@@ -1,0 +1,8 @@
+enabledWorkflows:
+  - session-management
+  - project-discovery
+  - macos
+  - ui-automation
+  - swift-package
+  - logging
+  - utilities

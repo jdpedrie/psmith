@@ -1,0 +1,456 @@
+package conversations
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
+	"github.com/jdpedrie/clark/internal/auth"
+	"github.com/jdpedrie/clark/internal/modelmeta"
+	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/clark/internal/stream"
+	"github.com/jdpedrie/clark/internal/testutil"
+)
+
+// --- fake driver setup ---
+
+type fakeStatelessDriver struct {
+	typeName string
+	chunks   []providers.Chunk
+	sendErr  error
+}
+
+func (f *fakeStatelessDriver) Type() string                                            { return f.typeName }
+func (f *fakeStatelessDriver) Stateful() bool                                          { return false }
+func (f *fakeStatelessDriver) DiscoverModels(_ context.Context) ([]providers.Model, error) { return nil, nil }
+func (f *fakeStatelessDriver) RenderThinkingToText(_ json.RawMessage) string           { return "" }
+
+func (f *fakeStatelessDriver) Send(_ context.Context, _ providers.SendRequest) (<-chan providers.Chunk, error) {
+	if f.sendErr != nil {
+		return nil, f.sendErr
+	}
+	ch := make(chan providers.Chunk, len(f.chunks)+1)
+	for _, c := range f.chunks {
+		ch <- c
+	}
+	close(ch)
+	return ch, nil
+}
+
+// uniqueDriverName produces a registry-unique driver type per test (the
+// providers.Register registry is process-global and panics on duplicates).
+func uniqueDriverName(t *testing.T, prefix string) string {
+	t.Helper()
+	n := strings.ReplaceAll(t.Name(), "/", "_")
+	return prefix + "-" + n
+}
+
+func registerFakeDriver(t *testing.T, prefix string, chunks []providers.Chunk, sendErr error) string {
+	t.Helper()
+	typeName := uniqueDriverName(t, prefix)
+	providers.Register(typeName, func(_ providers.Deps, _ json.RawMessage) (providers.Provider, error) {
+		return &fakeStatelessDriver{typeName: typeName, chunks: chunks, sendErr: sendErr}, nil
+	})
+	return typeName
+}
+
+// --- test scaffolding ---
+
+func newFullSvc(t *testing.T) (*Service, *store.Queries, *stream.Supervisor) {
+	t.Helper()
+	svc, q, sup, _ := newFullSvcWithPool(t)
+	return svc, q, sup
+}
+
+// newFullSvcWithPool is like newFullSvc but also returns the underlying pgx
+// pool for tests that need raw SQL access (e.g., to verify ON DELETE
+// constraint behavior the store layer doesn't expose).
+func newFullSvcWithPool(t *testing.T) (*Service, *store.Queries, *stream.Supervisor, *pgxpool.Pool) {
+	t.Helper()
+	pool := testutil.Pool(t)
+	q := store.New(pool)
+	cat := modelmeta.NewDBCatalog(q, nil)
+	sup := stream.New(q, slog.Default())
+	return NewService(q, pool, cat, sup, slog.Default()), q, sup, pool
+}
+
+func textChunk(s string) providers.Chunk {
+	raw, _ := json.Marshal(map[string]string{"text": s})
+	return providers.Chunk{Type: providers.ChunkText, Payload: raw}
+}
+
+func doneChunk() providers.Chunk {
+	return providers.Chunk{Type: providers.ChunkDone, Payload: []byte(`{}`)}
+}
+
+// seedSendable builds a full stack ready for SendMessage: user, profile,
+// conversation with one active context (plus the system seed message), a
+// user_model_provider with the registered fake driver, and an enabled model.
+type sendFixture struct {
+	user        store.User
+	profile     store.Profile
+	conv        store.Conversation
+	contextID   uuid.UUID
+	systemMsgID uuid.UUID
+	provider    store.UserModelProvider
+	modelID     string
+}
+
+func seedSendable(t *testing.T, q *store.Queries, driverType string) sendFixture {
+	t.Helper()
+	ctx := context.Background()
+
+	uid, _ := uuid.NewV7()
+	user, err := q.CreateUser(ctx, store.CreateUserParams{
+		ID: uid, Username: t.Name(), PasswordHash: "x",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	pid, _ := uuid.NewV7()
+	sys := "You are concise."
+	profile, err := q.CreateProfile(ctx, store.CreateProfileParams{
+		ID: pid, UserID: user.ID, Name: "test", SystemMessage: &sys,
+	})
+	if err != nil {
+		t.Fatalf("CreateProfile: %v", err)
+	}
+
+	cvid, _ := uuid.NewV7()
+	conv, err := q.CreateConversation(ctx, store.CreateConversationParams{
+		ID: cvid, UserID: user.ID, ProfileID: profile.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+
+	cxid, _ := uuid.NewV7()
+	ctxRow, err := q.CreateContext(ctx, store.CreateContextParams{
+		ID:                    cxid,
+		ConversationID:        conv.ID,
+		ContextActivationTime: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("CreateContext: %v", err)
+	}
+
+	smid, _ := uuid.NewV7()
+	sysMsg, err := q.CreateMessage(ctx, store.CreateMessageParams{
+		ID: smid, ContextID: ctxRow.ID, Role: "system", Content: sys,
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage: %v", err)
+	}
+
+	prid, _ := uuid.NewV7()
+	prov, err := q.CreateUserModelProvider(ctx, store.CreateUserModelProviderParams{
+		ID: prid, UserID: user.ID, Type: driverType, Label: "test", Config: []byte("{}"),
+	})
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+
+	modelID := "fake-model"
+	if _, err := q.UpsertUserModel(ctx, store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             modelID,
+		DisplayName:         "Fake Model",
+		MetadataSource:      "manual",
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("UpsertUserModel: %v", err)
+	}
+
+	return sendFixture{
+		user: user, profile: profile, conv: conv,
+		contextID: ctxRow.ID, systemMsgID: sysMsg.ID,
+		provider: prov, modelID: modelID,
+	}
+}
+
+func ctxAsUser(u store.User) context.Context {
+	return auth.ContextWithUser(context.Background(), auth.User{
+		ID: u.ID, Username: u.Username, IsAdmin: u.IsAdmin,
+		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
+	})
+}
+
+// waitForTerminal polls supervisor.Get until the run reaches a terminal status
+// or the timeout expires.
+func waitForTerminal(t *testing.T, sup *stream.Supervisor, runID uuid.UUID) store.StreamRun {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		row, err := sup.Get(context.Background(), runID)
+		if err != nil {
+			t.Fatalf("supervisor.Get: %v", err)
+		}
+		if row.Status != "running" {
+			return row
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("stream did not reach terminal in time; status=%s", row.Status)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// --- happy path ---
+
+func TestSendMessage_Success_MaterializesAssistant(t *testing.T) {
+	t.Parallel()
+	svc, q, sup := newFullSvc(t)
+	driverType := registerFakeDriver(t, "send-ok",
+		[]providers.Chunk{textChunk("Hello"), textChunk(", world!"), doneChunk()}, nil)
+	f := seedSendable(t, q, driverType)
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	if err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	if resp.Msg.UserMessage == nil || resp.Msg.UserMessage.Content != "hi" {
+		t.Errorf("user message wrong: %+v", resp.Msg.UserMessage)
+	}
+	if resp.Msg.UserMessage.GetParentId() != f.systemMsgID.String() {
+		t.Errorf("user message parent should be system msg, got %q", resp.Msg.UserMessage.GetParentId())
+	}
+	if resp.Msg.StreamRun == nil || resp.Msg.StreamRun.Status != clarkv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING {
+		t.Errorf("stream_run not in running state: %+v", resp.Msg.StreamRun)
+	}
+
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "completed" {
+		t.Errorf("final status %q want completed; error_payload=%s", final.Status, string(final.ErrorPayload))
+	}
+	if final.ResultMessageID == nil {
+		t.Fatal("expected result_message_id set")
+	}
+	asst, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if asst.Role != "assistant" || asst.Content != "Hello, world!" {
+		t.Errorf("assistant message wrong: role=%q content=%q", asst.Role, asst.Content)
+	}
+	parentID, _ := uuid.Parse(resp.Msg.UserMessage.Id)
+	if asst.ParentID == nil || *asst.ParentID != parentID {
+		t.Errorf("assistant parent mismatch: %+v vs %v", asst.ParentID, parentID)
+	}
+}
+
+// --- request validation ---
+
+func TestSendMessage_MissingContent(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "no-content", nil, nil)
+	f := seedSendable(t, q, driverType)
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestSendMessage_InvalidConversationID(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "bad-cid", nil, nil)
+	f := seedSendable(t, q, driverType)
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: "not-a-uuid", Content: "hi",
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestSendMessage_CrossUserConversation(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "cross-user", nil, nil)
+	f := seedSendable(t, q, driverType)
+
+	bid, _ := uuid.NewV7()
+	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
+		ID: bid, Username: "bob-" + t.Name(), PasswordHash: "x",
+	})
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	_, err := svc.SendMessage(ctxAsUser(bob), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeNotFound)
+}
+
+func TestSendMessage_ProviderNotOwned(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "prov-foreign", nil, nil)
+	f := seedSendable(t, q, driverType)
+
+	// Make a second user + their own provider; try to send using their provider on Alice's conversation.
+	bid, _ := uuid.NewV7()
+	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
+		ID: bid, Username: "bob-" + t.Name(), PasswordHash: "x",
+	})
+	bpid, _ := uuid.NewV7()
+	bobProv, _ := q.CreateUserModelProvider(context.Background(), store.CreateUserModelProviderParams{
+		ID: bpid, UserID: bob.ID, Type: driverType, Label: "bob-prov", Config: []byte("{}"),
+	})
+	pid := bobProv.ID.String()
+	mid := "anything"
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestSendMessage_ModelNotEnabled(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "model-missing", nil, nil)
+	f := seedSendable(t, q, driverType)
+	pid := f.provider.ID.String()
+	mid := "not-enabled"
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestSendMessage_ProviderIDWithoutModelID(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "half-override", nil, nil)
+	f := seedSendable(t, q, driverType)
+	pid := f.provider.ID.String()
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestSendMessage_NoProviderResolved(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "no-resolve", nil, nil)
+	f := seedSendable(t, q, driverType)
+	// No per-turn override, no conversation defaults, no profile defaults → InvalidArgument.
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+// --- resolution chain ---
+
+func TestSendMessage_ResolvesFromConversationSettings(t *testing.T) {
+	t.Parallel()
+	svc, q, sup := newFullSvc(t)
+	driverType := registerFakeDriver(t, "conv-default", []providers.Chunk{textChunk("ok"), doneChunk()}, nil)
+	f := seedSendable(t, q, driverType)
+
+	// Set conversation settings to point at the provider/model.
+	pidStr := f.provider.ID.String()
+	settings := clarkv1.ConversationSettings{
+		DefaultProviderId: &pidStr,
+		DefaultModelId:    &f.modelID,
+	}
+	settingsJSON, _ := json.Marshal(&settings)
+	if err := q.UpdateConversationSettings(context.Background(), store.UpdateConversationSettingsParams{
+		ID: f.conv.ID, Settings: settingsJSON,
+	}); err != nil {
+		t.Fatalf("UpdateConversationSettings: %v", err)
+	}
+
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		// no per-turn provider/model — should resolve from conversation settings
+	}))
+	if err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "completed" {
+		t.Errorf("final status %q want completed", final.Status)
+	}
+}
+
+// --- driver errors ---
+
+func TestSendMessage_DriverSendFails(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "send-err", nil, errors.New("upstream broken"))
+	f := seedSendable(t, q, driverType)
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeInternal)
+}
+
+// --- nil deps ---
+
+func TestSendMessage_NoSupervisor_Unimplemented(t *testing.T) {
+	t.Parallel()
+	pool := testutil.Pool(t)
+	q := store.New(pool)
+	svc := NewService(q, nil, nil, nil, nil) // no pool, no catalog, no supervisor
+
+	uid, _ := uuid.NewV7()
+	user, _ := q.CreateUser(context.Background(), store.CreateUserParams{
+		ID: uid, Username: t.Name(), PasswordHash: "x",
+	})
+	// Conversation id need not exist — the nil-deps check fires before lookup.
+	pid := uuid.New().String()
+	mid := "x"
+	_, err := svc.SendMessage(ctxAsUser(user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: uuid.New().String(),
+		Content:        "hi",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	assertCode(t, err, connect.CodeUnimplemented)
+}

@@ -1,0 +1,18 @@
+/bin/
+*.test
+*.out
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+clients/ClarkSwift/.build
+clients/ClarkSwift/.swiftpm
+clients/clarkd-mac/.build
+clients/clarkd-mac/.swiftpm

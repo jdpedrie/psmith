@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package clark.v1;
+
+import "google/protobuf/timestamp.proto";
+import "clark/v1/types.proto";
+
+option go_package = "github.com/jdpedrie/clark/gen/clark/v1;clarkv1";
+
+service ModelProvidersService {
+  // ----- Driver types and provider templates -----
+
+  // Driver types compiled into this server build.
+  rpc ListProviderTypes(ListProviderTypesRequest) returns (ListProviderTypesResponse);
+
+  // Provider templates surfaced from the catalog (for "add provider" UX).
+  rpc ListProviderTemplates(ListProviderTemplatesRequest) returns (ListProviderTemplatesResponse);
+
+  // ----- User-configured providers (CRUD) -----
+
+  rpc CreateUserModelProvider(CreateUserModelProviderRequest) returns (CreateUserModelProviderResponse);
+  rpc ListUserModelProviders(ListUserModelProvidersRequest) returns (ListUserModelProvidersResponse);
+  rpc GetUserModelProvider(GetUserModelProviderRequest) returns (GetUserModelProviderResponse);
+  rpc UpdateUserModelProvider(UpdateUserModelProviderRequest) returns (UpdateUserModelProviderResponse);
+  rpc DeleteUserModelProvider(DeleteUserModelProviderRequest) returns (DeleteUserModelProviderResponse);
+
+  // ----- Model discovery and enablement -----
+
+  // Calls the driver to discover the provider's currently-offered models,
+  // enriched with catalog metadata where available. May be slow.
+  rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
+
+  // Idempotent — snapshots metadata at the moment of enabling. Server is
+  // authoritative for the snapshot source (catalog or driver discovery).
+  rpc EnableModels(EnableModelsRequest) returns (EnableModelsResponse);
+
+  // Idempotent — drops the rows. Disabling does not affect any historical
+  // messages or stream runs that referenced these models.
+  rpc DisableModels(DisableModelsRequest) returns (DisableModelsResponse);
+
+  // Per-instance enabled models.
+  rpc ListUserModels(ListUserModelsRequest) returns (ListUserModelsResponse);
+
+  // Flat list of all enabled models across the user's configured providers.
+  // Drives the model picker.
+  rpc ListAllUserModels(ListAllUserModelsRequest) returns (ListAllUserModelsResponse);
+
+  // ----- Catalog management -----
+
+  // Admin-only. Synchronously fetches models.dev and upserts catalog tables.
+  rpc RefreshModelCatalog(RefreshModelCatalogRequest) returns (RefreshModelCatalogResponse);
+
+  // Read-only status snapshot.
+  rpc GetCatalogStatus(GetCatalogStatusRequest) returns (GetCatalogStatusResponse);
+}
+
+// --- Driver types & templates ---
+
+message ListProviderTypesRequest {}
+message ListProviderTypesResponse {
+  repeated ProviderType types = 1;
+}
+
+message ListProviderTemplatesRequest {}
+message ListProviderTemplatesResponse {
+  repeated ProviderTemplate templates = 1;
+}
+
+// --- UserModelProvider CRUD ---
+
+message CreateUserModelProviderRequest {
+  string type = 1;
+  string label = 2;
+  bytes config = 3;
+}
+message CreateUserModelProviderResponse {
+  UserModelProvider provider = 1;
+}
+
+message ListUserModelProvidersRequest {}
+message ListUserModelProvidersResponse {
+  repeated UserModelProvider providers = 1;
+}
+
+message GetUserModelProviderRequest {
+  string id = 1;
+}
+message GetUserModelProviderResponse {
+  UserModelProvider provider = 1;
+  repeated UserModel enabled_models = 2;
+}
+
+message UpdateUserModelProviderRequest {
+  string id = 1;
+  optional string label = 2;
+  optional bytes config = 3;
+}
+message UpdateUserModelProviderResponse {
+  UserModelProvider provider = 1;
+}
+
+message DeleteUserModelProviderRequest {
+  string id = 1;
+}
+message DeleteUserModelProviderResponse {}
+
+// --- Discovery & enablement ---
+
+message DiscoverModelsRequest {
+  string user_model_provider_id = 1;
+}
+// Discovered models are not persisted by this RPC — they're presented to the
+// user for selection. Pass the chosen subset to EnableModels.
+message DiscoverModelsResponse {
+  // Model IDs available, with metadata enriched from catalog where known.
+  repeated DiscoveredModel models = 1;
+}
+message DiscoveredModel {
+  string model_id = 1;
+  string display_name = 2;
+  optional int32 context_window = 3;
+  optional int32 max_output_tokens = 4;
+  optional ModelPricing pricing = 5;
+  optional string knowledge_cutoff = 6;
+  repeated string modalities = 7;
+  optional ModelCapabilities capabilities = 8;
+  MetadataSource metadata_source = 9;  // where the metadata came from
+  bool already_enabled = 10;
+}
+
+message EnableModelsRequest {
+  string user_model_provider_id = 1;
+  repeated string model_ids = 2;
+}
+message EnableModelsResponse {
+  repeated UserModel enabled = 1;
+}
+
+message DisableModelsRequest {
+  string user_model_provider_id = 1;
+  repeated string model_ids = 2;
+}
+message DisableModelsResponse {}
+
+message ListUserModelsRequest {
+  string user_model_provider_id = 1;
+}
+message ListUserModelsResponse {
+  repeated UserModel models = 1;
+}
+
+message ListAllUserModelsRequest {}
+message UserModelEntry {
+  UserModelProvider provider = 1;
+  UserModel model = 2;
+}
+message ListAllUserModelsResponse {
+  repeated UserModelEntry entries = 1;
+}
+
+// --- Catalog management ---
+
+message RefreshModelCatalogRequest {}
+message RefreshModelCatalogResponse {
+  int32 providers_count = 1;
+  int32 models_count = 2;
+  google.protobuf.Timestamp fetched_at = 3;
+}
+
+message GetCatalogStatusRequest {}
+message GetCatalogStatusResponse {
+  int32 providers_count = 1;
+  int32 models_count = 2;
+  optional google.protobuf.Timestamp last_refresh_at = 3;
+}

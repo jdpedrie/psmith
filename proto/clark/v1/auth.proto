@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package clark.v1;
+
+import "google/protobuf/timestamp.proto";
+import "clark/v1/types.proto";
+
+option go_package = "github.com/jdpedrie/clark/gen/clark/v1;clarkv1";
+
+// AuthService handles authentication and user management.
+//
+// Transport: clients carry credentials via the `Authorization: Bearer <token>`
+// HTTP header. A server-side Connect interceptor validates the token, resolves
+// the user, and attaches the user to the request context. No user_id appears
+// in any request message — it's implicit in the auth context.
+//
+// Login is the only RPC permitted without a valid token; the unauth allowlist
+// is enforced by the interceptor, not by proto annotations.
+service AuthService {
+  // Authenticate with username + password, receive a session token.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Revoke the current session.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // Return the currently authenticated user.
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+
+  // Change the current user's password. Requires the existing password.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // ----- Admin-only RPCs (enforced server-side via user.is_admin) -----
+
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // Admin can reset another user's password without knowing the old one.
+  rpc AdminResetPassword(AdminResetPasswordRequest) returns (AdminResetPasswordResponse);
+}
+
+// --- Login / Logout / WhoAmI ---
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  // Free-form label for the session row, e.g. "iOS app", "web", "desktop".
+  // Helps the user audit/revoke sessions later.
+  optional string client_label = 3;
+}
+message LoginResponse {
+  // Raw bearer token. Returned exactly once at login; the server stores only a hash.
+  string session_token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  User user = 3;
+}
+
+message LogoutRequest {}
+message LogoutResponse {}
+
+message WhoAmIRequest {}
+message WhoAmIResponse {
+  User user = 1;
+}
+
+// --- Password change ---
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+message ChangePasswordResponse {}
+
+// --- Admin user management ---
+
+message CreateUserRequest {
+  string username = 1;
+  optional string display_name = 2;
+  string password = 3;
+  bool is_admin = 4;
+}
+message CreateUserResponse {
+  User user = 1;
+}
+
+message ListUsersRequest {}
+message ListUsersResponse {
+  repeated User users = 1;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+message GetUserResponse {
+  User user = 1;
+}
+
+message UpdateUserRequest {
+  string id = 1;
+  optional string display_name = 2;
+  optional bool is_admin = 3;
+  // Names of fields to clear (e.g. "display_name").
+  repeated string clear_fields = 4;
+}
+message UpdateUserResponse {
+  User user = 1;
+}
+
+message DeleteUserRequest {
+  string id = 1;
+}
+message DeleteUserResponse {}
+
+message AdminResetPasswordRequest {
+  string user_id = 1;
+  string new_password = 2;
+}
+message AdminResetPasswordResponse {}

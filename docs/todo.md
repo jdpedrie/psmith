@@ -1,0 +1,135 @@
+# Clark — deferred work
+
+Master list of known-deferred items. Update as new deferrals are introduced and as items get done. Cross-references go to the relevant package or doc section.
+
+The architecture doc's "Open threads" section captures the *strategic* deferrals (encryption, sharing model, transform pipeline, vision/files, tool use). This doc is the *tactical* version: in-flight TODOs left during implementation, plus a priority view of what's missing from the main system.
+
+---
+
+## Main system priorities — what's not done yet
+
+Ordered by impact on getting Clark to a "useful for sustained personal chat" state. Refer to the categorized sections below for implementation detail.
+
+### Critical — long-running usage breaks without these
+
+1. ~~**`ConversationsService.Compact`**~~ ✅ **Done.** User-triggered compression. Resolves compression model + guide + mode from the profile inheritance chain, builds a transcript prompt, hands to driver + supervisor. Supervisor's `PurposeCompression` terminal handler dual-writes a `role=compression_summary` message in the OLD context (with usage/cost) plus a new Context with a `role=context` message containing the calculated REPLACE/APPEND content. History-builder skips `role=compression_summary`. Migration 00002 added the new role to the CHECK constraint. Smoke-tested end-to-end against the local model.
+2. ~~**`ConversationsService.CountContextTokens`**~~ ✅ **Done.** Builds the wire prefix via `history.Build`, calls driver's `TokenCounter`. Returns `Unimplemented` for drivers without a TokenCounter (currently the openai-compatible driver — Anthropic has it). Response includes `context_window` from the user_model snapshot so the UI gets token_count + window in one round trip. Client-side advisory ("approaching limit") happens by the UI comparing the two — no server-side threshold.
+3. ~~**Token usage + cost recording**~~ ✅ **Done.** `messages` carries reported `input/output/cache_read/cache_write/reasoning_tokens` + raw provider blob, plus computed `input/output/cache_read/cache_write/total_cost_usd` from the `user_models` pricing snapshot. Both Anthropic + OpenAI drivers emit `ChunkUsage`; supervisor computes costs at materialization using the user_model pricing snapshot. Compression runs record usage/cost on the `compression_summary` message row.
+
+### Architecture-flagship features not yet built
+
+4. ~~**Branch navigation: per-context `current_leaf_message_id`**~~ ✅ **Done.** Migration 00003 added `current_leaf_message_id UUID REFERENCES messages(id) ON DELETE SET NULL` on `contexts`. `SendMessage` parent resolution now: explicit > cursor > latest-by-created_at; cursor advances on user-message insert AND on assistant materialization. New `ConversationsService.SetCurrentLeaf(context_id, message_id)` RPC validates that the message belongs to the context (empty `message_id` clears). `ListMessageAncestorChain` now returns `sibling_count` (count of OTHER messages sharing this row's parent) via subquery in the recursive CTE, surfaced as `Message.sibling_count` for fork indicators. `Context.current_leaf_message_id` exposed on the proto. Tests cover all three resolution branches, cursor advancement, fork indicators, and SetCurrentLeaf cross-context / cross-user / not-found / clear cases.
+
+5. ~~**Transform pipeline**~~ ✅ **Reframed and shipped as Chat Plugins.** See [internal/plugins/](../internal/plugins/) and the "Chat plugins" section in [architecture.md](architecture.md). MVP cut wired end-to-end: required `Plugin` interface + opt-in sub-interfaces (`SystemPrompter`, `OutgoingUserTransformer`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `ToolProvider`, `Configurable`); migration `00004_profile_plugins.sql` with all-or-nothing parent-chain inheritance; pipeline resolved per-conversation in `conversations.Service`; `SystemPrompter` + `HistoryTransformer` plumbed through `history.Build`; `DisplayTransformer` populates `Message.display_content` in `ListMessages` / `GetMessage` / `SendMessage`; first concrete plugin `lettered_choices` exercises four sub-interfaces (Configurable + SystemPrompter + HistoryTransformer + DisplayTransformer). `HistoryTransformer` receives a `HistoryPos{FromHead, FromHeadSameRole}` so role-aware policies ("keep last N assistant turns") are robust under forks. Not yet wired: `ChunkTransformer` (no driver yet needs one), `OutgoingUserTransformer` (interface exists, no concrete plugin), `ToolProvider` (blocked on tool-use end-to-end execution — still in Open Threads), and the empirical cache-observability mechanism (specced in architecture, not yet implemented).
+
+6. **Stateful harness drivers (`claude-code-subprocess`, `codex-subprocess`)** — entirely missing. Two parts: (a) the drivers themselves (subprocess management, NDJSON/JSON-RPC over stdio, session lifecycle), (b) the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class, and they were a stated motivator (mixing cloud APIs with local agentic CLIs).
+
+### Real bugs in shipped code
+
+5. ~~**Stream supervisor concurrent-subscriber race**~~ ✅ **Done.** Added `fanoutCursor int64` to `runState` (highest sequence ever fanned out, updated under broker mutex). Subscribe restructured to do replay+register atomically under the broker lock, with the DB read clamped to `[fromSequence, fanoutCursor]`. While the lock is held the broker can't advance the cursor, so chunks delivered via replay-from-DB never overlap with chunks delivered via live fan-out. Confirmed stable across 20× runs of `TestSubscribe_TwoConcurrent_BothReceiveAll` (previously flaked ~25%). Trade-off: broker fan-out blocks for the duration of one new-subscriber's replay DB read; in practice that's a fast index range scan on `(stream_run_id, sequence)`.
+
+### Untested-but-probably-works (cheap verifications) — ✅ Done
+
+6. ~~**Multi-turn conversations**~~ ✅ Tests in [internal/conversations/service_multi_turn_test.go](../internal/conversations/service_multi_turn_test.go): parent-chain correctness across 3 turns, empty assistant content, long stream, and a documented concurrent-sends race (see "Known issues" below).
+7. ~~**Forking**~~ ✅ Tests in [internal/conversations/service_fork_test.go](../internal/conversations/service_fork_test.go): fork from deep ancestor, fork from system message, fork from assistant (regenerate pattern), reject cross-context parent, parent-not-found, two forks off same parent (sibling_count), fork to a different model (cross-model history.Build).
+8. ~~**Context reactivation**~~ ✅ Tests in [internal/conversations/service_reactivation_test.go](../internal/conversations/service_reactivation_test.go): send-to-reactivated, preserved-cursor-drives-next-send, idempotent reactivate, cross-user, and reactivation-across-compression (the new context becomes orphaned-but-intact).
+
+### Known issues uncovered by smoke tests
+
+- ~~**Concurrent SendMessage on the same context can produce a chain instead of siblings.**~~ ✅ **Done.** SendMessage's critical section (resolve-parent → insert-user-message → advance-cursor) is now wrapped in a transaction with `SELECT FOR UPDATE` on the contexts row via the new `GetContextByIDForUpdate` query. Concurrent sends on the same context serialize: each TX observes the previous's committed cursor and parents off it. The driver.Send + supervisor.Start (slow HTTP) deliberately stay **outside** the TX so the row lock is held only for ~3 quick DB ops — no possibility of blocking other requests on network I/O, and the supervisor's later `UpdateContextCurrentLeaf` (during materialization) never overlaps with the SendMessage TX. Replacement test `TestMultiTurn_ConcurrentSendsSerialize` runs 5 goroutines × concurrent send and asserts all messages persist with valid parent chains; passes 10/10.
+
+  **UX note:** the deterministic shape is "second send becomes a follow-up to the first" rather than "two siblings under the same parent." This matches the cursor's "tip you're sending from" semantics. If a UI wants the siblings shape (e.g., "press send twice in fast succession" → parallel branches), it should pass `parent_message_id` explicitly.
+
+### Nice-to-have
+
+- `AddManualModel`, `UpdateUserModel`, `RefreshUserModelMetadata` RPCs.
+- `ListConversations` real pagination.
+- ~~`streamsvc` test coverage.~~ ✅ Tests in [internal/streamsvc/service_test.go](../internal/streamsvc/service_test.go): SubscribeStream (invalid UUID, not found, happy path with chunks+terminal, FromSequence resume, already-terminal DB-replay path), CancelStream (invalid UUID, not found, happy path verifying status flips to "cancelled"), GetStreamRun (invalid UUID, not found, happy path), and pure-function tests for the four wire converters (statusToProto, purposeToProto, chunkTypeToProto, streamRunToProto with full + minimal field sets). 14 tests via real httptest + Connect client. Client-cancel-mid-stream is a useful follow-up but tests Connect/HTTP lifecycle more than streamsvc's contract; left as a note in the file. Also fixed `chunkTypeToProto` to map `providers.ChunkUsage → CHUNK_TYPE_USAGE` (it had been silently dropped to UNSPECIFIED, so subscribers never saw usage chunks on the wire even though they were persisted to `stream_chunks`); the SubscribeStream happy-path test now pushes a usage chunk through the supervisor and asserts it arrives at the subscriber.
+- Multi-device per user (per-device key-pair pairing).
+
+---
+
+## Deferred RPCs (proto contract exists, no implementation yet)
+
+- **`ModelProvidersService.AddManualModel`** — for models not in catalog or driver discovery (local fine-tunes, custom endpoints serving non-listed models). Workaround today: direct `INSERT INTO user_models`. Proto stub: not yet defined; pattern would mirror EnableModels but accept the full UserModel shape.
+
+- **`ModelProvidersService.UpdateUserModel`** — let users hand-edit a snapshotted model's metadata (correct context window, change display name, etc.). Proto stub: not yet defined.
+
+- **`ModelProvidersService.RefreshUserModelMetadata`** — explicit re-snapshot of a UserModel from current catalog. Proto stub: not yet defined.
+
+- **`ConversationsService.Compact`** — proto contract in [proto/clark/v1/conversations.proto](../proto/clark/v1/conversations.proto). Not implemented; covered by `UnimplementedConversationsServiceHandler`. Requires: resolve compression model from profile; build full-context prefix; call driver with compression_guide as system; route through supervisor with `PurposeCompression`; **caller-side goroutine** subscribes to the compression run, accumulates summary text, creates a new Context with the summary as a `role=context` message (REPLACE or APPEND per profile); activates new context. Stream supervisor agent intentionally left context-creation to the caller.
+
+- **`ConversationsService.CountContextTokens`** — proto contract exists. Requires: build prefix via history-builder, type-assert driver to `providers.TokenCounter`, call. Anthropic driver has `CountTokens`; OpenAI driver intentionally doesn't (no consistent endpoint across compat servers, no tiktoken helper in `openai-go`). Return `Unimplemented` for drivers that don't satisfy.
+
+---
+
+## Implementation gaps inside shipped code
+
+### Drivers
+
+- **`internal/providers/anthropic`** — tool-use input is one-way: outbound `tool_result` blocks not yet translated from `WireMessage`. `signature_delta` and `citations_delta` events silently dropped (no normalized chunk slot). `MessageDeltaEvent` (usage / stop_reason) not surfaced — needs a chunk type when added.
+
+- **`internal/providers/openai`** — tool use tracks one active call (parallel tool calls would need a map keyed by `output_index`). `TokenCounter` intentionally not implemented (see proto-deferral note above). Thinking round-trip only works when stored shape matches Responses-API `ResponseReasoningItem`; cross-shape thinking silently omitted.
+
+### History builder
+
+- **`internal/history`** — cross-provider thinking is **omitted entirely** when destination ≠ producer. The architecture doc's "Thinking handling" section spec'd "render to plain text and inject into content" for this case. Deferred until tool use lands so we don't have to redo it. Code comment in `history.go` references this.
+
+### Stream supervisor
+
+- **`internal/stream`** — `PurposeCompression` runs persist chunks and finalize WITHOUT materializing a message; the future Compact handler must subscribe to the run and create the new context itself. Documented in `stream.go`. Slow-subscriber back-pressure: drops the subscriber (closes their channel) when the 64-chunk buffer fills — they can resubscribe with `lastSeen+1`. No replay tests cover the gap-fill race between DB replay and broker registration explicitly (covered implicitly by live-tail tests).
+
+- **`internal/stream` flaky test: `TestSubscribe_TwoConcurrent_BothReceiveAll`** — fails ~20-30% of runs with subscriber receiving MORE chunks than emitted (duplicates, not loss). Suggests the gap-fill DB read after broker registration overlaps with live-broker delivery, causing chunks to be delivered both via replay and via live-tail. Single-subscriber paths work fine (SendMessage end-to-end verified). Concurrent multi-subscriber not yet exercised in production code, but should be fixed before relying on it. Likely fix area: tighten the handoff between "last replayed sequence" and "first live-broker sequence" so the broker only forwards chunks strictly after the cursor.
+
+### Conversations / SendMessage
+
+- **Stateful provider sends not wired in `SendMessage`** — currently `SendMessage` requires the driver to satisfy `providers.StatelessProvider`; harness providers (when they exist) need a separate code path that calls `StartSession` / `SendInSession`.
+
+- **`internal/conversations` `var _ = time.Now`** in service.go is a leftover safety-net for an import that's now genuinely used. Cleanup nit; harmless.
+
+### Drivers not yet built
+
+- **`claude-code-subprocess` driver** — package doesn't exist. Stateful provider; would manage a `claude` CLI process per session, talk to it via NDJSON over stdio, expose the `--list-models` (or hardcoded) catalog. Community reference: `severity1/claude-agent-sdk-go`.
+- **`codex-subprocess` driver** — package doesn't exist. Same shape as above; talks to Codex CLI via JSON-RPC over stdio. Community reference: `hishamkaram/codex-agent-sdk-go`.
+
+### Subsystems not yet built
+
+- **`internal/transforms`** — package doesn't exist. Architecture spec'd outbound (full-message) and inbound (stream-processor) transforms with stable/non-stable flags, raw-vs-transformed storage, scope rules (global / per-provider / per-model / per-message-tag), explicit ordering. Tied to a "Transform-configuration schema" question (still open: where do transforms attach — profile, provider, conversation, or all of the above).
+
+---
+
+## Test gaps
+
+- **`internal/streamsvc`** — no tests yet. Thin shim over supervisor; should at least cover SubscribeStream success/error paths, CancelStream, GetStreamRun, and `ErrNotFound` mapping.
+- **End-to-end multi-turn** — single smoke test of one user → assistant turn done. Multi-turn (user → assistant → user → assistant), forking (`SendMessage` with `parent_message_id` pointing at a non-leaf), and context reactivation flows not yet smoke-tested.
+
+---
+
+## Strategic deferrals (also in architecture.md "Open threads")
+
+Recorded here for grep-ability; the canonical discussion is in [architecture.md](architecture.md):
+
+- **Tool use** as a first-class feature, plus its structural coupling with thinking on Anthropic.
+- **Vision / file attachments** in `WireMessage`.
+- **Transform-configuration schema** (where transforms attach: profile, provider instance, conversation, or combination). Inbound and outbound transform pipelines not yet built — the architecture is specified but no `internal/transforms` package exists.
+- **Resource sharing model** — v1 is per-user-only. Add `visibility = {private, shared}` on `user_model_providers` when a second user actually exists.
+- **Encryption** — Tier A (column at rest) and Tier B (per-user keys) sketched in architecture.md "Encryption (deferred)" section.
+
+---
+
+## Smaller items
+
+- **Connect server-streaming via raw curl** doesn't pretty-print — Connect's wire format isn't plain newline-delimited JSON. For terminal smoke testing, write a small `clarkctl` helper or use `buf curl` to subscribe to streams.
+- **`CLARK_CATALOG_REFRESH_INTERVAL` smoke-tested only at "0" (disabled).** Periodic refresh path not exercised in tests.
+- **`ListConversations` pagination** — `page_size` capped at 100, `page_token` ignored (returns all in one page). Real pagination deferred.
+- **`ListProviderTypes` `display_name`** — currently humanized via `humanizeName`. Could come from driver metadata if drivers exposed a `DisplayName()` method.
+- **`ListProviderTypes` `config_schema`** — empty bytes for v1; UI hardcodes config forms. JSON Schema generation per-driver is a future ergonomic win.
+- **Unit-tested `internal/store` queries** — no direct tests of the sqlc-generated layer (covered transitively by every service test).
+
+---
+
+## How to use this doc
+
+When you defer something, add a one-bullet entry here with: package/file, what was skipped, why, and (if known) when to revisit. When you complete an item, delete it.
+
+Companion to [architecture.md](architecture.md): strategic threads stay in the architecture doc's "Open threads"; tactical implementation TODOs live here.

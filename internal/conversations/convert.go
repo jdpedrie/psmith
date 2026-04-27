@@ -1,0 +1,256 @@
+package conversations
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
+	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/clark/plugins"
+)
+
+// Message-role wire/storage constants. The DB CHECK constraint enforces these
+// literal strings; the proto enum carries them on the wire.
+const (
+	roleSystem             = "system"
+	roleContext            = "context"
+	roleUser               = "user"
+	roleAssistant          = "assistant"
+	roleCompressionSummary = "compression_summary"
+)
+
+// settingsStorage mirrors ConversationSettings for JSON encoding into the
+// `conversations.settings` JSONB column. Round-trips through settingsFromJSON.
+type settingsStorage struct {
+	DefaultProviderID        *string `json:"default_provider_id,omitempty"`
+	DefaultModelID           *string `json:"default_model_id,omitempty"`
+	IncludeThinkingInHistory *bool   `json:"include_thinking_in_history,omitempty"`
+}
+
+func settingsToJSON(s *clarkv1.ConversationSettings) ([]byte, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return json.Marshal(settingsStorage{
+		DefaultProviderID:        s.DefaultProviderId,
+		DefaultModelID:           s.DefaultModelId,
+		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
+	})
+}
+
+func settingsFromJSON(b []byte) (*clarkv1.ConversationSettings, error) {
+	if len(b) == 0 {
+		return nil, nil
+	}
+	var s settingsStorage
+	if err := json.Unmarshal(b, &s); err != nil {
+		return nil, fmt.Errorf("decode conversation settings: %w", err)
+	}
+	return &clarkv1.ConversationSettings{
+		DefaultProviderId:        s.DefaultProviderID,
+		DefaultModelId:           s.DefaultModelID,
+		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
+	}, nil
+}
+
+// conversationToProto builds the wire shape from a store row plus the active
+// context id resolved by the caller. activeContextID may be the empty string
+// when an active context isn't known (e.g., immediately after creation, before
+// the seed messages are written).
+func conversationToProto(c store.Conversation, activeContextID string) (*clarkv1.Conversation, error) {
+	settings, err := settingsFromJSON(c.Settings)
+	if err != nil {
+		return nil, err
+	}
+	return &clarkv1.Conversation{
+		Id:              c.ID.String(),
+		ProfileId:       c.ProfileID.String(),
+		Title:           c.Title,
+		Settings:        settings,
+		ActiveContextId: activeContextID,
+		OwnerUserId:     c.UserID.String(),
+		CreatedAt:       timestamppb.New(c.CreatedAt),
+		UpdatedAt:       timestamppb.New(c.UpdatedAt),
+	}, nil
+}
+
+func contextToProto(c store.Context) *clarkv1.Context {
+	out := &clarkv1.Context{
+		Id:             c.ID.String(),
+		ConversationId: c.ConversationID.String(),
+		ActivationTime: timestamppb.New(c.ContextActivationTime),
+		CreatedAt:      timestamppb.New(c.CreatedAt),
+	}
+	if c.ParentContextID != nil {
+		s := c.ParentContextID.String()
+		out.ParentContextId = &s
+	}
+	if c.CurrentLeafMessageID != nil {
+		s := c.CurrentLeafMessageID.String()
+		out.CurrentLeafMessageId = &s
+	}
+	if c.Title != nil {
+		out.Title = c.Title
+	}
+	return out
+}
+
+// listContextRowToProto adapts the aggregated ListContextsByConversation row
+// (which carries message_count) to the Context proto. Single-context queries
+// continue to use contextToProto, which leaves message_count at zero.
+func listContextRowToProto(r store.ListContextsByConversationRow) *clarkv1.Context {
+	out := &clarkv1.Context{
+		Id:             r.ID.String(),
+		ConversationId: r.ConversationID.String(),
+		ActivationTime: timestamppb.New(r.ContextActivationTime),
+		CreatedAt:      timestamppb.New(r.CreatedAt),
+		MessageCount:   int32(r.MessageCount),
+	}
+	if r.ParentContextID != nil {
+		s := r.ParentContextID.String()
+		out.ParentContextId = &s
+	}
+	if r.CurrentLeafMessageID != nil {
+		s := r.CurrentLeafMessageID.String()
+		out.CurrentLeafMessageId = &s
+	}
+	if r.Title != nil {
+		out.Title = r.Title
+	}
+	return out
+}
+
+func messageToProto(m store.Message) *clarkv1.Message {
+	out := &clarkv1.Message{
+		Id:                   m.ID.String(),
+		ContextId:            m.ContextID.String(),
+		Role:                 roleStringToEnum(m.Role),
+		Content:              m.Content,
+		RawContent:           m.RawContent,
+		Thinking:             m.Thinking,
+		ThinkingProviderType: m.ThinkingProviderType,
+		ThinkingRenderedText: m.ThinkingRenderedText,
+		ModelId:              m.ModelID,
+		CreatedAt:            timestamppb.New(m.CreatedAt),
+	}
+	if m.ParentID != nil {
+		s := m.ParentID.String()
+		out.ParentId = &s
+	}
+	if m.ProviderID != nil {
+		s := m.ProviderID.String()
+		out.ProviderId = &s
+	}
+	if usage := messageUsageToProto(m); usage != nil {
+		out.Usage = usage
+	}
+	if m.EditedAt != nil {
+		out.EditedAt = timestamppb.New(*m.EditedAt)
+	}
+	return out
+}
+
+// messageUsageToProto returns a MessageUsage proto if any usage/cost column
+// is populated. Returns nil otherwise so the wire-message stays compact for
+// non-assistant rows.
+func messageUsageToProto(m store.Message) *clarkv1.MessageUsage {
+	if m.InputTokens == nil && m.OutputTokens == nil &&
+		m.CacheReadTokens == nil && m.CacheWriteTokens == nil &&
+		m.ReasoningTokens == nil &&
+		!m.InputCostUsd.Valid && !m.OutputCostUsd.Valid &&
+		!m.CacheReadCostUsd.Valid && !m.CacheWriteCostUsd.Valid &&
+		!m.TotalCostUsd.Valid {
+		return nil
+	}
+	return &clarkv1.MessageUsage{
+		InputTokens:       m.InputTokens,
+		OutputTokens:      m.OutputTokens,
+		CacheReadTokens:   m.CacheReadTokens,
+		CacheWriteTokens:  m.CacheWriteTokens,
+		ReasoningTokens:   m.ReasoningTokens,
+		InputCostUsd:      numericToFloat64Ptr(m.InputCostUsd),
+		OutputCostUsd:     numericToFloat64Ptr(m.OutputCostUsd),
+		CacheReadCostUsd:  numericToFloat64Ptr(m.CacheReadCostUsd),
+		CacheWriteCostUsd: numericToFloat64Ptr(m.CacheWriteCostUsd),
+		TotalCostUsd:      numericToFloat64Ptr(m.TotalCostUsd),
+	}
+}
+
+func numericToFloat64Ptr(n pgtype.Numeric) *float64 {
+	if !n.Valid {
+		return nil
+	}
+	f, err := n.Float64Value()
+	if err != nil || !f.Valid {
+		return nil
+	}
+	v := f.Float64
+	return &v
+}
+
+// chainRowToProto adapts a recursive-CTE row (a value-copy of the message
+// columns plus sibling_count) into the proto Message shape.
+func chainRowToProto(r store.ListMessageAncestorChainRow) *clarkv1.Message {
+	out := messageToProto(store.Message{
+		ID:                   r.ID,
+		ContextID:            r.ContextID,
+		ParentID:             r.ParentID,
+		Role:                 r.Role,
+		Content:              r.Content,
+		RawContent:           r.RawContent,
+		Thinking:             r.Thinking,
+		ThinkingProviderType: r.ThinkingProviderType,
+		ThinkingRenderedText: r.ThinkingRenderedText,
+		ProviderID:           r.ProviderID,
+		ModelID:              r.ModelID,
+		CreatedAt:            r.CreatedAt,
+		EditedAt:             r.EditedAt,
+		InputTokens:          r.InputTokens,
+		OutputTokens:         r.OutputTokens,
+		CacheReadTokens:      r.CacheReadTokens,
+		CacheWriteTokens:     r.CacheWriteTokens,
+		ReasoningTokens:      r.ReasoningTokens,
+		ProviderUsageRaw:     r.ProviderUsageRaw,
+		InputCostUsd:         r.InputCostUsd,
+		OutputCostUsd:        r.OutputCostUsd,
+		CacheReadCostUsd:     r.CacheReadCostUsd,
+		CacheWriteCostUsd:    r.CacheWriteCostUsd,
+		TotalCostUsd:         r.TotalCostUsd,
+	})
+	out.SiblingCount = r.SiblingCount
+	return out
+}
+
+// applyDisplay populates m.DisplayContent. When the pipeline is empty (or
+// has no DisplayTransformer plugins), display_content equals content so
+// clients can always read display_content without checking for absence.
+func applyDisplay(m *clarkv1.Message, pipeline plugins.Pipeline) {
+	if m == nil {
+		return
+	}
+	if pipeline.Empty() {
+		m.DisplayContent = m.Content
+		return
+	}
+	m.DisplayContent = pipeline.TransformForDisplay(m.Content)
+}
+
+func roleStringToEnum(s string) clarkv1.MessageRole {
+	switch s {
+	case roleSystem:
+		return clarkv1.MessageRole_MESSAGE_ROLE_SYSTEM
+	case roleContext:
+		return clarkv1.MessageRole_MESSAGE_ROLE_CONTEXT
+	case roleUser:
+		return clarkv1.MessageRole_MESSAGE_ROLE_USER
+	case roleAssistant:
+		return clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+	case roleCompressionSummary:
+		return clarkv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY
+	default:
+		return clarkv1.MessageRole_MESSAGE_ROLE_UNSPECIFIED
+	}
+}
