@@ -27,10 +27,15 @@ public final class ConversationsRepository: Sendable {
         return (ClarkConversation(from: msg.conversation), ClarkContext(from: msg.activeContext))
     }
 
-    public func create(profileID: String, title: String? = nil) async throws -> ClarkConversation {
+    public func create(
+        profileID: String,
+        title: String? = nil,
+        settings: ClarkConversationSettings? = nil
+    ) async throws -> ClarkConversation {
         var req = Clark_V1_CreateConversationRequest()
         req.profileID = profileID
         if let title { req.title = title }
+        if let settings { req.settings = settings.proto }
         let resp = await client.createConversation(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("create conversation") }
         return ClarkConversation(from: msg.conversation)
@@ -41,6 +46,20 @@ public final class ConversationsRepository: Sendable {
         req.id = id
         let resp = await client.deleteConversation(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
+    }
+
+    /// Updates the conversation's title. Pass `nil` to leave it unchanged;
+    /// pass an empty string to clear it back to NULL. Used by the Mac
+    /// client's on-device titler to push a locally-generated title back to
+    /// the server (the same call any other UI uses for manual rename).
+    @discardableResult
+    public func updateTitle(id: String, title: String) async throws -> ClarkConversation {
+        var req = Clark_V1_UpdateConversationRequest()
+        req.id = id
+        req.title = title
+        let resp = await client.updateConversation(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("update conversation") }
+        return ClarkConversation(from: msg.conversation)
     }
 
     public func sendMessage(
@@ -80,9 +99,22 @@ public final class ConversationsRepository: Sendable {
         return (msg.tokenCount, msg.contextWindow)
     }
 
-    public func compact(conversationID: String) async throws -> ClarkStreamRun {
+    /// Trigger compression on the active context. The `guide` /
+    /// `providerID` / `modelID` arguments, when non-nil, override the
+    /// profile's resolved compression settings for this single call —
+    /// nothing is persisted. Use this from the Compact page to let the
+    /// user edit the prompt and pick a different model per-invocation.
+    public func compact(
+        conversationID: String,
+        guide: String? = nil,
+        providerID: String? = nil,
+        modelID: String? = nil
+    ) async throws -> ClarkStreamRun {
         var req = Clark_V1_CompactRequest()
         req.conversationID = conversationID
+        if let guide      { req.compressionGuide      = guide }
+        if let providerID { req.compressionProviderID = providerID }
+        if let modelID    { req.compressionModelID    = modelID }
         let resp = await client.compact(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("compact") }
         return ClarkStreamRun(from: msg.streamRun)

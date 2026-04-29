@@ -814,6 +814,169 @@ func TestDisableModels_OtherUserNotFound(t *testing.T) {
 	assertCode(t, err, connect.CodeNotFound)
 }
 
+// --- ToggleUserModelFavorite ---
+
+func TestToggleUserModelFavorite_SetsTrue(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		Favorite:            true,
+	}))
+	if err != nil {
+		t.Fatalf("ToggleUserModelFavorite: %v", err)
+	}
+	if !resp.Msg.Model.Favorite {
+		t.Error("response model should be favorite=true")
+	}
+	row, err := q.GetUserModel(context.Background(), store.GetUserModelParams{
+		UserModelProviderID: prov.ID, ModelID: "m1",
+	})
+	if err != nil {
+		t.Fatalf("GetUserModel: %v", err)
+	}
+	if !row.Favorite {
+		t.Error("DB row should be favorite=true")
+	}
+}
+
+func TestToggleUserModelFavorite_SetsFalse(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := q.SetUserModelFavorite(context.Background(), store.SetUserModelFavoriteParams{
+		UserModelProviderID: prov.ID, ModelID: "m1", Favorite: true,
+	}); err != nil {
+		t.Fatalf("seed favorite: %v", err)
+	}
+
+	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		Favorite:            false,
+	}))
+	if err != nil {
+		t.Fatalf("ToggleUserModelFavorite: %v", err)
+	}
+	if resp.Msg.Model.Favorite {
+		t.Error("response model should be favorite=false")
+	}
+}
+
+func TestToggleUserModelFavorite_PreservedAcrossUpsert(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	models := []providers.Model{{ID: "m1", DisplayName: "M1 Updated"}}
+	typeName := registerFakeDriver(t, "favorite-upsert", models, nil)
+	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
+
+	// Enable, then favorite, then re-enable. Favorite must survive the upsert.
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&clarkv1.EnableModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelIds:            []string{"m1"},
+	})); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if _, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		Favorite:            true,
+	})); err != nil {
+		t.Fatalf("favorite: %v", err)
+	}
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&clarkv1.EnableModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelIds:            []string{"m1"},
+	})); err != nil {
+		t.Fatalf("re-enable: %v", err)
+	}
+	row, err := q.GetUserModel(context.Background(), store.GetUserModelParams{
+		UserModelProviderID: prov.ID, ModelID: "m1",
+	})
+	if err != nil {
+		t.Fatalf("GetUserModel: %v", err)
+	}
+	if !row.Favorite {
+		t.Error("favorite should be preserved across upsert (re-enable)")
+	}
+}
+
+func TestToggleUserModelFavorite_OtherUserNotFound(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	alice := mustUser(t, q, "alice", false)
+	bob := mustUser(t, q, "bob", false)
+	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := svc.ToggleUserModelFavorite(ctxAs(bob), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		Favorite:            true,
+	}))
+	assertCode(t, err, connect.CodeNotFound)
+}
+
+func TestToggleUserModelFavorite_ModelNotFound(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "nonexistent",
+		Favorite:            true,
+	}))
+	assertCode(t, err, connect.CodeNotFound)
+}
+
+func TestToggleUserModelFavorite_EmptyModelID(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&clarkv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "",
+		Favorite:            true,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
 // --- ListUserModels ---
 
 func TestListUserModels_PerInstance(t *testing.T) {
@@ -1018,6 +1181,9 @@ func (f *fakeCatalog) LookupProvider(_ context.Context, _ string) (*modelmeta.Pr
 	return nil, modelmeta.ErrNotFound
 }
 func (f *fakeCatalog) ListProviders(_ context.Context) ([]modelmeta.Provider, error) {
+	return nil, nil
+}
+func (f *fakeCatalog) ListModelsByProvider(_ context.Context, _ string) ([]modelmeta.Model, error) {
 	return nil, nil
 }
 func (f *fakeCatalog) Refresh(_ context.Context) error {

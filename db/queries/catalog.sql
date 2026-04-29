@@ -47,6 +47,9 @@ ON CONFLICT (provider_id, model_id) DO UPDATE SET
 -- name: GetCatalogModel :one
 SELECT * FROM catalog_models WHERE provider_id = $1 AND model_id = $2;
 
+-- name: ListCatalogModelsByProvider :many
+SELECT * FROM catalog_models WHERE provider_id = $1 ORDER BY model_id;
+
 -- name: CountCatalogModels :one
 SELECT COUNT(*) FROM catalog_models;
 

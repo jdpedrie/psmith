@@ -221,6 +221,13 @@ message SendMessageResponse {
 
 message CompactRequest {
   string conversation_id = 1;
+  // Per-call overrides over the resolved profile values. Each, if set, takes
+  // precedence over what the profile inheritance chain produces. Lets clients
+  // surface a "compact with this prompt + this model" page (per-invocation,
+  // not persisted to the profile) and bypass profile-resolution glitches.
+  optional string compression_guide = 2;
+  optional string compression_provider_id = 3;
+  optional string compression_model_id = 4;
 }
 message CompactResponse {
   StreamRun stream_run = 1;

@@ -806,6 +806,14 @@ public struct Clark_V1_UserModel: @unchecked Sendable {
   /// Clears the value of `enabledAt`. Subsequent reads from it will return its default value.
   public mutating func clearEnabledAt() {_uniqueStorage()._enabledAt = nil}
 
+  /// When true, surface this model in the FAVORITES section at the top of
+  /// model pickers. Identity-style metadata, like profiles.favorite — does not
+  /// affect snapshotted catalog metadata.
+  public var favorite: Bool {
+    get {_storage._favorite}
+    set {_uniqueStorage()._favorite = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1052,6 +1060,43 @@ public struct Clark_V1_Profile: @unchecked Sendable {
   /// Clears the value of `titleGuide`. Subsequent reads from it will return its default value.
   public mutating func clearTitleGuide() {_uniqueStorage()._titleGuide = nil}
 
+  /// Sentinel naming a non-server title generator. NULL = "use the configured
+  /// (title_provider_id, title_model_id) cloud call." A non-null value names a
+  /// generator handled outside the server's stateless-provider title path.
+  /// v1 sentinel: "apple_foundation" — the Mac client uses Apple's on-device
+  /// FoundationModels framework (macOS 26+) to title locally; the server skips
+  /// its cloud roundtrip and the client persists via UpdateConversation.
+  public var titleProviderKind: String {
+    get {_storage._titleProviderKind ?? String()}
+    set {_uniqueStorage()._titleProviderKind = newValue}
+  }
+  /// Returns true if `titleProviderKind` has been explicitly set.
+  public var hasTitleProviderKind: Bool {_storage._titleProviderKind != nil}
+  /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
+
+  /// Free-form description shown alongside `name` in pickers and the detail
+  /// viewer. Identity metadata — NOT inherited through the parent chain.
+  /// Empty string means "no description."
+  public var description_p: String {
+    get {_storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
+
+  /// When true, the profile is hidden from the new-conversation picker and
+  /// only usable as a parent for inheritance. Defaults to false (chat-capable).
+  public var parentOnly: Bool {
+    get {_storage._parentOnly}
+    set {_uniqueStorage()._parentOnly = newValue}
+  }
+
+  /// When true, surface this profile at the start of pickers. Identity
+  /// metadata — not inherited.
+  public var favorite: Bool {
+    get {_storage._favorite}
+    set {_uniqueStorage()._favorite = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1224,6 +1269,18 @@ public struct Clark_V1_Context: Sendable {
   /// aggregate.
   public var messageCount: Int32 = 0
 
+  /// Total tokens (input + output) reported by the most recent assistant
+  /// message in this context. Populated by ListContexts; zero when retrieved
+  /// via single-context RPCs that don't aggregate, or when the context
+  /// contains no assistant message with usage data yet.
+  public var lastMessageTotalTokens: Int64 = 0
+
+  /// Cumulative cost in USD across every message in this context (sum of
+  /// total_cost_usd over all messages, assistant + compression_summary alike).
+  /// Populated by ListContexts; zero when retrieved via single-context RPCs
+  /// that don't aggregate.
+  public var cumulativeCostUsd: Double = 0
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1365,6 +1422,22 @@ public struct Clark_V1_Message: @unchecked Sendable {
   public var hasEditedAt: Bool {_storage._editedAt != nil}
   /// Clears the value of `editedAt`. Subsequent reads from it will return its default value.
   public mutating func clearEditedAt() {_uniqueStorage()._editedAt = nil}
+
+  /// Human-readable error text when the stream that produced this message
+  /// terminated in errored/cancelled state. Non-null marks the message as a
+  /// failed turn: the UI renders it with a warning accent + the error text,
+  /// shows whatever partial content streamed before failure (still in
+  /// `content`), and exposes retry-from-here affordances. The full failure
+  /// payload — provider-specific raw fields — is preserved in the database
+  /// for debugging; only the human-readable string travels on the wire.
+  public var errorText: String {
+    get {_storage._errorText ?? String()}
+    set {_uniqueStorage()._errorText = newValue}
+  }
+  /// Returns true if `errorText` has been explicitly set.
+  public var hasErrorText: Bool {_storage._errorText != nil}
+  /// Clears the value of `errorText`. Subsequent reads from it will return its default value.
+  public mutating func clearErrorText() {_uniqueStorage()._errorText = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2189,7 +2262,7 @@ extension Clark_V1_CatalogModel: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModel"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}default_settings\0\u{3}metadata_source\0\u{3}metadata_snapshot_at\0\u{3}enabled_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}default_settings\0\u{3}metadata_source\0\u{3}metadata_snapshot_at\0\u{3}enabled_at\0\u{1}favorite\0")
 
   fileprivate class _StorageClass {
     var _userModelProviderID: String = String()
@@ -2205,6 +2278,7 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     var _metadataSource: Clark_V1_MetadataSource = .unspecified
     var _metadataSnapshotAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _enabledAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _favorite: Bool = false
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -2228,6 +2302,7 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       _metadataSource = source._metadataSource
       _metadataSnapshotAt = source._metadataSnapshotAt
       _enabledAt = source._enabledAt
+      _favorite = source._favorite
     }
   }
 
@@ -2259,6 +2334,7 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         case 11: try { try decoder.decodeSingularEnumField(value: &_storage._metadataSource) }()
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._metadataSnapshotAt) }()
         case 13: try { try decoder.decodeSingularMessageField(value: &_storage._enabledAt) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
         default: break
         }
       }
@@ -2310,6 +2386,9 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       try { if let v = _storage._enabledAt {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
       } }()
+      if _storage._favorite != false {
+        try visitor.visitSingularBoolField(value: _storage._favorite, fieldNumber: 14)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2332,6 +2411,7 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         if _storage._metadataSource != rhs_storage._metadataSource {return false}
         if _storage._metadataSnapshotAt != rhs_storage._metadataSnapshotAt {return false}
         if _storage._enabledAt != rhs_storage._enabledAt {return false}
+        if _storage._favorite != rhs_storage._favorite {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -2441,7 +2521,7 @@ extension Clark_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
 extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Profile"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -2460,6 +2540,10 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _titleProviderID: String? = nil
     var _titleModelID: String? = nil
     var _titleGuide: String? = nil
+    var _titleProviderKind: String? = nil
+    var _description_p: String = String()
+    var _parentOnly: Bool = false
+    var _favorite: Bool = false
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -2486,6 +2570,10 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _titleProviderID = source._titleProviderID
       _titleModelID = source._titleModelID
       _titleGuide = source._titleGuide
+      _titleProviderKind = source._titleProviderKind
+      _description_p = source._description_p
+      _parentOnly = source._parentOnly
+      _favorite = source._favorite
     }
   }
 
@@ -2520,6 +2608,10 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 14: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderID) }()
         case 15: try { try decoder.decodeSingularStringField(value: &_storage._titleModelID) }()
         case 16: try { try decoder.decodeSingularStringField(value: &_storage._titleGuide) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 18: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
+        case 19: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
+        case 20: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
         default: break
         }
       }
@@ -2580,6 +2672,18 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._titleGuide {
         try visitor.visitSingularStringField(value: v, fieldNumber: 16)
       } }()
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 17)
+      }
+      if _storage._parentOnly != false {
+        try visitor.visitSingularBoolField(value: _storage._parentOnly, fieldNumber: 18)
+      }
+      if _storage._favorite != false {
+        try visitor.visitSingularBoolField(value: _storage._favorite, fieldNumber: 19)
+      }
+      try { if let v = _storage._titleProviderKind {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 20)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2605,6 +2709,10 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._titleProviderID != rhs_storage._titleProviderID {return false}
         if _storage._titleModelID != rhs_storage._titleModelID {return false}
         if _storage._titleGuide != rhs_storage._titleGuide {return false}
+        if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._parentOnly != rhs_storage._parentOnly {return false}
+        if _storage._favorite != rhs_storage._favorite {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -2729,7 +2837,7 @@ extension Clark_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Context"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}parent_context_id\0\u{3}activation_time\0\u{3}created_at\0\u{3}current_leaf_message_id\0\u{1}title\0\u{3}message_count\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}parent_context_id\0\u{3}activation_time\0\u{3}created_at\0\u{3}current_leaf_message_id\0\u{1}title\0\u{3}message_count\0\u{3}last_message_total_tokens\0\u{3}cumulative_cost_usd\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2745,6 +2853,8 @@ extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       case 6: try { try decoder.decodeSingularStringField(value: &self._currentLeafMessageID) }()
       case 7: try { try decoder.decodeSingularStringField(value: &self._title) }()
       case 8: try { try decoder.decodeSingularInt32Field(value: &self.messageCount) }()
+      case 9: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageTotalTokens) }()
+      case 10: try { try decoder.decodeSingularDoubleField(value: &self.cumulativeCostUsd) }()
       default: break
       }
     }
@@ -2779,6 +2889,12 @@ extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if self.messageCount != 0 {
       try visitor.visitSingularInt32Field(value: self.messageCount, fieldNumber: 8)
     }
+    if self.lastMessageTotalTokens != 0 {
+      try visitor.visitSingularInt64Field(value: self.lastMessageTotalTokens, fieldNumber: 9)
+    }
+    if self.cumulativeCostUsd.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.cumulativeCostUsd, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2791,6 +2907,8 @@ extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     if lhs._currentLeafMessageID != rhs._currentLeafMessageID {return false}
     if lhs._title != rhs._title {return false}
     if lhs.messageCount != rhs.messageCount {return false}
+    if lhs.lastMessageTotalTokens != rhs.lastMessageTotalTokens {return false}
+    if lhs.cumulativeCostUsd != rhs.cumulativeCostUsd {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2798,7 +2916,7 @@ extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -2817,6 +2935,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _siblingCount: Int32 = 0
     var _displayContent: String = String()
     var _editedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _errorText: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -2843,6 +2962,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _siblingCount = source._siblingCount
       _displayContent = source._displayContent
       _editedAt = source._editedAt
+      _errorText = source._errorText
     }
   }
 
@@ -2877,6 +2997,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 14: try { try decoder.decodeSingularInt32Field(value: &_storage._siblingCount) }()
         case 15: try { try decoder.decodeSingularStringField(value: &_storage._displayContent) }()
         case 16: try { try decoder.decodeSingularMessageField(value: &_storage._editedAt) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorText) }()
         default: break
         }
       }
@@ -2937,6 +3058,9 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._editedAt {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
       } }()
+      try { if let v = _storage._errorText {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 17)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2962,6 +3086,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._siblingCount != rhs_storage._siblingCount {return false}
         if _storage._displayContent != rhs_storage._displayContent {return false}
         if _storage._editedAt != rhs_storage._editedAt {return false}
+        if _storage._errorText != rhs_storage._errorText {return false}
         return true
       }
       if !storagesAreEqual {return false}

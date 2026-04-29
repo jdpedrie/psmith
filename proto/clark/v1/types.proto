@@ -124,6 +124,11 @@ message UserModel {
   MetadataSource metadata_source = 11;
   google.protobuf.Timestamp metadata_snapshot_at = 12;
   google.protobuf.Timestamp enabled_at = 13;
+
+  // When true, surface this model in the FAVORITES section at the top of
+  // model pickers. Identity-style metadata, like profiles.favorite — does not
+  // affect snapshotted catalog metadata.
+  bool favorite = 14;
 }
 
 // Per-call provider settings.
@@ -177,6 +182,27 @@ message Profile {
   optional string title_provider_id = 14;
   optional string title_model_id = 15;
   optional string title_guide = 16;
+
+  // Sentinel naming a non-server title generator. NULL = "use the configured
+  // (title_provider_id, title_model_id) cloud call." A non-null value names a
+  // generator handled outside the server's stateless-provider title path.
+  // v1 sentinel: "apple_foundation" — the Mac client uses Apple's on-device
+  // FoundationModels framework (macOS 26+) to title locally; the server skips
+  // its cloud roundtrip and the client persists via UpdateConversation.
+  optional string title_provider_kind = 20;
+
+  // Free-form description shown alongside `name` in pickers and the detail
+  // viewer. Identity metadata — NOT inherited through the parent chain.
+  // Empty string means "no description."
+  string description = 17;
+
+  // When true, the profile is hidden from the new-conversation picker and
+  // only usable as a parent for inheritance. Defaults to false (chat-capable).
+  bool parent_only = 18;
+
+  // When true, surface this profile at the start of pickers. Identity
+  // metadata — not inherited.
+  bool favorite = 19;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +244,16 @@ message Context {
   // ListContexts; zero when retrieved via single-context RPCs that don't
   // aggregate.
   int32 message_count = 8;
+  // Total tokens (input + output) reported by the most recent assistant
+  // message in this context. Populated by ListContexts; zero when retrieved
+  // via single-context RPCs that don't aggregate, or when the context
+  // contains no assistant message with usage data yet.
+  int64 last_message_total_tokens = 9;
+  // Cumulative cost in USD across every message in this context (sum of
+  // total_cost_usd over all messages, assistant + compression_summary alike).
+  // Populated by ListContexts; zero when retrieved via single-context RPCs
+  // that don't aggregate.
+  double cumulative_cost_usd = 10;
 }
 
 enum MessageRole {
@@ -258,6 +294,14 @@ message Message {
   // Set by EditMessage. UI shows "edited <relative time>" only when this
   // is non-null. Audit trail; doesn't affect history-builder output.
   optional google.protobuf.Timestamp edited_at = 16;
+  // Human-readable error text when the stream that produced this message
+  // terminated in errored/cancelled state. Non-null marks the message as a
+  // failed turn: the UI renders it with a warning accent + the error text,
+  // shows whatever partial content streamed before failure (still in
+  // `content`), and exposes retry-from-here affordances. The full failure
+  // payload — provider-specific raw fields — is preserved in the database
+  // for debugging; only the human-readable string travels on the wire.
+  optional string error_text = 17;
 }
 
 // MessageUsage records token usage reported by the provider plus the

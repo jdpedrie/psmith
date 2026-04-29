@@ -1240,26 +1240,55 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
 	}
-	if resolved.CompressionGuide == nil || *resolved.CompressionGuide == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("profile has no compression_guide"))
+
+	// Apply per-call overrides over the resolved profile values BEFORE the
+	// existence checks. Each request field, when set, takes precedence over
+	// the inheritance chain. The Compact page in the client uses these to
+	// drive a per-invocation prompt + model picker without persisting to the
+	// profile (and as a workaround when the profile resolves to a model the
+	// user no longer has enabled).
+	guide := resolved.CompressionGuide
+	if req.Msg.CompressionGuide != nil {
+		v := *req.Msg.CompressionGuide
+		guide = &v
 	}
-	if resolved.CompressionProviderID == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("profile has no compression_provider_id"))
+	var providerID *uuid.UUID
+	if resolved.CompressionProviderID != nil {
+		providerID = resolved.CompressionProviderID
 	}
-	if resolved.CompressionModelID == nil || *resolved.CompressionModelID == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("profile has no compression_model_id"))
+	if req.Msg.CompressionProviderId != nil {
+		pid, err := uuid.Parse(*req.Msg.CompressionProviderId)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid compression_provider_id: %w", err))
+		}
+		providerID = &pid
+	}
+	modelID := resolved.CompressionModelID
+	if req.Msg.CompressionModelId != nil {
+		v := *req.Msg.CompressionModelId
+		modelID = &v
+	}
+
+	if guide == nil || *guide == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression_guide is required (set on profile or request)"))
+	}
+	if providerID == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression_provider_id is required (set on profile or request)"))
+	}
+	if modelID == nil || *modelID == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression_model_id is required (set on profile or request)"))
 	}
 
 	// Validate provider/model ownership + enablement.
-	provRow, err := s.queries.GetUserModelProvider(ctx, *resolved.CompressionProviderID)
+	provRow, err := s.queries.GetUserModelProvider(ctx, *providerID)
 	if err != nil || provRow.UserID != user.ID {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression provider not found"))
 	}
 	if _, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
 		UserModelProviderID: provRow.ID,
-		ModelID:             *resolved.CompressionModelID,
+		ModelID:             *modelID,
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("compression model %q is not enabled", *resolved.CompressionModelID))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("compression model %q is not enabled", *modelID))
 	}
 
 	// Resolve compression mode (default REPLACE).
@@ -1295,9 +1324,9 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 
 	driverCtx := context.WithoutCancel(ctx)
 	srcCh, err := stateless.Send(driverCtx, providers.SendRequest{
-		ModelID: *resolved.CompressionModelID,
+		ModelID: *modelID,
 		Messages: []providers.WireMessage{
-			{Role: "system", Content: *resolved.CompressionGuide},
+			{Role: "system", Content: *guide},
 			{Role: "user", Content: "Here is the conversation to compress.\n\n" + transcript + "\n\nProduce the summary."},
 		},
 	})
@@ -1310,7 +1339,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 		ContextID:       activeCtx.ID,
 		ParentMessageID: parentID,
 		ProviderID:      provRow.ID,
-		ModelID:         *resolved.CompressionModelID,
+		ModelID:         *modelID,
 		Purpose:         stream.PurposeCompression,
 		CompressionMode: mode,
 		Source:          srcCh,

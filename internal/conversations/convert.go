@@ -99,15 +99,18 @@ func contextToProto(c store.Context) *clarkv1.Context {
 }
 
 // listContextRowToProto adapts the aggregated ListContextsByConversation row
-// (which carries message_count) to the Context proto. Single-context queries
-// continue to use contextToProto, which leaves message_count at zero.
+// (which carries message_count, last_message_total_tokens, and
+// cumulative_cost_usd) to the Context proto. Single-context queries continue
+// to use contextToProto, which leaves the aggregate fields at zero.
 func listContextRowToProto(r store.ListContextsByConversationRow) *clarkv1.Context {
 	out := &clarkv1.Context{
-		Id:             r.ID.String(),
-		ConversationId: r.ConversationID.String(),
-		ActivationTime: timestamppb.New(r.ContextActivationTime),
-		CreatedAt:      timestamppb.New(r.CreatedAt),
-		MessageCount:   int32(r.MessageCount),
+		Id:                     r.ID.String(),
+		ConversationId:         r.ConversationID.String(),
+		ActivationTime:         timestamppb.New(r.ContextActivationTime),
+		CreatedAt:              timestamppb.New(r.CreatedAt),
+		MessageCount:           int32(r.MessageCount),
+		LastMessageTotalTokens: r.LastMessageTotalTokens,
+		CumulativeCostUsd:      r.CumulativeCostUsd,
 	}
 	if r.ParentContextID != nil {
 		s := r.ParentContextID.String()
@@ -150,7 +153,29 @@ func messageToProto(m store.Message) *clarkv1.Message {
 	if m.EditedAt != nil {
 		out.EditedAt = timestamppb.New(*m.EditedAt)
 	}
+	if errText := errorTextFromPayload(m.ErrorPayload); errText != "" {
+		out.ErrorText = &errText
+	}
 	return out
+}
+
+// errorTextFromPayload extracts the human-readable .message field from a
+// stored error_payload (the JSON shape used by the stream supervisor — see
+// internal/stream.chunkErrorPayload). Returns "" when the payload is empty
+// or unparseable; in that case the proto's error_text stays absent and the UI
+// treats the message as non-errored. The full payload (including any raw
+// provider blob) stays in the database for debugging.
+func errorTextFromPayload(payload []byte) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var p struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return ""
+	}
+	return p.Message
 }
 
 // messageUsageToProto returns a MessageUsage proto if any usage/cost column
@@ -219,6 +244,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *clarkv1.Message {
 		CacheReadCostUsd:     r.CacheReadCostUsd,
 		CacheWriteCostUsd:    r.CacheWriteCostUsd,
 		TotalCostUsd:         r.TotalCostUsd,
+		ErrorPayload:         r.ErrorPayload,
 	})
 	out.SiblingCount = r.SiblingCount
 	return out

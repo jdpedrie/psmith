@@ -81,6 +81,16 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 		s.logger.Warn("title: resolve profile failed", "err", err)
 		return
 	}
+	// Sentinel: a non-server title generator owns this profile. v1 case is
+	// "apple_foundation" — the Mac client runs Apple's on-device
+	// FoundationModels framework and persists the title via the existing
+	// UpdateConversation RPC. Server skips its cloud roundtrip entirely.
+	if resolved.TitleProviderKind != nil && *resolved.TitleProviderKind != "" {
+		s.logger.Debug("title: client-side generator configured; skipping server-side generation",
+			"kind", *resolved.TitleProviderKind,
+			"conversation_id", params.ConversationID)
+		return
+	}
 	if resolved.TitleProviderID == nil || resolved.TitleModelID == nil || *resolved.TitleModelID == "" {
 		// Opt-in feature; profile didn't configure it.
 		return

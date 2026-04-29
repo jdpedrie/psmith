@@ -64,6 +64,18 @@ func (c *DBCatalog) ListProviders(ctx context.Context) ([]Provider, error) {
 	return out, nil
 }
 
+func (c *DBCatalog) ListModelsByProvider(ctx context.Context, providerID string) ([]Model, error) {
+	rows, err := c.queries.ListCatalogModelsByProvider(ctx, providerID)
+	if err != nil {
+		return nil, fmt.Errorf("modelmeta: list models: %w", err)
+	}
+	out := make([]Model, len(rows))
+	for i, r := range rows {
+		out[i] = *rowToModel(r)
+	}
+	return out, nil
+}
+
 // Refresh fetches the latest snapshot and upserts everything. Failures partway
 // through leave the table in an inconsistent state — callers should treat the
 // catalog as eventually-consistent across refreshes.

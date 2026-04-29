@@ -11,6 +11,36 @@ public enum ProvidersDetailMode: Equatable, Sendable {
     case discovering
 }
 
+/// Live state of a "Test provider" action. Stored per-provider in
+/// `ProvidersViewModel.providerTestStatus`; UI reads it to render the inline
+/// Test affordance (button → spinner → result chip).
+public enum ProviderTestStatus: Sendable, Equatable {
+    case idle
+    case testing
+    case success(ClarkProviderTestResult)
+    case failure(String)
+}
+
+/// Composite key for per-model test state — a single provider can have many
+/// enabled models, and a model id alone isn't unique across providers.
+public struct ModelTestKey: Sendable, Hashable {
+    public let providerID: String
+    public let modelID: String
+    public init(providerID: String, modelID: String) {
+        self.providerID = providerID
+        self.modelID = modelID
+    }
+}
+
+/// Live state of a "Test model" action. Same shape as ProviderTestStatus —
+/// the rendering logic in the view layer treats them analogously.
+public enum ModelTestStatus: Sendable, Equatable {
+    case idle
+    case testing
+    case success(ClarkModelTestResult)
+    case failure(String)
+}
+
 /// Provider list + per-provider model orchestration. Drives the providers
 /// settings category. Reusable across macOS / iOS.
 @Observable
@@ -33,6 +63,14 @@ public final class ProvidersViewModel {
     /// so re-entering Add doesn't re-fetch.
     public var templates: [ClarkProviderTemplate] = []
     public var templatesLoaded = false
+
+    /// Transient per-provider test results — keyed by provider ID. Memory-only;
+    /// reset across app launches and overwritten on each re-test.
+    public var providerTestStatus: [String: ProviderTestStatus] = [:]
+
+    /// Transient per-model test results — keyed by (providerID, modelID).
+    /// Same lifecycle as `providerTestStatus`.
+    public var modelTestStatus: [ModelTestKey: ModelTestStatus] = [:]
 
     public init(client: ClarkClient) { self.client = client }
 
@@ -91,6 +129,34 @@ public final class ProvidersViewModel {
         }
     }
 
+    /// Optimistic local toggle of a user model's `favorite` flag — UI updates
+    /// instantly, rolls back on error. Mirrors `ProfilesViewModel.toggleFavorite`.
+    /// Server is the source of truth.
+    public func toggleModelFavorite(modelID: String) async {
+        guard let providerID = selectedID else { return }
+        guard let idx = enabledModels.firstIndex(where: { $0.modelID == modelID }) else { return }
+        let original = enabledModels[idx]
+        let newValue = !original.favorite
+        enabledModels[idx] = ClarkUserModel(
+            providerID: original.providerID,
+            modelID: original.modelID,
+            displayName: original.displayName,
+            contextWindow: original.contextWindow,
+            maxOutputTokens: original.maxOutputTokens,
+            pricing: original.pricing,
+            knowledgeCutoff: original.knowledgeCutoff,
+            modalities: original.modalities,
+            capabilities: original.capabilities,
+            favorite: newValue
+        )
+        do {
+            _ = try await client.modelProviders.toggleModelFavorite(providerID: providerID, modelID: modelID, favorite: newValue)
+        } catch {
+            enabledModels[idx] = original
+            self.error = error.localizedDescription
+        }
+    }
+
     public func loadTemplates() async {
         guard !templatesLoaded else { return }
         do {
@@ -126,5 +192,35 @@ public final class ProvidersViewModel {
         enabledModels.append(contentsOf: fresh)
         enabledModels.sort { $0.displayName < $1.displayName }
         return enabled
+    }
+
+    // MARK: - Test actions
+
+    /// Triggers a "Test provider" action. Re-callable; the latest result
+    /// overwrites any prior result so users can re-test after fixing config.
+    /// Transport errors land in `.failure`; per-payload `ok=false` results
+    /// land in `.success(result)` with `result.ok == false` so the chip
+    /// renders the inline error message rather than the alert banner.
+    public func testProvider(_ providerID: String) async {
+        providerTestStatus[providerID] = .testing
+        do {
+            let result = try await client.modelProviders.testProvider(providerID: providerID)
+            providerTestStatus[providerID] = .success(result)
+        } catch {
+            providerTestStatus[providerID] = .failure(error.localizedDescription)
+        }
+    }
+
+    /// Triggers a "Test model" action against a specific enabled model.
+    /// Same packing convention as `testProvider`.
+    public func testModel(providerID: String, modelID: String) async {
+        let key = ModelTestKey(providerID: providerID, modelID: modelID)
+        modelTestStatus[key] = .testing
+        do {
+            let result = try await client.modelProviders.testModel(providerID: providerID, modelID: modelID)
+            modelTestStatus[key] = .success(result)
+        } catch {
+            modelTestStatus[key] = .failure(error.localizedDescription)
+        }
     }
 }

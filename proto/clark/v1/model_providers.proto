@@ -45,6 +45,23 @@ service ModelProvidersService {
   // Drives the model picker.
   rpc ListAllUserModels(ListAllUserModelsRequest) returns (ListAllUserModelsResponse);
 
+  // Toggle the favorite flag on a single user model. Identity metadata —
+  // surfaces the model in the FAVORITES section of the model picker.
+  rpc ToggleUserModelFavorite(ToggleUserModelFavoriteRequest) returns (ToggleUserModelFavoriteResponse);
+
+  // ----- Connection / responsiveness checks -----
+
+  // Verifies a provider's auth + reachability by calling DiscoverModels.
+  // Free for all current drivers (catalog/Anthropic static, openai-compatible
+  // /v1/models). Failures are reported in the response (ok=false) rather than
+  // as RPC errors so the UI can render them inline.
+  rpc TestUserModelProvider(TestUserModelProviderRequest) returns (TestUserModelProviderResponse);
+
+  // Sends a tiny "Reply with the single word OK." prompt to the named model
+  // and reports latency, tokens, and a sample of the reply. Bills a few
+  // tokens. Failures are packed into the response, not raised as RPC errors.
+  rpc TestUserModel(TestUserModelRequest) returns (TestUserModelResponse);
+
   // ----- Catalog management -----
 
   // Admin-only. Synchronously fetches models.dev and upserts catalog tables.
@@ -156,6 +173,40 @@ message UserModelEntry {
 }
 message ListAllUserModelsResponse {
   repeated UserModelEntry entries = 1;
+}
+
+message ToggleUserModelFavoriteRequest {
+  string user_model_provider_id = 1;
+  string model_id = 2;
+  bool favorite = 3;
+}
+message ToggleUserModelFavoriteResponse {
+  UserModel model = 1;
+}
+
+// --- Connection / responsiveness checks ---
+
+message TestUserModelProviderRequest {
+  string user_model_provider_id = 1;
+}
+message TestUserModelProviderResponse {
+  bool ok = 1;
+  string error_message = 2;
+  int32 model_count = 3;
+  int64 latency_ms = 4;
+}
+
+message TestUserModelRequest {
+  string user_model_provider_id = 1;
+  string model_id = 2;
+}
+message TestUserModelResponse {
+  bool ok = 1;
+  string error_message = 2;
+  int64 latency_ms = 3;
+  int32 input_tokens = 4;
+  int32 output_tokens = 5;
+  string sample_text = 6;
 }
 
 // --- Catalog management ---

@@ -38,6 +38,10 @@ func (f *fakeCatalog) ListProviders(_ context.Context) ([]modelmeta.Provider, er
 	return nil, nil
 }
 
+func (f *fakeCatalog) ListModelsByProvider(_ context.Context, _ string) ([]modelmeta.Model, error) {
+	return nil, nil
+}
+
 func (f *fakeCatalog) Refresh(_ context.Context) error { return nil }
 
 func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) {

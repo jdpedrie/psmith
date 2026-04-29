@@ -59,6 +59,24 @@ public protocol Clark_V1_ModelProvidersServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `listAllUserModels`(request: Clark_V1_ListAllUserModelsRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_ListAllUserModelsResponse>
 
+    /// Toggle the favorite flag on a single user model. Identity metadata —
+    /// surfaces the model in the FAVORITES section of the model picker.
+    @available(iOS 13, *)
+    func `toggleUserModelFavorite`(request: Clark_V1_ToggleUserModelFavoriteRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_ToggleUserModelFavoriteResponse>
+
+    /// Verifies a provider's auth + reachability by calling DiscoverModels.
+    /// Free for all current drivers (catalog/Anthropic static, openai-compatible
+    /// /v1/models). Failures are reported in the response (ok=false) rather than
+    /// as RPC errors so the UI can render them inline.
+    @available(iOS 13, *)
+    func `testUserModelProvider`(request: Clark_V1_TestUserModelProviderRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_TestUserModelProviderResponse>
+
+    /// Sends a tiny "Reply with the single word OK." prompt to the named model
+    /// and reports latency, tokens, and a sample of the reply. Bills a few
+    /// tokens. Failures are packed into the response, not raised as RPC errors.
+    @available(iOS 13, *)
+    func `testUserModel`(request: Clark_V1_TestUserModelRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_TestUserModelResponse>
+
     /// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
     @available(iOS 13, *)
     func `refreshModelCatalog`(request: Clark_V1_RefreshModelCatalogRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_RefreshModelCatalogResponse>
@@ -137,6 +155,21 @@ public final class Clark_V1_ModelProvidersServiceClient: Clark_V1_ModelProviders
     }
 
     @available(iOS 13, *)
+    public func `toggleUserModelFavorite`(request: Clark_V1_ToggleUserModelFavoriteRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_ToggleUserModelFavoriteResponse> {
+        return await self.client.unary(path: "/clark.v1.ModelProvidersService/ToggleUserModelFavorite", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `testUserModelProvider`(request: Clark_V1_TestUserModelProviderRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_TestUserModelProviderResponse> {
+        return await self.client.unary(path: "/clark.v1.ModelProvidersService/TestUserModelProvider", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `testUserModel`(request: Clark_V1_TestUserModelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_TestUserModelResponse> {
+        return await self.client.unary(path: "/clark.v1.ModelProvidersService/TestUserModel", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `refreshModelCatalog`(request: Clark_V1_RefreshModelCatalogRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_RefreshModelCatalogResponse> {
         return await self.client.unary(path: "/clark.v1.ModelProvidersService/RefreshModelCatalog", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -160,6 +193,9 @@ public final class Clark_V1_ModelProvidersServiceClient: Clark_V1_ModelProviders
             public static let disableModels = Connect.MethodSpec(name: "DisableModels", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let listUserModels = Connect.MethodSpec(name: "ListUserModels", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let listAllUserModels = Connect.MethodSpec(name: "ListAllUserModels", service: "clark.v1.ModelProvidersService", type: .unary)
+            public static let toggleUserModelFavorite = Connect.MethodSpec(name: "ToggleUserModelFavorite", service: "clark.v1.ModelProvidersService", type: .unary)
+            public static let testUserModelProvider = Connect.MethodSpec(name: "TestUserModelProvider", service: "clark.v1.ModelProvidersService", type: .unary)
+            public static let testUserModel = Connect.MethodSpec(name: "TestUserModel", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let refreshModelCatalog = Connect.MethodSpec(name: "RefreshModelCatalog", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let getCatalogStatus = Connect.MethodSpec(name: "GetCatalogStatus", service: "clark.v1.ModelProvidersService", type: .unary)
         }

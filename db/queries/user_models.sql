@@ -42,3 +42,8 @@ ORDER BY ump.created_at, um.model_id;
 -- name: DeleteUserModel :exec
 DELETE FROM user_models
 WHERE user_model_provider_id = $1 AND model_id = $2;
+
+-- name: SetUserModelFavorite :exec
+UPDATE user_models
+SET favorite = $3
+WHERE user_model_provider_id = $1 AND model_id = $2;

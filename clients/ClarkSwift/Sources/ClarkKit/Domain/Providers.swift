@@ -99,6 +99,31 @@ public struct ClarkUserModel: Sendable, Identifiable, Hashable {
     public let knowledgeCutoff: String?
     public let modalities: [String]
     public let capabilities: ClarkModelCapabilities?
+    public let favorite: Bool
+
+    public init(
+        providerID: String,
+        modelID: String,
+        displayName: String,
+        contextWindow: Int32?,
+        maxOutputTokens: Int32?,
+        pricing: ClarkModelPricing?,
+        knowledgeCutoff: String?,
+        modalities: [String],
+        capabilities: ClarkModelCapabilities?,
+        favorite: Bool
+    ) {
+        self.providerID = providerID
+        self.modelID = modelID
+        self.displayName = displayName
+        self.contextWindow = contextWindow
+        self.maxOutputTokens = maxOutputTokens
+        self.pricing = pricing
+        self.knowledgeCutoff = knowledgeCutoff
+        self.modalities = modalities
+        self.capabilities = capabilities
+        self.favorite = favorite
+    }
 }
 
 extension ClarkUserModel {
@@ -112,6 +137,7 @@ extension ClarkUserModel {
         knowledgeCutoff = p.hasKnowledgeCutoff ? p.knowledgeCutoff : nil
         modalities     = p.modalities
         capabilities   = p.hasCapabilities   ? ClarkModelCapabilities(from: p.capabilities) : nil
+        favorite       = p.favorite
     }
 }
 
@@ -133,6 +159,66 @@ extension ClarkDiscoveredModel {
         pricing       = p.hasPricing       ? ClarkModelPricing(from: p.pricing)        : nil
         capabilities  = p.hasCapabilities  ? ClarkModelCapabilities(from: p.capabilities) : nil
         alreadyEnabled = p.alreadyEnabled
+    }
+}
+
+// MARK: - Test results
+
+/// Outcome of a "Test provider" action — verifies auth + reachability via
+/// the driver's DiscoverModels. Server packs failures into the response so
+/// clients can render them inline next to successful results.
+public struct ClarkProviderTestResult: Sendable, Hashable {
+    public let ok: Bool
+    public let errorMessage: String
+    public let modelCount: Int32
+    public let latencyMs: Int64
+
+    public init(ok: Bool, errorMessage: String, modelCount: Int32, latencyMs: Int64) {
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.modelCount = modelCount
+        self.latencyMs = latencyMs
+    }
+}
+
+extension ClarkProviderTestResult {
+    init(from p: Clark_V1_TestUserModelProviderResponse) {
+        ok = p.ok
+        errorMessage = p.errorMessage
+        modelCount = p.modelCount
+        latencyMs = p.latencyMs
+    }
+}
+
+/// Outcome of a "Test model" action — sends a tiny "Reply with the single
+/// word OK." prompt and reports latency, tokens, and a sample of the reply.
+public struct ClarkModelTestResult: Sendable, Hashable {
+    public let ok: Bool
+    public let errorMessage: String
+    public let latencyMs: Int64
+    public let inputTokens: Int32
+    public let outputTokens: Int32
+    public let sampleText: String
+
+    public init(ok: Bool, errorMessage: String, latencyMs: Int64,
+                inputTokens: Int32, outputTokens: Int32, sampleText: String) {
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.latencyMs = latencyMs
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.sampleText = sampleText
+    }
+}
+
+extension ClarkModelTestResult {
+    init(from p: Clark_V1_TestUserModelResponse) {
+        ok = p.ok
+        errorMessage = p.errorMessage
+        latencyMs = p.latencyMs
+        inputTokens = p.inputTokens
+        outputTokens = p.outputTokens
+        sampleText = p.sampleText
     }
 }
 

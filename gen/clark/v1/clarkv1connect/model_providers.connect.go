@@ -69,6 +69,15 @@ const (
 	// ModelProvidersServiceListAllUserModelsProcedure is the fully-qualified name of the
 	// ModelProvidersService's ListAllUserModels RPC.
 	ModelProvidersServiceListAllUserModelsProcedure = "/clark.v1.ModelProvidersService/ListAllUserModels"
+	// ModelProvidersServiceToggleUserModelFavoriteProcedure is the fully-qualified name of the
+	// ModelProvidersService's ToggleUserModelFavorite RPC.
+	ModelProvidersServiceToggleUserModelFavoriteProcedure = "/clark.v1.ModelProvidersService/ToggleUserModelFavorite"
+	// ModelProvidersServiceTestUserModelProviderProcedure is the fully-qualified name of the
+	// ModelProvidersService's TestUserModelProvider RPC.
+	ModelProvidersServiceTestUserModelProviderProcedure = "/clark.v1.ModelProvidersService/TestUserModelProvider"
+	// ModelProvidersServiceTestUserModelProcedure is the fully-qualified name of the
+	// ModelProvidersService's TestUserModel RPC.
+	ModelProvidersServiceTestUserModelProcedure = "/clark.v1.ModelProvidersService/TestUserModel"
 	// ModelProvidersServiceRefreshModelCatalogProcedure is the fully-qualified name of the
 	// ModelProvidersService's RefreshModelCatalog RPC.
 	ModelProvidersServiceRefreshModelCatalogProcedure = "/clark.v1.ModelProvidersService/RefreshModelCatalog"
@@ -102,6 +111,18 @@ type ModelProvidersServiceClient interface {
 	// Flat list of all enabled models across the user's configured providers.
 	// Drives the model picker.
 	ListAllUserModels(context.Context, *connect.Request[v1.ListAllUserModelsRequest]) (*connect.Response[v1.ListAllUserModelsResponse], error)
+	// Toggle the favorite flag on a single user model. Identity metadata —
+	// surfaces the model in the FAVORITES section of the model picker.
+	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
+	// Verifies a provider's auth + reachability by calling DiscoverModels.
+	// Free for all current drivers (catalog/Anthropic static, openai-compatible
+	// /v1/models). Failures are reported in the response (ok=false) rather than
+	// as RPC errors so the UI can render them inline.
+	TestUserModelProvider(context.Context, *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error)
+	// Sends a tiny "Reply with the single word OK." prompt to the named model
+	// and reports latency, tokens, and a sample of the reply. Bills a few
+	// tokens. Failures are packed into the response, not raised as RPC errors.
+	TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error)
 	// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
@@ -191,6 +212,24 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(modelProvidersServiceMethods.ByName("ListAllUserModels")),
 			connect.WithClientOptions(opts...),
 		),
+		toggleUserModelFavorite: connect.NewClient[v1.ToggleUserModelFavoriteRequest, v1.ToggleUserModelFavoriteResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceToggleUserModelFavoriteProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("ToggleUserModelFavorite")),
+			connect.WithClientOptions(opts...),
+		),
+		testUserModelProvider: connect.NewClient[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceTestUserModelProviderProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModelProvider")),
+			connect.WithClientOptions(opts...),
+		),
+		testUserModel: connect.NewClient[v1.TestUserModelRequest, v1.TestUserModelResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceTestUserModelProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModel")),
+			connect.WithClientOptions(opts...),
+		),
 		refreshModelCatalog: connect.NewClient[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse](
 			httpClient,
 			baseURL+ModelProvidersServiceRefreshModelCatalogProcedure,
@@ -220,6 +259,9 @@ type modelProvidersServiceClient struct {
 	disableModels           *connect.Client[v1.DisableModelsRequest, v1.DisableModelsResponse]
 	listUserModels          *connect.Client[v1.ListUserModelsRequest, v1.ListUserModelsResponse]
 	listAllUserModels       *connect.Client[v1.ListAllUserModelsRequest, v1.ListAllUserModelsResponse]
+	toggleUserModelFavorite *connect.Client[v1.ToggleUserModelFavoriteRequest, v1.ToggleUserModelFavoriteResponse]
+	testUserModelProvider   *connect.Client[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse]
+	testUserModel           *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
 	refreshModelCatalog     *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
 	getCatalogStatus        *connect.Client[v1.GetCatalogStatusRequest, v1.GetCatalogStatusResponse]
 }
@@ -284,6 +326,21 @@ func (c *modelProvidersServiceClient) ListAllUserModels(ctx context.Context, req
 	return c.listAllUserModels.CallUnary(ctx, req)
 }
 
+// ToggleUserModelFavorite calls clark.v1.ModelProvidersService.ToggleUserModelFavorite.
+func (c *modelProvidersServiceClient) ToggleUserModelFavorite(ctx context.Context, req *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error) {
+	return c.toggleUserModelFavorite.CallUnary(ctx, req)
+}
+
+// TestUserModelProvider calls clark.v1.ModelProvidersService.TestUserModelProvider.
+func (c *modelProvidersServiceClient) TestUserModelProvider(ctx context.Context, req *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error) {
+	return c.testUserModelProvider.CallUnary(ctx, req)
+}
+
+// TestUserModel calls clark.v1.ModelProvidersService.TestUserModel.
+func (c *modelProvidersServiceClient) TestUserModel(ctx context.Context, req *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error) {
+	return c.testUserModel.CallUnary(ctx, req)
+}
+
 // RefreshModelCatalog calls clark.v1.ModelProvidersService.RefreshModelCatalog.
 func (c *modelProvidersServiceClient) RefreshModelCatalog(ctx context.Context, req *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error) {
 	return c.refreshModelCatalog.CallUnary(ctx, req)
@@ -319,6 +376,18 @@ type ModelProvidersServiceHandler interface {
 	// Flat list of all enabled models across the user's configured providers.
 	// Drives the model picker.
 	ListAllUserModels(context.Context, *connect.Request[v1.ListAllUserModelsRequest]) (*connect.Response[v1.ListAllUserModelsResponse], error)
+	// Toggle the favorite flag on a single user model. Identity metadata —
+	// surfaces the model in the FAVORITES section of the model picker.
+	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
+	// Verifies a provider's auth + reachability by calling DiscoverModels.
+	// Free for all current drivers (catalog/Anthropic static, openai-compatible
+	// /v1/models). Failures are reported in the response (ok=false) rather than
+	// as RPC errors so the UI can render them inline.
+	TestUserModelProvider(context.Context, *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error)
+	// Sends a tiny "Reply with the single word OK." prompt to the named model
+	// and reports latency, tokens, and a sample of the reply. Bills a few
+	// tokens. Failures are packed into the response, not raised as RPC errors.
+	TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error)
 	// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
@@ -404,6 +473,24 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 		connect.WithSchema(modelProvidersServiceMethods.ByName("ListAllUserModels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelProvidersServiceToggleUserModelFavoriteHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceToggleUserModelFavoriteProcedure,
+		svc.ToggleUserModelFavorite,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("ToggleUserModelFavorite")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelProvidersServiceTestUserModelProviderHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceTestUserModelProviderProcedure,
+		svc.TestUserModelProvider,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModelProvider")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelProvidersServiceTestUserModelHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceTestUserModelProcedure,
+		svc.TestUserModel,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelProvidersServiceRefreshModelCatalogHandler := connect.NewUnaryHandler(
 		ModelProvidersServiceRefreshModelCatalogProcedure,
 		svc.RefreshModelCatalog,
@@ -442,6 +529,12 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 			modelProvidersServiceListUserModelsHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceListAllUserModelsProcedure:
 			modelProvidersServiceListAllUserModelsHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceToggleUserModelFavoriteProcedure:
+			modelProvidersServiceToggleUserModelFavoriteHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceTestUserModelProviderProcedure:
+			modelProvidersServiceTestUserModelProviderHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceTestUserModelProcedure:
+			modelProvidersServiceTestUserModelHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceRefreshModelCatalogProcedure:
 			modelProvidersServiceRefreshModelCatalogHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceGetCatalogStatusProcedure:
@@ -501,6 +594,18 @@ func (UnimplementedModelProvidersServiceHandler) ListUserModels(context.Context,
 
 func (UnimplementedModelProvidersServiceHandler) ListAllUserModels(context.Context, *connect.Request[v1.ListAllUserModelsRequest]) (*connect.Response[v1.ListAllUserModelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.ListAllUserModels is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.ToggleUserModelFavorite is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) TestUserModelProvider(context.Context, *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.TestUserModelProvider is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.TestUserModel is not implemented"))
 }
 
 func (UnimplementedModelProvidersServiceHandler) RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error) {

@@ -84,6 +84,12 @@ type Catalog interface {
 	// ListProviders returns all catalog providers (used to surface templates).
 	ListProviders(ctx context.Context) ([]Provider, error)
 
+	// ListModelsByProvider returns every catalog model under providerID,
+	// alphabetised. Used by the discovery flow when a user_model_provider
+	// has a `catalog_provider_id` configured — we trust the catalog as the
+	// source of truth instead of hitting the live provider API.
+	ListModelsByProvider(ctx context.Context, providerID string) ([]Model, error)
+
 	// Refresh fetches the latest data from the upstream source (models.dev) and
 	// upserts both providers and models. Idempotent.
 	Refresh(ctx context.Context) error

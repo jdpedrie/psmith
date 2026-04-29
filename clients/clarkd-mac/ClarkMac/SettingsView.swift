@@ -13,17 +13,60 @@ struct SettingsView: View {
     let onBack: () -> Void
 
     @State private var category: SettingsCategory = .providers
+    @Environment(WindowState.self) private var windowState
+    @Environment(Navigator.self) private var navigator
+
+    /// macOS draws an opaque ~36pt title-bar overlay only when the window is
+    /// zoomed — normal and fullscreen leave the title-bar area transparent.
+    /// Reserve a strip in the right two columns when zoomed so headers stay
+    /// visible; in the other modes content sits flush against the top.
+    /// macOS draws an opaque title-bar overlay only when the window is
+    /// zoomed — normal and fullscreen leave that band transparent. Reserve
+    /// just enough space to clear the overlay when zoomed; in the other
+    /// modes the headers sit flush against the top.
+    private var topInset: CGFloat {
+        windowState.mode == .zoomed ? 36 : 0
+    }
 
     var body: some View {
         HSplitView {
             categoriesColumn
                 .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
-            middleColumn
-                .frame(minWidth: 260, idealWidth: 320)
-            detailColumn
+            insetWrap(middleColumn)
+                .frame(minWidth: 260, idealWidth: 320, maxWidth: 380)
+            insetWrap(detailColumn)
                 .frame(minWidth: 420)
         }
         .frame(minWidth: 940, minHeight: 520)
+        .onAppear { consumePendingProfileSelection() }
+        .onChange(of: navigator.pendingProfileSelection) { _, _ in
+            consumePendingProfileSelection()
+        }
+    }
+
+    /// If a ProfileCard's gear button asked us to drill into a specific
+    /// profile, switch to the Profiles category and select it. The signal
+    /// is cleared after consumption so re-entering settings later doesn't
+    /// re-trigger the jump.
+    private func consumePendingProfileSelection() {
+        guard let id = navigator.pendingProfileSelection else { return }
+        category = .profiles
+        profilesModel.select(id)
+        navigator.pendingProfileSelection = nil
+    }
+
+    /// Stacks an opaque Spacer above the column when the window is zoomed,
+    /// so the column's header clears macOS's opaque title-bar overlay.
+    /// `padding`/`safeAreaInset` haven't been reliably reaching the inner
+    /// VStack in this layout, so we use an explicit wrapper VStack.
+    @ViewBuilder
+    private func insetWrap<Content: View>(_ content: Content) -> some View {
+        VStack(spacing: 0) {
+            if topInset > 0 {
+                Color.clear.frame(height: topInset)
+            }
+            content
+        }
     }
 
     // MARK: - Column 1: categories sidebar
@@ -107,8 +150,11 @@ struct SettingsListHeader: View {
 }
 
 /// Compact icon-only Liquid Glass circle button — used in pane headers
-/// for actions like back, edit, delete, create. All buttons share the same
-/// 24×24 footprint so headers read as a row of consistent affordances.
+/// for actions like back, edit, delete, create. The ZStack with Color.clear
+/// forces every instance to the same 26×26 footprint regardless of which
+/// SF Symbol it carries (chevron.left, plus, pencil, trash all have
+/// different intrinsic widths). The glass effect lives on the button itself
+/// so .buttonStyle(.plain) gets a clean rectangular hit target.
 struct GlassCircleButton: View {
     let systemImage: String
     let action: () -> Void
@@ -118,15 +164,19 @@ struct GlassCircleButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 24, height: 24)
-                .glassEffect(
-                    tint.map { .regular.tint($0).interactive() } ?? .regular.interactive(),
-                    in: .circle
-                )
+            ZStack {
+                Color.clear
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .frame(width: 26, height: 26)
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .glassEffect(
+            tint.map { .regular.tint($0).interactive() } ?? .regular.interactive(),
+            in: .circle
+        )
         .disabled(disabled)
         .help(help)
     }

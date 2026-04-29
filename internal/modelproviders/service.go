@@ -75,6 +75,10 @@ func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[
 		case p.APIBase != "":
 			driverType = "openai-compatible"
 		default:
+			// Catalog providers without an api_base and no native driver
+			// (Google's Gemini being the notable case) are skipped here.
+			// Adding them would require a native driver; we don't want to
+			// route Gemini through its OpenAI-compatible shim.
 			continue
 		}
 		tmpl := &clarkv1.ProviderTemplate{
@@ -207,14 +211,7 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[clark
 	if err != nil {
 		return nil, err
 	}
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
-	}
-	models, err := driver.DiscoverModels(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("discover models: %w", err))
-	}
+
 	enabled, err := s.queries.ListUserModelsByProvider(ctx, row.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -222,6 +219,36 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[clark
 	enabledSet := make(map[string]bool, len(enabled))
 	for _, m := range enabled {
 		enabledSet[m.ModelID] = true
+	}
+
+	// Prefer the catalog as the source of truth for model discovery whenever
+	// the provider has a `catalog_provider_id` (every Anthropic provider does
+	// implicitly; openai-compatible providers carry it in their config).
+	// Catalog data is curated and metadata-rich; the live provider API
+	// (e.g. OpenRouter's /v1/models) leaks alias pointers and unversioned
+	// entries that have no pricing/context-window data, which is what users
+	// run into. Fall back to live discovery only for providers with no
+	// catalog hint at all (LM Studio, Ollama, custom endpoints).
+	catalogProviderID := configCatalogProviderID(row.Type, row.Config)
+	if catalogProviderID != "" {
+		cms, lookupErr := s.catalog.ListModelsByProvider(ctx, catalogProviderID)
+		if lookupErr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("catalog list: %w", lookupErr))
+		}
+		out := make([]*clarkv1.DiscoveredModel, 0, len(cms))
+		for i := range cms {
+			out = append(out, catalogModelToDiscovered(&cms[i], enabledSet[cms[i].ID]))
+		}
+		return connect.NewResponse(&clarkv1.DiscoverModelsResponse{Models: out}), nil
+	}
+
+	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
+	}
+	models, err := driver.DiscoverModels(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("discover models: %w", err))
 	}
 	out := make([]*clarkv1.DiscoveredModel, 0, len(models))
 	for _, m := range models {
@@ -380,6 +407,52 @@ func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[clar
 		})
 	}
 	return connect.NewResponse(&clarkv1.ListAllUserModelsResponse{Entries: entries}), nil
+}
+
+// --- Favorite toggle ---
+
+// ToggleUserModelFavorite sets the `favorite` flag on a single user model.
+// Verifies the caller owns the parent provider; the model row must already
+// exist (callers can't favorite a model they haven't enabled).
+func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Request[clarkv1.ToggleUserModelFavoriteRequest]) (*connect.Response[clarkv1.ToggleUserModelFavoriteResponse], error) {
+	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.ModelId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
+	}
+	// Make sure the model exists on this provider before toggling — we want
+	// NotFound rather than a silent no-op if the row doesn't exist.
+	existing, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("model not enabled on this provider"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if existing.Favorite != req.Msg.Favorite {
+		if err := s.queries.SetUserModelFavorite(ctx, store.SetUserModelFavoriteParams{
+			UserModelProviderID: row.ID,
+			ModelID:             req.Msg.ModelId,
+			Favorite:            req.Msg.Favorite,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+	updated, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&clarkv1.ToggleUserModelFavoriteResponse{
+		Model: storeUserModelToProto(updated),
+	}), nil
 }
 
 // --- Catalog ---

@@ -35,8 +35,17 @@ type CreateProfileRequest struct {
 	TitleProviderId       *string                `protobuf:"bytes,10,opt,name=title_provider_id,json=titleProviderId,proto3,oneof" json:"title_provider_id,omitempty"`
 	TitleModelId          *string                `protobuf:"bytes,11,opt,name=title_model_id,json=titleModelId,proto3,oneof" json:"title_model_id,omitempty"`
 	TitleGuide            *string                `protobuf:"bytes,12,opt,name=title_guide,json=titleGuide,proto3,oneof" json:"title_guide,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Free-form description; empty string treated as "no description."
+	Description string `protobuf:"bytes,13,opt,name=description,proto3" json:"description,omitempty"`
+	// When true, profile is hidden from the new-conversation picker.
+	ParentOnly bool `protobuf:"varint,14,opt,name=parent_only,json=parentOnly,proto3" json:"parent_only,omitempty"`
+	// When true, surface at the top of profile pickers.
+	Favorite bool `protobuf:"varint,15,opt,name=favorite,proto3" json:"favorite,omitempty"`
+	// Sentinel for a non-server title generator (e.g. "apple_foundation" for
+	// Mac on-device titling). See Profile.title_provider_kind.
+	TitleProviderKind *string `protobuf:"bytes,16,opt,name=title_provider_kind,json=titleProviderKind,proto3,oneof" json:"title_provider_kind,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreateProfileRequest) Reset() {
@@ -149,6 +158,34 @@ func (x *CreateProfileRequest) GetTitleModelId() string {
 func (x *CreateProfileRequest) GetTitleGuide() string {
 	if x != nil && x.TitleGuide != nil {
 		return *x.TitleGuide
+	}
+	return ""
+}
+
+func (x *CreateProfileRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CreateProfileRequest) GetParentOnly() bool {
+	if x != nil {
+		return x.ParentOnly
+	}
+	return false
+}
+
+func (x *CreateProfileRequest) GetFavorite() bool {
+	if x != nil {
+		return x.Favorite
+	}
+	return false
+}
+
+func (x *CreateProfileRequest) GetTitleProviderKind() string {
+	if x != nil && x.TitleProviderKind != nil {
+		return *x.TitleProviderKind
 	}
 	return ""
 }
@@ -399,8 +436,16 @@ type UpdateProfileRequest struct {
 	TitleProviderId       *string          `protobuf:"bytes,11,opt,name=title_provider_id,json=titleProviderId,proto3,oneof" json:"title_provider_id,omitempty"`
 	TitleModelId          *string          `protobuf:"bytes,12,opt,name=title_model_id,json=titleModelId,proto3,oneof" json:"title_model_id,omitempty"`
 	TitleGuide            *string          `protobuf:"bytes,13,opt,name=title_guide,json=titleGuide,proto3,oneof" json:"title_guide,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Identity-metadata updates. All non-nullable on the row, so they're
+	// wrapped here as `optional` purely so callers can leave them unchanged.
+	Description *string `protobuf:"bytes,14,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	ParentOnly  *bool   `protobuf:"varint,15,opt,name=parent_only,json=parentOnly,proto3,oneof" json:"parent_only,omitempty"`
+	Favorite    *bool   `protobuf:"varint,16,opt,name=favorite,proto3,oneof" json:"favorite,omitempty"`
+	// Sentinel for a non-server title generator. See Profile.title_provider_kind.
+	// Listed in clear_fields to revert to inherited / cloud-titled behavior.
+	TitleProviderKind *string `protobuf:"bytes,17,opt,name=title_provider_kind,json=titleProviderKind,proto3,oneof" json:"title_provider_kind,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *UpdateProfileRequest) Reset() {
@@ -520,6 +565,34 @@ func (x *UpdateProfileRequest) GetTitleModelId() string {
 func (x *UpdateProfileRequest) GetTitleGuide() string {
 	if x != nil && x.TitleGuide != nil {
 		return *x.TitleGuide
+	}
+	return ""
+}
+
+func (x *UpdateProfileRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *UpdateProfileRequest) GetParentOnly() bool {
+	if x != nil && x.ParentOnly != nil {
+		return *x.ParentOnly
+	}
+	return false
+}
+
+func (x *UpdateProfileRequest) GetFavorite() bool {
+	if x != nil && x.Favorite != nil {
+		return *x.Favorite
+	}
+	return false
+}
+
+func (x *UpdateProfileRequest) GetTitleProviderKind() string {
+	if x != nil && x.TitleProviderKind != nil {
+		return *x.TitleProviderKind
 	}
 	return ""
 }
@@ -1145,7 +1218,7 @@ var File_clark_v1_profiles_proto protoreflect.FileDescriptor
 
 const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\n" +
-	"\x17clark/v1/profiles.proto\x12\bclark.v1\x1a\x14clark/v1/types.proto\"\xec\x06\n" +
+	"\x17clark/v1/profiles.proto\x12\bclark.v1\x1a\x14clark/v1/types.proto\"\x98\b\n" +
 	"\x14CreateProfileRequest\x12/\n" +
 	"\x11parent_profile_id\x18\x01 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12*\n" +
@@ -1161,7 +1234,12 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x0etitle_model_id\x18\v \x01(\tH\tR\ftitleModelId\x88\x01\x01\x12$\n" +
 	"\vtitle_guide\x18\f \x01(\tH\n" +
 	"R\n" +
-	"titleGuide\x88\x01\x01B\x14\n" +
+	"titleGuide\x88\x01\x01\x12 \n" +
+	"\vdescription\x18\r \x01(\tR\vdescription\x12\x1f\n" +
+	"\vparent_only\x18\x0e \x01(\bR\n" +
+	"parentOnly\x12\x1a\n" +
+	"\bfavorite\x18\x0f \x01(\bR\bfavorite\x123\n" +
+	"\x13title_provider_kind\x18\x10 \x01(\tH\vR\x11titleProviderKind\x88\x01\x01B\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -1172,7 +1250,8 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x11_default_settingsB\x14\n" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
-	"\f_title_guide\"D\n" +
+	"\f_title_guideB\x16\n" +
+	"\x14_title_provider_kind\"D\n" +
 	"\x15CreateProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.clark.v1.ProfileR\aprofile\"\x15\n" +
 	"\x13ListProfilesRequest\"E\n" +
@@ -1184,7 +1263,7 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x12GetProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.clark.v1.ProfileR\aprofile\x122\n" +
 	"\bresolved\x18\x02 \x01(\v2\x11.clark.v1.ProfileH\x00R\bresolved\x88\x01\x01B\v\n" +
-	"\t_resolved\"\xe6\x06\n" +
+	"\t_resolved\"\xce\b\n" +
 	"\x14UpdateProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12*\n" +
@@ -1201,7 +1280,12 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x0etitle_model_id\x18\f \x01(\tH\tR\ftitleModelId\x88\x01\x01\x12$\n" +
 	"\vtitle_guide\x18\r \x01(\tH\n" +
 	"R\n" +
-	"titleGuide\x88\x01\x01B\a\n" +
+	"titleGuide\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x0e \x01(\tH\vR\vdescription\x88\x01\x01\x12$\n" +
+	"\vparent_only\x18\x0f \x01(\bH\fR\n" +
+	"parentOnly\x88\x01\x01\x12\x1f\n" +
+	"\bfavorite\x18\x10 \x01(\bH\rR\bfavorite\x88\x01\x01\x123\n" +
+	"\x13title_provider_kind\x18\x11 \x01(\tH\x0eR\x11titleProviderKind\x88\x01\x01B\a\n" +
 	"\x05_nameB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -1212,7 +1296,11 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x11_default_settingsB\x14\n" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
-	"\f_title_guide\"D\n" +
+	"\f_title_guideB\x0e\n" +
+	"\f_descriptionB\x0e\n" +
+	"\f_parent_onlyB\v\n" +
+	"\t_favoriteB\x16\n" +
+	"\x14_title_provider_kind\"D\n" +
 	"\x15UpdateProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.clark.v1.ProfileR\aprofile\"&\n" +
 	"\x14DeleteProfileRequest\x12\x0e\n" +

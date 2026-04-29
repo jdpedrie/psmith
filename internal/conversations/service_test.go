@@ -3,17 +3,32 @@ package conversations
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
 	"github.com/jdpedrie/clark/internal/auth"
 	"github.com/jdpedrie/clark/internal/store"
 	"github.com/jdpedrie/clark/internal/testutil"
 )
+
+// numericValue is a small test helper for building pgtype.Numeric from a float
+// — mirrors the production conversion in stream/consume.go's floatToNumeric
+// (string round-trip) but lives in the test file to avoid coupling tests to
+// internal package helpers.
+func numericValue(t *testing.T, v float64) pgtype.Numeric {
+	t.Helper()
+	var n pgtype.Numeric
+	if err := n.Scan(strconv.FormatFloat(v, 'f', 6, 64)); err != nil {
+		t.Fatalf("numeric scan %f: %v", v, err)
+	}
+	return n
+}
 
 // --- helpers ---
 
@@ -668,6 +683,150 @@ func TestService_ListContexts_MessageCount(t *testing.T) {
 	}
 	if got := byID[ctx2UUID.String()].MessageCount; got != 0 {
 		t.Errorf("ctx2 message_count: got %d want 0", got)
+	}
+}
+
+// Per-context aggregates last_message_total_tokens and cumulative_cost_usd
+// are exposed via ListContexts so the client can render context-list rows
+// without N+1 round trips. Empty contexts (no assistant message with usage)
+// must yield zero on both fields. Contexts with multiple assistant messages
+// must report the LAST assistant's input+output tokens and the SUM of every
+// row's total_cost_usd (ignoring NULL costs).
+func TestService_ListContexts_TokenAndCostAggregates(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&clarkv1.CreateConversationRequest{
+		ProfileId: prof.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	convoUUID, _ := uuid.Parse(created.Msg.Conversation.Id)
+	ctx1UUID, _ := uuid.Parse(created.Msg.InitialContext.Id)
+
+	// Context 1: one user msg (no usage), two assistant msgs (with usage).
+	// Cost expectation: 0.001 + 0.002 = 0.003.
+	// Last-message-tokens expectation: assistant #2 (the most recent) → 30 + 7 = 37.
+	uID, _ := uuid.NewV7()
+	if _, err := q.CreateMessage(context.Background(), store.CreateMessageParams{
+		ID:        uID,
+		ContextID: ctx1UUID,
+		Role:      "user",
+		Content:   "hi",
+	}); err != nil {
+		t.Fatalf("user msg: %v", err)
+	}
+
+	in1, out1 := int32(20), int32(5)
+	a1ID, _ := uuid.NewV7()
+	if _, err := q.CreateAssistantMessageWithUsage(context.Background(), store.CreateAssistantMessageWithUsageParams{
+		ID:           a1ID,
+		ContextID:    ctx1UUID,
+		ParentID:     &uID,
+		Role:         "assistant",
+		Content:      "first",
+		InputTokens:  &in1,
+		OutputTokens: &out1,
+		TotalCostUsd: numericValue(t, 0.001),
+	}); err != nil {
+		t.Fatalf("assistant 1: %v", err)
+	}
+
+	// Pause briefly so created_at differs (UUIDv7 already encodes time, but
+	// the SQL ordering goes by created_at column — ensure monotonic separation
+	// rather than relying on same-microsecond rows).
+	time.Sleep(10 * time.Millisecond)
+
+	in2, out2 := int32(30), int32(7)
+	a2ID, _ := uuid.NewV7()
+	if _, err := q.CreateAssistantMessageWithUsage(context.Background(), store.CreateAssistantMessageWithUsageParams{
+		ID:           a2ID,
+		ContextID:    ctx1UUID,
+		ParentID:     &a1ID,
+		Role:         "assistant",
+		Content:      "second",
+		InputTokens:  &in2,
+		OutputTokens: &out2,
+		TotalCostUsd: numericValue(t, 0.002),
+	}); err != nil {
+		t.Fatalf("assistant 2: %v", err)
+	}
+
+	// Context 2: empty (no messages at all). Must yield zero on both fields.
+	ctx2UUID, _ := uuid.NewV7()
+	if _, err := q.CreateContext(context.Background(), store.CreateContextParams{
+		ID:                    ctx2UUID,
+		ConversationID:        convoUUID,
+		ContextActivationTime: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("ctx2: %v", err)
+	}
+
+	// Context 3: one assistant message but with NULL usage columns. Must yield
+	// zero on last-message-tokens (the SQL only counts rows with non-null
+	// input_tokens or output_tokens) and zero on cost (NULL total_cost_usd
+	// summed via COALESCE/SUM).
+	ctx3UUID, _ := uuid.NewV7()
+	if _, err := q.CreateContext(context.Background(), store.CreateContextParams{
+		ID:                    ctx3UUID,
+		ConversationID:        convoUUID,
+		ContextActivationTime: time.Now().UTC().Add(2 * time.Hour),
+	}); err != nil {
+		t.Fatalf("ctx3: %v", err)
+	}
+	a3ID, _ := uuid.NewV7()
+	if _, err := q.CreateMessage(context.Background(), store.CreateMessageParams{
+		ID:        a3ID,
+		ContextID: ctx3UUID,
+		Role:      "assistant",
+		Content:   "no usage",
+	}); err != nil {
+		t.Fatalf("assistant no usage: %v", err)
+	}
+
+	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&clarkv1.ListContextsRequest{
+		ConversationId: created.Msg.Conversation.Id,
+	}))
+	if err != nil {
+		t.Fatalf("ListContexts: %v", err)
+	}
+	if len(resp.Msg.Contexts) != 3 {
+		t.Fatalf("contexts: got %d want 3", len(resp.Msg.Contexts))
+	}
+
+	byID := map[string]*clarkv1.Context{}
+	for _, c := range resp.Msg.Contexts {
+		byID[c.Id] = c
+	}
+
+	// Context 1 — populated.
+	c1 := byID[ctx1UUID.String()]
+	if got := c1.LastMessageTotalTokens; got != 37 {
+		t.Errorf("ctx1 last_message_total_tokens: got %d want 37", got)
+	}
+	const epsilon = 1e-9
+	if got := c1.CumulativeCostUsd; got < 0.003-epsilon || got > 0.003+epsilon {
+		t.Errorf("ctx1 cumulative_cost_usd: got %f want ~0.003", got)
+	}
+
+	// Context 2 — empty.
+	c2 := byID[ctx2UUID.String()]
+	if got := c2.LastMessageTotalTokens; got != 0 {
+		t.Errorf("ctx2 last_message_total_tokens: got %d want 0", got)
+	}
+	if got := c2.CumulativeCostUsd; got != 0 {
+		t.Errorf("ctx2 cumulative_cost_usd: got %f want 0", got)
+	}
+
+	// Context 3 — assistant with NULL usage.
+	c3 := byID[ctx3UUID.String()]
+	if got := c3.LastMessageTotalTokens; got != 0 {
+		t.Errorf("ctx3 last_message_total_tokens: got %d want 0 (no usage data)", got)
+	}
+	if got := c3.CumulativeCostUsd; got != 0 {
+		t.Errorf("ctx3 cumulative_cost_usd: got %f want 0", got)
 	}
 }
 

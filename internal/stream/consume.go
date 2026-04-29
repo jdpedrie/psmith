@@ -189,43 +189,48 @@ loop:
 		status = statusCancelled
 	}
 
-	// Materialize. PurposeCompression dual-writes a compression_summary in
-	// the OLD context (audit + usage/cost) plus a new Context with a
-	// role=context message containing the calculated REPLACE/APPEND content.
+	// Encode error payload — shared by stream_runs.error_payload and (when
+	// the run errored) the materialized message row's error_payload column.
+	var errPayload []byte
+	if seenError != nil {
+		if b, err := json.Marshal(seenError); err == nil {
+			errPayload = b
+		}
+	}
+
+	// Materialize. Both PurposeAssistantResponse and PurposeCompression now
+	// always write a message row, even on errored/cancelled runs — the row
+	// carries the partial content streamed before failure plus errPayload, so
+	// the UI can render the failed turn as a first-class history entry the
+	// user can review (and eventually retry from). The canonical error copy
+	// still lives on stream_runs.error_payload.
 	var resultMessageID *uuid.UUID
 	var resultContextID *uuid.UUID
 	switch params.Purpose {
 	case PurposeAssistantResponse:
-		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), usage, logger)
+		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), usage, errPayload, logger)
 		if err != nil {
 			logger.Error("materialize assistant message failed", "err", err)
 		} else if mid != uuid.Nil {
 			resultMessageID = &mid
 		}
 	case PurposeCompression:
-		// Only materialize compression artifacts on a clean stream — errored /
-		// cancelled / interrupted runs leave the chunks recorded but no new
-		// context is created. User retries.
-		if status == statusCompleted {
-			mid, cid, err := s.materializeCompression(params, contentBuilder.String(), usage, logger)
-			if err != nil {
-				logger.Error("materialize compression failed", "err", err)
-			} else {
-				if mid != uuid.Nil {
-					resultMessageID = &mid
-				}
-				if cid != uuid.Nil {
-					resultContextID = &cid
-				}
+		// On errored/cancelled compression runs we still write the
+		// compression_summary row in the source context — empty (or
+		// partial) content + errPayload — so the user sees the failed
+		// compaction in their history. New-context creation remains
+		// gated on a clean run; the user retries by deleting the failed
+		// summary or kicking off a fresh compaction.
+		mid, cid, err := s.materializeCompression(params, contentBuilder.String(), usage, errPayload, logger)
+		if err != nil {
+			logger.Error("materialize compression failed", "err", err)
+		} else {
+			if mid != uuid.Nil {
+				resultMessageID = &mid
 			}
-		}
-	}
-
-	// Encode error payload.
-	var errPayload []byte
-	if seenError != nil {
-		if b, err := json.Marshal(seenError); err == nil {
-			errPayload = b
+			if cid != uuid.Nil {
+				resultContextID = &cid
+			}
 		}
 	}
 
@@ -315,12 +320,17 @@ func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, see
 // always write a row, even with empty content, so the user can see "the
 // model produced nothing").
 //
+// errPayload is non-nil only for errored runs; in that case the message
+// carries the same JSON-encoded chunkErrorPayload that lands on
+// stream_runs.error_payload, so the UI can render the failure inline as a
+// first-class history entry (partial content + error text + provider/model).
+//
 // The thinking JSON shape is a single concatenated block of the form
 // {"type":"text","text":"…"}; richer per-provider shapes (Anthropic signed
 // blocks, OpenAI reasoning items) are NOT reconstructed here — they require
 // driver cooperation and are deferred to the (future) inbound transform
 // pipeline. See "Materialization" in the task spec.
-func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, usage *providers.Usage, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
+func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
 	// We always write a row, even with empty content, so the user can
 	// see that an attempt was made and so result_message_id is non-null
 	// for downstream UX.
@@ -369,6 +379,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		CacheReadCostUsd:     usageParams.CacheReadCostUsd,
 		CacheWriteCostUsd:    usageParams.CacheWriteCostUsd,
 		TotalCostUsd:         usageParams.TotalCostUsd,
+		ErrorPayload:         errPayload,
 	}); err != nil {
 		// If the context row was deleted out from under us (cascade),
 		// log and skip — the run still gets finalized.
@@ -393,8 +404,10 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 
 	// Fire the post-materialization hook (auto-title generation, etc.) in a
 	// detached goroutine so the supervisor's terminal handling is unaffected
-	// by hook latency or failure.
-	if s.onAssistantMaterialized != nil {
+	// by hook latency or failure. Skip on errored runs — there's no useful
+	// assistant turn for the title generator to read off, and we'd just
+	// burn another LLM call against a model that already failed.
+	if s.onAssistantMaterialized != nil && len(errPayload) == 0 {
 		go s.onAssistantMaterialized(context.Background(), params, msgID)
 	}
 	return msgID, nil
@@ -507,18 +520,23 @@ func intToPtrInt32(p *int) *int32 {
 // `role=compression_summary` message in the OLD Context, carrying the
 // assistant summary as content plus the usage/cost from this run.
 // History-builder skips this row by design — it's a permanent audit/cost
-// record, not a wire turn. Its presence in the context is also a "pending
-// compaction" marker that gates SendMessage / Compact via the
-// requireNoPendingCompactionSummary precondition.
+// record, not a wire turn.
 //
-// The new Context creation is now a separate, user-driven step
-// (PromoteCompactionToNewContext on ConversationsService), so the user can
-// review and edit the summary before committing to the split.
+// On a clean (errPayload == nil) run the resulting summary's presence in the
+// context gates SendMessage / Compact via the requireNoPendingCompactionSummary
+// precondition; the user retries by either deleting the summary or calling
+// PromoteCompactionToNewContext.
+//
+// On an errored or cancelled run errPayload is non-nil and the row is written
+// with whatever partial content streamed before the failure (often empty) so
+// the user sees the failed compaction in their history. Errored summaries
+// are NOT treated as pending — the UI can let the user dismiss them and
+// keep sending in the source context.
 //
 // Returns (compressionSummaryID, uuid.Nil, error). The second return slot is
 // retained for backwards compat with the consume loop's existing two-id
 // handling; it is always uuid.Nil now.
-func (s *Supervisor) materializeCompression(params StartParams, summary string, usage *providers.Usage, logger interface{ Error(string, ...any) }) (uuid.UUID, uuid.UUID, error) {
+func (s *Supervisor) materializeCompression(params StartParams, summary string, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, uuid.UUID, error) {
 	insertCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -548,8 +566,23 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 		CacheReadCostUsd:  usageParams.CacheReadCostUsd,
 		CacheWriteCostUsd: usageParams.CacheWriteCostUsd,
 		TotalCostUsd:      usageParams.TotalCostUsd,
+		ErrorPayload:      errPayload,
 	}); err != nil {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insert compression_summary: %w", err)
+	}
+
+	// Advance the per-context cursor to the just-materialized
+	// compression_summary so ListMessageAncestorChain (the standard list path)
+	// includes it in the rendered conversation. Without this the chain walks
+	// up from the previous assistant turn and the summary — sitting as a
+	// child of that turn — never appears in the UI. Best-effort: if the
+	// context vanished mid-flight, the message itself already cascaded out,
+	// so a no-rows result is benign.
+	if _, err := s.queries.UpdateContextCurrentLeaf(insertCtx, store.UpdateContextCurrentLeafParams{
+		ID:                   params.ContextID,
+		CurrentLeafMessageID: &summaryID,
+	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger.Error("materialize compression: advance current_leaf failed", "context_id", params.ContextID, "err", err)
 	}
 	return summaryID, uuid.Nil, nil
 }

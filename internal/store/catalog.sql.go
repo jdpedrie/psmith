@@ -96,6 +96,45 @@ func (q *Queries) LatestCatalogFetch(ctx context.Context) (time.Time, error) {
 	return latest, err
 }
 
+const listCatalogModelsByProvider = `-- name: ListCatalogModelsByProvider :many
+SELECT provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, raw, fetched_at FROM catalog_models WHERE provider_id = $1 ORDER BY model_id
+`
+
+func (q *Queries) ListCatalogModelsByProvider(ctx context.Context, providerID string) ([]CatalogModel, error) {
+	rows, err := q.db.Query(ctx, listCatalogModelsByProvider, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CatalogModel
+	for rows.Next() {
+		var i CatalogModel
+		if err := rows.Scan(
+			&i.ProviderID,
+			&i.ModelID,
+			&i.DisplayName,
+			&i.ContextWindow,
+			&i.MaxOutputTokens,
+			&i.InputPricePerMillion,
+			&i.OutputPricePerMillion,
+			&i.CacheReadPerMillion,
+			&i.CacheWritePerMillion,
+			&i.KnowledgeCutoff,
+			&i.Modalities,
+			&i.Capabilities,
+			&i.Raw,
+			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCatalogProviders = `-- name: ListCatalogProviders :many
 SELECT id, name, api_base, env_key, doc_url, npm, raw, fetched_at FROM catalog_model_providers ORDER BY id
 `

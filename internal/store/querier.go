@@ -17,7 +17,9 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	// Used by the stream supervisor at materialization. Allows the assistant turn
 	// (or the compression_summary record) to be inserted with usage + cost
-	// columns populated atomically.
+	// columns populated atomically. error_payload is set when the stream
+	// terminated in an errored/cancelled state — captures the failure inline so
+	// the UI can render the message as a first-class errored history entry.
 	CreateAssistantMessageWithUsage(ctx context.Context, arg CreateAssistantMessageWithUsageParams) (Message, error)
 	CreateContext(ctx context.Context, arg CreateContextParams) (Context, error)
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (Conversation, error)
@@ -77,10 +79,13 @@ type Querier interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error)
 	GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error)
-	// True iff the context contains at least one role=compression_summary row.
-	// SendMessage / Compact use this as a precondition: a context with a pending
-	// summary must have it promoted (PromoteCompactionToNewContext) or deleted
-	// (DeleteMessage) before more turns can land.
+	// True iff the context contains at least one role=compression_summary row that
+	// did NOT fail (error_payload IS NULL). SendMessage / Compact use this as a
+	// precondition: a clean pending summary must be promoted
+	// (PromoteCompactionToNewContext) or deleted (DeleteMessage) before more turns
+	// can land. Errored compression_summary rows are first-class history entries
+	// the user can review; they do not gate the conversation — the user retries
+	// by either deleting the failed summary or kicking off a fresh compaction.
 	HasCompressionSummaryInContext(ctx context.Context, contextID uuid.UUID) (bool, error)
 	// True iff the conversation has any stream_run with status='running'. Used by
 	// the conversation-lock helper that gates mutating RPCs while a stream is
@@ -90,9 +95,21 @@ type Querier interface {
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
 	LatestCatalogFetch(ctx context.Context) (time.Time, error)
+	ListCatalogModelsByProvider(ctx context.Context, providerID string) ([]CatalogModel, error)
 	ListCatalogProviders(ctx context.Context) ([]CatalogModelProvider, error)
-	// Per-context message_count is aggregated in a single query so the client
-	// can render the context list without N+1 round trips.
+	// Per-context aggregates (message_count, last_message_total_tokens,
+	// cumulative_cost_usd) are computed in a single query so the client can
+	// render context-list rows without N+1 round trips.
+	//
+	//   last_message_total_tokens: input_tokens + output_tokens of the most
+	//     recent assistant message (by created_at, then id as tiebreaker) that
+	//     carries usage data. Zero when no such message exists yet. Mirrors the
+	//     "last turn cost / size" UX surface — input tokens already reflect the
+	//     full wire prefix at that turn, so input+output captures the work the
+	//     model did for that turn.
+	//   cumulative_cost_usd: SUM of messages.total_cost_usd across every row in
+	//     the context (NULLs treated as zero). Includes compression_summary
+	//     rows since they carry real cost.
 	ListContextsByConversation(ctx context.Context, conversationID uuid.UUID) ([]ListContextsByConversationRow, error)
 	ListConversationsByUser(ctx context.Context, userID uuid.UUID) ([]Conversation, error)
 	// Walks parent_id from the leaf back to the root, returning rows root-first.
@@ -131,6 +148,7 @@ type Querier interface {
 	// the diagnostics computed against the previous turn (NULL on the first
 	// turn for a context — no comparison possible).
 	SetStreamRunPrefixHashes(ctx context.Context, arg SetStreamRunPrefixHashesParams) error
+	SetUserModelFavorite(ctx context.Context, arg SetUserModelFavoriteParams) error
 	TouchSession(ctx context.Context, tokenHash string) error
 	UpdateContextActivationTime(ctx context.Context, arg UpdateContextActivationTimeParams) (Context, error)
 	// Sets the per-context cursor for "the tip the user is currently viewing."
@@ -153,11 +171,15 @@ type Querier interface {
 	UpdateProfileCompressionProviderID(ctx context.Context, arg UpdateProfileCompressionProviderIDParams) error
 	UpdateProfileDefaultSettings(ctx context.Context, arg UpdateProfileDefaultSettingsParams) error
 	UpdateProfileDefaultUserMessage(ctx context.Context, arg UpdateProfileDefaultUserMessageParams) error
+	UpdateProfileDescription(ctx context.Context, arg UpdateProfileDescriptionParams) error
+	UpdateProfileFavorite(ctx context.Context, arg UpdateProfileFavoriteParams) error
 	UpdateProfileName(ctx context.Context, arg UpdateProfileNameParams) error
+	UpdateProfileParentOnly(ctx context.Context, arg UpdateProfileParentOnlyParams) error
 	UpdateProfileSystemMessage(ctx context.Context, arg UpdateProfileSystemMessageParams) error
 	UpdateProfileTitleGuide(ctx context.Context, arg UpdateProfileTitleGuideParams) error
 	UpdateProfileTitleModelID(ctx context.Context, arg UpdateProfileTitleModelIDParams) error
 	UpdateProfileTitleProviderID(ctx context.Context, arg UpdateProfileTitleProviderIDParams) error
+	UpdateProfileTitleProviderKind(ctx context.Context, arg UpdateProfileTitleProviderKindParams) error
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	UpdateUserIsAdmin(ctx context.Context, arg UpdateUserIsAdminParams) error
 	// Shallow-merges the incoming JSONB patch into the existing config. Keys

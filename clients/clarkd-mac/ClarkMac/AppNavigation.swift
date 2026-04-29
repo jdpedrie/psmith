@@ -5,6 +5,36 @@ enum AppMode: Hashable {
     case settings
 }
 
+/// Top-level navigation state shared between HomeView and the menu/Commands
+/// layer. Exposing this via @Environment lets the Cmd+, menu item flip into
+/// settings mode without having to reach into HomeView's @State.
+@Observable
+@MainActor
+final class Navigator {
+    var mode: AppMode = .chats
+
+    /// While true, the chats shell's detail pane shows `NewConversationView`
+    /// instead of the regular conversation. Replaces the old popover.
+    var composingNewConversation: Bool = false
+
+    /// One-shot signal: when set, the settings shell should switch to the
+    /// Profiles category and select the named profile. Cleared by whoever
+    /// reads it to keep the request idempotent.
+    var pendingProfileSelection: String?
+
+    /// Called by ProfileCard's gear button. Switches mode to settings and
+    /// stashes the profile ID for SettingsView to consume on appear.
+    func openProfileSettings(id: String) {
+        pendingProfileSelection = id
+        mode = .settings
+    }
+}
+
+/// Shared instance used by both the SwiftUI environment and the menu
+/// Commands modifier (which can't read a view-local @State).
+@MainActor
+let sharedNavigator = Navigator()
+
 /// Standardised height for every pane's bottom footer band so the three
 /// column footers (categories | list | detail) line up across the whole
 /// settings shell.

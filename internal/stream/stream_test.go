@@ -525,6 +525,179 @@ func TestChunkError_MidStream_PartialMaterialized(t *testing.T) {
 	if msg.Content != "starting " {
 		t.Errorf("content = %q", msg.Content)
 	}
+	// The errored assistant message must carry the error_payload inline so
+	// the UI can render it as a first-class failed-history entry without
+	// having to follow the run reference.
+	if len(msg.ErrorPayload) == 0 {
+		t.Fatal("expected message.error_payload populated on errored run")
+	}
+	var msgEp chunkErrorPayload
+	if err := json.Unmarshal(msg.ErrorPayload, &msgEp); err != nil {
+		t.Fatalf("decode message error payload: %v", err)
+	}
+	if msgEp.Message != "provider blew up" {
+		t.Errorf("message error payload mismatch: %q", msgEp.Message)
+	}
+	// Provider/model identification is preserved so a future retry has
+	// everything it needs.
+	if msg.ProviderID == nil || *msg.ProviderID != f.prov.ID {
+		t.Errorf("expected provider_id=%s on errored message, got %v", f.prov.ID, msg.ProviderID)
+	}
+	if msg.ModelID == nil || *msg.ModelID != "gpt-test" {
+		t.Errorf("expected model_id=gpt-test, got %v", msg.ModelID)
+	}
+}
+
+// TestSourceClean_AssistantMessage_NoErrorPayload guards against a regression
+// where every materialized assistant row carried error_payload regardless of
+// run outcome — error_payload must stay null on clean runs so the UI's
+// "is this an errored message?" check is correct.
+func TestSourceClean_AssistantMessage_NoErrorPayload(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	src := newFakeSource(4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	src.push(textChunk("clean output"))
+	src.close()
+
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 2*time.Second, "completed")
+
+	r, _ := f.sup.Get(context.Background(), runID)
+	if r.ResultMessageID == nil {
+		t.Fatal("expected materialized message")
+	}
+	msg, err := f.q.GetMessageByID(context.Background(), *r.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if len(msg.ErrorPayload) != 0 {
+		t.Errorf("expected error_payload null on clean run, got %s", string(msg.ErrorPayload))
+	}
+}
+
+// TestCompressionError_MaterializesSummaryWithErrorPayload — when a
+// compression run errors the supervisor still writes a compression_summary
+// row in the source context, with the error captured inline. The new context
+// is NOT created (that remains gated on a clean run + an explicit
+// PromoteCompactionToNewContext call).
+func TestCompressionError_MaterializesSummaryWithErrorPayload(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	src := newFakeSource(4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeCompression))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Stream a tiny bit of partial summary, then an error mid-flight.
+	src.push(textChunk("starting summary…"))
+	src.push(errorChunk("credit balance too low"))
+	src.close()
+
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusErrored
+	}, 2*time.Second, "compression errored")
+
+	r, _ := f.sup.Get(context.Background(), runID)
+	if r.ResultMessageID == nil {
+		t.Fatal("expected compression_summary materialized on errored run")
+	}
+	if r.ResultContextID != nil {
+		t.Errorf("expected no new context on errored run; got %s", *r.ResultContextID)
+	}
+
+	summary, err := f.q.GetMessageByID(context.Background(), *r.ResultMessageID)
+	if err != nil {
+		t.Fatalf("fetch errored compression_summary: %v", err)
+	}
+	if summary.Role != "compression_summary" {
+		t.Errorf("expected role=compression_summary, got %q", summary.Role)
+	}
+	if summary.ContextID != f.ctx.ID {
+		t.Errorf("summary should land in source context (%s), got %s", f.ctx.ID, summary.ContextID)
+	}
+	if summary.Content != "starting summary…" {
+		t.Errorf("partial content lost: got %q", summary.Content)
+	}
+	if len(summary.ErrorPayload) == 0 {
+		t.Fatal("expected error_payload on errored compression_summary")
+	}
+	var ep chunkErrorPayload
+	if err := json.Unmarshal(summary.ErrorPayload, &ep); err != nil {
+		t.Fatalf("decode error payload: %v", err)
+	}
+	if ep.Message != "credit balance too low" {
+		t.Errorf("error message mismatch: %q", ep.Message)
+	}
+	// No new context should have been created.
+	all, err := f.q.ListContextsByConversation(context.Background(), f.conv.ID)
+	if err != nil {
+		t.Fatalf("ListContextsByConversation: %v", err)
+	}
+	if len(all) != 1 {
+		t.Errorf("expected 1 context (no new context on errored compression); got %d", len(all))
+	}
+
+	// And the gating predicate must NOT treat an errored summary as a
+	// pending compaction — sending a follow-up message in the source
+	// context is allowed.
+	hasPending, err := f.q.HasCompressionSummaryInContext(context.Background(), f.ctx.ID)
+	if err != nil {
+		t.Fatalf("HasCompressionSummaryInContext: %v", err)
+	}
+	if hasPending {
+		t.Error("errored compression_summary should NOT gate the conversation")
+	}
+}
+
+// TestCompressionClean_NoErrorPayload — clean compression runs land a
+// compression_summary row with NULL error_payload, matching the historical
+// behaviour. Regression guard for the predicate change in
+// HasCompressionSummaryInContext.
+func TestCompressionClean_NoErrorPayload(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	src := newFakeSource(4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeCompression))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	src.push(textChunk("clean summary"))
+	src.close()
+
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 2*time.Second, "compression completed")
+
+	r, _ := f.sup.Get(context.Background(), runID)
+	if r.ResultMessageID == nil {
+		t.Fatal("expected compression_summary id")
+	}
+	summary, err := f.q.GetMessageByID(context.Background(), *r.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if len(summary.ErrorPayload) != 0 {
+		t.Errorf("expected error_payload null on clean compression, got %s", string(summary.ErrorPayload))
+	}
+	hasPending, err := f.q.HasCompressionSummaryInContext(context.Background(), f.ctx.ID)
+	if err != nil {
+		t.Fatalf("HasCompressionSummaryInContext: %v", err)
+	}
+	if !hasPending {
+		t.Error("clean compression_summary SHOULD gate the conversation until promoted/deleted")
+	}
 }
 
 func TestRecoverInterrupted(t *testing.T) {

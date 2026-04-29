@@ -42,6 +42,39 @@ extension ClarkConversation {
     }
 }
 
+/// Per-conversation overrides that shadow the profile's defaults.
+/// Mirrors `Clark_V1_ConversationSettings` but exposes a Swift-friendly
+/// shape (no proto-generated has-getters / value defaults).
+public struct ClarkConversationSettings: Sendable, Hashable {
+    public var defaultProviderID: String?
+    public var defaultModelID: String?
+    public var includeThinkingInHistory: Bool?
+
+    public init(
+        defaultProviderID: String? = nil,
+        defaultModelID: String? = nil,
+        includeThinkingInHistory: Bool? = nil
+    ) {
+        self.defaultProviderID = defaultProviderID
+        self.defaultModelID = defaultModelID
+        self.includeThinkingInHistory = includeThinkingInHistory
+    }
+
+    /// True if no overrides are set — caller should pass `nil` to the
+    /// repository in that case rather than an empty proto.
+    public var isEmpty: Bool {
+        defaultProviderID == nil && defaultModelID == nil && includeThinkingInHistory == nil
+    }
+
+    var proto: Clark_V1_ConversationSettings {
+        var s = Clark_V1_ConversationSettings()
+        if let v = defaultProviderID        { s.defaultProviderID = v }
+        if let v = defaultModelID           { s.defaultModelID = v }
+        if let v = includeThinkingInHistory { s.includeThinkingInHistory = v }
+        return s
+    }
+}
+
 public struct ClarkContext: Sendable, Hashable, Identifiable {
     public let id: String
     public let conversationID: String
@@ -53,6 +86,13 @@ public struct ClarkContext: Sendable, Hashable, Identifiable {
     /// Total messages in this context (every role). Populated by ListContexts;
     /// zero on responses from single-context RPCs that don't aggregate.
     public let messageCount: Int
+    /// Total tokens (input + output) of the most recent assistant message in
+    /// this context. Populated by ListContexts; zero when retrieved via
+    /// single-context RPCs or when no assistant message with usage exists yet.
+    public let lastMessageTotalTokens: Int64
+    /// Cumulative cost in USD across every message in this context. Populated
+    /// by ListContexts; zero on single-context RPCs that don't aggregate.
+    public let cumulativeCostUsd: Double
 }
 
 extension ClarkContext {
@@ -65,7 +105,9 @@ extension ClarkContext {
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
             currentLeafMessageID: p.hasCurrentLeafMessageID ? p.currentLeafMessageID : nil,
             title: p.hasTitle ? p.title : nil,
-            messageCount: Int(p.messageCount)
+            messageCount: Int(p.messageCount),
+            lastMessageTotalTokens: p.lastMessageTotalTokens,
+            cumulativeCostUsd: p.cumulativeCostUsd
         )
     }
 }
@@ -131,6 +173,12 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
     public let usage: ClarkMessageUsage?
     /// Non-nil when this message has been edited via EditMessage.
     public let editedAt: Date?
+    /// Non-nil when the stream that produced this message terminated in an
+    /// errored/cancelled state. The UI renders messages with `errorText`
+    /// using a warning accent + the error text + (if any) the partial content
+    /// captured before the failure. Provider/model identification is still
+    /// populated so a future retry has all the data it needs.
+    public let errorText: String?
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -149,7 +197,8 @@ extension ClarkMessage {
             providerID: p.hasProviderID ? p.providerID : nil,
             modelID: p.hasModelID ? p.modelID : nil,
             usage: p.hasUsage ? ClarkMessageUsage(from: p.usage) : nil,
-            editedAt: p.hasEditedAt ? p.editedAt.date : nil
+            editedAt: p.hasEditedAt ? p.editedAt.date : nil,
+            errorText: p.hasErrorText ? p.errorText : nil
         )
     }
 }
@@ -172,9 +221,21 @@ public struct ClarkProfileDefaults: Sendable, Hashable {
     }
 }
 
+/// Sentinel naming a non-server title generator. v1 case is on-device
+/// generation via Apple's FoundationModels framework on macOS 26+.
+public enum ClarkTitleProviderKind {
+    /// Wire string for `title_provider_kind = "apple_foundation"`. Surfacing
+    /// this as a constant rather than a raw string avoids typos at every
+    /// call site that switches on it.
+    public static let appleFoundation = "apple_foundation"
+}
+
 public struct ClarkProfile: Sendable, Hashable, Identifiable {
     public let id: String
     public let name: String
+    public let description: String
+    public let parentOnly: Bool
+    public let favorite: Bool
     public let parentProfileID: String?
     public let systemMessage: String?
     public let defaultUserMessage: String?
@@ -186,12 +247,19 @@ public struct ClarkProfile: Sendable, Hashable, Identifiable {
     public let titleProviderID: String?
     public let titleModelID: String?
     public let titleGuide: String?
+    /// Sentinel for non-server title generation (e.g.
+    /// `ClarkTitleProviderKind.appleFoundation`). When set, the server
+    /// skips its cloud title call and the client owns title generation.
+    public let titleProviderKind: String?
     public let createdAt: Date?
     public let updatedAt: Date?
 
     public init(
         id: String,
         name: String,
+        description: String = "",
+        parentOnly: Bool = false,
+        favorite: Bool = false,
         parentProfileID: String? = nil,
         systemMessage: String? = nil,
         defaultUserMessage: String? = nil,
@@ -203,11 +271,15 @@ public struct ClarkProfile: Sendable, Hashable, Identifiable {
         titleProviderID: String? = nil,
         titleModelID: String? = nil,
         titleGuide: String? = nil,
+        titleProviderKind: String? = nil,
         createdAt: Date? = nil,
         updatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
+        self.description = description
+        self.parentOnly = parentOnly
+        self.favorite = favorite
         self.parentProfileID = parentProfileID
         self.systemMessage = systemMessage
         self.defaultUserMessage = defaultUserMessage
@@ -219,6 +291,7 @@ public struct ClarkProfile: Sendable, Hashable, Identifiable {
         self.titleProviderID = titleProviderID
         self.titleModelID = titleModelID
         self.titleGuide = titleGuide
+        self.titleProviderKind = titleProviderKind
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -245,6 +318,9 @@ extension ClarkProfile {
         self.init(
             id: p.id,
             name: p.name,
+            description: p.description_p,
+            parentOnly: p.parentOnly,
+            favorite: p.favorite,
             parentProfileID:       p.hasParentProfileID       ? p.parentProfileID       : nil,
             systemMessage:         p.hasSystemMessage         ? p.systemMessage         : nil,
             defaultUserMessage:    p.hasDefaultUserMessage    ? p.defaultUserMessage    : nil,
@@ -256,6 +332,7 @@ extension ClarkProfile {
             titleProviderID:       p.hasTitleProviderID       ? p.titleProviderID       : nil,
             titleModelID:          p.hasTitleModelID          ? p.titleModelID          : nil,
             titleGuide:            p.hasTitleGuide            ? p.titleGuide            : nil,
+            titleProviderKind:     p.hasTitleProviderKind     ? p.titleProviderKind     : nil,
             createdAt:             p.hasCreatedAt ? p.createdAt.date : nil,
             updatedAt:             p.hasUpdatedAt ? p.updatedAt.date : nil
         )

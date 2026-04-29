@@ -60,6 +60,7 @@ func storeUserModelToProto(m store.UserModel) *clarkv1.UserModel {
 		MetadataSource:      stringToMetadataSourceEnum(m.MetadataSource),
 		MetadataSnapshotAt:  timestamppb.New(m.MetadataSnapshotAt),
 		EnabledAt:           timestamppb.New(m.EnabledAt),
+		Favorite:            m.Favorite,
 	}
 	if pricing := pricingFromCols(m.InputPricePerMillion, m.OutputPricePerMillion, m.CacheReadPerMillion, m.CacheWritePerMillion); pricing != nil {
 		out.Pricing = pricing
@@ -174,6 +175,44 @@ func stringToMetadataSourceEnum(s string) clarkv1.MetadataSource {
 		return clarkv1.MetadataSource_METADATA_SOURCE_MANUAL
 	}
 	return clarkv1.MetadataSource_METADATA_SOURCE_UNSPECIFIED
+}
+
+// catalogModelToDiscovered builds a DiscoveredModel from a catalog Model.
+// Used by the catalog-driven discovery path (every provider with a
+// `catalog_provider_id`); pricing/context/etc come straight from the
+// curated catalog so the user picks from a metadata-rich list.
+func catalogModelToDiscovered(m *modelmeta.Model, alreadyEnabled bool) *clarkv1.DiscoveredModel {
+	out := &clarkv1.DiscoveredModel{
+		ModelId:        m.ID,
+		DisplayName:    m.DisplayName,
+		Modalities:     m.Modalities,
+		Capabilities: &clarkv1.ModelCapabilities{
+			Streaming:     m.Capabilities.Streaming,
+			Thinking:      m.Capabilities.Thinking,
+			ToolUse:       m.Capabilities.ToolUse,
+			Vision:        m.Capabilities.Vision,
+			PromptCaching: m.Capabilities.PromptCaching,
+		},
+		MetadataSource: clarkv1.MetadataSource_METADATA_SOURCE_CATALOG,
+		AlreadyEnabled: alreadyEnabled,
+	}
+	if m.ContextWindow > 0 {
+		v := int32(m.ContextWindow)
+		out.ContextWindow = &v
+	}
+	if m.MaxOutputTokens > 0 {
+		v := int32(m.MaxOutputTokens)
+		out.MaxOutputTokens = &v
+	}
+	if m.Pricing != nil {
+		out.Pricing = pricingToProto(m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion,
+			m.Pricing.CacheReadPerMillion, m.Pricing.CacheWritePerMillion)
+	}
+	if m.KnowledgeCutoff != nil {
+		s := m.KnowledgeCutoff.Format("2006-01-02")
+		out.KnowledgeCutoff = &s
+	}
+	return out
 }
 
 // providerModelToDiscovered builds a DiscoveredModel from a providers.Model.

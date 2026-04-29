@@ -651,9 +651,44 @@ public struct Clark_V1_CompactRequest: Sendable {
 
   public var conversationID: String = String()
 
+  /// Per-call overrides over the resolved profile values. Each, if set, takes
+  /// precedence over what the profile inheritance chain produces. Lets clients
+  /// surface a "compact with this prompt + this model" page (per-invocation,
+  /// not persisted to the profile) and bypass profile-resolution glitches.
+  public var compressionGuide: String {
+    get {_compressionGuide ?? String()}
+    set {_compressionGuide = newValue}
+  }
+  /// Returns true if `compressionGuide` has been explicitly set.
+  public var hasCompressionGuide: Bool {self._compressionGuide != nil}
+  /// Clears the value of `compressionGuide`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionGuide() {self._compressionGuide = nil}
+
+  public var compressionProviderID: String {
+    get {_compressionProviderID ?? String()}
+    set {_compressionProviderID = newValue}
+  }
+  /// Returns true if `compressionProviderID` has been explicitly set.
+  public var hasCompressionProviderID: Bool {self._compressionProviderID != nil}
+  /// Clears the value of `compressionProviderID`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionProviderID() {self._compressionProviderID = nil}
+
+  public var compressionModelID: String {
+    get {_compressionModelID ?? String()}
+    set {_compressionModelID = newValue}
+  }
+  /// Returns true if `compressionModelID` has been explicitly set.
+  public var hasCompressionModelID: Bool {self._compressionModelID != nil}
+  /// Clears the value of `compressionModelID`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionModelID() {self._compressionModelID = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _compressionGuide: String? = nil
+  fileprivate var _compressionProviderID: String? = nil
+  fileprivate var _compressionModelID: String? = nil
 }
 
 public struct Clark_V1_CompactResponse: Sendable {
@@ -1840,7 +1875,7 @@ extension Clark_V1_SendMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Clark_V1_CompactRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CompactRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}compression_guide\0\u{3}compression_provider_id\0\u{3}compression_model_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1849,20 +1884,39 @@ extension Clark_V1_CompactRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._compressionGuide) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._compressionProviderID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._compressionModelID) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.conversationID.isEmpty {
       try visitor.visitSingularStringField(value: self.conversationID, fieldNumber: 1)
     }
+    try { if let v = self._compressionGuide {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._compressionProviderID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._compressionModelID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Clark_V1_CompactRequest, rhs: Clark_V1_CompactRequest) -> Bool {
     if lhs.conversationID != rhs.conversationID {return false}
+    if lhs._compressionGuide != rhs._compressionGuide {return false}
+    if lhs._compressionProviderID != rhs._compressionProviderID {return false}
+    if lhs._compressionModelID != rhs._compressionModelID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -1060,8 +1060,12 @@ type UserModel struct {
 	MetadataSource      MetadataSource         `protobuf:"varint,11,opt,name=metadata_source,json=metadataSource,proto3,enum=clark.v1.MetadataSource" json:"metadata_source,omitempty"`
 	MetadataSnapshotAt  *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=metadata_snapshot_at,json=metadataSnapshotAt,proto3" json:"metadata_snapshot_at,omitempty"`
 	EnabledAt           *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=enabled_at,json=enabledAt,proto3" json:"enabled_at,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// When true, surface this model in the FAVORITES section at the top of
+	// model pickers. Identity-style metadata, like profiles.favorite — does not
+	// affect snapshotted catalog metadata.
+	Favorite      bool `protobuf:"varint,14,opt,name=favorite,proto3" json:"favorite,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserModel) Reset() {
@@ -1183,6 +1187,13 @@ func (x *UserModel) GetEnabledAt() *timestamppb.Timestamp {
 		return x.EnabledAt
 	}
 	return nil
+}
+
+func (x *UserModel) GetFavorite() bool {
+	if x != nil {
+		return x.Favorite
+	}
+	return false
 }
 
 // Per-call provider settings.
@@ -1346,8 +1357,25 @@ type Profile struct {
 	TitleProviderId *string `protobuf:"bytes,14,opt,name=title_provider_id,json=titleProviderId,proto3,oneof" json:"title_provider_id,omitempty"`
 	TitleModelId    *string `protobuf:"bytes,15,opt,name=title_model_id,json=titleModelId,proto3,oneof" json:"title_model_id,omitempty"`
 	TitleGuide      *string `protobuf:"bytes,16,opt,name=title_guide,json=titleGuide,proto3,oneof" json:"title_guide,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Sentinel naming a non-server title generator. NULL = "use the configured
+	// (title_provider_id, title_model_id) cloud call." A non-null value names a
+	// generator handled outside the server's stateless-provider title path.
+	// v1 sentinel: "apple_foundation" — the Mac client uses Apple's on-device
+	// FoundationModels framework (macOS 26+) to title locally; the server skips
+	// its cloud roundtrip and the client persists via UpdateConversation.
+	TitleProviderKind *string `protobuf:"bytes,20,opt,name=title_provider_kind,json=titleProviderKind,proto3,oneof" json:"title_provider_kind,omitempty"`
+	// Free-form description shown alongside `name` in pickers and the detail
+	// viewer. Identity metadata — NOT inherited through the parent chain.
+	// Empty string means "no description."
+	Description string `protobuf:"bytes,17,opt,name=description,proto3" json:"description,omitempty"`
+	// When true, the profile is hidden from the new-conversation picker and
+	// only usable as a parent for inheritance. Defaults to false (chat-capable).
+	ParentOnly bool `protobuf:"varint,18,opt,name=parent_only,json=parentOnly,proto3" json:"parent_only,omitempty"`
+	// When true, surface this profile at the start of pickers. Identity
+	// metadata — not inherited.
+	Favorite      bool `protobuf:"varint,19,opt,name=favorite,proto3" json:"favorite,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -1490,6 +1518,34 @@ func (x *Profile) GetTitleGuide() string {
 		return *x.TitleGuide
 	}
 	return ""
+}
+
+func (x *Profile) GetTitleProviderKind() string {
+	if x != nil && x.TitleProviderKind != nil {
+		return *x.TitleProviderKind
+	}
+	return ""
+}
+
+func (x *Profile) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Profile) GetParentOnly() bool {
+	if x != nil {
+		return x.ParentOnly
+	}
+	return false
+}
+
+func (x *Profile) GetFavorite() bool {
+	if x != nil {
+		return x.Favorite
+	}
+	return false
 }
 
 type ConversationSettings struct {
@@ -1670,9 +1726,19 @@ type Context struct {
 	// Total count of messages in this context (every role). Populated by
 	// ListContexts; zero when retrieved via single-context RPCs that don't
 	// aggregate.
-	MessageCount  int32 `protobuf:"varint,8,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MessageCount int32 `protobuf:"varint,8,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"`
+	// Total tokens (input + output) reported by the most recent assistant
+	// message in this context. Populated by ListContexts; zero when retrieved
+	// via single-context RPCs that don't aggregate, or when the context
+	// contains no assistant message with usage data yet.
+	LastMessageTotalTokens int64 `protobuf:"varint,9,opt,name=last_message_total_tokens,json=lastMessageTotalTokens,proto3" json:"last_message_total_tokens,omitempty"`
+	// Cumulative cost in USD across every message in this context (sum of
+	// total_cost_usd over all messages, assistant + compression_summary alike).
+	// Populated by ListContexts; zero when retrieved via single-context RPCs
+	// that don't aggregate.
+	CumulativeCostUsd float64 `protobuf:"fixed64,10,opt,name=cumulative_cost_usd,json=cumulativeCostUsd,proto3" json:"cumulative_cost_usd,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Context) Reset() {
@@ -1761,6 +1827,20 @@ func (x *Context) GetMessageCount() int32 {
 	return 0
 }
 
+func (x *Context) GetLastMessageTotalTokens() int64 {
+	if x != nil {
+		return x.LastMessageTotalTokens
+	}
+	return 0
+}
+
+func (x *Context) GetCumulativeCostUsd() float64 {
+	if x != nil {
+		return x.CumulativeCostUsd
+	}
+	return 0
+}
+
 type Message struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1788,7 +1868,15 @@ type Message struct {
 	DisplayContent string `protobuf:"bytes,15,opt,name=display_content,json=displayContent,proto3" json:"display_content,omitempty"`
 	// Set by EditMessage. UI shows "edited <relative time>" only when this
 	// is non-null. Audit trail; doesn't affect history-builder output.
-	EditedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=edited_at,json=editedAt,proto3,oneof" json:"edited_at,omitempty"`
+	EditedAt *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=edited_at,json=editedAt,proto3,oneof" json:"edited_at,omitempty"`
+	// Human-readable error text when the stream that produced this message
+	// terminated in errored/cancelled state. Non-null marks the message as a
+	// failed turn: the UI renders it with a warning accent + the error text,
+	// shows whatever partial content streamed before failure (still in
+	// `content`), and exposes retry-from-here affordances. The full failure
+	// payload — provider-specific raw fields — is preserved in the database
+	// for debugging; only the human-readable string travels on the wire.
+	ErrorText     *string `protobuf:"bytes,17,opt,name=error_text,json=errorText,proto3,oneof" json:"error_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1933,6 +2021,13 @@ func (x *Message) GetEditedAt() *timestamppb.Timestamp {
 		return x.EditedAt
 	}
 	return nil
+}
+
+func (x *Message) GetErrorText() string {
+	if x != nil && x.ErrorText != nil {
+		return *x.ErrorText
+	}
+	return ""
 }
 
 // MessageUsage records token usage reported by the provider plus the
@@ -2384,7 +2479,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"\b_pricingB\x13\n" +
 	"\x11_knowledge_cutoffB\x0f\n" +
-	"\r_capabilities\"\xac\x06\n" +
+	"\r_capabilities\"\xc8\x06\n" +
 	"\tUserModel\x123\n" +
 	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x19\n" +
 	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12!\n" +
@@ -2402,7 +2497,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x0fmetadata_source\x18\v \x01(\x0e2\x18.clark.v1.MetadataSourceR\x0emetadataSource\x12L\n" +
 	"\x14metadata_snapshot_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x12metadataSnapshotAt\x129\n" +
 	"\n" +
-	"enabled_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tenabledAtB\x11\n" +
+	"enabled_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tenabledAt\x12\x1a\n" +
+	"\bfavorite\x18\x0e \x01(\bR\bfavoriteB\x11\n" +
 	"\x0f_context_windowB\x14\n" +
 	"\x12_max_output_tokensB\n" +
 	"\n" +
@@ -2426,7 +2522,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x1binclude_thinking_in_history\x18\x03 \x01(\bH\x02R\x18includeThinkingInHistory\x88\x01\x01B\x16\n" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
-	"\x1c_include_thinking_in_history\"\x89\b\n" +
+	"\x1c_include_thinking_in_history\"\xb5\t\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12/\n" +
 	"\x11parent_profile_id\x18\x02 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
@@ -2448,7 +2544,12 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x0etitle_model_id\x18\x0f \x01(\tH\tR\ftitleModelId\x88\x01\x01\x12$\n" +
 	"\vtitle_guide\x18\x10 \x01(\tH\n" +
 	"R\n" +
-	"titleGuide\x88\x01\x01B\x14\n" +
+	"titleGuide\x88\x01\x01\x123\n" +
+	"\x13title_provider_kind\x18\x14 \x01(\tH\vR\x11titleProviderKind\x88\x01\x01\x12 \n" +
+	"\vdescription\x18\x11 \x01(\tR\vdescription\x12\x1f\n" +
+	"\vparent_only\x18\x12 \x01(\bR\n" +
+	"parentOnly\x12\x1a\n" +
+	"\bfavorite\x18\x13 \x01(\bR\bfavoriteB\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -2459,7 +2560,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x11_default_settingsB\x14\n" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
-	"\f_title_guide\"\x8b\x02\n" +
+	"\f_title_guideB\x16\n" +
+	"\x14_title_provider_kind\"\x8b\x02\n" +
 	"\x14ConversationSettings\x123\n" +
 	"\x13default_provider_id\x18\x01 \x01(\tH\x00R\x11defaultProviderId\x88\x01\x01\x12-\n" +
 	"\x10default_model_id\x18\x02 \x01(\tH\x01R\x0edefaultModelId\x88\x01\x01\x12B\n" +
@@ -2480,7 +2582,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\b\n" +
 	"\x06_titleB\v\n" +
-	"\t_settings\"\xab\x03\n" +
+	"\t_settings\"\x96\x04\n" +
 	"\aContext\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12/\n" +
@@ -2490,10 +2592,13 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12:\n" +
 	"\x17current_leaf_message_id\x18\x06 \x01(\tH\x01R\x14currentLeafMessageId\x88\x01\x01\x12\x19\n" +
 	"\x05title\x18\a \x01(\tH\x02R\x05title\x88\x01\x01\x12#\n" +
-	"\rmessage_count\x18\b \x01(\x05R\fmessageCountB\x14\n" +
+	"\rmessage_count\x18\b \x01(\x05R\fmessageCount\x129\n" +
+	"\x19last_message_total_tokens\x18\t \x01(\x03R\x16lastMessageTotalTokens\x12.\n" +
+	"\x13cumulative_cost_usd\x18\n" +
+	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\xa0\x06\n" +
+	"\x06_title\"\xd3\x06\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2515,7 +2620,9 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x05usage\x18\r \x01(\v2\x16.clark.v1.MessageUsageH\x06R\x05usage\x88\x01\x01\x12#\n" +
 	"\rsibling_count\x18\x0e \x01(\x05R\fsiblingCount\x12'\n" +
 	"\x0fdisplay_content\x18\x0f \x01(\tR\x0edisplayContent\x12<\n" +
-	"\tedited_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\aR\beditedAt\x88\x01\x01B\f\n" +
+	"\tedited_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\aR\beditedAt\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"error_text\x18\x11 \x01(\tH\bR\terrorText\x88\x01\x01B\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -2525,7 +2632,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\t_model_idB\b\n" +
 	"\x06_usageB\f\n" +
 	"\n" +
-	"_edited_at\"\xb1\x05\n" +
+	"_edited_atB\r\n" +
+	"\v_error_text\"\xb1\x05\n" +
 	"\fMessageUsage\x12&\n" +
 	"\finput_tokens\x18\x01 \x01(\x05H\x00R\vinputTokens\x88\x01\x01\x12(\n" +
 	"\routput_tokens\x18\x02 \x01(\x05H\x01R\foutputTokens\x88\x01\x01\x12/\n" +

@@ -33,6 +33,9 @@ func (f *fakeCatalog) LookupProvider(_ context.Context, _ string) (*modelmeta.Pr
 func (f *fakeCatalog) ListProviders(_ context.Context) ([]modelmeta.Provider, error) {
 	return nil, nil
 }
+func (f *fakeCatalog) ListModelsByProvider(_ context.Context, _ string) ([]modelmeta.Model, error) {
+	return nil, nil
+}
 func (f *fakeCatalog) Refresh(_ context.Context) error                   { return nil }
 func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) { return modelmeta.Status{}, nil }
 

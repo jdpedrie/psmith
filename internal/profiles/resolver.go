@@ -95,4 +95,7 @@ func mergeFromParent(resolved *store.Profile, parent store.Profile) {
 	if resolved.TitleGuide == nil && parent.TitleGuide != nil {
 		resolved.TitleGuide = parent.TitleGuide
 	}
+	if resolved.TitleProviderKind == nil && parent.TitleProviderKind != nil {
+		resolved.TitleProviderKind = parent.TitleProviderKind
+	}
 }

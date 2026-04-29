@@ -35,7 +35,8 @@ struct ProfilesMiddleColumn: View {
                     ProfileRow(profile: profile, profiles: model.profiles)
                         .tag(profile.id)
                 }
-                .listStyle(.sidebar)
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -136,26 +137,57 @@ private struct ProfileViewer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(profile.name).font(.title3).fontWeight(.semibold)
-                    if let parent = parentName {
-                        Text("Inherits from \(parent)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            // Header — mirrors ProviderHeader so the two settings panes share
+            // a row of glass circle buttons in the same paneHeaderHeight band.
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 6) {
+                        Text(profile.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if profile.parentOnly {
+                            Text("PARENT ONLY")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.18))
+                                .clipShape(Capsule())
+                        }
                     }
+                    Text(parentName.map { "Inherits from \($0)" } ?? "Standalone profile")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 Spacer()
-                Button("Edit") { model.profilesModel.detailMode = .editing }
-                    .buttonStyle(.glass)
+                GlassCircleButton(
+                    systemImage: "pencil",
+                    action: { model.profilesModel.detailMode = .editing },
+                    help: "Edit"
+                )
+                GlassCircleButton(
+                    systemImage: "trash",
+                    action: { model.profilesModel.showDeleteConfirm = true },
+                    help: hasChildren
+                        ? "Has \(childCount) child profile\(childCount == 1 ? "" : "s") — delete those first"
+                        : "Delete profile",
+                    tint: .red,
+                    disabled: model.profilesModel.isDeleting || hasChildren
+                )
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
 
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if !profile.description.isEmpty {
+                        section("Description") {
+                            multilineText(profile.description)
+                        }
+                    }
                     if let sm = profile.systemMessage, !sm.isEmpty {
                         section("System message") {
                             multilineText(sm)
@@ -200,7 +232,21 @@ private struct ProfileViewer: View {
                     if hasTitleOverrides {
                         section("Auto-titling") {
                             VStack(alignment: .leading, spacing: 4) {
-                                if profile.titleProviderID != nil || profile.titleModelID != nil {
+                                if profile.titleProviderKind == ClarkTitleProviderKind.appleFoundation {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "apple.logo")
+                                            .foregroundStyle(Color.accentColor)
+                                        Text("Apple Foundation Models")
+                                            .font(.callout)
+                                        Text("ON DEVICE")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(Color.accentColor.opacity(0.85))
+                                            .clipShape(Capsule())
+                                    }
+                                } else if profile.titleProviderID != nil || profile.titleModelID != nil {
                                     HStack(spacing: 4) {
                                         Text("Model:").foregroundStyle(.secondary).font(.caption)
                                         modelDescription(profile.titleProviderID, profile.titleModelID)
@@ -224,25 +270,14 @@ private struct ProfileViewer: View {
                 .padding(20)
             }
 
-            PaneFooter {
-                if let err = model.profilesModel.error {
+            if let err = model.profilesModel.error {
+                PaneFooter {
                     Label(err, systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.red)
                         .lineLimit(1)
+                    Spacer()
                 }
-                Spacer()
-                if hasChildren {
-                    Text("Has \(childCount) child profile\(childCount == 1 ? "" : "s") — delete those first.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Button("Delete profile", role: .destructive) {
-                    model.profilesModel.showDeleteConfirm = true
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.red)
-                .disabled(model.profilesModel.isDeleting || hasChildren)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -269,6 +304,7 @@ private struct ProfileViewer: View {
         profile.titleProviderID != nil
             || profile.titleModelID != nil
             || (profile.titleGuide?.isEmpty == false)
+            || (profile.titleProviderKind?.isEmpty == false)
     }
 
     private var isFullyInherited: Bool {
@@ -342,6 +378,8 @@ private struct ProfileForm: View {
     let editing: ClarkProfile?
 
     @State private var name = ""
+    @State private var profileDescription = ""
+    @State private var parentOnly = false
     @State private var parentID: String?
     @State private var systemMessage = ""
     @State private var defaultUserMessage = ""
@@ -358,6 +396,12 @@ private struct ProfileForm: View {
     @State private var titleProviderID: String?
     @State private var titleModelID: String?
     @State private var titleGuide = ""
+    /// Sentinel naming a non-server titler. Currently only
+    /// `ClarkTitleProviderKind.appleFoundation` ("apple_foundation") is
+    /// recognized — picks the on-device Apple Foundation Models path on the
+    /// Mac. Mutually exclusive with the cloud title model picker below;
+    /// selecting one nils the other.
+    @State private var titleProviderKind: String?
 
     @State private var isSaving = false
     @State private var formError: String?
@@ -370,15 +414,18 @@ private struct ProfileForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(alignment: .firstTextBaseline) {
+            // Header — same paneHeaderHeight band as ProfileViewer / ProviderHeader
+            // for column-to-column visual rhythm.
+            HStack(alignment: .center, spacing: 8) {
                 Text(isEdit ? "Edit profile" : "Add profile")
-                    .font(.title3)
-                    .fontWeight(.semibold)
+                    .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
                     model.detailMode = .viewing
                 }
+                .controlSize(.small)
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 Button {
                     Task { await save() }
@@ -386,11 +433,13 @@ private struct ProfileForm: View {
                     if isSaving { ProgressView().controlSize(.small) }
                     else { Text(isEdit ? "Save" : "Create") }
                 }
+                .controlSize(.small)
                 .buttonStyle(.glassProminent)
                 .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
 
             Divider()
 
@@ -402,16 +451,26 @@ private struct ProfileForm: View {
                             TextField("e.g. Default, Coding, Brainstorm", text: $name)
                                 .textFieldStyle(.roundedBorder)
                         }
+                        formRow(label: "Description",
+                                description: "Optional. A sentence about when to reach for this profile.") {
+                            TextField("e.g. \"Concise, code-first answers\"", text: $profileDescription)
+                                .textFieldStyle(.roundedBorder)
+                        }
                         formRow(label: "Inherits from",
-                                description: "Any field left blank below falls back to this parent.") {
-                            Picker("", selection: $parentID) {
-                                Text("(none)").tag(String?.none)
-                                ForEach(otherProfiles, id: \.id) { p in
-                                    Text(p.name).tag(Optional(p.id))
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(maxWidth: 280)
+                                description: "Any field left blank below falls back to this parent. Templates (parent-only profiles) are eligible.") {
+                            ProfilePickerRow(
+                                model: model,
+                                selectedID: $parentID,
+                                includeNoneOption: true,
+                                allowParentOnly: true,
+                                excludeID: editing?.id
+                            )
+                        }
+                        formRow(label: "Parent only",
+                                description: "When on, this profile is hidden from the new-conversation picker — only usable as a parent for inheritance.") {
+                            Toggle("", isOn: $parentOnly)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
                         }
                     }
 
@@ -455,9 +514,15 @@ private struct ProfileForm: View {
                     }
 
                     formSection("Auto-titling") {
-                        formRow(label: "Model",
-                                description: "Model used to invent a 2–5 word title after the first assistant turn. Auto-titling only fires when both this and a title guide resolve.") {
-                            modelPicker(provider: $titleProviderID, model: $titleModelID)
+                        formRow(label: "Generator",
+                                description: "Apple Foundation Models runs locally on macOS 26+ — free, fast, private. Pick a cloud model below to use a paid LLM instead.") {
+                            titleGeneratorPicker
+                        }
+                        if titleProviderKind != ClarkTitleProviderKind.appleFoundation {
+                            formRow(label: "Cloud model",
+                                    description: "Used when the local generator is unavailable or you want a specific model.") {
+                                modelPicker(provider: $titleProviderID, model: $titleModelID)
+                            }
                         }
                         formRow(label: "Guide",
                                 description: "Optional extra instruction for the titler — e.g. \"prefer technical phrasing\".") {
@@ -470,14 +535,13 @@ private struct ProfileForm: View {
                     }
                 }
                 .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { seedFromEditing() }
     }
 
-    private var otherProfiles: [ClarkProfile] {
-        model.profiles.filter { $0.id != editing?.id }
-    }
 
     /// Width of the left "label" column; used by every formRow so fields line up.
     private static let labelColumnWidth: CGFloat = 130
@@ -568,6 +632,126 @@ private struct ProfileForm: View {
         .fixedSize()
     }
 
+    /// Two inline glass cards — Apple Foundation Models (on-device) vs.
+    /// Cloud model. Tapping a card sets `titleProviderKind` and clears the
+    /// other side's selection. Inline rows are used instead of a Menu per
+    /// the project's known SwiftUI macOS Menu bug — see
+    /// feedback_swiftui_menu_macos_bug.md.
+    @ViewBuilder
+    private var titleGeneratorPicker: some View {
+        let isLocal = titleProviderKind == ClarkTitleProviderKind.appleFoundation
+        let isCloud = !isLocal && titleProviderID != nil && titleModelID != nil
+        let isInherit = !isLocal && !isCloud
+
+        VStack(alignment: .leading, spacing: 6) {
+            titleGeneratorCard(
+                title: "Apple Foundation Models",
+                subtitle: "On-device · free · macOS 26+",
+                systemImage: "apple.logo",
+                badge: "ON DEVICE",
+                isSelected: isLocal,
+                tint: .accentColor
+            ) {
+                titleProviderKind = ClarkTitleProviderKind.appleFoundation
+                titleProviderID = nil
+                titleModelID = nil
+            }
+
+            titleGeneratorCard(
+                title: "Cloud model",
+                subtitle: cloudSubtitle,
+                systemImage: "cloud",
+                badge: nil,
+                isSelected: isCloud,
+                tint: .accentColor
+            ) {
+                titleProviderKind = nil
+                // Leave (provider/model) as-is so the picker below opens
+                // pre-selected. The user can then change them.
+            }
+
+            titleGeneratorCard(
+                title: "Inherit / disabled",
+                subtitle: "Use parent profile's setting (or skip auto-titling).",
+                systemImage: "arrow.up.right",
+                badge: nil,
+                isSelected: isInherit,
+                tint: .secondary
+            ) {
+                titleProviderKind = nil
+                titleProviderID = nil
+                titleModelID = nil
+            }
+        }
+        .frame(maxWidth: 460)
+    }
+
+    private var cloudSubtitle: String {
+        if let pid = titleProviderID, let mid = titleModelID,
+           let m = model.availableModels.first(where: { $0.providerID == pid && $0.modelID == mid }) {
+            return m.displayName
+        }
+        return "Pick a model below."
+    }
+
+    @ViewBuilder
+    private func titleGeneratorCard(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        badge: String?,
+        isSelected: Bool,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? tint : .secondary)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(title).font(.callout.weight(.medium))
+                        if let badge {
+                            Text(badge)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(tint.opacity(0.85))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(tint)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? tint.opacity(0.10) : Color.primary.opacity(0.04))
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(
+                        isSelected ? AnyShapeStyle(tint.opacity(0.55)) : AnyShapeStyle(Color.primary.opacity(0.06)),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private func modelLabel(provider: String?, model modelID: String?) -> String {
         guard let pid = provider, let mid = modelID else {
             return "(unset — inherit)"
@@ -583,6 +767,8 @@ private struct ProfileForm: View {
     private func seedFromEditing() {
         guard let p = editing else { return }
         name = p.name
+        profileDescription = p.description
+        parentOnly = p.parentOnly
         parentID = p.parentProfileID
         systemMessage = p.systemMessage ?? ""
         defaultUserMessage = p.defaultUserMessage ?? ""
@@ -594,9 +780,10 @@ private struct ProfileForm: View {
         compressionModelID    = p.compressionModelID
         compressionGuide      = p.compressionGuide ?? ""
 
-        titleProviderID = p.titleProviderID
-        titleModelID    = p.titleModelID
-        titleGuide      = p.titleGuide ?? ""
+        titleProviderID   = p.titleProviderID
+        titleModelID      = p.titleModelID
+        titleGuide        = p.titleGuide ?? ""
+        titleProviderKind = p.titleProviderKind
     }
 
     private func save() async {
@@ -611,6 +798,8 @@ private struct ProfileForm: View {
         let trimmedTitleGuide = titleGuide.trimmingCharacters(in: .whitespaces)
 
         patch.name = trimmedName
+        patch.description = profileDescription.trimmingCharacters(in: .whitespaces)
+        patch.parentOnly = parentOnly
         patch.parentProfileID = parentID
         patch.systemMessage = trimmedSystem.isEmpty ? nil : trimmedSystem
         patch.defaultUserMessage = trimmedDefault.isEmpty ? nil : trimmedDefault
@@ -627,9 +816,19 @@ private struct ProfileForm: View {
         patch.compressionModelID    = compressionModelID
         patch.compressionGuide      = trimmedCompGuide.isEmpty ? nil : trimmedCompGuide
 
-        patch.titleProviderID = titleProviderID
-        patch.titleModelID    = titleModelID
-        patch.titleGuide      = trimmedTitleGuide.isEmpty ? nil : trimmedTitleGuide
+        // Mutually exclusive: when "Apple Foundation Models" is selected we
+        // null out the cloud (provider, model) pair so the kind sentinel is
+        // unambiguous on the server.
+        if titleProviderKind == ClarkTitleProviderKind.appleFoundation {
+            patch.titleProviderID = nil
+            patch.titleModelID    = nil
+            patch.titleProviderKind = ClarkTitleProviderKind.appleFoundation
+        } else {
+            patch.titleProviderID = titleProviderID
+            patch.titleModelID    = titleModelID
+            patch.titleProviderKind = nil
+        }
+        patch.titleGuide = trimmedTitleGuide.isEmpty ? nil : trimmedTitleGuide
 
         var clearFields: [String] = []
         if isEdit {
@@ -646,6 +845,7 @@ private struct ProfileForm: View {
             if patch.titleProviderID == nil       { clearFields.append("title_provider_id") }
             if patch.titleModelID == nil          { clearFields.append("title_model_id") }
             if patch.titleGuide == nil            { clearFields.append("title_guide") }
+            if patch.titleProviderKind == nil     { clearFields.append("title_provider_kind") }
         }
 
         do {

@@ -4,13 +4,15 @@ INSERT INTO profiles (
     system_message, default_user_message, compression_guide,
     compression_mode, compression_provider_id, compression_model_id,
     default_settings,
-    title_provider_id, title_model_id, title_guide
+    title_provider_id, title_model_id, title_guide, title_provider_kind,
+    description, parent_only, favorite
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9, $10,
     $11,
-    $12, $13, $14
+    $12, $13, $14, $15,
+    $16, $17, $18
 )
 RETURNING *;
 
@@ -55,3 +57,15 @@ UPDATE profiles SET title_model_id = $2, updated_at = NOW() WHERE id = $1;
 
 -- name: UpdateProfileTitleGuide :exec
 UPDATE profiles SET title_guide = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileTitleProviderKind :exec
+UPDATE profiles SET title_provider_kind = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileDescription :exec
+UPDATE profiles SET description = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileParentOnly :exec
+UPDATE profiles SET parent_only = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileFavorite :exec
+UPDATE profiles SET favorite = $2, updated_at = NOW() WHERE id = $1;

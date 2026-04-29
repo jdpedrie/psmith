@@ -17,15 +17,17 @@ INSERT INTO profiles (
     system_message, default_user_message, compression_guide,
     compression_mode, compression_provider_id, compression_model_id,
     default_settings,
-    title_provider_id, title_model_id, title_guide
+    title_provider_id, title_model_id, title_guide, title_provider_kind,
+    description, parent_only, favorite
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9, $10,
     $11,
-    $12, $13, $14
+    $12, $13, $14, $15,
+    $16, $17, $18
 )
-RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide
+RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind
 `
 
 type CreateProfileParams struct {
@@ -43,6 +45,10 @@ type CreateProfileParams struct {
 	TitleProviderID       *uuid.UUID
 	TitleModelID          *string
 	TitleGuide            *string
+	TitleProviderKind     *string
+	Description           string
+	ParentOnly            bool
+	Favorite              bool
 }
 
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
@@ -61,6 +67,10 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		arg.TitleProviderID,
 		arg.TitleModelID,
 		arg.TitleGuide,
+		arg.TitleProviderKind,
+		arg.Description,
+		arg.ParentOnly,
+		arg.Favorite,
 	)
 	var i Profile
 	err := row.Scan(
@@ -80,6 +90,10 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		&i.TitleProviderID,
 		&i.TitleModelID,
 		&i.TitleGuide,
+		&i.Description,
+		&i.ParentOnly,
+		&i.Favorite,
+		&i.TitleProviderKind,
 	)
 	return i, err
 }
@@ -94,7 +108,7 @@ func (q *Queries) DeleteProfile(ctx context.Context, id uuid.UUID) error {
 }
 
 const getProfileByID = `-- name: GetProfileByID :one
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide FROM profiles WHERE id = $1
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind FROM profiles WHERE id = $1
 `
 
 func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error) {
@@ -117,12 +131,16 @@ func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, er
 		&i.TitleProviderID,
 		&i.TitleModelID,
 		&i.TitleGuide,
+		&i.Description,
+		&i.ParentOnly,
+		&i.Favorite,
+		&i.TitleProviderKind,
 	)
 	return i, err
 }
 
 const listProfilesByUser = `-- name: ListProfilesByUser :many
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide FROM profiles WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind FROM profiles WHERE user_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error) {
@@ -151,6 +169,10 @@ func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]P
 			&i.TitleProviderID,
 			&i.TitleModelID,
 			&i.TitleGuide,
+			&i.Description,
+			&i.ParentOnly,
+			&i.Favorite,
+			&i.TitleProviderKind,
 		); err != nil {
 			return nil, err
 		}
@@ -246,6 +268,34 @@ func (q *Queries) UpdateProfileDefaultUserMessage(ctx context.Context, arg Updat
 	return err
 }
 
+const updateProfileDescription = `-- name: UpdateProfileDescription :exec
+UPDATE profiles SET description = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileDescriptionParams struct {
+	ID          uuid.UUID
+	Description string
+}
+
+func (q *Queries) UpdateProfileDescription(ctx context.Context, arg UpdateProfileDescriptionParams) error {
+	_, err := q.db.Exec(ctx, updateProfileDescription, arg.ID, arg.Description)
+	return err
+}
+
+const updateProfileFavorite = `-- name: UpdateProfileFavorite :exec
+UPDATE profiles SET favorite = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileFavoriteParams struct {
+	ID       uuid.UUID
+	Favorite bool
+}
+
+func (q *Queries) UpdateProfileFavorite(ctx context.Context, arg UpdateProfileFavoriteParams) error {
+	_, err := q.db.Exec(ctx, updateProfileFavorite, arg.ID, arg.Favorite)
+	return err
+}
+
 const updateProfileName = `-- name: UpdateProfileName :exec
 UPDATE profiles SET name = $2, updated_at = NOW() WHERE id = $1
 `
@@ -257,6 +307,20 @@ type UpdateProfileNameParams struct {
 
 func (q *Queries) UpdateProfileName(ctx context.Context, arg UpdateProfileNameParams) error {
 	_, err := q.db.Exec(ctx, updateProfileName, arg.ID, arg.Name)
+	return err
+}
+
+const updateProfileParentOnly = `-- name: UpdateProfileParentOnly :exec
+UPDATE profiles SET parent_only = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileParentOnlyParams struct {
+	ID         uuid.UUID
+	ParentOnly bool
+}
+
+func (q *Queries) UpdateProfileParentOnly(ctx context.Context, arg UpdateProfileParentOnlyParams) error {
+	_, err := q.db.Exec(ctx, updateProfileParentOnly, arg.ID, arg.ParentOnly)
 	return err
 }
 
@@ -313,5 +377,19 @@ type UpdateProfileTitleProviderIDParams struct {
 
 func (q *Queries) UpdateProfileTitleProviderID(ctx context.Context, arg UpdateProfileTitleProviderIDParams) error {
 	_, err := q.db.Exec(ctx, updateProfileTitleProviderID, arg.ID, arg.TitleProviderID)
+	return err
+}
+
+const updateProfileTitleProviderKind = `-- name: UpdateProfileTitleProviderKind :exec
+UPDATE profiles SET title_provider_kind = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileTitleProviderKindParams struct {
+	ID                uuid.UUID
+	TitleProviderKind *string
+}
+
+func (q *Queries) UpdateProfileTitleProviderKind(ctx context.Context, arg UpdateProfileTitleProviderKindParams) error {
+	_, err := q.db.Exec(ctx, updateProfileTitleProviderKind, arg.ID, arg.TitleProviderKind)
 	return err
 }

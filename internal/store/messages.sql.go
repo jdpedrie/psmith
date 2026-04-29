@@ -21,7 +21,8 @@ INSERT INTO messages (
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
     reasoning_tokens, provider_usage_raw,
     input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd,
-    total_cost_usd
+    total_cost_usd,
+    error_payload
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -29,9 +30,10 @@ INSERT INTO messages (
     $12, $13, $14, $15,
     $16, $17,
     $18, $19, $20, $21,
-    $22
+    $22,
+    $23
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload
 `
 
 type CreateAssistantMessageWithUsageParams struct {
@@ -57,11 +59,14 @@ type CreateAssistantMessageWithUsageParams struct {
 	CacheReadCostUsd     pgtype.Numeric
 	CacheWriteCostUsd    pgtype.Numeric
 	TotalCostUsd         pgtype.Numeric
+	ErrorPayload         []byte
 }
 
 // Used by the stream supervisor at materialization. Allows the assistant turn
 // (or the compression_summary record) to be inserted with usage + cost
-// columns populated atomically.
+// columns populated atomically. error_payload is set when the stream
+// terminated in an errored/cancelled state — captures the failure inline so
+// the UI can render the message as a first-class errored history entry.
 func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg CreateAssistantMessageWithUsageParams) (Message, error) {
 	row := q.db.QueryRow(ctx, createAssistantMessageWithUsage,
 		arg.ID,
@@ -86,6 +91,7 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		arg.CacheReadCostUsd,
 		arg.CacheWriteCostUsd,
 		arg.TotalCostUsd,
+		arg.ErrorPayload,
 	)
 	var i Message
 	err := row.Scan(
@@ -113,6 +119,7 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
@@ -127,7 +134,7 @@ INSERT INTO messages (
     $6, $7, $8, $9,
     $10, $11
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload
 `
 
 type CreateMessageParams struct {
@@ -184,6 +191,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
@@ -200,7 +208,7 @@ func (q *Queries) DeleteMessageByID(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCompressionSummaryInContext = `-- name: GetCompressionSummaryInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload FROM messages
 WHERE context_id = $1 AND role = 'compression_summary'
 ORDER BY created_at DESC
 LIMIT 1
@@ -237,12 +245,13 @@ func (q *Queries) GetCompressionSummaryInContext(ctx context.Context, contextID 
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
 
 const getContextLeafMessage = `-- name: GetContextLeafMessage :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at FROM messages m
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload FROM messages m
 WHERE m.context_id = $1
   AND m.id NOT IN (
     SELECT DISTINCT c.parent_id FROM messages c
@@ -285,12 +294,13 @@ func (q *Queries) GetContextLeafMessage(ctx context.Context, contextID uuid.UUID
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
 
 const getContextRoleMessageInContext = `-- name: GetContextRoleMessageInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload FROM messages
 WHERE context_id = $1 AND role = 'context'
 ORDER BY created_at
 LIMIT 1
@@ -326,12 +336,13 @@ func (q *Queries) GetContextRoleMessageInContext(ctx context.Context, contextID 
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
 
 const getMessageByID = `-- name: GetMessageByID :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at FROM messages WHERE id = $1
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error) {
@@ -362,6 +373,7 @@ func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, er
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }
@@ -369,14 +381,19 @@ func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, er
 const hasCompressionSummaryInContext = `-- name: HasCompressionSummaryInContext :one
 SELECT EXISTS(
     SELECT 1 FROM messages
-    WHERE context_id = $1 AND role = 'compression_summary'
+    WHERE context_id = $1
+      AND role = 'compression_summary'
+      AND error_payload IS NULL
 )::BOOLEAN AS has_summary
 `
 
-// True iff the context contains at least one role=compression_summary row.
-// SendMessage / Compact use this as a precondition: a context with a pending
-// summary must have it promoted (PromoteCompactionToNewContext) or deleted
-// (DeleteMessage) before more turns can land.
+// True iff the context contains at least one role=compression_summary row that
+// did NOT fail (error_payload IS NULL). SendMessage / Compact use this as a
+// precondition: a clean pending summary must be promoted
+// (PromoteCompactionToNewContext) or deleted (DeleteMessage) before more turns
+// can land. Errored compression_summary rows are first-class history entries
+// the user can review; they do not gate the conversation — the user retries
+// by either deleting the failed summary or kicking off a fresh compaction.
 func (q *Queries) HasCompressionSummaryInContext(ctx context.Context, contextID uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, hasCompressionSummaryInContext, contextID)
 	var has_summary bool
@@ -386,11 +403,11 @@ func (q *Queries) HasCompressionSummaryInContext(ctx context.Context, contextID 
 
 const listMessageAncestorChain = `-- name: ListMessageAncestorChain :many
 WITH RECURSIVE chain AS (
-    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, 0 AS depth
+    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, 0 AS depth
     FROM messages
     WHERE messages.id = $1
     UNION ALL
-    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, c.depth + 1
+    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, m.error_payload, c.depth + 1
     FROM messages m
     INNER JOIN chain c ON m.id = c.parent_id
 )
@@ -401,6 +418,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.reasoning_tokens, chain.provider_usage_raw,
        chain.input_cost_usd, chain.output_cost_usd, chain.cache_read_cost_usd, chain.cache_write_cost_usd,
        chain.total_cost_usd,
+       chain.error_payload,
        chain.created_at,
        chain.edited_at,
        (
@@ -438,6 +456,7 @@ type ListMessageAncestorChainRow struct {
 	CacheReadCostUsd     pgtype.Numeric
 	CacheWriteCostUsd    pgtype.Numeric
 	TotalCostUsd         pgtype.Numeric
+	ErrorPayload         []byte
 	CreatedAt            time.Time
 	EditedAt             *time.Time
 	SiblingCount         int32
@@ -479,6 +498,7 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 			&i.CacheReadCostUsd,
 			&i.CacheWriteCostUsd,
 			&i.TotalCostUsd,
+			&i.ErrorPayload,
 			&i.CreatedAt,
 			&i.EditedAt,
 			&i.SiblingCount,
@@ -494,7 +514,7 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 }
 
 const listMessagesByContext = `-- name: ListMessagesByContext :many
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload FROM messages
 WHERE context_id = $1
 ORDER BY created_at, id
 `
@@ -533,6 +553,7 @@ func (q *Queries) ListMessagesByContext(ctx context.Context, contextID uuid.UUID
 			&i.CacheWriteCostUsd,
 			&i.TotalCostUsd,
 			&i.EditedAt,
+			&i.ErrorPayload,
 		); err != nil {
 			return nil, err
 		}
@@ -569,7 +590,7 @@ SET content   = $2,
     role      = COALESCE($3, role),
     edited_at = NOW()
 WHERE id = $1
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload
 `
 
 type UpdateMessageContentRoleParams struct {
@@ -610,6 +631,7 @@ func (q *Queries) UpdateMessageContentRole(ctx context.Context, arg UpdateMessag
 		&i.CacheWriteCostUsd,
 		&i.TotalCostUsd,
 		&i.EditedAt,
+		&i.ErrorPayload,
 	)
 	return i, err
 }

@@ -44,6 +44,15 @@ message CreateProfileRequest {
   optional string title_provider_id = 10;
   optional string title_model_id = 11;
   optional string title_guide = 12;
+  // Free-form description; empty string treated as "no description."
+  string description = 13;
+  // When true, profile is hidden from the new-conversation picker.
+  bool parent_only = 14;
+  // When true, surface at the top of profile pickers.
+  bool favorite = 15;
+  // Sentinel for a non-server title generator (e.g. "apple_foundation" for
+  // Mac on-device titling). See Profile.title_provider_kind.
+  optional string title_provider_kind = 16;
 }
 message CreateProfileResponse {
   Profile profile = 1;
@@ -80,6 +89,14 @@ message UpdateProfileRequest {
   optional string title_provider_id = 11;
   optional string title_model_id = 12;
   optional string title_guide = 13;
+  // Identity-metadata updates. All non-nullable on the row, so they're
+  // wrapped here as `optional` purely so callers can leave them unchanged.
+  optional string description = 14;
+  optional bool parent_only = 15;
+  optional bool favorite = 16;
+  // Sentinel for a non-server title generator. See Profile.title_provider_kind.
+  // Listed in clear_fields to revert to inherited / cloud-titled behavior.
+  optional string title_provider_kind = 17;
 }
 message UpdateProfileResponse {
   Profile profile = 1;

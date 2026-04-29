@@ -25,11 +25,32 @@ ORDER BY context_activation_time DESC
 LIMIT 1;
 
 -- name: ListContextsByConversation :many
--- Per-context message_count is aggregated in a single query so the client
--- can render the context list without N+1 round trips.
+-- Per-context aggregates (message_count, last_message_total_tokens,
+-- cumulative_cost_usd) are computed in a single query so the client can
+-- render context-list rows without N+1 round trips.
+--
+--   last_message_total_tokens: input_tokens + output_tokens of the most
+--     recent assistant message (by created_at, then id as tiebreaker) that
+--     carries usage data. Zero when no such message exists yet. Mirrors the
+--     "last turn cost / size" UX surface — input tokens already reflect the
+--     full wire prefix at that turn, so input+output captures the work the
+--     model did for that turn.
+--   cumulative_cost_usd: SUM of messages.total_cost_usd across every row in
+--     the context (NULLs treated as zero). Includes compression_summary
+--     rows since they carry real cost.
 SELECT
     c.*,
-    COUNT(m.id)::BIGINT AS message_count
+    COUNT(m.id)::BIGINT AS message_count,
+    COALESCE((
+        SELECT (COALESCE(la.input_tokens, 0) + COALESCE(la.output_tokens, 0))::BIGINT
+        FROM messages la
+        WHERE la.context_id = c.id
+          AND la.role = 'assistant'
+          AND (la.input_tokens IS NOT NULL OR la.output_tokens IS NOT NULL)
+        ORDER BY la.created_at DESC, la.id DESC
+        LIMIT 1
+    ), 0)::BIGINT AS last_message_total_tokens,
+    COALESCE(SUM(m.total_cost_usd), 0)::DOUBLE PRECISION AS cumulative_cost_usd
 FROM contexts c
 LEFT JOIN messages m ON m.context_id = c.id
 WHERE c.conversation_id = $1

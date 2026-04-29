@@ -25,127 +25,149 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
-public struct Clark_V1_CreateProfileRequest: Sendable {
+public struct Clark_V1_CreateProfileRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var parentProfileID: String {
-    get {_parentProfileID ?? String()}
-    set {_parentProfileID = newValue}
+    get {_storage._parentProfileID ?? String()}
+    set {_uniqueStorage()._parentProfileID = newValue}
   }
   /// Returns true if `parentProfileID` has been explicitly set.
-  public var hasParentProfileID: Bool {self._parentProfileID != nil}
+  public var hasParentProfileID: Bool {_storage._parentProfileID != nil}
   /// Clears the value of `parentProfileID`. Subsequent reads from it will return its default value.
-  public mutating func clearParentProfileID() {self._parentProfileID = nil}
+  public mutating func clearParentProfileID() {_uniqueStorage()._parentProfileID = nil}
 
-  public var name: String = String()
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
 
   public var systemMessage: String {
-    get {_systemMessage ?? String()}
-    set {_systemMessage = newValue}
+    get {_storage._systemMessage ?? String()}
+    set {_uniqueStorage()._systemMessage = newValue}
   }
   /// Returns true if `systemMessage` has been explicitly set.
-  public var hasSystemMessage: Bool {self._systemMessage != nil}
+  public var hasSystemMessage: Bool {_storage._systemMessage != nil}
   /// Clears the value of `systemMessage`. Subsequent reads from it will return its default value.
-  public mutating func clearSystemMessage() {self._systemMessage = nil}
+  public mutating func clearSystemMessage() {_uniqueStorage()._systemMessage = nil}
 
   public var defaultUserMessage: String {
-    get {_defaultUserMessage ?? String()}
-    set {_defaultUserMessage = newValue}
+    get {_storage._defaultUserMessage ?? String()}
+    set {_uniqueStorage()._defaultUserMessage = newValue}
   }
   /// Returns true if `defaultUserMessage` has been explicitly set.
-  public var hasDefaultUserMessage: Bool {self._defaultUserMessage != nil}
+  public var hasDefaultUserMessage: Bool {_storage._defaultUserMessage != nil}
   /// Clears the value of `defaultUserMessage`. Subsequent reads from it will return its default value.
-  public mutating func clearDefaultUserMessage() {self._defaultUserMessage = nil}
+  public mutating func clearDefaultUserMessage() {_uniqueStorage()._defaultUserMessage = nil}
 
   public var compressionGuide: String {
-    get {_compressionGuide ?? String()}
-    set {_compressionGuide = newValue}
+    get {_storage._compressionGuide ?? String()}
+    set {_uniqueStorage()._compressionGuide = newValue}
   }
   /// Returns true if `compressionGuide` has been explicitly set.
-  public var hasCompressionGuide: Bool {self._compressionGuide != nil}
+  public var hasCompressionGuide: Bool {_storage._compressionGuide != nil}
   /// Clears the value of `compressionGuide`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionGuide() {self._compressionGuide = nil}
+  public mutating func clearCompressionGuide() {_uniqueStorage()._compressionGuide = nil}
 
   public var compressionMode: Clark_V1_CompressionMode {
-    get {_compressionMode ?? .unspecified}
-    set {_compressionMode = newValue}
+    get {_storage._compressionMode ?? .unspecified}
+    set {_uniqueStorage()._compressionMode = newValue}
   }
   /// Returns true if `compressionMode` has been explicitly set.
-  public var hasCompressionMode: Bool {self._compressionMode != nil}
+  public var hasCompressionMode: Bool {_storage._compressionMode != nil}
   /// Clears the value of `compressionMode`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionMode() {self._compressionMode = nil}
+  public mutating func clearCompressionMode() {_uniqueStorage()._compressionMode = nil}
 
   public var compressionProviderID: String {
-    get {_compressionProviderID ?? String()}
-    set {_compressionProviderID = newValue}
+    get {_storage._compressionProviderID ?? String()}
+    set {_uniqueStorage()._compressionProviderID = newValue}
   }
   /// Returns true if `compressionProviderID` has been explicitly set.
-  public var hasCompressionProviderID: Bool {self._compressionProviderID != nil}
+  public var hasCompressionProviderID: Bool {_storage._compressionProviderID != nil}
   /// Clears the value of `compressionProviderID`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionProviderID() {self._compressionProviderID = nil}
+  public mutating func clearCompressionProviderID() {_uniqueStorage()._compressionProviderID = nil}
 
   public var compressionModelID: String {
-    get {_compressionModelID ?? String()}
-    set {_compressionModelID = newValue}
+    get {_storage._compressionModelID ?? String()}
+    set {_uniqueStorage()._compressionModelID = newValue}
   }
   /// Returns true if `compressionModelID` has been explicitly set.
-  public var hasCompressionModelID: Bool {self._compressionModelID != nil}
+  public var hasCompressionModelID: Bool {_storage._compressionModelID != nil}
   /// Clears the value of `compressionModelID`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionModelID() {self._compressionModelID = nil}
+  public mutating func clearCompressionModelID() {_uniqueStorage()._compressionModelID = nil}
 
   public var defaultSettings: Clark_V1_ProfileDefaults {
-    get {_defaultSettings ?? Clark_V1_ProfileDefaults()}
-    set {_defaultSettings = newValue}
+    get {_storage._defaultSettings ?? Clark_V1_ProfileDefaults()}
+    set {_uniqueStorage()._defaultSettings = newValue}
   }
   /// Returns true if `defaultSettings` has been explicitly set.
-  public var hasDefaultSettings: Bool {self._defaultSettings != nil}
+  public var hasDefaultSettings: Bool {_storage._defaultSettings != nil}
   /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
-  public mutating func clearDefaultSettings() {self._defaultSettings = nil}
+  public mutating func clearDefaultSettings() {_uniqueStorage()._defaultSettings = nil}
 
   public var titleProviderID: String {
-    get {_titleProviderID ?? String()}
-    set {_titleProviderID = newValue}
+    get {_storage._titleProviderID ?? String()}
+    set {_uniqueStorage()._titleProviderID = newValue}
   }
   /// Returns true if `titleProviderID` has been explicitly set.
-  public var hasTitleProviderID: Bool {self._titleProviderID != nil}
+  public var hasTitleProviderID: Bool {_storage._titleProviderID != nil}
   /// Clears the value of `titleProviderID`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleProviderID() {self._titleProviderID = nil}
+  public mutating func clearTitleProviderID() {_uniqueStorage()._titleProviderID = nil}
 
   public var titleModelID: String {
-    get {_titleModelID ?? String()}
-    set {_titleModelID = newValue}
+    get {_storage._titleModelID ?? String()}
+    set {_uniqueStorage()._titleModelID = newValue}
   }
   /// Returns true if `titleModelID` has been explicitly set.
-  public var hasTitleModelID: Bool {self._titleModelID != nil}
+  public var hasTitleModelID: Bool {_storage._titleModelID != nil}
   /// Clears the value of `titleModelID`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleModelID() {self._titleModelID = nil}
+  public mutating func clearTitleModelID() {_uniqueStorage()._titleModelID = nil}
 
   public var titleGuide: String {
-    get {_titleGuide ?? String()}
-    set {_titleGuide = newValue}
+    get {_storage._titleGuide ?? String()}
+    set {_uniqueStorage()._titleGuide = newValue}
   }
   /// Returns true if `titleGuide` has been explicitly set.
-  public var hasTitleGuide: Bool {self._titleGuide != nil}
+  public var hasTitleGuide: Bool {_storage._titleGuide != nil}
   /// Clears the value of `titleGuide`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleGuide() {self._titleGuide = nil}
+  public mutating func clearTitleGuide() {_uniqueStorage()._titleGuide = nil}
+
+  /// Free-form description; empty string treated as "no description."
+  public var description_p: String {
+    get {_storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
+
+  /// When true, profile is hidden from the new-conversation picker.
+  public var parentOnly: Bool {
+    get {_storage._parentOnly}
+    set {_uniqueStorage()._parentOnly = newValue}
+  }
+
+  /// When true, surface at the top of profile pickers.
+  public var favorite: Bool {
+    get {_storage._favorite}
+    set {_uniqueStorage()._favorite = newValue}
+  }
+
+  /// Sentinel for a non-server title generator (e.g. "apple_foundation" for
+  /// Mac on-device titling). See Profile.title_provider_kind.
+  public var titleProviderKind: String {
+    get {_storage._titleProviderKind ?? String()}
+    set {_uniqueStorage()._titleProviderKind = newValue}
+  }
+  /// Returns true if `titleProviderKind` has been explicitly set.
+  public var hasTitleProviderKind: Bool {_storage._titleProviderKind != nil}
+  /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _parentProfileID: String? = nil
-  fileprivate var _systemMessage: String? = nil
-  fileprivate var _defaultUserMessage: String? = nil
-  fileprivate var _compressionGuide: String? = nil
-  fileprivate var _compressionMode: Clark_V1_CompressionMode? = nil
-  fileprivate var _compressionProviderID: String? = nil
-  fileprivate var _compressionModelID: String? = nil
-  fileprivate var _defaultSettings: Clark_V1_ProfileDefaults? = nil
-  fileprivate var _titleProviderID: String? = nil
-  fileprivate var _titleModelID: String? = nil
-  fileprivate var _titleGuide: String? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Clark_V1_CreateProfileResponse: Sendable {
@@ -238,131 +260,167 @@ public struct Clark_V1_GetProfileResponse: Sendable {
   fileprivate var _resolved: Clark_V1_Profile? = nil
 }
 
-public struct Clark_V1_UpdateProfileRequest: Sendable {
+public struct Clark_V1_UpdateProfileRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: String = String()
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
   /// Replace semantics on present fields. To clear a field (revert to inherit),
   /// list its name in clear_fields rather than omitting it from the request.
   public var name: String {
-    get {_name ?? String()}
-    set {_name = newValue}
+    get {_storage._name ?? String()}
+    set {_uniqueStorage()._name = newValue}
   }
   /// Returns true if `name` has been explicitly set.
-  public var hasName: Bool {self._name != nil}
+  public var hasName: Bool {_storage._name != nil}
   /// Clears the value of `name`. Subsequent reads from it will return its default value.
-  public mutating func clearName() {self._name = nil}
+  public mutating func clearName() {_uniqueStorage()._name = nil}
 
   public var systemMessage: String {
-    get {_systemMessage ?? String()}
-    set {_systemMessage = newValue}
+    get {_storage._systemMessage ?? String()}
+    set {_uniqueStorage()._systemMessage = newValue}
   }
   /// Returns true if `systemMessage` has been explicitly set.
-  public var hasSystemMessage: Bool {self._systemMessage != nil}
+  public var hasSystemMessage: Bool {_storage._systemMessage != nil}
   /// Clears the value of `systemMessage`. Subsequent reads from it will return its default value.
-  public mutating func clearSystemMessage() {self._systemMessage = nil}
+  public mutating func clearSystemMessage() {_uniqueStorage()._systemMessage = nil}
 
   public var defaultUserMessage: String {
-    get {_defaultUserMessage ?? String()}
-    set {_defaultUserMessage = newValue}
+    get {_storage._defaultUserMessage ?? String()}
+    set {_uniqueStorage()._defaultUserMessage = newValue}
   }
   /// Returns true if `defaultUserMessage` has been explicitly set.
-  public var hasDefaultUserMessage: Bool {self._defaultUserMessage != nil}
+  public var hasDefaultUserMessage: Bool {_storage._defaultUserMessage != nil}
   /// Clears the value of `defaultUserMessage`. Subsequent reads from it will return its default value.
-  public mutating func clearDefaultUserMessage() {self._defaultUserMessage = nil}
+  public mutating func clearDefaultUserMessage() {_uniqueStorage()._defaultUserMessage = nil}
 
   public var compressionGuide: String {
-    get {_compressionGuide ?? String()}
-    set {_compressionGuide = newValue}
+    get {_storage._compressionGuide ?? String()}
+    set {_uniqueStorage()._compressionGuide = newValue}
   }
   /// Returns true if `compressionGuide` has been explicitly set.
-  public var hasCompressionGuide: Bool {self._compressionGuide != nil}
+  public var hasCompressionGuide: Bool {_storage._compressionGuide != nil}
   /// Clears the value of `compressionGuide`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionGuide() {self._compressionGuide = nil}
+  public mutating func clearCompressionGuide() {_uniqueStorage()._compressionGuide = nil}
 
   public var compressionMode: Clark_V1_CompressionMode {
-    get {_compressionMode ?? .unspecified}
-    set {_compressionMode = newValue}
+    get {_storage._compressionMode ?? .unspecified}
+    set {_uniqueStorage()._compressionMode = newValue}
   }
   /// Returns true if `compressionMode` has been explicitly set.
-  public var hasCompressionMode: Bool {self._compressionMode != nil}
+  public var hasCompressionMode: Bool {_storage._compressionMode != nil}
   /// Clears the value of `compressionMode`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionMode() {self._compressionMode = nil}
+  public mutating func clearCompressionMode() {_uniqueStorage()._compressionMode = nil}
 
   public var compressionProviderID: String {
-    get {_compressionProviderID ?? String()}
-    set {_compressionProviderID = newValue}
+    get {_storage._compressionProviderID ?? String()}
+    set {_uniqueStorage()._compressionProviderID = newValue}
   }
   /// Returns true if `compressionProviderID` has been explicitly set.
-  public var hasCompressionProviderID: Bool {self._compressionProviderID != nil}
+  public var hasCompressionProviderID: Bool {_storage._compressionProviderID != nil}
   /// Clears the value of `compressionProviderID`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionProviderID() {self._compressionProviderID = nil}
+  public mutating func clearCompressionProviderID() {_uniqueStorage()._compressionProviderID = nil}
 
   public var compressionModelID: String {
-    get {_compressionModelID ?? String()}
-    set {_compressionModelID = newValue}
+    get {_storage._compressionModelID ?? String()}
+    set {_uniqueStorage()._compressionModelID = newValue}
   }
   /// Returns true if `compressionModelID` has been explicitly set.
-  public var hasCompressionModelID: Bool {self._compressionModelID != nil}
+  public var hasCompressionModelID: Bool {_storage._compressionModelID != nil}
   /// Clears the value of `compressionModelID`. Subsequent reads from it will return its default value.
-  public mutating func clearCompressionModelID() {self._compressionModelID = nil}
+  public mutating func clearCompressionModelID() {_uniqueStorage()._compressionModelID = nil}
 
   public var defaultSettings: Clark_V1_ProfileDefaults {
-    get {_defaultSettings ?? Clark_V1_ProfileDefaults()}
-    set {_defaultSettings = newValue}
+    get {_storage._defaultSettings ?? Clark_V1_ProfileDefaults()}
+    set {_uniqueStorage()._defaultSettings = newValue}
   }
   /// Returns true if `defaultSettings` has been explicitly set.
-  public var hasDefaultSettings: Bool {self._defaultSettings != nil}
+  public var hasDefaultSettings: Bool {_storage._defaultSettings != nil}
   /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
-  public mutating func clearDefaultSettings() {self._defaultSettings = nil}
+  public mutating func clearDefaultSettings() {_uniqueStorage()._defaultSettings = nil}
 
-  public var clearFields_p: [String] = []
+  public var clearFields_p: [String] {
+    get {_storage._clearFields_p}
+    set {_uniqueStorage()._clearFields_p = newValue}
+  }
 
   public var titleProviderID: String {
-    get {_titleProviderID ?? String()}
-    set {_titleProviderID = newValue}
+    get {_storage._titleProviderID ?? String()}
+    set {_uniqueStorage()._titleProviderID = newValue}
   }
   /// Returns true if `titleProviderID` has been explicitly set.
-  public var hasTitleProviderID: Bool {self._titleProviderID != nil}
+  public var hasTitleProviderID: Bool {_storage._titleProviderID != nil}
   /// Clears the value of `titleProviderID`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleProviderID() {self._titleProviderID = nil}
+  public mutating func clearTitleProviderID() {_uniqueStorage()._titleProviderID = nil}
 
   public var titleModelID: String {
-    get {_titleModelID ?? String()}
-    set {_titleModelID = newValue}
+    get {_storage._titleModelID ?? String()}
+    set {_uniqueStorage()._titleModelID = newValue}
   }
   /// Returns true if `titleModelID` has been explicitly set.
-  public var hasTitleModelID: Bool {self._titleModelID != nil}
+  public var hasTitleModelID: Bool {_storage._titleModelID != nil}
   /// Clears the value of `titleModelID`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleModelID() {self._titleModelID = nil}
+  public mutating func clearTitleModelID() {_uniqueStorage()._titleModelID = nil}
 
   public var titleGuide: String {
-    get {_titleGuide ?? String()}
-    set {_titleGuide = newValue}
+    get {_storage._titleGuide ?? String()}
+    set {_uniqueStorage()._titleGuide = newValue}
   }
   /// Returns true if `titleGuide` has been explicitly set.
-  public var hasTitleGuide: Bool {self._titleGuide != nil}
+  public var hasTitleGuide: Bool {_storage._titleGuide != nil}
   /// Clears the value of `titleGuide`. Subsequent reads from it will return its default value.
-  public mutating func clearTitleGuide() {self._titleGuide = nil}
+  public mutating func clearTitleGuide() {_uniqueStorage()._titleGuide = nil}
+
+  /// Identity-metadata updates. All non-nullable on the row, so they're
+  /// wrapped here as `optional` purely so callers can leave them unchanged.
+  public var description_p: String {
+    get {_storage._description_p ?? String()}
+    set {_uniqueStorage()._description_p = newValue}
+  }
+  /// Returns true if `description_p` has been explicitly set.
+  public var hasDescription_p: Bool {_storage._description_p != nil}
+  /// Clears the value of `description_p`. Subsequent reads from it will return its default value.
+  public mutating func clearDescription_p() {_uniqueStorage()._description_p = nil}
+
+  public var parentOnly: Bool {
+    get {_storage._parentOnly ?? false}
+    set {_uniqueStorage()._parentOnly = newValue}
+  }
+  /// Returns true if `parentOnly` has been explicitly set.
+  public var hasParentOnly: Bool {_storage._parentOnly != nil}
+  /// Clears the value of `parentOnly`. Subsequent reads from it will return its default value.
+  public mutating func clearParentOnly() {_uniqueStorage()._parentOnly = nil}
+
+  public var favorite: Bool {
+    get {_storage._favorite ?? false}
+    set {_uniqueStorage()._favorite = newValue}
+  }
+  /// Returns true if `favorite` has been explicitly set.
+  public var hasFavorite: Bool {_storage._favorite != nil}
+  /// Clears the value of `favorite`. Subsequent reads from it will return its default value.
+  public mutating func clearFavorite() {_uniqueStorage()._favorite = nil}
+
+  /// Sentinel for a non-server title generator. See Profile.title_provider_kind.
+  /// Listed in clear_fields to revert to inherited / cloud-titled behavior.
+  public var titleProviderKind: String {
+    get {_storage._titleProviderKind ?? String()}
+    set {_uniqueStorage()._titleProviderKind = newValue}
+  }
+  /// Returns true if `titleProviderKind` has been explicitly set.
+  public var hasTitleProviderKind: Bool {_storage._titleProviderKind != nil}
+  /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _name: String? = nil
-  fileprivate var _systemMessage: String? = nil
-  fileprivate var _defaultUserMessage: String? = nil
-  fileprivate var _compressionGuide: String? = nil
-  fileprivate var _compressionMode: Clark_V1_CompressionMode? = nil
-  fileprivate var _compressionProviderID: String? = nil
-  fileprivate var _compressionModelID: String? = nil
-  fileprivate var _defaultSettings: Clark_V1_ProfileDefaults? = nil
-  fileprivate var _titleProviderID: String? = nil
-  fileprivate var _titleModelID: String? = nil
-  fileprivate var _titleGuide: String? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public struct Clark_V1_UpdateProfileResponse: Sendable {
@@ -562,88 +620,174 @@ fileprivate let _protobuf_package = "clark.v1"
 
 extension Clark_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateProfileRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
+
+  fileprivate class _StorageClass {
+    var _parentProfileID: String? = nil
+    var _name: String = String()
+    var _systemMessage: String? = nil
+    var _defaultUserMessage: String? = nil
+    var _compressionGuide: String? = nil
+    var _compressionMode: Clark_V1_CompressionMode? = nil
+    var _compressionProviderID: String? = nil
+    var _compressionModelID: String? = nil
+    var _defaultSettings: Clark_V1_ProfileDefaults? = nil
+    var _titleProviderID: String? = nil
+    var _titleModelID: String? = nil
+    var _titleGuide: String? = nil
+    var _description_p: String = String()
+    var _parentOnly: Bool = false
+    var _favorite: Bool = false
+    var _titleProviderKind: String? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _parentProfileID = source._parentProfileID
+      _name = source._name
+      _systemMessage = source._systemMessage
+      _defaultUserMessage = source._defaultUserMessage
+      _compressionGuide = source._compressionGuide
+      _compressionMode = source._compressionMode
+      _compressionProviderID = source._compressionProviderID
+      _compressionModelID = source._compressionModelID
+      _defaultSettings = source._defaultSettings
+      _titleProviderID = source._titleProviderID
+      _titleModelID = source._titleModelID
+      _titleGuide = source._titleGuide
+      _description_p = source._description_p
+      _parentOnly = source._parentOnly
+      _favorite = source._favorite
+      _titleProviderKind = source._titleProviderKind
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self._parentProfileID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self._systemMessage) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self._defaultUserMessage) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self._compressionGuide) }()
-      case 6: try { try decoder.decodeSingularEnumField(value: &self._compressionMode) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self._compressionProviderID) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self._compressionModelID) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._defaultSettings) }()
-      case 10: try { try decoder.decodeSingularStringField(value: &self._titleProviderID) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self._titleModelID) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self._titleGuide) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._parentProfileID) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._systemMessage) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._defaultUserMessage) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._compressionGuide) }()
+        case 6: try { try decoder.decodeSingularEnumField(value: &_storage._compressionMode) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._compressionProviderID) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._compressionModelID) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._defaultSettings) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderID) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._titleModelID) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._titleGuide) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
+        case 15: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._parentProfileID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    } }()
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      try { if let v = _storage._parentProfileID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+      } }()
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 2)
+      }
+      try { if let v = _storage._systemMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._defaultUserMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._compressionGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._compressionMode {
+        try visitor.visitSingularEnumField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._compressionProviderID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._compressionModelID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._defaultSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._titleProviderID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 10)
+      } }()
+      try { if let v = _storage._titleModelID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._titleGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+      } }()
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 13)
+      }
+      if _storage._parentOnly != false {
+        try visitor.visitSingularBoolField(value: _storage._parentOnly, fieldNumber: 14)
+      }
+      if _storage._favorite != false {
+        try visitor.visitSingularBoolField(value: _storage._favorite, fieldNumber: 15)
+      }
+      try { if let v = _storage._titleProviderKind {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 16)
+      } }()
     }
-    try { if let v = self._systemMessage {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._defaultUserMessage {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._compressionGuide {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._compressionMode {
-      try visitor.visitSingularEnumField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._compressionProviderID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._compressionModelID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
-    } }()
-    try { if let v = self._defaultSettings {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    try { if let v = self._titleProviderID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 10)
-    } }()
-    try { if let v = self._titleModelID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 11)
-    } }()
-    try { if let v = self._titleGuide {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 12)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Clark_V1_CreateProfileRequest, rhs: Clark_V1_CreateProfileRequest) -> Bool {
-    if lhs._parentProfileID != rhs._parentProfileID {return false}
-    if lhs.name != rhs.name {return false}
-    if lhs._systemMessage != rhs._systemMessage {return false}
-    if lhs._defaultUserMessage != rhs._defaultUserMessage {return false}
-    if lhs._compressionGuide != rhs._compressionGuide {return false}
-    if lhs._compressionMode != rhs._compressionMode {return false}
-    if lhs._compressionProviderID != rhs._compressionProviderID {return false}
-    if lhs._compressionModelID != rhs._compressionModelID {return false}
-    if lhs._defaultSettings != rhs._defaultSettings {return false}
-    if lhs._titleProviderID != rhs._titleProviderID {return false}
-    if lhs._titleModelID != rhs._titleModelID {return false}
-    if lhs._titleGuide != rhs._titleGuide {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._parentProfileID != rhs_storage._parentProfileID {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._systemMessage != rhs_storage._systemMessage {return false}
+        if _storage._defaultUserMessage != rhs_storage._defaultUserMessage {return false}
+        if _storage._compressionGuide != rhs_storage._compressionGuide {return false}
+        if _storage._compressionMode != rhs_storage._compressionMode {return false}
+        if _storage._compressionProviderID != rhs_storage._compressionProviderID {return false}
+        if _storage._compressionModelID != rhs_storage._compressionModelID {return false}
+        if _storage._defaultSettings != rhs_storage._defaultSettings {return false}
+        if _storage._titleProviderID != rhs_storage._titleProviderID {return false}
+        if _storage._titleModelID != rhs_storage._titleModelID {return false}
+        if _storage._titleGuide != rhs_storage._titleGuide {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._parentOnly != rhs_storage._parentOnly {return false}
+        if _storage._favorite != rhs_storage._favorite {return false}
+        if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -808,93 +952,181 @@ extension Clark_V1_GetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Clark_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateProfileRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _name: String? = nil
+    var _systemMessage: String? = nil
+    var _defaultUserMessage: String? = nil
+    var _compressionGuide: String? = nil
+    var _compressionMode: Clark_V1_CompressionMode? = nil
+    var _compressionProviderID: String? = nil
+    var _compressionModelID: String? = nil
+    var _defaultSettings: Clark_V1_ProfileDefaults? = nil
+    var _clearFields_p: [String] = []
+    var _titleProviderID: String? = nil
+    var _titleModelID: String? = nil
+    var _titleGuide: String? = nil
+    var _description_p: String? = nil
+    var _parentOnly: Bool? = nil
+    var _favorite: Bool? = nil
+    var _titleProviderKind: String? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _name = source._name
+      _systemMessage = source._systemMessage
+      _defaultUserMessage = source._defaultUserMessage
+      _compressionGuide = source._compressionGuide
+      _compressionMode = source._compressionMode
+      _compressionProviderID = source._compressionProviderID
+      _compressionModelID = source._compressionModelID
+      _defaultSettings = source._defaultSettings
+      _clearFields_p = source._clearFields_p
+      _titleProviderID = source._titleProviderID
+      _titleModelID = source._titleModelID
+      _titleGuide = source._titleGuide
+      _description_p = source._description_p
+      _parentOnly = source._parentOnly
+      _favorite = source._favorite
+      _titleProviderKind = source._titleProviderKind
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self._name) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self._systemMessage) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self._defaultUserMessage) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self._compressionGuide) }()
-      case 6: try { try decoder.decodeSingularEnumField(value: &self._compressionMode) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self._compressionProviderID) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self._compressionModelID) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._defaultSettings) }()
-      case 10: try { try decoder.decodeRepeatedStringField(value: &self.clearFields_p) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self._titleProviderID) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self._titleModelID) }()
-      case 13: try { try decoder.decodeSingularStringField(value: &self._titleGuide) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._systemMessage) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._defaultUserMessage) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._compressionGuide) }()
+        case 6: try { try decoder.decodeSingularEnumField(value: &_storage._compressionMode) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._compressionProviderID) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._compressionModelID) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._defaultSettings) }()
+        case 10: try { try decoder.decodeRepeatedStringField(value: &_storage._clearFields_p) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderID) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._titleModelID) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._titleGuide) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 15: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
+        case 16: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      try { if let v = _storage._name {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+      } }()
+      try { if let v = _storage._systemMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._defaultUserMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._compressionGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._compressionMode {
+        try visitor.visitSingularEnumField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._compressionProviderID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._compressionModelID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._defaultSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      if !_storage._clearFields_p.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._clearFields_p, fieldNumber: 10)
+      }
+      try { if let v = _storage._titleProviderID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._titleModelID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+      } }()
+      try { if let v = _storage._titleGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 13)
+      } }()
+      try { if let v = _storage._description_p {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 14)
+      } }()
+      try { if let v = _storage._parentOnly {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 15)
+      } }()
+      try { if let v = _storage._favorite {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 16)
+      } }()
+      try { if let v = _storage._titleProviderKind {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 17)
+      } }()
     }
-    try { if let v = self._name {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
-    } }()
-    try { if let v = self._systemMessage {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._defaultUserMessage {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
-    } }()
-    try { if let v = self._compressionGuide {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
-    try { if let v = self._compressionMode {
-      try visitor.visitSingularEnumField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._compressionProviderID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
-    } }()
-    try { if let v = self._compressionModelID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
-    } }()
-    try { if let v = self._defaultSettings {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    if !self.clearFields_p.isEmpty {
-      try visitor.visitRepeatedStringField(value: self.clearFields_p, fieldNumber: 10)
-    }
-    try { if let v = self._titleProviderID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 11)
-    } }()
-    try { if let v = self._titleModelID {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 12)
-    } }()
-    try { if let v = self._titleGuide {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 13)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Clark_V1_UpdateProfileRequest, rhs: Clark_V1_UpdateProfileRequest) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs._name != rhs._name {return false}
-    if lhs._systemMessage != rhs._systemMessage {return false}
-    if lhs._defaultUserMessage != rhs._defaultUserMessage {return false}
-    if lhs._compressionGuide != rhs._compressionGuide {return false}
-    if lhs._compressionMode != rhs._compressionMode {return false}
-    if lhs._compressionProviderID != rhs._compressionProviderID {return false}
-    if lhs._compressionModelID != rhs._compressionModelID {return false}
-    if lhs._defaultSettings != rhs._defaultSettings {return false}
-    if lhs.clearFields_p != rhs.clearFields_p {return false}
-    if lhs._titleProviderID != rhs._titleProviderID {return false}
-    if lhs._titleModelID != rhs._titleModelID {return false}
-    if lhs._titleGuide != rhs._titleGuide {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._systemMessage != rhs_storage._systemMessage {return false}
+        if _storage._defaultUserMessage != rhs_storage._defaultUserMessage {return false}
+        if _storage._compressionGuide != rhs_storage._compressionGuide {return false}
+        if _storage._compressionMode != rhs_storage._compressionMode {return false}
+        if _storage._compressionProviderID != rhs_storage._compressionProviderID {return false}
+        if _storage._compressionModelID != rhs_storage._compressionModelID {return false}
+        if _storage._defaultSettings != rhs_storage._defaultSettings {return false}
+        if _storage._clearFields_p != rhs_storage._clearFields_p {return false}
+        if _storage._titleProviderID != rhs_storage._titleProviderID {return false}
+        if _storage._titleModelID != rhs_storage._titleModelID {return false}
+        if _storage._titleGuide != rhs_storage._titleGuide {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._parentOnly != rhs_storage._parentOnly {return false}
+        if _storage._favorite != rhs_storage._favorite {return false}
+        if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

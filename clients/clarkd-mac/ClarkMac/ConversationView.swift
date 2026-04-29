@@ -29,10 +29,17 @@ struct ConversationView: View {
             let m = ConversationViewModel(
                 conversation: conversation,
                 client: app.client,
-                onTerminal: { [weak convos] in await convos?.refresh() }
+                onTerminal: { [weak convos] in await convos?.refresh() },
+                localTitler: AppleFoundationTitler()
             )
             self.model = m
             await m.load()
+            // After the message list is in hand, decide whether to fire the
+            // on-device titler. Builds a profile lookup map so the
+            // ConversationViewModel can resolve `title_provider_kind`
+            // through the parent chain without hitting the network.
+            let profileMap = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
+            await m.maybeGenerateLocalTitle(profilesByID: profileMap)
         }
     }
 }
@@ -42,11 +49,14 @@ struct ConversationView: View {
 private struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ClarkConversation
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         VStack(spacing: 0) {
             if model.showingContextList {
                 ContextListPane(model: model)
+            } else if model.showingCompactView {
+                CompactPane(model: model)
             } else {
                 statusStrip
                 if let err = model.compactError {
@@ -56,27 +66,28 @@ private struct ConversationBody: View {
                 composer
             }
         }
-        .navigationTitle(liveConversation.title?.isEmpty == false ? liveConversation.title! : "Untitled")
-        .navigationSubtitle(activeContextSubtitle)
+        // Top inset keeps scroll content from bleeding up into the
+        // title-bar overlay region. The space itself is filled by the
+        // window's solid backgroundColor (set in ClarkMacApp); the AppKit
+        // title bar renders its title + buttons over that. Scoped to this
+        // pane so the sidebar still extends Notes-style.
+        .padding(.top, 28)
+        .navigationTitle(navTitle)
+        .navigationSubtitle(navSubtitle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                contextSwitcherMenu
+                leadingToolbarItem
             }
-            ToolbarItem(placement: .primaryAction) {
-                overflowMenu
+            if !model.showingContextList && !model.showingCompactView {
+                ToolbarItem(placement: .primaryAction) {
+                    overflowMenu
+                }
             }
-        }
-        .confirmationDialog(
-            "Compact this conversation?",
-            isPresented: $model.showCompactConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Generate summary") {
-                Task { await model.compact() }
+            if model.showingCompactView {
+                ToolbarItem(placement: .confirmationAction) {
+                    compactSubmitButton
+                }
             }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text(compactConfirmMessage)
         }
         .task {
             await model.loadContexts()
@@ -89,10 +100,9 @@ private struct ConversationBody: View {
     /// reads as chrome above the scroll, matching the toolbar's glass.
     @ViewBuilder
     private var statusStrip: some View {
-        if model.tokenCount != nil || model.costToDate > 0 {
+        if model.tokenCount != nil {
             HStack(spacing: 12) {
                 tokenCountChip
-                costChip
                 Spacer()
             }
             .padding(.horizontal, 14)
@@ -103,7 +113,9 @@ private struct ConversationBody: View {
     }
 
     private func contextLabel(_ ctx: ClarkContext) -> String {
-        ctx.title?.isEmpty == false ? ctx.title! : "Context \(ctx.id.prefix(8))"
+        if let t = ctx.title, !t.isEmpty { return t }
+        if let n = model.contextNumber(for: ctx.id) { return "Context \(n)" }
+        return "Context \(ctx.id.prefix(8))"
     }
 
     /// Active context label for the navigation subtitle. Empty string hides
@@ -113,14 +125,28 @@ private struct ConversationBody: View {
         return contextLabel(ctx)
     }
 
-    private var compactConfirmMessage: String {
-        let count = model.messages.filter { $0.role == .user || $0.role == .assistant }.count
-        var s = "\(count) message\(count == 1 ? "" : "s") will be summarised. You'll review the summary before it replaces the active context."
-        if let count = model.tokenCount, let window = model.contextWindow, window > 0 {
-            let pct = Int(Double(count) / Double(window) * 100)
-            s += "\n\nCurrent: \(count.formatted()) / \(window.formatted()) tokens (\(pct)%)."
+    /// Window-title-bar text. Conversation title in chat mode (with the
+    /// cumulative conversation cost appended when > 0, e.g. "Markdown Basics
+    /// — $0.0046"); "Contexts" while the contexts page is active; "Compact"
+    /// while the compact page is active. The page-swap titles match the
+    /// Settings/Profiles pattern and tell the AppKit title bar this is a
+    /// discrete screen, not a sub-overlay.
+    private var navTitle: String {
+        if model.showingContextList { return "Contexts" }
+        if model.showingCompactView { return "Compact" }
+        let base = liveConversation.title?.isEmpty == false ? liveConversation.title! : "Untitled"
+        let cost = model.conversationCost
+        if cost > 0 {
+            return "\(base) — \(cost.formatted(.currency(code: "USD").precision(.fractionLength(4))))"
         }
-        return s
+        return base
+    }
+
+    /// Window-title-bar subtitle. Hidden (empty) on the page-swap screens so
+    /// the chrome stays clean — those screens render their own structure.
+    private var navSubtitle: String {
+        if model.showingContextList || model.showingCompactView { return "" }
+        return activeContextSubtitle
     }
 
     @ViewBuilder
@@ -138,69 +164,111 @@ private struct ConversationBody: View {
         }
     }
 
-    @ViewBuilder
-    private var costChip: some View {
-        if model.costToDate > 0 {
-            Label {
-                Text(model.costToDate, format: .currency(code: "USD").precision(.fractionLength(4)))
-            } icon: {
-                Image(systemName: "dollarsign.circle")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-    }
-
+    /// Single-action toolbar button — opens the full-pane Compact view.
+    /// Was a Menu with one item, but SwiftUI's macOS Menu renders single-item
+    /// content with zero-height rows (the popup chrome shows but the row is
+    /// invisible), so this is wired as a direct Button instead. Add a Menu
+    /// wrapper back if/when there's a second action to put alongside compact.
+    /// Click flow: opens the Compact page (no popup, no sheet) — the user
+    /// edits the prompt + picks a model + hits Compact in the toolbar
+    /// confirmation slot.
     private var overflowMenu: some View {
-        Menu {
-            Button {
-                model.showCompactConfirm = true
-            } label: {
-                Label("Compact now…", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .disabled(model.hasPendingCompression || model.isCompacting || model.sending)
+        Button {
+            model.showingCompactView = true
         } label: {
-            Image(systemName: "ellipsis")
+            Image(systemName: "wand.and.stars")
         }
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .help("Compact conversation…")
+        .disabled(model.hasPendingCompression || model.isCompacting || model.sending)
     }
 
-    /// Compact toolbar Menu that lists every context and offers a
-    /// "View contexts…" entry to open the full context-list pane.
-    /// Lives in the navigation toolbar slot, next to the sidebar toggle,
-    /// so the affordance is visible without cluttering the title pill.
-    private var contextSwitcherMenu: some View {
-        Menu {
-            let sorted = model.contexts.sorted {
-                ($0.activationTime ?? .distantPast) > ($1.activationTime ?? .distantPast)
+    /// Trailing toolbar slot while the Compact page is active. Glass-prominent
+    /// "Compact" button kicks off the RPC with the page's draft prompt + model
+    /// selection as overrides. Disabled when the model picker hasn't resolved
+    /// (or the user cleared it) — the request would 412 anyway, no point
+    /// waiting for the round trip to surface that.
+    @ViewBuilder
+    private var compactSubmitButton: some View {
+        Button {
+            let providerID = model.compactProviderID
+            let modelID    = model.compactModelID
+            let promptDraft = model.compactPromptDraft
+            let trimmed = promptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let guide   = trimmed.isEmpty ? nil : trimmed
+            // Close the page first so the user sees the streaming summary
+            // land in the message list, same as the old confirmation flow.
+            model.showingCompactView = false
+            Task {
+                await model.compact(guide: guide, providerID: providerID, modelID: modelID)
             }
-            ForEach(sorted) { ctx in
-                Button {
-                    if ctx.id != model.activeContext?.id {
-                        Task { await model.activateContext(ctx.id) }
-                    }
-                } label: {
-                    if ctx.id == model.activeContext?.id {
-                        Label(contextLabel(ctx), systemImage: "checkmark")
-                    } else {
-                        Text(contextLabel(ctx))
-                    }
-                }
+        } label: {
+            if model.isCompacting {
+                ProgressView().controlSize(.small)
+            } else {
+                Text("Compact")
             }
-            if !model.contexts.isEmpty {
-                Divider()
+        }
+        .buttonStyle(.glassProminent)
+        .keyboardShortcut(.defaultAction)
+        .disabled(!compactFormValid || model.isCompacting || model.sending)
+        .help("Run compaction with the prompt and model above")
+    }
+
+    /// Compact submission needs three things to be valid:
+    ///   - a non-empty prompt (whitespace-only doesn't count),
+    ///   - both compactProviderID and compactModelID set,
+    ///   - the selected (provider, model) pair must exist in the user's
+    ///     enabled models list — otherwise the server will reject with
+    ///     "compression model X is not enabled" and the user just sees an
+    ///     error toast a beat later. Catch it client-side instead.
+    private var compactFormValid: Bool {
+        let trimmed = model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard let providerID = model.compactProviderID, !providerID.isEmpty,
+              let modelID    = model.compactModelID,    !modelID.isEmpty
+        else { return false }
+        return app.profiles.availableModels.contains {
+            $0.providerID == providerID && $0.modelID == modelID
+        }
+    }
+
+    /// Leading toolbar slot. Four states (per the project's "no popup
+    /// windows" rule and the user's "replace popup with a page" instruction):
+    ///   - `showingContextList == true`            → back-chevron Button
+    ///   - `showingCompactView == true`            → back-chevron Button
+    ///   - `contexts.count <= 1`                   → nothing (hidden)
+    ///   - otherwise                               → inbox Button that
+    ///                                              opens the full-pane
+    ///                                              contexts view
+    /// We deliberately do NOT use a SwiftUI Menu here — single-item Menus
+    /// render with zero-height content on macOS, and the user's flow is
+    /// "open page, pick row, dismiss" which is a page swap, not a popover.
+    @ViewBuilder
+    private var leadingToolbarItem: some View {
+        if model.showingContextList {
+            Button {
+                model.showingContextList = false
+            } label: {
+                Image(systemName: "chevron.left")
             }
+            .help("Back to conversation")
+            .keyboardShortcut(.cancelAction)
+        } else if model.showingCompactView {
+            Button {
+                model.showingCompactView = false
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .help("Back to conversation")
+            .keyboardShortcut(.cancelAction)
+        } else if model.contexts.count > 1 {
             Button {
                 model.showingContextList = true
             } label: {
-                Label("View contexts…", systemImage: "tray.full")
+                Image(systemName: "tray.full")
             }
-        } label: {
-            Image(systemName: "tray.full")
+            .help("View contexts")
         }
-        .menuIndicator(.hidden)
-        .help("Switch context")
     }
 
     private func compactErrorBanner(_ message: String) -> some View {
@@ -250,7 +318,7 @@ private struct ConversationBody: View {
                                 .id("__pending__")
                         }
                         if model.isCompacting {
-                            CompactingRow().id("__compacting__")
+                            CompactingRow(text: model.streamingText).id("__compacting__")
                         } else if !model.streamingText.isEmpty || model.isStreaming {
                             StreamingRow(text: model.streamingText).id("__streaming__")
                         }
@@ -286,7 +354,7 @@ private struct ConversationBody: View {
         VStack(spacing: 0) {
             if model.hasPendingCompression {
                 HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.orange)
+                    Image(systemName: "wand.and.stars").foregroundStyle(.orange)
                     Text("Review the compression summary above before sending.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -305,8 +373,15 @@ private struct ConversationBody: View {
                         .textFieldStyle(.plain)
                         .font(.body)
                         .onKeyPress(.return) {
+                            // shift+Return → insert a literal newline. We
+                            // explicitly append "\n" instead of returning
+                            // `.ignored`; relying on the default produced
+                            // a text-selection extend on macOS instead of a
+                            // newline (TextField with axis: .vertical doesn't
+                            // route shift+Return to the newline handler).
                             if NSEvent.modifierFlags.contains(.shift) {
-                                return .ignored  // Insert newline (default behaviour).
+                                model.draft.append("\n")
+                                return .handled
                             }
                             if !model.isStreaming
                                 && !model.sending
@@ -435,25 +510,42 @@ private struct MessageRow: View {
     @State private var showDeleteConfirm = false
     @State private var showUsageDetail = false
     @State private var editDraft: String = ""
+    @State private var showPartialContent = false
 
     private var isEditing: Bool {
         model.editingMessage?.id == message.id
     }
 
+    private var isErrored: Bool {
+        message.errorText != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
+                if isErrored {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .imageScale(.small)
+                }
                 Text(roleLabel)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isErrored ? .orange : .secondary)
+                    .fontWeight(isErrored ? .semibold : .regular)
+                if isErrored {
+                    Text("FAILED")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.orange)
+                }
                 if message.editedAt != nil {
                     Text("edited")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                if let modelID = message.modelID {
-                    Text(modelID)
+                if let label = modelDisplayLabel {
+                    Text(label)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -461,6 +553,8 @@ private struct MessageRow: View {
             }
             if isEditing {
                 inlineEditor
+            } else if isErrored {
+                erroredBody
             } else {
                 let displayText = message.displayContent ?? message.content
                 if displayText.isEmpty {
@@ -479,7 +573,7 @@ private struct MessageRow: View {
                 .buttonStyle(.plain)
                 .padding(.top, 2)
                 .popover(isPresented: $showUsageDetail, arrowEdge: .bottom) {
-                    MessageUsagePopover(message: message)
+                    MessageUsagePopover(message: message, model: model)
                 }
             }
         }
@@ -498,7 +592,10 @@ private struct MessageRow: View {
                 .strokeBorder(
                     isEditing
                         ? AnyShapeStyle(Color.accentColor.opacity(0.6))
-                        : AnyShapeStyle(Color.primary.opacity(0.06))
+                        : (isErrored
+                            ? AnyShapeStyle(Color.orange.opacity(0.55))
+                            : AnyShapeStyle(Color.primary.opacity(0.06))),
+                    lineWidth: isErrored ? 1.5 : 1
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -513,6 +610,36 @@ private struct MessageRow: View {
             }
         } message: {
             Text("This message will be removed from the conversation. Children will be stitched to its parent.")
+        }
+    }
+
+    /// Body for an errored assistant turn: shows the error text in full,
+    /// plus a disclosure-style group for whatever partial content streamed
+    /// before the failure. Reads as a clear "this attempt failed" surface
+    /// that the user can review in the history (and, in a future change,
+    /// retry from).
+    @ViewBuilder
+    private var erroredBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let errText = message.errorText, !errText.isEmpty {
+                Text(errText)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
+            let partial = message.displayContent ?? message.content
+            if !partial.isEmpty {
+                DisclosureGroup(isExpanded: $showPartialContent) {
+                    MarkdownText(partial)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                } label: {
+                    Text("Partial output streamed before failure")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -568,25 +695,51 @@ private struct MessageRow: View {
         }
     }
 
+    /// "<Provider Label> <Model Display Name>" with graceful fallbacks. Looks
+    /// up the human-readable strings via the view-model's loaded providers
+    /// list; falls back to raw IDs when either lookup misses (legacy rows,
+    /// disabled provider, etc.). Returns nil when there's no model on the row.
+    private var modelDisplayLabel: String? {
+        guard let mid = message.modelID, !mid.isEmpty else { return nil }
+        let pid = message.providerID
+        let providerLabel = pid.flatMap { model.providerLabels[$0] }
+        let modelDisplay = model.availableModels
+            .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
+            .displayName
+        switch (providerLabel, modelDisplay) {
+        case let (p?, m?): return "\(p) \(m)"
+        case let (p?, nil): return "\(p) \(mid)"
+        case let (nil, m?): return m
+        case (nil, nil): return mid
+        }
+    }
+
     /// Tinted glass bubble that matches the macOS 26 design language —
     /// user messages get an accent-tinted glass, assistants get neutral glass,
-    /// system/context get a subtle warning tint.
+    /// system/context get a subtle warning tint. Errored assistant turns swap
+    /// the neutral tint for an orange wash so the failure reads at a glance.
     @ViewBuilder
     private var bubbleBackground: some View {
-        switch message.role {
-        case .user:
+        if isErrored {
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.accentColor.opacity(0.18))
+                .fill(Color.orange.opacity(0.10))
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        case .assistant:
-            RoundedRectangle(cornerRadius: 10)
-                .fill(.regularMaterial)
-        case .system, .context, .compressionSummary:
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.yellow.opacity(0.10))
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        case .unknown:
-            Color.clear
+        } else {
+            switch message.role {
+            case .user:
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.accentColor.opacity(0.18))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            case .assistant:
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(.regularMaterial)
+            case .system, .context, .compressionSummary:
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.yellow.opacity(0.10))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            case .unknown:
+                Color.clear
+            }
         }
     }
 
@@ -646,71 +799,150 @@ private struct CompressionSummaryCard: View {
     let model: ConversationViewModel
     @State private var showDeleteConfirm = false
     @State private var isPromoting = false
+    @State private var showPartialContent = false
+
+    private var isErrored: Bool {
+        message.errorText != nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Image(systemName: isErrored
+                      ? "exclamationmark.triangle.fill"
+                      : "wand.and.stars")
                     .foregroundStyle(.orange)
-                Text("Compression summary")
+                Text(isErrored ? "Compression failed" : "Compression summary")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                 Spacer()
-                Text("Review and promote or delete")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if !isErrored {
+                    Text("Review and promote or delete")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if let label = compressionModelLabel {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
 
-            MarkdownText(message.content)
-                .font(.callout)
+            if isErrored {
+                erroredBody
+            } else {
+                MarkdownText(message.content)
+                    .font(.callout)
+            }
 
             HStack(spacing: 8) {
-                Button("Edit…") {
-                    model.editingMessage = message
-                }
-                .buttonStyle(.borderless)
-
-                Spacer()
-
-                Button("Delete") {
-                    showDeleteConfirm = true
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.red)
-                .confirmationDialog(
-                    "Delete compression summary?",
-                    isPresented: $showDeleteConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete summary", role: .destructive) {
+                if isErrored {
+                    Spacer()
+                    Button("Dismiss") {
                         Task { await model.deleteMessage(id: message.id) }
                     }
-                } message: {
-                    Text("The conversation will resume in the current context as if compaction never happened.")
-                }
+                    .buttonStyle(.glassProminent)
+                    .help("Remove this failed compaction from the history. You can retry compaction at any time.")
+                } else {
+                    Button("Edit…") {
+                        model.editingMessage = message
+                    }
+                    .buttonStyle(.borderless)
 
-                Button {
-                    isPromoting = true
-                    Task {
-                        await model.promoteCompaction(messageID: message.id)
-                        isPromoting = false
+                    Spacer()
+
+                    Button("Delete") {
+                        showDeleteConfirm = true
                     }
-                } label: {
-                    if isPromoting {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Promote to new context", systemImage: "arrow.up.forward")
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.red)
+                    .confirmationDialog(
+                        "Delete compression summary?",
+                        isPresented: $showDeleteConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Delete summary", role: .destructive) {
+                            Task { await model.deleteMessage(id: message.id) }
+                        }
+                    } message: {
+                        Text("The conversation will resume in the current context as if compaction never happened.")
                     }
+
+                    Button {
+                        isPromoting = true
+                        Task {
+                            await model.promoteCompaction(messageID: message.id)
+                            isPromoting = false
+                        }
+                    } label: {
+                        if isPromoting {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Confirm")
+                        }
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(isPromoting)
+                    .help("Confirm the summary, open a fresh context, and continue from there")
                 }
-                .buttonStyle(.glassProminent)
-                .disabled(isPromoting)
             }
         }
         .padding(12)
-        .background(Color.orange.opacity(0.08))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1.5))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    Color.orange.opacity(isErrored ? 0.55 : 0.35),
+                    lineWidth: 1.5
+                )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Body for an errored compression card: error text in red + an optional
+    /// disclosure for any partial summary text streamed before the failure.
+    @ViewBuilder
+    private var erroredBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let errText = message.errorText, !errText.isEmpty {
+                Text(errText)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
+            if !message.content.isEmpty {
+                DisclosureGroup(isExpanded: $showPartialContent) {
+                    MarkdownText(message.content)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                } label: {
+                    Text("Partial summary streamed before failure")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// "<Provider Label> <Model Display Name>" with graceful fallbacks.
+    /// Mirrors `MessageRow.modelDisplayLabel` so the failed compression
+    /// summary header reads consistently with assistant message rows.
+    private var compressionModelLabel: String? {
+        guard let mid = message.modelID, !mid.isEmpty else { return nil }
+        let pid = message.providerID
+        let providerLabel = pid.flatMap { model.providerLabels[$0] }
+        let modelDisplay = model.availableModels
+            .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
+            .displayName
+        switch (providerLabel, modelDisplay) {
+        case let (p?, m?): return "\(p) \(m)"
+        case let (p?, nil): return "\(p) \(mid)"
+        case let (nil, m?): return m
+        case (nil, nil): return mid
+        }
     }
 }
 
@@ -742,12 +974,26 @@ private struct StreamingRow: View {
 }
 
 private struct CompactingRow: View {
+    let text: String
+
     var body: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text("Summarizing conversation…")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .foregroundStyle(.orange)
+                Text("COMPACTING")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                ProgressView().controlSize(.mini)
+            }
+            if text.isEmpty {
+                Text("Summarizing conversation…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                MarkdownText(text)
+                    .font(.callout)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -761,14 +1007,24 @@ private struct CompactingRow: View {
 
 private struct MessageUsagePopover: View {
     let message: ClarkMessage
+    let model: ConversationViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Model / provider identification
+            // Model / provider identification — show human-readable labels
+            // (provider nicename + model display name) instead of UUIDs / raw
+            // model_ids; fall back to the raw value when the lookup misses.
             if message.modelID != nil || message.providerID != nil {
                 section("Model") {
-                    if let id = message.modelID    { row("Model",    id) }
-                    if let id = message.providerID { row("Provider", id) }
+                    if let mid = message.modelID {
+                        let modelDisplay = model.availableModels
+                            .first(where: { $0.modelID == mid && (message.providerID == nil || $0.providerID == message.providerID) })?
+                            .displayName
+                        row("Model", modelDisplay ?? mid)
+                    }
+                    if let pid = message.providerID {
+                        row("Provider", model.providerLabels[pid] ?? pid)
+                    }
                 }
             }
 

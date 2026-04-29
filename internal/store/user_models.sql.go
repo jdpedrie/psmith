@@ -29,7 +29,7 @@ func (q *Queries) DeleteUserModel(ctx context.Context, arg DeleteUserModelParams
 }
 
 const getUserModel = `-- name: GetUserModel :one
-SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at FROM user_models
+SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite FROM user_models
 WHERE user_model_provider_id = $1 AND model_id = $2
 `
 
@@ -58,12 +58,13 @@ func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (Use
 		&i.MetadataSource,
 		&i.MetadataSnapshotAt,
 		&i.EnabledAt,
+		&i.Favorite,
 	)
 	return i, err
 }
 
 const listUserModelsByProvider = `-- name: ListUserModelsByProvider :many
-SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at FROM user_models
+SELECT user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite FROM user_models
 WHERE user_model_provider_id = $1
 ORDER BY model_id
 `
@@ -94,6 +95,7 @@ func (q *Queries) ListUserModelsByProvider(ctx context.Context, userModelProvide
 			&i.MetadataSource,
 			&i.MetadataSnapshotAt,
 			&i.EnabledAt,
+			&i.Favorite,
 		); err != nil {
 			return nil, err
 		}
@@ -106,7 +108,7 @@ func (q *Queries) ListUserModelsByProvider(ctx context.Context, userModelProvide
 }
 
 const listUserModelsByUser = `-- name: ListUserModelsByUser :many
-SELECT um.user_model_provider_id, um.model_id, um.display_name, um.context_window, um.max_output_tokens, um.input_price_per_million, um.output_price_per_million, um.cache_read_per_million, um.cache_write_per_million, um.knowledge_cutoff, um.modalities, um.capabilities, um.default_settings, um.metadata_source, um.metadata_snapshot_at, um.enabled_at
+SELECT um.user_model_provider_id, um.model_id, um.display_name, um.context_window, um.max_output_tokens, um.input_price_per_million, um.output_price_per_million, um.cache_read_per_million, um.cache_write_per_million, um.knowledge_cutoff, um.modalities, um.capabilities, um.default_settings, um.metadata_source, um.metadata_snapshot_at, um.enabled_at, um.favorite
 FROM user_models um
 JOIN user_model_providers ump ON ump.id = um.user_model_provider_id
 WHERE ump.user_id = $1
@@ -139,6 +141,7 @@ func (q *Queries) ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([
 			&i.MetadataSource,
 			&i.MetadataSnapshotAt,
 			&i.EnabledAt,
+			&i.Favorite,
 		); err != nil {
 			return nil, err
 		}
@@ -148,6 +151,23 @@ func (q *Queries) ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const setUserModelFavorite = `-- name: SetUserModelFavorite :exec
+UPDATE user_models
+SET favorite = $3
+WHERE user_model_provider_id = $1 AND model_id = $2
+`
+
+type SetUserModelFavoriteParams struct {
+	UserModelProviderID uuid.UUID
+	ModelID             string
+	Favorite            bool
+}
+
+func (q *Queries) SetUserModelFavorite(ctx context.Context, arg SetUserModelFavoriteParams) error {
+	_, err := q.db.Exec(ctx, setUserModelFavorite, arg.UserModelProviderID, arg.ModelID, arg.Favorite)
+	return err
 }
 
 const upsertUserModel = `-- name: UpsertUserModel :one
@@ -173,7 +193,7 @@ ON CONFLICT (user_model_provider_id, model_id) DO UPDATE SET
     default_settings          = EXCLUDED.default_settings,
     metadata_source           = EXCLUDED.metadata_source,
     metadata_snapshot_at      = EXCLUDED.metadata_snapshot_at
-RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at
+RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite
 `
 
 type UpsertUserModelParams struct {
@@ -230,6 +250,7 @@ func (q *Queries) UpsertUserModel(ctx context.Context, arg UpsertUserModelParams
 		&i.MetadataSource,
 		&i.MetadataSnapshotAt,
 		&i.EnabledAt,
+		&i.Favorite,
 	)
 	return i, err
 }

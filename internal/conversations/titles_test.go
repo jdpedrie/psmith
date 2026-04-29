@@ -136,6 +136,51 @@ func TestTitle_E2E_GeneratesConversationAndContextTitles(t *testing.T) {
 	}
 }
 
+// TestTitle_E2E_SkippedWhenAppleFoundationKind — profile has the
+// "apple_foundation" sentinel set on title_provider_kind. The server skips
+// title generation entirely (the Mac client owns it via on-device Foundation
+// Models). Title remains NULL on the server side; the client persists it via
+// UpdateConversation when it lands. Even if the cloud title fields are
+// also configured, the kind sentinel takes precedence.
+func TestTitle_E2E_SkippedWhenAppleFoundationKind(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	// Only the assistant reply — NO title call should be made.
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "ok"}}})
+
+	svc, q, sup := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, fake.URL())
+	sup.SetOnAssistantMaterialized(svc.MaybeGenerateTitle)
+	// Configure the cloud title fields AND the apple_foundation kind. The
+	// kind sentinel must short-circuit cloud generation.
+	configureProfileTitle(t, q, f.profile.ID, f.provider.ID, f.modelID, nil)
+	kind := "apple_foundation"
+	if err := q.UpdateProfileTitleProviderKind(context.Background(), store.UpdateProfileTitleProviderKindParams{
+		ID: f.profile.ID, TitleProviderKind: &kind,
+	}); err != nil {
+		t.Fatalf("UpdateProfileTitleProviderKind: %v", err)
+	}
+
+	_, _ = runOneTurn(t, svc, sup, q, f, "hi")
+
+	// Wait briefly to give the (suppressed) title goroutine a chance.
+	time.Sleep(200 * time.Millisecond)
+	row, _ := q.GetConversationByID(context.Background(), f.conv.ID)
+	if row.Title != nil {
+		t.Errorf("title should remain NULL when title_provider_kind is set; got %+v", row.Title)
+	}
+	cx, _ := q.GetContextByID(context.Background(), f.contextID)
+	if cx.Title != nil {
+		t.Errorf("context title should remain NULL; got %+v", cx.Title)
+	}
+	// Only the assistant request should have hit the fake server — no
+	// follow-up title call.
+	if reqs := fake.Requests(); len(reqs) != 1 {
+		t.Errorf("expected 1 fake request (assistant only); got %d", len(reqs))
+	}
+}
+
 // TestTitle_E2E_SkippedWhenProfileNotConfigured — profile has no title_*
 // fields; the hook fires but does nothing. Title remains NULL.
 func TestTitle_E2E_SkippedWhenProfileNotConfigured(t *testing.T) {

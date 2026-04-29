@@ -38,7 +38,11 @@ public final class ProfilesRepository: Sendable {
         if let v = patch.titleProviderID       { req.titleProviderID = v }
         if let v = patch.titleModelID          { req.titleModelID = v }
         if let v = patch.titleGuide            { req.titleGuide = v }
+        if let v = patch.titleProviderKind     { req.titleProviderKind = v }
         if let d = patch.defaultSettings       { req.defaultSettings = pbDefaults(d) }
+        if let v = patch.description           { req.description_p = v }
+        if let v = patch.parentOnly            { req.parentOnly = v }
+        if let v = patch.favorite              { req.favorite = v }
         let resp = await client.createProfile(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("create profile") }
         return ClarkProfile(from: msg.profile)
@@ -47,7 +51,7 @@ public final class ProfilesRepository: Sendable {
     /// `clearFields` lists protobuf field names whose value should be reset to inherit from the parent.
     /// Valid: `system_message`, `default_user_message`, `compression_guide`, `compression_mode`,
     /// `compression_provider_id`, `compression_model_id`, `default_settings`, `title_provider_id`,
-    /// `title_model_id`, `title_guide`, `parent_profile_id`.
+    /// `title_model_id`, `title_guide`, `title_provider_kind`, `parent_profile_id`.
     public func update(id: String, patch: ClarkProfilePatch, clearFields: [String] = []) async throws -> ClarkProfile {
         var req = Clark_V1_UpdateProfileRequest()
         req.id = id
@@ -61,7 +65,11 @@ public final class ProfilesRepository: Sendable {
         if let v = patch.titleProviderID       { req.titleProviderID = v }
         if let v = patch.titleModelID          { req.titleModelID = v }
         if let v = patch.titleGuide            { req.titleGuide = v }
+        if let v = patch.titleProviderKind     { req.titleProviderKind = v }
         if let d = patch.defaultSettings       { req.defaultSettings = pbDefaults(d) }
+        if let v = patch.description           { req.description_p = v }
+        if let v = patch.parentOnly            { req.parentOnly = v }
+        if let v = patch.favorite              { req.favorite = v }
         req.clearFields_p = clearFields
         let resp = await client.updateProfile(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("update profile") }
@@ -91,6 +99,13 @@ public struct ClarkProfilePatch: Sendable {
     public var titleProviderID: String?
     public var titleModelID: String?
     public var titleGuide: String?
+    /// Sentinel for non-server title generation (e.g.
+    /// `ClarkTitleProviderKind.appleFoundation`). Pass `clearFields:
+    /// ["title_provider_kind"]` to revert to default cloud-titled behavior.
+    public var titleProviderKind: String?
+    public var description: String?
+    public var parentOnly: Bool?
+    public var favorite: Bool?
 
     public init(
         name: String? = nil,
@@ -104,7 +119,11 @@ public struct ClarkProfilePatch: Sendable {
         defaultSettings: ClarkProfileDefaults? = nil,
         titleProviderID: String? = nil,
         titleModelID: String? = nil,
-        titleGuide: String? = nil
+        titleGuide: String? = nil,
+        titleProviderKind: String? = nil,
+        description: String? = nil,
+        parentOnly: Bool? = nil,
+        favorite: Bool? = nil
     ) {
         self.name = name
         self.parentProfileID = parentProfileID
@@ -118,6 +137,10 @@ public struct ClarkProfilePatch: Sendable {
         self.titleProviderID = titleProviderID
         self.titleModelID = titleModelID
         self.titleGuide = titleGuide
+        self.titleProviderKind = titleProviderKind
+        self.description = description
+        self.parentOnly = parentOnly
+        self.favorite = favorite
     }
 }
 

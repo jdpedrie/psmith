@@ -93,4 +93,38 @@ public final class ModelProvidersRepository: Sendable {
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list models") }
         return msg.models.map(ClarkUserModel.init(from:))
     }
+
+    public func toggleModelFavorite(providerID: String, modelID: String, favorite: Bool) async throws -> ClarkUserModel {
+        var req = Clark_V1_ToggleUserModelFavoriteRequest()
+        req.userModelProviderID = providerID
+        req.modelID = modelID
+        req.favorite = favorite
+        let resp = await client.toggleUserModelFavorite(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("toggle favorite") }
+        return ClarkUserModel(from: msg.model)
+    }
+
+    /// Verifies a provider's auth + reachability. Server returns ok=false in
+    /// the response payload (not as an RPC error) for normal "your key is
+    /// wrong" failures — we surface those inline. Connection-level errors
+    /// (couldn't reach clarkd at all) still throw.
+    public func testProvider(providerID: String) async throws -> ClarkProviderTestResult {
+        var req = Clark_V1_TestUserModelProviderRequest()
+        req.userModelProviderID = providerID
+        let resp = await client.testUserModelProvider(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("test provider") }
+        return ClarkProviderTestResult(from: msg)
+    }
+
+    /// Sends a tiny prompt to the named model. Same packing convention as
+    /// testProvider: ok=false in the body for "your auth was good but the
+    /// model errored", thrown errors only for transport-level issues.
+    public func testModel(providerID: String, modelID: String) async throws -> ClarkModelTestResult {
+        var req = Clark_V1_TestUserModelRequest()
+        req.userModelProviderID = providerID
+        req.modelID = modelID
+        let resp = await client.testUserModel(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("test model") }
+        return ClarkModelTestResult(from: msg)
+    }
 }

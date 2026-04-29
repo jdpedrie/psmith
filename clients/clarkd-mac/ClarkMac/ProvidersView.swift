@@ -61,7 +61,8 @@ struct ProvidersMiddleColumn: View {
                             }
                         }
                 }
-                .listStyle(.sidebar)
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -145,7 +146,6 @@ private struct ProviderDetailPanel: View {
             switch model.detailMode {
             case .editing:
                 EditProviderForm(provider: provider, model: model)
-                    .padding()
                 Divider()
             default:
                 ProviderHeader(provider: provider, model: model)
@@ -192,11 +192,15 @@ private struct ProviderDetailPanel: View {
     }
 }
 
-// MARK: - Provider header (name + type | Edit + Delete buttons)
+// MARK: - Provider header (name + type | Test + Edit + Delete buttons)
 
 private struct ProviderHeader: View {
     let provider: ClarkUserModelProvider
     @Bindable var model: ProvidersViewModel
+
+    private var testStatus: ProviderTestStatus {
+        model.providerTestStatus[provider.id] ?? .idle
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -210,6 +214,7 @@ private struct ProviderHeader: View {
                     .lineLimit(1)
             }
             Spacer()
+            ProviderTestControl(provider: provider, model: model)
             GlassCircleButton(
                 systemImage: "pencil",
                 action: { model.detailMode = .editing },
@@ -225,6 +230,90 @@ private struct ProviderHeader: View {
         }
         .padding(.horizontal, 12)
         .frame(height: paneHeaderHeight)
+    }
+}
+
+/// Test affordance for a provider. Renders a glass button when idle, a
+/// spinner-bearing button while testing, and a glass result chip on
+/// success/failure. Clicking the chip retests so users can re-verify after
+/// editing config without first reaching for a separate "reset" affordance.
+private struct ProviderTestControl: View {
+    let provider: ClarkUserModelProvider
+    @Bindable var model: ProvidersViewModel
+
+    private var status: ProviderTestStatus {
+        model.providerTestStatus[provider.id] ?? .idle
+    }
+
+    var body: some View {
+        Button(action: runTest) {
+            switch status {
+            case .idle:
+                Label("Test", systemImage: "bolt.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+            case .testing:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Testing…").font(.caption)
+                }
+            case .success(let result) where result.ok:
+                Label("\(result.modelCount) models · \(result.latencyMs)ms",
+                      systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+            case .success(let result):
+                // ok=false comes back as .success with the failure body —
+                // render orange like other failures.
+                Label(failureLabel(result.errorMessage),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .lineLimit(1)
+            case .failure(let msg):
+                Label(failureLabel(msg), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+        }
+        .controlSize(.small)
+        .buttonStyle(.glass)
+        .tint(tintForStatus)
+        .disabled(isTesting)
+        .help(helpText)
+    }
+
+    private var isTesting: Bool {
+        if case .testing = status { return true }
+        return false
+    }
+
+    private var tintForStatus: Color {
+        switch status {
+        case .success(let r) where r.ok: return .green
+        case .success: return .orange
+        case .failure: return .orange
+        default: return .accentColor
+        }
+    }
+
+    private var helpText: String {
+        switch status {
+        case .idle:    return "Verify provider auth + reachability"
+        case .testing: return "Testing…"
+        case .success(let r) where r.ok:
+            return "Reachable · \(r.modelCount) models discovered in \(r.latencyMs)ms. Click to re-test."
+        case .success(let r):
+            return "Test failed: \(r.errorMessage). Click to retry."
+        case .failure(let m):
+            return "Test failed: \(m). Click to retry."
+        }
+    }
+
+    private func failureLabel(_ s: String) -> String {
+        s.isEmpty ? "Failed" : s
+    }
+
+    private func runTest() {
+        Task { await model.testProvider(provider.id) }
     }
 }
 
@@ -245,9 +334,12 @@ private struct ModelsList: View {
             )
         } else {
             List(model.enabledModels) { m in
-                ModelRow(model: m) {
-                    Task { await model.disableModel(m.modelID) }
-                }
+                ModelRow(
+                    model: m,
+                    providersModel: model,
+                    onDisable: { Task { await model.disableModel(m.modelID) } },
+                    onToggleFavorite: { Task { await model.toggleModelFavorite(modelID: m.modelID) } }
+                )
             }
             .listStyle(.inset)
         }
@@ -256,7 +348,9 @@ private struct ModelsList: View {
 
 private struct ModelRow: View {
     let model: ClarkUserModel
+    @Bindable var providersModel: ProvidersViewModel
     let onDisable: () -> Void
+    let onToggleFavorite: () -> Void
     @State private var showConfirm = false
 
     var body: some View {
@@ -269,8 +363,23 @@ private struct ModelRow: View {
                     knowledgeCutoff: model.knowledgeCutoff,
                     capabilities: model.capabilities
                 )
+                // Inline test result chip — sits below the meta strip so it
+                // doesn't fight for horizontal real estate. Hidden when idle.
+                ModelTestResultChip(
+                    status: providersModel.modelTestStatus[
+                        ModelTestKey(providerID: model.providerID, modelID: model.modelID)
+                    ] ?? .idle
+                )
             }
             Spacer()
+            ModelTestButton(model: model, providersModel: providersModel)
+            Button(action: onToggleFavorite) {
+                Image(systemName: model.favorite ? "star.fill" : "star")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(model.favorite ? Color.yellow : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(model.favorite ? "Unfavorite" : "Mark as favorite")
             Button {
                 showConfirm = true
             } label: {
@@ -289,6 +398,123 @@ private struct ModelRow: View {
             }
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// Compact inline trigger for "Test this model". Renders as a small glass
+/// play button when idle and a glass spinner while in flight. The result
+/// itself is rendered by `ModelTestResultChip` under the model name, so this
+/// button stays the same width across states (no layout jitter).
+private struct ModelTestButton: View {
+    let model: ClarkUserModel
+    @Bindable var providersModel: ProvidersViewModel
+
+    private var key: ModelTestKey {
+        ModelTestKey(providerID: model.providerID, modelID: model.modelID)
+    }
+
+    private var status: ModelTestStatus {
+        providersModel.modelTestStatus[key] ?? .idle
+    }
+
+    private var isTesting: Bool {
+        if case .testing = status { return true }
+        return false
+    }
+
+    var body: some View {
+        Button {
+            Task { await providersModel.testModel(providerID: model.providerID, modelID: model.modelID) }
+        } label: {
+            ZStack {
+                Color.clear
+                if isTesting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "play.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+            }
+            .frame(width: 26, height: 26)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .disabled(isTesting)
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        switch status {
+        case .idle:    return "Send a tiny prompt to verify this model responds"
+        case .testing: return "Testing…"
+        case .success(let r) where r.ok:
+            return "Responded in \(r.latencyMs)ms (\(r.outputTokens) output tokens). Click to re-test."
+        case .success(let r):
+            return "Failed: \(r.errorMessage). Click to retry."
+        case .failure(let m):
+            return "Failed: \(m). Click to retry."
+        }
+    }
+}
+
+/// Inline result chip for a single model test. Hidden when idle/testing
+/// (the button itself communicates those states); shown as a small glass
+/// capsule on completion. Same shape on success and failure, only tint and
+/// icon differ.
+private struct ModelTestResultChip: View {
+    let status: ModelTestStatus
+
+    var body: some View {
+        switch status {
+        case .idle, .testing:
+            EmptyView()
+        case .success(let r) where r.ok:
+            chip(
+                icon: "checkmark.circle.fill",
+                text: successText(r),
+                tint: .green
+            )
+        case .success(let r):
+            chip(
+                icon: "exclamationmark.triangle.fill",
+                text: r.errorMessage.isEmpty ? "Failed" : r.errorMessage,
+                tint: .orange
+            )
+        case .failure(let m):
+            chip(
+                icon: "exclamationmark.triangle.fill",
+                text: m.isEmpty ? "Failed" : m,
+                tint: .orange
+            )
+        }
+    }
+
+    private func successText(_ r: ClarkModelTestResult) -> String {
+        var bits: [String] = []
+        bits.append("\(r.latencyMs)ms")
+        if r.outputTokens > 0 {
+            bits.append("\(r.outputTokens) tokens")
+        }
+        if !r.sampleText.isEmpty {
+            bits.append(r.sampleText)
+        }
+        return bits.joined(separator: " · ")
+    }
+
+    private func chip(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .glassEffect(.regular.tint(tint.opacity(0.18)), in: .capsule)
     }
 }
 
@@ -334,12 +560,16 @@ private struct AddProviderForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Add provider").font(.title3).fontWeight(.semibold)
+            HStack(alignment: .center, spacing: 8) {
+                Text("Add provider")
+                    .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
                     model.detailMode = .viewing
                 }
+                .controlSize(.small)
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 Button {
                     Task { await save() }
@@ -347,11 +577,13 @@ private struct AddProviderForm: View {
                     if isCreating { ProgressView().controlSize(.small) }
                     else { Text("Create") }
                 }
+                .controlSize(.small)
                 .buttonStyle(.glassProminent)
                 .disabled(!canCreate)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
 
             Divider()
 
@@ -370,8 +602,10 @@ private struct AddProviderForm: View {
                     }
                 }
                 .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     /// Full grid shown until a template is picked.
@@ -504,13 +738,17 @@ private struct EditProviderForm: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Edit provider").font(.title3).fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Edit provider")
+                    .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
                     model.detailMode = .viewing
                 }
+                .controlSize(.small)
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 Button {
                     Task { await save() }
@@ -518,10 +756,17 @@ private struct EditProviderForm: View {
                     if isSaving { ProgressView().controlSize(.small) }
                     else { Text("Save") }
                 }
+                .controlSize(.small)
                 .buttonStyle(.glassProminent)
                 .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
 
             CredField("Label") {
                 TextField("Display name", text: $label)
@@ -559,6 +804,8 @@ private struct EditProviderForm: View {
             if let formError {
                 Text(formError).font(.caption).foregroundStyle(.red)
             }
+            }
+            .padding(12)
         }
         .onAppear {
             label = provider.label

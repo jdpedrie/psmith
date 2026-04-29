@@ -94,6 +94,7 @@ type Message struct {
 	CacheWriteCostUsd    pgtype.Numeric
 	TotalCostUsd         pgtype.Numeric
 	EditedAt             *time.Time
+	ErrorPayload         []byte
 }
 
 type Profile struct {
@@ -113,6 +114,10 @@ type Profile struct {
 	TitleProviderID       *uuid.UUID
 	TitleModelID          *string
 	TitleGuide            *string
+	Description           string
+	ParentOnly            bool
+	Favorite              bool
+	TitleProviderKind     *string
 }
 
 type ProfilePlugin struct {
@@ -188,6 +193,7 @@ type UserModel struct {
 	MetadataSource        string
 	MetadataSnapshotAt    time.Time
 	EnabledAt             time.Time
+	Favorite              bool
 }
 
 type UserModelProvider struct {

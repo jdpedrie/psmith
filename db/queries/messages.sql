@@ -13,7 +13,9 @@ RETURNING *;
 -- name: CreateAssistantMessageWithUsage :one
 -- Used by the stream supervisor at materialization. Allows the assistant turn
 -- (or the compression_summary record) to be inserted with usage + cost
--- columns populated atomically.
+-- columns populated atomically. error_payload is set when the stream
+-- terminated in an errored/cancelled state — captures the failure inline so
+-- the UI can render the message as a first-class errored history entry.
 INSERT INTO messages (
     id, context_id, parent_id, role, content,
     raw_content, thinking, thinking_provider_type, thinking_rendered_text,
@@ -21,7 +23,8 @@ INSERT INTO messages (
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
     reasoning_tokens, provider_usage_raw,
     input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd,
-    total_cost_usd
+    total_cost_usd,
+    error_payload
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -29,7 +32,8 @@ INSERT INTO messages (
     $12, $13, $14, $15,
     $16, $17,
     $18, $19, $20, $21,
-    $22
+    $22,
+    $23
 )
 RETURNING *;
 
@@ -75,13 +79,18 @@ WHERE parent_id = $1;
 DELETE FROM messages WHERE id = $1;
 
 -- name: HasCompressionSummaryInContext :one
--- True iff the context contains at least one role=compression_summary row.
--- SendMessage / Compact use this as a precondition: a context with a pending
--- summary must have it promoted (PromoteCompactionToNewContext) or deleted
--- (DeleteMessage) before more turns can land.
+-- True iff the context contains at least one role=compression_summary row that
+-- did NOT fail (error_payload IS NULL). SendMessage / Compact use this as a
+-- precondition: a clean pending summary must be promoted
+-- (PromoteCompactionToNewContext) or deleted (DeleteMessage) before more turns
+-- can land. Errored compression_summary rows are first-class history entries
+-- the user can review; they do not gate the conversation — the user retries
+-- by either deleting the failed summary or kicking off a fresh compaction.
 SELECT EXISTS(
     SELECT 1 FROM messages
-    WHERE context_id = $1 AND role = 'compression_summary'
+    WHERE context_id = $1
+      AND role = 'compression_summary'
+      AND error_payload IS NULL
 )::BOOLEAN AS has_summary;
 
 -- name: GetCompressionSummaryInContext :one
@@ -129,6 +138,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.reasoning_tokens, chain.provider_usage_raw,
        chain.input_cost_usd, chain.output_cost_usd, chain.cache_read_cost_usd, chain.cache_write_cost_usd,
        chain.total_cost_usd,
+       chain.error_payload,
        chain.created_at,
        chain.edited_at,
        (

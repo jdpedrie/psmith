@@ -35,9 +35,18 @@ public final class ConversationsModel {
     }
 
     @discardableResult
-    public func newConversation(profileID: String) async -> ClarkConversation? {
+    public func newConversation(
+        profileID: String,
+        title: String? = nil,
+        settings: ClarkConversationSettings? = nil
+    ) async -> ClarkConversation? {
         do {
-            let c = try await client.conversations.create(profileID: profileID)
+            let effectiveSettings = (settings?.isEmpty ?? true) ? nil : settings
+            let c = try await client.conversations.create(
+                profileID: profileID,
+                title: title,
+                settings: effectiveSettings
+            )
             self.conversations.insert(c, at: 0)
             self.selectedID = c.id
             return c

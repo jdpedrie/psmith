@@ -1257,6 +1257,358 @@ func (x *ListAllUserModelsResponse) GetEntries() []*UserModelEntry {
 	return nil
 }
 
+type ToggleUserModelFavoriteRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
+	ModelId             string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	Favorite            bool                   `protobuf:"varint,3,opt,name=favorite,proto3" json:"favorite,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ToggleUserModelFavoriteRequest) Reset() {
+	*x = ToggleUserModelFavoriteRequest{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToggleUserModelFavoriteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToggleUserModelFavoriteRequest) ProtoMessage() {}
+
+func (x *ToggleUserModelFavoriteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToggleUserModelFavoriteRequest.ProtoReflect.Descriptor instead.
+func (*ToggleUserModelFavoriteRequest) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ToggleUserModelFavoriteRequest) GetUserModelProviderId() string {
+	if x != nil {
+		return x.UserModelProviderId
+	}
+	return ""
+}
+
+func (x *ToggleUserModelFavoriteRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+func (x *ToggleUserModelFavoriteRequest) GetFavorite() bool {
+	if x != nil {
+		return x.Favorite
+	}
+	return false
+}
+
+type ToggleUserModelFavoriteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Model         *UserModel             `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToggleUserModelFavoriteResponse) Reset() {
+	*x = ToggleUserModelFavoriteResponse{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToggleUserModelFavoriteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToggleUserModelFavoriteResponse) ProtoMessage() {}
+
+func (x *ToggleUserModelFavoriteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToggleUserModelFavoriteResponse.ProtoReflect.Descriptor instead.
+func (*ToggleUserModelFavoriteResponse) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ToggleUserModelFavoriteResponse) GetModel() *UserModel {
+	if x != nil {
+		return x.Model
+	}
+	return nil
+}
+
+type TestUserModelProviderRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *TestUserModelProviderRequest) Reset() {
+	*x = TestUserModelProviderRequest{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestUserModelProviderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestUserModelProviderRequest) ProtoMessage() {}
+
+func (x *TestUserModelProviderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestUserModelProviderRequest.ProtoReflect.Descriptor instead.
+func (*TestUserModelProviderRequest) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *TestUserModelProviderRequest) GetUserModelProviderId() string {
+	if x != nil {
+		return x.UserModelProviderId
+	}
+	return ""
+}
+
+type TestUserModelProviderResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ModelCount    int32                  `protobuf:"varint,3,opt,name=model_count,json=modelCount,proto3" json:"model_count,omitempty"`
+	LatencyMs     int64                  `protobuf:"varint,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestUserModelProviderResponse) Reset() {
+	*x = TestUserModelProviderResponse{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestUserModelProviderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestUserModelProviderResponse) ProtoMessage() {}
+
+func (x *TestUserModelProviderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestUserModelProviderResponse.ProtoReflect.Descriptor instead.
+func (*TestUserModelProviderResponse) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *TestUserModelProviderResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *TestUserModelProviderResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *TestUserModelProviderResponse) GetModelCount() int32 {
+	if x != nil {
+		return x.ModelCount
+	}
+	return 0
+}
+
+func (x *TestUserModelProviderResponse) GetLatencyMs() int64 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+type TestUserModelRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
+	ModelId             string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *TestUserModelRequest) Reset() {
+	*x = TestUserModelRequest{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestUserModelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestUserModelRequest) ProtoMessage() {}
+
+func (x *TestUserModelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestUserModelRequest.ProtoReflect.Descriptor instead.
+func (*TestUserModelRequest) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *TestUserModelRequest) GetUserModelProviderId() string {
+	if x != nil {
+		return x.UserModelProviderId
+	}
+	return ""
+}
+
+func (x *TestUserModelRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+type TestUserModelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	LatencyMs     int64                  `protobuf:"varint,3,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	InputTokens   int32                  `protobuf:"varint,4,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens  int32                  `protobuf:"varint,5,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	SampleText    string                 `protobuf:"bytes,6,opt,name=sample_text,json=sampleText,proto3" json:"sample_text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestUserModelResponse) Reset() {
+	*x = TestUserModelResponse{}
+	mi := &file_clark_v1_model_providers_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestUserModelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestUserModelResponse) ProtoMessage() {}
+
+func (x *TestUserModelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_model_providers_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestUserModelResponse.ProtoReflect.Descriptor instead.
+func (*TestUserModelResponse) Descriptor() ([]byte, []int) {
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *TestUserModelResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *TestUserModelResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *TestUserModelResponse) GetLatencyMs() int64 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+func (x *TestUserModelResponse) GetInputTokens() int32 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *TestUserModelResponse) GetOutputTokens() int32 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *TestUserModelResponse) GetSampleText() string {
+	if x != nil {
+		return x.SampleText
+	}
+	return ""
+}
+
 type RefreshModelCatalogRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1265,7 +1617,7 @@ type RefreshModelCatalogRequest struct {
 
 func (x *RefreshModelCatalogRequest) Reset() {
 	*x = RefreshModelCatalogRequest{}
-	mi := &file_clark_v1_model_providers_proto_msgTypes[26]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1277,7 +1629,7 @@ func (x *RefreshModelCatalogRequest) String() string {
 func (*RefreshModelCatalogRequest) ProtoMessage() {}
 
 func (x *RefreshModelCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_model_providers_proto_msgTypes[26]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1290,7 +1642,7 @@ func (x *RefreshModelCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshModelCatalogRequest.ProtoReflect.Descriptor instead.
 func (*RefreshModelCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{26}
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{32}
 }
 
 type RefreshModelCatalogResponse struct {
@@ -1304,7 +1656,7 @@ type RefreshModelCatalogResponse struct {
 
 func (x *RefreshModelCatalogResponse) Reset() {
 	*x = RefreshModelCatalogResponse{}
-	mi := &file_clark_v1_model_providers_proto_msgTypes[27]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1668,7 @@ func (x *RefreshModelCatalogResponse) String() string {
 func (*RefreshModelCatalogResponse) ProtoMessage() {}
 
 func (x *RefreshModelCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_model_providers_proto_msgTypes[27]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1681,7 @@ func (x *RefreshModelCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshModelCatalogResponse.ProtoReflect.Descriptor instead.
 func (*RefreshModelCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{27}
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RefreshModelCatalogResponse) GetProvidersCount() int32 {
@@ -1361,7 +1713,7 @@ type GetCatalogStatusRequest struct {
 
 func (x *GetCatalogStatusRequest) Reset() {
 	*x = GetCatalogStatusRequest{}
-	mi := &file_clark_v1_model_providers_proto_msgTypes[28]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1725,7 @@ func (x *GetCatalogStatusRequest) String() string {
 func (*GetCatalogStatusRequest) ProtoMessage() {}
 
 func (x *GetCatalogStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_model_providers_proto_msgTypes[28]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1738,7 @@ func (x *GetCatalogStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogStatusRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{28}
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{34}
 }
 
 type GetCatalogStatusResponse struct {
@@ -1400,7 +1752,7 @@ type GetCatalogStatusResponse struct {
 
 func (x *GetCatalogStatusResponse) Reset() {
 	*x = GetCatalogStatusResponse{}
-	mi := &file_clark_v1_model_providers_proto_msgTypes[29]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1412,7 +1764,7 @@ func (x *GetCatalogStatusResponse) String() string {
 func (*GetCatalogStatusResponse) ProtoMessage() {}
 
 func (x *GetCatalogStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_model_providers_proto_msgTypes[29]
+	mi := &file_clark_v1_model_providers_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1425,7 +1777,7 @@ func (x *GetCatalogStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetCatalogStatusResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{29}
+	return file_clark_v1_model_providers_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetCatalogStatusResponse) GetProvidersCount() int32 {
@@ -1527,7 +1879,34 @@ const file_clark_v1_model_providers_proto_rawDesc = "" +
 	"\bprovider\x18\x01 \x01(\v2\x1b.clark.v1.UserModelProviderR\bprovider\x12)\n" +
 	"\x05model\x18\x02 \x01(\v2\x13.clark.v1.UserModelR\x05model\"O\n" +
 	"\x19ListAllUserModelsResponse\x122\n" +
-	"\aentries\x18\x01 \x03(\v2\x18.clark.v1.UserModelEntryR\aentries\"\x1c\n" +
+	"\aentries\x18\x01 \x03(\v2\x18.clark.v1.UserModelEntryR\aentries\"\x8c\x01\n" +
+	"\x1eToggleUserModelFavoriteRequest\x123\n" +
+	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12\x1a\n" +
+	"\bfavorite\x18\x03 \x01(\bR\bfavorite\"L\n" +
+	"\x1fToggleUserModelFavoriteResponse\x12)\n" +
+	"\x05model\x18\x01 \x01(\v2\x13.clark.v1.UserModelR\x05model\"S\n" +
+	"\x1cTestUserModelProviderRequest\x123\n" +
+	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\"\x94\x01\n" +
+	"\x1dTestUserModelProviderResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x1f\n" +
+	"\vmodel_count\x18\x03 \x01(\x05R\n" +
+	"modelCount\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\"f\n" +
+	"\x14TestUserModelRequest\x123\n" +
+	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\"\xd4\x01\n" +
+	"\x15TestUserModelResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x03 \x01(\x03R\tlatencyMs\x12!\n" +
+	"\finput_tokens\x18\x04 \x01(\x05R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x05 \x01(\x05R\foutputTokens\x12\x1f\n" +
+	"\vsample_text\x18\x06 \x01(\tR\n" +
+	"sampleText\"\x1c\n" +
 	"\x1aRefreshModelCatalogRequest\"\xa4\x01\n" +
 	"\x1bRefreshModelCatalogResponse\x12'\n" +
 	"\x0fproviders_count\x18\x01 \x01(\x05R\x0eprovidersCount\x12!\n" +
@@ -1539,8 +1918,7 @@ const file_clark_v1_model_providers_proto_rawDesc = "" +
 	"\x0fproviders_count\x18\x01 \x01(\x05R\x0eprovidersCount\x12!\n" +
 	"\fmodels_count\x18\x02 \x01(\x05R\vmodelsCount\x12G\n" +
 	"\x0flast_refresh_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\rlastRefreshAt\x88\x01\x01B\x12\n" +
-	"\x10_last_refresh_at2\xeb\n" +
-	"\n" +
+	"\x10_last_refresh_at2\x97\r\n" +
 	"\x15ModelProvidersService\x12\\\n" +
 	"\x11ListProviderTypes\x12\".clark.v1.ListProviderTypesRequest\x1a#.clark.v1.ListProviderTypesResponse\x12h\n" +
 	"\x15ListProviderTemplates\x12&.clark.v1.ListProviderTemplatesRequest\x1a'.clark.v1.ListProviderTemplatesResponse\x12n\n" +
@@ -1553,7 +1931,10 @@ const file_clark_v1_model_providers_proto_rawDesc = "" +
 	"\fEnableModels\x12\x1d.clark.v1.EnableModelsRequest\x1a\x1e.clark.v1.EnableModelsResponse\x12P\n" +
 	"\rDisableModels\x12\x1e.clark.v1.DisableModelsRequest\x1a\x1f.clark.v1.DisableModelsResponse\x12S\n" +
 	"\x0eListUserModels\x12\x1f.clark.v1.ListUserModelsRequest\x1a .clark.v1.ListUserModelsResponse\x12\\\n" +
-	"\x11ListAllUserModels\x12\".clark.v1.ListAllUserModelsRequest\x1a#.clark.v1.ListAllUserModelsResponse\x12b\n" +
+	"\x11ListAllUserModels\x12\".clark.v1.ListAllUserModelsRequest\x1a#.clark.v1.ListAllUserModelsResponse\x12n\n" +
+	"\x17ToggleUserModelFavorite\x12(.clark.v1.ToggleUserModelFavoriteRequest\x1a).clark.v1.ToggleUserModelFavoriteResponse\x12h\n" +
+	"\x15TestUserModelProvider\x12&.clark.v1.TestUserModelProviderRequest\x1a'.clark.v1.TestUserModelProviderResponse\x12P\n" +
+	"\rTestUserModel\x12\x1e.clark.v1.TestUserModelRequest\x1a\x1f.clark.v1.TestUserModelResponse\x12b\n" +
 	"\x13RefreshModelCatalog\x12$.clark.v1.RefreshModelCatalogRequest\x1a%.clark.v1.RefreshModelCatalogResponse\x12Y\n" +
 	"\x10GetCatalogStatus\x12!.clark.v1.GetCatalogStatusRequest\x1a\".clark.v1.GetCatalogStatusResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
 
@@ -1569,7 +1950,7 @@ func file_clark_v1_model_providers_proto_rawDescGZIP() []byte {
 	return file_clark_v1_model_providers_proto_rawDescData
 }
 
-var file_clark_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_clark_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_clark_v1_model_providers_proto_goTypes = []any{
 	(*ListProviderTypesRequest)(nil),        // 0: clark.v1.ListProviderTypesRequest
 	(*ListProviderTypesResponse)(nil),       // 1: clark.v1.ListProviderTypesResponse
@@ -1597,71 +1978,84 @@ var file_clark_v1_model_providers_proto_goTypes = []any{
 	(*ListAllUserModelsRequest)(nil),        // 23: clark.v1.ListAllUserModelsRequest
 	(*UserModelEntry)(nil),                  // 24: clark.v1.UserModelEntry
 	(*ListAllUserModelsResponse)(nil),       // 25: clark.v1.ListAllUserModelsResponse
-	(*RefreshModelCatalogRequest)(nil),      // 26: clark.v1.RefreshModelCatalogRequest
-	(*RefreshModelCatalogResponse)(nil),     // 27: clark.v1.RefreshModelCatalogResponse
-	(*GetCatalogStatusRequest)(nil),         // 28: clark.v1.GetCatalogStatusRequest
-	(*GetCatalogStatusResponse)(nil),        // 29: clark.v1.GetCatalogStatusResponse
-	(*ProviderType)(nil),                    // 30: clark.v1.ProviderType
-	(*ProviderTemplate)(nil),                // 31: clark.v1.ProviderTemplate
-	(*UserModelProvider)(nil),               // 32: clark.v1.UserModelProvider
-	(*UserModel)(nil),                       // 33: clark.v1.UserModel
-	(*ModelPricing)(nil),                    // 34: clark.v1.ModelPricing
-	(*ModelCapabilities)(nil),               // 35: clark.v1.ModelCapabilities
-	(MetadataSource)(0),                     // 36: clark.v1.MetadataSource
-	(*timestamppb.Timestamp)(nil),           // 37: google.protobuf.Timestamp
+	(*ToggleUserModelFavoriteRequest)(nil),  // 26: clark.v1.ToggleUserModelFavoriteRequest
+	(*ToggleUserModelFavoriteResponse)(nil), // 27: clark.v1.ToggleUserModelFavoriteResponse
+	(*TestUserModelProviderRequest)(nil),    // 28: clark.v1.TestUserModelProviderRequest
+	(*TestUserModelProviderResponse)(nil),   // 29: clark.v1.TestUserModelProviderResponse
+	(*TestUserModelRequest)(nil),            // 30: clark.v1.TestUserModelRequest
+	(*TestUserModelResponse)(nil),           // 31: clark.v1.TestUserModelResponse
+	(*RefreshModelCatalogRequest)(nil),      // 32: clark.v1.RefreshModelCatalogRequest
+	(*RefreshModelCatalogResponse)(nil),     // 33: clark.v1.RefreshModelCatalogResponse
+	(*GetCatalogStatusRequest)(nil),         // 34: clark.v1.GetCatalogStatusRequest
+	(*GetCatalogStatusResponse)(nil),        // 35: clark.v1.GetCatalogStatusResponse
+	(*ProviderType)(nil),                    // 36: clark.v1.ProviderType
+	(*ProviderTemplate)(nil),                // 37: clark.v1.ProviderTemplate
+	(*UserModelProvider)(nil),               // 38: clark.v1.UserModelProvider
+	(*UserModel)(nil),                       // 39: clark.v1.UserModel
+	(*ModelPricing)(nil),                    // 40: clark.v1.ModelPricing
+	(*ModelCapabilities)(nil),               // 41: clark.v1.ModelCapabilities
+	(MetadataSource)(0),                     // 42: clark.v1.MetadataSource
+	(*timestamppb.Timestamp)(nil),           // 43: google.protobuf.Timestamp
 }
 var file_clark_v1_model_providers_proto_depIdxs = []int32{
-	30, // 0: clark.v1.ListProviderTypesResponse.types:type_name -> clark.v1.ProviderType
-	31, // 1: clark.v1.ListProviderTemplatesResponse.templates:type_name -> clark.v1.ProviderTemplate
-	32, // 2: clark.v1.CreateUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
-	32, // 3: clark.v1.ListUserModelProvidersResponse.providers:type_name -> clark.v1.UserModelProvider
-	32, // 4: clark.v1.GetUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
-	33, // 5: clark.v1.GetUserModelProviderResponse.enabled_models:type_name -> clark.v1.UserModel
-	32, // 6: clark.v1.UpdateUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
+	36, // 0: clark.v1.ListProviderTypesResponse.types:type_name -> clark.v1.ProviderType
+	37, // 1: clark.v1.ListProviderTemplatesResponse.templates:type_name -> clark.v1.ProviderTemplate
+	38, // 2: clark.v1.CreateUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
+	38, // 3: clark.v1.ListUserModelProvidersResponse.providers:type_name -> clark.v1.UserModelProvider
+	38, // 4: clark.v1.GetUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
+	39, // 5: clark.v1.GetUserModelProviderResponse.enabled_models:type_name -> clark.v1.UserModel
+	38, // 6: clark.v1.UpdateUserModelProviderResponse.provider:type_name -> clark.v1.UserModelProvider
 	16, // 7: clark.v1.DiscoverModelsResponse.models:type_name -> clark.v1.DiscoveredModel
-	34, // 8: clark.v1.DiscoveredModel.pricing:type_name -> clark.v1.ModelPricing
-	35, // 9: clark.v1.DiscoveredModel.capabilities:type_name -> clark.v1.ModelCapabilities
-	36, // 10: clark.v1.DiscoveredModel.metadata_source:type_name -> clark.v1.MetadataSource
-	33, // 11: clark.v1.EnableModelsResponse.enabled:type_name -> clark.v1.UserModel
-	33, // 12: clark.v1.ListUserModelsResponse.models:type_name -> clark.v1.UserModel
-	32, // 13: clark.v1.UserModelEntry.provider:type_name -> clark.v1.UserModelProvider
-	33, // 14: clark.v1.UserModelEntry.model:type_name -> clark.v1.UserModel
+	40, // 8: clark.v1.DiscoveredModel.pricing:type_name -> clark.v1.ModelPricing
+	41, // 9: clark.v1.DiscoveredModel.capabilities:type_name -> clark.v1.ModelCapabilities
+	42, // 10: clark.v1.DiscoveredModel.metadata_source:type_name -> clark.v1.MetadataSource
+	39, // 11: clark.v1.EnableModelsResponse.enabled:type_name -> clark.v1.UserModel
+	39, // 12: clark.v1.ListUserModelsResponse.models:type_name -> clark.v1.UserModel
+	38, // 13: clark.v1.UserModelEntry.provider:type_name -> clark.v1.UserModelProvider
+	39, // 14: clark.v1.UserModelEntry.model:type_name -> clark.v1.UserModel
 	24, // 15: clark.v1.ListAllUserModelsResponse.entries:type_name -> clark.v1.UserModelEntry
-	37, // 16: clark.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
-	37, // 17: clark.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
-	0,  // 18: clark.v1.ModelProvidersService.ListProviderTypes:input_type -> clark.v1.ListProviderTypesRequest
-	2,  // 19: clark.v1.ModelProvidersService.ListProviderTemplates:input_type -> clark.v1.ListProviderTemplatesRequest
-	4,  // 20: clark.v1.ModelProvidersService.CreateUserModelProvider:input_type -> clark.v1.CreateUserModelProviderRequest
-	6,  // 21: clark.v1.ModelProvidersService.ListUserModelProviders:input_type -> clark.v1.ListUserModelProvidersRequest
-	8,  // 22: clark.v1.ModelProvidersService.GetUserModelProvider:input_type -> clark.v1.GetUserModelProviderRequest
-	10, // 23: clark.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> clark.v1.UpdateUserModelProviderRequest
-	12, // 24: clark.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> clark.v1.DeleteUserModelProviderRequest
-	14, // 25: clark.v1.ModelProvidersService.DiscoverModels:input_type -> clark.v1.DiscoverModelsRequest
-	17, // 26: clark.v1.ModelProvidersService.EnableModels:input_type -> clark.v1.EnableModelsRequest
-	19, // 27: clark.v1.ModelProvidersService.DisableModels:input_type -> clark.v1.DisableModelsRequest
-	21, // 28: clark.v1.ModelProvidersService.ListUserModels:input_type -> clark.v1.ListUserModelsRequest
-	23, // 29: clark.v1.ModelProvidersService.ListAllUserModels:input_type -> clark.v1.ListAllUserModelsRequest
-	26, // 30: clark.v1.ModelProvidersService.RefreshModelCatalog:input_type -> clark.v1.RefreshModelCatalogRequest
-	28, // 31: clark.v1.ModelProvidersService.GetCatalogStatus:input_type -> clark.v1.GetCatalogStatusRequest
-	1,  // 32: clark.v1.ModelProvidersService.ListProviderTypes:output_type -> clark.v1.ListProviderTypesResponse
-	3,  // 33: clark.v1.ModelProvidersService.ListProviderTemplates:output_type -> clark.v1.ListProviderTemplatesResponse
-	5,  // 34: clark.v1.ModelProvidersService.CreateUserModelProvider:output_type -> clark.v1.CreateUserModelProviderResponse
-	7,  // 35: clark.v1.ModelProvidersService.ListUserModelProviders:output_type -> clark.v1.ListUserModelProvidersResponse
-	9,  // 36: clark.v1.ModelProvidersService.GetUserModelProvider:output_type -> clark.v1.GetUserModelProviderResponse
-	11, // 37: clark.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> clark.v1.UpdateUserModelProviderResponse
-	13, // 38: clark.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> clark.v1.DeleteUserModelProviderResponse
-	15, // 39: clark.v1.ModelProvidersService.DiscoverModels:output_type -> clark.v1.DiscoverModelsResponse
-	18, // 40: clark.v1.ModelProvidersService.EnableModels:output_type -> clark.v1.EnableModelsResponse
-	20, // 41: clark.v1.ModelProvidersService.DisableModels:output_type -> clark.v1.DisableModelsResponse
-	22, // 42: clark.v1.ModelProvidersService.ListUserModels:output_type -> clark.v1.ListUserModelsResponse
-	25, // 43: clark.v1.ModelProvidersService.ListAllUserModels:output_type -> clark.v1.ListAllUserModelsResponse
-	27, // 44: clark.v1.ModelProvidersService.RefreshModelCatalog:output_type -> clark.v1.RefreshModelCatalogResponse
-	29, // 45: clark.v1.ModelProvidersService.GetCatalogStatus:output_type -> clark.v1.GetCatalogStatusResponse
-	32, // [32:46] is the sub-list for method output_type
-	18, // [18:32] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	39, // 16: clark.v1.ToggleUserModelFavoriteResponse.model:type_name -> clark.v1.UserModel
+	43, // 17: clark.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
+	43, // 18: clark.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
+	0,  // 19: clark.v1.ModelProvidersService.ListProviderTypes:input_type -> clark.v1.ListProviderTypesRequest
+	2,  // 20: clark.v1.ModelProvidersService.ListProviderTemplates:input_type -> clark.v1.ListProviderTemplatesRequest
+	4,  // 21: clark.v1.ModelProvidersService.CreateUserModelProvider:input_type -> clark.v1.CreateUserModelProviderRequest
+	6,  // 22: clark.v1.ModelProvidersService.ListUserModelProviders:input_type -> clark.v1.ListUserModelProvidersRequest
+	8,  // 23: clark.v1.ModelProvidersService.GetUserModelProvider:input_type -> clark.v1.GetUserModelProviderRequest
+	10, // 24: clark.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> clark.v1.UpdateUserModelProviderRequest
+	12, // 25: clark.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> clark.v1.DeleteUserModelProviderRequest
+	14, // 26: clark.v1.ModelProvidersService.DiscoverModels:input_type -> clark.v1.DiscoverModelsRequest
+	17, // 27: clark.v1.ModelProvidersService.EnableModels:input_type -> clark.v1.EnableModelsRequest
+	19, // 28: clark.v1.ModelProvidersService.DisableModels:input_type -> clark.v1.DisableModelsRequest
+	21, // 29: clark.v1.ModelProvidersService.ListUserModels:input_type -> clark.v1.ListUserModelsRequest
+	23, // 30: clark.v1.ModelProvidersService.ListAllUserModels:input_type -> clark.v1.ListAllUserModelsRequest
+	26, // 31: clark.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> clark.v1.ToggleUserModelFavoriteRequest
+	28, // 32: clark.v1.ModelProvidersService.TestUserModelProvider:input_type -> clark.v1.TestUserModelProviderRequest
+	30, // 33: clark.v1.ModelProvidersService.TestUserModel:input_type -> clark.v1.TestUserModelRequest
+	32, // 34: clark.v1.ModelProvidersService.RefreshModelCatalog:input_type -> clark.v1.RefreshModelCatalogRequest
+	34, // 35: clark.v1.ModelProvidersService.GetCatalogStatus:input_type -> clark.v1.GetCatalogStatusRequest
+	1,  // 36: clark.v1.ModelProvidersService.ListProviderTypes:output_type -> clark.v1.ListProviderTypesResponse
+	3,  // 37: clark.v1.ModelProvidersService.ListProviderTemplates:output_type -> clark.v1.ListProviderTemplatesResponse
+	5,  // 38: clark.v1.ModelProvidersService.CreateUserModelProvider:output_type -> clark.v1.CreateUserModelProviderResponse
+	7,  // 39: clark.v1.ModelProvidersService.ListUserModelProviders:output_type -> clark.v1.ListUserModelProvidersResponse
+	9,  // 40: clark.v1.ModelProvidersService.GetUserModelProvider:output_type -> clark.v1.GetUserModelProviderResponse
+	11, // 41: clark.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> clark.v1.UpdateUserModelProviderResponse
+	13, // 42: clark.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> clark.v1.DeleteUserModelProviderResponse
+	15, // 43: clark.v1.ModelProvidersService.DiscoverModels:output_type -> clark.v1.DiscoverModelsResponse
+	18, // 44: clark.v1.ModelProvidersService.EnableModels:output_type -> clark.v1.EnableModelsResponse
+	20, // 45: clark.v1.ModelProvidersService.DisableModels:output_type -> clark.v1.DisableModelsResponse
+	22, // 46: clark.v1.ModelProvidersService.ListUserModels:output_type -> clark.v1.ListUserModelsResponse
+	25, // 47: clark.v1.ModelProvidersService.ListAllUserModels:output_type -> clark.v1.ListAllUserModelsResponse
+	27, // 48: clark.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> clark.v1.ToggleUserModelFavoriteResponse
+	29, // 49: clark.v1.ModelProvidersService.TestUserModelProvider:output_type -> clark.v1.TestUserModelProviderResponse
+	31, // 50: clark.v1.ModelProvidersService.TestUserModel:output_type -> clark.v1.TestUserModelResponse
+	33, // 51: clark.v1.ModelProvidersService.RefreshModelCatalog:output_type -> clark.v1.RefreshModelCatalogResponse
+	35, // 52: clark.v1.ModelProvidersService.GetCatalogStatus:output_type -> clark.v1.GetCatalogStatusResponse
+	36, // [36:53] is the sub-list for method output_type
+	19, // [19:36] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_clark_v1_model_providers_proto_init() }
@@ -1672,14 +2066,14 @@ func file_clark_v1_model_providers_proto_init() {
 	file_clark_v1_types_proto_init()
 	file_clark_v1_model_providers_proto_msgTypes[10].OneofWrappers = []any{}
 	file_clark_v1_model_providers_proto_msgTypes[16].OneofWrappers = []any{}
-	file_clark_v1_model_providers_proto_msgTypes[29].OneofWrappers = []any{}
+	file_clark_v1_model_providers_proto_msgTypes[35].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_clark_v1_model_providers_proto_rawDesc), len(file_clark_v1_model_providers_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

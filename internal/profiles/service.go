@@ -40,7 +40,23 @@ const (
 	fieldTitleProvider       = "title_provider_id"
 	fieldTitleModelID        = "title_model_id"
 	fieldTitleGuide          = "title_guide"
+	fieldTitleProviderKind   = "title_provider_kind"
+	fieldDescription         = "description"
 )
+
+// TitleProviderKindAppleFoundation is the sentinel value of
+// `profiles.title_provider_kind` that delegates title generation to the Mac
+// client's on-device Apple FoundationModels framework. When a resolved
+// profile carries this kind, the server's auto-title hook skips its cloud
+// roundtrip — see internal/conversations/titles.go.
+const TitleProviderKindAppleFoundation = "apple_foundation"
+
+// validTitleProviderKinds enumerates the sentinel values the server is
+// willing to accept on Create / Update. Other values are rejected with
+// InvalidArgument so a typo doesn't silently disable auto-titling.
+var validTitleProviderKinds = map[string]struct{}{
+	TitleProviderKindAppleFoundation: {},
+}
 
 // Service implements clarkv1connect.ProfilesServiceHandler.
 //
@@ -131,6 +147,15 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[clarkv
 		titleProviderID = &tid
 	}
 
+	var titleProviderKind *string
+	if req.Msg.TitleProviderKind != nil && *req.Msg.TitleProviderKind != "" {
+		k := *req.Msg.TitleProviderKind
+		if _, ok := validTitleProviderKinds[k]; !ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown title_provider_kind: %q", k))
+		}
+		titleProviderKind = &k
+	}
+
 	row, err := s.queries.CreateProfile(ctx, store.CreateProfileParams{
 		ID:                    id,
 		UserID:                caller.ID,
@@ -146,6 +171,10 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[clarkv
 		TitleProviderID:       titleProviderID,
 		TitleModelID:          req.Msg.TitleModelId,
 		TitleGuide:            req.Msg.TitleGuide,
+		TitleProviderKind:     titleProviderKind,
+		Description:           req.Msg.Description,
+		ParentOnly:            req.Msg.ParentOnly,
+		Favorite:              req.Msg.Favorite,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -371,6 +400,55 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[clarkv
 		}
 	} else if req.Msg.TitleGuide != nil {
 		if err := s.queries.UpdateProfileTitleGuide(ctx, store.UpdateProfileTitleGuideParams{ID: id, TitleGuide: req.Msg.TitleGuide}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+
+	// title_provider_kind — sentinel for non-server title generation (e.g.
+	// "apple_foundation"). Validated against a known-values whitelist.
+	if _, ok := clear[fieldTitleProviderKind]; ok {
+		if err := s.queries.UpdateProfileTitleProviderKind(ctx, store.UpdateProfileTitleProviderKindParams{ID: id, TitleProviderKind: nil}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else if req.Msg.TitleProviderKind != nil {
+		k := *req.Msg.TitleProviderKind
+		if k == "" {
+			// Empty-string convention: same as listing the field in clear_fields.
+			if err := s.queries.UpdateProfileTitleProviderKind(ctx, store.UpdateProfileTitleProviderKindParams{ID: id, TitleProviderKind: nil}); err != nil {
+				return nil, connect.NewError(connect.CodeInternal, err)
+			}
+		} else {
+			if _, ok := validTitleProviderKinds[k]; !ok {
+				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown title_provider_kind: %q", k))
+			}
+			if err := s.queries.UpdateProfileTitleProviderKind(ctx, store.UpdateProfileTitleProviderKindParams{ID: id, TitleProviderKind: &k}); err != nil {
+				return nil, connect.NewError(connect.CodeInternal, err)
+			}
+		}
+	}
+
+	// description (non-nullable on the row, "clear" maps to empty string)
+	if _, ok := clear[fieldDescription]; ok {
+		if err := s.queries.UpdateProfileDescription(ctx, store.UpdateProfileDescriptionParams{ID: id, Description: ""}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else if req.Msg.Description != nil {
+		if err := s.queries.UpdateProfileDescription(ctx, store.UpdateProfileDescriptionParams{ID: id, Description: *req.Msg.Description}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+
+	// parent_only — has no "clear" semantic since it's a bool with a defined
+	// default; missing in the request just means "leave unchanged."
+	if req.Msg.ParentOnly != nil {
+		if err := s.queries.UpdateProfileParentOnly(ctx, store.UpdateProfileParentOnlyParams{ID: id, ParentOnly: *req.Msg.ParentOnly}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+
+	// favorite — same shape as parent_only.
+	if req.Msg.Favorite != nil {
+		if err := s.queries.UpdateProfileFavorite(ctx, store.UpdateProfileFavoriteParams{ID: id, Favorite: *req.Msg.Favorite}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
@@ -659,6 +737,9 @@ func profileToProto(p store.Profile) (*clarkv1.Profile, error) {
 		OwnerUserId:        p.UserID.String(),
 		CreatedAt:          timestamppb.New(p.CreatedAt),
 		UpdatedAt:          timestamppb.New(p.UpdatedAt),
+		Description:        p.Description,
+		ParentOnly:         p.ParentOnly,
+		Favorite:           p.Favorite,
 	}
 	if p.ParentProfileID != nil {
 		s := p.ParentProfileID.String()
@@ -678,6 +759,7 @@ func profileToProto(p store.Profile) (*clarkv1.Profile, error) {
 	}
 	out.TitleModelId = p.TitleModelID
 	out.TitleGuide = p.TitleGuide
+	out.TitleProviderKind = p.TitleProviderKind
 	return out, nil
 }
 

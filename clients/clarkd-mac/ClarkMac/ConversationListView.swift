@@ -9,19 +9,21 @@ struct ConversationListView: View {
         @Bindable var convos = convos
         VStack(spacing: 0) {
             List(selection: $convos.selectedID) {
-                if convos.conversations.isEmpty && !convos.isLoading && convos.loadError == nil {
-                    Text("No conversations yet.")
-                        .foregroundStyle(.secondary)
-                        .listRowSeparator(.hidden)
-                }
-                ForEach(convos.conversations) { c in
-                    ConversationRow(conversation: c)
-                        .tag(c.id)
-                        .contextMenu {
-                            Button("Delete", role: .destructive) {
-                                conversationToDelete = c
+                Section("Chats") {
+                    if convos.conversations.isEmpty && !convos.isLoading && convos.loadError == nil {
+                        Text("No conversations yet.")
+                            .foregroundStyle(.secondary)
+                            .listRowSeparator(.hidden)
+                    }
+                    ForEach(convos.conversations) { c in
+                        ConversationRow(conversation: c)
+                            .tag(c.id)
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    conversationToDelete = c
+                                }
                             }
-                        }
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -95,53 +97,3 @@ struct ConversationRow: View {
     }
 }
 
-/// Shared compact popover used by the bottom sidebar tray's `+` button.
-/// Picks a profile and (optionally) a title.
-struct NewConversationPopover: View {
-    let profiles: ProfilesViewModel
-    let onDone: (_ profileID: String?, _ title: String?) -> Void
-
-    @Environment(ConversationsModel.self) private var convos
-    @State private var selectedProfileID: String?
-    @State private var title: String = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Profile", selection: $selectedProfileID) {
-                ForEach(convos.profiles) { p in
-                    Text(profileLabel(p)).tag(Optional(p.id))
-                }
-            }
-            .labelsHidden()
-
-            TextField("Title (optional)", text: $title)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Button("Cancel") { onDone(nil, nil) }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Create") {
-                    onDone(selectedProfileID, title.isEmpty ? nil : title)
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.glassProminent)
-                .disabled(selectedProfileID == nil)
-            }
-        }
-        .padding(14)
-        .frame(width: 320)
-        .onAppear {
-            if selectedProfileID == nil {
-                selectedProfileID = convos.profiles.first?.id
-            }
-        }
-    }
-
-    private func profileLabel(_ p: ClarkProfile) -> String {
-        if let full = profiles.profiles.first(where: { $0.id == p.id }) {
-            return profiles.conciseName(for: full)
-        }
-        return p.name
-    }
-}

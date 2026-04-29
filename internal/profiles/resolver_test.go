@@ -217,6 +217,44 @@ func TestResolve_TitleFieldsChildOverridesParent(t *testing.T) {
 	}
 }
 
+// TestResolve_TitleProviderKindInheritedFromParent verifies the
+// "apple_foundation" sentinel — like the other title fields — flows down
+// the parent chain when the child leaves it nil.
+func TestResolve_TitleProviderKindInheritedFromParent(t *testing.T) {
+	t.Parallel()
+
+	parent := makeProfile("parent", nil)
+	parent.TitleProviderKind = strPtr(TitleProviderKindAppleFoundation)
+
+	child := makeProfile("child", &parent.ID)
+	// child leaves TitleProviderKind nil → inherits.
+
+	got, err := Resolve(context.Background(), newLoader(parent, child), child)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got.TitleProviderKind == nil || *got.TitleProviderKind != TitleProviderKindAppleFoundation {
+		t.Errorf("expected child to inherit parent's title_provider_kind; got %+v", got.TitleProviderKind)
+	}
+}
+
+// TestResolve_TitleProviderKindChildOverridesParent verifies the child's
+// explicit kind wins over the parent's.
+func TestResolve_TitleProviderKindChildOverridesParent(t *testing.T) {
+	t.Parallel()
+
+	parent := makeProfile("parent", nil)
+	parent.TitleProviderKind = strPtr("some-other-kind")
+
+	child := makeProfile("child", &parent.ID)
+	child.TitleProviderKind = strPtr(TitleProviderKindAppleFoundation)
+
+	got, _ := Resolve(context.Background(), newLoader(parent, child), child)
+	if got.TitleProviderKind == nil || *got.TitleProviderKind != TitleProviderKindAppleFoundation {
+		t.Errorf("expected child's title_provider_kind to win; got %+v", got.TitleProviderKind)
+	}
+}
+
 func TestResolve_Cycle(t *testing.T) {
 	t.Parallel()
 

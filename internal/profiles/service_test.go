@@ -155,6 +155,91 @@ func TestService_CreateProfile_AllFields(t *testing.T) {
 	}
 }
 
+func TestService_CreateProfile_DescriptionAndParentOnly(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name:        "tmpl",
+		Description: "Shared base prompt",
+		ParentOnly:  true,
+	}))
+	if err != nil {
+		t.Fatalf("CreateProfile: %v", err)
+	}
+	if resp.Msg.Profile.Description != "Shared base prompt" {
+		t.Errorf("description: %q", resp.Msg.Profile.Description)
+	}
+	if !resp.Msg.Profile.ParentOnly {
+		t.Errorf("parent_only should be true")
+	}
+}
+
+func TestService_CreateProfile_DescriptionAndParentOnlyDefaults(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name: "default",
+	}))
+	if err != nil {
+		t.Fatalf("CreateProfile: %v", err)
+	}
+	if resp.Msg.Profile.Description != "" {
+		t.Errorf("description default: %q", resp.Msg.Profile.Description)
+	}
+	if resp.Msg.Profile.ParentOnly {
+		t.Errorf("parent_only default should be false")
+	}
+}
+
+func TestService_UpdateProfile_DescriptionAndParentOnly(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	created, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name: "p",
+	}))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	desc := "Now described"
+	parentOnly := true
+	resp, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&clarkv1.UpdateProfileRequest{
+		Id:          created.Msg.Profile.Id,
+		Description: &desc,
+		ParentOnly:  &parentOnly,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if resp.Msg.Profile.Description != desc {
+		t.Errorf("description: %q", resp.Msg.Profile.Description)
+	}
+	if !resp.Msg.Profile.ParentOnly {
+		t.Errorf("parent_only should be true after update")
+	}
+
+	// clear description via clear_fields → empty string
+	resp2, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&clarkv1.UpdateProfileRequest{
+		Id:          created.Msg.Profile.Id,
+		ClearFields: []string{"description"},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile clear: %v", err)
+	}
+	if resp2.Msg.Profile.Description != "" {
+		t.Errorf("description after clear: %q", resp2.Msg.Profile.Description)
+	}
+	if !resp2.Msg.Profile.ParentOnly {
+		t.Errorf("parent_only should still be true after unrelated clear")
+	}
+}
+
 func TestService_CreateProfile_MissingName(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
@@ -686,4 +771,101 @@ func TestService_DeleteProfile_WithChildren_FailedPrecondition(t *testing.T) {
 
 	_, err = svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&clarkv1.DeleteProfileRequest{Id: pid}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
+}
+
+// --- title_provider_kind ---------------------------------------------------
+
+func TestService_CreateProfile_WithTitleProviderKind(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	kind := TitleProviderKindAppleFoundation
+	resp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name:              "local",
+		TitleProviderKind: &kind,
+	}))
+	if err != nil {
+		t.Fatalf("CreateProfile: %v", err)
+	}
+	if resp.Msg.Profile.TitleProviderKind == nil || *resp.Msg.Profile.TitleProviderKind != kind {
+		t.Errorf("title_provider_kind round-trip: %+v", resp.Msg.Profile.TitleProviderKind)
+	}
+}
+
+func TestService_CreateProfile_RejectsUnknownTitleProviderKind(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	bogus := "not_a_real_kind"
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name:              "p",
+		TitleProviderKind: &bogus,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestService_UpdateProfile_SetTitleProviderKind(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.CreateProfileRequest{Name: "p"}))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	kind := TitleProviderKindAppleFoundation
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.UpdateProfileRequest{
+		Id:                p.Msg.Profile.Id,
+		TitleProviderKind: &kind,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if resp.Msg.Profile.TitleProviderKind == nil || *resp.Msg.Profile.TitleProviderKind != kind {
+		t.Errorf("title_provider_kind: %+v", resp.Msg.Profile.TitleProviderKind)
+	}
+}
+
+func TestService_UpdateProfile_ClearTitleProviderKind(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	kind := TitleProviderKindAppleFoundation
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.CreateProfileRequest{
+		Name:              "p",
+		TitleProviderKind: &kind,
+	}))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.UpdateProfileRequest{
+		Id:          p.Msg.Profile.Id,
+		ClearFields: []string{"title_provider_kind"},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if resp.Msg.Profile.TitleProviderKind != nil {
+		t.Errorf("title_provider_kind should be cleared: %+v", resp.Msg.Profile.TitleProviderKind)
+	}
+}
+
+func TestService_UpdateProfile_RejectsUnknownTitleProviderKind(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.CreateProfileRequest{Name: "p"}))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	bogus := "not_a_real_kind"
+	_, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&clarkv1.UpdateProfileRequest{
+		Id:                p.Msg.Profile.Id,
+		TitleProviderKind: &bogus,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
 }

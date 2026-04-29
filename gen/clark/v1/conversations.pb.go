@@ -1513,8 +1513,15 @@ func (x *SendMessageResponse) GetStreamRun() *StreamRun {
 type CompactRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Per-call overrides over the resolved profile values. Each, if set, takes
+	// precedence over what the profile inheritance chain produces. Lets clients
+	// surface a "compact with this prompt + this model" page (per-invocation,
+	// not persisted to the profile) and bypass profile-resolution glitches.
+	CompressionGuide      *string `protobuf:"bytes,2,opt,name=compression_guide,json=compressionGuide,proto3,oneof" json:"compression_guide,omitempty"`
+	CompressionProviderId *string `protobuf:"bytes,3,opt,name=compression_provider_id,json=compressionProviderId,proto3,oneof" json:"compression_provider_id,omitempty"`
+	CompressionModelId    *string `protobuf:"bytes,4,opt,name=compression_model_id,json=compressionModelId,proto3,oneof" json:"compression_model_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *CompactRequest) Reset() {
@@ -1550,6 +1557,27 @@ func (*CompactRequest) Descriptor() ([]byte, []int) {
 func (x *CompactRequest) GetConversationId() string {
 	if x != nil {
 		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *CompactRequest) GetCompressionGuide() string {
+	if x != nil && x.CompressionGuide != nil {
+		return *x.CompressionGuide
+	}
+	return ""
+}
+
+func (x *CompactRequest) GetCompressionProviderId() string {
+	if x != nil && x.CompressionProviderId != nil {
+		return *x.CompressionProviderId
+	}
+	return ""
+}
+
+func (x *CompactRequest) GetCompressionModelId() string {
+	if x != nil && x.CompressionModelId != nil {
+		return *x.CompressionModelId
 	}
 	return ""
 }
@@ -1815,9 +1843,15 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\x13SendMessageResponse\x124\n" +
 	"\fuser_message\x18\x01 \x01(\v2\x11.clark.v1.MessageR\vuserMessage\x122\n" +
 	"\n" +
-	"stream_run\x18\x02 \x01(\v2\x13.clark.v1.StreamRunR\tstreamRun\"9\n" +
+	"stream_run\x18\x02 \x01(\v2\x13.clark.v1.StreamRunR\tstreamRun\"\xaa\x02\n" +
 	"\x0eCompactRequest\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"E\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x120\n" +
+	"\x11compression_guide\x18\x02 \x01(\tH\x00R\x10compressionGuide\x88\x01\x01\x12;\n" +
+	"\x17compression_provider_id\x18\x03 \x01(\tH\x01R\x15compressionProviderId\x88\x01\x01\x125\n" +
+	"\x14compression_model_id\x18\x04 \x01(\tH\x02R\x12compressionModelId\x88\x01\x01B\x14\n" +
+	"\x12_compression_guideB\x1a\n" +
+	"\x18_compression_provider_idB\x17\n" +
+	"\x15_compression_model_id\"E\n" +
 	"\x0fCompactResponse\x122\n" +
 	"\n" +
 	"stream_run\x18\x01 \x01(\v2\x13.clark.v1.StreamRunR\tstreamRun\"v\n" +
@@ -1983,6 +2017,7 @@ func file_clark_v1_conversations_proto_init() {
 	file_clark_v1_conversations_proto_msgTypes[18].OneofWrappers = []any{}
 	file_clark_v1_conversations_proto_msgTypes[22].OneofWrappers = []any{}
 	file_clark_v1_conversations_proto_msgTypes[28].OneofWrappers = []any{}
+	file_clark_v1_conversations_proto_msgTypes[30].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
