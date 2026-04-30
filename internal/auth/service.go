@@ -30,7 +30,31 @@ func NewService(queries *store.Queries) *Service {
 	return &Service{queries: queries}
 }
 
-// --- Login / Logout / WhoAmI ---
+// --- Probe / Login / Logout / WhoAmI ---
+
+// Probe is the unauthenticated identity ping. Clients use it to confirm
+// "yes this URL hosts a clarkd" before showing the login form. No DB
+// hit, no token check; the existence of a successful response is the
+// signal. Server name is hard-coded to "clarkd" — forks should bump
+// this so a misconfigured client can warn.
+func (s *Service) Probe(_ context.Context, _ *connect.Request[clarkv1.ProbeRequest]) (*connect.Response[clarkv1.ProbeResponse], error) {
+	return connect.NewResponse(&clarkv1.ProbeResponse{
+		Server:  "clarkd",
+		Version: serverVersion(),
+	}), nil
+}
+
+// serverVersion returns the build's identity string. Empty for dev
+// builds (`go run`) where no -ldflags-stamped value is available; the
+// client treats empty as "unknown — proceed without warning."
+func serverVersion() string {
+	// TODO: stamp at build time via -ldflags='-X github.com/jdpedrie/clark/internal/auth.buildVersion=...'
+	return buildVersion
+}
+
+// buildVersion is overridden at build time via -ldflags. Empty means
+// "no version stamped" (dev builds).
+var buildVersion = ""
 
 func (s *Service) Login(ctx context.Context, req *connect.Request[clarkv1.LoginRequest]) (*connect.Response[clarkv1.LoginResponse], error) {
 	if req.Msg.Username == "" || req.Msg.Password == "" {

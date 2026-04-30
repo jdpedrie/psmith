@@ -33,6 +33,8 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// AuthServiceProbeProcedure is the fully-qualified name of the AuthService's Probe RPC.
+	AuthServiceProbeProcedure = "/clark.v1.AuthService/Probe"
 	// AuthServiceLoginProcedure is the fully-qualified name of the AuthService's Login RPC.
 	AuthServiceLoginProcedure = "/clark.v1.AuthService/Login"
 	// AuthServiceLogoutProcedure is the fully-qualified name of the AuthService's Logout RPC.
@@ -59,6 +61,11 @@ const (
 
 // AuthServiceClient is a client for the clark.v1.AuthService service.
 type AuthServiceClient interface {
+	// Probe is an unauthenticated identity ping — the client uses it to
+	// confirm "yes there is a clarkd at this URL" before showing the
+	// login form. Returns server identity (name + version) so future
+	// clients can warn on incompatible versions. Cheap; no DB hit.
+	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	// Authenticate with username + password, receive a session token.
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	// Revoke the current session.
@@ -87,6 +94,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 	baseURL = strings.TrimRight(baseURL, "/")
 	authServiceMethods := v1.File_clark_v1_auth_proto.Services().ByName("AuthService").Methods()
 	return &authServiceClient{
+		probe: connect.NewClient[v1.ProbeRequest, v1.ProbeResponse](
+			httpClient,
+			baseURL+AuthServiceProbeProcedure,
+			connect.WithSchema(authServiceMethods.ByName("Probe")),
+			connect.WithClientOptions(opts...),
+		),
 		login: connect.NewClient[v1.LoginRequest, v1.LoginResponse](
 			httpClient,
 			baseURL+AuthServiceLoginProcedure,
@@ -152,6 +165,7 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
+	probe              *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
 	login              *connect.Client[v1.LoginRequest, v1.LoginResponse]
 	logout             *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 	whoAmI             *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
@@ -162,6 +176,11 @@ type authServiceClient struct {
 	updateUser         *connect.Client[v1.UpdateUserRequest, v1.UpdateUserResponse]
 	deleteUser         *connect.Client[v1.DeleteUserRequest, v1.DeleteUserResponse]
 	adminResetPassword *connect.Client[v1.AdminResetPasswordRequest, v1.AdminResetPasswordResponse]
+}
+
+// Probe calls clark.v1.AuthService.Probe.
+func (c *authServiceClient) Probe(ctx context.Context, req *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
+	return c.probe.CallUnary(ctx, req)
 }
 
 // Login calls clark.v1.AuthService.Login.
@@ -216,6 +235,11 @@ func (c *authServiceClient) AdminResetPassword(ctx context.Context, req *connect
 
 // AuthServiceHandler is an implementation of the clark.v1.AuthService service.
 type AuthServiceHandler interface {
+	// Probe is an unauthenticated identity ping — the client uses it to
+	// confirm "yes there is a clarkd at this URL" before showing the
+	// login form. Returns server identity (name + version) so future
+	// clients can warn on incompatible versions. Cheap; no DB hit.
+	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	// Authenticate with username + password, receive a session token.
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	// Revoke the current session.
@@ -240,6 +264,12 @@ type AuthServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	authServiceMethods := v1.File_clark_v1_auth_proto.Services().ByName("AuthService").Methods()
+	authServiceProbeHandler := connect.NewUnaryHandler(
+		AuthServiceProbeProcedure,
+		svc.Probe,
+		connect.WithSchema(authServiceMethods.ByName("Probe")),
+		connect.WithHandlerOptions(opts...),
+	)
 	authServiceLoginHandler := connect.NewUnaryHandler(
 		AuthServiceLoginProcedure,
 		svc.Login,
@@ -302,6 +332,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/clark.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case AuthServiceProbeProcedure:
+			authServiceProbeHandler.ServeHTTP(w, r)
 		case AuthServiceLoginProcedure:
 			authServiceLoginHandler.ServeHTTP(w, r)
 		case AuthServiceLogoutProcedure:
@@ -330,6 +362,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 
 // UnimplementedAuthServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAuthServiceHandler struct{}
+
+func (UnimplementedAuthServiceHandler) Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.AuthService.Probe is not implemented"))
+}
 
 func (UnimplementedAuthServiceHandler) Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.AuthService.Login is not implemented"))

@@ -460,8 +460,9 @@ public struct Clark_V1_ListMessagesRequest: Sendable {
 
   public var contextID: String = String()
 
-  /// If set, return only the linear ancestor chain ending at this leaf
-  /// (one branch of the message tree). Otherwise return the full tree.
+  /// Pin the linear ancestor chain to this leaf. When unset, server
+  /// resolves the leaf via context.current_leaf_message_id, then falls
+  /// back to the natural leaf of the tree. Ignored when `full_tree=true`.
   public var leafMessageID: String {
     get {_leafMessageID ?? String()}
     set {_leafMessageID = newValue}
@@ -470,6 +471,13 @@ public struct Clark_V1_ListMessagesRequest: Sendable {
   public var hasLeafMessageID: Bool {self._leafMessageID != nil}
   /// Clears the value of `leafMessageID`. Subsequent reads from it will return its default value.
   public mutating func clearLeafMessageID() {self._leafMessageID = nil}
+
+  /// When true, return every message in the context — every branch, not
+  /// just the active chain. Used by the branch switcher in the client to
+  /// discover sibling IDs and walk down to the deepest descendant of the
+  /// chosen fork. Default false (chain mode) preserves the original
+  /// behaviour for callers that don't opt in.
+  public var fullTree: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -682,6 +690,15 @@ public struct Clark_V1_SendMessageRequest: Sendable {
   /// Clears the value of `callSettings`. Subsequent reads from it will return its default value.
   public mutating func clearCallSettings() {self._callSettings = nil}
 
+  /// Regenerate-only: when true, the server skips creating a new user
+  /// message and starts the assistant stream off `parent_message_id`
+  /// directly. `parent_message_id` is required in this mode and must
+  /// reference an existing user-role row in the active context. Powers the
+  /// "regenerate" affordance in the UI — produces a sibling assistant
+  /// turn under the SAME user message, no duplicate user. `content` is
+  /// ignored when this flag is set.
+  public var regenerate: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -697,6 +714,9 @@ public struct Clark_V1_SendMessageResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  /// Echo of the user message that anchors this turn. When `regenerate`
+  /// was set, this is the existing parent user message (no new row); when
+  /// false, it's the freshly-inserted user row.
   public var userMessage: Clark_V1_Message {
     get {_userMessage ?? Clark_V1_Message()}
     set {_userMessage = newValue}
@@ -1550,7 +1570,7 @@ extension Clark_V1_UpdateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Clark_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListMessagesRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}leaf_message_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}leaf_message_id\0\u{3}full_tree\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1560,6 +1580,7 @@ extension Clark_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.contextID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self._leafMessageID) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.fullTree) }()
       default: break
       }
     }
@@ -1576,12 +1597,16 @@ extension Clark_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     try { if let v = self._leafMessageID {
       try visitor.visitSingularStringField(value: v, fieldNumber: 2)
     } }()
+    if self.fullTree != false {
+      try visitor.visitSingularBoolField(value: self.fullTree, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Clark_V1_ListMessagesRequest, rhs: Clark_V1_ListMessagesRequest) -> Bool {
     if lhs.contextID != rhs.contextID {return false}
     if lhs._leafMessageID != rhs._leafMessageID {return false}
+    if lhs.fullTree != rhs.fullTree {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1879,7 +1904,7 @@ extension Clark_V1_PromoteCompactionToNewContextResponse: SwiftProtobuf.Message,
 
 extension Clark_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1893,6 +1918,7 @@ extension Clark_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 4: try { try decoder.decodeSingularStringField(value: &self._providerID) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self._modelID) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.regenerate) }()
       default: break
       }
     }
@@ -1921,6 +1947,9 @@ extension Clark_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     try { if let v = self._callSettings {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
     } }()
+    if self.regenerate != false {
+      try visitor.visitSingularBoolField(value: self.regenerate, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1931,6 +1960,7 @@ extension Clark_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs._providerID != rhs._providerID {return false}
     if lhs._modelID != rhs._modelID {return false}
     if lhs._callSettings != rhs._callSettings {return false}
+    if lhs.regenerate != rhs.regenerate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

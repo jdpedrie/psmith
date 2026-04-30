@@ -90,6 +90,7 @@ func run() error {
 	authSvc := auth.NewService(queries)
 	authInterceptor := auth.NewInterceptor(queries,
 		clarkv1connect.AuthServiceLoginProcedure,
+		clarkv1connect.AuthServiceProbeProcedure,
 	)
 	opts := connect.WithInterceptors(authInterceptor)
 

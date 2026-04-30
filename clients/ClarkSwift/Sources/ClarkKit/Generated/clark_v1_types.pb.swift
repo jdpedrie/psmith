@@ -2030,6 +2030,20 @@ public struct Clark_V1_Message: @unchecked Sendable {
   /// Clears the value of `errorText`. Subsequent reads from it will return its default value.
   public mutating func clearErrorText() {_uniqueStorage()._errorText = nil}
 
+  /// Elapsed wall-clock between the first and last `thinking_delta` chunk
+  /// captured during the stream that produced this message. Powers the UI's
+  /// "Thought for X.Ys" badge on historical turns. Null when the assistant
+  /// didn't reason (or only emitted reasoning tokens without surfacing
+  /// thinking_delta chunks — see usage.reasoning_tokens for the latter case).
+  public var thinkingDurationMs: Int32 {
+    get {_storage._thinkingDurationMs ?? 0}
+    set {_uniqueStorage()._thinkingDurationMs = newValue}
+  }
+  /// Returns true if `thinkingDurationMs` has been explicitly set.
+  public var hasThinkingDurationMs: Bool {_storage._thinkingDurationMs != nil}
+  /// Clears the value of `thinkingDurationMs`. Subsequent reads from it will return its default value.
+  public mutating func clearThinkingDurationMs() {_uniqueStorage()._thinkingDurationMs = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3979,7 +3993,7 @@ extension Clark_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -3999,6 +4013,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _displayContent: String = String()
     var _editedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _errorText: String? = nil
+    var _thinkingDurationMs: Int32? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4026,6 +4041,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _displayContent = source._displayContent
       _editedAt = source._editedAt
       _errorText = source._errorText
+      _thinkingDurationMs = source._thinkingDurationMs
     }
   }
 
@@ -4061,6 +4077,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 15: try { try decoder.decodeSingularStringField(value: &_storage._displayContent) }()
         case 16: try { try decoder.decodeSingularMessageField(value: &_storage._editedAt) }()
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorText) }()
+        case 18: try { try decoder.decodeSingularInt32Field(value: &_storage._thinkingDurationMs) }()
         default: break
         }
       }
@@ -4124,6 +4141,9 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._errorText {
         try visitor.visitSingularStringField(value: v, fieldNumber: 17)
       } }()
+      try { if let v = _storage._thinkingDurationMs {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 18)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4150,6 +4170,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._displayContent != rhs_storage._displayContent {return false}
         if _storage._editedAt != rhs_storage._editedAt {return false}
         if _storage._errorText != rhs_storage._errorText {return false}
+        if _storage._thinkingDurationMs != rhs_storage._thinkingDurationMs {return false}
         return true
       }
       if !storagesAreEqual {return false}

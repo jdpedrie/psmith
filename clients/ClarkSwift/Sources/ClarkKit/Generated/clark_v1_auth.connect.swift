@@ -16,9 +16,16 @@ import SwiftProtobuf
 /// the user, and attaches the user to the request context. No user_id appears
 /// in any request message — it's implicit in the auth context.
 ///
-/// Login is the only RPC permitted without a valid token; the unauth allowlist
-/// is enforced by the interceptor, not by proto annotations.
+/// Login + Probe are the only RPCs permitted without a valid token; the unauth
+/// allowlist is enforced by the interceptor, not by proto annotations.
 public protocol Clark_V1_AuthServiceClientInterface: Sendable {
+
+    /// Probe is an unauthenticated identity ping — the client uses it to
+    /// confirm "yes there is a clarkd at this URL" before showing the
+    /// login form. Returns server identity (name + version) so future
+    /// clients can warn on incompatible versions. Cheap; no DB hit.
+    @available(iOS 13, *)
+    func `probe`(request: Clark_V1_ProbeRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_ProbeResponse>
 
     /// Authenticate with username + password, receive a session token.
     @available(iOS 13, *)
@@ -62,6 +69,11 @@ public final class Clark_V1_AuthServiceClient: Clark_V1_AuthServiceClientInterfa
 
     public init(client: Connect.ProtocolClientInterface) {
         self.client = client
+    }
+
+    @available(iOS 13, *)
+    public func `probe`(request: Clark_V1_ProbeRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_ProbeResponse> {
+        return await self.client.unary(path: "/clark.v1.AuthService/Probe", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
     @available(iOS 13, *)
@@ -116,6 +128,7 @@ public final class Clark_V1_AuthServiceClient: Clark_V1_AuthServiceClientInterfa
 
     public enum Metadata {
         public enum Methods {
+            public static let probe = Connect.MethodSpec(name: "Probe", service: "clark.v1.AuthService", type: .unary)
             public static let login = Connect.MethodSpec(name: "Login", service: "clark.v1.AuthService", type: .unary)
             public static let logout = Connect.MethodSpec(name: "Logout", service: "clark.v1.AuthService", type: .unary)
             public static let whoAmI = Connect.MethodSpec(name: "WhoAmI", service: "clark.v1.AuthService", type: .unary)

@@ -22,6 +22,103 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ProbeRequest is empty — clients call Probe with no arguments to
+// confirm a candidate URL hosts a clarkd. The response shape is the
+// signal: a successful response means a clarkd answered.
+type ProbeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProbeRequest) Reset() {
+	*x = ProbeRequest{}
+	mi := &file_clark_v1_auth_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProbeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProbeRequest) ProtoMessage() {}
+
+func (x *ProbeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_auth_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProbeRequest.ProtoReflect.Descriptor instead.
+func (*ProbeRequest) Descriptor() ([]byte, []int) {
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{0}
+}
+
+type ProbeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Server identifier. Always "clarkd" for the canonical server. Future
+	// forks can change this to surface "this isn't the clarkd you think
+	// it is" before login auth.
+	Server string `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	// Build/version string. Empty when the build didn't stamp one (dev
+	// builds via `go run`). Clients use this to warn on
+	// protocol-incompatible mismatches.
+	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProbeResponse) Reset() {
+	*x = ProbeResponse{}
+	mi := &file_clark_v1_auth_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProbeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProbeResponse) ProtoMessage() {}
+
+func (x *ProbeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_auth_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProbeResponse.ProtoReflect.Descriptor instead.
+func (*ProbeResponse) Descriptor() ([]byte, []int) {
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ProbeResponse) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *ProbeResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
 type LoginRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Username string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -35,7 +132,7 @@ type LoginRequest struct {
 
 func (x *LoginRequest) Reset() {
 	*x = LoginRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[0]
+	mi := &file_clark_v1_auth_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +144,7 @@ func (x *LoginRequest) String() string {
 func (*LoginRequest) ProtoMessage() {}
 
 func (x *LoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[0]
+	mi := &file_clark_v1_auth_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +157,7 @@ func (x *LoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginRequest.ProtoReflect.Descriptor instead.
 func (*LoginRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{0}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *LoginRequest) GetUsername() string {
@@ -96,7 +193,7 @@ type LoginResponse struct {
 
 func (x *LoginResponse) Reset() {
 	*x = LoginResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[1]
+	mi := &file_clark_v1_auth_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -108,7 +205,7 @@ func (x *LoginResponse) String() string {
 func (*LoginResponse) ProtoMessage() {}
 
 func (x *LoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[1]
+	mi := &file_clark_v1_auth_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -121,7 +218,7 @@ func (x *LoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResponse.ProtoReflect.Descriptor instead.
 func (*LoginResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{1}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *LoginResponse) GetSessionToken() string {
@@ -153,7 +250,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[2]
+	mi := &file_clark_v1_auth_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +262,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[2]
+	mi := &file_clark_v1_auth_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +275,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{2}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{4}
 }
 
 type LogoutResponse struct {
@@ -189,7 +286,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[3]
+	mi := &file_clark_v1_auth_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -201,7 +298,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[3]
+	mi := &file_clark_v1_auth_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -214,7 +311,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{3}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{5}
 }
 
 type WhoAmIRequest struct {
@@ -225,7 +322,7 @@ type WhoAmIRequest struct {
 
 func (x *WhoAmIRequest) Reset() {
 	*x = WhoAmIRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[4]
+	mi := &file_clark_v1_auth_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -237,7 +334,7 @@ func (x *WhoAmIRequest) String() string {
 func (*WhoAmIRequest) ProtoMessage() {}
 
 func (x *WhoAmIRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[4]
+	mi := &file_clark_v1_auth_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -250,7 +347,7 @@ func (x *WhoAmIRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhoAmIRequest.ProtoReflect.Descriptor instead.
 func (*WhoAmIRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{4}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{6}
 }
 
 type WhoAmIResponse struct {
@@ -262,7 +359,7 @@ type WhoAmIResponse struct {
 
 func (x *WhoAmIResponse) Reset() {
 	*x = WhoAmIResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[5]
+	mi := &file_clark_v1_auth_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -274,7 +371,7 @@ func (x *WhoAmIResponse) String() string {
 func (*WhoAmIResponse) ProtoMessage() {}
 
 func (x *WhoAmIResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[5]
+	mi := &file_clark_v1_auth_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -287,7 +384,7 @@ func (x *WhoAmIResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhoAmIResponse.ProtoReflect.Descriptor instead.
 func (*WhoAmIResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{5}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WhoAmIResponse) GetUser() *User {
@@ -307,7 +404,7 @@ type ChangePasswordRequest struct {
 
 func (x *ChangePasswordRequest) Reset() {
 	*x = ChangePasswordRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[6]
+	mi := &file_clark_v1_auth_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +416,7 @@ func (x *ChangePasswordRequest) String() string {
 func (*ChangePasswordRequest) ProtoMessage() {}
 
 func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[6]
+	mi := &file_clark_v1_auth_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +429,7 @@ func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordRequest.ProtoReflect.Descriptor instead.
 func (*ChangePasswordRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{6}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ChangePasswordRequest) GetOldPassword() string {
@@ -357,7 +454,7 @@ type ChangePasswordResponse struct {
 
 func (x *ChangePasswordResponse) Reset() {
 	*x = ChangePasswordResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[7]
+	mi := &file_clark_v1_auth_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +466,7 @@ func (x *ChangePasswordResponse) String() string {
 func (*ChangePasswordResponse) ProtoMessage() {}
 
 func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[7]
+	mi := &file_clark_v1_auth_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +479,7 @@ func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordResponse.ProtoReflect.Descriptor instead.
 func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{7}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{9}
 }
 
 type CreateUserRequest struct {
@@ -397,7 +494,7 @@ type CreateUserRequest struct {
 
 func (x *CreateUserRequest) Reset() {
 	*x = CreateUserRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[8]
+	mi := &file_clark_v1_auth_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -409,7 +506,7 @@ func (x *CreateUserRequest) String() string {
 func (*CreateUserRequest) ProtoMessage() {}
 
 func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[8]
+	mi := &file_clark_v1_auth_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -422,7 +519,7 @@ func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserRequest.ProtoReflect.Descriptor instead.
 func (*CreateUserRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{8}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateUserRequest) GetUsername() string {
@@ -462,7 +559,7 @@ type CreateUserResponse struct {
 
 func (x *CreateUserResponse) Reset() {
 	*x = CreateUserResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[9]
+	mi := &file_clark_v1_auth_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +571,7 @@ func (x *CreateUserResponse) String() string {
 func (*CreateUserResponse) ProtoMessage() {}
 
 func (x *CreateUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[9]
+	mi := &file_clark_v1_auth_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +584,7 @@ func (x *CreateUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserResponse.ProtoReflect.Descriptor instead.
 func (*CreateUserResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{9}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateUserResponse) GetUser() *User {
@@ -505,7 +602,7 @@ type ListUsersRequest struct {
 
 func (x *ListUsersRequest) Reset() {
 	*x = ListUsersRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[10]
+	mi := &file_clark_v1_auth_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -517,7 +614,7 @@ func (x *ListUsersRequest) String() string {
 func (*ListUsersRequest) ProtoMessage() {}
 
 func (x *ListUsersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[10]
+	mi := &file_clark_v1_auth_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -530,7 +627,7 @@ func (x *ListUsersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsersRequest.ProtoReflect.Descriptor instead.
 func (*ListUsersRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{10}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{12}
 }
 
 type ListUsersResponse struct {
@@ -542,7 +639,7 @@ type ListUsersResponse struct {
 
 func (x *ListUsersResponse) Reset() {
 	*x = ListUsersResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[11]
+	mi := &file_clark_v1_auth_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -554,7 +651,7 @@ func (x *ListUsersResponse) String() string {
 func (*ListUsersResponse) ProtoMessage() {}
 
 func (x *ListUsersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[11]
+	mi := &file_clark_v1_auth_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -567,7 +664,7 @@ func (x *ListUsersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsersResponse.ProtoReflect.Descriptor instead.
 func (*ListUsersResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{11}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListUsersResponse) GetUsers() []*User {
@@ -586,7 +683,7 @@ type GetUserRequest struct {
 
 func (x *GetUserRequest) Reset() {
 	*x = GetUserRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[12]
+	mi := &file_clark_v1_auth_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +695,7 @@ func (x *GetUserRequest) String() string {
 func (*GetUserRequest) ProtoMessage() {}
 
 func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[12]
+	mi := &file_clark_v1_auth_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +708,7 @@ func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRequest.ProtoReflect.Descriptor instead.
 func (*GetUserRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{12}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetUserRequest) GetId() string {
@@ -630,7 +727,7 @@ type GetUserResponse struct {
 
 func (x *GetUserResponse) Reset() {
 	*x = GetUserResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[13]
+	mi := &file_clark_v1_auth_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +739,7 @@ func (x *GetUserResponse) String() string {
 func (*GetUserResponse) ProtoMessage() {}
 
 func (x *GetUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[13]
+	mi := &file_clark_v1_auth_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +752,7 @@ func (x *GetUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserResponse.ProtoReflect.Descriptor instead.
 func (*GetUserResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{13}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetUserResponse) GetUser() *User {
@@ -678,7 +775,7 @@ type UpdateUserRequest struct {
 
 func (x *UpdateUserRequest) Reset() {
 	*x = UpdateUserRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[14]
+	mi := &file_clark_v1_auth_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -690,7 +787,7 @@ func (x *UpdateUserRequest) String() string {
 func (*UpdateUserRequest) ProtoMessage() {}
 
 func (x *UpdateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[14]
+	mi := &file_clark_v1_auth_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -703,7 +800,7 @@ func (x *UpdateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateUserRequest.ProtoReflect.Descriptor instead.
 func (*UpdateUserRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{14}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpdateUserRequest) GetId() string {
@@ -743,7 +840,7 @@ type UpdateUserResponse struct {
 
 func (x *UpdateUserResponse) Reset() {
 	*x = UpdateUserResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[15]
+	mi := &file_clark_v1_auth_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +852,7 @@ func (x *UpdateUserResponse) String() string {
 func (*UpdateUserResponse) ProtoMessage() {}
 
 func (x *UpdateUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[15]
+	mi := &file_clark_v1_auth_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +865,7 @@ func (x *UpdateUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateUserResponse.ProtoReflect.Descriptor instead.
 func (*UpdateUserResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{15}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *UpdateUserResponse) GetUser() *User {
@@ -787,7 +884,7 @@ type DeleteUserRequest struct {
 
 func (x *DeleteUserRequest) Reset() {
 	*x = DeleteUserRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[16]
+	mi := &file_clark_v1_auth_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -799,7 +896,7 @@ func (x *DeleteUserRequest) String() string {
 func (*DeleteUserRequest) ProtoMessage() {}
 
 func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[16]
+	mi := &file_clark_v1_auth_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -812,7 +909,7 @@ func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
 func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{16}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeleteUserRequest) GetId() string {
@@ -830,7 +927,7 @@ type DeleteUserResponse struct {
 
 func (x *DeleteUserResponse) Reset() {
 	*x = DeleteUserResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[17]
+	mi := &file_clark_v1_auth_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +939,7 @@ func (x *DeleteUserResponse) String() string {
 func (*DeleteUserResponse) ProtoMessage() {}
 
 func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[17]
+	mi := &file_clark_v1_auth_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +952,7 @@ func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteUserResponse.ProtoReflect.Descriptor instead.
 func (*DeleteUserResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{17}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{19}
 }
 
 type AdminResetPasswordRequest struct {
@@ -868,7 +965,7 @@ type AdminResetPasswordRequest struct {
 
 func (x *AdminResetPasswordRequest) Reset() {
 	*x = AdminResetPasswordRequest{}
-	mi := &file_clark_v1_auth_proto_msgTypes[18]
+	mi := &file_clark_v1_auth_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -880,7 +977,7 @@ func (x *AdminResetPasswordRequest) String() string {
 func (*AdminResetPasswordRequest) ProtoMessage() {}
 
 func (x *AdminResetPasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[18]
+	mi := &file_clark_v1_auth_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -893,7 +990,7 @@ func (x *AdminResetPasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminResetPasswordRequest.ProtoReflect.Descriptor instead.
 func (*AdminResetPasswordRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{18}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AdminResetPasswordRequest) GetUserId() string {
@@ -918,7 +1015,7 @@ type AdminResetPasswordResponse struct {
 
 func (x *AdminResetPasswordResponse) Reset() {
 	*x = AdminResetPasswordResponse{}
-	mi := &file_clark_v1_auth_proto_msgTypes[19]
+	mi := &file_clark_v1_auth_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1027,7 @@ func (x *AdminResetPasswordResponse) String() string {
 func (*AdminResetPasswordResponse) ProtoMessage() {}
 
 func (x *AdminResetPasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_auth_proto_msgTypes[19]
+	mi := &file_clark_v1_auth_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,14 +1040,18 @@ func (x *AdminResetPasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminResetPasswordResponse.ProtoReflect.Descriptor instead.
 func (*AdminResetPasswordResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_auth_proto_rawDescGZIP(), []int{19}
+	return file_clark_v1_auth_proto_rawDescGZIP(), []int{21}
 }
 
 var File_clark_v1_auth_proto protoreflect.FileDescriptor
 
 const file_clark_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x13clark/v1/auth.proto\x12\bclark.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14clark/v1/types.proto\"\x7f\n" +
+	"\x13clark/v1/auth.proto\x12\bclark.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14clark/v1/types.proto\"\x0e\n" +
+	"\fProbeRequest\"A\n" +
+	"\rProbeResponse\x12\x16\n" +
+	"\x06server\x18\x01 \x01(\tR\x06server\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\x7f\n" +
 	"\fLoginRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12&\n" +
@@ -1000,8 +1101,9 @@ const file_clark_v1_auth_proto_rawDesc = "" +
 	"\x19AdminResetPasswordRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x1c\n" +
-	"\x1aAdminResetPasswordResponse2\xd8\x05\n" +
+	"\x1aAdminResetPasswordResponse2\x92\x06\n" +
 	"\vAuthService\x128\n" +
+	"\x05Probe\x12\x16.clark.v1.ProbeRequest\x1a\x17.clark.v1.ProbeResponse\x128\n" +
 	"\x05Login\x12\x16.clark.v1.LoginRequest\x1a\x17.clark.v1.LoginResponse\x12;\n" +
 	"\x06Logout\x12\x17.clark.v1.LogoutRequest\x1a\x18.clark.v1.LogoutResponse\x12;\n" +
 	"\x06WhoAmI\x12\x17.clark.v1.WhoAmIRequest\x1a\x18.clark.v1.WhoAmIResponse\x12S\n" +
@@ -1028,61 +1130,65 @@ func file_clark_v1_auth_proto_rawDescGZIP() []byte {
 	return file_clark_v1_auth_proto_rawDescData
 }
 
-var file_clark_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_clark_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_clark_v1_auth_proto_goTypes = []any{
-	(*LoginRequest)(nil),               // 0: clark.v1.LoginRequest
-	(*LoginResponse)(nil),              // 1: clark.v1.LoginResponse
-	(*LogoutRequest)(nil),              // 2: clark.v1.LogoutRequest
-	(*LogoutResponse)(nil),             // 3: clark.v1.LogoutResponse
-	(*WhoAmIRequest)(nil),              // 4: clark.v1.WhoAmIRequest
-	(*WhoAmIResponse)(nil),             // 5: clark.v1.WhoAmIResponse
-	(*ChangePasswordRequest)(nil),      // 6: clark.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil),     // 7: clark.v1.ChangePasswordResponse
-	(*CreateUserRequest)(nil),          // 8: clark.v1.CreateUserRequest
-	(*CreateUserResponse)(nil),         // 9: clark.v1.CreateUserResponse
-	(*ListUsersRequest)(nil),           // 10: clark.v1.ListUsersRequest
-	(*ListUsersResponse)(nil),          // 11: clark.v1.ListUsersResponse
-	(*GetUserRequest)(nil),             // 12: clark.v1.GetUserRequest
-	(*GetUserResponse)(nil),            // 13: clark.v1.GetUserResponse
-	(*UpdateUserRequest)(nil),          // 14: clark.v1.UpdateUserRequest
-	(*UpdateUserResponse)(nil),         // 15: clark.v1.UpdateUserResponse
-	(*DeleteUserRequest)(nil),          // 16: clark.v1.DeleteUserRequest
-	(*DeleteUserResponse)(nil),         // 17: clark.v1.DeleteUserResponse
-	(*AdminResetPasswordRequest)(nil),  // 18: clark.v1.AdminResetPasswordRequest
-	(*AdminResetPasswordResponse)(nil), // 19: clark.v1.AdminResetPasswordResponse
-	(*timestamppb.Timestamp)(nil),      // 20: google.protobuf.Timestamp
-	(*User)(nil),                       // 21: clark.v1.User
+	(*ProbeRequest)(nil),               // 0: clark.v1.ProbeRequest
+	(*ProbeResponse)(nil),              // 1: clark.v1.ProbeResponse
+	(*LoginRequest)(nil),               // 2: clark.v1.LoginRequest
+	(*LoginResponse)(nil),              // 3: clark.v1.LoginResponse
+	(*LogoutRequest)(nil),              // 4: clark.v1.LogoutRequest
+	(*LogoutResponse)(nil),             // 5: clark.v1.LogoutResponse
+	(*WhoAmIRequest)(nil),              // 6: clark.v1.WhoAmIRequest
+	(*WhoAmIResponse)(nil),             // 7: clark.v1.WhoAmIResponse
+	(*ChangePasswordRequest)(nil),      // 8: clark.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),     // 9: clark.v1.ChangePasswordResponse
+	(*CreateUserRequest)(nil),          // 10: clark.v1.CreateUserRequest
+	(*CreateUserResponse)(nil),         // 11: clark.v1.CreateUserResponse
+	(*ListUsersRequest)(nil),           // 12: clark.v1.ListUsersRequest
+	(*ListUsersResponse)(nil),          // 13: clark.v1.ListUsersResponse
+	(*GetUserRequest)(nil),             // 14: clark.v1.GetUserRequest
+	(*GetUserResponse)(nil),            // 15: clark.v1.GetUserResponse
+	(*UpdateUserRequest)(nil),          // 16: clark.v1.UpdateUserRequest
+	(*UpdateUserResponse)(nil),         // 17: clark.v1.UpdateUserResponse
+	(*DeleteUserRequest)(nil),          // 18: clark.v1.DeleteUserRequest
+	(*DeleteUserResponse)(nil),         // 19: clark.v1.DeleteUserResponse
+	(*AdminResetPasswordRequest)(nil),  // 20: clark.v1.AdminResetPasswordRequest
+	(*AdminResetPasswordResponse)(nil), // 21: clark.v1.AdminResetPasswordResponse
+	(*timestamppb.Timestamp)(nil),      // 22: google.protobuf.Timestamp
+	(*User)(nil),                       // 23: clark.v1.User
 }
 var file_clark_v1_auth_proto_depIdxs = []int32{
-	20, // 0: clark.v1.LoginResponse.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 1: clark.v1.LoginResponse.user:type_name -> clark.v1.User
-	21, // 2: clark.v1.WhoAmIResponse.user:type_name -> clark.v1.User
-	21, // 3: clark.v1.CreateUserResponse.user:type_name -> clark.v1.User
-	21, // 4: clark.v1.ListUsersResponse.users:type_name -> clark.v1.User
-	21, // 5: clark.v1.GetUserResponse.user:type_name -> clark.v1.User
-	21, // 6: clark.v1.UpdateUserResponse.user:type_name -> clark.v1.User
-	0,  // 7: clark.v1.AuthService.Login:input_type -> clark.v1.LoginRequest
-	2,  // 8: clark.v1.AuthService.Logout:input_type -> clark.v1.LogoutRequest
-	4,  // 9: clark.v1.AuthService.WhoAmI:input_type -> clark.v1.WhoAmIRequest
-	6,  // 10: clark.v1.AuthService.ChangePassword:input_type -> clark.v1.ChangePasswordRequest
-	8,  // 11: clark.v1.AuthService.CreateUser:input_type -> clark.v1.CreateUserRequest
-	10, // 12: clark.v1.AuthService.ListUsers:input_type -> clark.v1.ListUsersRequest
-	12, // 13: clark.v1.AuthService.GetUser:input_type -> clark.v1.GetUserRequest
-	14, // 14: clark.v1.AuthService.UpdateUser:input_type -> clark.v1.UpdateUserRequest
-	16, // 15: clark.v1.AuthService.DeleteUser:input_type -> clark.v1.DeleteUserRequest
-	18, // 16: clark.v1.AuthService.AdminResetPassword:input_type -> clark.v1.AdminResetPasswordRequest
-	1,  // 17: clark.v1.AuthService.Login:output_type -> clark.v1.LoginResponse
-	3,  // 18: clark.v1.AuthService.Logout:output_type -> clark.v1.LogoutResponse
-	5,  // 19: clark.v1.AuthService.WhoAmI:output_type -> clark.v1.WhoAmIResponse
-	7,  // 20: clark.v1.AuthService.ChangePassword:output_type -> clark.v1.ChangePasswordResponse
-	9,  // 21: clark.v1.AuthService.CreateUser:output_type -> clark.v1.CreateUserResponse
-	11, // 22: clark.v1.AuthService.ListUsers:output_type -> clark.v1.ListUsersResponse
-	13, // 23: clark.v1.AuthService.GetUser:output_type -> clark.v1.GetUserResponse
-	15, // 24: clark.v1.AuthService.UpdateUser:output_type -> clark.v1.UpdateUserResponse
-	17, // 25: clark.v1.AuthService.DeleteUser:output_type -> clark.v1.DeleteUserResponse
-	19, // 26: clark.v1.AuthService.AdminResetPassword:output_type -> clark.v1.AdminResetPasswordResponse
-	17, // [17:27] is the sub-list for method output_type
-	7,  // [7:17] is the sub-list for method input_type
+	22, // 0: clark.v1.LoginResponse.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 1: clark.v1.LoginResponse.user:type_name -> clark.v1.User
+	23, // 2: clark.v1.WhoAmIResponse.user:type_name -> clark.v1.User
+	23, // 3: clark.v1.CreateUserResponse.user:type_name -> clark.v1.User
+	23, // 4: clark.v1.ListUsersResponse.users:type_name -> clark.v1.User
+	23, // 5: clark.v1.GetUserResponse.user:type_name -> clark.v1.User
+	23, // 6: clark.v1.UpdateUserResponse.user:type_name -> clark.v1.User
+	0,  // 7: clark.v1.AuthService.Probe:input_type -> clark.v1.ProbeRequest
+	2,  // 8: clark.v1.AuthService.Login:input_type -> clark.v1.LoginRequest
+	4,  // 9: clark.v1.AuthService.Logout:input_type -> clark.v1.LogoutRequest
+	6,  // 10: clark.v1.AuthService.WhoAmI:input_type -> clark.v1.WhoAmIRequest
+	8,  // 11: clark.v1.AuthService.ChangePassword:input_type -> clark.v1.ChangePasswordRequest
+	10, // 12: clark.v1.AuthService.CreateUser:input_type -> clark.v1.CreateUserRequest
+	12, // 13: clark.v1.AuthService.ListUsers:input_type -> clark.v1.ListUsersRequest
+	14, // 14: clark.v1.AuthService.GetUser:input_type -> clark.v1.GetUserRequest
+	16, // 15: clark.v1.AuthService.UpdateUser:input_type -> clark.v1.UpdateUserRequest
+	18, // 16: clark.v1.AuthService.DeleteUser:input_type -> clark.v1.DeleteUserRequest
+	20, // 17: clark.v1.AuthService.AdminResetPassword:input_type -> clark.v1.AdminResetPasswordRequest
+	1,  // 18: clark.v1.AuthService.Probe:output_type -> clark.v1.ProbeResponse
+	3,  // 19: clark.v1.AuthService.Login:output_type -> clark.v1.LoginResponse
+	5,  // 20: clark.v1.AuthService.Logout:output_type -> clark.v1.LogoutResponse
+	7,  // 21: clark.v1.AuthService.WhoAmI:output_type -> clark.v1.WhoAmIResponse
+	9,  // 22: clark.v1.AuthService.ChangePassword:output_type -> clark.v1.ChangePasswordResponse
+	11, // 23: clark.v1.AuthService.CreateUser:output_type -> clark.v1.CreateUserResponse
+	13, // 24: clark.v1.AuthService.ListUsers:output_type -> clark.v1.ListUsersResponse
+	15, // 25: clark.v1.AuthService.GetUser:output_type -> clark.v1.GetUserResponse
+	17, // 26: clark.v1.AuthService.UpdateUser:output_type -> clark.v1.UpdateUserResponse
+	19, // 27: clark.v1.AuthService.DeleteUser:output_type -> clark.v1.DeleteUserResponse
+	21, // 28: clark.v1.AuthService.AdminResetPassword:output_type -> clark.v1.AdminResetPasswordResponse
+	18, // [18:29] is the sub-list for method output_type
+	7,  // [7:18] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -1094,16 +1200,16 @@ func file_clark_v1_auth_proto_init() {
 		return
 	}
 	file_clark_v1_types_proto_init()
-	file_clark_v1_auth_proto_msgTypes[0].OneofWrappers = []any{}
-	file_clark_v1_auth_proto_msgTypes[8].OneofWrappers = []any{}
-	file_clark_v1_auth_proto_msgTypes[14].OneofWrappers = []any{}
+	file_clark_v1_auth_proto_msgTypes[2].OneofWrappers = []any{}
+	file_clark_v1_auth_proto_msgTypes[10].OneofWrappers = []any{}
+	file_clark_v1_auth_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_clark_v1_auth_proto_rawDesc), len(file_clark_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
