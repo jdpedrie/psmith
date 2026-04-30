@@ -33,9 +33,19 @@ let package = Package(
             ],
             path: "Sources/ClarkUI"
         ),
+        // Test harness — non-test target so multiple test targets can share it.
+        // Hosts TestClarkdServer (boots a local clarkd subprocess against an
+        // isolated database), TestSession (fresh-user helper), FakeProvider
+        // (embedded mock OpenAI-compatible upstream), and Fixtures (canned
+        // ClarkProfilePatch / ClarkProfilePlugin builders).
+        .target(
+            name: "ClarkKitTestHarness",
+            dependencies: ["ClarkKit"],
+            path: "Tests/Harness"
+        ),
         .testTarget(
             name: "ClarkKitTests",
-            dependencies: ["ClarkKit"],
+            dependencies: ["ClarkKit", "ClarkKitTestHarness"],
             path: "Tests/ClarkKitTests"
         ),
     ]

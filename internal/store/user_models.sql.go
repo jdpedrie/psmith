@@ -170,6 +170,27 @@ func (q *Queries) SetUserModelFavorite(ctx context.Context, arg SetUserModelFavo
 	return err
 }
 
+const updateUserModelDefaultSettings = `-- name: UpdateUserModelDefaultSettings :exec
+UPDATE user_models
+SET default_settings = $3, metadata_snapshot_at = NOW()
+WHERE user_model_provider_id = $1 AND model_id = $2
+`
+
+type UpdateUserModelDefaultSettingsParams struct {
+	UserModelProviderID uuid.UUID
+	ModelID             string
+	DefaultSettings     []byte
+}
+
+// Replaces (not merges) the per-model default_settings JSONB blob. NULL
+// clears it. metadata_snapshot_at is bumped so consumers polling for row
+// changes notice the update — the row's metadata identity hasn't changed,
+// but its effective behavior has.
+func (q *Queries) UpdateUserModelDefaultSettings(ctx context.Context, arg UpdateUserModelDefaultSettingsParams) error {
+	_, err := q.db.Exec(ctx, updateUserModelDefaultSettings, arg.UserModelProviderID, arg.ModelID, arg.DefaultSettings)
+	return err
+}
+
 const upsertUserModel = `-- name: UpsertUserModel :one
 INSERT INTO user_models (
     user_model_provider_id, model_id, display_name,

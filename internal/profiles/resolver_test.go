@@ -2,11 +2,13 @@ package profiles
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 
+	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
 	"github.com/jdpedrie/clark/internal/store"
 )
 
@@ -314,5 +316,149 @@ func TestResolve_FirstNonNullWins_OverThreeLevels(t *testing.T) {
 	}
 	if got.SystemMessage == nil || *got.SystemMessage != "from-leaf" {
 		t.Errorf("expected leaf's system_message to win: %+v", got.SystemMessage)
+	}
+}
+
+// --- default_settings.call_settings parent-chain inheritance --------------
+
+// withCallSettingsBlob writes a default_settings JSONB blob carrying just
+// the call_settings sub-object. Other defaultsStorage fields stay unset.
+func withCallSettingsBlob(t *testing.T, p store.Profile, cs *clarkv1.CallSettings) store.Profile {
+	t.Helper()
+	raw, err := MarshalCallSettings(cs)
+	if err != nil {
+		t.Fatalf("MarshalCallSettings: %v", err)
+	}
+	wrapper := struct {
+		CallSettings json.RawMessage `json:"call_settings"`
+	}{CallSettings: raw}
+	blob, err := json.Marshal(wrapper)
+	if err != nil {
+		t.Fatalf("marshal wrapper: %v", err)
+	}
+	p.DefaultSettings = blob
+	return p
+}
+
+// callSettingsFromResolved decodes the call_settings sub-object out of a
+// resolved profile's default_settings — same shape Resolve produces after
+// re-encoding the merged result.
+func callSettingsFromResolved(t *testing.T, p store.Profile) *clarkv1.CallSettings {
+	t.Helper()
+	if len(p.DefaultSettings) == 0 {
+		return nil
+	}
+	var s struct {
+		CallSettings json.RawMessage `json:"call_settings,omitempty"`
+	}
+	if err := json.Unmarshal(p.DefaultSettings, &s); err != nil {
+		t.Fatalf("decode resolved default_settings: %v", err)
+	}
+	if len(s.CallSettings) == 0 {
+		return nil
+	}
+	cs, err := UnmarshalCallSettings(s.CallSettings)
+	if err != nil {
+		t.Fatalf("UnmarshalCallSettings: %v", err)
+	}
+	return cs
+}
+
+func TestResolve_CallSettings_ChildOverridesParentPerField(t *testing.T) {
+	t.Parallel()
+
+	// Parent sets temperature + top_p; child sets temperature only.
+	// Resolved should combine: child's temperature, parent's top_p.
+	parent := makeProfile("parent", nil)
+	parent = withCallSettingsBlob(t, parent, &clarkv1.CallSettings{
+		Temperature: f64(0.2),
+		TopP:        f64(0.85),
+	})
+
+	child := makeProfile("child", &parent.ID)
+	child = withCallSettingsBlob(t, child, &clarkv1.CallSettings{
+		Temperature: f64(0.7),
+	})
+
+	got, err := Resolve(context.Background(), newLoader(parent, child), child)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	cs := callSettingsFromResolved(t, got)
+	if cs == nil {
+		t.Fatal("expected resolved call_settings, got nil")
+	}
+	if cs.GetTemperature() != 0.7 {
+		t.Errorf("temperature: %v want 0.7 (child)", cs.GetTemperature())
+	}
+	if cs.GetTopP() != 0.85 {
+		t.Errorf("top_p: %v want 0.85 (parent)", cs.GetTopP())
+	}
+}
+
+func TestResolve_CallSettings_ChainAcrossThreeLevels(t *testing.T) {
+	t.Parallel()
+
+	// Grandparent: top_k. Mid: nothing. Leaf: temperature.
+	// Resolved leaf should carry leaf's temperature + grandparent's top_k,
+	// inherited through the silent middle layer.
+	gp := makeProfile("gp", nil)
+	gp = withCallSettingsBlob(t, gp, &clarkv1.CallSettings{
+		TopK: i32(40),
+	})
+
+	mid := makeProfile("mid", &gp.ID)
+	// mid has no default_settings at all.
+
+	leaf := makeProfile("leaf", &mid.ID)
+	leaf = withCallSettingsBlob(t, leaf, &clarkv1.CallSettings{
+		Temperature: f64(0.9),
+	})
+
+	got, err := Resolve(context.Background(), newLoader(gp, mid, leaf), leaf)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	cs := callSettingsFromResolved(t, got)
+	if cs == nil {
+		t.Fatal("expected resolved call_settings, got nil")
+	}
+	if cs.GetTemperature() != 0.9 {
+		t.Errorf("temperature: %v want 0.9 (leaf)", cs.GetTemperature())
+	}
+	if cs.GetTopK() != 40 {
+		t.Errorf("top_k: %v want 40 (gp)", cs.GetTopK())
+	}
+}
+
+func TestResolve_CallSettings_NestedThinkingMergesAcrossChain(t *testing.T) {
+	t.Parallel()
+
+	// Parent: thinking enabled with budget=2000. Child: thinking budget
+	// override only (no enabled flag). Resolved: enabled=true (parent),
+	// budget=8000 (child).
+	parent := makeProfile("parent", nil)
+	parent = withCallSettingsBlob(t, parent, &clarkv1.CallSettings{
+		Thinking: &clarkv1.ThinkingSettings{Enabled: boolPtr(true), BudgetTokens: i32(2000)},
+	})
+
+	child := makeProfile("child", &parent.ID)
+	child = withCallSettingsBlob(t, child, &clarkv1.CallSettings{
+		Thinking: &clarkv1.ThinkingSettings{BudgetTokens: i32(8000)},
+	})
+
+	got, err := Resolve(context.Background(), newLoader(parent, child), child)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	cs := callSettingsFromResolved(t, got)
+	if cs == nil || cs.GetThinking() == nil {
+		t.Fatal("expected resolved thinking, got nil")
+	}
+	if !cs.GetThinking().GetEnabled() {
+		t.Error("thinking.enabled: should inherit true from parent")
+	}
+	if cs.GetThinking().GetBudgetTokens() != 8000 {
+		t.Errorf("thinking.budget_tokens: %v want 8000 (child)", cs.GetThinking().GetBudgetTokens())
 	}
 }

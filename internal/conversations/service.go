@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
@@ -205,11 +206,68 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[c
 func (s *Service) ListConversations(ctx context.Context, req *connect.Request[clarkv1.ListConversationsRequest]) (*connect.Response[clarkv1.ListConversationsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
-	// page_token is documented as ignored for v1 — all rows fit in one page.
-	// page_size is honored as a cap (clamped to MaxListPageSize).
-	rows, err := s.queries.ListConversationsByUser(ctx, caller.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	var titleQuery *string
+	if q := strings.TrimSpace(req.Msg.GetTitleQuery()); q != "" {
+		titleQuery = &q
+	}
+	var profileFilter *uuid.UUID
+	if pid := req.Msg.GetProfileId(); pid != "" {
+		parsed, err := uuid.Parse(pid)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid profile_id: %w", err))
+		}
+		profileFilter = &parsed
+	}
+
+	// Two SQL queries (one ordered by created_at, one by computed
+	// last_activity_at) — sqlc doesn't support dynamic ORDER BY. Both share
+	// the same filter shape, so we just pick which to call.
+	type row struct {
+		Conversation   store.Conversation
+		LastActivityAt time.Time
+	}
+	var rows []row
+	switch req.Msg.GetOrder() {
+	case clarkv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
+		raw, err := s.queries.ListConversationsByUserRecentlyCreated(ctx, store.ListConversationsByUserRecentlyCreatedParams{
+			UserID:     caller.ID,
+			TitleQuery: titleQuery,
+			ProfileID:  profileFilter,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		rows = make([]row, len(raw))
+		for i, r := range raw {
+			rows[i] = row{
+				Conversation: store.Conversation{
+					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
+					Title: r.Title, Settings: r.Settings,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				},
+				LastActivityAt: r.LastActivityAt,
+			}
+		}
+	default: // UNSPECIFIED or RECENTLY_USED
+		raw, err := s.queries.ListConversationsByUserRecentlyUsed(ctx, store.ListConversationsByUserRecentlyUsedParams{
+			UserID:     caller.ID,
+			TitleQuery: titleQuery,
+			ProfileID:  profileFilter,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		rows = make([]row, len(raw))
+		for i, r := range raw {
+			rows[i] = row{
+				Conversation: store.Conversation{
+					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
+					Title: r.Title, Settings: r.Settings,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+				},
+				LastActivityAt: r.LastActivityAt,
+			}
+		}
 	}
 
 	limit := int(req.Msg.PageSize)
@@ -225,7 +283,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[cl
 		// active_context_id is left empty in list responses — clients can
 		// fetch the full conversation via GetConversation when they need it.
 		// Avoids N+1 round trips on the list path.
-		p, err := conversationToProto(r, "")
+		p, err := conversationToProtoWithActivity(r.Conversation, "", r.LastActivityAt)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
@@ -808,8 +866,16 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
 	}
 
-	// Resolve effective call settings: defaults from the enabled model, overlaid by per-turn request settings.
-	callSettings := mergeCallSettings(decodeCallSettingsBytes(enabledModel.DefaultSettings), protoCallSettingsToProvider(req.Msg.CallSettings))
+	// Resolve effective call settings via the 4-layer chain (high precedence
+	// → low): conversation > resolved profile > model > provider. The
+	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat
+	// but is intentionally NOT merged in v1 — conversation-level granularity
+	// is enough; per-message overrides clutter the composer for marginal
+	// benefit. See the plan's "Resolution chain" section.
+	callSettings, err := s.assembleCallSettings(ctx, conv, providerID, modelID, enabledModel.DefaultSettings)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
+	}
 
 	// Detach the driver from the HTTP request context so the upstream stream
 	// outlives the request — the supervisor goroutine owns the consumption
@@ -817,9 +883,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 	// We keep the request ctx's values (auth, logging) via WithoutCancel.
 	driverCtx := context.WithoutCancel(ctx)
 	srcCh, err := stateless.Send(driverCtx, providers.SendRequest{
-		ModelID:  modelID,
-		Messages: wireMessages,
-		Settings: callSettings,
+		ModelID:        modelID,
+		Messages:       wireMessages,
+		Settings:       callSettings,
+		ConversationID: conv.ID.String(),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("driver send: %w", err))
@@ -1002,77 +1069,285 @@ func (s *Service) resolveParent(ctx context.Context, q *store.Queries, activeCtx
 // settings translation
 // ---------------------------------------------------------------------------
 
-// providerCallSettingsJSON mirrors providers.CallSettings JSON shape used by
-// modelproviders.encodeCallSettings, so we can decode user_models.default_settings.
-type providerCallSettingsJSON struct {
-	Temperature          *float64        `json:"temperature,omitempty"`
-	MaxOutputTokens      *int            `json:"max_output_tokens,omitempty"`
-	ThinkingEnabled      *bool           `json:"thinking_enabled,omitempty"`
-	ThinkingBudgetTokens *int32          `json:"thinking_budget_tokens,omitempty"`
-	Extras               json.RawMessage `json:"extras,omitempty"`
-}
-
-func decodeCallSettingsBytes(b []byte) providers.CallSettings {
+// decodeCallSettingsBytes decodes the JSONB blob persisted in
+// `user_models.default_settings` (the model layer of the resolution chain)
+// into a proto CallSettings. Returns nil for an empty/invalid blob — the
+// model layer contributes nothing in that case.
+func decodeCallSettingsBytes(b []byte) *clarkv1.CallSettings {
 	if len(b) == 0 {
-		return providers.CallSettings{}
+		return nil
 	}
-	var raw providerCallSettingsJSON
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return providers.CallSettings{}
+	cs, err := profiles.UnmarshalCallSettings(b)
+	if err != nil {
+		return nil
 	}
-	out := providers.CallSettings{
-		Temperature:     raw.Temperature,
-		MaxOutputTokens: raw.MaxOutputTokens,
-		ThinkingEnabled: raw.ThinkingEnabled,
-		Extras:          raw.Extras,
-	}
-	if raw.ThinkingBudgetTokens != nil {
-		v := int(*raw.ThinkingBudgetTokens)
-		out.ThinkingBudgetTokens = &v
-	}
-	return out
+	return cs
 }
 
+// loadProviderDefaultSettings loads the bottom-of-chain provider-level
+// CallSettings from `user_model_providers.default_settings`. Returns
+// (nil, nil) when the column is NULL — that layer contributes nothing.
+func (s *Service) loadProviderDefaultSettings(ctx context.Context, providerID uuid.UUID) (*clarkv1.CallSettings, error) {
+	prov, err := s.queries.GetUserModelProvider(ctx, providerID)
+	if err != nil {
+		return nil, fmt.Errorf("load provider %s: %w", providerID, err)
+	}
+	return decodeCallSettingsBytes(prov.DefaultSettings), nil
+}
+
+// assembleCallSettings sparse-merges the four layers of the resolution chain
+// in highest-precedence-first order:
+//
+//	conversation.settings.call_settings
+//	  > resolved_profile.default_settings.call_settings
+//	    > user_model.default_settings
+//	      > user_model_provider.default_settings
+//
+// Each layer's set fields override the layers below; unset fields fall
+// through. Returns the driver-side struct ready to ship via SendRequest.
+//
+// Implementation: load every layer's proto, then nest MergeCallSettings calls
+// from the bottom up so the precedence reads top-down at the call site.
+func (s *Service) assembleCallSettings(
+	ctx context.Context,
+	conv store.Conversation,
+	providerID uuid.UUID,
+	modelID string,
+	modelDefaultSettingsBytes []byte,
+) (providers.CallSettings, error) {
+	// Layer 4 (lowest precedence): provider.
+	providerCS, err := s.loadProviderDefaultSettings(ctx, providerID)
+	if err != nil {
+		return providers.CallSettings{}, err
+	}
+
+	// Layer 3: model. Already loaded by the caller; decode its blob.
+	modelCS := decodeCallSettingsBytes(modelDefaultSettingsBytes)
+
+	// Layer 2: resolved profile (with parent-chain inheritance baked into
+	// resolved.DefaultSettings.call_settings by profiles.Resolve).
+	profile, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
+	if err != nil {
+		return providers.CallSettings{}, fmt.Errorf("load profile: %w", err)
+	}
+	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	if err != nil {
+		return providers.CallSettings{}, fmt.Errorf("resolve profile: %w", err)
+	}
+	profileCS := extractProfileCallSettings(resolved.DefaultSettings)
+
+	// Layer 1 (highest precedence): conversation.
+	convCS := extractConversationCallSettings(conv.Settings)
+
+	// Merge bottom-up.
+	merged := profiles.MergeCallSettings(
+		convCS,
+		profiles.MergeCallSettings(
+			profileCS,
+			profiles.MergeCallSettings(modelCS, providerCS),
+		),
+	)
+	return protoCallSettingsToProvider(merged), nil
+}
+
+// extractProfileCallSettings pulls the call_settings sub-object out of a
+// profile's default_settings JSONB blob. Returns nil for an empty blob or
+// missing field — that layer contributes nothing to the merge.
+func extractProfileCallSettings(blob []byte) *clarkv1.CallSettings {
+	if len(blob) == 0 {
+		return nil
+	}
+	var s struct {
+		CallSettings json.RawMessage `json:"call_settings,omitempty"`
+	}
+	if err := json.Unmarshal(blob, &s); err != nil {
+		return nil
+	}
+	if len(s.CallSettings) == 0 {
+		return nil
+	}
+	cs, err := profiles.UnmarshalCallSettings(s.CallSettings)
+	if err != nil {
+		return nil
+	}
+	return cs
+}
+
+// extractConversationCallSettings pulls the call_settings sub-object out of a
+// conversation's settings JSONB blob. The blob is protojson-encoded
+// (see convert.go::settingsToJSON); we use the same decoder to honour
+// proto's optional-field presence rules.
+var conversationSettingsExtractUnmarshaller = protojson.UnmarshalOptions{DiscardUnknown: true}
+
+func extractConversationCallSettings(blob []byte) *clarkv1.CallSettings {
+	if len(blob) == 0 {
+		return nil
+	}
+	var settings clarkv1.ConversationSettings
+	if err := conversationSettingsExtractUnmarshaller.Unmarshal(blob, &settings); err != nil {
+		return nil
+	}
+	return settings.CallSettings
+}
+
+// protoCallSettingsToProvider converts a proto CallSettings (the wire/storage
+// shape) into the driver-side struct (what providers.SendRequest carries).
+// Drivers pluck whatever subset they support; the rest is silently dropped.
 func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings {
 	if s == nil {
 		return providers.CallSettings{}
 	}
 	out := providers.CallSettings{
-		Temperature:     s.Temperature,
-		ThinkingEnabled: s.ThinkingEnabled,
-		Extras:          s.Extras,
+		Temperature: s.Temperature,
+		TopP:        s.TopP,
 	}
 	if s.MaxOutputTokens != nil {
 		v := int(*s.MaxOutputTokens)
 		out.MaxOutputTokens = &v
 	}
-	if s.ThinkingBudgetTokens != nil {
-		v := int(*s.ThinkingBudgetTokens)
-		out.ThinkingBudgetTokens = &v
+	if s.TopK != nil {
+		v := int(*s.TopK)
+		out.TopK = &v
+	}
+	if len(s.StopSequences) > 0 {
+		out.StopSequences = append([]string(nil), s.StopSequences...)
+	}
+	if t := s.Thinking; t != nil {
+		ts := &providers.ThinkingSettings{Enabled: t.Enabled}
+		if t.BudgetTokens != nil {
+			v := int(*t.BudgetTokens)
+			ts.BudgetTokens = &v
+		}
+		out.Thinking = ts
+	}
+	if ae := s.Anthropic; ae != nil {
+		out.Anthropic = &providers.AnthropicExtras{
+			CacheEnabled: ae.CacheEnabled,
+			CacheTTL:     convertProtoCacheTTL(ae.CacheTtl),
+		}
+	}
+	if oe := s.Openai; oe != nil {
+		out.OpenAI = &providers.OpenAIExtras{
+			FrequencyPenalty:  oe.FrequencyPenalty,
+			PresencePenalty:   oe.PresencePenalty,
+			ParallelToolCalls: oe.ParallelToolCalls,
+		}
+		if oe.Seed != nil {
+			v := int(*oe.Seed)
+			out.OpenAI.Seed = &v
+		}
+		if oe.TopLogprobs != nil {
+			v := int(*oe.TopLogprobs)
+			out.OpenAI.TopLogprobs = &v
+		}
+		if oe.ServiceTier != nil {
+			v := convertProtoServiceTier(*oe.ServiceTier)
+			out.OpenAI.ServiceTier = &v
+		}
+		if oe.ResponseFormat != nil {
+			out.OpenAI.ResponseFormat = convertProtoResponseFormat(oe.ResponseFormat)
+		}
+		if len(oe.LogitBias) > 0 {
+			lb := make(map[int32]float64, len(oe.LogitBias))
+			for k, v := range oe.LogitBias {
+				lb[k] = v
+			}
+			out.OpenAI.LogitBias = lb
+		}
+	}
+	if ge := s.Google; ge != nil {
+		out.Google = &providers.GoogleExtras{
+			ResponseMimeType: ge.ResponseMimeType,
+		}
+		if ge.CandidateCount != nil {
+			v := int(*ge.CandidateCount)
+			out.Google.CandidateCount = &v
+		}
+		if len(ge.ResponseSchema) > 0 {
+			out.Google.ResponseSchema = append([]byte(nil), ge.ResponseSchema...)
+		}
+		if ge.SafetySettings != nil {
+			out.Google.SafetySettings = &providers.SafetySettings{
+				Harassment:       convertProtoHarmThreshold(ge.SafetySettings.Harassment),
+				HateSpeech:       convertProtoHarmThreshold(ge.SafetySettings.HateSpeech),
+				SexuallyExplicit: convertProtoHarmThreshold(ge.SafetySettings.SexuallyExplicit),
+				DangerousContent: convertProtoHarmThreshold(ge.SafetySettings.DangerousContent),
+			}
+		}
 	}
 	return out
 }
 
-// mergeCallSettings overlays per-turn settings on top of model defaults.
-// Per-turn fields win where set; unset per-turn fields fall through to defaults.
-func mergeCallSettings(defaults, override providers.CallSettings) providers.CallSettings {
-	out := defaults
-	if override.Temperature != nil {
-		out.Temperature = override.Temperature
+func convertProtoCacheTTL(in *clarkv1.CacheTTL) providers.CacheTTL {
+	if in == nil {
+		return providers.CacheTTLUnspecified
 	}
-	if override.MaxOutputTokens != nil {
-		out.MaxOutputTokens = override.MaxOutputTokens
+	switch *in {
+	case clarkv1.CacheTTL_CACHE_TTL_5M:
+		return providers.CacheTTL5m
+	case clarkv1.CacheTTL_CACHE_TTL_1H:
+		return providers.CacheTTL1h
 	}
-	if override.ThinkingEnabled != nil {
-		out.ThinkingEnabled = override.ThinkingEnabled
+	return providers.CacheTTLUnspecified
+}
+
+func convertProtoServiceTier(in clarkv1.ServiceTier) providers.ServiceTier {
+	switch in {
+	case clarkv1.ServiceTier_SERVICE_TIER_AUTO:
+		return providers.ServiceTierAuto
+	case clarkv1.ServiceTier_SERVICE_TIER_STANDARD:
+		return providers.ServiceTierStandard
+	case clarkv1.ServiceTier_SERVICE_TIER_PRIORITY:
+		return providers.ServiceTierPriority
 	}
-	if override.ThinkingBudgetTokens != nil {
-		out.ThinkingBudgetTokens = override.ThinkingBudgetTokens
+	return providers.ServiceTierUnspecified
+}
+
+func convertProtoResponseFormat(rf *clarkv1.ResponseFormat) *providers.ResponseFormat {
+	if rf == nil {
+		return nil
 	}
-	if len(override.Extras) > 0 {
-		out.Extras = override.Extras
+	out := &providers.ResponseFormat{}
+	switch k := rf.Kind.(type) {
+	case *clarkv1.ResponseFormat_Text:
+		v := k.Text
+		out.Text = &v
+	case *clarkv1.ResponseFormat_JsonObject:
+		v := k.JsonObject
+		out.JSONObject = &v
+	case *clarkv1.ResponseFormat_JsonSchema:
+		if k.JsonSchema != nil {
+			out.JSONSchema = &providers.JSONSchema{
+				Name:        k.JsonSchema.Name,
+				Description: k.JsonSchema.Description,
+				Strict:      k.JsonSchema.Strict,
+			}
+			if len(k.JsonSchema.Schema) > 0 {
+				out.JSONSchema.Schema = append([]byte(nil), k.JsonSchema.Schema...)
+			}
+		}
 	}
 	return out
+}
+
+func convertProtoHarmThreshold(in *clarkv1.HarmThreshold) *providers.HarmThreshold {
+	if in == nil {
+		return nil
+	}
+	var v providers.HarmThreshold
+	switch *in {
+	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE:
+		v = providers.HarmThresholdBlockNone
+	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE:
+		v = providers.HarmThresholdBlockLowAndAbove
+	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE:
+		v = providers.HarmThresholdBlockMediumAndAbove
+	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH:
+		v = providers.HarmThresholdBlockOnlyHigh
+	default:
+		v = providers.HarmThresholdUnspecified
+	}
+	return &v
 }
 
 // streamRunToProto converts a store.StreamRun to its proto shape.

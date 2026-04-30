@@ -72,6 +72,12 @@ const (
 	// ModelProvidersServiceToggleUserModelFavoriteProcedure is the fully-qualified name of the
 	// ModelProvidersService's ToggleUserModelFavorite RPC.
 	ModelProvidersServiceToggleUserModelFavoriteProcedure = "/clark.v1.ModelProvidersService/ToggleUserModelFavorite"
+	// ModelProvidersServiceUpdateUserModelProcedure is the fully-qualified name of the
+	// ModelProvidersService's UpdateUserModel RPC.
+	ModelProvidersServiceUpdateUserModelProcedure = "/clark.v1.ModelProvidersService/UpdateUserModel"
+	// ModelProvidersServiceAddManualModelProcedure is the fully-qualified name of the
+	// ModelProvidersService's AddManualModel RPC.
+	ModelProvidersServiceAddManualModelProcedure = "/clark.v1.ModelProvidersService/AddManualModel"
 	// ModelProvidersServiceTestUserModelProviderProcedure is the fully-qualified name of the
 	// ModelProvidersService's TestUserModelProvider RPC.
 	ModelProvidersServiceTestUserModelProviderProcedure = "/clark.v1.ModelProvidersService/TestUserModelProvider"
@@ -114,6 +120,17 @@ type ModelProvidersServiceClient interface {
 	// Toggle the favorite flag on a single user model. Identity metadata —
 	// surfaces the model in the FAVORITES section of the model picker.
 	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
+	// Mutate fields on an enabled user model. Currently only `default_settings`
+	// is writable (per-model default CallSettings layer). The model row must
+	// already exist (callers can't update a model they haven't enabled).
+	UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error)
+	// Add a manually-described model to a user provider. For models not in
+	// the catalog and not surfaced by driver discovery — e.g. private
+	// fine-tunes, renamed-but-real models, or anything served by an
+	// openai-compatible endpoint that doesn't list them via /v1/models. The
+	// resulting row carries `metadata_source = 'manual'`. Caller must own the
+	// provider; (provider_id, model_id) must not already exist.
+	AddManualModel(context.Context, *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error)
 	// Verifies a provider's auth + reachability by calling DiscoverModels.
 	// Free for all current drivers (catalog/Anthropic static, openai-compatible
 	// /v1/models). Failures are reported in the response (ok=false) rather than
@@ -218,6 +235,18 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(modelProvidersServiceMethods.ByName("ToggleUserModelFavorite")),
 			connect.WithClientOptions(opts...),
 		),
+		updateUserModel: connect.NewClient[v1.UpdateUserModelRequest, v1.UpdateUserModelResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceUpdateUserModelProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("UpdateUserModel")),
+			connect.WithClientOptions(opts...),
+		),
+		addManualModel: connect.NewClient[v1.AddManualModelRequest, v1.AddManualModelResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceAddManualModelProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("AddManualModel")),
+			connect.WithClientOptions(opts...),
+		),
 		testUserModelProvider: connect.NewClient[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse](
 			httpClient,
 			baseURL+ModelProvidersServiceTestUserModelProviderProcedure,
@@ -260,6 +289,8 @@ type modelProvidersServiceClient struct {
 	listUserModels          *connect.Client[v1.ListUserModelsRequest, v1.ListUserModelsResponse]
 	listAllUserModels       *connect.Client[v1.ListAllUserModelsRequest, v1.ListAllUserModelsResponse]
 	toggleUserModelFavorite *connect.Client[v1.ToggleUserModelFavoriteRequest, v1.ToggleUserModelFavoriteResponse]
+	updateUserModel         *connect.Client[v1.UpdateUserModelRequest, v1.UpdateUserModelResponse]
+	addManualModel          *connect.Client[v1.AddManualModelRequest, v1.AddManualModelResponse]
 	testUserModelProvider   *connect.Client[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse]
 	testUserModel           *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
 	refreshModelCatalog     *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
@@ -331,6 +362,16 @@ func (c *modelProvidersServiceClient) ToggleUserModelFavorite(ctx context.Contex
 	return c.toggleUserModelFavorite.CallUnary(ctx, req)
 }
 
+// UpdateUserModel calls clark.v1.ModelProvidersService.UpdateUserModel.
+func (c *modelProvidersServiceClient) UpdateUserModel(ctx context.Context, req *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error) {
+	return c.updateUserModel.CallUnary(ctx, req)
+}
+
+// AddManualModel calls clark.v1.ModelProvidersService.AddManualModel.
+func (c *modelProvidersServiceClient) AddManualModel(ctx context.Context, req *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error) {
+	return c.addManualModel.CallUnary(ctx, req)
+}
+
 // TestUserModelProvider calls clark.v1.ModelProvidersService.TestUserModelProvider.
 func (c *modelProvidersServiceClient) TestUserModelProvider(ctx context.Context, req *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error) {
 	return c.testUserModelProvider.CallUnary(ctx, req)
@@ -379,6 +420,17 @@ type ModelProvidersServiceHandler interface {
 	// Toggle the favorite flag on a single user model. Identity metadata —
 	// surfaces the model in the FAVORITES section of the model picker.
 	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
+	// Mutate fields on an enabled user model. Currently only `default_settings`
+	// is writable (per-model default CallSettings layer). The model row must
+	// already exist (callers can't update a model they haven't enabled).
+	UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error)
+	// Add a manually-described model to a user provider. For models not in
+	// the catalog and not surfaced by driver discovery — e.g. private
+	// fine-tunes, renamed-but-real models, or anything served by an
+	// openai-compatible endpoint that doesn't list them via /v1/models. The
+	// resulting row carries `metadata_source = 'manual'`. Caller must own the
+	// provider; (provider_id, model_id) must not already exist.
+	AddManualModel(context.Context, *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error)
 	// Verifies a provider's auth + reachability by calling DiscoverModels.
 	// Free for all current drivers (catalog/Anthropic static, openai-compatible
 	// /v1/models). Failures are reported in the response (ok=false) rather than
@@ -479,6 +531,18 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 		connect.WithSchema(modelProvidersServiceMethods.ByName("ToggleUserModelFavorite")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelProvidersServiceUpdateUserModelHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceUpdateUserModelProcedure,
+		svc.UpdateUserModel,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("UpdateUserModel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelProvidersServiceAddManualModelHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceAddManualModelProcedure,
+		svc.AddManualModel,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("AddManualModel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelProvidersServiceTestUserModelProviderHandler := connect.NewUnaryHandler(
 		ModelProvidersServiceTestUserModelProviderProcedure,
 		svc.TestUserModelProvider,
@@ -531,6 +595,10 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 			modelProvidersServiceListAllUserModelsHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceToggleUserModelFavoriteProcedure:
 			modelProvidersServiceToggleUserModelFavoriteHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceUpdateUserModelProcedure:
+			modelProvidersServiceUpdateUserModelHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceAddManualModelProcedure:
+			modelProvidersServiceAddManualModelHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceTestUserModelProviderProcedure:
 			modelProvidersServiceTestUserModelProviderHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceTestUserModelProcedure:
@@ -598,6 +666,14 @@ func (UnimplementedModelProvidersServiceHandler) ListAllUserModels(context.Conte
 
 func (UnimplementedModelProvidersServiceHandler) ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.ToggleUserModelFavorite is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.UpdateUserModel is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) AddManualModel(context.Context, *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("clark.v1.ModelProvidersService.AddManualModel is not implemented"))
 }
 
 func (UnimplementedModelProvidersServiceHandler) TestUserModelProvider(context.Context, *connect.Request[v1.TestUserModelProviderRequest]) (*connect.Response[v1.TestUserModelProviderResponse], error) {

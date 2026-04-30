@@ -10,6 +10,7 @@ import (
 
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
 	"github.com/jdpedrie/clark/internal/modelmeta"
+	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
 	"github.com/jdpedrie/clark/internal/store"
 )
@@ -37,7 +38,7 @@ var knownStatefulTypes = map[string]bool{
 
 // storeProviderToProto maps a store row to its proto shape.
 func storeProviderToProto(p store.UserModelProvider) *clarkv1.UserModelProvider {
-	return &clarkv1.UserModelProvider{
+	out := &clarkv1.UserModelProvider{
 		Id:          p.ID.String(),
 		Type:        p.Type,
 		Label:       p.Label,
@@ -46,6 +47,10 @@ func storeProviderToProto(p store.UserModelProvider) *clarkv1.UserModelProvider 
 		CreatedAt:   timestamppb.New(p.CreatedAt),
 		UpdatedAt:   timestamppb.New(p.UpdatedAt),
 	}
+	if len(p.DefaultSettings) > 0 {
+		out.DefaultSettings = callSettingsFromJSON(p.DefaultSettings)
+	}
+	return out
 }
 
 // storeUserModelToProto maps a store user_models row to its proto shape.
@@ -118,51 +123,76 @@ func providerCapsToProto(c providers.ModelCapabilities) *clarkv1.ModelCapabiliti
 	}
 }
 
+// callSettingsFromJSON decodes the JSONB blob persisted in
+// `user_models.default_settings` (or `user_model_providers.default_settings`)
+// back into a proto CallSettings. The blob is protojson — see
+// profiles.MarshalCallSettings — so we delegate to that codec.
 func callSettingsFromJSON(b []byte) *clarkv1.CallSettings {
-	var cs providerCallSettings
-	if err := json.Unmarshal(b, &cs); err != nil {
+	if len(b) == 0 {
 		return nil
 	}
-	out := &clarkv1.CallSettings{
-		Temperature:          cs.Temperature,
-		ThinkingEnabled:      cs.ThinkingEnabled,
-		ThinkingBudgetTokens: cs.ThinkingBudgetTokens,
-		Extras:               cs.Extras,
+	cs, err := profiles.UnmarshalCallSettings(b)
+	if err != nil {
+		return nil
 	}
-	if cs.MaxOutputTokens != nil {
-		v := int32(*cs.MaxOutputTokens)
+	return cs
+}
+
+// encodeCallSettings serializes a driver-side CallSettings struct to the
+// JSONB shape used in `user_models.default_settings`. Returns (nil, nil) for
+// an all-empty settings struct so the column stays NULL.
+func encodeCallSettings(s providers.CallSettings) ([]byte, error) {
+	proto := callSettingsToProto(s)
+	if proto == nil {
+		return nil, nil
+	}
+	return profiles.MarshalCallSettings(proto)
+}
+
+// callSettingsToProto converts a driver-side CallSettings to the proto type.
+// Returns nil when every field is unset — so callers can skip persisting an
+// empty blob entirely.
+func callSettingsToProto(s providers.CallSettings) *clarkv1.CallSettings {
+	out := &clarkv1.CallSettings{
+		Temperature: s.Temperature,
+		TopP:        s.TopP,
+	}
+	if s.MaxOutputTokens != nil {
+		v := int32(*s.MaxOutputTokens)
 		out.MaxOutputTokens = &v
+	}
+	if s.TopK != nil {
+		v := int32(*s.TopK)
+		out.TopK = &v
+	}
+	if len(s.StopSequences) > 0 {
+		out.StopSequences = append([]string(nil), s.StopSequences...)
+	}
+	if t := s.Thinking; t != nil {
+		ts := &clarkv1.ThinkingSettings{Enabled: t.Enabled}
+		if t.BudgetTokens != nil {
+			v := int32(*t.BudgetTokens)
+			ts.BudgetTokens = &v
+		}
+		if ts.Enabled != nil || ts.BudgetTokens != nil {
+			out.Thinking = ts
+		}
+	}
+	if isCallSettingsEmpty(out) {
+		return nil
 	}
 	return out
 }
 
-// providerCallSettings mirrors providers.CallSettings for JSON encoding so we
-// don't depend on field tag stability of the providers package's struct.
-type providerCallSettings struct {
-	Temperature          *float64        `json:"temperature,omitempty"`
-	MaxOutputTokens      *int            `json:"max_output_tokens,omitempty"`
-	ThinkingEnabled      *bool           `json:"thinking_enabled,omitempty"`
-	ThinkingBudgetTokens *int32          `json:"thinking_budget_tokens,omitempty"`
-	Extras               json.RawMessage `json:"extras,omitempty"`
-}
-
-func encodeCallSettings(s providers.CallSettings) ([]byte, error) {
-	tmp := providerCallSettings{
-		Temperature:     s.Temperature,
-		MaxOutputTokens: s.MaxOutputTokens,
-		ThinkingEnabled: s.ThinkingEnabled,
-		Extras:          s.Extras,
+// isCallSettingsEmpty returns true when every field on the proto is unset.
+// Helps the encode path skip writing a useless `{}` blob.
+func isCallSettingsEmpty(cs *clarkv1.CallSettings) bool {
+	if cs == nil {
+		return true
 	}
-	if s.ThinkingBudgetTokens != nil {
-		v := int32(*s.ThinkingBudgetTokens)
-		tmp.ThinkingBudgetTokens = &v
-	}
-	if tmp.Temperature == nil && tmp.MaxOutputTokens == nil &&
-		tmp.ThinkingEnabled == nil && tmp.ThinkingBudgetTokens == nil &&
-		len(tmp.Extras) == 0 {
-		return nil, nil
-	}
-	return json.Marshal(tmp)
+	return cs.Temperature == nil && cs.TopP == nil && cs.MaxOutputTokens == nil &&
+		len(cs.StopSequences) == 0 && cs.TopK == nil &&
+		cs.Thinking == nil && cs.Anthropic == nil && cs.Openai == nil && cs.Google == nil
 }
 
 func stringToMetadataSourceEnum(s string) clarkv1.MetadataSource {

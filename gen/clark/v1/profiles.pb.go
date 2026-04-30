@@ -21,6 +21,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ConfigField_Type int32
+
+const (
+	ConfigField_TYPE_UNSPECIFIED ConfigField_Type = 0
+	ConfigField_NUMBER           ConfigField_Type = 1
+	ConfigField_TEXT             ConfigField_Type = 2
+	ConfigField_TEXTAREA         ConfigField_Type = 3
+	ConfigField_BOOLEAN          ConfigField_Type = 4
+	ConfigField_SELECT           ConfigField_Type = 5
+)
+
+// Enum value maps for ConfigField_Type.
+var (
+	ConfigField_Type_name = map[int32]string{
+		0: "TYPE_UNSPECIFIED",
+		1: "NUMBER",
+		2: "TEXT",
+		3: "TEXTAREA",
+		4: "BOOLEAN",
+		5: "SELECT",
+	}
+	ConfigField_Type_value = map[string]int32{
+		"TYPE_UNSPECIFIED": 0,
+		"NUMBER":           1,
+		"TEXT":             2,
+		"TEXTAREA":         3,
+		"BOOLEAN":          4,
+		"SELECT":           5,
+	}
+)
+
+func (x ConfigField_Type) Enum() *ConfigField_Type {
+	p := new(ConfigField_Type)
+	*p = x
+	return p
+}
+
+func (x ConfigField_Type) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConfigField_Type) Descriptor() protoreflect.EnumDescriptor {
+	return file_clark_v1_profiles_proto_enumTypes[0].Descriptor()
+}
+
+func (ConfigField_Type) Type() protoreflect.EnumType {
+	return &file_clark_v1_profiles_proto_enumTypes[0]
+}
+
+func (x ConfigField_Type) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConfigField_Type.Descriptor instead.
+func (ConfigField_Type) EnumDescriptor() ([]byte, []int) {
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{12, 0}
+}
+
 type CreateProfileRequest struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	ParentProfileId       *string                `protobuf:"bytes,1,opt,name=parent_profile_id,json=parentProfileId,proto3,oneof" json:"parent_profile_id,omitempty"`
@@ -820,9 +878,9 @@ type PluginType struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// JSON Schema describing the per-instance config blob the plugin accepts.
-	// Empty when the plugin doesn't implement Configurable.
-	ConfigSchema  []byte              `protobuf:"bytes,3,opt,name=config_schema,json=configSchema,proto3" json:"config_schema,omitempty"`
+	// Flat list of typed fields describing the per-instance config blob the
+	// plugin accepts. Empty when the plugin doesn't implement Configurable.
+	ConfigFields  []*ConfigField      `protobuf:"bytes,3,rep,name=config_fields,json=configFields,proto3" json:"config_fields,omitempty"`
 	Capabilities  *PluginCapabilities `protobuf:"bytes,4,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -872,9 +930,9 @@ func (x *PluginType) GetDescription() string {
 	return ""
 }
 
-func (x *PluginType) GetConfigSchema() []byte {
+func (x *PluginType) GetConfigFields() []*ConfigField {
 	if x != nil {
-		return x.ConfigSchema
+		return x.ConfigFields
 	}
 	return nil
 }
@@ -884,6 +942,148 @@ func (x *PluginType) GetCapabilities() *PluginCapabilities {
 		return x.Capabilities
 	}
 	return nil
+}
+
+// ConfigField is one entry in a plugin's per-instance config descriptor.
+// The list is flat — there's no nesting — so a UI can render a form by
+// walking the array once.
+type ConfigField struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Display     string                 `protobuf:"bytes,2,opt,name=display,proto3" json:"display,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Type        ConfigField_Type       `protobuf:"varint,4,opt,name=type,proto3,enum=clark.v1.ConfigField_Type" json:"type,omitempty"`
+	// JSON-encoded default value (e.g. `1`, `"<choices>"`, `true`). Empty = no default.
+	DefaultJson string `protobuf:"bytes,5,opt,name=default_json,json=defaultJson,proto3" json:"default_json,omitempty"`
+	// Populated only when type == SELECT.
+	Options       []*ConfigOption `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigField) Reset() {
+	*x = ConfigField{}
+	mi := &file_clark_v1_profiles_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigField) ProtoMessage() {}
+
+func (x *ConfigField) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_profiles_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigField.ProtoReflect.Descriptor instead.
+func (*ConfigField) Descriptor() ([]byte, []int) {
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ConfigField) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConfigField) GetDisplay() string {
+	if x != nil {
+		return x.Display
+	}
+	return ""
+}
+
+func (x *ConfigField) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ConfigField) GetType() ConfigField_Type {
+	if x != nil {
+		return x.Type
+	}
+	return ConfigField_TYPE_UNSPECIFIED
+}
+
+func (x *ConfigField) GetDefaultJson() string {
+	if x != nil {
+		return x.DefaultJson
+	}
+	return ""
+}
+
+func (x *ConfigField) GetOptions() []*ConfigOption {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+// ConfigOption is one entry in a SELECT field's options list.
+type ConfigOption struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigOption) Reset() {
+	*x = ConfigOption{}
+	mi := &file_clark_v1_profiles_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigOption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigOption) ProtoMessage() {}
+
+func (x *ConfigOption) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_profiles_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigOption.ProtoReflect.Descriptor instead.
+func (*ConfigOption) Descriptor() ([]byte, []int) {
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ConfigOption) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *ConfigOption) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 // ProfilePlugin is one row in a profile's pipeline. On input to
@@ -901,7 +1101,7 @@ type ProfilePlugin struct {
 
 func (x *ProfilePlugin) Reset() {
 	*x = ProfilePlugin{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[12]
+	mi := &file_clark_v1_profiles_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -913,7 +1113,7 @@ func (x *ProfilePlugin) String() string {
 func (*ProfilePlugin) ProtoMessage() {}
 
 func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[12]
+	mi := &file_clark_v1_profiles_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -926,7 +1126,7 @@ func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfilePlugin.ProtoReflect.Descriptor instead.
 func (*ProfilePlugin) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{12}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ProfilePlugin) GetPluginName() string {
@@ -958,7 +1158,7 @@ type ListPluginTypesRequest struct {
 
 func (x *ListPluginTypesRequest) Reset() {
 	*x = ListPluginTypesRequest{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[13]
+	mi := &file_clark_v1_profiles_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +1170,7 @@ func (x *ListPluginTypesRequest) String() string {
 func (*ListPluginTypesRequest) ProtoMessage() {}
 
 func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[13]
+	mi := &file_clark_v1_profiles_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +1183,7 @@ func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{13}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{15}
 }
 
 type ListPluginTypesResponse struct {
@@ -995,7 +1195,7 @@ type ListPluginTypesResponse struct {
 
 func (x *ListPluginTypesResponse) Reset() {
 	*x = ListPluginTypesResponse{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[14]
+	mi := &file_clark_v1_profiles_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1207,7 @@ func (x *ListPluginTypesResponse) String() string {
 func (*ListPluginTypesResponse) ProtoMessage() {}
 
 func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[14]
+	mi := &file_clark_v1_profiles_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1220,7 @@ func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{14}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListPluginTypesResponse) GetPluginTypes() []*PluginType {
@@ -1039,7 +1239,7 @@ type GetProfilePluginsRequest struct {
 
 func (x *GetProfilePluginsRequest) Reset() {
 	*x = GetProfilePluginsRequest{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[15]
+	mi := &file_clark_v1_profiles_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1051,7 +1251,7 @@ func (x *GetProfilePluginsRequest) String() string {
 func (*GetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[15]
+	mi := &file_clark_v1_profiles_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1064,7 +1264,7 @@ func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{15}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetProfilePluginsRequest) GetProfileId() string {
@@ -1083,7 +1283,7 @@ type GetProfilePluginsResponse struct {
 
 func (x *GetProfilePluginsResponse) Reset() {
 	*x = GetProfilePluginsResponse{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[16]
+	mi := &file_clark_v1_profiles_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1095,7 +1295,7 @@ func (x *GetProfilePluginsResponse) String() string {
 func (*GetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[16]
+	mi := &file_clark_v1_profiles_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1108,7 +1308,7 @@ func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{16}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1128,7 +1328,7 @@ type SetProfilePluginsRequest struct {
 
 func (x *SetProfilePluginsRequest) Reset() {
 	*x = SetProfilePluginsRequest{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[17]
+	mi := &file_clark_v1_profiles_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +1340,7 @@ func (x *SetProfilePluginsRequest) String() string {
 func (*SetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[17]
+	mi := &file_clark_v1_profiles_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +1353,7 @@ func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{17}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetProfilePluginsRequest) GetProfileId() string {
@@ -1179,7 +1379,7 @@ type SetProfilePluginsResponse struct {
 
 func (x *SetProfilePluginsResponse) Reset() {
 	*x = SetProfilePluginsResponse{}
-	mi := &file_clark_v1_profiles_proto_msgTypes[18]
+	mi := &file_clark_v1_profiles_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1191,7 +1391,7 @@ func (x *SetProfilePluginsResponse) String() string {
 func (*SetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_profiles_proto_msgTypes[18]
+	mi := &file_clark_v1_profiles_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1204,7 +1404,7 @@ func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{18}
+	return file_clark_v1_profiles_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1313,13 +1513,32 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\x13history_transformer\x18\x04 \x01(\bR\x12historyTransformer\x12+\n" +
 	"\x11chunk_transformer\x18\x05 \x01(\bR\x10chunkTransformer\x12/\n" +
 	"\x13display_transformer\x18\x06 \x01(\bR\x12displayTransformer\x12#\n" +
-	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\"\xa9\x01\n" +
+	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\"\xc0\x01\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
-	"\rconfig_schema\x18\x03 \x01(\fR\fconfigSchema\x12@\n" +
-	"\fcapabilities\x18\x04 \x01(\v2\x1c.clark.v1.PluginCapabilitiesR\fcapabilities\"b\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
+	"\rconfig_fields\x18\x03 \x03(\v2\x15.clark.v1.ConfigFieldR\fconfigFields\x12@\n" +
+	"\fcapabilities\x18\x04 \x01(\v2\x1c.clark.v1.PluginCapabilitiesR\fcapabilities\"\xbd\x02\n" +
+	"\vConfigField\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12.\n" +
+	"\x04type\x18\x04 \x01(\x0e2\x1a.clark.v1.ConfigField.TypeR\x04type\x12!\n" +
+	"\fdefault_json\x18\x05 \x01(\tR\vdefaultJson\x120\n" +
+	"\aoptions\x18\x06 \x03(\v2\x16.clark.v1.ConfigOptionR\aoptions\"Y\n" +
+	"\x04Type\x12\x14\n" +
+	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
+	"\n" +
+	"\x06NUMBER\x10\x01\x12\b\n" +
+	"\x04TEXT\x10\x02\x12\f\n" +
+	"\bTEXTAREA\x10\x03\x12\v\n" +
+	"\aBOOLEAN\x10\x04\x12\n" +
+	"\n" +
+	"\x06SELECT\x10\x05\":\n" +
+	"\fConfigOption\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"b\n" +
 	"\rProfilePlugin\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x12\x18\n" +
@@ -1362,67 +1581,74 @@ func file_clark_v1_profiles_proto_rawDescGZIP() []byte {
 	return file_clark_v1_profiles_proto_rawDescData
 }
 
-var file_clark_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_clark_v1_profiles_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_clark_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_clark_v1_profiles_proto_goTypes = []any{
-	(*CreateProfileRequest)(nil),      // 0: clark.v1.CreateProfileRequest
-	(*CreateProfileResponse)(nil),     // 1: clark.v1.CreateProfileResponse
-	(*ListProfilesRequest)(nil),       // 2: clark.v1.ListProfilesRequest
-	(*ListProfilesResponse)(nil),      // 3: clark.v1.ListProfilesResponse
-	(*GetProfileRequest)(nil),         // 4: clark.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),        // 5: clark.v1.GetProfileResponse
-	(*UpdateProfileRequest)(nil),      // 6: clark.v1.UpdateProfileRequest
-	(*UpdateProfileResponse)(nil),     // 7: clark.v1.UpdateProfileResponse
-	(*DeleteProfileRequest)(nil),      // 8: clark.v1.DeleteProfileRequest
-	(*DeleteProfileResponse)(nil),     // 9: clark.v1.DeleteProfileResponse
-	(*PluginCapabilities)(nil),        // 10: clark.v1.PluginCapabilities
-	(*PluginType)(nil),                // 11: clark.v1.PluginType
-	(*ProfilePlugin)(nil),             // 12: clark.v1.ProfilePlugin
-	(*ListPluginTypesRequest)(nil),    // 13: clark.v1.ListPluginTypesRequest
-	(*ListPluginTypesResponse)(nil),   // 14: clark.v1.ListPluginTypesResponse
-	(*GetProfilePluginsRequest)(nil),  // 15: clark.v1.GetProfilePluginsRequest
-	(*GetProfilePluginsResponse)(nil), // 16: clark.v1.GetProfilePluginsResponse
-	(*SetProfilePluginsRequest)(nil),  // 17: clark.v1.SetProfilePluginsRequest
-	(*SetProfilePluginsResponse)(nil), // 18: clark.v1.SetProfilePluginsResponse
-	(CompressionMode)(0),              // 19: clark.v1.CompressionMode
-	(*ProfileDefaults)(nil),           // 20: clark.v1.ProfileDefaults
-	(*Profile)(nil),                   // 21: clark.v1.Profile
+	(ConfigField_Type)(0),             // 0: clark.v1.ConfigField.Type
+	(*CreateProfileRequest)(nil),      // 1: clark.v1.CreateProfileRequest
+	(*CreateProfileResponse)(nil),     // 2: clark.v1.CreateProfileResponse
+	(*ListProfilesRequest)(nil),       // 3: clark.v1.ListProfilesRequest
+	(*ListProfilesResponse)(nil),      // 4: clark.v1.ListProfilesResponse
+	(*GetProfileRequest)(nil),         // 5: clark.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),        // 6: clark.v1.GetProfileResponse
+	(*UpdateProfileRequest)(nil),      // 7: clark.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),     // 8: clark.v1.UpdateProfileResponse
+	(*DeleteProfileRequest)(nil),      // 9: clark.v1.DeleteProfileRequest
+	(*DeleteProfileResponse)(nil),     // 10: clark.v1.DeleteProfileResponse
+	(*PluginCapabilities)(nil),        // 11: clark.v1.PluginCapabilities
+	(*PluginType)(nil),                // 12: clark.v1.PluginType
+	(*ConfigField)(nil),               // 13: clark.v1.ConfigField
+	(*ConfigOption)(nil),              // 14: clark.v1.ConfigOption
+	(*ProfilePlugin)(nil),             // 15: clark.v1.ProfilePlugin
+	(*ListPluginTypesRequest)(nil),    // 16: clark.v1.ListPluginTypesRequest
+	(*ListPluginTypesResponse)(nil),   // 17: clark.v1.ListPluginTypesResponse
+	(*GetProfilePluginsRequest)(nil),  // 18: clark.v1.GetProfilePluginsRequest
+	(*GetProfilePluginsResponse)(nil), // 19: clark.v1.GetProfilePluginsResponse
+	(*SetProfilePluginsRequest)(nil),  // 20: clark.v1.SetProfilePluginsRequest
+	(*SetProfilePluginsResponse)(nil), // 21: clark.v1.SetProfilePluginsResponse
+	(CompressionMode)(0),              // 22: clark.v1.CompressionMode
+	(*ProfileDefaults)(nil),           // 23: clark.v1.ProfileDefaults
+	(*Profile)(nil),                   // 24: clark.v1.Profile
 }
 var file_clark_v1_profiles_proto_depIdxs = []int32{
-	19, // 0: clark.v1.CreateProfileRequest.compression_mode:type_name -> clark.v1.CompressionMode
-	20, // 1: clark.v1.CreateProfileRequest.default_settings:type_name -> clark.v1.ProfileDefaults
-	21, // 2: clark.v1.CreateProfileResponse.profile:type_name -> clark.v1.Profile
-	21, // 3: clark.v1.ListProfilesResponse.profiles:type_name -> clark.v1.Profile
-	21, // 4: clark.v1.GetProfileResponse.profile:type_name -> clark.v1.Profile
-	21, // 5: clark.v1.GetProfileResponse.resolved:type_name -> clark.v1.Profile
-	19, // 6: clark.v1.UpdateProfileRequest.compression_mode:type_name -> clark.v1.CompressionMode
-	20, // 7: clark.v1.UpdateProfileRequest.default_settings:type_name -> clark.v1.ProfileDefaults
-	21, // 8: clark.v1.UpdateProfileResponse.profile:type_name -> clark.v1.Profile
-	10, // 9: clark.v1.PluginType.capabilities:type_name -> clark.v1.PluginCapabilities
-	11, // 10: clark.v1.ListPluginTypesResponse.plugin_types:type_name -> clark.v1.PluginType
-	12, // 11: clark.v1.GetProfilePluginsResponse.plugins:type_name -> clark.v1.ProfilePlugin
-	12, // 12: clark.v1.SetProfilePluginsRequest.plugins:type_name -> clark.v1.ProfilePlugin
-	12, // 13: clark.v1.SetProfilePluginsResponse.plugins:type_name -> clark.v1.ProfilePlugin
-	0,  // 14: clark.v1.ProfilesService.CreateProfile:input_type -> clark.v1.CreateProfileRequest
-	2,  // 15: clark.v1.ProfilesService.ListProfiles:input_type -> clark.v1.ListProfilesRequest
-	4,  // 16: clark.v1.ProfilesService.GetProfile:input_type -> clark.v1.GetProfileRequest
-	6,  // 17: clark.v1.ProfilesService.UpdateProfile:input_type -> clark.v1.UpdateProfileRequest
-	8,  // 18: clark.v1.ProfilesService.DeleteProfile:input_type -> clark.v1.DeleteProfileRequest
-	13, // 19: clark.v1.ProfilesService.ListPluginTypes:input_type -> clark.v1.ListPluginTypesRequest
-	15, // 20: clark.v1.ProfilesService.GetProfilePlugins:input_type -> clark.v1.GetProfilePluginsRequest
-	17, // 21: clark.v1.ProfilesService.SetProfilePlugins:input_type -> clark.v1.SetProfilePluginsRequest
-	1,  // 22: clark.v1.ProfilesService.CreateProfile:output_type -> clark.v1.CreateProfileResponse
-	3,  // 23: clark.v1.ProfilesService.ListProfiles:output_type -> clark.v1.ListProfilesResponse
-	5,  // 24: clark.v1.ProfilesService.GetProfile:output_type -> clark.v1.GetProfileResponse
-	7,  // 25: clark.v1.ProfilesService.UpdateProfile:output_type -> clark.v1.UpdateProfileResponse
-	9,  // 26: clark.v1.ProfilesService.DeleteProfile:output_type -> clark.v1.DeleteProfileResponse
-	14, // 27: clark.v1.ProfilesService.ListPluginTypes:output_type -> clark.v1.ListPluginTypesResponse
-	16, // 28: clark.v1.ProfilesService.GetProfilePlugins:output_type -> clark.v1.GetProfilePluginsResponse
-	18, // 29: clark.v1.ProfilesService.SetProfilePlugins:output_type -> clark.v1.SetProfilePluginsResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	22, // 0: clark.v1.CreateProfileRequest.compression_mode:type_name -> clark.v1.CompressionMode
+	23, // 1: clark.v1.CreateProfileRequest.default_settings:type_name -> clark.v1.ProfileDefaults
+	24, // 2: clark.v1.CreateProfileResponse.profile:type_name -> clark.v1.Profile
+	24, // 3: clark.v1.ListProfilesResponse.profiles:type_name -> clark.v1.Profile
+	24, // 4: clark.v1.GetProfileResponse.profile:type_name -> clark.v1.Profile
+	24, // 5: clark.v1.GetProfileResponse.resolved:type_name -> clark.v1.Profile
+	22, // 6: clark.v1.UpdateProfileRequest.compression_mode:type_name -> clark.v1.CompressionMode
+	23, // 7: clark.v1.UpdateProfileRequest.default_settings:type_name -> clark.v1.ProfileDefaults
+	24, // 8: clark.v1.UpdateProfileResponse.profile:type_name -> clark.v1.Profile
+	13, // 9: clark.v1.PluginType.config_fields:type_name -> clark.v1.ConfigField
+	11, // 10: clark.v1.PluginType.capabilities:type_name -> clark.v1.PluginCapabilities
+	0,  // 11: clark.v1.ConfigField.type:type_name -> clark.v1.ConfigField.Type
+	14, // 12: clark.v1.ConfigField.options:type_name -> clark.v1.ConfigOption
+	12, // 13: clark.v1.ListPluginTypesResponse.plugin_types:type_name -> clark.v1.PluginType
+	15, // 14: clark.v1.GetProfilePluginsResponse.plugins:type_name -> clark.v1.ProfilePlugin
+	15, // 15: clark.v1.SetProfilePluginsRequest.plugins:type_name -> clark.v1.ProfilePlugin
+	15, // 16: clark.v1.SetProfilePluginsResponse.plugins:type_name -> clark.v1.ProfilePlugin
+	1,  // 17: clark.v1.ProfilesService.CreateProfile:input_type -> clark.v1.CreateProfileRequest
+	3,  // 18: clark.v1.ProfilesService.ListProfiles:input_type -> clark.v1.ListProfilesRequest
+	5,  // 19: clark.v1.ProfilesService.GetProfile:input_type -> clark.v1.GetProfileRequest
+	7,  // 20: clark.v1.ProfilesService.UpdateProfile:input_type -> clark.v1.UpdateProfileRequest
+	9,  // 21: clark.v1.ProfilesService.DeleteProfile:input_type -> clark.v1.DeleteProfileRequest
+	16, // 22: clark.v1.ProfilesService.ListPluginTypes:input_type -> clark.v1.ListPluginTypesRequest
+	18, // 23: clark.v1.ProfilesService.GetProfilePlugins:input_type -> clark.v1.GetProfilePluginsRequest
+	20, // 24: clark.v1.ProfilesService.SetProfilePlugins:input_type -> clark.v1.SetProfilePluginsRequest
+	2,  // 25: clark.v1.ProfilesService.CreateProfile:output_type -> clark.v1.CreateProfileResponse
+	4,  // 26: clark.v1.ProfilesService.ListProfiles:output_type -> clark.v1.ListProfilesResponse
+	6,  // 27: clark.v1.ProfilesService.GetProfile:output_type -> clark.v1.GetProfileResponse
+	8,  // 28: clark.v1.ProfilesService.UpdateProfile:output_type -> clark.v1.UpdateProfileResponse
+	10, // 29: clark.v1.ProfilesService.DeleteProfile:output_type -> clark.v1.DeleteProfileResponse
+	17, // 30: clark.v1.ProfilesService.ListPluginTypes:output_type -> clark.v1.ListPluginTypesResponse
+	19, // 31: clark.v1.ProfilesService.GetProfilePlugins:output_type -> clark.v1.GetProfilePluginsResponse
+	21, // 32: clark.v1.ProfilesService.SetProfilePlugins:output_type -> clark.v1.SetProfilePluginsResponse
+	25, // [25:33] is the sub-list for method output_type
+	17, // [17:25] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_clark_v1_profiles_proto_init() }
@@ -1439,13 +1665,14 @@ func file_clark_v1_profiles_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_clark_v1_profiles_proto_rawDesc), len(file_clark_v1_profiles_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   19,
+			NumEnums:      1,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_clark_v1_profiles_proto_goTypes,
 		DependencyIndexes: file_clark_v1_profiles_proto_depIdxs,
+		EnumInfos:         file_clark_v1_profiles_proto_enumTypes,
 		MessageInfos:      file_clark_v1_profiles_proto_msgTypes,
 	}.Build()
 	File_clark_v1_profiles_proto = out.File

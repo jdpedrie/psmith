@@ -20,6 +20,49 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   typealias Version = _2
 }
 
+/// Ordering for ListConversations. Default (UNSPECIFIED) = RECENTLY_USED.
+/// "Recently used" sorts by the most recent message timestamp across the
+/// conversation's contexts, falling back to the conversation's created_at
+/// when there are no messages yet (a brand-new conversation appears at the
+/// top).
+public enum Clark_V1_ConversationOrder: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case recentlyUsed // = 1
+  case recentlyCreated // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .recentlyUsed
+    case 2: self = .recentlyCreated
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .recentlyUsed: return 1
+    case .recentlyCreated: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Clark_V1_ConversationOrder] = [
+    .unspecified,
+    .recentlyUsed,
+    .recentlyCreated,
+  ]
+
+}
+
 public struct Clark_V1_CreateConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -98,9 +141,45 @@ public struct Clark_V1_ListConversationsRequest: Sendable {
 
   public var pageToken: String = String()
 
+  /// Sort order for the returned page. Optional; defaults to RECENTLY_USED.
+  public var order: Clark_V1_ConversationOrder {
+    get {_order ?? .unspecified}
+    set {_order = newValue}
+  }
+  /// Returns true if `order` has been explicitly set.
+  public var hasOrder: Bool {self._order != nil}
+  /// Clears the value of `order`. Subsequent reads from it will return its default value.
+  public mutating func clearOrder() {self._order = nil}
+
+  /// Case-insensitive substring match against the conversation's title.
+  /// Conversations with no title are excluded when this is set.
+  public var titleQuery: String {
+    get {_titleQuery ?? String()}
+    set {_titleQuery = newValue}
+  }
+  /// Returns true if `titleQuery` has been explicitly set.
+  public var hasTitleQuery: Bool {self._titleQuery != nil}
+  /// Clears the value of `titleQuery`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleQuery() {self._titleQuery = nil}
+
+  /// Filter to conversations belonging to a specific profile. Used by the
+  /// sidebar's "By Profile" view to render one section per profile.
+  public var profileID: String {
+    get {_profileID ?? String()}
+    set {_profileID = newValue}
+  }
+  /// Returns true if `profileID` has been explicitly set.
+  public var hasProfileID: Bool {self._profileID != nil}
+  /// Clears the value of `profileID`. Subsequent reads from it will return its default value.
+  public mutating func clearProfileID() {self._profileID = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _order: Clark_V1_ConversationOrder? = nil
+  fileprivate var _titleQuery: String? = nil
+  fileprivate var _profileID: String? = nil
 }
 
 public struct Clark_V1_ListConversationsResponse: Sendable {
@@ -748,6 +827,10 @@ public struct Clark_V1_CountContextTokensResponse: Sendable {
 
 fileprivate let _protobuf_package = "clark.v1"
 
+extension Clark_V1_ConversationOrder: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_ORDER_UNSPECIFIED\0\u{1}CONVERSATION_ORDER_RECENTLY_USED\0\u{1}CONVERSATION_ORDER_RECENTLY_CREATED\0")
+}
+
 extension Clark_V1_CreateConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateConversationRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0")
@@ -878,7 +961,7 @@ extension Clark_V1_CreateConversationResponse: SwiftProtobuf.Message, SwiftProto
 
 extension Clark_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0\u{1}order\0\u{3}title_query\0\u{3}profile_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -888,24 +971,43 @@ extension Clark_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobu
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt32Field(value: &self.pageSize) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.pageToken) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self._order) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._titleQuery) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._profileID) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if self.pageSize != 0 {
       try visitor.visitSingularInt32Field(value: self.pageSize, fieldNumber: 1)
     }
     if !self.pageToken.isEmpty {
       try visitor.visitSingularStringField(value: self.pageToken, fieldNumber: 2)
     }
+    try { if let v = self._order {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._titleQuery {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
+    try { if let v = self._profileID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Clark_V1_ListConversationsRequest, rhs: Clark_V1_ListConversationsRequest) -> Bool {
     if lhs.pageSize != rhs.pageSize {return false}
     if lhs.pageToken != rhs.pageToken {return false}
+    if lhs._order != rhs._order {return false}
+    if lhs._titleQuery != rhs._titleQuery {return false}
+    if lhs._profileID != rhs._profileID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

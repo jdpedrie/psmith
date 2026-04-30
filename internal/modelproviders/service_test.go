@@ -23,6 +23,8 @@ import (
 
 // --- helpers ---
 
+func ptr[T any](v T) *T { return &v }
+
 func newTestService(t *testing.T) (*Service, *store.Queries, *modelmeta.DBCatalog, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.Pool(t)
@@ -233,7 +235,10 @@ func TestListProviderTemplates_FromCatalog(t *testing.T) {
 	seedCatalog(t, cat, "anthropic", "Anthropic", "https://api.anthropic.com", "claude-foo", "Claude Foo")
 	seedCatalog(t, cat, "openai", "OpenAI", "https://api.openai.com/v1", "gpt-foo", "GPT Foo")
 	seedCatalog(t, cat, "groq", "Groq", "https://api.groq.com/openai/v1", "llama-foo", "Llama Foo")
-	// Provider with no api_base is skipped.
+	// Google: catalog row carries no api_base; the service is expected to
+	// surface the AI Studio default.
+	seedCatalog(t, cat, "google", "Google", "", "gemini-foo", "Gemini Foo")
+	// Provider with no api_base AND no native driver is skipped.
 	seedCatalog(t, cat, "local-only", "Local", "", "x", "X")
 
 	resp, err := svc.ListProviderTemplates(context.Background(), connect.NewRequest(&clarkv1.ListProviderTemplatesRequest{}))
@@ -254,8 +259,19 @@ func TestListProviderTemplates_FromCatalog(t *testing.T) {
 	if got["groq"] == nil || got["groq"].DriverType != "openai-compatible" {
 		t.Errorf("groq mapping: %+v", got["groq"])
 	}
+	if got["google"] == nil {
+		t.Errorf("google template missing")
+	} else {
+		if got["google"].DriverType != "google" {
+			t.Errorf("google driver_type=%q want google", got["google"].DriverType)
+		}
+		if got["google"].ApiBase == nil ||
+			*got["google"].ApiBase != "https://generativelanguage.googleapis.com/v1beta" {
+			t.Errorf("google api_base=%v want AI Studio default", got["google"].ApiBase)
+		}
+	}
 	if _, ok := got["local-only"]; ok {
-		t.Error("provider without api_base should be skipped")
+		t.Error("provider without api_base AND without native driver should be skipped")
 	}
 }
 
@@ -265,9 +281,10 @@ func TestCreateUserModelProvider_Success(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "create-success", nil, nil)
 
 	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.CreateUserModelProviderRequest{
-		Type:   "fake-type",
+		Type:   typeName,
 		Label:  "main",
 		Config: []byte(`{"api_key":"sk-x"}`),
 	}))
@@ -277,7 +294,7 @@ func TestCreateUserModelProvider_Success(t *testing.T) {
 	if resp.Msg.Provider.OwnerUserId != user.ID.String() {
 		t.Errorf("owner_user_id mismatch: %s vs %s", resp.Msg.Provider.OwnerUserId, user.ID)
 	}
-	if resp.Msg.Provider.Type != "fake-type" {
+	if resp.Msg.Provider.Type != typeName {
 		t.Errorf("type mismatch")
 	}
 	if resp.Msg.Provider.Label != "main" {
@@ -289,9 +306,10 @@ func TestCreateUserModelProvider_DefaultsConfigToEmptyObject(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "create-default-cfg", nil, nil)
 
 	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.CreateUserModelProviderRequest{
-		Type:  "fake-type",
+		Type:  typeName,
 		Label: "main",
 	}))
 	if err != nil {
@@ -310,11 +328,25 @@ func TestCreateUserModelProvider_RejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "create-bad-cfg", nil, nil)
 
 	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.CreateUserModelProviderRequest{
-		Type:   "fake-type",
+		Type:   typeName,
 		Label:  "main",
 		Config: []byte("not-json"),
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+// New: validate the type-registry check.
+func TestCreateUserModelProvider_RejectsUnknownType(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+
+	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.CreateUserModelProviderRequest{
+		Type:  "nonexistent-driver-type",
+		Label: "main",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
@@ -515,6 +547,77 @@ func TestUpdateUserModelProvider_EmptyLabelRejected(t *testing.T) {
 		Label: &empty,
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+// TestUpdateUserModelProvider_DefaultSettings round-trips a CallSettings
+// (temperature + thinking budget), then runs an unrelated update without the
+// `default_settings` field set and verifies the previously-stored value
+// survives — the unset signals "leave the column alone."
+func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	// First write — set temperature + thinking.budget.
+	temp := 0.5
+	budget := int32(4096)
+	thinkingOn := true
+	want := &clarkv1.CallSettings{
+		Temperature: &temp,
+		Thinking: &clarkv1.ThinkingSettings{
+			Enabled:      &thinkingOn,
+			BudgetTokens: &budget,
+		},
+	}
+	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelProviderRequest{
+		Id:              prov.ID.String(),
+		DefaultSettings: want,
+	}))
+	if err != nil {
+		t.Fatalf("Update (with defaults): %v", err)
+	}
+	if got := resp.Msg.Provider.GetDefaultSettings(); got == nil ||
+		got.GetTemperature() != temp ||
+		got.GetThinking() == nil ||
+		got.GetThinking().GetBudgetTokens() != budget ||
+		!got.GetThinking().GetEnabled() {
+		t.Errorf("first-write round-trip mismatch: %+v", got)
+	}
+
+	// Round-trip via Get — this exercises the convert.go decode path too.
+	getResp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.GetUserModelProviderRequest{
+		Id: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := getResp.Msg.Provider.GetDefaultSettings(); got == nil ||
+		got.GetTemperature() != temp ||
+		got.GetThinking().GetBudgetTokens() != budget {
+		t.Errorf("Get round-trip mismatch: %+v", got)
+	}
+
+	// Second update — change something else (label) and leave default_settings
+	// unset. The previously-stored value must NOT be cleared.
+	newLabel := "renamed"
+	if _, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelProviderRequest{
+		Id:    prov.ID.String(),
+		Label: &newLabel,
+	})); err != nil {
+		t.Fatalf("Update (label only): %v", err)
+	}
+	getResp2, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.GetUserModelProviderRequest{
+		Id: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("Get (after label-only update): %v", err)
+	}
+	if got := getResp2.Msg.Provider.GetDefaultSettings(); got == nil ||
+		got.GetTemperature() != temp ||
+		got.GetThinking().GetBudgetTokens() != budget {
+		t.Errorf("default_settings wiped by unrelated update: %+v", got)
+	}
 }
 
 // --- DeleteUserModelProvider ---
@@ -977,6 +1080,308 @@ func TestToggleUserModelFavorite_EmptyModelID(t *testing.T) {
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
 
+// --- UpdateUserModel ---
+
+func TestUpdateUserModel_HappyPath(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	topP := 0.7
+	want := &clarkv1.CallSettings{TopP: &topP}
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DefaultSettings:     want,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel: %v", err)
+	}
+	if got := resp.Msg.UserModel.GetDefaultSettings(); got == nil || got.GetTopP() != topP {
+		t.Errorf("response default_settings mismatch: %+v", got)
+	}
+
+	// Confirm via ListUserModels — exercises the read/decode path too.
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&clarkv1.ListUserModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("ListUserModels: %v", err)
+	}
+	if len(listResp.Msg.Models) != 1 {
+		t.Fatalf("got %d models want 1", len(listResp.Msg.Models))
+	}
+	if got := listResp.Msg.Models[0].GetDefaultSettings(); got == nil || got.GetTopP() != topP {
+		t.Errorf("list default_settings mismatch: %+v", got)
+	}
+}
+
+func TestUpdateUserModel_NotEnabled(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	topP := 0.7
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "never-enabled",
+		DefaultSettings:     &clarkv1.CallSettings{TopP: &topP},
+	}))
+	assertCode(t, err, connect.CodeNotFound)
+}
+
+func TestUpdateUserModel_CrossUser(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	alice := mustUser(t, q, "alice", false)
+	bob := mustUser(t, q, "bob", false)
+	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	topP := 0.5
+	_, err := svc.UpdateUserModel(ctxAs(bob), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DefaultSettings:     &clarkv1.CallSettings{TopP: &topP},
+	}))
+	// NotFound — don't leak existence to the wrong user.
+	assertCode(t, err, connect.CodeNotFound)
+}
+
+func TestUpdateUserModel_EmptyModelID(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "",
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+// TestUpdateUserModel_FullMetadata exercises the metadata-merge path that
+// powers the model edit screen: every metadata field gets a new value and
+// the response (plus a follow-up read) reflects them.
+func TestUpdateUserModel_FullMetadata(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	cw0 := int32(8192)
+	mo0 := int32(2048)
+	in0 := 1.0
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID:   prov.ID,
+		ModelID:               "m1",
+		DisplayName:           "Original",
+		ContextWindow:         &cw0,
+		MaxOutputTokens:       &mo0,
+		InputPricePerMillion:  &in0,
+		Modalities:            []string{"text"},
+		MetadataSource:        string(modelmeta.SourceManual),
+		MetadataSnapshotAt:    time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	newDisplay := "Renamed"
+	newCW := int32(128000)
+	newMO := int32(16384)
+	newKC := "2025-01-15"
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         &newDisplay,
+		ContextWindow:       &newCW,
+		MaxOutputTokens:     &newMO,
+		Pricing: &clarkv1.ModelPricing{
+			InputPerMillionTokens:  ptr(2.5),
+			OutputPerMillionTokens: ptr(10.0),
+		},
+		UpdateModalities: true,
+		Modalities:       []string{"text", "image"},
+		Capabilities: &clarkv1.ModelCapabilities{
+			Streaming: true,
+			Vision:    true,
+		},
+		KnowledgeCutoff: &newKC,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel: %v", err)
+	}
+	got := resp.Msg.UserModel
+	if got.DisplayName != newDisplay {
+		t.Errorf("display_name: got %q want %q", got.DisplayName, newDisplay)
+	}
+	if got.GetContextWindow() != newCW {
+		t.Errorf("context_window: got %d want %d", got.GetContextWindow(), newCW)
+	}
+	if got.GetMaxOutputTokens() != newMO {
+		t.Errorf("max_output_tokens: got %d want %d", got.GetMaxOutputTokens(), newMO)
+	}
+	if got.Pricing.GetInputPerMillionTokens() != 2.5 || got.Pricing.GetOutputPerMillionTokens() != 10 {
+		t.Errorf("pricing not applied: %+v", got.Pricing)
+	}
+	if len(got.Modalities) != 2 || got.Modalities[0] != "text" || got.Modalities[1] != "image" {
+		t.Errorf("modalities: got %v", got.Modalities)
+	}
+	if !got.Capabilities.GetStreaming() || !got.Capabilities.GetVision() {
+		t.Errorf("capabilities not applied: %+v", got.Capabilities)
+	}
+	if got.GetKnowledgeCutoff() != newKC {
+		t.Errorf("knowledge_cutoff: got %q want %q", got.GetKnowledgeCutoff(), newKC)
+	}
+}
+
+// TestUpdateUserModel_SparseMerge sends only display_name; everything else
+// must keep its existing value (the merge-then-upsert path must not zero
+// out fields whose proto messages weren't sent).
+func TestUpdateUserModel_SparseMerge(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	cw0 := int32(8192)
+	in0 := 1.0
+	capJSON, _ := json.Marshal(modelmeta.Capabilities{Streaming: true, Vision: true})
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID:  prov.ID,
+		ModelID:              "m1",
+		DisplayName:          "Original",
+		ContextWindow:        &cw0,
+		InputPricePerMillion: &in0,
+		Modalities:           []string{"text", "image"},
+		Capabilities:         capJSON,
+		MetadataSource:       string(modelmeta.SourceManual),
+		MetadataSnapshotAt:   time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	newDisplay := "Renamed"
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         &newDisplay,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel: %v", err)
+	}
+	got := resp.Msg.UserModel
+	if got.DisplayName != newDisplay {
+		t.Errorf("display_name: got %q want %q", got.DisplayName, newDisplay)
+	}
+	if got.GetContextWindow() != cw0 {
+		t.Errorf("context_window changed unexpectedly: got %d want %d", got.GetContextWindow(), cw0)
+	}
+	if got.Pricing.GetInputPerMillionTokens() != in0 {
+		t.Errorf("pricing changed unexpectedly: %+v", got.Pricing)
+	}
+	if len(got.Modalities) != 2 {
+		t.Errorf("modalities changed unexpectedly: %v", got.Modalities)
+	}
+	if !got.Capabilities.GetStreaming() || !got.Capabilities.GetVision() {
+		t.Errorf("capabilities changed unexpectedly: %+v", got.Capabilities)
+	}
+}
+
+// TestUpdateUserModel_ModalitiesFlagGate confirms the update_modalities
+// flag really controls the column. Sending an empty array WITHOUT the
+// flag must NOT clear the existing value.
+func TestUpdateUserModel_ModalitiesFlagGate(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		Modalities:          []string{"text", "image"},
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Flag false → existing modalities preserved.
+	newDisplay := "Keep"
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         &newDisplay,
+		// UpdateModalities not set; Modalities ignored.
+		Modalities: []string{},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel (preserve): %v", err)
+	}
+	if len(resp.Msg.UserModel.Modalities) != 2 {
+		t.Errorf("modalities cleared without flag: %v", resp.Msg.UserModel.Modalities)
+	}
+
+	// Flag true with empty array → cleared.
+	resp2, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		UpdateModalities:    true,
+		Modalities:          []string{},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel (clear): %v", err)
+	}
+	if len(resp2.Msg.UserModel.Modalities) != 0 {
+		t.Errorf("modalities not cleared with flag: %v", resp2.Msg.UserModel.Modalities)
+	}
+}
+
+// TestUpdateUserModel_EmptyDisplayNameRejected protects against a UI
+// bug clearing the user-visible label by mistake.
+func TestUpdateUserModel_EmptyDisplayNameRejected(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "m1",
+		DisplayName:         "M1",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	empty := "   "
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&clarkv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         &empty,
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
 // --- ListUserModels ---
 
 func TestListUserModels_PerInstance(t *testing.T) {
@@ -1381,10 +1786,12 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 			Streaming: true, Thinking: true, ToolUse: true,
 		},
 		DefaultSettings: providers.CallSettings{
-			Temperature:          &temp,
-			MaxOutputTokens:      &maxOut,
-			ThinkingEnabled:      &thinkingOn,
-			ThinkingBudgetTokens: &thinkingBudget,
+			Temperature:     &temp,
+			MaxOutputTokens: &maxOut,
+			Thinking: &providers.ThinkingSettings{
+				Enabled:      &thinkingOn,
+				BudgetTokens: &thinkingBudget,
+			},
 		},
 		MetadataSource: modelmeta.SourceDriver,
 	}
@@ -1421,8 +1828,9 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 	if got.DefaultSettings == nil ||
 		got.DefaultSettings.GetTemperature() != temp ||
 		got.DefaultSettings.GetMaxOutputTokens() != int32(maxOut) ||
-		!got.DefaultSettings.GetThinkingEnabled() ||
-		got.DefaultSettings.GetThinkingBudgetTokens() != int32(thinkingBudget) {
+		got.DefaultSettings.GetThinking() == nil ||
+		!got.DefaultSettings.GetThinking().GetEnabled() ||
+		got.DefaultSettings.GetThinking().GetBudgetTokens() != int32(thinkingBudget) {
 		t.Errorf("default_settings round-trip: %+v", got.DefaultSettings)
 	}
 	if got.MetadataSource != clarkv1.MetadataSource_METADATA_SOURCE_DRIVER {
@@ -1492,4 +1900,159 @@ func TestCallSettingsFromJSON_Malformed(t *testing.T) {
 	if got := callSettingsFromJSON([]byte("not json")); got != nil {
 		t.Errorf("expected nil on malformed JSON, got %+v", got)
 	}
+}
+
+// --- AddManualModel ---
+
+func TestAddManualModel_HappyPath(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	cw := int32(128_000)
+	maxOut := int32(8_192)
+	inputPrice := 1.5
+	outputPrice := 6.0
+	cutoff := "2025-04-01"
+	temp := 0.4
+
+	resp, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&clarkv1.AddManualModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "gpt-mystery",
+		DisplayName:         "GPT Mystery",
+		ContextWindow:       &cw,
+		MaxOutputTokens:     &maxOut,
+		Pricing: &clarkv1.ModelPricing{
+			InputPerMillionTokens:  &inputPrice,
+			OutputPerMillionTokens: &outputPrice,
+		},
+		Modalities:      []string{"text", "image"},
+		Capabilities:    &clarkv1.ModelCapabilities{Streaming: true, Vision: true},
+		KnowledgeCutoff: &cutoff,
+		DefaultSettings: &clarkv1.CallSettings{Temperature: &temp},
+	}))
+	if err != nil {
+		t.Fatalf("AddManualModel: %v", err)
+	}
+	got := resp.Msg.GetUserModel()
+	if got == nil {
+		t.Fatal("nil user_model in response")
+	}
+	if got.GetModelId() != "gpt-mystery" {
+		t.Errorf("model_id: %q", got.GetModelId())
+	}
+	if got.GetDisplayName() != "GPT Mystery" {
+		t.Errorf("display_name: %q", got.GetDisplayName())
+	}
+	if got.GetContextWindow() != cw {
+		t.Errorf("context_window: %d", got.GetContextWindow())
+	}
+	if got.GetMaxOutputTokens() != maxOut {
+		t.Errorf("max_output_tokens: %d", got.GetMaxOutputTokens())
+	}
+	if p := got.GetPricing(); p == nil {
+		t.Errorf("pricing nil")
+	} else if p.GetInputPerMillionTokens() != inputPrice || p.GetOutputPerMillionTokens() != outputPrice {
+		t.Errorf("pricing: %+v", p)
+	}
+	if cap := got.GetCapabilities(); cap == nil {
+		t.Errorf("capabilities nil")
+	} else if !cap.Streaming || !cap.Vision {
+		t.Errorf("capabilities: %+v", cap)
+	}
+	if got.GetKnowledgeCutoff() != cutoff {
+		t.Errorf("knowledge_cutoff: %q", got.GetKnowledgeCutoff())
+	}
+	if ds := got.GetDefaultSettings(); ds == nil || ds.GetTemperature() != temp {
+		t.Errorf("default_settings: %+v", ds)
+	}
+	if got.GetMetadataSource() != clarkv1.MetadataSource_METADATA_SOURCE_MANUAL {
+		t.Errorf("metadata_source: %v", got.GetMetadataSource())
+	}
+	if got.GetEnabledAt() == nil || got.GetMetadataSnapshotAt() == nil {
+		t.Errorf("missing timestamps")
+	}
+
+	// Round-trip: ListUserModels should return the same row.
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&clarkv1.ListUserModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("ListUserModels: %v", err)
+	}
+	if len(listResp.Msg.Models) != 1 {
+		t.Fatalf("got %d models want 1", len(listResp.Msg.Models))
+	}
+	if listResp.Msg.Models[0].GetMetadataSource() != clarkv1.MetadataSource_METADATA_SOURCE_MANUAL {
+		t.Errorf("listed metadata_source: %v", listResp.Msg.Models[0].GetMetadataSource())
+	}
+}
+
+func TestAddManualModel_DuplicateModelID(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "dup",
+		DisplayName:         "Original",
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&clarkv1.AddManualModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "dup",
+		DisplayName:         "Replacement",
+	}))
+	assertCode(t, err, connect.CodeAlreadyExists)
+}
+
+func TestAddManualModel_EmptyModelID(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&clarkv1.AddManualModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "",
+		DisplayName:         "Nameless",
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestAddManualModel_EmptyDisplayName(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
+
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&clarkv1.AddManualModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         "",
+	}))
+	assertCode(t, err, connect.CodeInvalidArgument)
+}
+
+func TestAddManualModel_CrossUser(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	alice := mustUser(t, q, "alice", false)
+	bob := mustUser(t, q, "bob", false)
+	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
+
+	_, err := svc.AddManualModel(ctxAs(bob), connect.NewRequest(&clarkv1.AddManualModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "m1",
+		DisplayName:         "M1",
+	}))
+	// NotFound — don't leak existence of alice's provider to bob.
+	assertCode(t, err, connect.CodeNotFound)
 }

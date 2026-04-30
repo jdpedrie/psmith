@@ -1,4 +1,4 @@
-.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test swift-build swift-test mac-build mac-run mac-app mac-app-run
+.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run
 
 GOOSE_DRIVER ?= postgres
 GOOSE_DBSTRING ?= postgres://clark:clark@localhost:5433/clark?sslmode=disable
@@ -35,8 +35,31 @@ test:
 swift-build:
 	cd clients/ClarkSwift && swift build
 
-swift-test:
-	cd clients/ClarkSwift && swift test
+# Layer 1 (behavior) tests: ClarkKit integration tests against a freshly-
+# spawned clarkd subprocess. Each test gets a uuid-suffixed user; the server
+# binds an ephemeral port and uses an isolated, per-process database that's
+# dropped at exit.
+swift-test-l1:
+	cd clients/ClarkSwift && swift test --filter ClarkKitTests
+
+# Layer 2 (layout) tests: ClarkMac SwiftUI snapshot tests. References live
+# in clients/clarkd-mac/Tests/ClarkMacSnapshotTests/__Snapshots__/ and are
+# checked into git. Compares pixels against the committed baselines and
+# fails on diff. NSHostingView's `cacheDisplay(in:to:)` doesn't capture
+# Liquid Glass / Metal effects; baselines therefore record text + layout
+# structure (which is where most regressions land anyway).
+swift-test-l2:
+	cd clients/clarkd-mac && swift test --filter ClarkMacSnapshotTests
+
+# Re-baseline after intentional UI changes — sets the pointfreeco
+# RECORD_SNAPSHOTS env var so every assertion writes its current output
+# to disk (overwriting committed PNGs). Review the diff in git before
+# committing.
+swift-test-l2-record:
+	cd clients/clarkd-mac && RECORD_SNAPSHOTS=1 swift test --filter ClarkMacSnapshotTests
+
+# Run all swift tests — L1 (behavior) + L2 (layout snapshots).
+swift-test: swift-test-l1 swift-test-l2
 
 mac-build:
 	cd clients/clarkd-mac && swift build

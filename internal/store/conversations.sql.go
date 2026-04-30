@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -100,6 +101,146 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, userID uuid.UUID)
 			&i.Settings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConversationsByUserRecentlyCreated = `-- name: ListConversationsByUserRecentlyCreated :many
+SELECT
+    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
+    COALESCE(
+        (SELECT MAX(m.created_at) FROM messages m
+         JOIN contexts ctx ON ctx.id = m.context_id
+         WHERE ctx.conversation_id = c.id),
+        c.created_at
+    ) AS last_activity_at
+FROM conversations c
+WHERE c.user_id = $1
+  AND ($2::text IS NULL
+       OR (c.title IS NOT NULL
+           AND c.title ILIKE '%' || $2::text || '%'))
+  AND ($3::uuid IS NULL
+       OR c.profile_id = $3::uuid)
+ORDER BY c.created_at DESC
+`
+
+type ListConversationsByUserRecentlyCreatedParams struct {
+	UserID     uuid.UUID
+	TitleQuery *string
+	ProfileID  *uuid.UUID
+}
+
+type ListConversationsByUserRecentlyCreatedRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	ProfileID      uuid.UUID
+	Title          *string
+	Settings       []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	LastActivityAt time.Time
+}
+
+// Same filters as ListConversationsByUserRecentlyUsed but ordered by the
+// conversation's own created_at — the freshest creation always wins
+// regardless of subsequent message traffic. Still computes
+// last_activity_at for clients that want to display "last used" alongside
+// the row even when sorting by creation.
+func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, arg ListConversationsByUserRecentlyCreatedParams) ([]ListConversationsByUserRecentlyCreatedRow, error) {
+	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyCreated, arg.UserID, arg.TitleQuery, arg.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConversationsByUserRecentlyCreatedRow
+	for rows.Next() {
+		var i ListConversationsByUserRecentlyCreatedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProfileID,
+			&i.Title,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConversationsByUserRecentlyUsed = `-- name: ListConversationsByUserRecentlyUsed :many
+SELECT
+    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
+    COALESCE(
+        (SELECT MAX(m.created_at) FROM messages m
+         JOIN contexts ctx ON ctx.id = m.context_id
+         WHERE ctx.conversation_id = c.id),
+        c.created_at
+    ) AS last_activity_at
+FROM conversations c
+WHERE c.user_id = $1
+  AND ($2::text IS NULL
+       OR (c.title IS NOT NULL
+           AND c.title ILIKE '%' || $2::text || '%'))
+  AND ($3::uuid IS NULL
+       OR c.profile_id = $3::uuid)
+ORDER BY last_activity_at DESC
+`
+
+type ListConversationsByUserRecentlyUsedParams struct {
+	UserID     uuid.UUID
+	TitleQuery *string
+	ProfileID  *uuid.UUID
+}
+
+type ListConversationsByUserRecentlyUsedRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	ProfileID      uuid.UUID
+	Title          *string
+	Settings       []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	LastActivityAt time.Time
+}
+
+// Returns conversations sorted by the most recent message activity, with
+// created_at as the fallback for conversations that haven't received a
+// message yet. Optional filters: case-insensitive title substring (NULL
+// skips the filter; conversations with no title are excluded when set);
+// profile_id (NULL skips the filter).
+func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error) {
+	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyUsed, arg.UserID, arg.TitleQuery, arg.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConversationsByUserRecentlyUsedRow
+	for rows.Next() {
+		var i ListConversationsByUserRecentlyUsedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProfileID,
+			&i.Title,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
 		}

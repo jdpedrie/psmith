@@ -86,9 +86,28 @@ message CreateConversationResponse {
   repeated Message seed_messages = 3;
 }
 
+// Ordering for ListConversations. Default (UNSPECIFIED) = RECENTLY_USED.
+// "Recently used" sorts by the most recent message timestamp across the
+// conversation's contexts, falling back to the conversation's created_at
+// when there are no messages yet (a brand-new conversation appears at the
+// top).
+enum ConversationOrder {
+  CONVERSATION_ORDER_UNSPECIFIED  = 0;
+  CONVERSATION_ORDER_RECENTLY_USED    = 1;
+  CONVERSATION_ORDER_RECENTLY_CREATED = 2;
+}
+
 message ListConversationsRequest {
   int32 page_size = 1;
   string page_token = 2;
+  // Sort order for the returned page. Optional; defaults to RECENTLY_USED.
+  optional ConversationOrder order = 3;
+  // Case-insensitive substring match against the conversation's title.
+  // Conversations with no title are excluded when this is set.
+  optional string title_query = 4;
+  // Filter to conversations belonging to a specific profile. Used by the
+  // sidebar's "By Profile" view to render one section per profile.
+  optional string profile_id = 5;
 }
 message ListConversationsResponse {
   repeated Conversation conversations = 1;

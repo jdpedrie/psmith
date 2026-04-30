@@ -8,6 +8,14 @@ public struct ClarkConversation: Sendable, Hashable, Identifiable {
     public let ownerUserID: String
     public let createdAt: Date
     public let updatedAt: Date
+    /// Most recent message timestamp across the conversation's contexts —
+    /// falls back to `createdAt` when no messages exist yet. Used by the
+    /// sidebar's "Recently Used" sort. May equal `createdAt` for a fresh
+    /// conversation; never nil so the sort is total.
+    public let lastActivityAt: Date
+    /// Per-conversation overrides — top of the call-settings resolution
+    /// chain. Nil when the row has no overrides yet (uses profile defaults).
+    public let settings: ClarkConversationSettings?
 
     public init(
         id: String,
@@ -16,7 +24,9 @@ public struct ClarkConversation: Sendable, Hashable, Identifiable {
         activeContextID: String,
         ownerUserID: String,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        lastActivityAt: Date? = nil,
+        settings: ClarkConversationSettings? = nil
     ) {
         self.id = id
         self.profileID = profileID
@@ -25,6 +35,8 @@ public struct ClarkConversation: Sendable, Hashable, Identifiable {
         self.ownerUserID = ownerUserID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.lastActivityAt = lastActivityAt ?? createdAt
+        self.settings = settings
     }
 }
 
@@ -37,8 +49,24 @@ extension ClarkConversation {
             activeContextID: p.activeContextID,
             ownerUserID: p.ownerUserID,
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
-            updatedAt: p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0)
+            updatedAt: p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0),
+            lastActivityAt: p.hasLastActivityAt ? p.lastActivityAt.date : nil,
+            settings: p.hasSettings ? ClarkConversationSettings(from: p.settings) : nil
         )
+    }
+}
+
+/// Mirror of `Clark_V1_ConversationOrder` for the `ConversationsRepository.list`
+/// surface — keeps the proto enum out of UI/view-model code.
+public enum ClarkConversationOrder: Sendable, Hashable {
+    case recentlyUsed
+    case recentlyCreated
+
+    var proto: Clark_V1_ConversationOrder {
+        switch self {
+        case .recentlyUsed:    return .recentlyUsed
+        case .recentlyCreated: return .recentlyCreated
+        }
     }
 }
 
@@ -49,21 +77,39 @@ public struct ClarkConversationSettings: Sendable, Hashable {
     public var defaultProviderID: String?
     public var defaultModelID: String?
     public var includeThinkingInHistory: Bool?
+    /// Per-conversation CallSettings overrides — top of the resolution chain
+    /// (conversation → profile → model → provider). Sparse: any unset field
+    /// inherits from the resolved profile layer below.
+    public var callSettings: ClarkCallSettings?
 
     public init(
         defaultProviderID: String? = nil,
         defaultModelID: String? = nil,
-        includeThinkingInHistory: Bool? = nil
+        includeThinkingInHistory: Bool? = nil,
+        callSettings: ClarkCallSettings? = nil
     ) {
         self.defaultProviderID = defaultProviderID
         self.defaultModelID = defaultModelID
         self.includeThinkingInHistory = includeThinkingInHistory
+        self.callSettings = callSettings
     }
 
     /// True if no overrides are set — caller should pass `nil` to the
     /// repository in that case rather than an empty proto.
     public var isEmpty: Bool {
-        defaultProviderID == nil && defaultModelID == nil && includeThinkingInHistory == nil
+        defaultProviderID == nil
+            && defaultModelID == nil
+            && includeThinkingInHistory == nil
+            && (callSettings?.isEmpty ?? true)
+    }
+
+    public init(from p: Clark_V1_ConversationSettings) {
+        self.init(
+            defaultProviderID:        p.hasDefaultProviderID        ? p.defaultProviderID        : nil,
+            defaultModelID:           p.hasDefaultModelID           ? p.defaultModelID           : nil,
+            includeThinkingInHistory: p.hasIncludeThinkingInHistory ? p.includeThinkingInHistory : nil,
+            callSettings:             p.hasCallSettings             ? ClarkCallSettings(from: p.callSettings) : nil
+        )
     }
 
     var proto: Clark_V1_ConversationSettings {
@@ -71,6 +117,7 @@ public struct ClarkConversationSettings: Sendable, Hashable {
         if let v = defaultProviderID        { s.defaultProviderID = v }
         if let v = defaultModelID           { s.defaultModelID = v }
         if let v = includeThinkingInHistory { s.includeThinkingInHistory = v }
+        if let cs = callSettings, !cs.isEmpty { s.callSettings = cs.proto }
         return s
     }
 }
@@ -93,6 +140,34 @@ public struct ClarkContext: Sendable, Hashable, Identifiable {
     /// Cumulative cost in USD across every message in this context. Populated
     /// by ListContexts; zero on single-context RPCs that don't aggregate.
     public let cumulativeCostUsd: Double
+
+    // MARK: - Test support
+    /// Public memberwise init so snapshot/unit tests can build deterministic
+    /// fixtures without going through the proto round-trip. Production code
+    /// constructs via `init(from p: Clark_V1_Context)`.
+    public init(
+        id: String,
+        conversationID: String,
+        parentContextID: String? = nil,
+        activationTime: Date? = nil,
+        createdAt: Date,
+        currentLeafMessageID: String? = nil,
+        title: String? = nil,
+        messageCount: Int = 0,
+        lastMessageTotalTokens: Int64 = 0,
+        cumulativeCostUsd: Double = 0
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.parentContextID = parentContextID
+        self.activationTime = activationTime
+        self.createdAt = createdAt
+        self.currentLeafMessageID = currentLeafMessageID
+        self.title = title
+        self.messageCount = messageCount
+        self.lastMessageTotalTokens = lastMessageTotalTokens
+        self.cumulativeCostUsd = cumulativeCostUsd
+    }
 }
 
 extension ClarkContext {
@@ -139,6 +214,33 @@ public struct ClarkMessageUsage: Sendable, Hashable {
     public let cacheReadCostUsd: Double?
     public let cacheWriteCostUsd: Double?
     public let totalCostUsd: Double?
+
+    // MARK: - Test support
+    /// Public memberwise init for fixture construction in snapshot/unit tests.
+    /// Production code uses `init(from p: Clark_V1_MessageUsage)`.
+    public init(
+        inputTokens: Int32? = nil,
+        outputTokens: Int32? = nil,
+        cacheReadTokens: Int32? = nil,
+        cacheWriteTokens: Int32? = nil,
+        reasoningTokens: Int32? = nil,
+        inputCostUsd: Double? = nil,
+        outputCostUsd: Double? = nil,
+        cacheReadCostUsd: Double? = nil,
+        cacheWriteCostUsd: Double? = nil,
+        totalCostUsd: Double? = nil
+    ) {
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheWriteTokens = cacheWriteTokens
+        self.reasoningTokens = reasoningTokens
+        self.inputCostUsd = inputCostUsd
+        self.outputCostUsd = outputCostUsd
+        self.cacheReadCostUsd = cacheReadCostUsd
+        self.cacheWriteCostUsd = cacheWriteCostUsd
+        self.totalCostUsd = totalCostUsd
+    }
 }
 
 extension ClarkMessageUsage {
@@ -182,6 +284,37 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
+
+    // MARK: - Test support
+    /// Public memberwise init so snapshot/unit tests can construct messages
+    /// directly. Production code uses `init(from p: Clark_V1_Message)`.
+    public init(
+        id: String,
+        contextID: String,
+        parentID: String? = nil,
+        role: ClarkMessageRole,
+        content: String,
+        displayContent: String? = nil,
+        siblingCount: Int32 = 0,
+        providerID: String? = nil,
+        modelID: String? = nil,
+        usage: ClarkMessageUsage? = nil,
+        editedAt: Date? = nil,
+        errorText: String? = nil
+    ) {
+        self.id = id
+        self.contextID = contextID
+        self.parentID = parentID
+        self.role = role
+        self.content = content
+        self.displayContent = displayContent
+        self.siblingCount = siblingCount
+        self.providerID = providerID
+        self.modelID = modelID
+        self.usage = usage
+        self.editedAt = editedAt
+        self.errorText = errorText
+    }
 }
 
 extension ClarkMessage {
@@ -213,11 +346,29 @@ public struct ClarkProfileDefaults: Sendable, Hashable {
     public var defaultProviderID: String?
     public var defaultModelID: String?
     public var includeThinkingInHistory: Bool?
+    /// Per-profile default CallSettings. Sparse — any unset field falls
+    /// through to the model / provider layers below in the resolution
+    /// chain. Profile-level settings can also be inherited from a parent
+    /// profile via the existing `parent_profile_id` chain.
+    public var callSettings: ClarkCallSettings?
 
-    public init(defaultProviderID: String? = nil, defaultModelID: String? = nil, includeThinkingInHistory: Bool? = nil) {
+    public init(
+        defaultProviderID: String? = nil,
+        defaultModelID: String? = nil,
+        includeThinkingInHistory: Bool? = nil,
+        callSettings: ClarkCallSettings? = nil
+    ) {
         self.defaultProviderID = defaultProviderID
         self.defaultModelID = defaultModelID
         self.includeThinkingInHistory = includeThinkingInHistory
+        self.callSettings = callSettings
+    }
+
+    public var isEmpty: Bool {
+        defaultProviderID == nil
+            && defaultModelID == nil
+            && includeThinkingInHistory == nil
+            && (callSettings?.isEmpty ?? true)
     }
 }
 
@@ -312,7 +463,8 @@ extension ClarkProfile {
             ? ClarkProfileDefaults(
                 defaultProviderID:        p.defaultSettings.hasDefaultProviderID ? p.defaultSettings.defaultProviderID : nil,
                 defaultModelID:           p.defaultSettings.hasDefaultModelID    ? p.defaultSettings.defaultModelID    : nil,
-                includeThinkingInHistory: p.defaultSettings.hasIncludeThinkingInHistory ? p.defaultSettings.includeThinkingInHistory : nil
+                includeThinkingInHistory: p.defaultSettings.hasIncludeThinkingInHistory ? p.defaultSettings.includeThinkingInHistory : nil,
+                callSettings:             p.defaultSettings.hasCallSettings ? ClarkCallSettings(from: p.defaultSettings.callSettings) : nil
             )
             : nil
         self.init(

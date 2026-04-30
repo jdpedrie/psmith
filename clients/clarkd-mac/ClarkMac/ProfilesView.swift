@@ -385,6 +385,10 @@ private struct ProfileForm: View {
     @State private var defaultUserMessage = ""
     @State private var defaultProviderID: String?
     @State private var defaultModelID: String?
+    /// Editable per-profile default CallSettings. Inherits from the model
+    /// layer below at SendMessage time on the server — the form renders
+    /// "(inherited)" placeholders for unset fields.
+    @State private var callSettingsDraft = ClarkCallSettings()
 
     // Compression
     @State private var compressionMode: ClarkCompressionMode? = nil
@@ -443,9 +447,16 @@ private struct ProfileForm: View {
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    formSection("Basic") {
+            // GeometryReader pins the inner VStack's width to the column's
+            // actual width — without it, the embedded CallSettingsForm's
+            // wide segmented pickers force the VStack's intrinsic size
+            // above the column, so the column's left edge clips the
+            // leading characters of every label. Same fix applied to
+            // ModelEditForm in ProvidersView.
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        formSection("Basic") {
                         formRow(label: "Name",
                                 description: "Short, memorable. Shown in the conversation list.") {
                             TextField("e.g. Default, Coding, Brainstorm", text: $name)
@@ -492,6 +503,20 @@ private struct ProfileForm: View {
                         }
                     }
 
+                    formSection("Default call settings") {
+                        Text("Per-profile generation knobs (temperature, max tokens, thinking, …). Any unset field inherits from the model and provider layers below at send time.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        CallSettingsForm(
+                            settings: $callSettingsDraft,
+                            inheritedSettings: profileInheritedCallSettings,
+                            driverType: profileDriverType,
+                            modelCapabilities: profileModelCapabilities
+                        )
+                    }
+
                     formSection("Compression") {
                         formRow(label: "Mode",
                                 description: "Replace replaces the context with a summary; Append keeps both.") {
@@ -511,6 +536,10 @@ private struct ProfileForm: View {
                                 description: "Optional extra instruction for the summariser.") {
                             multilineEditor($compressionGuide).frame(minHeight: 60)
                         }
+                    }
+
+                    if let editing {
+                        PluginsSection(model: model, profileID: editing.id)
                     }
 
                     formSection("Auto-titling") {
@@ -535,7 +564,8 @@ private struct ProfileForm: View {
                     }
                 }
                 .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: geo.size.width, alignment: .topLeading)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -774,6 +804,7 @@ private struct ProfileForm: View {
         defaultUserMessage = p.defaultUserMessage ?? ""
         defaultProviderID = p.defaultSettings?.defaultProviderID
         defaultModelID    = p.defaultSettings?.defaultModelID
+        callSettingsDraft = p.defaultSettings?.callSettings ?? ClarkCallSettings()
 
         compressionMode       = p.compressionMode
         compressionProviderID = p.compressionProviderID
@@ -784,6 +815,36 @@ private struct ProfileForm: View {
         titleModelID      = p.titleModelID
         titleGuide        = p.titleGuide ?? ""
         titleProviderKind = p.titleProviderKind
+    }
+
+    /// Driver type to render for the CallSettingsForm. Picks from the
+    /// profile's currently-selected default model so swapping the model
+    /// flips the driver-specific extension block.
+    private var profileDriverType: String {
+        guard let pid = defaultProviderID,
+              let type = model.providerTypes[pid] else {
+            return "anthropic"
+        }
+        return type
+    }
+
+    /// Capabilities for the profile's selected default model. Surfaces the
+    /// thinking section only when the model supports it.
+    private var profileModelCapabilities: ClarkModelCapabilities? {
+        guard let pid = defaultProviderID, let mid = defaultModelID else { return nil }
+        return model.availableModels
+            .first(where: { $0.providerID == pid && $0.modelID == mid })?
+            .capabilities
+    }
+
+    /// Inherited (lower-layer) CallSettings preview — the selected default
+    /// model's `defaultSettings`. Profile sits one layer above the model in
+    /// the resolution chain.
+    private var profileInheritedCallSettings: ClarkCallSettings? {
+        guard let pid = defaultProviderID, let mid = defaultModelID else { return nil }
+        return model.availableModels
+            .first(where: { $0.providerID == pid && $0.modelID == mid })?
+            .defaultSettings
     }
 
     private func save() async {
@@ -804,10 +865,16 @@ private struct ProfileForm: View {
         patch.systemMessage = trimmedSystem.isEmpty ? nil : trimmedSystem
         patch.defaultUserMessage = trimmedDefault.isEmpty ? nil : trimmedDefault
 
-        if let pid = defaultProviderID, let mid = defaultModelID {
+        // Build the ProfileDefaults patch lazily — only set it when at least
+        // one of the inner fields is populated, otherwise the server treats
+        // an empty defaults blob the same as "preserve".
+        let trimmedCallSettings: ClarkCallSettings? = callSettingsDraft.isEmpty ? nil : callSettingsDraft
+        let hasAnyDefault = defaultProviderID != nil || defaultModelID != nil || trimmedCallSettings != nil
+        if hasAnyDefault {
             patch.defaultSettings = ClarkProfileDefaults(
-                defaultProviderID: pid,
-                defaultModelID: mid
+                defaultProviderID: defaultProviderID,
+                defaultModelID: defaultModelID,
+                callSettings: trimmedCallSettings
             )
         }
 
@@ -859,5 +926,279 @@ private struct ProfileForm: View {
         } catch {
             formError = error.localizedDescription
         }
+    }
+}
+
+// MARK: - Plugins section
+
+/// Inline plugins editor lives at the bottom of ProfileForm. Owns its own
+/// draft list (so edits don't mutate ProfilesViewModel.profilePlugins until
+/// the user clicks Save plugins). Loads from the server on appear.
+private struct PluginsSection: View {
+    @Bindable var model: ProfilesViewModel
+    let profileID: String
+
+    @State private var draft: [DraftPlugin] = []
+    @State private var loaded = false
+    @State private var isSaving = false
+    @State private var saveError: String?
+    @State private var addPopoverShown = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Plugins")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                Spacer()
+                if isDirty {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving { ProgressView().controlSize(.small) }
+                        else { Text("Save plugins") }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.glassProminent)
+                    .disabled(isSaving)
+                }
+            }
+
+            if !loaded {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading plugins…").font(.caption).foregroundStyle(.secondary)
+                }
+            } else if draft.isEmpty {
+                Text("No plugins. Inherits from parent profile.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(draft.enumerated()), id: \.element.localID) { index, plugin in
+                        pluginRow(index: index, plugin: plugin)
+                    }
+                }
+            }
+
+            addPluginButton
+                .disabled(model.pluginTypes.isEmpty)
+
+            if let saveError {
+                Text(saveError).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .task {
+            if model.pluginTypes.isEmpty {
+                await model.loadPluginTypes()
+            }
+            await model.loadPlugins(forProfileID: profileID)
+            seedDraft()
+            loaded = true
+        }
+    }
+
+    @ViewBuilder
+    private func pluginRow(index: Int, plugin: DraftPlugin) -> some View {
+        let pluginType = model.pluginTypes.first(where: { $0.name == plugin.pluginName })
+        let title = pluginType?.name ?? plugin.pluginName
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.callout.weight(.medium))
+                    if let desc = pluginType?.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer()
+                GlassCircleButton(
+                    systemImage: "minus",
+                    action: { remove(at: index) },
+                    help: "Remove plugin",
+                    tint: .red
+                )
+            }
+
+            if let pluginType, !pluginType.configFields.isEmpty {
+                PluginConfigForm(
+                    fields: pluginType.configFields,
+                    config: Binding(
+                        get: { draft[index].config },
+                        set: { draft[index].config = $0 }
+                    )
+                )
+                .padding(.leading, 4)
+            }
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.04))
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private var addPluginButton: some View {
+        Button {
+            addPopoverShown = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                Text("Add plugin")
+            }
+            .font(.callout)
+        }
+        .controlSize(.small)
+        .buttonStyle(.glass)
+        .popover(isPresented: $addPopoverShown, arrowEdge: .bottom) {
+            addPluginPopoverContent
+        }
+    }
+
+    private var addPluginPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if model.pluginTypes.isEmpty {
+                Text("No plugins available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+            } else {
+                ForEach(model.pluginTypes) { pluginType in
+                    Button {
+                        addPopoverShown = false
+                        attach(pluginType)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pluginType.name)
+                                .foregroundStyle(.primary)
+                                .font(.callout)
+                            if !pluginType.description.isEmpty {
+                                Text(pluginType.description)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(minWidth: 260)
+        .padding(.vertical, 4)
+    }
+
+    // MARK: state helpers
+
+    private func seedDraft() {
+        let stored = model.profilePlugins[profileID] ?? []
+        draft = stored.map { plugin in
+            DraftPlugin(
+                pluginName: plugin.pluginName,
+                config: decodeConfigDict(plugin.config) ?? [:]
+            )
+        }
+    }
+
+    private func attach(_ pluginType: ClarkPluginType) {
+        // Initialize the dict from each field's defaultJSON so the row
+        // has sensible starting values.
+        var initial: [String: Any] = [:]
+        for field in pluginType.configFields {
+            if !field.defaultJSON.isEmpty,
+               let data = field.defaultJSON.data(using: .utf8),
+               let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
+                initial[field.name] = any
+            }
+        }
+        draft.append(DraftPlugin(pluginName: pluginType.name, config: initial))
+    }
+
+    private func remove(at index: Int) {
+        guard draft.indices.contains(index) else { return }
+        draft.remove(at: index)
+    }
+
+    private var isDirty: Bool {
+        let stored = model.profilePlugins[profileID] ?? []
+        guard stored.count == draft.count else { return true }
+        for (s, d) in zip(stored, draft) {
+            if s.pluginName != d.pluginName { return true }
+            let storedDict = decodeConfigDict(s.config) ?? [:]
+            if !configsEqual(storedDict, d.config) { return true }
+        }
+        return false
+    }
+
+    private func save() async {
+        isSaving = true; saveError = nil
+        defer { isSaving = false }
+        do {
+            let plugins: [ClarkProfilePlugin] = try draft.enumerated().map { ordinal, plugin in
+                let data = try JSONSerialization.data(withJSONObject: plugin.config, options: [.sortedKeys])
+                return ClarkProfilePlugin(
+                    pluginName: plugin.pluginName,
+                    ordinal: Int32(ordinal),
+                    config: data
+                )
+            }
+            try await model.savePlugins(forProfileID: profileID, plugins: plugins)
+            seedDraft()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+}
+
+private struct DraftPlugin {
+    let localID = UUID()
+    var pluginName: String
+    var config: [String: Any]
+}
+
+private func decodeConfigDict(_ data: Data) -> [String: Any]? {
+    guard !data.isEmpty else { return [:] }
+    return (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
+}
+
+/// Shallow equality on the JSON-serializable subset we ever write into
+/// these dicts (Bool / Int / Double / String + nested dicts/arrays of the
+/// same). Used to drive the dirty indicator on the Plugins section.
+private func configsEqual(_ a: [String: Any], _ b: [String: Any]) -> Bool {
+    guard a.count == b.count else { return false }
+    for (k, v) in a {
+        guard let other = b[k] else { return false }
+        if !anyEqual(v, other) { return false }
+    }
+    return true
+}
+
+private func anyEqual(_ a: Any, _ b: Any) -> Bool {
+    switch (a, b) {
+    case let (a as Bool, b as Bool):     return a == b
+    case let (a as Int, b as Int):       return a == b
+    case let (a as Double, b as Double): return a == b
+    case let (a as Int, b as Double):    return Double(a) == b
+    case let (a as Double, b as Int):    return a == Double(b)
+    case let (a as String, b as String): return a == b
+    case let (a as [Any], b as [Any]):
+        guard a.count == b.count else { return false }
+        return zip(a, b).allSatisfy { anyEqual($0, $1) }
+    case let (a as [String: Any], b as [String: Any]):
+        return configsEqual(a, b)
+    default:
+        return false
     }
 }

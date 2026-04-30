@@ -30,6 +30,7 @@ import (
 
 	// Driver packages self-register their provider type in init().
 	_ "github.com/jdpedrie/clark/internal/providers/anthropic"
+	_ "github.com/jdpedrie/clark/internal/providers/google"
 	_ "github.com/jdpedrie/clark/internal/providers/openai"
 )
 

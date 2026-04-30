@@ -82,6 +82,31 @@ public final class ProfilesRepository: Sendable {
         let resp = await client.deleteProfile(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
     }
+
+    // MARK: - Plugins
+
+    public func listPluginTypes() async throws -> [ClarkPluginType] {
+        let resp = await client.listPluginTypes(request: Clark_V1_ListPluginTypesRequest(), headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list plugin types") }
+        return msg.pluginTypes.map(ClarkPluginType.init(from:))
+    }
+
+    public func getProfilePlugins(profileID: String) async throws -> [ClarkProfilePlugin] {
+        var req = Clark_V1_GetProfilePluginsRequest()
+        req.profileID = profileID
+        let resp = await client.getProfilePlugins(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("get profile plugins") }
+        return msg.plugins.map(ClarkProfilePlugin.init(from:))
+    }
+
+    public func setProfilePlugins(profileID: String, plugins: [ClarkProfilePlugin]) async throws -> [ClarkProfilePlugin] {
+        var req = Clark_V1_SetProfilePluginsRequest()
+        req.profileID = profileID
+        req.plugins = plugins.map { $0.proto }
+        let resp = await client.setProfilePlugins(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("set profile plugins") }
+        return msg.plugins.map(ClarkProfilePlugin.init(from:))
+    }
 }
 
 /// Optional-each-field patch shape for create/update. `nil` = don't set.
@@ -154,8 +179,9 @@ private func pbCompressionMode(_ m: ClarkCompressionMode) -> Clark_V1_Compressio
 
 private func pbDefaults(_ d: ClarkProfileDefaults) -> Clark_V1_ProfileDefaults {
     var pd = Clark_V1_ProfileDefaults()
-    if let v = d.defaultProviderID        { pd.defaultProviderID = v }
-    if let v = d.defaultModelID           { pd.defaultModelID = v }
-    if let v = d.includeThinkingInHistory { pd.includeThinkingInHistory = v }
+    if let v = d.defaultProviderID         { pd.defaultProviderID = v }
+    if let v = d.defaultModelID            { pd.defaultModelID = v }
+    if let v = d.includeThinkingInHistory  { pd.includeThinkingInHistory = v }
+    if let cs = d.callSettings, !cs.isEmpty { pd.callSettings = cs.proto }
     return pd
 }

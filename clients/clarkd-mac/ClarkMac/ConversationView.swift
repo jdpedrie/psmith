@@ -46,7 +46,11 @@ struct ConversationView: View {
 
 // MARK: - Body
 
-private struct ConversationBody: View {
+/// Internal so snapshot tests can render with a pre-populated
+/// ConversationViewModel (bypassing the load() RPC fired by ConversationView's
+/// `task(id:)`). Production code constructs this exclusively from
+/// ConversationView; tests are the only other caller.
+struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ClarkConversation
     @Environment(AppModel.self) private var app
@@ -57,6 +61,8 @@ private struct ConversationBody: View {
                 ContextListPane(model: model)
             } else if model.showingCompactView {
                 CompactPane(model: model)
+            } else if model.showingSettingsView {
+                ConversationSettingsView(model: model)
             } else {
                 statusStrip
                 if let err = model.compactError {
@@ -78,7 +84,10 @@ private struct ConversationBody: View {
             ToolbarItem(placement: .navigation) {
                 leadingToolbarItem
             }
-            if !model.showingContextList && !model.showingCompactView {
+            if !model.showingContextList && !model.showingCompactView && !model.showingSettingsView {
+                ToolbarItem(placement: .primaryAction) {
+                    settingsButton
+                }
                 ToolbarItem(placement: .primaryAction) {
                     overflowMenu
                 }
@@ -134,6 +143,7 @@ private struct ConversationBody: View {
     private var navTitle: String {
         if model.showingContextList { return "Contexts" }
         if model.showingCompactView { return "Compact" }
+        if model.showingSettingsView { return "Settings" }
         let base = liveConversation.title?.isEmpty == false ? liveConversation.title! : "Untitled"
         let cost = model.conversationCost
         if cost > 0 {
@@ -145,7 +155,7 @@ private struct ConversationBody: View {
     /// Window-title-bar subtitle. Hidden (empty) on the page-swap screens so
     /// the chrome stays clean — those screens render their own structure.
     private var navSubtitle: String {
-        if model.showingContextList || model.showingCompactView { return "" }
+        if model.showingContextList || model.showingCompactView || model.showingSettingsView { return "" }
         return activeContextSubtitle
     }
 
@@ -261,6 +271,14 @@ private struct ConversationBody: View {
             }
             .help("Back to conversation")
             .keyboardShortcut(.cancelAction)
+        } else if model.showingSettingsView {
+            Button {
+                model.showingSettingsView = false
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .help("Back to conversation")
+            .keyboardShortcut(.cancelAction)
         } else if model.contexts.count > 1 {
             Button {
                 model.showingContextList = true
@@ -269,6 +287,18 @@ private struct ConversationBody: View {
             }
             .help("View contexts")
         }
+    }
+
+    /// Trailing toolbar gear that opens the in-conversation Settings page.
+    /// Like the Compact button, this is wired as a direct Button rather than
+    /// a single-item Menu (which on macOS renders zero-height rows).
+    private var settingsButton: some View {
+        Button {
+            model.showingSettingsView = true
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .help("Conversation settings")
     }
 
     private func compactErrorBanner(_ message: String) -> some View {
@@ -1043,6 +1073,20 @@ private struct MessageUsagePopover: View {
                     }
                 }
 
+                // Cache savings — surface the dollar value the user
+                // wouldn't have spent on un-cached input. Anthropic gets a
+                // 90% discount on cache reads, OpenAI / Google ~50%.
+                if let cacheRead = u.cacheReadTokens, cacheRead > 0,
+                   let savings = cacheSavings(message: message, cacheReadTokens: cacheRead) {
+                    section("Cache") {
+                        row("Cache read",  cacheRead.formatted())
+                        if let cw = u.cacheWriteTokens, cw > 0 {
+                            row("Cache write", cw.formatted())
+                        }
+                        row("Estimated savings", costStr(savings), bold: true)
+                    }
+                }
+
                 // Costs
                 let hasCosts = u.inputCostUsd != nil || u.outputCostUsd != nil
                     || u.cacheReadCostUsd != nil || u.cacheWriteCostUsd != nil
@@ -1060,6 +1104,31 @@ private struct MessageUsagePopover: View {
         }
         .padding(14)
         .frame(minWidth: 280)
+    }
+
+    /// Estimate cache savings in USD for an assistant message. Computes
+    /// `cache_read_tokens × input_price_per_M / 1_000_000 × discount_factor`
+    /// where the discount factor is 0.9 for Anthropic (90% off) and 0.5 for
+    /// OpenAI / Google (50% off). Returns nil when we can't look up the
+    /// model's input pricing.
+    private func cacheSavings(message: ClarkMessage, cacheReadTokens: Int32) -> Double? {
+        guard let mid = message.modelID else { return nil }
+        let pid = message.providerID
+        guard let model = self.model.availableModels.first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) }),
+              let inputPrice = model.pricing?.inputPerMillion,
+              inputPrice > 0
+        else { return nil }
+        let discount: Double = isAnthropicProvider ? 0.9 : 0.5
+        return Double(cacheReadTokens) * inputPrice / 1_000_000.0 * discount
+    }
+
+    /// True when this message came from the Anthropic driver — used to pick
+    /// the cache-savings discount factor (90% on Anthropic, 50% elsewhere).
+    /// Falls back to false when the provider's driver type isn't loaded.
+    private var isAnthropicProvider: Bool {
+        guard let pid = message.providerID,
+              let type = self.model.providerTypes[pid] else { return false }
+        return type == "anthropic"
     }
 
     private func costStr(_ v: Double) -> String {

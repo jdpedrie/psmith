@@ -29,15 +29,21 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // Column minWidths sum below the window's 1080pt minimum
+        // (180 + 220 + 540 = 940pt) so HSplitView can honor each column's
+        // floor with headroom. The detail floor is set high enough to
+        // accommodate the model edit form's wide segmented pickers
+        // (Service tier / Response format) — narrower values caused the
+        // form's intrinsic content to overflow into the previous column.
         HSplitView {
             categoriesColumn
-                .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
+                .frame(minWidth: 180, idealWidth: 220, maxWidth: 240)
             insetWrap(middleColumn)
-                .frame(minWidth: 260, idealWidth: 320, maxWidth: 380)
+                .frame(minWidth: 220, idealWidth: 280, maxWidth: 340)
             insetWrap(detailColumn)
-                .frame(minWidth: 420)
+                .frame(minWidth: 540)
         }
-        .frame(minWidth: 940, minHeight: 520)
+        .frame(minWidth: 1040, minHeight: 520)
         .onAppear { consumePendingProfileSelection() }
         .onChange(of: navigator.pendingProfileSelection) { _, _ in
             consumePendingProfileSelection()

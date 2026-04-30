@@ -331,7 +331,7 @@ func TestSend_ThinkingAndToolUseStream(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-opus-4-7",
 		Messages: []providers.WireMessage{{Role: "user", Content: "compute"}},
-		Settings: providers.CallSettings{ThinkingEnabled: &enabled, ThinkingBudgetTokens: &budget},
+		Settings: providers.CallSettings{Thinking: &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &budget}},
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -520,6 +520,308 @@ func TestRenderThinkingToText(t *testing.T) {
 // ---------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------
+
+// ---------------------------------------------------------------------
+// CallSettings translation
+// ---------------------------------------------------------------------
+
+// TestSend_TopKWiredThrough confirms top_k flows from CallSettings to the
+// outbound request body.
+func TestSend_TopKWiredThrough(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	topK := 40
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "claude-opus-4-7",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+		Settings: providers.CallSettings{TopK: &topK},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	if !strings.Contains(string(bodyBytes), `"top_k":40`) {
+		t.Errorf("expected top_k=40 in request body, body=%s", bodyBytes)
+	}
+}
+
+// TestSend_CacheControl_OnPriorAssistantTurn confirms a single cache_control
+// breakpoint is placed at the end of the most-recent assistant turn when
+// there's prior history.
+func TestSend_CacheControl_OnPriorAssistantTurn(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be helpful"},
+			{Role: "user", Content: "Q1"},
+			{Role: "assistant", Content: "A1"},
+			{Role: "user", Content: "Q2"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	body := string(bodyBytes)
+
+	// Must contain exactly one cache_control marker.
+	if cnt := strings.Count(body, `"cache_control"`); cnt != 1 {
+		t.Errorf("expected exactly 1 cache_control marker, got %d in body=%s", cnt, body)
+	}
+	// It must appear inside the assistant turn's content (right after "A1").
+	asstIdx := strings.Index(body, `"A1"`)
+	cacheIdx := strings.Index(body, `"cache_control"`)
+	if asstIdx < 0 || cacheIdx < 0 {
+		t.Fatalf("missing markers: A1=%d cache=%d body=%s", asstIdx, cacheIdx, body)
+	}
+	if cacheIdx < asstIdx {
+		t.Errorf("cache_control should appear after the assistant text; cache@%d A1@%d", cacheIdx, asstIdx)
+	}
+}
+
+// TestSend_CacheControl_OmittedOnFirstTurn confirms NO cache_control is
+// placed when there's only the new user message — no stable prefix exists.
+func TestSend_CacheControl_OmittedOnFirstTurn(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	// No system, no prior assistant — only the new user turn. Driver should
+	// not add a cache_control breakpoint (nothing stable to cache).
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "claude-opus-4-7",
+		Messages: []providers.WireMessage{{Role: "user", Content: "first message"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	if strings.Contains(string(bodyBytes), `"cache_control"`) {
+		t.Errorf("expected no cache_control on first turn; body=%s", bodyBytes)
+	}
+}
+
+// TestSend_CacheControl_DefaultEnabled is a regression guard for the "no
+// AnthropicExtras provided" path — the marker should still be placed (current
+// behaviour, identical to before AnthropicExtras gained per-call knobs).
+func TestSend_CacheControl_DefaultEnabled(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be helpful"},
+			{Role: "user", Content: "Q1"},
+			{Role: "assistant", Content: "A1"},
+			{Role: "user", Content: "Q2"},
+		},
+		// Settings.Anthropic deliberately nil — assert default behaviour.
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	body := string(bodyBytes)
+	if cnt := strings.Count(body, `"cache_control"`); cnt != 1 {
+		t.Errorf("expected exactly 1 cache_control marker, got %d in body=%s", cnt, body)
+	}
+}
+
+// TestSend_CacheControl_DisabledByExtras confirms an explicit
+// AnthropicExtras{CacheEnabled: false} suppresses the marker entirely.
+func TestSend_CacheControl_DisabledByExtras(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	disabled := false
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be helpful"},
+			{Role: "user", Content: "Q1"},
+			{Role: "assistant", Content: "A1"},
+			{Role: "user", Content: "Q2"},
+		},
+		Settings: providers.CallSettings{
+			Anthropic: &providers.AnthropicExtras{CacheEnabled: &disabled},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	if strings.Contains(string(bodyBytes), `"cache_control"`) {
+		t.Errorf("expected no cache_control when CacheEnabled=false; body=%s", bodyBytes)
+	}
+}
+
+// TestSend_CacheControl_TTL5m confirms the explicit 5m selection still
+// produces a marker WITHOUT a `ttl` field (5m is the API default; emitting
+// it explicitly is harmless but unnecessary).
+func TestSend_CacheControl_TTL5m(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be helpful"},
+			{Role: "user", Content: "Q1"},
+			{Role: "assistant", Content: "A1"},
+			{Role: "user", Content: "Q2"},
+		},
+		Settings: providers.CallSettings{
+			Anthropic: &providers.AnthropicExtras{CacheTTL: providers.CacheTTL5m},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	body := string(bodyBytes)
+	if cnt := strings.Count(body, `"cache_control"`); cnt != 1 {
+		t.Errorf("expected exactly 1 cache_control marker, got %d in body=%s", cnt, body)
+	}
+	// Driver leaves the SDK default (no ttl override) → request must not
+	// carry an explicit `ttl` field.
+	if strings.Contains(body, `"ttl"`) {
+		t.Errorf("expected no ttl field on 5m default; body=%s", body)
+	}
+}
+
+// TestSend_CacheControl_TTL1h confirms the 1-hour TTL selection produces a
+// marker carrying `"ttl":"1h"` on the wire. SDK v1.4 doesn't expose this
+// field on the non-beta CacheControlEphemeralParam directly; the driver
+// uses the SDK's SetExtraFields escape hatch to splice the entry in.
+func TestSend_CacheControl_TTL1h(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be helpful"},
+			{Role: "user", Content: "Q1"},
+			{Role: "assistant", Content: "A1"},
+			{Role: "user", Content: "Q2"},
+		},
+		Settings: providers.CallSettings{
+			Anthropic: &providers.AnthropicExtras{CacheTTL: providers.CacheTTL1h},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	body := string(bodyBytes)
+	if cnt := strings.Count(body, `"cache_control"`); cnt != 1 {
+		t.Errorf("expected exactly 1 cache_control marker, got %d in body=%s", cnt, body)
+	}
+	if !strings.Contains(body, `"ttl":"1h"`) {
+		t.Errorf("expected ttl=1h on the cache_control marker; body=%s", body)
+	}
+}
+
+// TestSend_CacheControl_OnSystemWhenNoAssistantYet confirms cache_control
+// lands on the system block when there's a system prompt but no prior
+// assistant turn (i.e., the very first user turn after profile creation).
+func TestSend_CacheControl_OnSystemWhenNoAssistantYet(t *testing.T) {
+	var bodyBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		bodyBytes = buf
+		sseEvents(w, [2]string{"message_stop", `{"type":"message_stop"}`})
+	}))
+	defer srv.Close()
+
+	d := newTestDriver(t, srv.URL, nil)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "claude-opus-4-7",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "you are a helpful assistant"},
+			{Role: "user", Content: "first user turn"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+	body := string(bodyBytes)
+	if cnt := strings.Count(body, `"cache_control"`); cnt != 1 {
+		t.Errorf("expected exactly 1 cache_control marker on system, got %d in body=%s", cnt, body)
+	}
+	// The marker should sit on the system block — the system prompt text
+	// "you are a helpful assistant" must appear immediately before
+	// "cache_control" within the same JSON block, with no intervening
+	// "role":"user" delimiter.
+	cacheIdx := strings.Index(body, `"cache_control"`)
+	systemTextIdx := strings.Index(body, `"you are a helpful assistant"`)
+	if cacheIdx < 0 || systemTextIdx < 0 {
+		t.Fatalf("missing markers; body=%s", body)
+	}
+	// cache_control must follow the system prompt text in the body.
+	if cacheIdx < systemTextIdx {
+		t.Errorf("cache_control (@%d) should follow the system text (@%d); body=%s", cacheIdx, systemTextIdx, body)
+	}
+	// And there should be no "role":"assistant" anywhere — first turn.
+	if strings.Contains(body, `"role":"assistant"`) {
+		t.Errorf("first turn body shouldn't have an assistant turn; body=%s", body)
+	}
+}
 
 func drainChunks(t *testing.T, ch <-chan providers.Chunk) []providers.Chunk {
 	t.Helper()

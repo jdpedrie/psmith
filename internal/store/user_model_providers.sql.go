@@ -12,17 +12,18 @@ import (
 )
 
 const createUserModelProvider = `-- name: CreateUserModelProvider :one
-INSERT INTO user_model_providers (id, user_id, type, label, config)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, type, label, config, created_at, updated_at
+INSERT INTO user_model_providers (id, user_id, type, label, config, default_settings)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, type, label, config, created_at, updated_at, default_settings
 `
 
 type CreateUserModelProviderParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
-	Type   string
-	Label  string
-	Config []byte
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Type            string
+	Label           string
+	Config          []byte
+	DefaultSettings []byte
 }
 
 func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserModelProviderParams) (UserModelProvider, error) {
@@ -32,6 +33,7 @@ func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserMod
 		arg.Type,
 		arg.Label,
 		arg.Config,
+		arg.DefaultSettings,
 	)
 	var i UserModelProvider
 	err := row.Scan(
@@ -42,6 +44,7 @@ func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserMod
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultSettings,
 	)
 	return i, err
 }
@@ -56,7 +59,7 @@ func (q *Queries) DeleteUserModelProvider(ctx context.Context, id uuid.UUID) err
 }
 
 const getUserModelProvider = `-- name: GetUserModelProvider :one
-SELECT id, user_id, type, label, config, created_at, updated_at FROM user_model_providers WHERE id = $1
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings FROM user_model_providers WHERE id = $1
 `
 
 func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error) {
@@ -70,12 +73,13 @@ func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserM
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultSettings,
 	)
 	return i, err
 }
 
 const listUserModelProvidersByUser = `-- name: ListUserModelProvidersByUser :many
-SELECT id, user_id, type, label, config, created_at, updated_at FROM user_model_providers
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings FROM user_model_providers
 WHERE user_id = $1
 ORDER BY created_at
 `
@@ -97,6 +101,7 @@ func (q *Queries) ListUserModelProvidersByUser(ctx context.Context, userID uuid.
 			&i.Config,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DefaultSettings,
 		); err != nil {
 			return nil, err
 		}
@@ -124,6 +129,26 @@ type UpdateUserModelProviderConfigParams struct {
 // To clear a key, send it explicitly with an empty value.
 func (q *Queries) UpdateUserModelProviderConfig(ctx context.Context, arg UpdateUserModelProviderConfigParams) error {
 	_, err := q.db.Exec(ctx, updateUserModelProviderConfig, arg.ID, arg.Config)
+	return err
+}
+
+const updateUserModelProviderDefaultSettings = `-- name: UpdateUserModelProviderDefaultSettings :exec
+UPDATE user_model_providers
+SET default_settings = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateUserModelProviderDefaultSettingsParams struct {
+	ID              uuid.UUID
+	DefaultSettings []byte
+}
+
+// Replaces (not merges) the provider-level default_settings blob. NULL clears
+// it, returning the row to "no provider-level defaults; resolve from above
+// only." Replace semantics keep the call site simple — the resolver does the
+// merge with the upper layers, so partial writes here would be a footgun.
+func (q *Queries) UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error {
+	_, err := q.db.Exec(ctx, updateUserModelProviderDefaultSettings, arg.ID, arg.DefaultSettings)
 	return err
 }
 

@@ -74,6 +74,165 @@ func (MetadataSource) EnumDescriptor() ([]byte, []int) {
 	return file_clark_v1_types_proto_rawDescGZIP(), []int{0}
 }
 
+// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
+// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
+// tier costs more to write but persists across longer idle gaps.
+type CacheTTL int32
+
+const (
+	CacheTTL_CACHE_TTL_UNSPECIFIED CacheTTL = 0
+	CacheTTL_CACHE_TTL_5M          CacheTTL = 1
+	CacheTTL_CACHE_TTL_1H          CacheTTL = 2
+)
+
+// Enum value maps for CacheTTL.
+var (
+	CacheTTL_name = map[int32]string{
+		0: "CACHE_TTL_UNSPECIFIED",
+		1: "CACHE_TTL_5M",
+		2: "CACHE_TTL_1H",
+	}
+	CacheTTL_value = map[string]int32{
+		"CACHE_TTL_UNSPECIFIED": 0,
+		"CACHE_TTL_5M":          1,
+		"CACHE_TTL_1H":          2,
+	}
+)
+
+func (x CacheTTL) Enum() *CacheTTL {
+	p := new(CacheTTL)
+	*p = x
+	return p
+}
+
+func (x CacheTTL) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CacheTTL) Descriptor() protoreflect.EnumDescriptor {
+	return file_clark_v1_types_proto_enumTypes[1].Descriptor()
+}
+
+func (CacheTTL) Type() protoreflect.EnumType {
+	return &file_clark_v1_types_proto_enumTypes[1]
+}
+
+func (x CacheTTL) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CacheTTL.Descriptor instead.
+func (CacheTTL) EnumDescriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{1}
+}
+
+type ServiceTier int32
+
+const (
+	ServiceTier_SERVICE_TIER_UNSPECIFIED ServiceTier = 0
+	ServiceTier_SERVICE_TIER_AUTO        ServiceTier = 1
+	ServiceTier_SERVICE_TIER_STANDARD    ServiceTier = 2
+	ServiceTier_SERVICE_TIER_PRIORITY    ServiceTier = 3
+)
+
+// Enum value maps for ServiceTier.
+var (
+	ServiceTier_name = map[int32]string{
+		0: "SERVICE_TIER_UNSPECIFIED",
+		1: "SERVICE_TIER_AUTO",
+		2: "SERVICE_TIER_STANDARD",
+		3: "SERVICE_TIER_PRIORITY",
+	}
+	ServiceTier_value = map[string]int32{
+		"SERVICE_TIER_UNSPECIFIED": 0,
+		"SERVICE_TIER_AUTO":        1,
+		"SERVICE_TIER_STANDARD":    2,
+		"SERVICE_TIER_PRIORITY":    3,
+	}
+)
+
+func (x ServiceTier) Enum() *ServiceTier {
+	p := new(ServiceTier)
+	*p = x
+	return p
+}
+
+func (x ServiceTier) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ServiceTier) Descriptor() protoreflect.EnumDescriptor {
+	return file_clark_v1_types_proto_enumTypes[2].Descriptor()
+}
+
+func (ServiceTier) Type() protoreflect.EnumType {
+	return &file_clark_v1_types_proto_enumTypes[2]
+}
+
+func (x ServiceTier) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ServiceTier.Descriptor instead.
+func (ServiceTier) EnumDescriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{2}
+}
+
+type HarmThreshold int32
+
+const (
+	HarmThreshold_HARM_THRESHOLD_UNSPECIFIED            HarmThreshold = 0
+	HarmThreshold_HARM_THRESHOLD_BLOCK_NONE             HarmThreshold = 1
+	HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE    HarmThreshold = 2
+	HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE HarmThreshold = 3 // Gemini default
+	HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH        HarmThreshold = 4
+)
+
+// Enum value maps for HarmThreshold.
+var (
+	HarmThreshold_name = map[int32]string{
+		0: "HARM_THRESHOLD_UNSPECIFIED",
+		1: "HARM_THRESHOLD_BLOCK_NONE",
+		2: "HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE",
+		3: "HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE",
+		4: "HARM_THRESHOLD_BLOCK_ONLY_HIGH",
+	}
+	HarmThreshold_value = map[string]int32{
+		"HARM_THRESHOLD_UNSPECIFIED":            0,
+		"HARM_THRESHOLD_BLOCK_NONE":             1,
+		"HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE":    2,
+		"HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE": 3,
+		"HARM_THRESHOLD_BLOCK_ONLY_HIGH":        4,
+	}
+)
+
+func (x HarmThreshold) Enum() *HarmThreshold {
+	p := new(HarmThreshold)
+	*p = x
+	return p
+}
+
+func (x HarmThreshold) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HarmThreshold) Descriptor() protoreflect.EnumDescriptor {
+	return file_clark_v1_types_proto_enumTypes[3].Descriptor()
+}
+
+func (HarmThreshold) Type() protoreflect.EnumType {
+	return &file_clark_v1_types_proto_enumTypes[3]
+}
+
+func (x HarmThreshold) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HarmThreshold.Descriptor instead.
+func (HarmThreshold) EnumDescriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{3}
+}
+
 type CompressionMode int32
 
 const (
@@ -107,11 +266,11 @@ func (x CompressionMode) String() string {
 }
 
 func (CompressionMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_clark_v1_types_proto_enumTypes[1].Descriptor()
+	return file_clark_v1_types_proto_enumTypes[4].Descriptor()
 }
 
 func (CompressionMode) Type() protoreflect.EnumType {
-	return &file_clark_v1_types_proto_enumTypes[1]
+	return &file_clark_v1_types_proto_enumTypes[4]
 }
 
 func (x CompressionMode) Number() protoreflect.EnumNumber {
@@ -120,7 +279,7 @@ func (x CompressionMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CompressionMode.Descriptor instead.
 func (CompressionMode) EnumDescriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
 type MessageRole int32
@@ -165,11 +324,11 @@ func (x MessageRole) String() string {
 }
 
 func (MessageRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_clark_v1_types_proto_enumTypes[2].Descriptor()
+	return file_clark_v1_types_proto_enumTypes[5].Descriptor()
 }
 
 func (MessageRole) Type() protoreflect.EnumType {
-	return &file_clark_v1_types_proto_enumTypes[2]
+	return &file_clark_v1_types_proto_enumTypes[5]
 }
 
 func (x MessageRole) Number() protoreflect.EnumNumber {
@@ -178,7 +337,7 @@ func (x MessageRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MessageRole.Descriptor instead.
 func (MessageRole) EnumDescriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{5}
 }
 
 type StreamRunStatus int32
@@ -223,11 +382,11 @@ func (x StreamRunStatus) String() string {
 }
 
 func (StreamRunStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_clark_v1_types_proto_enumTypes[3].Descriptor()
+	return file_clark_v1_types_proto_enumTypes[6].Descriptor()
 }
 
 func (StreamRunStatus) Type() protoreflect.EnumType {
-	return &file_clark_v1_types_proto_enumTypes[3]
+	return &file_clark_v1_types_proto_enumTypes[6]
 }
 
 func (x StreamRunStatus) Number() protoreflect.EnumNumber {
@@ -236,7 +395,7 @@ func (x StreamRunStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StreamRunStatus.Descriptor instead.
 func (StreamRunStatus) EnumDescriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{6}
 }
 
 type StreamRunPurpose int32
@@ -272,11 +431,11 @@ func (x StreamRunPurpose) String() string {
 }
 
 func (StreamRunPurpose) Descriptor() protoreflect.EnumDescriptor {
-	return file_clark_v1_types_proto_enumTypes[4].Descriptor()
+	return file_clark_v1_types_proto_enumTypes[7].Descriptor()
 }
 
 func (StreamRunPurpose) Type() protoreflect.EnumType {
-	return &file_clark_v1_types_proto_enumTypes[4]
+	return &file_clark_v1_types_proto_enumTypes[7]
 }
 
 func (x StreamRunPurpose) Number() protoreflect.EnumNumber {
@@ -285,7 +444,7 @@ func (x StreamRunPurpose) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StreamRunPurpose.Descriptor instead.
 func (StreamRunPurpose) EnumDescriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{7}
 }
 
 type ChunkType int32
@@ -339,11 +498,11 @@ func (x ChunkType) String() string {
 }
 
 func (ChunkType) Descriptor() protoreflect.EnumDescriptor {
-	return file_clark_v1_types_proto_enumTypes[5].Descriptor()
+	return file_clark_v1_types_proto_enumTypes[8].Descriptor()
 }
 
 func (ChunkType) Type() protoreflect.EnumType {
-	return &file_clark_v1_types_proto_enumTypes[5]
+	return &file_clark_v1_types_proto_enumTypes[8]
 }
 
 func (x ChunkType) Number() protoreflect.EnumNumber {
@@ -352,7 +511,7 @@ func (x ChunkType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChunkType.Descriptor instead.
 func (ChunkType) EnumDescriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{5}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{8}
 }
 
 type User struct {
@@ -512,16 +671,21 @@ func (x *ProviderType) GetConfigSchema() []byte {
 
 // A user-configured instance of a driver type with credentials/endpoint/etc.
 type UserModelProvider struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"` // driver type name
-	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	Config        []byte                 `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"` // driver-specific JSON
-	OwnerUserId   string                 `protobuf:"bytes,5,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Type        string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"` // driver type name
+	Label       string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Config      []byte                 `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"` // driver-specific JSON
+	OwnerUserId string                 `protobuf:"bytes,5,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Provider-level default CallSettings — bottom layer of the resolution
+	// chain (conversation > profile > model > provider). Sparse: any unset
+	// field inherits nothing (this is the floor), but unset fields here let
+	// higher layers contribute their own values normally.
+	DefaultSettings *CallSettings `protobuf:"bytes,8,opt,name=default_settings,json=defaultSettings,proto3,oneof" json:"default_settings,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UserModelProvider) Reset() {
@@ -599,6 +763,13 @@ func (x *UserModelProvider) GetCreatedAt() *timestamppb.Timestamp {
 func (x *UserModelProvider) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *UserModelProvider) GetDefaultSettings() *CallSettings {
+	if x != nil {
+		return x.DefaultSettings
 	}
 	return nil
 }
@@ -1196,16 +1367,32 @@ func (x *UserModel) GetFavorite() bool {
 	return false
 }
 
-// Per-call provider settings.
+// Per-call provider settings. Hybrid common-core + provider-specific shape:
+// the first block is universal (every driver translates it), `top_k` is
+// shared by Anthropic + Google, `thinking` is the universal "extended
+// reasoning" knob translated per driver, and `anthropic` / `openai` /
+// `google` carry per-provider knobs that don't fit the common surface.
+//
+// Stored on JSONB columns at four layers (conversation > profile > model >
+// provider). Resolution merges sparsely — every layer can leave any field
+// unset to inherit from below; see `internal/profiles/callsettings.go`.
 type CallSettings struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Temperature          *float64               `protobuf:"fixed64,1,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
-	MaxOutputTokens      *int32                 `protobuf:"varint,2,opt,name=max_output_tokens,json=maxOutputTokens,proto3,oneof" json:"max_output_tokens,omitempty"`
-	ThinkingEnabled      *bool                  `protobuf:"varint,3,opt,name=thinking_enabled,json=thinkingEnabled,proto3,oneof" json:"thinking_enabled,omitempty"`
-	ThinkingBudgetTokens *int32                 `protobuf:"varint,4,opt,name=thinking_budget_tokens,json=thinkingBudgetTokens,proto3,oneof" json:"thinking_budget_tokens,omitempty"`
-	Extras               []byte                 `protobuf:"bytes,5,opt,name=extras,proto3" json:"extras,omitempty"` // provider-specific knobs not in the common set
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// --- Common (all three providers) ---
+	Temperature     *float64 `protobuf:"fixed64,1,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"` // clamped per-driver: Anthropic [0,1], OpenAI/Google [0,2]
+	TopP            *float64 `protobuf:"fixed64,2,opt,name=top_p,json=topP,proto3,oneof" json:"top_p,omitempty"`
+	MaxOutputTokens *int32   `protobuf:"varint,3,opt,name=max_output_tokens,json=maxOutputTokens,proto3,oneof" json:"max_output_tokens,omitempty"`
+	StopSequences   []string `protobuf:"bytes,4,rep,name=stop_sequences,json=stopSequences,proto3" json:"stop_sequences,omitempty"`
+	// --- Two-of-three (Anthropic + Google) ---
+	TopK *int32 `protobuf:"varint,5,opt,name=top_k,json=topK,proto3,oneof" json:"top_k,omitempty"`
+	// --- Universal "thinking" knob, translated per driver ---
+	Thinking *ThinkingSettings `protobuf:"bytes,6,opt,name=thinking,proto3,oneof" json:"thinking,omitempty"`
+	// --- Provider-specific extension blocks ---
+	Anthropic     *AnthropicExtras `protobuf:"bytes,10,opt,name=anthropic,proto3,oneof" json:"anthropic,omitempty"` // empty in v1 — reserved for future
+	Openai        *OpenAIExtras    `protobuf:"bytes,11,opt,name=openai,proto3,oneof" json:"openai,omitempty"`
+	Google        *GoogleExtras    `protobuf:"bytes,12,opt,name=google,proto3,oneof" json:"google,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallSettings) Reset() {
@@ -1245,6 +1432,13 @@ func (x *CallSettings) GetTemperature() float64 {
 	return 0
 }
 
+func (x *CallSettings) GetTopP() float64 {
+	if x != nil && x.TopP != nil {
+		return *x.TopP
+	}
+	return 0
+}
+
 func (x *CallSettings) GetMaxOutputTokens() int32 {
 	if x != nil && x.MaxOutputTokens != nil {
 		return *x.MaxOutputTokens
@@ -1252,25 +1446,580 @@ func (x *CallSettings) GetMaxOutputTokens() int32 {
 	return 0
 }
 
-func (x *CallSettings) GetThinkingEnabled() bool {
-	if x != nil && x.ThinkingEnabled != nil {
-		return *x.ThinkingEnabled
+func (x *CallSettings) GetStopSequences() []string {
+	if x != nil {
+		return x.StopSequences
 	}
-	return false
+	return nil
 }
 
-func (x *CallSettings) GetThinkingBudgetTokens() int32 {
-	if x != nil && x.ThinkingBudgetTokens != nil {
-		return *x.ThinkingBudgetTokens
+func (x *CallSettings) GetTopK() int32 {
+	if x != nil && x.TopK != nil {
+		return *x.TopK
 	}
 	return 0
 }
 
-func (x *CallSettings) GetExtras() []byte {
+func (x *CallSettings) GetThinking() *ThinkingSettings {
 	if x != nil {
-		return x.Extras
+		return x.Thinking
 	}
 	return nil
+}
+
+func (x *CallSettings) GetAnthropic() *AnthropicExtras {
+	if x != nil {
+		return x.Anthropic
+	}
+	return nil
+}
+
+func (x *CallSettings) GetOpenai() *OpenAIExtras {
+	if x != nil {
+		return x.Openai
+	}
+	return nil
+}
+
+func (x *CallSettings) GetGoogle() *GoogleExtras {
+	if x != nil {
+		return x.Google
+	}
+	return nil
+}
+
+// ThinkingSettings carries the cross-driver "show your work" knob. Each
+// driver translates it differently:
+//
+//	Anthropic & Google → literal budget_tokens.
+//	OpenAI Responses    → budget_tokens derives reasoning_effort
+//	                      (<2k → low, 2-8k → medium, >8k → high).
+//	OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+type ThinkingSettings struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       *bool                  `protobuf:"varint,1,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
+	BudgetTokens  *int32                 `protobuf:"varint,2,opt,name=budget_tokens,json=budgetTokens,proto3,oneof" json:"budget_tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ThinkingSettings) Reset() {
+	*x = ThinkingSettings{}
+	mi := &file_clark_v1_types_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThinkingSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThinkingSettings) ProtoMessage() {}
+
+func (x *ThinkingSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThinkingSettings.ProtoReflect.Descriptor instead.
+func (*ThinkingSettings) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ThinkingSettings) GetEnabled() bool {
+	if x != nil && x.Enabled != nil {
+		return *x.Enabled
+	}
+	return false
+}
+
+func (x *ThinkingSettings) GetBudgetTokens() int32 {
+	if x != nil && x.BudgetTokens != nil {
+		return *x.BudgetTokens
+	}
+	return 0
+}
+
+// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
+// provider common surface. v1 surfaces prompt-cache control; further knobs
+// will be added as they're needed.
+type AnthropicExtras struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When false, the driver skips placing a cache_control marker on the
+	// request — useful for one-off conversations where the +25% write
+	// overhead doesn't pay off, or for users who prefer not to cache for
+	// privacy reasons. Default (unset) = true.
+	CacheEnabled *bool `protobuf:"varint,1,opt,name=cache_enabled,json=cacheEnabled,proto3,oneof" json:"cache_enabled,omitempty"`
+	// Cache TTL — 5m (default) or 1h. 1h has higher break-even but
+	// survives stop-and-resume workflows.
+	CacheTtl      *CacheTTL `protobuf:"varint,2,opt,name=cache_ttl,json=cacheTtl,proto3,enum=clark.v1.CacheTTL,oneof" json:"cache_ttl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnthropicExtras) Reset() {
+	*x = AnthropicExtras{}
+	mi := &file_clark_v1_types_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnthropicExtras) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnthropicExtras) ProtoMessage() {}
+
+func (x *AnthropicExtras) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnthropicExtras.ProtoReflect.Descriptor instead.
+func (*AnthropicExtras) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AnthropicExtras) GetCacheEnabled() bool {
+	if x != nil && x.CacheEnabled != nil {
+		return *x.CacheEnabled
+	}
+	return false
+}
+
+func (x *AnthropicExtras) GetCacheTtl() CacheTTL {
+	if x != nil && x.CacheTtl != nil {
+		return *x.CacheTtl
+	}
+	return CacheTTL_CACHE_TTL_UNSPECIFIED
+}
+
+// OpenAIExtras carries the per-driver knobs that map to Chat Completions /
+// Responses but have no analog on Anthropic or Google.
+type OpenAIExtras struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Seed              *int32                 `protobuf:"varint,1,opt,name=seed,proto3,oneof" json:"seed,omitempty"`                                                  // reproducibility
+	FrequencyPenalty  *float64               `protobuf:"fixed64,2,opt,name=frequency_penalty,json=frequencyPenalty,proto3,oneof" json:"frequency_penalty,omitempty"` // [-2, 2]
+	PresencePenalty   *float64               `protobuf:"fixed64,3,opt,name=presence_penalty,json=presencePenalty,proto3,oneof" json:"presence_penalty,omitempty"`    // [-2, 2]
+	TopLogprobs       *int32                 `protobuf:"varint,4,opt,name=top_logprobs,json=topLogprobs,proto3,oneof" json:"top_logprobs,omitempty"`                 // [0, 5]; also enables Logprobs=true on the wire
+	ParallelToolCalls *bool                  `protobuf:"varint,5,opt,name=parallel_tool_calls,json=parallelToolCalls,proto3,oneof" json:"parallel_tool_calls,omitempty"`
+	ServiceTier       *ServiceTier           `protobuf:"varint,6,opt,name=service_tier,json=serviceTier,proto3,enum=clark.v1.ServiceTier,oneof" json:"service_tier,omitempty"`
+	ResponseFormat    *ResponseFormat        `protobuf:"bytes,7,opt,name=response_format,json=responseFormat,proto3,oneof" json:"response_format,omitempty"`
+	// logit_bias is map<int32_token_id, double_bias>. Tokenization is
+	// model-specific so the v1 UI is a JSON-blob field; no per-token row editor.
+	LogitBias     map[int32]float64 `protobuf:"bytes,8,rep,name=logit_bias,json=logitBias,proto3" json:"logit_bias,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenAIExtras) Reset() {
+	*x = OpenAIExtras{}
+	mi := &file_clark_v1_types_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenAIExtras) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenAIExtras) ProtoMessage() {}
+
+func (x *OpenAIExtras) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenAIExtras.ProtoReflect.Descriptor instead.
+func (*OpenAIExtras) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *OpenAIExtras) GetSeed() int32 {
+	if x != nil && x.Seed != nil {
+		return *x.Seed
+	}
+	return 0
+}
+
+func (x *OpenAIExtras) GetFrequencyPenalty() float64 {
+	if x != nil && x.FrequencyPenalty != nil {
+		return *x.FrequencyPenalty
+	}
+	return 0
+}
+
+func (x *OpenAIExtras) GetPresencePenalty() float64 {
+	if x != nil && x.PresencePenalty != nil {
+		return *x.PresencePenalty
+	}
+	return 0
+}
+
+func (x *OpenAIExtras) GetTopLogprobs() int32 {
+	if x != nil && x.TopLogprobs != nil {
+		return *x.TopLogprobs
+	}
+	return 0
+}
+
+func (x *OpenAIExtras) GetParallelToolCalls() bool {
+	if x != nil && x.ParallelToolCalls != nil {
+		return *x.ParallelToolCalls
+	}
+	return false
+}
+
+func (x *OpenAIExtras) GetServiceTier() ServiceTier {
+	if x != nil && x.ServiceTier != nil {
+		return *x.ServiceTier
+	}
+	return ServiceTier_SERVICE_TIER_UNSPECIFIED
+}
+
+func (x *OpenAIExtras) GetResponseFormat() *ResponseFormat {
+	if x != nil {
+		return x.ResponseFormat
+	}
+	return nil
+}
+
+func (x *OpenAIExtras) GetLogitBias() map[int32]float64 {
+	if x != nil {
+		return x.LogitBias
+	}
+	return nil
+}
+
+// ResponseFormat is the OpenAI response-format oneof.
+//
+//	text         — plain text output (default; no-op when set).
+//	json_object  — model is forced to emit a syntactically-valid JSON object.
+//	json_schema  — model output is constrained to match the embedded schema.
+type ResponseFormat struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*ResponseFormat_Text
+	//	*ResponseFormat_JsonObject
+	//	*ResponseFormat_JsonSchema
+	Kind          isResponseFormat_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResponseFormat) Reset() {
+	*x = ResponseFormat{}
+	mi := &file_clark_v1_types_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResponseFormat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResponseFormat) ProtoMessage() {}
+
+func (x *ResponseFormat) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResponseFormat.ProtoReflect.Descriptor instead.
+func (*ResponseFormat) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ResponseFormat) GetKind() isResponseFormat_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *ResponseFormat) GetText() bool {
+	if x != nil {
+		if x, ok := x.Kind.(*ResponseFormat_Text); ok {
+			return x.Text
+		}
+	}
+	return false
+}
+
+func (x *ResponseFormat) GetJsonObject() bool {
+	if x != nil {
+		if x, ok := x.Kind.(*ResponseFormat_JsonObject); ok {
+			return x.JsonObject
+		}
+	}
+	return false
+}
+
+func (x *ResponseFormat) GetJsonSchema() *JsonSchema {
+	if x != nil {
+		if x, ok := x.Kind.(*ResponseFormat_JsonSchema); ok {
+			return x.JsonSchema
+		}
+	}
+	return nil
+}
+
+type isResponseFormat_Kind interface {
+	isResponseFormat_Kind()
+}
+
+type ResponseFormat_Text struct {
+	Text bool `protobuf:"varint,1,opt,name=text,proto3,oneof"`
+}
+
+type ResponseFormat_JsonObject struct {
+	JsonObject bool `protobuf:"varint,2,opt,name=json_object,json=jsonObject,proto3,oneof"`
+}
+
+type ResponseFormat_JsonSchema struct {
+	JsonSchema *JsonSchema `protobuf:"bytes,3,opt,name=json_schema,json=jsonSchema,proto3,oneof"`
+}
+
+func (*ResponseFormat_Text) isResponseFormat_Kind() {}
+
+func (*ResponseFormat_JsonObject) isResponseFormat_Kind() {}
+
+func (*ResponseFormat_JsonSchema) isResponseFormat_Kind() {}
+
+type JsonSchema struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,2,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Schema        []byte                 `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"` // raw JSON Schema bytes; UI is a JSON code editor
+	Strict        *bool                  `protobuf:"varint,4,opt,name=strict,proto3,oneof" json:"strict,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JsonSchema) Reset() {
+	*x = JsonSchema{}
+	mi := &file_clark_v1_types_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JsonSchema) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JsonSchema) ProtoMessage() {}
+
+func (x *JsonSchema) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JsonSchema.ProtoReflect.Descriptor instead.
+func (*JsonSchema) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *JsonSchema) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *JsonSchema) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *JsonSchema) GetSchema() []byte {
+	if x != nil {
+		return x.Schema
+	}
+	return nil
+}
+
+func (x *JsonSchema) GetStrict() bool {
+	if x != nil && x.Strict != nil {
+		return *x.Strict
+	}
+	return false
+}
+
+// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
+// intentionally deferred — Gemini 2.x has implicit caching default-on and
+// explicit cachedContents needs its own design pass.
+type GoogleExtras struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SafetySettings   *SafetySettings        `protobuf:"bytes,1,opt,name=safety_settings,json=safetySettings,proto3,oneof" json:"safety_settings,omitempty"`
+	ResponseMimeType *string                `protobuf:"bytes,2,opt,name=response_mime_type,json=responseMimeType,proto3,oneof" json:"response_mime_type,omitempty"` // e.g. "application/json"
+	ResponseSchema   []byte                 `protobuf:"bytes,3,opt,name=response_schema,json=responseSchema,proto3,oneof" json:"response_schema,omitempty"`         // JSON Schema bytes
+	CandidateCount   *int32                 `protobuf:"varint,4,opt,name=candidate_count,json=candidateCount,proto3,oneof" json:"candidate_count,omitempty"`        // [1, 8]
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GoogleExtras) Reset() {
+	*x = GoogleExtras{}
+	mi := &file_clark_v1_types_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GoogleExtras) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GoogleExtras) ProtoMessage() {}
+
+func (x *GoogleExtras) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GoogleExtras.ProtoReflect.Descriptor instead.
+func (*GoogleExtras) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GoogleExtras) GetSafetySettings() *SafetySettings {
+	if x != nil {
+		return x.SafetySettings
+	}
+	return nil
+}
+
+func (x *GoogleExtras) GetResponseMimeType() string {
+	if x != nil && x.ResponseMimeType != nil {
+		return *x.ResponseMimeType
+	}
+	return ""
+}
+
+func (x *GoogleExtras) GetResponseSchema() []byte {
+	if x != nil {
+		return x.ResponseSchema
+	}
+	return nil
+}
+
+func (x *GoogleExtras) GetCandidateCount() int32 {
+	if x != nil && x.CandidateCount != nil {
+		return *x.CandidateCount
+	}
+	return 0
+}
+
+type SafetySettings struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Harassment       *HarmThreshold         `protobuf:"varint,1,opt,name=harassment,proto3,enum=clark.v1.HarmThreshold,oneof" json:"harassment,omitempty"`
+	HateSpeech       *HarmThreshold         `protobuf:"varint,2,opt,name=hate_speech,json=hateSpeech,proto3,enum=clark.v1.HarmThreshold,oneof" json:"hate_speech,omitempty"`
+	SexuallyExplicit *HarmThreshold         `protobuf:"varint,3,opt,name=sexually_explicit,json=sexuallyExplicit,proto3,enum=clark.v1.HarmThreshold,oneof" json:"sexually_explicit,omitempty"`
+	DangerousContent *HarmThreshold         `protobuf:"varint,4,opt,name=dangerous_content,json=dangerousContent,proto3,enum=clark.v1.HarmThreshold,oneof" json:"dangerous_content,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SafetySettings) Reset() {
+	*x = SafetySettings{}
+	mi := &file_clark_v1_types_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SafetySettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SafetySettings) ProtoMessage() {}
+
+func (x *SafetySettings) ProtoReflect() protoreflect.Message {
+	mi := &file_clark_v1_types_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SafetySettings.ProtoReflect.Descriptor instead.
+func (*SafetySettings) Descriptor() ([]byte, []int) {
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SafetySettings) GetHarassment() HarmThreshold {
+	if x != nil && x.Harassment != nil {
+		return *x.Harassment
+	}
+	return HarmThreshold_HARM_THRESHOLD_UNSPECIFIED
+}
+
+func (x *SafetySettings) GetHateSpeech() HarmThreshold {
+	if x != nil && x.HateSpeech != nil {
+		return *x.HateSpeech
+	}
+	return HarmThreshold_HARM_THRESHOLD_UNSPECIFIED
+}
+
+func (x *SafetySettings) GetSexuallyExplicit() HarmThreshold {
+	if x != nil && x.SexuallyExplicit != nil {
+		return *x.SexuallyExplicit
+	}
+	return HarmThreshold_HARM_THRESHOLD_UNSPECIFIED
+}
+
+func (x *SafetySettings) GetDangerousContent() HarmThreshold {
+	if x != nil && x.DangerousContent != nil {
+		return *x.DangerousContent
+	}
+	return HarmThreshold_HARM_THRESHOLD_UNSPECIFIED
 }
 
 type ProfileDefaults struct {
@@ -1278,13 +2027,18 @@ type ProfileDefaults struct {
 	DefaultProviderId        *string                `protobuf:"bytes,1,opt,name=default_provider_id,json=defaultProviderId,proto3,oneof" json:"default_provider_id,omitempty"`
 	DefaultModelId           *string                `protobuf:"bytes,2,opt,name=default_model_id,json=defaultModelId,proto3,oneof" json:"default_model_id,omitempty"`
 	IncludeThinkingInHistory *bool                  `protobuf:"varint,3,opt,name=include_thinking_in_history,json=includeThinkingInHistory,proto3,oneof" json:"include_thinking_in_history,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Per-profile default CallSettings. Sparse — any unset field falls through
+	// to the layers below in the resolution chain
+	// (provider > model > profile (resolved through parent inheritance) > conversation,
+	// walked highest-precedence first).
+	CallSettings  *CallSettings `protobuf:"bytes,4,opt,name=call_settings,json=callSettings,proto3,oneof" json:"call_settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProfileDefaults) Reset() {
 	*x = ProfileDefaults{}
-	mi := &file_clark_v1_types_proto_msgTypes[10]
+	mi := &file_clark_v1_types_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1296,7 +2050,7 @@ func (x *ProfileDefaults) String() string {
 func (*ProfileDefaults) ProtoMessage() {}
 
 func (x *ProfileDefaults) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[10]
+	mi := &file_clark_v1_types_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1309,7 +2063,7 @@ func (x *ProfileDefaults) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileDefaults.ProtoReflect.Descriptor instead.
 func (*ProfileDefaults) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProfileDefaults) GetDefaultProviderId() string {
@@ -1331,6 +2085,13 @@ func (x *ProfileDefaults) GetIncludeThinkingInHistory() bool {
 		return *x.IncludeThinkingInHistory
 	}
 	return false
+}
+
+func (x *ProfileDefaults) GetCallSettings() *CallSettings {
+	if x != nil {
+		return x.CallSettings
+	}
+	return nil
 }
 
 type Profile struct {
@@ -1380,7 +2141,7 @@ type Profile struct {
 
 func (x *Profile) Reset() {
 	*x = Profile{}
-	mi := &file_clark_v1_types_proto_msgTypes[11]
+	mi := &file_clark_v1_types_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1392,7 +2153,7 @@ func (x *Profile) String() string {
 func (*Profile) ProtoMessage() {}
 
 func (x *Profile) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[11]
+	mi := &file_clark_v1_types_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1405,7 +2166,7 @@ func (x *Profile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Profile.ProtoReflect.Descriptor instead.
 func (*Profile) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{11}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Profile) GetId() string {
@@ -1553,13 +2314,17 @@ type ConversationSettings struct {
 	DefaultProviderId        *string                `protobuf:"bytes,1,opt,name=default_provider_id,json=defaultProviderId,proto3,oneof" json:"default_provider_id,omitempty"`
 	DefaultModelId           *string                `protobuf:"bytes,2,opt,name=default_model_id,json=defaultModelId,proto3,oneof" json:"default_model_id,omitempty"`
 	IncludeThinkingInHistory *bool                  `protobuf:"varint,3,opt,name=include_thinking_in_history,json=includeThinkingInHistory,proto3,oneof" json:"include_thinking_in_history,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Per-conversation CallSettings overrides — top of the resolution chain
+	// (conversation > profile > model > provider). Sparse: unset fields fall
+	// through to the resolved profile layer below.
+	CallSettings  *CallSettings `protobuf:"bytes,4,opt,name=call_settings,json=callSettings,proto3,oneof" json:"call_settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConversationSettings) Reset() {
 	*x = ConversationSettings{}
-	mi := &file_clark_v1_types_proto_msgTypes[12]
+	mi := &file_clark_v1_types_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1571,7 +2336,7 @@ func (x *ConversationSettings) String() string {
 func (*ConversationSettings) ProtoMessage() {}
 
 func (x *ConversationSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[12]
+	mi := &file_clark_v1_types_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1584,7 +2349,7 @@ func (x *ConversationSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSettings.ProtoReflect.Descriptor instead.
 func (*ConversationSettings) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ConversationSettings) GetDefaultProviderId() string {
@@ -1608,6 +2373,13 @@ func (x *ConversationSettings) GetIncludeThinkingInHistory() bool {
 	return false
 }
 
+func (x *ConversationSettings) GetCallSettings() *CallSettings {
+	if x != nil {
+		return x.CallSettings
+	}
+	return nil
+}
+
 type Conversation struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1618,13 +2390,17 @@ type Conversation struct {
 	OwnerUserId     string                 `protobuf:"bytes,8,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Most recent message timestamp across this conversation's contexts.
+	// Falls back to created_at when no messages exist yet, so a fresh
+	// conversation still sorts above older ones in "Recently Used".
+	LastActivityAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_activity_at,json=lastActivityAt,proto3" json:"last_activity_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_clark_v1_types_proto_msgTypes[13]
+	mi := &file_clark_v1_types_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1636,7 +2412,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[13]
+	mi := &file_clark_v1_types_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1649,7 +2425,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Conversation) GetId() string {
@@ -1708,6 +2484,13 @@ func (x *Conversation) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Conversation) GetLastActivityAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastActivityAt
+	}
+	return nil
+}
+
 type Context struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1743,7 +2526,7 @@ type Context struct {
 
 func (x *Context) Reset() {
 	*x = Context{}
-	mi := &file_clark_v1_types_proto_msgTypes[14]
+	mi := &file_clark_v1_types_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1755,7 +2538,7 @@ func (x *Context) String() string {
 func (*Context) ProtoMessage() {}
 
 func (x *Context) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[14]
+	mi := &file_clark_v1_types_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1768,7 +2551,7 @@ func (x *Context) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Context.ProtoReflect.Descriptor instead.
 func (*Context) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{14}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Context) GetId() string {
@@ -1883,7 +2666,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_clark_v1_types_proto_msgTypes[15]
+	mi := &file_clark_v1_types_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1895,7 +2678,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[15]
+	mi := &file_clark_v1_types_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1908,7 +2691,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{15}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Message) GetId() string {
@@ -2051,7 +2834,7 @@ type MessageUsage struct {
 
 func (x *MessageUsage) Reset() {
 	*x = MessageUsage{}
-	mi := &file_clark_v1_types_proto_msgTypes[16]
+	mi := &file_clark_v1_types_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2063,7 +2846,7 @@ func (x *MessageUsage) String() string {
 func (*MessageUsage) ProtoMessage() {}
 
 func (x *MessageUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[16]
+	mi := &file_clark_v1_types_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2076,7 +2859,7 @@ func (x *MessageUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageUsage.ProtoReflect.Descriptor instead.
 func (*MessageUsage) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{16}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *MessageUsage) GetInputTokens() int32 {
@@ -2185,7 +2968,7 @@ type StreamRun struct {
 
 func (x *StreamRun) Reset() {
 	*x = StreamRun{}
-	mi := &file_clark_v1_types_proto_msgTypes[17]
+	mi := &file_clark_v1_types_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2197,7 +2980,7 @@ func (x *StreamRun) String() string {
 func (*StreamRun) ProtoMessage() {}
 
 func (x *StreamRun) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[17]
+	mi := &file_clark_v1_types_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2210,7 +2993,7 @@ func (x *StreamRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRun.ProtoReflect.Descriptor instead.
 func (*StreamRun) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{17}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *StreamRun) GetId() string {
@@ -2336,7 +3119,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_clark_v1_types_proto_msgTypes[18]
+	mi := &file_clark_v1_types_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +3131,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_clark_v1_types_proto_msgTypes[18]
+	mi := &file_clark_v1_types_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +3144,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_clark_v1_types_proto_rawDescGZIP(), []int{18}
+	return file_clark_v1_types_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Chunk) GetSequence() int64 {
@@ -2404,7 +3187,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1a\n" +
 	"\bstateful\x18\x03 \x01(\bR\bstateful\x12#\n" +
-	"\rconfig_schema\x18\x04 \x01(\fR\fconfigSchema\"\xff\x01\n" +
+	"\rconfig_schema\x18\x04 \x01(\fR\fconfigSchema\"\xdc\x02\n" +
 	"\x11UserModelProvider\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -2414,7 +3197,9 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf8\x01\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12F\n" +
+	"\x10default_settings\x18\b \x01(\v2\x16.clark.v1.CallSettingsH\x00R\x0fdefaultSettings\x88\x01\x01B\x13\n" +
+	"\x11_default_settings\"\xf8\x01\n" +
 	"\x10ProviderTemplate\x12.\n" +
 	"\x13catalog_provider_id\x18\x01 \x01(\tR\x11catalogProviderId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -2505,24 +3290,104 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\b_pricingB\x13\n" +
 	"\x11_knowledge_cutoffB\x0f\n" +
 	"\r_capabilitiesB\x13\n" +
-	"\x11_default_settings\"\xbf\x02\n" +
+	"\x11_default_settings\"\x91\x04\n" +
 	"\fCallSettings\x12%\n" +
-	"\vtemperature\x18\x01 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12/\n" +
-	"\x11max_output_tokens\x18\x02 \x01(\x05H\x01R\x0fmaxOutputTokens\x88\x01\x01\x12.\n" +
-	"\x10thinking_enabled\x18\x03 \x01(\bH\x02R\x0fthinkingEnabled\x88\x01\x01\x129\n" +
-	"\x16thinking_budget_tokens\x18\x04 \x01(\x05H\x03R\x14thinkingBudgetTokens\x88\x01\x01\x12\x16\n" +
-	"\x06extras\x18\x05 \x01(\fR\x06extrasB\x0e\n" +
-	"\f_temperatureB\x14\n" +
-	"\x12_max_output_tokensB\x13\n" +
-	"\x11_thinking_enabledB\x19\n" +
-	"\x17_thinking_budget_tokens\"\x86\x02\n" +
+	"\vtemperature\x18\x01 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12\x18\n" +
+	"\x05top_p\x18\x02 \x01(\x01H\x01R\x04topP\x88\x01\x01\x12/\n" +
+	"\x11max_output_tokens\x18\x03 \x01(\x05H\x02R\x0fmaxOutputTokens\x88\x01\x01\x12%\n" +
+	"\x0estop_sequences\x18\x04 \x03(\tR\rstopSequences\x12\x18\n" +
+	"\x05top_k\x18\x05 \x01(\x05H\x03R\x04topK\x88\x01\x01\x12;\n" +
+	"\bthinking\x18\x06 \x01(\v2\x1a.clark.v1.ThinkingSettingsH\x04R\bthinking\x88\x01\x01\x12<\n" +
+	"\tanthropic\x18\n" +
+	" \x01(\v2\x19.clark.v1.AnthropicExtrasH\x05R\tanthropic\x88\x01\x01\x123\n" +
+	"\x06openai\x18\v \x01(\v2\x16.clark.v1.OpenAIExtrasH\x06R\x06openai\x88\x01\x01\x123\n" +
+	"\x06google\x18\f \x01(\v2\x16.clark.v1.GoogleExtrasH\aR\x06google\x88\x01\x01B\x0e\n" +
+	"\f_temperatureB\b\n" +
+	"\x06_top_pB\x14\n" +
+	"\x12_max_output_tokensB\b\n" +
+	"\x06_top_kB\v\n" +
+	"\t_thinkingB\f\n" +
+	"\n" +
+	"_anthropicB\t\n" +
+	"\a_openaiB\t\n" +
+	"\a_google\"y\n" +
+	"\x10ThinkingSettings\x12\x1d\n" +
+	"\aenabled\x18\x01 \x01(\bH\x00R\aenabled\x88\x01\x01\x12(\n" +
+	"\rbudget_tokens\x18\x02 \x01(\x05H\x01R\fbudgetTokens\x88\x01\x01B\n" +
+	"\n" +
+	"\b_enabledB\x10\n" +
+	"\x0e_budget_tokens\"\x91\x01\n" +
+	"\x0fAnthropicExtras\x12(\n" +
+	"\rcache_enabled\x18\x01 \x01(\bH\x00R\fcacheEnabled\x88\x01\x01\x124\n" +
+	"\tcache_ttl\x18\x02 \x01(\x0e2\x12.clark.v1.CacheTTLH\x01R\bcacheTtl\x88\x01\x01B\x10\n" +
+	"\x0e_cache_enabledB\f\n" +
+	"\n" +
+	"_cache_ttl\"\xf3\x04\n" +
+	"\fOpenAIExtras\x12\x17\n" +
+	"\x04seed\x18\x01 \x01(\x05H\x00R\x04seed\x88\x01\x01\x120\n" +
+	"\x11frequency_penalty\x18\x02 \x01(\x01H\x01R\x10frequencyPenalty\x88\x01\x01\x12.\n" +
+	"\x10presence_penalty\x18\x03 \x01(\x01H\x02R\x0fpresencePenalty\x88\x01\x01\x12&\n" +
+	"\ftop_logprobs\x18\x04 \x01(\x05H\x03R\vtopLogprobs\x88\x01\x01\x123\n" +
+	"\x13parallel_tool_calls\x18\x05 \x01(\bH\x04R\x11parallelToolCalls\x88\x01\x01\x12=\n" +
+	"\fservice_tier\x18\x06 \x01(\x0e2\x15.clark.v1.ServiceTierH\x05R\vserviceTier\x88\x01\x01\x12F\n" +
+	"\x0fresponse_format\x18\a \x01(\v2\x18.clark.v1.ResponseFormatH\x06R\x0eresponseFormat\x88\x01\x01\x12D\n" +
+	"\n" +
+	"logit_bias\x18\b \x03(\v2%.clark.v1.OpenAIExtras.LogitBiasEntryR\tlogitBias\x1a<\n" +
+	"\x0eLogitBiasEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\a\n" +
+	"\x05_seedB\x14\n" +
+	"\x12_frequency_penaltyB\x13\n" +
+	"\x11_presence_penaltyB\x0f\n" +
+	"\r_top_logprobsB\x16\n" +
+	"\x14_parallel_tool_callsB\x0f\n" +
+	"\r_service_tierB\x12\n" +
+	"\x10_response_format\"\x8a\x01\n" +
+	"\x0eResponseFormat\x12\x14\n" +
+	"\x04text\x18\x01 \x01(\bH\x00R\x04text\x12!\n" +
+	"\vjson_object\x18\x02 \x01(\bH\x00R\n" +
+	"jsonObject\x127\n" +
+	"\vjson_schema\x18\x03 \x01(\v2\x14.clark.v1.JsonSchemaH\x00R\n" +
+	"jsonSchemaB\x06\n" +
+	"\x04kind\"\x97\x01\n" +
+	"\n" +
+	"JsonSchema\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x02 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x16\n" +
+	"\x06schema\x18\x03 \x01(\fR\x06schema\x12\x1b\n" +
+	"\x06strict\x18\x04 \x01(\bH\x01R\x06strict\x88\x01\x01B\x0e\n" +
+	"\f_descriptionB\t\n" +
+	"\a_strict\"\xb8\x02\n" +
+	"\fGoogleExtras\x12F\n" +
+	"\x0fsafety_settings\x18\x01 \x01(\v2\x18.clark.v1.SafetySettingsH\x00R\x0esafetySettings\x88\x01\x01\x121\n" +
+	"\x12response_mime_type\x18\x02 \x01(\tH\x01R\x10responseMimeType\x88\x01\x01\x12,\n" +
+	"\x0fresponse_schema\x18\x03 \x01(\fH\x02R\x0eresponseSchema\x88\x01\x01\x12,\n" +
+	"\x0fcandidate_count\x18\x04 \x01(\x05H\x03R\x0ecandidateCount\x88\x01\x01B\x12\n" +
+	"\x10_safety_settingsB\x15\n" +
+	"\x13_response_mime_typeB\x12\n" +
+	"\x10_response_schemaB\x12\n" +
+	"\x10_candidate_count\"\xee\x02\n" +
+	"\x0eSafetySettings\x12<\n" +
+	"\n" +
+	"harassment\x18\x01 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x00R\n" +
+	"harassment\x88\x01\x01\x12=\n" +
+	"\vhate_speech\x18\x02 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x01R\n" +
+	"hateSpeech\x88\x01\x01\x12I\n" +
+	"\x11sexually_explicit\x18\x03 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x02R\x10sexuallyExplicit\x88\x01\x01\x12I\n" +
+	"\x11dangerous_content\x18\x04 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x03R\x10dangerousContent\x88\x01\x01B\r\n" +
+	"\v_harassmentB\x0e\n" +
+	"\f_hate_speechB\x14\n" +
+	"\x12_sexually_explicitB\x14\n" +
+	"\x12_dangerous_content\"\xda\x02\n" +
 	"\x0fProfileDefaults\x123\n" +
 	"\x13default_provider_id\x18\x01 \x01(\tH\x00R\x11defaultProviderId\x88\x01\x01\x12-\n" +
 	"\x10default_model_id\x18\x02 \x01(\tH\x01R\x0edefaultModelId\x88\x01\x01\x12B\n" +
-	"\x1binclude_thinking_in_history\x18\x03 \x01(\bH\x02R\x18includeThinkingInHistory\x88\x01\x01B\x16\n" +
+	"\x1binclude_thinking_in_history\x18\x03 \x01(\bH\x02R\x18includeThinkingInHistory\x88\x01\x01\x12@\n" +
+	"\rcall_settings\x18\x04 \x01(\v2\x16.clark.v1.CallSettingsH\x03R\fcallSettings\x88\x01\x01B\x16\n" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
-	"\x1c_include_thinking_in_history\"\xb5\t\n" +
+	"\x1c_include_thinking_in_historyB\x10\n" +
+	"\x0e_call_settings\"\xb5\t\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12/\n" +
 	"\x11parent_profile_id\x18\x02 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
@@ -2561,14 +3426,16 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
 	"\f_title_guideB\x16\n" +
-	"\x14_title_provider_kind\"\x8b\x02\n" +
+	"\x14_title_provider_kind\"\xdf\x02\n" +
 	"\x14ConversationSettings\x123\n" +
 	"\x13default_provider_id\x18\x01 \x01(\tH\x00R\x11defaultProviderId\x88\x01\x01\x12-\n" +
 	"\x10default_model_id\x18\x02 \x01(\tH\x01R\x0edefaultModelId\x88\x01\x01\x12B\n" +
-	"\x1binclude_thinking_in_history\x18\x03 \x01(\bH\x02R\x18includeThinkingInHistory\x88\x01\x01B\x16\n" +
+	"\x1binclude_thinking_in_history\x18\x03 \x01(\bH\x02R\x18includeThinkingInHistory\x88\x01\x01\x12@\n" +
+	"\rcall_settings\x18\x04 \x01(\v2\x16.clark.v1.CallSettingsH\x03R\fcallSettings\x88\x01\x01B\x16\n" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
-	"\x1c_include_thinking_in_history\"\xf6\x02\n" +
+	"\x1c_include_thinking_in_historyB\x10\n" +
+	"\x0e_call_settings\"\xbc\x03\n" +
 	"\fConversation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2580,7 +3447,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\b\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12D\n" +
+	"\x10last_activity_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0elastActivityAtB\b\n" +
 	"\x06_titleB\v\n" +
 	"\t_settings\"\x96\x04\n" +
 	"\aContext\x12\x0e\n" +
@@ -2692,7 +3560,22 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x1bMETADATA_SOURCE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17METADATA_SOURCE_CATALOG\x10\x01\x12\x1a\n" +
 	"\x16METADATA_SOURCE_DRIVER\x10\x02\x12\x1a\n" +
-	"\x16METADATA_SOURCE_MANUAL\x10\x03*n\n" +
+	"\x16METADATA_SOURCE_MANUAL\x10\x03*I\n" +
+	"\bCacheTTL\x12\x19\n" +
+	"\x15CACHE_TTL_UNSPECIFIED\x10\x00\x12\x10\n" +
+	"\fCACHE_TTL_5M\x10\x01\x12\x10\n" +
+	"\fCACHE_TTL_1H\x10\x02*x\n" +
+	"\vServiceTier\x12\x1c\n" +
+	"\x18SERVICE_TIER_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11SERVICE_TIER_AUTO\x10\x01\x12\x19\n" +
+	"\x15SERVICE_TIER_STANDARD\x10\x02\x12\x19\n" +
+	"\x15SERVICE_TIER_PRIORITY\x10\x03*\xc5\x01\n" +
+	"\rHarmThreshold\x12\x1e\n" +
+	"\x1aHARM_THRESHOLD_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19HARM_THRESHOLD_BLOCK_NONE\x10\x01\x12&\n" +
+	"\"HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE\x10\x02\x12)\n" +
+	"%HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE\x10\x03\x12\"\n" +
+	"\x1eHARM_THRESHOLD_BLOCK_ONLY_HIGH\x10\x04*n\n" +
 	"\x0fCompressionMode\x12 \n" +
 	"\x1cCOMPRESSION_MODE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPRESSION_MODE_REPLACE\x10\x01\x12\x1b\n" +
@@ -2738,74 +3621,103 @@ func file_clark_v1_types_proto_rawDescGZIP() []byte {
 	return file_clark_v1_types_proto_rawDescData
 }
 
-var file_clark_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_clark_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_clark_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_clark_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_clark_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: clark.v1.MetadataSource
-	(CompressionMode)(0),          // 1: clark.v1.CompressionMode
-	(MessageRole)(0),              // 2: clark.v1.MessageRole
-	(StreamRunStatus)(0),          // 3: clark.v1.StreamRunStatus
-	(StreamRunPurpose)(0),         // 4: clark.v1.StreamRunPurpose
-	(ChunkType)(0),                // 5: clark.v1.ChunkType
-	(*User)(nil),                  // 6: clark.v1.User
-	(*ProviderType)(nil),          // 7: clark.v1.ProviderType
-	(*UserModelProvider)(nil),     // 8: clark.v1.UserModelProvider
-	(*ProviderTemplate)(nil),      // 9: clark.v1.ProviderTemplate
-	(*ModelCapabilities)(nil),     // 10: clark.v1.ModelCapabilities
-	(*ModelPricing)(nil),          // 11: clark.v1.ModelPricing
-	(*CatalogModelProvider)(nil),  // 12: clark.v1.CatalogModelProvider
-	(*CatalogModel)(nil),          // 13: clark.v1.CatalogModel
-	(*UserModel)(nil),             // 14: clark.v1.UserModel
-	(*CallSettings)(nil),          // 15: clark.v1.CallSettings
-	(*ProfileDefaults)(nil),       // 16: clark.v1.ProfileDefaults
-	(*Profile)(nil),               // 17: clark.v1.Profile
-	(*ConversationSettings)(nil),  // 18: clark.v1.ConversationSettings
-	(*Conversation)(nil),          // 19: clark.v1.Conversation
-	(*Context)(nil),               // 20: clark.v1.Context
-	(*Message)(nil),               // 21: clark.v1.Message
-	(*MessageUsage)(nil),          // 22: clark.v1.MessageUsage
-	(*StreamRun)(nil),             // 23: clark.v1.StreamRun
-	(*Chunk)(nil),                 // 24: clark.v1.Chunk
-	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
+	(CacheTTL)(0),                 // 1: clark.v1.CacheTTL
+	(ServiceTier)(0),              // 2: clark.v1.ServiceTier
+	(HarmThreshold)(0),            // 3: clark.v1.HarmThreshold
+	(CompressionMode)(0),          // 4: clark.v1.CompressionMode
+	(MessageRole)(0),              // 5: clark.v1.MessageRole
+	(StreamRunStatus)(0),          // 6: clark.v1.StreamRunStatus
+	(StreamRunPurpose)(0),         // 7: clark.v1.StreamRunPurpose
+	(ChunkType)(0),                // 8: clark.v1.ChunkType
+	(*User)(nil),                  // 9: clark.v1.User
+	(*ProviderType)(nil),          // 10: clark.v1.ProviderType
+	(*UserModelProvider)(nil),     // 11: clark.v1.UserModelProvider
+	(*ProviderTemplate)(nil),      // 12: clark.v1.ProviderTemplate
+	(*ModelCapabilities)(nil),     // 13: clark.v1.ModelCapabilities
+	(*ModelPricing)(nil),          // 14: clark.v1.ModelPricing
+	(*CatalogModelProvider)(nil),  // 15: clark.v1.CatalogModelProvider
+	(*CatalogModel)(nil),          // 16: clark.v1.CatalogModel
+	(*UserModel)(nil),             // 17: clark.v1.UserModel
+	(*CallSettings)(nil),          // 18: clark.v1.CallSettings
+	(*ThinkingSettings)(nil),      // 19: clark.v1.ThinkingSettings
+	(*AnthropicExtras)(nil),       // 20: clark.v1.AnthropicExtras
+	(*OpenAIExtras)(nil),          // 21: clark.v1.OpenAIExtras
+	(*ResponseFormat)(nil),        // 22: clark.v1.ResponseFormat
+	(*JsonSchema)(nil),            // 23: clark.v1.JsonSchema
+	(*GoogleExtras)(nil),          // 24: clark.v1.GoogleExtras
+	(*SafetySettings)(nil),        // 25: clark.v1.SafetySettings
+	(*ProfileDefaults)(nil),       // 26: clark.v1.ProfileDefaults
+	(*Profile)(nil),               // 27: clark.v1.Profile
+	(*ConversationSettings)(nil),  // 28: clark.v1.ConversationSettings
+	(*Conversation)(nil),          // 29: clark.v1.Conversation
+	(*Context)(nil),               // 30: clark.v1.Context
+	(*Message)(nil),               // 31: clark.v1.Message
+	(*MessageUsage)(nil),          // 32: clark.v1.MessageUsage
+	(*StreamRun)(nil),             // 33: clark.v1.StreamRun
+	(*Chunk)(nil),                 // 34: clark.v1.Chunk
+	nil,                           // 35: clark.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 36: google.protobuf.Timestamp
 }
 var file_clark_v1_types_proto_depIdxs = []int32{
-	25, // 0: clark.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	25, // 1: clark.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 2: clark.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	25, // 3: clark.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 4: clark.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
-	11, // 5: clark.v1.CatalogModel.pricing:type_name -> clark.v1.ModelPricing
-	10, // 6: clark.v1.CatalogModel.capabilities:type_name -> clark.v1.ModelCapabilities
-	25, // 7: clark.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
-	11, // 8: clark.v1.UserModel.pricing:type_name -> clark.v1.ModelPricing
-	10, // 9: clark.v1.UserModel.capabilities:type_name -> clark.v1.ModelCapabilities
-	15, // 10: clark.v1.UserModel.default_settings:type_name -> clark.v1.CallSettings
-	0,  // 11: clark.v1.UserModel.metadata_source:type_name -> clark.v1.MetadataSource
-	25, // 12: clark.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	25, // 13: clark.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
-	1,  // 14: clark.v1.Profile.compression_mode:type_name -> clark.v1.CompressionMode
-	16, // 15: clark.v1.Profile.default_settings:type_name -> clark.v1.ProfileDefaults
-	25, // 16: clark.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	25, // 17: clark.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 18: clark.v1.Conversation.settings:type_name -> clark.v1.ConversationSettings
-	25, // 19: clark.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	25, // 20: clark.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 21: clark.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	25, // 22: clark.v1.Context.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 23: clark.v1.Message.role:type_name -> clark.v1.MessageRole
-	25, // 24: clark.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	22, // 25: clark.v1.Message.usage:type_name -> clark.v1.MessageUsage
-	25, // 26: clark.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	3,  // 27: clark.v1.StreamRun.status:type_name -> clark.v1.StreamRunStatus
-	4,  // 28: clark.v1.StreamRun.purpose:type_name -> clark.v1.StreamRunPurpose
-	25, // 29: clark.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	25, // 30: clark.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	5,  // 31: clark.v1.Chunk.type:type_name -> clark.v1.ChunkType
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	36, // 0: clark.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	36, // 1: clark.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 2: clark.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	36, // 3: clark.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 4: clark.v1.UserModelProvider.default_settings:type_name -> clark.v1.CallSettings
+	36, // 5: clark.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	14, // 6: clark.v1.CatalogModel.pricing:type_name -> clark.v1.ModelPricing
+	13, // 7: clark.v1.CatalogModel.capabilities:type_name -> clark.v1.ModelCapabilities
+	36, // 8: clark.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	14, // 9: clark.v1.UserModel.pricing:type_name -> clark.v1.ModelPricing
+	13, // 10: clark.v1.UserModel.capabilities:type_name -> clark.v1.ModelCapabilities
+	18, // 11: clark.v1.UserModel.default_settings:type_name -> clark.v1.CallSettings
+	0,  // 12: clark.v1.UserModel.metadata_source:type_name -> clark.v1.MetadataSource
+	36, // 13: clark.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	36, // 14: clark.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	19, // 15: clark.v1.CallSettings.thinking:type_name -> clark.v1.ThinkingSettings
+	20, // 16: clark.v1.CallSettings.anthropic:type_name -> clark.v1.AnthropicExtras
+	21, // 17: clark.v1.CallSettings.openai:type_name -> clark.v1.OpenAIExtras
+	24, // 18: clark.v1.CallSettings.google:type_name -> clark.v1.GoogleExtras
+	1,  // 19: clark.v1.AnthropicExtras.cache_ttl:type_name -> clark.v1.CacheTTL
+	2,  // 20: clark.v1.OpenAIExtras.service_tier:type_name -> clark.v1.ServiceTier
+	22, // 21: clark.v1.OpenAIExtras.response_format:type_name -> clark.v1.ResponseFormat
+	35, // 22: clark.v1.OpenAIExtras.logit_bias:type_name -> clark.v1.OpenAIExtras.LogitBiasEntry
+	23, // 23: clark.v1.ResponseFormat.json_schema:type_name -> clark.v1.JsonSchema
+	25, // 24: clark.v1.GoogleExtras.safety_settings:type_name -> clark.v1.SafetySettings
+	3,  // 25: clark.v1.SafetySettings.harassment:type_name -> clark.v1.HarmThreshold
+	3,  // 26: clark.v1.SafetySettings.hate_speech:type_name -> clark.v1.HarmThreshold
+	3,  // 27: clark.v1.SafetySettings.sexually_explicit:type_name -> clark.v1.HarmThreshold
+	3,  // 28: clark.v1.SafetySettings.dangerous_content:type_name -> clark.v1.HarmThreshold
+	18, // 29: clark.v1.ProfileDefaults.call_settings:type_name -> clark.v1.CallSettings
+	4,  // 30: clark.v1.Profile.compression_mode:type_name -> clark.v1.CompressionMode
+	26, // 31: clark.v1.Profile.default_settings:type_name -> clark.v1.ProfileDefaults
+	36, // 32: clark.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	36, // 33: clark.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 34: clark.v1.ConversationSettings.call_settings:type_name -> clark.v1.CallSettings
+	28, // 35: clark.v1.Conversation.settings:type_name -> clark.v1.ConversationSettings
+	36, // 36: clark.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	36, // 37: clark.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 38: clark.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	36, // 39: clark.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	36, // 40: clark.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 41: clark.v1.Message.role:type_name -> clark.v1.MessageRole
+	36, // 42: clark.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	32, // 43: clark.v1.Message.usage:type_name -> clark.v1.MessageUsage
+	36, // 44: clark.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	6,  // 45: clark.v1.StreamRun.status:type_name -> clark.v1.StreamRunStatus
+	7,  // 46: clark.v1.StreamRun.purpose:type_name -> clark.v1.StreamRunPurpose
+	36, // 47: clark.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	36, // 48: clark.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 49: clark.v1.Chunk.type:type_name -> clark.v1.ChunkType
+	50, // [50:50] is the sub-list for method output_type
+	50, // [50:50] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_clark_v1_types_proto_init() }
@@ -2814,6 +3726,7 @@ func file_clark_v1_types_proto_init() {
 		return
 	}
 	file_clark_v1_types_proto_msgTypes[0].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[2].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[3].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[5].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[6].OneofWrappers = []any{}
@@ -2823,18 +3736,29 @@ func file_clark_v1_types_proto_init() {
 	file_clark_v1_types_proto_msgTypes[10].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[11].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[12].OneofWrappers = []any{}
-	file_clark_v1_types_proto_msgTypes[13].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[13].OneofWrappers = []any{
+		(*ResponseFormat_Text)(nil),
+		(*ResponseFormat_JsonObject)(nil),
+		(*ResponseFormat_JsonSchema)(nil),
+	}
 	file_clark_v1_types_proto_msgTypes[14].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[15].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[16].OneofWrappers = []any{}
 	file_clark_v1_types_proto_msgTypes[17].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[18].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[19].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[20].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[21].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[22].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[23].OneofWrappers = []any{}
+	file_clark_v1_types_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_clark_v1_types_proto_rawDesc), len(file_clark_v1_types_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   19,
+			NumEnums:      9,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

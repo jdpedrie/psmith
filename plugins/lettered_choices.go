@@ -100,34 +100,36 @@ func (p *letteredChoices) Description() string {
 
 // --- Configurable ---
 
-func (p *letteredChoices) ConfigSchema() []byte {
-	// Hand-authored JSON Schema; tiny enough to maintain inline.
-	return []byte(`{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "keep_last_n": {
-      "type": "integer",
-      "minimum": 0,
-      "default": 1,
-      "description": "Number of trailing assistant turns whose choice blocks are kept intact."
-    },
-    "open_tag": {
-      "type": "string",
-      "default": "<choices>",
-      "description": "Opening delimiter for the choices block."
-    },
-    "close_tag": {
-      "type": "string",
-      "default": "</choices>",
-      "description": "Closing delimiter for the choices block."
-    },
-    "system_instruction_override": {
-      "type": "string",
-      "description": "If set, replaces the default system-message instruction."
-    }
-  }
-}`)
+func (p *letteredChoices) ConfigFields() []ConfigField {
+	return []ConfigField{
+		{
+			Name:        "keep_last_n",
+			Display:     "Keep last N",
+			Description: "Number of trailing assistant turns whose choice blocks are kept intact.",
+			Type:        ConfigFieldNumber,
+			Default:     1,
+		},
+		{
+			Name:        "open_tag",
+			Display:     "Open tag",
+			Description: "Opening delimiter for the choices block.",
+			Type:        ConfigFieldText,
+			Default:     defaultLCOpenTag,
+		},
+		{
+			Name:        "close_tag",
+			Display:     "Close tag",
+			Description: "Closing delimiter for the choices block.",
+			Type:        ConfigFieldText,
+			Default:     defaultLCCloseTag,
+		},
+		{
+			Name:        "system_instruction_override",
+			Display:     "System instruction override",
+			Description: "If set, replaces the default system-message instruction.",
+			Type:        ConfigFieldTextarea,
+		},
+	}
 }
 
 // --- SystemPrompter ---

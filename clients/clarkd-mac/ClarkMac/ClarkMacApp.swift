@@ -72,6 +72,20 @@ private struct WindowChrome: NSViewRepresentable {
 /// AppDelegate. This catches the main window even if the SwiftUI background
 /// view's `viewDidMoveToWindow` hasn't fired yet.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Re-entrancy guard for the snap-up `setFrame` call. `setFrame` posts
+    /// `didResizeNotification`, which our observers handle by calling back
+    /// into `configure(_:)` — without this flag the snap would recurse
+    /// thousands of levels deep until the stack guard page faulted. We only
+    /// need to snap once at launch / first window mount; subsequent observer
+    /// fires can rely on `contentMinSize` (already set) to keep the window
+    /// above the floor.
+    @MainActor static var isSnapping = false
+    /// Tracks which windows have already been snapped this session so we
+    /// don't fight the user's manual resizes mid-session — the snap exists
+    /// solely to override state-restored frames that come back below the
+    /// minimum.
+    @MainActor static var snappedWindows: Set<ObjectIdentifier> = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureAndTrackAllWindows()
         let names: [Notification.Name] = [
@@ -141,6 +155,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // above the headers reads as one uniform dark surface in normal,
         // maximized, and fullscreen states.
         window.backgroundColor = NSColor(white: 0.13, alpha: 1.0)
+        // AppKit-level minimum — SwiftUI's `.frame(minWidth:minHeight:)` on
+        // the WindowGroup root doesn't reliably propagate to NSWindow, so
+        // without this the user could drag below the three-column floor
+        // and the detail pane's content would clip on the leading edge.
+        // Bumped from 880 → 1080 once the model edit form (with full-width
+        // segmented pickers for Service tier / Response format / etc.) was
+        // unified in. Below ~1080 the form's intrinsic content overflows the
+        // detail column and bleeds left over the categories sidebar.
+        let minSize = NSSize(width: 1080, height: 520)
+        window.contentMinSize = minSize
+
+        // One-shot snap-up: state restoration can hand us a frame below
+        // `minSize` before contentMinSize takes effect. We bump the frame
+        // up exactly once per window — subsequent observer fires (from
+        // user resizes, zoom, etc.) skip the snap, which is critical
+        // because `setFrame` posts `didResizeNotification` and our
+        // observers loop back into this method. The `isSnapping` flag
+        // catches any reentrancy that slips past the per-window guard.
+        let id = ObjectIdentifier(window)
+        guard !isSnapping, !snappedWindows.contains(id) else { return }
+        snappedWindows.insert(id)
+        var frame = window.frame
+        if frame.size.width < minSize.width { frame.size.width = minSize.width }
+        if frame.size.height < minSize.height { frame.size.height = minSize.height }
+        if frame != window.frame {
+            isSnapping = true
+            window.setFrame(frame, display: true)
+            isSnapping = false
+        }
     }
 }
 
@@ -163,11 +206,18 @@ struct ClarkMacApp: App {
                 .environment(appModel)
                 .environment(sharedWindowState)
                 .environment(sharedNavigator)
-                .frame(minWidth: 940, minHeight: 560)
+                .frame(minWidth: 1080, minHeight: 560)
                 .background(WindowChrome())
                 .navigationTitle("")
                 .task { await appModel.bootstrap() }
         }
+        // Default size on first run. macOS state-restores the window's last
+        // size on subsequent runs; the AppDelegate.configure NSWindow snap
+        // (contentMinSize + setFrame) is the belt-and-braces guard that
+        // forces the window back up to the SettingsView floor whenever it
+        // dips below — restored sessions don't reliably honor the SwiftUI
+        // .frame(minWidth:) modifier.
+        .defaultSize(width: 1100, height: 720)
         .commands {
             // Replace the standard "Settings…" menu item under the app menu
             // so ⌘, jumps the existing window into settings mode instead of

@@ -15,6 +15,10 @@ struct NewConversationView: View {
     @State private var overrideProviderID: String?
     @State private var overrideModelID: String?
     @State private var includeThinkingOverride: Bool? = nil
+    /// Per-conversation CallSettings the user can pre-set at create time.
+    /// Empty by default so all fields inherit from the resolved profile.
+    @State private var conversationCallSettings = ClarkCallSettings()
+    @State private var resolvedProfileForInherit: ClarkProfile?
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var modelSearch: String = ""
@@ -33,7 +37,7 @@ struct NewConversationView: View {
                 titleField
                 profileSection
                 modelOverrideSection
-                thinkingSection
+                chatSettingsSection
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.callout)
@@ -74,6 +78,24 @@ struct NewConversationView: View {
             if selectedProfileID == nil {
                 selectedProfileID = defaultProfileID
             }
+            await loadResolvedProfile()
+        }
+        .onChange(of: selectedProfileID) { _, _ in
+            Task { await loadResolvedProfile() }
+        }
+    }
+
+    /// Pulls the resolved (parent-chain-merged) profile so the
+    /// CallSettingsForm's inherit preview shows the user's actual defaults.
+    /// Non-fatal — the form just renders with no inherited values when this
+    /// fails.
+    private func loadResolvedProfile() async {
+        guard let pid = selectedProfileID else { return }
+        do {
+            let (_, resolved) = try await app.client.profiles.get(id: pid, resolve: true)
+            resolvedProfileForInherit = resolved
+        } catch {
+            // Non-fatal — fall back to no inherit preview.
         }
     }
 
@@ -268,23 +290,51 @@ struct NewConversationView: View {
         )
     }
 
-    private var thinkingSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private var chatSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
             sectionLabel("Chat settings")
-            Text("Include thinking in history")
-                .font(.callout)
-            Text("Whether assistant chain-of-thought is sent back as context on follow-up turns.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Picker("Include thinking in history", selection: thinkingBinding) {
-                Text("Inherit from profile").tag(Bool?.none)
-                Text("Include").tag(Bool?.some(true))
-                Text("Exclude").tag(Bool?.some(false))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Include thinking in history")
+                    .font(.callout)
+                Text("Whether assistant chain-of-thought is sent back as context on follow-up turns.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Picker("Include thinking in history", selection: thinkingBinding) {
+                    Text("Inherit from profile").tag(Bool?.none)
+                    Text("Include").tag(Bool?.some(true))
+                    Text("Exclude").tag(Bool?.some(false))
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 360)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 360)
+
+            CallSettingsForm(
+                settings: $conversationCallSettings,
+                inheritedSettings: resolvedProfileForInherit?.defaultSettings?.callSettings,
+                driverType: newConversationDriverType,
+                modelCapabilities: newConversationModelCapabilities
+            )
         }
+    }
+
+    /// Driver type for the CallSettingsForm. Picks from the conversation's
+    /// model override; falls back to the resolved profile's default model
+    /// when no override is set.
+    private var newConversationDriverType: String {
+        let pid = overrideProviderID ?? resolvedProfileForInherit?.defaultSettings?.defaultProviderID
+        guard let pid, let type = app.profiles.providerTypes[pid] else { return "anthropic" }
+        return type
+    }
+
+    private var newConversationModelCapabilities: ClarkModelCapabilities? {
+        let pid = overrideProviderID ?? resolvedProfileForInherit?.defaultSettings?.defaultProviderID
+        let mid = overrideModelID ?? resolvedProfileForInherit?.defaultSettings?.defaultModelID
+        guard let pid, let mid else { return nil }
+        return app.profiles.availableModels
+            .first(where: { $0.providerID == pid && $0.modelID == mid })?
+            .capabilities
     }
 
     private var thinkingBinding: Binding<Bool?> {
@@ -313,6 +363,9 @@ struct NewConversationView: View {
         settings.defaultProviderID = overrideProviderID
         settings.defaultModelID = overrideModelID
         settings.includeThinkingInHistory = includeThinkingOverride
+        if !conversationCallSettings.isEmpty {
+            settings.callSettings = conversationCallSettings
+        }
 
         let convo = await convos.newConversation(
             profileID: profileID,

@@ -21,6 +21,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Ordering for ListConversations. Default (UNSPECIFIED) = RECENTLY_USED.
+// "Recently used" sorts by the most recent message timestamp across the
+// conversation's contexts, falling back to the conversation's created_at
+// when there are no messages yet (a brand-new conversation appears at the
+// top).
+type ConversationOrder int32
+
+const (
+	ConversationOrder_CONVERSATION_ORDER_UNSPECIFIED      ConversationOrder = 0
+	ConversationOrder_CONVERSATION_ORDER_RECENTLY_USED    ConversationOrder = 1
+	ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED ConversationOrder = 2
+)
+
+// Enum value maps for ConversationOrder.
+var (
+	ConversationOrder_name = map[int32]string{
+		0: "CONVERSATION_ORDER_UNSPECIFIED",
+		1: "CONVERSATION_ORDER_RECENTLY_USED",
+		2: "CONVERSATION_ORDER_RECENTLY_CREATED",
+	}
+	ConversationOrder_value = map[string]int32{
+		"CONVERSATION_ORDER_UNSPECIFIED":      0,
+		"CONVERSATION_ORDER_RECENTLY_USED":    1,
+		"CONVERSATION_ORDER_RECENTLY_CREATED": 2,
+	}
+)
+
+func (x ConversationOrder) Enum() *ConversationOrder {
+	p := new(ConversationOrder)
+	*p = x
+	return p
+}
+
+func (x ConversationOrder) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConversationOrder) Descriptor() protoreflect.EnumDescriptor {
+	return file_clark_v1_conversations_proto_enumTypes[0].Descriptor()
+}
+
+func (ConversationOrder) Type() protoreflect.EnumType {
+	return &file_clark_v1_conversations_proto_enumTypes[0]
+}
+
+func (x ConversationOrder) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConversationOrder.Descriptor instead.
+func (ConversationOrder) EnumDescriptor() ([]byte, []int) {
+	return file_clark_v1_conversations_proto_rawDescGZIP(), []int{0}
+}
+
 type CreateConversationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProfileId     string                 `protobuf:"bytes,1,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
@@ -143,9 +197,17 @@ func (x *CreateConversationResponse) GetSeedMessages() []*Message {
 }
 
 type ListConversationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Sort order for the returned page. Optional; defaults to RECENTLY_USED.
+	Order *ConversationOrder `protobuf:"varint,3,opt,name=order,proto3,enum=clark.v1.ConversationOrder,oneof" json:"order,omitempty"`
+	// Case-insensitive substring match against the conversation's title.
+	// Conversations with no title are excluded when this is set.
+	TitleQuery *string `protobuf:"bytes,4,opt,name=title_query,json=titleQuery,proto3,oneof" json:"title_query,omitempty"`
+	// Filter to conversations belonging to a specific profile. Used by the
+	// sidebar's "By Profile" view to render one section per profile.
+	ProfileId     *string `protobuf:"bytes,5,opt,name=profile_id,json=profileId,proto3,oneof" json:"profile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -190,6 +252,27 @@ func (x *ListConversationsRequest) GetPageSize() int32 {
 func (x *ListConversationsRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListConversationsRequest) GetOrder() ConversationOrder {
+	if x != nil && x.Order != nil {
+		return *x.Order
+	}
+	return ConversationOrder_CONVERSATION_ORDER_UNSPECIFIED
+}
+
+func (x *ListConversationsRequest) GetTitleQuery() string {
+	if x != nil && x.TitleQuery != nil {
+		return *x.TitleQuery
+	}
+	return ""
+}
+
+func (x *ListConversationsRequest) GetProfileId() string {
+	if x != nil && x.ProfileId != nil {
+		return *x.ProfileId
 	}
 	return ""
 }
@@ -1754,11 +1837,19 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\x1aCreateConversationResponse\x12:\n" +
 	"\fconversation\x18\x01 \x01(\v2\x16.clark.v1.ConversationR\fconversation\x12:\n" +
 	"\x0finitial_context\x18\x02 \x01(\v2\x11.clark.v1.ContextR\x0einitialContext\x126\n" +
-	"\rseed_messages\x18\x03 \x03(\v2\x11.clark.v1.MessageR\fseedMessages\"V\n" +
+	"\rseed_messages\x18\x03 \x03(\v2\x11.clark.v1.MessageR\fseedMessages\"\x81\x02\n" +
 	"\x18ListConversationsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"\x81\x01\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\x126\n" +
+	"\x05order\x18\x03 \x01(\x0e2\x1b.clark.v1.ConversationOrderH\x00R\x05order\x88\x01\x01\x12$\n" +
+	"\vtitle_query\x18\x04 \x01(\tH\x01R\n" +
+	"titleQuery\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"profile_id\x18\x05 \x01(\tH\x02R\tprofileId\x88\x01\x01B\b\n" +
+	"\x06_orderB\x0e\n" +
+	"\f_title_queryB\r\n" +
+	"\v_profile_id\"\x81\x01\n" +
 	"\x19ListConversationsResponse\x12<\n" +
 	"\rconversations\x18\x01 \x03(\v2\x16.clark.v1.ConversationR\rconversations\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"(\n" +
@@ -1864,7 +1955,11 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\x1aCountContextTokensResponse\x12\x1f\n" +
 	"\vtoken_count\x18\x01 \x01(\x05R\n" +
 	"tokenCount\x12%\n" +
-	"\x0econtext_window\x18\x02 \x01(\x05R\rcontextWindow2\xe3\v\n" +
+	"\x0econtext_window\x18\x02 \x01(\x05R\rcontextWindow*\x86\x01\n" +
+	"\x11ConversationOrder\x12\"\n" +
+	"\x1eCONVERSATION_ORDER_UNSPECIFIED\x10\x00\x12$\n" +
+	" CONVERSATION_ORDER_RECENTLY_USED\x10\x01\x12'\n" +
+	"#CONVERSATION_ORDER_RECENTLY_CREATED\x10\x022\xe3\v\n" +
 	"\x14ConversationsService\x12_\n" +
 	"\x12CreateConversation\x12#.clark.v1.CreateConversationRequest\x1a$.clark.v1.CreateConversationResponse\x12\\\n" +
 	"\x11ListConversations\x12\".clark.v1.ListConversationsRequest\x1a#.clark.v1.ListConversationsResponse\x12V\n" +
@@ -1897,112 +1992,115 @@ func file_clark_v1_conversations_proto_rawDescGZIP() []byte {
 	return file_clark_v1_conversations_proto_rawDescData
 }
 
+var file_clark_v1_conversations_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_clark_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_clark_v1_conversations_proto_goTypes = []any{
-	(*CreateConversationRequest)(nil),             // 0: clark.v1.CreateConversationRequest
-	(*CreateConversationResponse)(nil),            // 1: clark.v1.CreateConversationResponse
-	(*ListConversationsRequest)(nil),              // 2: clark.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil),             // 3: clark.v1.ListConversationsResponse
-	(*GetConversationRequest)(nil),                // 4: clark.v1.GetConversationRequest
-	(*GetConversationResponse)(nil),               // 5: clark.v1.GetConversationResponse
-	(*UpdateConversationRequest)(nil),             // 6: clark.v1.UpdateConversationRequest
-	(*UpdateConversationResponse)(nil),            // 7: clark.v1.UpdateConversationResponse
-	(*DeleteConversationRequest)(nil),             // 8: clark.v1.DeleteConversationRequest
-	(*DeleteConversationResponse)(nil),            // 9: clark.v1.DeleteConversationResponse
-	(*ListContextsRequest)(nil),                   // 10: clark.v1.ListContextsRequest
-	(*ListContextsResponse)(nil),                  // 11: clark.v1.ListContextsResponse
-	(*ActivateContextRequest)(nil),                // 12: clark.v1.ActivateContextRequest
-	(*ActivateContextResponse)(nil),               // 13: clark.v1.ActivateContextResponse
-	(*SetCurrentLeafRequest)(nil),                 // 14: clark.v1.SetCurrentLeafRequest
-	(*SetCurrentLeafResponse)(nil),                // 15: clark.v1.SetCurrentLeafResponse
-	(*UpdateContextRequest)(nil),                  // 16: clark.v1.UpdateContextRequest
-	(*UpdateContextResponse)(nil),                 // 17: clark.v1.UpdateContextResponse
-	(*ListMessagesRequest)(nil),                   // 18: clark.v1.ListMessagesRequest
-	(*ListMessagesResponse)(nil),                  // 19: clark.v1.ListMessagesResponse
-	(*GetMessageRequest)(nil),                     // 20: clark.v1.GetMessageRequest
-	(*GetMessageResponse)(nil),                    // 21: clark.v1.GetMessageResponse
-	(*EditMessageRequest)(nil),                    // 22: clark.v1.EditMessageRequest
-	(*EditMessageResponse)(nil),                   // 23: clark.v1.EditMessageResponse
-	(*DeleteMessageRequest)(nil),                  // 24: clark.v1.DeleteMessageRequest
-	(*DeleteMessageResponse)(nil),                 // 25: clark.v1.DeleteMessageResponse
-	(*PromoteCompactionToNewContextRequest)(nil),  // 26: clark.v1.PromoteCompactionToNewContextRequest
-	(*PromoteCompactionToNewContextResponse)(nil), // 27: clark.v1.PromoteCompactionToNewContextResponse
-	(*SendMessageRequest)(nil),                    // 28: clark.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),                   // 29: clark.v1.SendMessageResponse
-	(*CompactRequest)(nil),                        // 30: clark.v1.CompactRequest
-	(*CompactResponse)(nil),                       // 31: clark.v1.CompactResponse
-	(*CountContextTokensRequest)(nil),             // 32: clark.v1.CountContextTokensRequest
-	(*CountContextTokensResponse)(nil),            // 33: clark.v1.CountContextTokensResponse
-	(*ConversationSettings)(nil),                  // 34: clark.v1.ConversationSettings
-	(*Conversation)(nil),                          // 35: clark.v1.Conversation
-	(*Context)(nil),                               // 36: clark.v1.Context
-	(*Message)(nil),                               // 37: clark.v1.Message
-	(MessageRole)(0),                              // 38: clark.v1.MessageRole
-	(*CallSettings)(nil),                          // 39: clark.v1.CallSettings
-	(*StreamRun)(nil),                             // 40: clark.v1.StreamRun
+	(ConversationOrder)(0),                        // 0: clark.v1.ConversationOrder
+	(*CreateConversationRequest)(nil),             // 1: clark.v1.CreateConversationRequest
+	(*CreateConversationResponse)(nil),            // 2: clark.v1.CreateConversationResponse
+	(*ListConversationsRequest)(nil),              // 3: clark.v1.ListConversationsRequest
+	(*ListConversationsResponse)(nil),             // 4: clark.v1.ListConversationsResponse
+	(*GetConversationRequest)(nil),                // 5: clark.v1.GetConversationRequest
+	(*GetConversationResponse)(nil),               // 6: clark.v1.GetConversationResponse
+	(*UpdateConversationRequest)(nil),             // 7: clark.v1.UpdateConversationRequest
+	(*UpdateConversationResponse)(nil),            // 8: clark.v1.UpdateConversationResponse
+	(*DeleteConversationRequest)(nil),             // 9: clark.v1.DeleteConversationRequest
+	(*DeleteConversationResponse)(nil),            // 10: clark.v1.DeleteConversationResponse
+	(*ListContextsRequest)(nil),                   // 11: clark.v1.ListContextsRequest
+	(*ListContextsResponse)(nil),                  // 12: clark.v1.ListContextsResponse
+	(*ActivateContextRequest)(nil),                // 13: clark.v1.ActivateContextRequest
+	(*ActivateContextResponse)(nil),               // 14: clark.v1.ActivateContextResponse
+	(*SetCurrentLeafRequest)(nil),                 // 15: clark.v1.SetCurrentLeafRequest
+	(*SetCurrentLeafResponse)(nil),                // 16: clark.v1.SetCurrentLeafResponse
+	(*UpdateContextRequest)(nil),                  // 17: clark.v1.UpdateContextRequest
+	(*UpdateContextResponse)(nil),                 // 18: clark.v1.UpdateContextResponse
+	(*ListMessagesRequest)(nil),                   // 19: clark.v1.ListMessagesRequest
+	(*ListMessagesResponse)(nil),                  // 20: clark.v1.ListMessagesResponse
+	(*GetMessageRequest)(nil),                     // 21: clark.v1.GetMessageRequest
+	(*GetMessageResponse)(nil),                    // 22: clark.v1.GetMessageResponse
+	(*EditMessageRequest)(nil),                    // 23: clark.v1.EditMessageRequest
+	(*EditMessageResponse)(nil),                   // 24: clark.v1.EditMessageResponse
+	(*DeleteMessageRequest)(nil),                  // 25: clark.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),                 // 26: clark.v1.DeleteMessageResponse
+	(*PromoteCompactionToNewContextRequest)(nil),  // 27: clark.v1.PromoteCompactionToNewContextRequest
+	(*PromoteCompactionToNewContextResponse)(nil), // 28: clark.v1.PromoteCompactionToNewContextResponse
+	(*SendMessageRequest)(nil),                    // 29: clark.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),                   // 30: clark.v1.SendMessageResponse
+	(*CompactRequest)(nil),                        // 31: clark.v1.CompactRequest
+	(*CompactResponse)(nil),                       // 32: clark.v1.CompactResponse
+	(*CountContextTokensRequest)(nil),             // 33: clark.v1.CountContextTokensRequest
+	(*CountContextTokensResponse)(nil),            // 34: clark.v1.CountContextTokensResponse
+	(*ConversationSettings)(nil),                  // 35: clark.v1.ConversationSettings
+	(*Conversation)(nil),                          // 36: clark.v1.Conversation
+	(*Context)(nil),                               // 37: clark.v1.Context
+	(*Message)(nil),                               // 38: clark.v1.Message
+	(MessageRole)(0),                              // 39: clark.v1.MessageRole
+	(*CallSettings)(nil),                          // 40: clark.v1.CallSettings
+	(*StreamRun)(nil),                             // 41: clark.v1.StreamRun
 }
 var file_clark_v1_conversations_proto_depIdxs = []int32{
-	34, // 0: clark.v1.CreateConversationRequest.settings:type_name -> clark.v1.ConversationSettings
-	35, // 1: clark.v1.CreateConversationResponse.conversation:type_name -> clark.v1.Conversation
-	36, // 2: clark.v1.CreateConversationResponse.initial_context:type_name -> clark.v1.Context
-	37, // 3: clark.v1.CreateConversationResponse.seed_messages:type_name -> clark.v1.Message
-	35, // 4: clark.v1.ListConversationsResponse.conversations:type_name -> clark.v1.Conversation
-	35, // 5: clark.v1.GetConversationResponse.conversation:type_name -> clark.v1.Conversation
-	36, // 6: clark.v1.GetConversationResponse.active_context:type_name -> clark.v1.Context
-	34, // 7: clark.v1.UpdateConversationRequest.settings:type_name -> clark.v1.ConversationSettings
-	35, // 8: clark.v1.UpdateConversationResponse.conversation:type_name -> clark.v1.Conversation
-	36, // 9: clark.v1.ListContextsResponse.contexts:type_name -> clark.v1.Context
-	36, // 10: clark.v1.ActivateContextResponse.context:type_name -> clark.v1.Context
-	36, // 11: clark.v1.SetCurrentLeafResponse.context:type_name -> clark.v1.Context
-	36, // 12: clark.v1.UpdateContextResponse.context:type_name -> clark.v1.Context
-	37, // 13: clark.v1.ListMessagesResponse.messages:type_name -> clark.v1.Message
-	37, // 14: clark.v1.GetMessageResponse.message:type_name -> clark.v1.Message
-	38, // 15: clark.v1.EditMessageRequest.role:type_name -> clark.v1.MessageRole
-	37, // 16: clark.v1.EditMessageResponse.message:type_name -> clark.v1.Message
-	36, // 17: clark.v1.PromoteCompactionToNewContextResponse.context:type_name -> clark.v1.Context
-	39, // 18: clark.v1.SendMessageRequest.call_settings:type_name -> clark.v1.CallSettings
-	37, // 19: clark.v1.SendMessageResponse.user_message:type_name -> clark.v1.Message
-	40, // 20: clark.v1.SendMessageResponse.stream_run:type_name -> clark.v1.StreamRun
-	40, // 21: clark.v1.CompactResponse.stream_run:type_name -> clark.v1.StreamRun
-	0,  // 22: clark.v1.ConversationsService.CreateConversation:input_type -> clark.v1.CreateConversationRequest
-	2,  // 23: clark.v1.ConversationsService.ListConversations:input_type -> clark.v1.ListConversationsRequest
-	4,  // 24: clark.v1.ConversationsService.GetConversation:input_type -> clark.v1.GetConversationRequest
-	6,  // 25: clark.v1.ConversationsService.UpdateConversation:input_type -> clark.v1.UpdateConversationRequest
-	8,  // 26: clark.v1.ConversationsService.DeleteConversation:input_type -> clark.v1.DeleteConversationRequest
-	10, // 27: clark.v1.ConversationsService.ListContexts:input_type -> clark.v1.ListContextsRequest
-	12, // 28: clark.v1.ConversationsService.ActivateContext:input_type -> clark.v1.ActivateContextRequest
-	14, // 29: clark.v1.ConversationsService.SetCurrentLeaf:input_type -> clark.v1.SetCurrentLeafRequest
-	16, // 30: clark.v1.ConversationsService.UpdateContext:input_type -> clark.v1.UpdateContextRequest
-	18, // 31: clark.v1.ConversationsService.ListMessages:input_type -> clark.v1.ListMessagesRequest
-	20, // 32: clark.v1.ConversationsService.GetMessage:input_type -> clark.v1.GetMessageRequest
-	22, // 33: clark.v1.ConversationsService.EditMessage:input_type -> clark.v1.EditMessageRequest
-	24, // 34: clark.v1.ConversationsService.DeleteMessage:input_type -> clark.v1.DeleteMessageRequest
-	26, // 35: clark.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> clark.v1.PromoteCompactionToNewContextRequest
-	28, // 36: clark.v1.ConversationsService.SendMessage:input_type -> clark.v1.SendMessageRequest
-	30, // 37: clark.v1.ConversationsService.Compact:input_type -> clark.v1.CompactRequest
-	32, // 38: clark.v1.ConversationsService.CountContextTokens:input_type -> clark.v1.CountContextTokensRequest
-	1,  // 39: clark.v1.ConversationsService.CreateConversation:output_type -> clark.v1.CreateConversationResponse
-	3,  // 40: clark.v1.ConversationsService.ListConversations:output_type -> clark.v1.ListConversationsResponse
-	5,  // 41: clark.v1.ConversationsService.GetConversation:output_type -> clark.v1.GetConversationResponse
-	7,  // 42: clark.v1.ConversationsService.UpdateConversation:output_type -> clark.v1.UpdateConversationResponse
-	9,  // 43: clark.v1.ConversationsService.DeleteConversation:output_type -> clark.v1.DeleteConversationResponse
-	11, // 44: clark.v1.ConversationsService.ListContexts:output_type -> clark.v1.ListContextsResponse
-	13, // 45: clark.v1.ConversationsService.ActivateContext:output_type -> clark.v1.ActivateContextResponse
-	15, // 46: clark.v1.ConversationsService.SetCurrentLeaf:output_type -> clark.v1.SetCurrentLeafResponse
-	17, // 47: clark.v1.ConversationsService.UpdateContext:output_type -> clark.v1.UpdateContextResponse
-	19, // 48: clark.v1.ConversationsService.ListMessages:output_type -> clark.v1.ListMessagesResponse
-	21, // 49: clark.v1.ConversationsService.GetMessage:output_type -> clark.v1.GetMessageResponse
-	23, // 50: clark.v1.ConversationsService.EditMessage:output_type -> clark.v1.EditMessageResponse
-	25, // 51: clark.v1.ConversationsService.DeleteMessage:output_type -> clark.v1.DeleteMessageResponse
-	27, // 52: clark.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> clark.v1.PromoteCompactionToNewContextResponse
-	29, // 53: clark.v1.ConversationsService.SendMessage:output_type -> clark.v1.SendMessageResponse
-	31, // 54: clark.v1.ConversationsService.Compact:output_type -> clark.v1.CompactResponse
-	33, // 55: clark.v1.ConversationsService.CountContextTokens:output_type -> clark.v1.CountContextTokensResponse
-	39, // [39:56] is the sub-list for method output_type
-	22, // [22:39] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	35, // 0: clark.v1.CreateConversationRequest.settings:type_name -> clark.v1.ConversationSettings
+	36, // 1: clark.v1.CreateConversationResponse.conversation:type_name -> clark.v1.Conversation
+	37, // 2: clark.v1.CreateConversationResponse.initial_context:type_name -> clark.v1.Context
+	38, // 3: clark.v1.CreateConversationResponse.seed_messages:type_name -> clark.v1.Message
+	0,  // 4: clark.v1.ListConversationsRequest.order:type_name -> clark.v1.ConversationOrder
+	36, // 5: clark.v1.ListConversationsResponse.conversations:type_name -> clark.v1.Conversation
+	36, // 6: clark.v1.GetConversationResponse.conversation:type_name -> clark.v1.Conversation
+	37, // 7: clark.v1.GetConversationResponse.active_context:type_name -> clark.v1.Context
+	35, // 8: clark.v1.UpdateConversationRequest.settings:type_name -> clark.v1.ConversationSettings
+	36, // 9: clark.v1.UpdateConversationResponse.conversation:type_name -> clark.v1.Conversation
+	37, // 10: clark.v1.ListContextsResponse.contexts:type_name -> clark.v1.Context
+	37, // 11: clark.v1.ActivateContextResponse.context:type_name -> clark.v1.Context
+	37, // 12: clark.v1.SetCurrentLeafResponse.context:type_name -> clark.v1.Context
+	37, // 13: clark.v1.UpdateContextResponse.context:type_name -> clark.v1.Context
+	38, // 14: clark.v1.ListMessagesResponse.messages:type_name -> clark.v1.Message
+	38, // 15: clark.v1.GetMessageResponse.message:type_name -> clark.v1.Message
+	39, // 16: clark.v1.EditMessageRequest.role:type_name -> clark.v1.MessageRole
+	38, // 17: clark.v1.EditMessageResponse.message:type_name -> clark.v1.Message
+	37, // 18: clark.v1.PromoteCompactionToNewContextResponse.context:type_name -> clark.v1.Context
+	40, // 19: clark.v1.SendMessageRequest.call_settings:type_name -> clark.v1.CallSettings
+	38, // 20: clark.v1.SendMessageResponse.user_message:type_name -> clark.v1.Message
+	41, // 21: clark.v1.SendMessageResponse.stream_run:type_name -> clark.v1.StreamRun
+	41, // 22: clark.v1.CompactResponse.stream_run:type_name -> clark.v1.StreamRun
+	1,  // 23: clark.v1.ConversationsService.CreateConversation:input_type -> clark.v1.CreateConversationRequest
+	3,  // 24: clark.v1.ConversationsService.ListConversations:input_type -> clark.v1.ListConversationsRequest
+	5,  // 25: clark.v1.ConversationsService.GetConversation:input_type -> clark.v1.GetConversationRequest
+	7,  // 26: clark.v1.ConversationsService.UpdateConversation:input_type -> clark.v1.UpdateConversationRequest
+	9,  // 27: clark.v1.ConversationsService.DeleteConversation:input_type -> clark.v1.DeleteConversationRequest
+	11, // 28: clark.v1.ConversationsService.ListContexts:input_type -> clark.v1.ListContextsRequest
+	13, // 29: clark.v1.ConversationsService.ActivateContext:input_type -> clark.v1.ActivateContextRequest
+	15, // 30: clark.v1.ConversationsService.SetCurrentLeaf:input_type -> clark.v1.SetCurrentLeafRequest
+	17, // 31: clark.v1.ConversationsService.UpdateContext:input_type -> clark.v1.UpdateContextRequest
+	19, // 32: clark.v1.ConversationsService.ListMessages:input_type -> clark.v1.ListMessagesRequest
+	21, // 33: clark.v1.ConversationsService.GetMessage:input_type -> clark.v1.GetMessageRequest
+	23, // 34: clark.v1.ConversationsService.EditMessage:input_type -> clark.v1.EditMessageRequest
+	25, // 35: clark.v1.ConversationsService.DeleteMessage:input_type -> clark.v1.DeleteMessageRequest
+	27, // 36: clark.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> clark.v1.PromoteCompactionToNewContextRequest
+	29, // 37: clark.v1.ConversationsService.SendMessage:input_type -> clark.v1.SendMessageRequest
+	31, // 38: clark.v1.ConversationsService.Compact:input_type -> clark.v1.CompactRequest
+	33, // 39: clark.v1.ConversationsService.CountContextTokens:input_type -> clark.v1.CountContextTokensRequest
+	2,  // 40: clark.v1.ConversationsService.CreateConversation:output_type -> clark.v1.CreateConversationResponse
+	4,  // 41: clark.v1.ConversationsService.ListConversations:output_type -> clark.v1.ListConversationsResponse
+	6,  // 42: clark.v1.ConversationsService.GetConversation:output_type -> clark.v1.GetConversationResponse
+	8,  // 43: clark.v1.ConversationsService.UpdateConversation:output_type -> clark.v1.UpdateConversationResponse
+	10, // 44: clark.v1.ConversationsService.DeleteConversation:output_type -> clark.v1.DeleteConversationResponse
+	12, // 45: clark.v1.ConversationsService.ListContexts:output_type -> clark.v1.ListContextsResponse
+	14, // 46: clark.v1.ConversationsService.ActivateContext:output_type -> clark.v1.ActivateContextResponse
+	16, // 47: clark.v1.ConversationsService.SetCurrentLeaf:output_type -> clark.v1.SetCurrentLeafResponse
+	18, // 48: clark.v1.ConversationsService.UpdateContext:output_type -> clark.v1.UpdateContextResponse
+	20, // 49: clark.v1.ConversationsService.ListMessages:output_type -> clark.v1.ListMessagesResponse
+	22, // 50: clark.v1.ConversationsService.GetMessage:output_type -> clark.v1.GetMessageResponse
+	24, // 51: clark.v1.ConversationsService.EditMessage:output_type -> clark.v1.EditMessageResponse
+	26, // 52: clark.v1.ConversationsService.DeleteMessage:output_type -> clark.v1.DeleteMessageResponse
+	28, // 53: clark.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> clark.v1.PromoteCompactionToNewContextResponse
+	30, // 54: clark.v1.ConversationsService.SendMessage:output_type -> clark.v1.SendMessageResponse
+	32, // 55: clark.v1.ConversationsService.Compact:output_type -> clark.v1.CompactResponse
+	34, // 56: clark.v1.ConversationsService.CountContextTokens:output_type -> clark.v1.CountContextTokensResponse
+	40, // [40:57] is the sub-list for method output_type
+	23, // [23:40] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_clark_v1_conversations_proto_init() }
@@ -2012,6 +2110,7 @@ func file_clark_v1_conversations_proto_init() {
 	}
 	file_clark_v1_types_proto_init()
 	file_clark_v1_conversations_proto_msgTypes[0].OneofWrappers = []any{}
+	file_clark_v1_conversations_proto_msgTypes[2].OneofWrappers = []any{}
 	file_clark_v1_conversations_proto_msgTypes[6].OneofWrappers = []any{}
 	file_clark_v1_conversations_proto_msgTypes[16].OneofWrappers = []any{}
 	file_clark_v1_conversations_proto_msgTypes[18].OneofWrappers = []any{}
@@ -2023,13 +2122,14 @@ func file_clark_v1_conversations_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_clark_v1_conversations_proto_rawDesc), len(file_clark_v1_conversations_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_clark_v1_conversations_proto_goTypes,
 		DependencyIndexes: file_clark_v1_conversations_proto_depIdxs,
+		EnumInfos:         file_clark_v1_conversations_proto_enumTypes,
 		MessageInfos:      file_clark_v1_conversations_proto_msgTypes,
 	}.Build()
 	File_clark_v1_conversations_proto = out.File

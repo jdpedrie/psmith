@@ -46,11 +46,7 @@ struct HomeView: View {
                 ConversationView(conversation: conversation, profiles: app.profiles)
                     .id(id)
             } else {
-                EmptyStateView(
-                    "No conversation selected",
-                    systemImage: "bubble.left.and.bubble.right",
-                    description: "Pick one from the sidebar or start a new one."
-                )
+                WelcomeView()
             }
         }
         // If the user picks a conversation from the sidebar while the

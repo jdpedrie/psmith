@@ -188,12 +188,24 @@ public struct Clark_V1_UpdateUserModelProviderRequest: Sendable {
   /// Clears the value of `config`. Subsequent reads from it will return its default value.
   public mutating func clearConfig() {self._config = nil}
 
+  /// Replace (not merge) the provider-level default CallSettings. Unset
+  /// leaves the column alone; sending an empty CallSettings clears it.
+  public var defaultSettings: Clark_V1_CallSettings {
+    get {_defaultSettings ?? Clark_V1_CallSettings()}
+    set {_defaultSettings = newValue}
+  }
+  /// Returns true if `defaultSettings` has been explicitly set.
+  public var hasDefaultSettings: Bool {self._defaultSettings != nil}
+  /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultSettings() {self._defaultSettings = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _label: String? = nil
   fileprivate var _config: Data? = nil
+  fileprivate var _defaultSettings: Clark_V1_CallSettings? = nil
 }
 
 public struct Clark_V1_UpdateUserModelProviderResponse: Sendable {
@@ -511,6 +523,265 @@ public struct Clark_V1_ToggleUserModelFavoriteResponse: Sendable {
   public init() {}
 
   fileprivate var _model: Clark_V1_UserModel? = nil
+}
+
+public struct Clark_V1_UpdateUserModelRequest: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModelProviderID: String {
+    get {_storage._userModelProviderID}
+    set {_uniqueStorage()._userModelProviderID = newValue}
+  }
+
+  public var modelID: String {
+    get {_storage._modelID}
+    set {_uniqueStorage()._modelID = newValue}
+  }
+
+  /// Replace (not merge) the per-model default CallSettings. Unset leaves
+  /// the column alone; sending an empty CallSettings clears it.
+  public var defaultSettings: Clark_V1_CallSettings {
+    get {_storage._defaultSettings ?? Clark_V1_CallSettings()}
+    set {_uniqueStorage()._defaultSettings = newValue}
+  }
+  /// Returns true if `defaultSettings` has been explicitly set.
+  public var hasDefaultSettings: Bool {_storage._defaultSettings != nil}
+  /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultSettings() {_uniqueStorage()._defaultSettings = nil}
+
+  /// All other metadata fields are unset → leave the column alone, set →
+  /// overwrite. The wire model_id is the key and is never updatable —
+  /// change it by removing the row and adding a new manual row.
+  public var displayName: String {
+    get {_storage._displayName ?? String()}
+    set {_uniqueStorage()._displayName = newValue}
+  }
+  /// Returns true if `displayName` has been explicitly set.
+  public var hasDisplayName: Bool {_storage._displayName != nil}
+  /// Clears the value of `displayName`. Subsequent reads from it will return its default value.
+  public mutating func clearDisplayName() {_uniqueStorage()._displayName = nil}
+
+  public var contextWindow: Int32 {
+    get {_storage._contextWindow ?? 0}
+    set {_uniqueStorage()._contextWindow = newValue}
+  }
+  /// Returns true if `contextWindow` has been explicitly set.
+  public var hasContextWindow: Bool {_storage._contextWindow != nil}
+  /// Clears the value of `contextWindow`. Subsequent reads from it will return its default value.
+  public mutating func clearContextWindow() {_uniqueStorage()._contextWindow = nil}
+
+  public var maxOutputTokens: Int32 {
+    get {_storage._maxOutputTokens ?? 0}
+    set {_uniqueStorage()._maxOutputTokens = newValue}
+  }
+  /// Returns true if `maxOutputTokens` has been explicitly set.
+  public var hasMaxOutputTokens: Bool {_storage._maxOutputTokens != nil}
+  /// Clears the value of `maxOutputTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearMaxOutputTokens() {_uniqueStorage()._maxOutputTokens = nil}
+
+  public var pricing: Clark_V1_ModelPricing {
+    get {_storage._pricing ?? Clark_V1_ModelPricing()}
+    set {_uniqueStorage()._pricing = newValue}
+  }
+  /// Returns true if `pricing` has been explicitly set.
+  public var hasPricing: Bool {_storage._pricing != nil}
+  /// Clears the value of `pricing`. Subsequent reads from it will return its default value.
+  public mutating func clearPricing() {_uniqueStorage()._pricing = nil}
+
+  /// Modalities: when `update_modalities` is true, the `modalities` array
+  /// replaces the column wholesale (empty = clear). When false, the column
+  /// is left alone. (`repeated` doesn't have field presence so we need an
+  /// explicit flag to distinguish "no change" from "set to empty list".)
+  public var updateModalities: Bool {
+    get {_storage._updateModalities}
+    set {_uniqueStorage()._updateModalities = newValue}
+  }
+
+  public var modalities: [String] {
+    get {_storage._modalities}
+    set {_uniqueStorage()._modalities = newValue}
+  }
+
+  public var capabilities: Clark_V1_ModelCapabilities {
+    get {_storage._capabilities ?? Clark_V1_ModelCapabilities()}
+    set {_uniqueStorage()._capabilities = newValue}
+  }
+  /// Returns true if `capabilities` has been explicitly set.
+  public var hasCapabilities: Bool {_storage._capabilities != nil}
+  /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
+  public mutating func clearCapabilities() {_uniqueStorage()._capabilities = nil}
+
+  public var knowledgeCutoff: String {
+    get {_storage._knowledgeCutoff ?? String()}
+    set {_uniqueStorage()._knowledgeCutoff = newValue}
+  }
+  /// Returns true if `knowledgeCutoff` has been explicitly set.
+  public var hasKnowledgeCutoff: Bool {_storage._knowledgeCutoff != nil}
+  /// Clears the value of `knowledgeCutoff`. Subsequent reads from it will return its default value.
+  public mutating func clearKnowledgeCutoff() {_uniqueStorage()._knowledgeCutoff = nil}
+
+  /// Explicit clear flags for nullable scalar columns. SetField via the
+  /// optional accessor is "set to value"; un-setting via `.clear*()` is
+  /// "no change" on the server side. To revert a column to NULL clients
+  /// set the corresponding clear flag to true (and leave the optional
+  /// value field unset). When both the value and the clear flag are
+  /// present the clear flag wins.
+  public var clearContextWindow_p: Bool {
+    get {_storage._clearContextWindow_p}
+    set {_uniqueStorage()._clearContextWindow_p = newValue}
+  }
+
+  public var clearMaxOutputTokens_p: Bool {
+    get {_storage._clearMaxOutputTokens_p}
+    set {_uniqueStorage()._clearMaxOutputTokens_p = newValue}
+  }
+
+  public var clearKnowledgeCutoff_p: Bool {
+    get {_storage._clearKnowledgeCutoff_p}
+    set {_uniqueStorage()._clearKnowledgeCutoff_p = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public struct Clark_V1_UpdateUserModelResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModel: Clark_V1_UserModel {
+    get {_userModel ?? Clark_V1_UserModel()}
+    set {_userModel = newValue}
+  }
+  /// Returns true if `userModel` has been explicitly set.
+  public var hasUserModel: Bool {self._userModel != nil}
+  /// Clears the value of `userModel`. Subsequent reads from it will return its default value.
+  public mutating func clearUserModel() {self._userModel = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _userModel: Clark_V1_UserModel? = nil
+}
+
+/// AddManualModelRequest carries every snapshot field. model_id and
+/// display_name are required; metadata is optional and stored verbatim
+/// (server doesn't try to look up catalog defaults for manual models).
+public struct Clark_V1_AddManualModelRequest: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModelProviderID: String {
+    get {_storage._userModelProviderID}
+    set {_uniqueStorage()._userModelProviderID = newValue}
+  }
+
+  /// required
+  public var modelID: String {
+    get {_storage._modelID}
+    set {_uniqueStorage()._modelID = newValue}
+  }
+
+  /// required
+  public var displayName: String {
+    get {_storage._displayName}
+    set {_uniqueStorage()._displayName = newValue}
+  }
+
+  public var contextWindow: Int32 {
+    get {_storage._contextWindow ?? 0}
+    set {_uniqueStorage()._contextWindow = newValue}
+  }
+  /// Returns true if `contextWindow` has been explicitly set.
+  public var hasContextWindow: Bool {_storage._contextWindow != nil}
+  /// Clears the value of `contextWindow`. Subsequent reads from it will return its default value.
+  public mutating func clearContextWindow() {_uniqueStorage()._contextWindow = nil}
+
+  public var maxOutputTokens: Int32 {
+    get {_storage._maxOutputTokens ?? 0}
+    set {_uniqueStorage()._maxOutputTokens = newValue}
+  }
+  /// Returns true if `maxOutputTokens` has been explicitly set.
+  public var hasMaxOutputTokens: Bool {_storage._maxOutputTokens != nil}
+  /// Clears the value of `maxOutputTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearMaxOutputTokens() {_uniqueStorage()._maxOutputTokens = nil}
+
+  public var pricing: Clark_V1_ModelPricing {
+    get {_storage._pricing ?? Clark_V1_ModelPricing()}
+    set {_uniqueStorage()._pricing = newValue}
+  }
+  /// Returns true if `pricing` has been explicitly set.
+  public var hasPricing: Bool {_storage._pricing != nil}
+  /// Clears the value of `pricing`. Subsequent reads from it will return its default value.
+  public mutating func clearPricing() {_uniqueStorage()._pricing = nil}
+
+  public var modalities: [String] {
+    get {_storage._modalities}
+    set {_uniqueStorage()._modalities = newValue}
+  }
+
+  public var capabilities: Clark_V1_ModelCapabilities {
+    get {_storage._capabilities ?? Clark_V1_ModelCapabilities()}
+    set {_uniqueStorage()._capabilities = newValue}
+  }
+  /// Returns true if `capabilities` has been explicitly set.
+  public var hasCapabilities: Bool {_storage._capabilities != nil}
+  /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
+  public mutating func clearCapabilities() {_uniqueStorage()._capabilities = nil}
+
+  /// ISO date (YYYY-MM-DD)
+  public var knowledgeCutoff: String {
+    get {_storage._knowledgeCutoff ?? String()}
+    set {_uniqueStorage()._knowledgeCutoff = newValue}
+  }
+  /// Returns true if `knowledgeCutoff` has been explicitly set.
+  public var hasKnowledgeCutoff: Bool {_storage._knowledgeCutoff != nil}
+  /// Clears the value of `knowledgeCutoff`. Subsequent reads from it will return its default value.
+  public mutating func clearKnowledgeCutoff() {_uniqueStorage()._knowledgeCutoff = nil}
+
+  public var defaultSettings: Clark_V1_CallSettings {
+    get {_storage._defaultSettings ?? Clark_V1_CallSettings()}
+    set {_uniqueStorage()._defaultSettings = newValue}
+  }
+  /// Returns true if `defaultSettings` has been explicitly set.
+  public var hasDefaultSettings: Bool {_storage._defaultSettings != nil}
+  /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultSettings() {_uniqueStorage()._defaultSettings = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public struct Clark_V1_AddManualModelResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModel: Clark_V1_UserModel {
+    get {_userModel ?? Clark_V1_UserModel()}
+    set {_userModel = newValue}
+  }
+  /// Returns true if `userModel` has been explicitly set.
+  public var hasUserModel: Bool {self._userModel != nil}
+  /// Clears the value of `userModel`. Subsequent reads from it will return its default value.
+  public mutating func clearUserModel() {self._userModel = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _userModel: Clark_V1_UserModel? = nil
 }
 
 public struct Clark_V1_TestUserModelProviderRequest: Sendable {
@@ -945,7 +1216,7 @@ extension Clark_V1_GetUserModelProviderResponse: SwiftProtobuf.Message, SwiftPro
 
 extension Clark_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelProviderRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}label\0\u{1}config\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}label\0\u{1}config\0\u{3}default_settings\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -956,6 +1227,7 @@ extension Clark_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
       case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self._label) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self._config) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._defaultSettings) }()
       default: break
       }
     }
@@ -975,6 +1247,9 @@ extension Clark_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
     try { if let v = self._config {
       try visitor.visitSingularBytesField(value: v, fieldNumber: 3)
     } }()
+    try { if let v = self._defaultSettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -982,6 +1257,7 @@ extension Clark_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
     if lhs.id != rhs.id {return false}
     if lhs._label != rhs._label {return false}
     if lhs._config != rhs._config {return false}
+    if lhs._defaultSettings != rhs._defaultSettings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1599,6 +1875,368 @@ extension Clark_V1_ToggleUserModelFavoriteResponse: SwiftProtobuf.Message, Swift
 
   public static func ==(lhs: Clark_V1_ToggleUserModelFavoriteResponse, rhs: Clark_V1_ToggleUserModelFavoriteResponse) -> Bool {
     if lhs._model != rhs._model {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_UpdateUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}default_settings\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}update_modalities\0\u{1}modalities\0\u{1}capabilities\0\u{3}knowledge_cutoff\0\u{3}clear_context_window\0\u{3}clear_max_output_tokens\0\u{3}clear_knowledge_cutoff\0")
+
+  fileprivate class _StorageClass {
+    var _userModelProviderID: String = String()
+    var _modelID: String = String()
+    var _defaultSettings: Clark_V1_CallSettings? = nil
+    var _displayName: String? = nil
+    var _contextWindow: Int32? = nil
+    var _maxOutputTokens: Int32? = nil
+    var _pricing: Clark_V1_ModelPricing? = nil
+    var _updateModalities: Bool = false
+    var _modalities: [String] = []
+    var _capabilities: Clark_V1_ModelCapabilities? = nil
+    var _knowledgeCutoff: String? = nil
+    var _clearContextWindow_p: Bool = false
+    var _clearMaxOutputTokens_p: Bool = false
+    var _clearKnowledgeCutoff_p: Bool = false
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _userModelProviderID = source._userModelProviderID
+      _modelID = source._modelID
+      _defaultSettings = source._defaultSettings
+      _displayName = source._displayName
+      _contextWindow = source._contextWindow
+      _maxOutputTokens = source._maxOutputTokens
+      _pricing = source._pricing
+      _updateModalities = source._updateModalities
+      _modalities = source._modalities
+      _capabilities = source._capabilities
+      _knowledgeCutoff = source._knowledgeCutoff
+      _clearContextWindow_p = source._clearContextWindow_p
+      _clearMaxOutputTokens_p = source._clearMaxOutputTokens_p
+      _clearKnowledgeCutoff_p = source._clearKnowledgeCutoff_p
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._userModelProviderID) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._modelID) }()
+        case 3: try { try decoder.decodeSingularMessageField(value: &_storage._defaultSettings) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._displayName) }()
+        case 5: try { try decoder.decodeSingularInt32Field(value: &_storage._contextWindow) }()
+        case 6: try { try decoder.decodeSingularInt32Field(value: &_storage._maxOutputTokens) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._pricing) }()
+        case 8: try { try decoder.decodeSingularBoolField(value: &_storage._updateModalities) }()
+        case 9: try { try decoder.decodeRepeatedStringField(value: &_storage._modalities) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._capabilities) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._knowledgeCutoff) }()
+        case 12: try { try decoder.decodeSingularBoolField(value: &_storage._clearContextWindow_p) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._clearMaxOutputTokens_p) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._clearKnowledgeCutoff_p) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._userModelProviderID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._userModelProviderID, fieldNumber: 1)
+      }
+      if !_storage._modelID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._modelID, fieldNumber: 2)
+      }
+      try { if let v = _storage._defaultSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._displayName {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._contextWindow {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._maxOutputTokens {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._pricing {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      if _storage._updateModalities != false {
+        try visitor.visitSingularBoolField(value: _storage._updateModalities, fieldNumber: 8)
+      }
+      if !_storage._modalities.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._modalities, fieldNumber: 9)
+      }
+      try { if let v = _storage._capabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+      try { if let v = _storage._knowledgeCutoff {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 11)
+      } }()
+      if _storage._clearContextWindow_p != false {
+        try visitor.visitSingularBoolField(value: _storage._clearContextWindow_p, fieldNumber: 12)
+      }
+      if _storage._clearMaxOutputTokens_p != false {
+        try visitor.visitSingularBoolField(value: _storage._clearMaxOutputTokens_p, fieldNumber: 13)
+      }
+      if _storage._clearKnowledgeCutoff_p != false {
+        try visitor.visitSingularBoolField(value: _storage._clearKnowledgeCutoff_p, fieldNumber: 14)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_UpdateUserModelRequest, rhs: Clark_V1_UpdateUserModelRequest) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._userModelProviderID != rhs_storage._userModelProviderID {return false}
+        if _storage._modelID != rhs_storage._modelID {return false}
+        if _storage._defaultSettings != rhs_storage._defaultSettings {return false}
+        if _storage._displayName != rhs_storage._displayName {return false}
+        if _storage._contextWindow != rhs_storage._contextWindow {return false}
+        if _storage._maxOutputTokens != rhs_storage._maxOutputTokens {return false}
+        if _storage._pricing != rhs_storage._pricing {return false}
+        if _storage._updateModalities != rhs_storage._updateModalities {return false}
+        if _storage._modalities != rhs_storage._modalities {return false}
+        if _storage._capabilities != rhs_storage._capabilities {return false}
+        if _storage._knowledgeCutoff != rhs_storage._knowledgeCutoff {return false}
+        if _storage._clearContextWindow_p != rhs_storage._clearContextWindow_p {return false}
+        if _storage._clearMaxOutputTokens_p != rhs_storage._clearMaxOutputTokens_p {return false}
+        if _storage._clearKnowledgeCutoff_p != rhs_storage._clearKnowledgeCutoff_p {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_UpdateUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._userModel) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._userModel {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_UpdateUserModelResponse, rhs: Clark_V1_UpdateUserModelResponse) -> Bool {
+    if lhs._userModel != rhs._userModel {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_AddManualModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AddManualModelRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{1}modalities\0\u{1}capabilities\0\u{3}knowledge_cutoff\0\u{3}default_settings\0")
+
+  fileprivate class _StorageClass {
+    var _userModelProviderID: String = String()
+    var _modelID: String = String()
+    var _displayName: String = String()
+    var _contextWindow: Int32? = nil
+    var _maxOutputTokens: Int32? = nil
+    var _pricing: Clark_V1_ModelPricing? = nil
+    var _modalities: [String] = []
+    var _capabilities: Clark_V1_ModelCapabilities? = nil
+    var _knowledgeCutoff: String? = nil
+    var _defaultSettings: Clark_V1_CallSettings? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _userModelProviderID = source._userModelProviderID
+      _modelID = source._modelID
+      _displayName = source._displayName
+      _contextWindow = source._contextWindow
+      _maxOutputTokens = source._maxOutputTokens
+      _pricing = source._pricing
+      _modalities = source._modalities
+      _capabilities = source._capabilities
+      _knowledgeCutoff = source._knowledgeCutoff
+      _defaultSettings = source._defaultSettings
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._userModelProviderID) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._modelID) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._displayName) }()
+        case 4: try { try decoder.decodeSingularInt32Field(value: &_storage._contextWindow) }()
+        case 5: try { try decoder.decodeSingularInt32Field(value: &_storage._maxOutputTokens) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._pricing) }()
+        case 7: try { try decoder.decodeRepeatedStringField(value: &_storage._modalities) }()
+        case 8: try { try decoder.decodeSingularMessageField(value: &_storage._capabilities) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._knowledgeCutoff) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._defaultSettings) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._userModelProviderID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._userModelProviderID, fieldNumber: 1)
+      }
+      if !_storage._modelID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._modelID, fieldNumber: 2)
+      }
+      if !_storage._displayName.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._displayName, fieldNumber: 3)
+      }
+      try { if let v = _storage._contextWindow {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._maxOutputTokens {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._pricing {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      if !_storage._modalities.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._modalities, fieldNumber: 7)
+      }
+      try { if let v = _storage._capabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._knowledgeCutoff {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._defaultSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_AddManualModelRequest, rhs: Clark_V1_AddManualModelRequest) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._userModelProviderID != rhs_storage._userModelProviderID {return false}
+        if _storage._modelID != rhs_storage._modelID {return false}
+        if _storage._displayName != rhs_storage._displayName {return false}
+        if _storage._contextWindow != rhs_storage._contextWindow {return false}
+        if _storage._maxOutputTokens != rhs_storage._maxOutputTokens {return false}
+        if _storage._pricing != rhs_storage._pricing {return false}
+        if _storage._modalities != rhs_storage._modalities {return false}
+        if _storage._capabilities != rhs_storage._capabilities {return false}
+        if _storage._knowledgeCutoff != rhs_storage._knowledgeCutoff {return false}
+        if _storage._defaultSettings != rhs_storage._defaultSettings {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_AddManualModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AddManualModelResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._userModel) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._userModel {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_AddManualModelResponse, rhs: Clark_V1_AddManualModelResponse) -> Bool {
+    if lhs._userModel != rhs._userModel {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

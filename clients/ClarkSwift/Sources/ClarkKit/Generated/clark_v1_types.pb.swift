@@ -67,6 +67,137 @@ public enum Clark_V1_MetadataSource: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
+/// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
+/// tier costs more to write but persists across longer idle gaps.
+public enum Clark_V1_CacheTTL: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case cacheTtl5M // = 1
+  case cacheTtl1H // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .cacheTtl5M
+    case 2: self = .cacheTtl1H
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .cacheTtl5M: return 1
+    case .cacheTtl1H: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Clark_V1_CacheTTL] = [
+    .unspecified,
+    .cacheTtl5M,
+    .cacheTtl1H,
+  ]
+
+}
+
+public enum Clark_V1_ServiceTier: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case auto // = 1
+  case standard // = 2
+  case priority // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .auto
+    case 2: self = .standard
+    case 3: self = .priority
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .auto: return 1
+    case .standard: return 2
+    case .priority: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Clark_V1_ServiceTier] = [
+    .unspecified,
+    .auto,
+    .standard,
+    .priority,
+  ]
+
+}
+
+public enum Clark_V1_HarmThreshold: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case blockNone // = 1
+  case blockLowAndAbove // = 2
+
+  /// Gemini default
+  case blockMediumAndAbove // = 3
+  case blockOnlyHigh // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .blockNone
+    case 2: self = .blockLowAndAbove
+    case 3: self = .blockMediumAndAbove
+    case 4: self = .blockOnlyHigh
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .blockNone: return 1
+    case .blockLowAndAbove: return 2
+    case .blockMediumAndAbove: return 3
+    case .blockOnlyHigh: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Clark_V1_HarmThreshold] = [
+    .unspecified,
+    .blockNone,
+    .blockLowAndAbove,
+    .blockMediumAndAbove,
+    .blockOnlyHigh,
+  ]
+
+}
+
 public enum Clark_V1_CompressionMode: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
@@ -416,12 +547,26 @@ public struct Clark_V1_UserModelProvider: Sendable {
   /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
   public mutating func clearUpdatedAt() {self._updatedAt = nil}
 
+  /// Provider-level default CallSettings — bottom layer of the resolution
+  /// chain (conversation > profile > model > provider). Sparse: any unset
+  /// field inherits nothing (this is the floor), but unset fields here let
+  /// higher layers contribute their own values normally.
+  public var defaultSettings: Clark_V1_CallSettings {
+    get {_defaultSettings ?? Clark_V1_CallSettings()}
+    set {_defaultSettings = newValue}
+  }
+  /// Returns true if `defaultSettings` has been explicitly set.
+  public var hasDefaultSettings: Bool {self._defaultSettings != nil}
+  /// Clears the value of `defaultSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultSettings() {self._defaultSettings = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _defaultSettings: Clark_V1_CallSettings? = nil
 }
 
 /// A template surfaced from the catalog to accelerate "add provider" UX.
@@ -821,59 +966,465 @@ public struct Clark_V1_UserModel: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-/// Per-call provider settings.
-public struct Clark_V1_CallSettings: Sendable {
+/// Per-call provider settings. Hybrid common-core + provider-specific shape:
+/// the first block is universal (every driver translates it), `top_k` is
+/// shared by Anthropic + Google, `thinking` is the universal "extended
+/// reasoning" knob translated per driver, and `anthropic` / `openai` /
+/// `google` carry per-provider knobs that don't fit the common surface.
+///
+/// Stored on JSONB columns at four layers (conversation > profile > model >
+/// provider). Resolution merges sparsely — every layer can leave any field
+/// unset to inherit from below; see `internal/profiles/callsettings.go`.
+public struct Clark_V1_CallSettings: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  /// --- Common (all three providers) ---
   public var temperature: Double {
-    get {_temperature ?? 0}
-    set {_temperature = newValue}
+    get {_storage._temperature ?? 0}
+    set {_uniqueStorage()._temperature = newValue}
   }
   /// Returns true if `temperature` has been explicitly set.
-  public var hasTemperature: Bool {self._temperature != nil}
+  public var hasTemperature: Bool {_storage._temperature != nil}
   /// Clears the value of `temperature`. Subsequent reads from it will return its default value.
-  public mutating func clearTemperature() {self._temperature = nil}
+  public mutating func clearTemperature() {_uniqueStorage()._temperature = nil}
+
+  public var topP: Double {
+    get {_storage._topP ?? 0}
+    set {_uniqueStorage()._topP = newValue}
+  }
+  /// Returns true if `topP` has been explicitly set.
+  public var hasTopP: Bool {_storage._topP != nil}
+  /// Clears the value of `topP`. Subsequent reads from it will return its default value.
+  public mutating func clearTopP() {_uniqueStorage()._topP = nil}
 
   public var maxOutputTokens: Int32 {
-    get {_maxOutputTokens ?? 0}
-    set {_maxOutputTokens = newValue}
+    get {_storage._maxOutputTokens ?? 0}
+    set {_uniqueStorage()._maxOutputTokens = newValue}
   }
   /// Returns true if `maxOutputTokens` has been explicitly set.
-  public var hasMaxOutputTokens: Bool {self._maxOutputTokens != nil}
+  public var hasMaxOutputTokens: Bool {_storage._maxOutputTokens != nil}
   /// Clears the value of `maxOutputTokens`. Subsequent reads from it will return its default value.
-  public mutating func clearMaxOutputTokens() {self._maxOutputTokens = nil}
+  public mutating func clearMaxOutputTokens() {_uniqueStorage()._maxOutputTokens = nil}
 
-  public var thinkingEnabled: Bool {
-    get {_thinkingEnabled ?? false}
-    set {_thinkingEnabled = newValue}
+  public var stopSequences: [String] {
+    get {_storage._stopSequences}
+    set {_uniqueStorage()._stopSequences = newValue}
   }
-  /// Returns true if `thinkingEnabled` has been explicitly set.
-  public var hasThinkingEnabled: Bool {self._thinkingEnabled != nil}
-  /// Clears the value of `thinkingEnabled`. Subsequent reads from it will return its default value.
-  public mutating func clearThinkingEnabled() {self._thinkingEnabled = nil}
 
-  public var thinkingBudgetTokens: Int32 {
-    get {_thinkingBudgetTokens ?? 0}
-    set {_thinkingBudgetTokens = newValue}
+  /// --- Two-of-three (Anthropic + Google) ---
+  public var topK: Int32 {
+    get {_storage._topK ?? 0}
+    set {_uniqueStorage()._topK = newValue}
   }
-  /// Returns true if `thinkingBudgetTokens` has been explicitly set.
-  public var hasThinkingBudgetTokens: Bool {self._thinkingBudgetTokens != nil}
-  /// Clears the value of `thinkingBudgetTokens`. Subsequent reads from it will return its default value.
-  public mutating func clearThinkingBudgetTokens() {self._thinkingBudgetTokens = nil}
+  /// Returns true if `topK` has been explicitly set.
+  public var hasTopK: Bool {_storage._topK != nil}
+  /// Clears the value of `topK`. Subsequent reads from it will return its default value.
+  public mutating func clearTopK() {_uniqueStorage()._topK = nil}
 
-  /// provider-specific knobs not in the common set
-  public var extras: Data = Data()
+  /// --- Universal "thinking" knob, translated per driver ---
+  public var thinking: Clark_V1_ThinkingSettings {
+    get {_storage._thinking ?? Clark_V1_ThinkingSettings()}
+    set {_uniqueStorage()._thinking = newValue}
+  }
+  /// Returns true if `thinking` has been explicitly set.
+  public var hasThinking: Bool {_storage._thinking != nil}
+  /// Clears the value of `thinking`. Subsequent reads from it will return its default value.
+  public mutating func clearThinking() {_uniqueStorage()._thinking = nil}
+
+  /// --- Provider-specific extension blocks ---
+  public var anthropic: Clark_V1_AnthropicExtras {
+    get {_storage._anthropic ?? Clark_V1_AnthropicExtras()}
+    set {_uniqueStorage()._anthropic = newValue}
+  }
+  /// Returns true if `anthropic` has been explicitly set.
+  public var hasAnthropic: Bool {_storage._anthropic != nil}
+  /// Clears the value of `anthropic`. Subsequent reads from it will return its default value.
+  public mutating func clearAnthropic() {_uniqueStorage()._anthropic = nil}
+
+  public var openai: Clark_V1_OpenAIExtras {
+    get {_storage._openai ?? Clark_V1_OpenAIExtras()}
+    set {_uniqueStorage()._openai = newValue}
+  }
+  /// Returns true if `openai` has been explicitly set.
+  public var hasOpenai: Bool {_storage._openai != nil}
+  /// Clears the value of `openai`. Subsequent reads from it will return its default value.
+  public mutating func clearOpenai() {_uniqueStorage()._openai = nil}
+
+  public var google: Clark_V1_GoogleExtras {
+    get {_storage._google ?? Clark_V1_GoogleExtras()}
+    set {_uniqueStorage()._google = newValue}
+  }
+  /// Returns true if `google` has been explicitly set.
+  public var hasGoogle: Bool {_storage._google != nil}
+  /// Clears the value of `google`. Subsequent reads from it will return its default value.
+  public mutating func clearGoogle() {_uniqueStorage()._google = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _temperature: Double? = nil
-  fileprivate var _maxOutputTokens: Int32? = nil
-  fileprivate var _thinkingEnabled: Bool? = nil
-  fileprivate var _thinkingBudgetTokens: Int32? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// ThinkingSettings carries the cross-driver "show your work" knob. Each
+/// driver translates it differently:
+///   Anthropic & Google → literal budget_tokens.
+///   OpenAI Responses    → budget_tokens derives reasoning_effort
+///                         (<2k → low, 2-8k → medium, >8k → high).
+///   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+public struct Clark_V1_ThinkingSettings: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var enabled: Bool {
+    get {_enabled ?? false}
+    set {_enabled = newValue}
+  }
+  /// Returns true if `enabled` has been explicitly set.
+  public var hasEnabled: Bool {self._enabled != nil}
+  /// Clears the value of `enabled`. Subsequent reads from it will return its default value.
+  public mutating func clearEnabled() {self._enabled = nil}
+
+  public var budgetTokens: Int32 {
+    get {_budgetTokens ?? 0}
+    set {_budgetTokens = newValue}
+  }
+  /// Returns true if `budgetTokens` has been explicitly set.
+  public var hasBudgetTokens: Bool {self._budgetTokens != nil}
+  /// Clears the value of `budgetTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearBudgetTokens() {self._budgetTokens = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _enabled: Bool? = nil
+  fileprivate var _budgetTokens: Int32? = nil
+}
+
+/// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
+/// provider common surface. v1 surfaces prompt-cache control; further knobs
+/// will be added as they're needed.
+public struct Clark_V1_AnthropicExtras: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// When false, the driver skips placing a cache_control marker on the
+  /// request — useful for one-off conversations where the +25% write
+  /// overhead doesn't pay off, or for users who prefer not to cache for
+  /// privacy reasons. Default (unset) = true.
+  public var cacheEnabled: Bool {
+    get {_cacheEnabled ?? false}
+    set {_cacheEnabled = newValue}
+  }
+  /// Returns true if `cacheEnabled` has been explicitly set.
+  public var hasCacheEnabled: Bool {self._cacheEnabled != nil}
+  /// Clears the value of `cacheEnabled`. Subsequent reads from it will return its default value.
+  public mutating func clearCacheEnabled() {self._cacheEnabled = nil}
+
+  /// Cache TTL — 5m (default) or 1h. 1h has higher break-even but
+  /// survives stop-and-resume workflows.
+  public var cacheTtl: Clark_V1_CacheTTL {
+    get {_cacheTtl ?? .unspecified}
+    set {_cacheTtl = newValue}
+  }
+  /// Returns true if `cacheTtl` has been explicitly set.
+  public var hasCacheTtl: Bool {self._cacheTtl != nil}
+  /// Clears the value of `cacheTtl`. Subsequent reads from it will return its default value.
+  public mutating func clearCacheTtl() {self._cacheTtl = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _cacheEnabled: Bool? = nil
+  fileprivate var _cacheTtl: Clark_V1_CacheTTL? = nil
+}
+
+/// OpenAIExtras carries the per-driver knobs that map to Chat Completions /
+/// Responses but have no analog on Anthropic or Google.
+public struct Clark_V1_OpenAIExtras: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// reproducibility
+  public var seed: Int32 {
+    get {_seed ?? 0}
+    set {_seed = newValue}
+  }
+  /// Returns true if `seed` has been explicitly set.
+  public var hasSeed: Bool {self._seed != nil}
+  /// Clears the value of `seed`. Subsequent reads from it will return its default value.
+  public mutating func clearSeed() {self._seed = nil}
+
+  /// [-2, 2]
+  public var frequencyPenalty: Double {
+    get {_frequencyPenalty ?? 0}
+    set {_frequencyPenalty = newValue}
+  }
+  /// Returns true if `frequencyPenalty` has been explicitly set.
+  public var hasFrequencyPenalty: Bool {self._frequencyPenalty != nil}
+  /// Clears the value of `frequencyPenalty`. Subsequent reads from it will return its default value.
+  public mutating func clearFrequencyPenalty() {self._frequencyPenalty = nil}
+
+  /// [-2, 2]
+  public var presencePenalty: Double {
+    get {_presencePenalty ?? 0}
+    set {_presencePenalty = newValue}
+  }
+  /// Returns true if `presencePenalty` has been explicitly set.
+  public var hasPresencePenalty: Bool {self._presencePenalty != nil}
+  /// Clears the value of `presencePenalty`. Subsequent reads from it will return its default value.
+  public mutating func clearPresencePenalty() {self._presencePenalty = nil}
+
+  /// [0, 5]; also enables Logprobs=true on the wire
+  public var topLogprobs: Int32 {
+    get {_topLogprobs ?? 0}
+    set {_topLogprobs = newValue}
+  }
+  /// Returns true if `topLogprobs` has been explicitly set.
+  public var hasTopLogprobs: Bool {self._topLogprobs != nil}
+  /// Clears the value of `topLogprobs`. Subsequent reads from it will return its default value.
+  public mutating func clearTopLogprobs() {self._topLogprobs = nil}
+
+  public var parallelToolCalls: Bool {
+    get {_parallelToolCalls ?? false}
+    set {_parallelToolCalls = newValue}
+  }
+  /// Returns true if `parallelToolCalls` has been explicitly set.
+  public var hasParallelToolCalls: Bool {self._parallelToolCalls != nil}
+  /// Clears the value of `parallelToolCalls`. Subsequent reads from it will return its default value.
+  public mutating func clearParallelToolCalls() {self._parallelToolCalls = nil}
+
+  public var serviceTier: Clark_V1_ServiceTier {
+    get {_serviceTier ?? .unspecified}
+    set {_serviceTier = newValue}
+  }
+  /// Returns true if `serviceTier` has been explicitly set.
+  public var hasServiceTier: Bool {self._serviceTier != nil}
+  /// Clears the value of `serviceTier`. Subsequent reads from it will return its default value.
+  public mutating func clearServiceTier() {self._serviceTier = nil}
+
+  public var responseFormat: Clark_V1_ResponseFormat {
+    get {_responseFormat ?? Clark_V1_ResponseFormat()}
+    set {_responseFormat = newValue}
+  }
+  /// Returns true if `responseFormat` has been explicitly set.
+  public var hasResponseFormat: Bool {self._responseFormat != nil}
+  /// Clears the value of `responseFormat`. Subsequent reads from it will return its default value.
+  public mutating func clearResponseFormat() {self._responseFormat = nil}
+
+  /// logit_bias is map<int32_token_id, double_bias>. Tokenization is
+  /// model-specific so the v1 UI is a JSON-blob field; no per-token row editor.
+  public var logitBias: Dictionary<Int32,Double> = [:]
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _seed: Int32? = nil
+  fileprivate var _frequencyPenalty: Double? = nil
+  fileprivate var _presencePenalty: Double? = nil
+  fileprivate var _topLogprobs: Int32? = nil
+  fileprivate var _parallelToolCalls: Bool? = nil
+  fileprivate var _serviceTier: Clark_V1_ServiceTier? = nil
+  fileprivate var _responseFormat: Clark_V1_ResponseFormat? = nil
+}
+
+/// ResponseFormat is the OpenAI response-format oneof.
+///   text         — plain text output (default; no-op when set).
+///   json_object  — model is forced to emit a syntactically-valid JSON object.
+///   json_schema  — model output is constrained to match the embedded schema.
+public struct Clark_V1_ResponseFormat: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var kind: Clark_V1_ResponseFormat.OneOf_Kind? = nil
+
+  public var text: Bool {
+    get {
+      if case .text(let v)? = kind {return v}
+      return false
+    }
+    set {kind = .text(newValue)}
+  }
+
+  public var jsonObject: Bool {
+    get {
+      if case .jsonObject(let v)? = kind {return v}
+      return false
+    }
+    set {kind = .jsonObject(newValue)}
+  }
+
+  public var jsonSchema: Clark_V1_JsonSchema {
+    get {
+      if case .jsonSchema(let v)? = kind {return v}
+      return Clark_V1_JsonSchema()
+    }
+    set {kind = .jsonSchema(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public enum OneOf_Kind: Equatable, Sendable {
+    case text(Bool)
+    case jsonObject(Bool)
+    case jsonSchema(Clark_V1_JsonSchema)
+
+  }
+
+  public init() {}
+}
+
+public struct Clark_V1_JsonSchema: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var description_p: String {
+    get {_description_p ?? String()}
+    set {_description_p = newValue}
+  }
+  /// Returns true if `description_p` has been explicitly set.
+  public var hasDescription_p: Bool {self._description_p != nil}
+  /// Clears the value of `description_p`. Subsequent reads from it will return its default value.
+  public mutating func clearDescription_p() {self._description_p = nil}
+
+  /// raw JSON Schema bytes; UI is a JSON code editor
+  public var schema: Data = Data()
+
+  public var strict: Bool {
+    get {_strict ?? false}
+    set {_strict = newValue}
+  }
+  /// Returns true if `strict` has been explicitly set.
+  public var hasStrict: Bool {self._strict != nil}
+  /// Clears the value of `strict`. Subsequent reads from it will return its default value.
+  public mutating func clearStrict() {self._strict = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _description_p: String? = nil
+  fileprivate var _strict: Bool? = nil
+}
+
+/// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
+/// intentionally deferred — Gemini 2.x has implicit caching default-on and
+/// explicit cachedContents needs its own design pass.
+public struct Clark_V1_GoogleExtras: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var safetySettings: Clark_V1_SafetySettings {
+    get {_safetySettings ?? Clark_V1_SafetySettings()}
+    set {_safetySettings = newValue}
+  }
+  /// Returns true if `safetySettings` has been explicitly set.
+  public var hasSafetySettings: Bool {self._safetySettings != nil}
+  /// Clears the value of `safetySettings`. Subsequent reads from it will return its default value.
+  public mutating func clearSafetySettings() {self._safetySettings = nil}
+
+  /// e.g. "application/json"
+  public var responseMimeType: String {
+    get {_responseMimeType ?? String()}
+    set {_responseMimeType = newValue}
+  }
+  /// Returns true if `responseMimeType` has been explicitly set.
+  public var hasResponseMimeType: Bool {self._responseMimeType != nil}
+  /// Clears the value of `responseMimeType`. Subsequent reads from it will return its default value.
+  public mutating func clearResponseMimeType() {self._responseMimeType = nil}
+
+  /// JSON Schema bytes
+  public var responseSchema: Data {
+    get {_responseSchema ?? Data()}
+    set {_responseSchema = newValue}
+  }
+  /// Returns true if `responseSchema` has been explicitly set.
+  public var hasResponseSchema: Bool {self._responseSchema != nil}
+  /// Clears the value of `responseSchema`. Subsequent reads from it will return its default value.
+  public mutating func clearResponseSchema() {self._responseSchema = nil}
+
+  /// [1, 8]
+  public var candidateCount: Int32 {
+    get {_candidateCount ?? 0}
+    set {_candidateCount = newValue}
+  }
+  /// Returns true if `candidateCount` has been explicitly set.
+  public var hasCandidateCount: Bool {self._candidateCount != nil}
+  /// Clears the value of `candidateCount`. Subsequent reads from it will return its default value.
+  public mutating func clearCandidateCount() {self._candidateCount = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _safetySettings: Clark_V1_SafetySettings? = nil
+  fileprivate var _responseMimeType: String? = nil
+  fileprivate var _responseSchema: Data? = nil
+  fileprivate var _candidateCount: Int32? = nil
+}
+
+public struct Clark_V1_SafetySettings: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var harassment: Clark_V1_HarmThreshold {
+    get {_harassment ?? .unspecified}
+    set {_harassment = newValue}
+  }
+  /// Returns true if `harassment` has been explicitly set.
+  public var hasHarassment: Bool {self._harassment != nil}
+  /// Clears the value of `harassment`. Subsequent reads from it will return its default value.
+  public mutating func clearHarassment() {self._harassment = nil}
+
+  public var hateSpeech: Clark_V1_HarmThreshold {
+    get {_hateSpeech ?? .unspecified}
+    set {_hateSpeech = newValue}
+  }
+  /// Returns true if `hateSpeech` has been explicitly set.
+  public var hasHateSpeech: Bool {self._hateSpeech != nil}
+  /// Clears the value of `hateSpeech`. Subsequent reads from it will return its default value.
+  public mutating func clearHateSpeech() {self._hateSpeech = nil}
+
+  public var sexuallyExplicit: Clark_V1_HarmThreshold {
+    get {_sexuallyExplicit ?? .unspecified}
+    set {_sexuallyExplicit = newValue}
+  }
+  /// Returns true if `sexuallyExplicit` has been explicitly set.
+  public var hasSexuallyExplicit: Bool {self._sexuallyExplicit != nil}
+  /// Clears the value of `sexuallyExplicit`. Subsequent reads from it will return its default value.
+  public mutating func clearSexuallyExplicit() {self._sexuallyExplicit = nil}
+
+  public var dangerousContent: Clark_V1_HarmThreshold {
+    get {_dangerousContent ?? .unspecified}
+    set {_dangerousContent = newValue}
+  }
+  /// Returns true if `dangerousContent` has been explicitly set.
+  public var hasDangerousContent: Bool {self._dangerousContent != nil}
+  /// Clears the value of `dangerousContent`. Subsequent reads from it will return its default value.
+  public mutating func clearDangerousContent() {self._dangerousContent = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _harassment: Clark_V1_HarmThreshold? = nil
+  fileprivate var _hateSpeech: Clark_V1_HarmThreshold? = nil
+  fileprivate var _sexuallyExplicit: Clark_V1_HarmThreshold? = nil
+  fileprivate var _dangerousContent: Clark_V1_HarmThreshold? = nil
 }
 
 public struct Clark_V1_ProfileDefaults: Sendable {
@@ -908,6 +1459,19 @@ public struct Clark_V1_ProfileDefaults: Sendable {
   /// Clears the value of `includeThinkingInHistory`. Subsequent reads from it will return its default value.
   public mutating func clearIncludeThinkingInHistory() {self._includeThinkingInHistory = nil}
 
+  /// Per-profile default CallSettings. Sparse — any unset field falls through
+  /// to the layers below in the resolution chain
+  /// (provider > model > profile (resolved through parent inheritance) > conversation,
+  /// walked highest-precedence first).
+  public var callSettings: Clark_V1_CallSettings {
+    get {_callSettings ?? Clark_V1_CallSettings()}
+    set {_callSettings = newValue}
+  }
+  /// Returns true if `callSettings` has been explicitly set.
+  public var hasCallSettings: Bool {self._callSettings != nil}
+  /// Clears the value of `callSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearCallSettings() {self._callSettings = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -915,6 +1479,7 @@ public struct Clark_V1_ProfileDefaults: Sendable {
   fileprivate var _defaultProviderID: String? = nil
   fileprivate var _defaultModelID: String? = nil
   fileprivate var _includeThinkingInHistory: Bool? = nil
+  fileprivate var _callSettings: Clark_V1_CallSettings? = nil
 }
 
 public struct Clark_V1_Profile: @unchecked Sendable {
@@ -1136,6 +1701,18 @@ public struct Clark_V1_ConversationSettings: Sendable {
   /// Clears the value of `includeThinkingInHistory`. Subsequent reads from it will return its default value.
   public mutating func clearIncludeThinkingInHistory() {self._includeThinkingInHistory = nil}
 
+  /// Per-conversation CallSettings overrides — top of the resolution chain
+  /// (conversation > profile > model > provider). Sparse: unset fields fall
+  /// through to the resolved profile layer below.
+  public var callSettings: Clark_V1_CallSettings {
+    get {_callSettings ?? Clark_V1_CallSettings()}
+    set {_callSettings = newValue}
+  }
+  /// Returns true if `callSettings` has been explicitly set.
+  public var hasCallSettings: Bool {self._callSettings != nil}
+  /// Clears the value of `callSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearCallSettings() {self._callSettings = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1143,6 +1720,7 @@ public struct Clark_V1_ConversationSettings: Sendable {
   fileprivate var _defaultProviderID: String? = nil
   fileprivate var _defaultModelID: String? = nil
   fileprivate var _includeThinkingInHistory: Bool? = nil
+  fileprivate var _callSettings: Clark_V1_CallSettings? = nil
 }
 
 public struct Clark_V1_Conversation: Sendable {
@@ -1194,6 +1772,18 @@ public struct Clark_V1_Conversation: Sendable {
   /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
   public mutating func clearUpdatedAt() {self._updatedAt = nil}
 
+  /// Most recent message timestamp across this conversation's contexts.
+  /// Falls back to created_at when no messages exist yet, so a fresh
+  /// conversation still sorts above older ones in "Recently Used".
+  public var lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_lastActivityAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_lastActivityAt = newValue}
+  }
+  /// Returns true if `lastActivityAt` has been explicitly set.
+  public var hasLastActivityAt: Bool {self._lastActivityAt != nil}
+  /// Clears the value of `lastActivityAt`. Subsequent reads from it will return its default value.
+  public mutating func clearLastActivityAt() {self._lastActivityAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1202,6 +1792,7 @@ public struct Clark_V1_Conversation: Sendable {
   fileprivate var _settings: Clark_V1_ConversationSettings? = nil
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public struct Clark_V1_Context: Sendable {
@@ -1717,6 +2308,18 @@ extension Clark_V1_MetadataSource: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0METADATA_SOURCE_UNSPECIFIED\0\u{1}METADATA_SOURCE_CATALOG\0\u{1}METADATA_SOURCE_DRIVER\0\u{1}METADATA_SOURCE_MANUAL\0")
 }
 
+extension Clark_V1_CacheTTL: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CACHE_TTL_UNSPECIFIED\0\u{1}CACHE_TTL_5M\0\u{1}CACHE_TTL_1H\0")
+}
+
+extension Clark_V1_ServiceTier: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVICE_TIER_UNSPECIFIED\0\u{1}SERVICE_TIER_AUTO\0\u{1}SERVICE_TIER_STANDARD\0\u{1}SERVICE_TIER_PRIORITY\0")
+}
+
+extension Clark_V1_HarmThreshold: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0HARM_THRESHOLD_UNSPECIFIED\0\u{1}HARM_THRESHOLD_BLOCK_NONE\0\u{1}HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE\0\u{1}HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE\0\u{1}HARM_THRESHOLD_BLOCK_ONLY_HIGH\0")
+}
+
 extension Clark_V1_CompressionMode: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0COMPRESSION_MODE_UNSPECIFIED\0\u{1}COMPRESSION_MODE_REPLACE\0\u{1}COMPRESSION_MODE_APPEND\0")
 }
@@ -1843,7 +2446,7 @@ extension Clark_V1_ProviderType: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Clark_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModelProvider"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}type\0\u{1}label\0\u{1}config\0\u{3}owner_user_id\0\u{3}created_at\0\u{3}updated_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}type\0\u{1}label\0\u{1}config\0\u{3}owner_user_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}default_settings\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1858,6 +2461,7 @@ extension Clark_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 5: try { try decoder.decodeSingularStringField(value: &self.ownerUserID) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 7: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._defaultSettings) }()
       default: break
       }
     }
@@ -1889,6 +2493,9 @@ extension Clark_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try { if let v = self._updatedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
     } }()
+    try { if let v = self._defaultSettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1900,6 +2507,7 @@ extension Clark_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.ownerUserID != rhs.ownerUserID {return false}
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}
+    if lhs._defaultSettings != rhs._defaultSettings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2423,7 +3031,133 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallSettings"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{3}max_output_tokens\0\u{3}thinking_enabled\0\u{3}thinking_budget_tokens\0\u{1}extras\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{3}top_p\0\u{3}max_output_tokens\0\u{3}stop_sequences\0\u{3}top_k\0\u{1}thinking\0\u{2}\u{4}anthropic\0\u{1}openai\0\u{1}google\0")
+
+  fileprivate class _StorageClass {
+    var _temperature: Double? = nil
+    var _topP: Double? = nil
+    var _maxOutputTokens: Int32? = nil
+    var _stopSequences: [String] = []
+    var _topK: Int32? = nil
+    var _thinking: Clark_V1_ThinkingSettings? = nil
+    var _anthropic: Clark_V1_AnthropicExtras? = nil
+    var _openai: Clark_V1_OpenAIExtras? = nil
+    var _google: Clark_V1_GoogleExtras? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _temperature = source._temperature
+      _topP = source._topP
+      _maxOutputTokens = source._maxOutputTokens
+      _stopSequences = source._stopSequences
+      _topK = source._topK
+      _thinking = source._thinking
+      _anthropic = source._anthropic
+      _openai = source._openai
+      _google = source._google
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularDoubleField(value: &_storage._temperature) }()
+        case 2: try { try decoder.decodeSingularDoubleField(value: &_storage._topP) }()
+        case 3: try { try decoder.decodeSingularInt32Field(value: &_storage._maxOutputTokens) }()
+        case 4: try { try decoder.decodeRepeatedStringField(value: &_storage._stopSequences) }()
+        case 5: try { try decoder.decodeSingularInt32Field(value: &_storage._topK) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._thinking) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._anthropic) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._openai) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._google) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      try { if let v = _storage._temperature {
+        try visitor.visitSingularDoubleField(value: v, fieldNumber: 1)
+      } }()
+      try { if let v = _storage._topP {
+        try visitor.visitSingularDoubleField(value: v, fieldNumber: 2)
+      } }()
+      try { if let v = _storage._maxOutputTokens {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 3)
+      } }()
+      if !_storage._stopSequences.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._stopSequences, fieldNumber: 4)
+      }
+      try { if let v = _storage._topK {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._thinking {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._anthropic {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+      try { if let v = _storage._openai {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._google {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      } }()
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_CallSettings, rhs: Clark_V1_CallSettings) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._temperature != rhs_storage._temperature {return false}
+        if _storage._topP != rhs_storage._topP {return false}
+        if _storage._maxOutputTokens != rhs_storage._maxOutputTokens {return false}
+        if _storage._stopSequences != rhs_storage._stopSequences {return false}
+        if _storage._topK != rhs_storage._topK {return false}
+        if _storage._thinking != rhs_storage._thinking {return false}
+        if _storage._anthropic != rhs_storage._anthropic {return false}
+        if _storage._openai != rhs_storage._openai {return false}
+        if _storage._google != rhs_storage._google {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ThinkingSettings"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}enabled\0\u{3}budget_tokens\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2431,11 +3165,8 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularDoubleField(value: &self._temperature) }()
-      case 2: try { try decoder.decodeSingularInt32Field(value: &self._maxOutputTokens) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self._thinkingEnabled) }()
-      case 4: try { try decoder.decodeSingularInt32Field(value: &self._thinkingBudgetTokens) }()
-      case 5: try { try decoder.decodeSingularBytesField(value: &self.extras) }()
+      case 1: try { try decoder.decodeSingularBoolField(value: &self._enabled) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self._budgetTokens) }()
       default: break
       }
     }
@@ -2446,30 +3177,347 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._temperature {
-      try visitor.visitSingularDoubleField(value: v, fieldNumber: 1)
+    try { if let v = self._enabled {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
     } }()
-    try { if let v = self._maxOutputTokens {
+    try { if let v = self._budgetTokens {
       try visitor.visitSingularInt32Field(value: v, fieldNumber: 2)
     } }()
-    try { if let v = self._thinkingEnabled {
-      try visitor.visitSingularBoolField(value: v, fieldNumber: 3)
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_ThinkingSettings, rhs: Clark_V1_ThinkingSettings) -> Bool {
+    if lhs._enabled != rhs._enabled {return false}
+    if lhs._budgetTokens != rhs._budgetTokens {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_AnthropicExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AnthropicExtras"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}cache_enabled\0\u{3}cache_ttl\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self._cacheEnabled) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self._cacheTtl) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._cacheEnabled {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
     } }()
-    try { if let v = self._thinkingBudgetTokens {
+    try { if let v = self._cacheTtl {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_AnthropicExtras, rhs: Clark_V1_AnthropicExtras) -> Bool {
+    if lhs._cacheEnabled != rhs._cacheEnabled {return false}
+    if lhs._cacheTtl != rhs._cacheTtl {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_OpenAIExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OpenAIExtras"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}seed\0\u{3}frequency_penalty\0\u{3}presence_penalty\0\u{3}top_logprobs\0\u{3}parallel_tool_calls\0\u{3}service_tier\0\u{3}response_format\0\u{3}logit_bias\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self._seed) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self._frequencyPenalty) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self._presencePenalty) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self._topLogprobs) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self._parallelToolCalls) }()
+      case 6: try { try decoder.decodeSingularEnumField(value: &self._serviceTier) }()
+      case 7: try { try decoder.decodeSingularMessageField(value: &self._responseFormat) }()
+      case 8: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufInt32,SwiftProtobuf.ProtobufDouble>.self, value: &self.logitBias) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._seed {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._frequencyPenalty {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._presencePenalty {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._topLogprobs {
       try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
     } }()
-    if !self.extras.isEmpty {
-      try visitor.visitSingularBytesField(value: self.extras, fieldNumber: 5)
+    try { if let v = self._parallelToolCalls {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 5)
+    } }()
+    try { if let v = self._serviceTier {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 6)
+    } }()
+    try { if let v = self._responseFormat {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+    } }()
+    if !self.logitBias.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufInt32,SwiftProtobuf.ProtobufDouble>.self, value: self.logitBias, fieldNumber: 8)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Clark_V1_CallSettings, rhs: Clark_V1_CallSettings) -> Bool {
-    if lhs._temperature != rhs._temperature {return false}
-    if lhs._maxOutputTokens != rhs._maxOutputTokens {return false}
-    if lhs._thinkingEnabled != rhs._thinkingEnabled {return false}
-    if lhs._thinkingBudgetTokens != rhs._thinkingBudgetTokens {return false}
-    if lhs.extras != rhs.extras {return false}
+  public static func ==(lhs: Clark_V1_OpenAIExtras, rhs: Clark_V1_OpenAIExtras) -> Bool {
+    if lhs._seed != rhs._seed {return false}
+    if lhs._frequencyPenalty != rhs._frequencyPenalty {return false}
+    if lhs._presencePenalty != rhs._presencePenalty {return false}
+    if lhs._topLogprobs != rhs._topLogprobs {return false}
+    if lhs._parallelToolCalls != rhs._parallelToolCalls {return false}
+    if lhs._serviceTier != rhs._serviceTier {return false}
+    if lhs._responseFormat != rhs._responseFormat {return false}
+    if lhs.logitBias != rhs.logitBias {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_ResponseFormat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ResponseFormat"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{3}json_object\0\u{3}json_schema\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Bool?
+        try decoder.decodeSingularBoolField(value: &v)
+        if let v = v {
+          if self.kind != nil {try decoder.handleConflictingOneOf()}
+          self.kind = .text(v)
+        }
+      }()
+      case 2: try {
+        var v: Bool?
+        try decoder.decodeSingularBoolField(value: &v)
+        if let v = v {
+          if self.kind != nil {try decoder.handleConflictingOneOf()}
+          self.kind = .jsonObject(v)
+        }
+      }()
+      case 3: try {
+        var v: Clark_V1_JsonSchema?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .jsonSchema(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .jsonSchema(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.kind {
+    case .text?: try {
+      guard case .text(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
+    }()
+    case .jsonObject?: try {
+      guard case .jsonObject(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 2)
+    }()
+    case .jsonSchema?: try {
+      guard case .jsonSchema(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_ResponseFormat, rhs: Clark_V1_ResponseFormat) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".JsonSchema"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{1}schema\0\u{1}strict\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._description_p) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.schema) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self._strict) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try { if let v = self._description_p {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    if !self.schema.isEmpty {
+      try visitor.visitSingularBytesField(value: self.schema, fieldNumber: 3)
+    }
+    try { if let v = self._strict {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_JsonSchema, rhs: Clark_V1_JsonSchema) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs._description_p != rhs._description_p {return false}
+    if lhs.schema != rhs.schema {return false}
+    if lhs._strict != rhs._strict {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GoogleExtras"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._safetySettings) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._responseMimeType) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self._responseSchema) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self._candidateCount) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._safetySettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._responseMimeType {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._responseSchema {
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._candidateCount {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_GoogleExtras, rhs: Clark_V1_GoogleExtras) -> Bool {
+    if lhs._safetySettings != rhs._safetySettings {return false}
+    if lhs._responseMimeType != rhs._responseMimeType {return false}
+    if lhs._responseSchema != rhs._responseSchema {return false}
+    if lhs._candidateCount != rhs._candidateCount {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_SafetySettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SafetySettings"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}harassment\0\u{3}hate_speech\0\u{3}sexually_explicit\0\u{3}dangerous_content\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self._harassment) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self._hateSpeech) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self._sexuallyExplicit) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self._dangerousContent) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._harassment {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._hateSpeech {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._sexuallyExplicit {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._dangerousContent {
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_SafetySettings, rhs: Clark_V1_SafetySettings) -> Bool {
+    if lhs._harassment != rhs._harassment {return false}
+    if lhs._hateSpeech != rhs._hateSpeech {return false}
+    if lhs._sexuallyExplicit != rhs._sexuallyExplicit {return false}
+    if lhs._dangerousContent != rhs._dangerousContent {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2477,7 +3525,7 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Clark_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProfileDefaults"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0\u{3}call_settings\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2488,6 +3536,7 @@ extension Clark_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
       case 1: try { try decoder.decodeSingularStringField(value: &self._defaultProviderID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self._defaultModelID) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self._includeThinkingInHistory) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
       default: break
       }
     }
@@ -2507,6 +3556,9 @@ extension Clark_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try { if let v = self._includeThinkingInHistory {
       try visitor.visitSingularBoolField(value: v, fieldNumber: 3)
     } }()
+    try { if let v = self._callSettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2514,6 +3566,7 @@ extension Clark_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
     if lhs._defaultProviderID != rhs._defaultProviderID {return false}
     if lhs._defaultModelID != rhs._defaultModelID {return false}
     if lhs._includeThinkingInHistory != rhs._includeThinkingInHistory {return false}
+    if lhs._callSettings != rhs._callSettings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2724,7 +3777,7 @@ extension Clark_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Clark_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConversationSettings"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0\u{3}call_settings\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2735,6 +3788,7 @@ extension Clark_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
       case 1: try { try decoder.decodeSingularStringField(value: &self._defaultProviderID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self._defaultModelID) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self._includeThinkingInHistory) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
       default: break
       }
     }
@@ -2754,6 +3808,9 @@ extension Clark_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
     try { if let v = self._includeThinkingInHistory {
       try visitor.visitSingularBoolField(value: v, fieldNumber: 3)
     } }()
+    try { if let v = self._callSettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2761,6 +3818,7 @@ extension Clark_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs._defaultProviderID != rhs._defaultProviderID {return false}
     if lhs._defaultModelID != rhs._defaultModelID {return false}
     if lhs._includeThinkingInHistory != rhs._includeThinkingInHistory {return false}
+    if lhs._callSettings != rhs._callSettings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2768,7 +3826,7 @@ extension Clark_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Clark_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2784,6 +3842,7 @@ extension Clark_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 6: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 7: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
       case 8: try { try decoder.decodeSingularStringField(value: &self.ownerUserID) }()
+      case 9: try { try decoder.decodeSingularMessageField(value: &self._lastActivityAt) }()
       default: break
       }
     }
@@ -2818,6 +3877,9 @@ extension Clark_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if !self.ownerUserID.isEmpty {
       try visitor.visitSingularStringField(value: self.ownerUserID, fieldNumber: 8)
     }
+    try { if let v = self._lastActivityAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2830,6 +3892,7 @@ extension Clark_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs.ownerUserID != rhs.ownerUserID {return false}
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}
+    if lhs._lastActivityAt != rhs._lastActivityAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

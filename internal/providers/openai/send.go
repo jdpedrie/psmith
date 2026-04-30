@@ -38,7 +38,7 @@ import (
 // reason). Cancellation of ctx propagates to the SDK and closes the
 // channel after a final ChunkError.
 func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan providers.Chunk, error) {
-	if d.cfg.UseChatCompletions {
+	if d.chatCompletions {
 		params, err := buildChatCompletionParams(req)
 		if err != nil {
 			return nil, fmt.Errorf("openai-compatible: build chat params: %w", err)
@@ -188,15 +188,129 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 	if req.Settings.Temperature != nil {
 		params.Temperature = param.NewOpt(*req.Settings.Temperature)
 	}
+	if req.Settings.TopP != nil {
+		params.TopP = param.NewOpt(*req.Settings.TopP)
+	}
 	if req.Settings.MaxOutputTokens != nil {
 		params.MaxCompletionTokens = param.NewOpt(int64(*req.Settings.MaxOutputTokens))
 	}
+	if len(req.Settings.StopSequences) > 0 {
+		params.Stop = openai.ChatCompletionNewParamsStopUnion{
+			OfStringArray: append([]string(nil), req.Settings.StopSequences...),
+		}
+	}
+	// OpenAI Chat Completions doesn't expose a top_k knob — drop. Same for
+	// the universal `thinking` field; reasoning effort is a Responses-API
+	// concept and Chat Completions has no equivalent on this surface.
+
+	// Always set the prompt cache key to the conversation_id so successive
+	// turns route to the same cache shard. Empty conv id (compression turns,
+	// etc.) is fine — OpenAI ignores empty values.
+	if req.ConversationID != "" {
+		params.PromptCacheKey = param.NewOpt(req.ConversationID)
+	}
+
+	if oe := req.Settings.OpenAI; oe != nil {
+		if oe.Seed != nil {
+			params.Seed = param.NewOpt(int64(*oe.Seed))
+		}
+		if oe.FrequencyPenalty != nil {
+			params.FrequencyPenalty = param.NewOpt(*oe.FrequencyPenalty)
+		}
+		if oe.PresencePenalty != nil {
+			params.PresencePenalty = param.NewOpt(*oe.PresencePenalty)
+		}
+		if oe.TopLogprobs != nil {
+			// TopLogprobs requires Logprobs=true to be honoured.
+			params.Logprobs = param.NewOpt(true)
+			params.TopLogprobs = param.NewOpt(int64(*oe.TopLogprobs))
+		}
+		if oe.ParallelToolCalls != nil {
+			params.ParallelToolCalls = param.NewOpt(*oe.ParallelToolCalls)
+		}
+		if oe.ServiceTier != nil {
+			params.ServiceTier = chatServiceTier(*oe.ServiceTier)
+		}
+		if oe.ResponseFormat != nil {
+			if rf, ok := chatResponseFormat(oe.ResponseFormat); ok {
+				params.ResponseFormat = rf
+			}
+		}
+		if len(oe.LogitBias) > 0 {
+			lb := make(map[string]int64, len(oe.LogitBias))
+			for tok, bias := range oe.LogitBias {
+				lb[fmt.Sprintf("%d", tok)] = int64(bias)
+			}
+			params.LogitBias = lb
+		}
+	}
+
 	// Always opt into the trailing usage chunk so the supervisor can record
 	// per-message token counts and cost.
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: param.NewOpt(true),
 	}
 	return params, nil
+}
+
+// chatServiceTier maps the Clark enum to the SDK's ChatCompletionNewParamsServiceTier.
+// Returns the zero value for Unspecified — leaves the field empty on the wire.
+func chatServiceTier(in providers.ServiceTier) openai.ChatCompletionNewParamsServiceTier {
+	switch in {
+	case providers.ServiceTierAuto:
+		return openai.ChatCompletionNewParamsServiceTierAuto
+	case providers.ServiceTierStandard:
+		// "Standard" maps to OpenAI's "default" tier — the term they use
+		// for the standard pricing/perf bucket.
+		return openai.ChatCompletionNewParamsServiceTierDefault
+	case providers.ServiceTierPriority:
+		return openai.ChatCompletionNewParamsServiceTierPriority
+	}
+	return ""
+}
+
+// chatResponseFormat translates the driver-side ResponseFormat into the
+// Chat Completions union. Returns ok=false when the input is the "text"
+// variant — that's the API's default and we just leave the field empty.
+func chatResponseFormat(rf *providers.ResponseFormat) (openai.ChatCompletionNewParamsResponseFormatUnion, bool) {
+	if rf == nil {
+		return openai.ChatCompletionNewParamsResponseFormatUnion{}, false
+	}
+	if rf.Text != nil {
+		// Text is the default; setting it explicitly is harmless but noisy.
+		return openai.ChatCompletionNewParamsResponseFormatUnion{}, false
+	}
+	if rf.JSONObject != nil {
+		obj := shared.NewResponseFormatJSONObjectParam()
+		return openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}, true
+	}
+	if rf.JSONSchema != nil {
+		schema := shared.ResponseFormatJSONSchemaParam{
+			JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+				Name: rf.JSONSchema.Name,
+			},
+		}
+		if rf.JSONSchema.Description != nil {
+			schema.JSONSchema.Description = param.NewOpt(*rf.JSONSchema.Description)
+		}
+		if rf.JSONSchema.Strict != nil {
+			schema.JSONSchema.Strict = param.NewOpt(*rf.JSONSchema.Strict)
+		}
+		if len(rf.JSONSchema.Schema) > 0 {
+			// `Schema` is `any` on the SDK side — unmarshal once so the
+			// bytes don't get JSON-string-quoted on the way out.
+			var decoded any
+			if err := json.Unmarshal(rf.JSONSchema.Schema, &decoded); err == nil {
+				schema.JSONSchema.Schema = decoded
+			} else {
+				// Fall back to raw bytes; Unmarshal failure is rare and the
+				// API will reject the malformed JSON itself.
+				schema.JSONSchema.Schema = json.RawMessage(rf.JSONSchema.Schema)
+			}
+		}
+		return openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONSchema: &schema}, true
+	}
+	return openai.ChatCompletionNewParamsResponseFormatUnion{}, false
 }
 
 // streamLike is the subset of *ssestream.Stream[T] we actually use; lets
@@ -423,19 +537,71 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 	if req.Settings.Temperature != nil {
 		params.Temperature = param.NewOpt(*req.Settings.Temperature)
 	}
+	if req.Settings.TopP != nil {
+		params.TopP = param.NewOpt(*req.Settings.TopP)
+	}
 	if req.Settings.MaxOutputTokens != nil {
 		params.MaxOutputTokens = param.NewOpt(int64(*req.Settings.MaxOutputTokens))
 	}
-	if req.Settings.ThinkingEnabled != nil && *req.Settings.ThinkingEnabled {
-		// Best-effort: enable medium reasoning effort. Reasoning models
-		// (o1, o3, gpt-5) honour this; non-reasoning models will return
-		// 400 — that's surfaced via the error chunk.
+	// Thinking: derive Reasoning.Effort from budget_tokens.
+	//   <2k → low; 2k-8k → medium; >8k → high. Falls back to medium when
+	//   thinking is enabled but no budget is specified.
+	if t := req.Settings.Thinking; t != nil && t.Enabled != nil && *t.Enabled {
 		params.Reasoning = shared.ReasoningParam{
-			Effort: shared.ReasoningEffortMedium,
+			Effort: derivedReasoningEffort(t.BudgetTokens),
 		}
+	}
+	// Always set the prompt cache key to the conversation_id so successive
+	// turns route to the same cache shard.
+	if req.ConversationID != "" {
+		params.PromptCacheKey = param.NewOpt(req.ConversationID)
+	}
+
+	if oe := req.Settings.OpenAI; oe != nil {
+		if oe.ServiceTier != nil {
+			params.ServiceTier = responsesServiceTier(*oe.ServiceTier)
+		}
+		// Responses API on openai-go v1.12 surfaces ServiceTier but not
+		// Seed, frequency_penalty, presence_penalty, top_logprobs,
+		// parallel_tool_calls, logit_bias, or the chat-style
+		// response_format union — drop those fields silently. (Seed
+		// ships on Chat Completions only at this SDK version; the
+		// per-driver translation table allows for a future SDK rev.)
 	}
 
 	return params, nil
+}
+
+// derivedReasoningEffort maps a budget-tokens hint to the OpenAI reasoning
+// effort enum. The thresholds mirror the plan's budget→effort mapping
+// (<2k → low, 2-8k → medium, >8k → high). When the budget is unset we
+// default to medium — matches the prior "thinking enabled, effort medium"
+// behavior.
+func derivedReasoningEffort(budget *int) shared.ReasoningEffort {
+	if budget == nil {
+		return shared.ReasoningEffortMedium
+	}
+	switch {
+	case *budget < 2000:
+		return shared.ReasoningEffortLow
+	case *budget <= 8000:
+		return shared.ReasoningEffortMedium
+	default:
+		return shared.ReasoningEffortHigh
+	}
+}
+
+// responsesServiceTier maps the Clark enum to the Responses API tier enum.
+func responsesServiceTier(in providers.ServiceTier) responses.ResponseNewParamsServiceTier {
+	switch in {
+	case providers.ServiceTierAuto:
+		return responses.ResponseNewParamsServiceTierAuto
+	case providers.ServiceTierStandard:
+		return responses.ResponseNewParamsServiceTierDefault
+	case providers.ServiceTierPriority:
+		return responses.ResponseNewParamsServiceTierPriority
+	}
+	return ""
 }
 
 // decodeReasoningItem attempts to interpret a stored thinking blob as the

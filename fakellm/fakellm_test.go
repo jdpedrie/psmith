@@ -280,7 +280,10 @@ func TestOpenAIResponsesRoundTrip(t *testing.T) {
 		Usage: &fakellm.Usage{InputTokens: 7, OutputTokens: 3, ReasoningTokens: 2},
 	})
 
-	cfg := []byte(fmt.Sprintf(`{"api_key":"x","base_url":%q}`, fake.URL()+"/v1"))
+	// Force Responses-API routing — this test asserts the Responses path
+	// works end-to-end. Default routing (chat-completions for non-OpenAI
+	// base URLs) would otherwise route this through chat-completions.
+	cfg := []byte(fmt.Sprintf(`{"api_key":"x","base_url":%q,"use_chat_completions":false}`, fake.URL()+"/v1"))
 	driver, err := providers.Build("openai-compatible", providers.Deps{Logger: slog.Default()}, cfg)
 	if err != nil {
 		t.Fatalf("Build: %v", err)

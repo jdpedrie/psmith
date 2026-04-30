@@ -112,6 +112,18 @@ type Querier interface {
 	//     rows since they carry real cost.
 	ListContextsByConversation(ctx context.Context, conversationID uuid.UUID) ([]ListContextsByConversationRow, error)
 	ListConversationsByUser(ctx context.Context, userID uuid.UUID) ([]Conversation, error)
+	// Same filters as ListConversationsByUserRecentlyUsed but ordered by the
+	// conversation's own created_at — the freshest creation always wins
+	// regardless of subsequent message traffic. Still computes
+	// last_activity_at for clients that want to display "last used" alongside
+	// the row even when sorting by creation.
+	ListConversationsByUserRecentlyCreated(ctx context.Context, arg ListConversationsByUserRecentlyCreatedParams) ([]ListConversationsByUserRecentlyCreatedRow, error)
+	// Returns conversations sorted by the most recent message activity, with
+	// created_at as the fallback for conversations that haven't received a
+	// message yet. Optional filters: case-insensitive title substring (NULL
+	// skips the filter; conversations with no title are excluded when set);
+	// profile_id (NULL skips the filter).
+	ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error)
 	// Walks parent_id from the leaf back to the root, returning rows root-first.
 	// sibling_count: number of OTHER messages sharing this row's parent — i.e.
 	// branches forking off the same parent. The UI uses it to render fork
@@ -182,10 +194,20 @@ type Querier interface {
 	UpdateProfileTitleProviderKind(ctx context.Context, arg UpdateProfileTitleProviderKindParams) error
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	UpdateUserIsAdmin(ctx context.Context, arg UpdateUserIsAdminParams) error
+	// Replaces (not merges) the per-model default_settings JSONB blob. NULL
+	// clears it. metadata_snapshot_at is bumped so consumers polling for row
+	// changes notice the update — the row's metadata identity hasn't changed,
+	// but its effective behavior has.
+	UpdateUserModelDefaultSettings(ctx context.Context, arg UpdateUserModelDefaultSettingsParams) error
 	// Shallow-merges the incoming JSONB patch into the existing config. Keys
 	// present in the patch override existing values; absent keys are preserved.
 	// To clear a key, send it explicitly with an empty value.
 	UpdateUserModelProviderConfig(ctx context.Context, arg UpdateUserModelProviderConfigParams) error
+	// Replaces (not merges) the provider-level default_settings blob. NULL clears
+	// it, returning the row to "no provider-level defaults; resolve from above
+	// only." Replace semantics keep the call site simple — the resolver does the
+	// merge with the upper layers, so partial writes here would be a footgun.
+	UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	// Catalog models -----------------------------------------------------------

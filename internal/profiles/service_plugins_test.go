@@ -57,8 +57,36 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	if got.Description == "" {
 		t.Error("description should be non-empty")
 	}
-	if len(got.ConfigSchema) == 0 {
-		t.Error("config_schema should be non-empty (lettered_choices implements Configurable)")
+	if len(got.ConfigFields) != 4 {
+		t.Errorf("config_fields len = %d want 4", len(got.ConfigFields))
+	}
+	// Spot-check keep_last_n: NUMBER type with default JSON-encoded "1".
+	var keepLastN, sysOverride *clarkv1.ConfigField
+	for _, f := range got.ConfigFields {
+		switch f.Name {
+		case "keep_last_n":
+			keepLastN = f
+		case "system_instruction_override":
+			sysOverride = f
+		}
+	}
+	if keepLastN == nil {
+		t.Fatal("keep_last_n field missing")
+	}
+	if keepLastN.Type != clarkv1.ConfigField_NUMBER {
+		t.Errorf("keep_last_n type = %v want NUMBER", keepLastN.Type)
+	}
+	if keepLastN.DefaultJson != "1" {
+		t.Errorf("keep_last_n default_json = %q want %q", keepLastN.DefaultJson, "1")
+	}
+	if sysOverride == nil {
+		t.Fatal("system_instruction_override field missing")
+	}
+	if sysOverride.Type != clarkv1.ConfigField_TEXTAREA {
+		t.Errorf("system_instruction_override type = %v want TEXTAREA", sysOverride.Type)
+	}
+	if sysOverride.DefaultJson != "" {
+		t.Errorf("system_instruction_override default_json = %q want \"\"", sysOverride.DefaultJson)
 	}
 	caps := got.Capabilities
 	if caps == nil {

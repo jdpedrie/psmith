@@ -3,8 +3,10 @@ package conversations
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
@@ -22,45 +24,56 @@ const (
 	roleCompressionSummary = "compression_summary"
 )
 
-// settingsStorage mirrors ConversationSettings for JSON encoding into the
-// `conversations.settings` JSONB column. Round-trips through settingsFromJSON.
-type settingsStorage struct {
-	DefaultProviderID        *string `json:"default_provider_id,omitempty"`
-	DefaultModelID           *string `json:"default_model_id,omitempty"`
-	IncludeThinkingInHistory *bool   `json:"include_thinking_in_history,omitempty"`
-}
+// Persisted conversations.settings is the full proto round-tripped via
+// protojson. Earlier code marshalled a hand-rolled struct that silently
+// dropped the `call_settings` sub-block, breaking the conversation layer
+// of the CallSettings resolution chain. encoding/json on the proto is
+// also wrong — it doesn't honour optional-field presence the way
+// protojson does. Both write and read use protojson with the same options
+// pinned in `profiles.callSettingsMarshaller` (snake-case names, omit
+// unset, tolerate unknown fields).
+var (
+	conversationSettingsMarshaller = protojson.MarshalOptions{
+		UseProtoNames:   true,
+		EmitUnpopulated: false,
+	}
+	conversationSettingsUnmarshaller = protojson.UnmarshalOptions{
+		DiscardUnknown: true,
+	}
+)
 
 func settingsToJSON(s *clarkv1.ConversationSettings) ([]byte, error) {
 	if s == nil {
 		return nil, nil
 	}
-	return json.Marshal(settingsStorage{
-		DefaultProviderID:        s.DefaultProviderId,
-		DefaultModelID:           s.DefaultModelId,
-		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
-	})
+	return conversationSettingsMarshaller.Marshal(s)
 }
 
 func settingsFromJSON(b []byte) (*clarkv1.ConversationSettings, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
-	var s settingsStorage
-	if err := json.Unmarshal(b, &s); err != nil {
+	var s clarkv1.ConversationSettings
+	if err := conversationSettingsUnmarshaller.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("decode conversation settings: %w", err)
 	}
-	return &clarkv1.ConversationSettings{
-		DefaultProviderId:        s.DefaultProviderID,
-		DefaultModelId:           s.DefaultModelID,
-		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
-	}, nil
+	return &s, nil
 }
 
 // conversationToProto builds the wire shape from a store row plus the active
 // context id resolved by the caller. activeContextID may be the empty string
 // when an active context isn't known (e.g., immediately after creation, before
-// the seed messages are written).
+// the seed messages are written). last_activity_at falls back to UpdatedAt
+// (the only proxy available without a join) — list paths that compute the
+// real value should call conversationToProtoWithActivity instead.
 func conversationToProto(c store.Conversation, activeContextID string) (*clarkv1.Conversation, error) {
+	return conversationToProtoWithActivity(c, activeContextID, c.UpdatedAt)
+}
+
+// conversationToProtoWithActivity is the list-path variant — it accepts the
+// joined max(messages.created_at) so the sidebar can render "Recently Used"
+// without an N+1 round trip.
+func conversationToProtoWithActivity(c store.Conversation, activeContextID string, lastActivityAt time.Time) (*clarkv1.Conversation, error) {
 	settings, err := settingsFromJSON(c.Settings)
 	if err != nil {
 		return nil, err
@@ -74,6 +87,7 @@ func conversationToProto(c store.Conversation, activeContextID string) (*clarkv1
 		OwnerUserId:     c.UserID.String(),
 		CreatedAt:       timestamppb.New(c.CreatedAt),
 		UpdatedAt:       timestamppb.New(c.UpdatedAt),
+		LastActivityAt:  timestamppb.New(lastActivityAt),
 	}, nil
 }
 

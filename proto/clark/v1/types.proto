@@ -42,6 +42,11 @@ message UserModelProvider {
   string owner_user_id = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // Provider-level default CallSettings — bottom layer of the resolution
+  // chain (conversation > profile > model > provider). Sparse: any unset
+  // field inherits nothing (this is the floor), but unset fields here let
+  // higher layers contribute their own values normally.
+  optional CallSettings default_settings = 8;
 }
 
 // A template surfaced from the catalog to accelerate "add provider" UX.
@@ -131,13 +136,132 @@ message UserModel {
   bool favorite = 14;
 }
 
-// Per-call provider settings.
+// Per-call provider settings. Hybrid common-core + provider-specific shape:
+// the first block is universal (every driver translates it), `top_k` is
+// shared by Anthropic + Google, `thinking` is the universal "extended
+// reasoning" knob translated per driver, and `anthropic` / `openai` /
+// `google` carry per-provider knobs that don't fit the common surface.
+//
+// Stored on JSONB columns at four layers (conversation > profile > model >
+// provider). Resolution merges sparsely — every layer can leave any field
+// unset to inherit from below; see `internal/profiles/callsettings.go`.
 message CallSettings {
-  optional double temperature = 1;
-  optional int32 max_output_tokens = 2;
-  optional bool thinking_enabled = 3;
-  optional int32 thinking_budget_tokens = 4;
-  bytes extras = 5;          // provider-specific knobs not in the common set
+  // --- Common (all three providers) ---
+  optional double temperature        = 1;   // clamped per-driver: Anthropic [0,1], OpenAI/Google [0,2]
+  optional double top_p              = 2;
+  optional int32  max_output_tokens  = 3;
+  repeated string stop_sequences     = 4;
+
+  // --- Two-of-three (Anthropic + Google) ---
+  optional int32  top_k              = 5;
+
+  // --- Universal "thinking" knob, translated per driver ---
+  optional ThinkingSettings thinking = 6;
+
+  // --- Provider-specific extension blocks ---
+  optional AnthropicExtras anthropic = 10;   // empty in v1 — reserved for future
+  optional OpenAIExtras    openai    = 11;
+  optional GoogleExtras    google    = 12;
+}
+
+// ThinkingSettings carries the cross-driver "show your work" knob. Each
+// driver translates it differently:
+//   Anthropic & Google → literal budget_tokens.
+//   OpenAI Responses    → budget_tokens derives reasoning_effort
+//                         (<2k → low, 2-8k → medium, >8k → high).
+//   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+message ThinkingSettings {
+  optional bool   enabled        = 1;
+  optional int32  budget_tokens  = 2;
+}
+
+// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
+// provider common surface. v1 surfaces prompt-cache control; further knobs
+// will be added as they're needed.
+message AnthropicExtras {
+  // When false, the driver skips placing a cache_control marker on the
+  // request — useful for one-off conversations where the +25% write
+  // overhead doesn't pay off, or for users who prefer not to cache for
+  // privacy reasons. Default (unset) = true.
+  optional bool cache_enabled = 1;
+  // Cache TTL — 5m (default) or 1h. 1h has higher break-even but
+  // survives stop-and-resume workflows.
+  optional CacheTTL cache_ttl = 2;
+}
+
+// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
+// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
+// tier costs more to write but persists across longer idle gaps.
+enum CacheTTL {
+  CACHE_TTL_UNSPECIFIED = 0;
+  CACHE_TTL_5M          = 1;
+  CACHE_TTL_1H          = 2;
+}
+
+// OpenAIExtras carries the per-driver knobs that map to Chat Completions /
+// Responses but have no analog on Anthropic or Google.
+message OpenAIExtras {
+  optional int32  seed                  = 1;   // reproducibility
+  optional double frequency_penalty     = 2;   // [-2, 2]
+  optional double presence_penalty      = 3;   // [-2, 2]
+  optional int32  top_logprobs          = 4;   // [0, 5]; also enables Logprobs=true on the wire
+  optional bool   parallel_tool_calls   = 5;
+  optional ServiceTier service_tier     = 6;
+  optional ResponseFormat response_format = 7;
+  // logit_bias is map<int32_token_id, double_bias>. Tokenization is
+  // model-specific so the v1 UI is a JSON-blob field; no per-token row editor.
+  map<int32, double> logit_bias         = 8;
+}
+
+enum ServiceTier {
+  SERVICE_TIER_UNSPECIFIED = 0;
+  SERVICE_TIER_AUTO        = 1;
+  SERVICE_TIER_STANDARD    = 2;
+  SERVICE_TIER_PRIORITY    = 3;
+}
+
+// ResponseFormat is the OpenAI response-format oneof.
+//   text         — plain text output (default; no-op when set).
+//   json_object  — model is forced to emit a syntactically-valid JSON object.
+//   json_schema  — model output is constrained to match the embedded schema.
+message ResponseFormat {
+  oneof kind {
+    bool text         = 1;
+    bool json_object  = 2;
+    JsonSchema json_schema = 3;
+  }
+}
+
+message JsonSchema {
+  string name        = 1;
+  optional string description = 2;
+  bytes  schema      = 3;     // raw JSON Schema bytes; UI is a JSON code editor
+  optional bool strict = 4;
+}
+
+// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
+// intentionally deferred — Gemini 2.x has implicit caching default-on and
+// explicit cachedContents needs its own design pass.
+message GoogleExtras {
+  optional SafetySettings safety_settings = 1;
+  optional string response_mime_type      = 2;   // e.g. "application/json"
+  optional bytes  response_schema         = 3;   // JSON Schema bytes
+  optional int32  candidate_count         = 4;   // [1, 8]
+}
+
+message SafetySettings {
+  optional HarmThreshold harassment        = 1;
+  optional HarmThreshold hate_speech       = 2;
+  optional HarmThreshold sexually_explicit = 3;
+  optional HarmThreshold dangerous_content = 4;
+}
+
+enum HarmThreshold {
+  HARM_THRESHOLD_UNSPECIFIED = 0;
+  HARM_THRESHOLD_BLOCK_NONE                 = 1;
+  HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE        = 2;
+  HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE     = 3;  // Gemini default
+  HARM_THRESHOLD_BLOCK_ONLY_HIGH            = 4;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +278,11 @@ message ProfileDefaults {
   optional string default_provider_id = 1;
   optional string default_model_id = 2;
   optional bool include_thinking_in_history = 3;
+  // Per-profile default CallSettings. Sparse — any unset field falls through
+  // to the layers below in the resolution chain
+  // (provider > model > profile (resolved through parent inheritance) > conversation,
+  // walked highest-precedence first).
+  optional CallSettings call_settings = 4;
 }
 
 message Profile {
@@ -213,6 +342,10 @@ message ConversationSettings {
   optional string default_provider_id = 1;
   optional string default_model_id = 2;
   optional bool include_thinking_in_history = 3;
+  // Per-conversation CallSettings overrides — top of the resolution chain
+  // (conversation > profile > model > provider). Sparse: unset fields fall
+  // through to the resolved profile layer below.
+  optional CallSettings call_settings = 4;
 }
 
 message Conversation {
@@ -224,6 +357,10 @@ message Conversation {
   string owner_user_id = 8;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // Most recent message timestamp across this conversation's contexts.
+  // Falls back to created_at when no messages exist yet, so a fresh
+  // conversation still sorts above older ones in "Recently Used".
+  google.protobuf.Timestamp last_activity_at = 9;
 }
 
 message Context {

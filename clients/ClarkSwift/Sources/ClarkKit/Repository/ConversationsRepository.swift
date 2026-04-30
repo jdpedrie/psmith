@@ -8,10 +8,19 @@ public final class ConversationsRepository: Sendable {
         self.client = client
     }
 
-    public func list(pageSize: Int32 = 100, pageToken: String? = nil) async throws -> (items: [ClarkConversation], nextPageToken: String?) {
+    public func list(
+        pageSize: Int32 = 100,
+        pageToken: String? = nil,
+        order: ClarkConversationOrder? = nil,
+        titleQuery: String? = nil,
+        profileID: String? = nil
+    ) async throws -> (items: [ClarkConversation], nextPageToken: String?) {
         var req = Clark_V1_ListConversationsRequest()
         req.pageSize = pageSize
         if let pageToken { req.pageToken = pageToken }
+        if let order { req.order = order.proto }
+        if let titleQuery, !titleQuery.isEmpty { req.titleQuery = titleQuery }
+        if let profileID { req.profileID = profileID }
 
         let resp = await client.listConversations(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list conversations") }
@@ -57,6 +66,26 @@ public final class ConversationsRepository: Sendable {
         var req = Clark_V1_UpdateConversationRequest()
         req.id = id
         req.title = title
+        let resp = await client.updateConversation(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("update conversation") }
+        return ClarkConversation(from: msg.conversation)
+    }
+
+    /// Updates the conversation's per-conversation settings — bound to
+    /// `conversations.settings` JSONB. Pass `nil` for `title` to leave it
+    /// unchanged. The server replaces (not merges) the settings blob, so
+    /// callers should pass the *full* desired settings shape (typically
+    /// loaded via `get`, mutated, then sent back).
+    @discardableResult
+    public func updateSettings(
+        id: String,
+        title: String? = nil,
+        settings: ClarkConversationSettings
+    ) async throws -> ClarkConversation {
+        var req = Clark_V1_UpdateConversationRequest()
+        req.id = id
+        if let title { req.title = title }
+        req.settings = settings.proto
         let resp = await client.updateConversation(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("update conversation") }
         return ClarkConversation(from: msg.conversation)
@@ -163,7 +192,7 @@ public final class ConversationsRepository: Sendable {
 }
 
 extension ClarkError {
-    static func from(_ err: ConnectError) -> ClarkError {
+    public static func from(_ err: ConnectError) -> ClarkError {
         .rpc(code: err.code, message: err.message ?? err.code.name)
     }
 }

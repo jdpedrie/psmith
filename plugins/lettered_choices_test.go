@@ -236,18 +236,30 @@ func TestLetteredChoices_DisplayCustomTags(t *testing.T) {
 
 // --- Configurable ---
 
-func TestLetteredChoices_ConfigSchemaIsValidJSON(t *testing.T) {
+func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, "")
-	schema := lc.ConfigSchema()
-	if len(schema) == 0 {
-		t.Fatal("ConfigSchema returned empty bytes")
+	fields := lc.ConfigFields()
+	if len(fields) != 4 {
+		t.Fatalf("ConfigFields len = %d want 4", len(fields))
 	}
-	// Sanity: schema mentions every config field by name.
+	byName := map[string]ConfigField{}
+	for _, f := range fields {
+		byName[f.Name] = f
+	}
 	for _, want := range []string{"keep_last_n", "open_tag", "close_tag", "system_instruction_override"} {
-		if !strings.Contains(string(schema), want) {
-			t.Errorf("schema missing field %q", want)
+		if _, ok := byName[want]; !ok {
+			t.Errorf("ConfigFields missing %q", want)
 		}
+	}
+	if byName["keep_last_n"].Type != ConfigFieldNumber {
+		t.Errorf("keep_last_n type = %q want %q", byName["keep_last_n"].Type, ConfigFieldNumber)
+	}
+	if byName["system_instruction_override"].Type != ConfigFieldTextarea {
+		t.Errorf("system_instruction_override type = %q want %q", byName["system_instruction_override"].Type, ConfigFieldTextarea)
+	}
+	if byName["system_instruction_override"].Default != nil {
+		t.Errorf("system_instruction_override default = %v want nil", byName["system_instruction_override"].Default)
 	}
 }
 

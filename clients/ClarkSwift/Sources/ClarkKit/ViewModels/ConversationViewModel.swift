@@ -78,9 +78,32 @@ public final class ConversationViewModel {
     /// title menu's "View contexts…" entry.
     public var showingContextList: Bool = false
 
+    // Settings page
+    /// When true, the conversation pane swaps the message scroll for the
+    /// in-conversation Settings page (Compact / Contexts / Settings share
+    /// the same page-replaces-pane pattern).
+    public var showingSettingsView: Bool = false
+    /// Editable conversation-level CallSettings draft. Mutations here are
+    /// pushed to the server via `saveCallSettings()` on dismiss.
+    public var conversationCallSettingsDraft: ClarkCallSettings = ClarkCallSettings()
+    /// Snapshot of the resolved-from-below CallSettings (model + profile)
+    /// used by the form's "Inherit (X)" mute previews. Loaded by
+    /// `prepareSettingsView()`.
+    public var resolvedCallSettings: ClarkCallSettings?
+    /// Tracks the resolved profile so the form can pick the correct driver
+    /// extension block (anthropic / openai / google) based on the
+    /// effective default model. Loaded by `prepareSettingsView()`.
+    public var settingsResolvedProfile: ClarkProfile?
+    public var preparingSettingsView = false
+
     // Model switcher
     public var availableModels: [ClarkUserModel] = []
     public var providerLabels: [String: String] = [:]
+    /// Provider driver type keyed by provider ID — e.g. "anthropic" /
+    /// "openai-compatible" / "google". Populated by `loadAvailableModels`.
+    /// Used by views to decide which CallSettings extension block to render
+    /// and to compute cache-savings discount factors.
+    public var providerTypes: [String: String] = [:]
     public var selectedProviderID: String?
     public var selectedModelID: String?
 
@@ -272,6 +295,7 @@ public final class ConversationViewModel {
         do {
             let providers = try await client.modelProviders.list()
             providerLabels = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.label) })
+            providerTypes  = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.type) })
             availableModels = try await withThrowingTaskGroup(of: [ClarkUserModel].self) { group in
                 for p in providers {
                     group.addTask { try await self.client.modelProviders.listModels(providerID: p.id) }
@@ -396,6 +420,90 @@ public final class ConversationViewModel {
             // themselves. They get a clearer error from the Compact RPC if
             // things still aren't right when they hit submit.
         }
+    }
+
+    // MARK: Settings page
+
+    /// Loads the data the in-conversation Settings page needs:
+    ///   - the conversation-level CallSettings draft (seeded from the
+    ///     conversation's existing `settings.callSettings`, if any).
+    ///   - the resolved-from-below CallSettings snapshot used by the form's
+    ///     "Inherit (X)" mute previews. Computed by merging the profile's
+    ///     resolved CallSettings with the active model's defaults; the
+    ///     server will additionally consult provider defaults at SendMessage
+    ///     time, which we don't surface in the preview.
+    ///   - the resolved profile, used by the form to pick the correct
+    ///     driver-specific extension block.
+    public func prepareSettingsView() async {
+        preparingSettingsView = true
+        defer { preparingSettingsView = false }
+
+        // Always re-fetch the live conversation so we pick up settings
+        // that another path may have written.
+        let liveConvo: ClarkConversation
+        do {
+            (liveConvo, _) = try await client.conversations.get(id: conversation.id)
+        } catch {
+            return
+        }
+        conversationCallSettingsDraft = liveConvo.settings?.callSettings ?? ClarkCallSettings()
+
+        // Resolve the profile through the parent chain so we can render
+        // the inheritance preview against the profile's effective settings.
+        var resolved: ClarkCallSettings = ClarkCallSettings()
+        if let (_, resolvedProfile) = try? await client.profiles.get(id: liveConvo.profileID, resolve: true),
+           let resolvedProfile {
+            settingsResolvedProfile = resolvedProfile
+            if let cs = resolvedProfile.defaultSettings?.callSettings {
+                resolved = cs
+            }
+            // Layer the resolved profile's default model defaults *under*
+            // the profile's own callSettings — model is lower precedence.
+            // We don't know the per-model defaults until we look the model
+            // up in the available-models list.
+            if let pid = liveConvo.settings?.defaultProviderID ?? resolvedProfile.defaultSettings?.defaultProviderID,
+               let mid = liveConvo.settings?.defaultModelID    ?? resolvedProfile.defaultSettings?.defaultModelID,
+               let model = availableModels.first(where: { $0.providerID == pid && $0.modelID == mid }),
+               let modelDefaults = model.defaultSettings {
+                resolved = mergeCallSettings(higher: resolved, lower: modelDefaults)
+            }
+        }
+        resolvedCallSettings = resolved
+    }
+
+    /// Persists the current `conversationCallSettingsDraft` back to the
+    /// server. Preserves any non-call-settings fields on the conversation's
+    /// existing settings (default provider/model, include-thinking flag).
+    /// Called on dismiss of the in-conversation Settings page.
+    public func saveCallSettings() async {
+        var settings = conversation.settings ?? ClarkConversationSettings()
+        settings.callSettings = conversationCallSettingsDraft.isEmpty ? nil : conversationCallSettingsDraft
+        do {
+            _ = try await client.conversations.updateSettings(
+                id: conversation.id,
+                settings: settings
+            )
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// Sparse merge — `higher` wins when set, otherwise `lower` field is
+    /// adopted. Mirrors the server-side `mergeCallSettings` in
+    /// `internal/profiles/callsettings.go`. Used for the inherit-preview.
+    private func mergeCallSettings(higher: ClarkCallSettings, lower: ClarkCallSettings) -> ClarkCallSettings {
+        var out = higher
+        if out.temperature == nil      { out.temperature = lower.temperature }
+        if out.topP == nil             { out.topP = lower.topP }
+        if out.maxOutputTokens == nil  { out.maxOutputTokens = lower.maxOutputTokens }
+        if out.stopSequences.isEmpty   { out.stopSequences = lower.stopSequences }
+        if out.topK == nil             { out.topK = lower.topK }
+        // Thinking / extras: take whichever is non-nil; no nested merge in v1.
+        if out.thinking == nil  || (out.thinking?.isEmpty ?? true)  { out.thinking  = lower.thinking }
+        if out.anthropic == nil || (out.anthropic?.isEmpty ?? true) { out.anthropic = lower.anthropic }
+        if out.openai == nil    || (out.openai?.isEmpty ?? true)    { out.openai    = lower.openai }
+        if out.google == nil    || (out.google?.isEmpty ?? true)    { out.google    = lower.google }
+        return out
     }
 
     /// Trigger compaction, optionally with per-call overrides for prompt

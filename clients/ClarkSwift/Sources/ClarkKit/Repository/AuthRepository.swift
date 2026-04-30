@@ -74,12 +74,26 @@ public final class AuthRepository: Sendable {
 
     /// Restore session from on-disk token: if a token is present, call WhoAmI.
     /// On 401 the AuthInterceptor will already have flagged needsReauth; here
-    /// we just swallow the error so callers can render Login.
+    /// we swallow the error so callers can render Login. We also clear the
+    /// keychain when the stored token is rejected, so subsequent launches
+    /// don't repeat the dead-token round-trip and force the user through a
+    /// fresh login flow once.
     @discardableResult
     public func restoreSession() async -> ClarkUser? {
         guard let token = try? tokenStore.load(), !token.isEmpty else { return nil }
         _ = token
-        return try? await whoAmI()
+        do {
+            return try await whoAmI()
+        } catch {
+            // Wipe the dead token only on auth-class failures. Network /
+            // transport errors are transient — keep the token so the next
+            // launch can retry once the server is reachable.
+            if case let ClarkError.rpc(code, _) = error,
+               code == .unauthenticated || code == .permissionDenied {
+                try? tokenStore.clear()
+            }
+            return nil
+        }
     }
 
     private func map(error: ConnectError?) -> ClarkError? {

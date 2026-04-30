@@ -80,7 +80,24 @@ struct ProvidersDetail: View {
             switch model.detailMode {
             case .adding:
                 AddProviderForm(model: model)
-            case .viewing, .editing, .discovering:
+            case .addingManualModel:
+                if let id = model.selectedID,
+                   let provider = model.providers.first(where: { $0.id == id }) {
+                    ModelEditForm(
+                        formMode: .adding(provider: provider),
+                        providersModel: model
+                    )
+                }
+            case .editingModel(let modelID):
+                if let id = model.selectedID,
+                   let provider = model.providers.first(where: { $0.id == id }),
+                   let m = model.enabledModels.first(where: { $0.modelID == modelID }) {
+                    ModelEditForm(
+                        formMode: .editing(model: m, provider: provider),
+                        providersModel: model
+                    )
+                }
+            case .viewing, .editing, .discovering, .settings:
                 if let id = model.selectedID,
                    let provider = model.providers.first(where: { $0.id == id }) {
                     ProviderDetailPanel(provider: provider, model: model)
@@ -161,21 +178,30 @@ private struct ProviderDetailPanel: View {
                        let p = model.providers.first(where: { $0.id == id }) {
                         DiscoverModelsInline(provider: p, model: model)
                     }
+                case .settings:
+                    ProviderDefaultSettingsTab(provider: provider, model: model)
                 default:
                     ModelsList(model: model)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Default alignment is .center, which causes the form's leading
+            // edge to render off-screen-left when its intrinsic content is
+            // wider than the column. .topLeading anchors the form so any
+            // overflow extends to the right (clipped properly) instead of
+            // bleeding behind the column divider.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
     /// Full-width tab bar below the header — picks between viewing the
-    /// provider's enabled models and discovering new ones.
+    /// provider's enabled models, discovering new ones, and editing the
+    /// provider-level default call settings.
     @ViewBuilder
     private var tabBar: some View {
         Picker("", selection: tabBinding) {
             Text("Enabled Models").tag(ProvidersDetailMode.viewing)
             Text("Discover Models").tag(ProvidersDetailMode.discovering)
+            Text("Default Settings").tag(ProvidersDetailMode.settings)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
@@ -186,7 +212,13 @@ private struct ProviderDetailPanel: View {
 
     private var tabBinding: Binding<ProvidersDetailMode> {
         Binding(
-            get: { model.detailMode == .discovering ? .discovering : .viewing },
+            get: {
+                switch model.detailMode {
+                case .discovering: return .discovering
+                case .settings:    return .settings
+                default:           return .viewing
+                }
+            },
             set: { model.detailMode = $0 }
         )
     }
@@ -205,15 +237,24 @@ private struct ProviderHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 0) {
+                // Truncate from the tail so "OpenRouter" stays readable even
+                // when the column is narrow (the alternative was the title
+                // getting clipped on the leading edge — silently — when the
+                // trailing buttons + test chip ate the row's horizontal budget).
                 Text(provider.label)
                     .font(.headline)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(provider.type)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            Spacer()
+            // Higher layoutPriority keeps the title VStack from being squeezed
+            // to zero width by the test-chip + button cluster.
+            .layoutPriority(1)
+            Spacer(minLength: 8)
             ProviderTestControl(provider: provider, model: model)
             GlassCircleButton(
                 systemImage: "pencil",
@@ -372,6 +413,15 @@ private struct ModelRow: View {
                 )
             }
             Spacer()
+            // Gear → swap the detail pane to the unified model edit form.
+            // Same screen as "Add custom model"; pre-populates from the row.
+            Button {
+                providersModel.detailMode = .editingModel(model.modelID)
+            } label: {
+                Image(systemName: "gearshape").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Edit model")
             ModelTestButton(model: model, providersModel: providersModel)
             Button(action: onToggleFavorite) {
                 Image(systemName: model.favorite ? "star.fill" : "star")
@@ -398,6 +448,12 @@ private struct ModelRow: View {
             }
         }
         .padding(.vertical, 3)
+    }
+
+    /// Driver type of the parent provider — passed into CallSettingsForm to
+    /// pick the right extension block.
+    private var providerType: String {
+        providersModel.providers.first(where: { $0.id == model.providerID })?.type ?? "anthropic"
     }
 }
 
@@ -533,28 +589,59 @@ private func costBucket(_ pricing: ClarkModelPricing?) -> String? {
 
 // MARK: - Add provider (inline)
 
+/// Drives the AddProviderForm's "what kind of provider are we creating"
+/// state: a catalog template (Anthropic / Groq / etc.) or a fully-custom
+/// configuration (user picks the driver type, label, base URL, api key from
+/// scratch). The custom case is for self-hosted endpoints, forks of known
+/// providers with a different URL, or any openai-compatible service that
+/// hasn't been catalogued.
+private enum AddProviderSelection: Equatable {
+    case template(ClarkProviderTemplate)
+    case custom
+}
+
 /// Inline form replacing the old AddProviderSheet. Lives in the providers
 /// detail column when `detailMode == .adding`.
 private struct AddProviderForm: View {
     @Bindable var model: ProvidersViewModel
     @Environment(AppModel.self) private var app
 
-    @State private var selectedTemplate: ClarkProviderTemplate?
+    @State private var selection: AddProviderSelection?
     @State private var label = ""
     @State private var apiKey = ""
     @State private var baseURL = ""
+    /// Driver type when the user is creating a custom provider. Defaults to
+    /// `openai-compatible` since that's the broadest fit.
+    @State private var customDriverType: String = "openai-compatible"
     @State private var isCreating = false
     @State private var formError: String?
 
-    private var isOpenAI: Bool {
-        selectedTemplate?.driverType == "openai-compatible"
+    private var isOpenAICompatibleSelection: Bool {
+        switch selection {
+        case .template(let t): return t.driverType == "openai-compatible"
+        case .custom:          return customDriverType == "openai-compatible"
+        case nil:              return false
+        }
+    }
+
+    /// The driver type that will actually be submitted. Mirrors `selection` —
+    /// for templates it's the template's own driver, for custom it's the
+    /// segmented-picker choice.
+    private var effectiveDriverType: String {
+        switch selection {
+        case .template(let t): return t.driverType
+        case .custom:          return customDriverType
+        case nil:              return ""
+        }
     }
 
     private var canCreate: Bool {
-        guard let _ = selectedTemplate else { return false }
+        guard selection != nil else { return false }
         if label.trimmingCharacters(in: .whitespaces).isEmpty { return false }
         if apiKey.isEmpty { return false }
-        if isOpenAI && baseURL.isEmpty { return false }
+        if isOpenAICompatibleSelection && baseURL.trimmingCharacters(in: .whitespaces).isEmpty {
+            return false
+        }
         return !isCreating
     }
 
@@ -589,7 +676,7 @@ private struct AddProviderForm: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if selectedTemplate == nil {
+                    if selection == nil {
                         templatePicker
                     } else {
                         selectedTemplateRow
@@ -608,19 +695,44 @@ private struct AddProviderForm: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Full grid shown until a template is picked.
+    /// Full grid shown until a template is picked. The "Custom" tile is
+    /// pinned at the top so users searching for a self-hosted-or-similar
+    /// path don't have to scroll past 70+ catalog templates first.
     private var templatePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Pick a template")
+            // Standalone Custom tile — full row width, distinct visual style
+            // (dashed border + plus icon) so it doesn't blend in with the
+            // catalog grid below.
+            CustomProviderTile {
+                selection = .custom
+                if label.isEmpty { label = "Custom provider" }
+                customDriverType = "openai-compatible"
+            }
             if model.templates.isEmpty {
                 ProgressView().controlSize(.small)
+                    .padding(.top, 4)
             } else {
-                LazyVGrid(columns: [.init(.adaptive(minimum: 200, maximum: 280), spacing: 8)], spacing: 8) {
-                    ForEach(model.templates) { t in
-                        TemplatePill(template: t, isSelected: false) {
-                            selectedTemplate = t
-                            if label.isEmpty { label = t.name }
-                            if baseURL.isEmpty { baseURL = t.apiBase ?? "" }
+                // VGrid (not LazyVGrid) deliberately — LazyVGrid mis-renders
+                // hit areas on the first row when the form first appears
+                // (clicks on the upper ~25px land on no button). The catalog
+                // is bounded (~70 templates) so non-lazy is fine here, and
+                // the eager layout fixes the click-hole reliably.
+                Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(templateRows, id: \.self) { row in
+                        GridRow {
+                            ForEach(row, id: \.id) { t in
+                                TemplatePill(template: t, isSelected: false) {
+                                    selection = .template(t)
+                                    if label.isEmpty { label = t.name }
+                                    if baseURL.isEmpty { baseURL = t.apiBase ?? "" }
+                                }
+                            }
+                            // Pad the trailing column on the last row so the
+                            // single tile doesn't span the full width.
+                            if row.count == 1 {
+                                Color.clear.frame(maxWidth: .infinity)
+                            }
                         }
                     }
                 }
@@ -628,24 +740,47 @@ private struct AddProviderForm: View {
         }
     }
 
-    /// Compact summary of the chosen template, with a "Change" button to
-    /// reopen the picker. Stays at the top of the form so it's immediately
-    /// clear what's being added.
+    /// Catalog templates packed into rows of 2. Two columns mirror the prior
+    /// LazyVGrid `.adaptive(minimum: 200, maximum: 280)` density — wider columns
+    /// would look stretched, narrower columns lose readable label space.
+    private var templateRows: [[ClarkProviderTemplate]] {
+        let columns = 2
+        var rows: [[ClarkProviderTemplate]] = []
+        var current: [ClarkProviderTemplate] = []
+        for t in model.templates {
+            current.append(t)
+            if current.count == columns {
+                rows.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { rows.append(current) }
+        return rows
+    }
+
+    /// Compact summary of the chosen template (or "Custom"), with a "Change"
+    /// button to reopen the picker. Stays at the top of the form so it's
+    /// immediately clear what's being added.
     @ViewBuilder
     private var selectedTemplateRow: some View {
-        if let t = selectedTemplate {
+        if let sel = selection {
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("Template")
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(t.name).fontWeight(.semibold)
-                        Text(t.driverType).font(.caption2).foregroundStyle(.secondary)
+                        switch sel {
+                        case .template(let t):
+                            Text(t.name).fontWeight(.semibold)
+                            Text(t.driverType).font(.caption2).foregroundStyle(.secondary)
+                        case .custom:
+                            Text("Custom provider").fontWeight(.semibold)
+                            Text("Pick a driver type and configure manually")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
-                    Button("Change") {
-                        selectedTemplate = nil
-                    }
-                    .buttonStyle(.glass)
+                    Button("Change") { selection = nil }
+                        .buttonStyle(.glass)
                 }
                 .padding(10)
                 .background(Color.accentColor.opacity(0.10))
@@ -661,24 +796,53 @@ private struct AddProviderForm: View {
     private var credentialsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Credentials")
+            // For custom providers the user picks the driver type up-front;
+            // for templates the driver is locked-in by the catalog row.
+            if case .custom = selection {
+                CredField("Driver type") {
+                    Picker("", selection: $customDriverType) {
+                        Text("Anthropic").tag("anthropic")
+                        Text("OpenAI-compatible").tag("openai-compatible")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            }
             CredField("Label") {
                 TextField("Display name", text: $label)
                     .textFieldStyle(.roundedBorder)
             }
             CredField(
                 "API key",
-                hint: selectedTemplate?.envKey.map { "env: \($0)" }
+                hint: templateEnvKeyHint
             ) {
                 SecureField("Paste key here", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
             }
-            if isOpenAI {
-                CredField("Base URL") {
+            if isOpenAICompatibleSelection {
+                CredField(
+                    "Base URL",
+                    hint: customBaseURLHint
+                ) {
                     TextField("https://api.example.com/v1", text: $baseURL)
                         .textFieldStyle(.roundedBorder)
                 }
             }
         }
+    }
+
+    private var templateEnvKeyHint: String? {
+        if case .template(let t) = selection {
+            return t.envKey.map { "env: \($0)" }
+        }
+        return nil
+    }
+
+    private var customBaseURLHint: String? {
+        if case .custom = selection {
+            return "Required for OpenAI-compatible drivers (e.g. http://localhost:9999/v1)"
+        }
+        return nil
     }
 
     private func sectionTitle(_ s: String) -> some View {
@@ -690,18 +854,25 @@ private struct AddProviderForm: View {
     }
 
     private func save() async {
-        guard let tmpl = selectedTemplate else { return }
+        guard let sel = selection else { return }
         isCreating = true; formError = nil
         defer { isCreating = false }
         do {
             var dict: [String: String] = ["api_key": apiKey]
-            if tmpl.driverType == "openai-compatible" {
-                if !baseURL.isEmpty { dict["base_url"] = baseURL }
-                if !tmpl.catalogProviderID.isEmpty { dict["catalog_provider_id"] = tmpl.catalogProviderID }
+            let driverType = effectiveDriverType
+            if driverType == "openai-compatible" {
+                let trimmed = baseURL.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { dict["base_url"] = trimmed }
+                // Templates carry a catalog hint that enriches discovery;
+                // custom providers don't unless the user explicitly picks one
+                // (deferred — could add a "catalog enrichment" sub-field later).
+                if case .template(let t) = sel, !t.catalogProviderID.isEmpty {
+                    dict["catalog_provider_id"] = t.catalogProviderID
+                }
             }
             let config = try JSONSerialization.data(withJSONObject: dict)
             let provider = try await model.createProvider(
-                type: tmpl.driverType,
+                type: driverType,
                 label: label.trimmingCharacters(in: .whitespaces),
                 config: config
             )
@@ -710,6 +881,50 @@ private struct AddProviderForm: View {
         } catch {
             formError = error.localizedDescription
         }
+    }
+}
+
+/// Pinned tile at the top of the templates picker that opens the form in
+/// custom-provider mode. Visual: dashed accent border + plus icon, distinct
+/// from the catalog's solid-border tiles so it reads as a different kind of
+/// affordance.
+private struct CustomProviderTile: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Custom provider")
+                        .fontWeight(.semibold)
+                    Text("Configure manually — for self-hosted or uncatalogued endpoints")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // contentShape forces the entire frame (including transparent
+            // padding region) to be hittable — without this, hit-testing
+            // misses the gaps between the icon and the text.
+            .contentShape(Rectangle())
+            .background(Color.accentColor.opacity(0.06))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(
+                        Color.accentColor.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                    )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -870,17 +1085,27 @@ private struct DiscoverModelsInline: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Search bar
-            if !discovered.isEmpty || !searchText.isEmpty || isLoading {
-                HStack {
-                    TextField("Search models…", text: $searchText)
-                        .textFieldStyle(.roundedBorder)
-                    if isLoading { ProgressView().controlSize(.small) }
+            // Search bar + "Add custom model" affordance — sits in the
+            // discover tab header so users who can't find a model in the
+            // catalog/discovery list have a clear next step right there.
+            HStack {
+                TextField("Search models…", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                if isLoading { ProgressView().controlSize(.small) }
+                Button {
+                    model.detailMode = .addingManualModel
+                } label: {
+                    Label("Add custom model", systemImage: "plus")
+                        .font(.caption)
+                        .labelStyle(.titleAndIcon)
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
+                .controlSize(.small)
+                .buttonStyle(.glass)
+                .help("Add a manually-described model — for private fine-tunes or models the provider doesn't list via /v1/models.")
             }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
 
             // List
             if let inlineError {
@@ -1106,13 +1331,24 @@ private struct TemplatePill: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.accentColor)
                 }
             }
             .padding(10)
+            // maxWidth: .infinity expands the label to fill the grid cell so
+            // the entire visible tile is one hit target. Without it the
+            // HStack's intrinsic width stops short of the column boundary
+            // and clicks on the right edge land on no view.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // contentShape extends hit-testing to the full padded frame
+            // including the transparent .background(Color.clear) area.
+            // Without this, clicks on the un-text part of the tile (i.e. the
+            // padding around "302.AI") pass through to whatever's underneath
+            // — which is why the upper edge of first-row tiles read as dead.
+            .contentShape(Rectangle())
             .background(isSelected ? Color.accentColor.opacity(0.10) : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
@@ -1156,5 +1392,544 @@ private struct CredField<Content: View>: View {
                     .padding(.leading, 90)
             }
         }
+    }
+}
+
+// MARK: - Provider default-settings tab
+
+/// "Default Settings" tab on the provider detail pane. Renders the shared
+/// `CallSettingsForm` bound to a local draft seeded from the provider's
+/// existing `defaultSettings`. Auto-saves on dismiss (when the user
+/// switches tabs or selects a different provider) — same pattern as
+/// `ConversationSettingsView`.
+private struct ProviderDefaultSettingsTab: View {
+    let provider: ClarkUserModelProvider
+    @Bindable var model: ProvidersViewModel
+    @State private var draft = ClarkCallSettings()
+    @State private var seeded = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                headerNote
+                CallSettingsForm(
+                    settings: $draft,
+                    inheritedSettings: nil,
+                    driverType: provider.type,
+                    modelCapabilities: nil
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onAppear {
+            // Seed once per appearance — re-seeding on every .onAppear would
+            // clobber an in-flight edit if the parent re-renders the same
+            // provider for unrelated reasons.
+            if !seeded {
+                draft = provider.defaultSettings ?? ClarkCallSettings()
+                seeded = true
+            }
+        }
+        .onDisappear {
+            // Auto-save on dismiss. Skip the call when the draft matches what's
+            // already persisted — avoids a no-op round-trip every tab switch.
+            let original = provider.defaultSettings ?? ClarkCallSettings()
+            guard draft != original else { return }
+            let providerID = provider.id
+            let settings = draft
+            let m = model
+            Task { try? await m.updateProviderDefaultSettings(providerID: providerID, settings: settings) }
+        }
+    }
+
+    private var headerNote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Provider defaults")
+                .font(.headline)
+            Text("Bottom layer of the resolution chain — any field set here is used unless a per-model, profile, or conversation override is set. Changes auto-save when you leave this tab.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// MARK: - Unified model edit form (replaces both popovers)
+
+/// Mode for the unified model edit screen. `.adding` starts blank and
+/// commits via AddManualModel; `.editing` pre-populates from an existing
+/// row and commits the per-model `default_settings` layer via UpdateUserModel.
+/// Metadata fields (id, limits, pricing, capabilities, modalities, cutoff)
+/// are read-only when editing — the current backend only exposes
+/// `default_settings` as a mutable field on existing rows.
+enum ModelEditMode {
+    case adding(provider: ClarkUserModelProvider)
+    case editing(model: ClarkUserModel, provider: ClarkUserModelProvider)
+
+    var provider: ClarkUserModelProvider {
+        switch self {
+        case .adding(let p):       return p
+        case .editing(_, let p):   return p
+        }
+    }
+
+    var existingModel: ClarkUserModel? {
+        if case .editing(let m, _) = self { return m }
+        return nil
+    }
+}
+
+/// Full-pane add/edit screen for a model row. Replaces the gear-button and
+/// "+ Add custom model" popovers with a screen-style flow that mirrors the
+/// provider edit/add pattern (header + Cancel/Save right-aligned, body
+/// scrolls underneath). Identity/metadata fields are pre-populated and
+/// disabled when editing — the existing UpdateUserModel RPC only mutates
+/// `default_settings`, so the form is honest about what is editable.
+private struct ModelEditForm: View {
+    let formMode: ModelEditMode
+    @Bindable var providersModel: ProvidersViewModel
+
+    @State private var modelID: String = ""
+    @State private var displayName: String = ""
+    @State private var contextWindowText: String = ""
+    @State private var maxOutputTokensText: String = ""
+    @State private var inputPriceText: String = ""
+    @State private var outputPriceText: String = ""
+    @State private var cacheReadPriceText: String = ""
+    @State private var cacheWritePriceText: String = ""
+    @State private var modalities: Set<String> = ["text"]
+    @State private var capStreaming = true
+    @State private var capThinking = false
+    @State private var capToolUse = false
+    @State private var capVision = false
+    @State private var capPromptCaching = false
+    @State private var knowledgeCutoffEnabled = false
+    @State private var knowledgeCutoffDate = Date()
+    @State private var defaultSettings = ClarkCallSettings()
+    @State private var defaultSettingsExpanded = false
+    @State private var isSaving = false
+    @State private var formError: String?
+    @State private var seeded = false
+
+    private static let modalityChoices: [(key: String, label: String, systemImage: String)] = [
+        ("text",  "Text",  "text.alignleft"),
+        ("image", "Image", "photo"),
+        ("audio", "Audio", "waveform"),
+        ("pdf",   "PDF",   "doc.richtext"),
+        ("video", "Video", "video"),
+    ]
+
+    private var isEditing: Bool { formMode.existingModel != nil }
+    private var providerType: String { formMode.provider.type }
+    private var provider: ClarkUserModelProvider { formMode.provider }
+
+    private var canSave: Bool {
+        // displayName is required in both modes (it's the row's user-visible
+        // label); modelID is required only when adding (it's the row key
+        // and pre-populated/locked when editing).
+        if isSaving { return false }
+        if !isEditing && modelID.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+        return !displayName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            // GeometryReader gives us the column's actual width — without it
+            // ScrollView's preferred-size negotiation with wide internal
+            // content (segmented pickers in the embedded CallSettingsForm)
+            // causes the inner VStack to render at its *intrinsic* width with
+            // the column's left edge clipping the leading characters of
+            // every label. Constraining the VStack to the geometry width
+            // forces it to shrink, so labels (and their padding) are
+            // honored relative to the column's left edge.
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        introCaption
+                        identitySection
+                        limitsSection
+                        pricingSection
+                        modalitiesSection
+                        capabilitiesSection
+                        cutoffSection
+                        defaultSettingsSection
+                        if let formError {
+                            Text(formError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.top, 4)
+                        }
+                    }
+                    .padding(16)
+                    .frame(width: geo.size.width, alignment: .topLeading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { seedFromExistingIfNeeded() }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(isEditing ? "Edit model" : "Add custom model")
+                .font(.headline)
+                .lineLimit(1)
+            Spacer()
+            Button("Cancel") {
+                providersModel.detailMode = .viewing
+            }
+            .controlSize(.small)
+            .buttonStyle(.glass)
+            .keyboardShortcut(.cancelAction)
+            Button {
+                Task { await save() }
+            } label: {
+                if isSaving { ProgressView().controlSize(.small) }
+                else { Text(isEditing ? "Save" : "Add model") }
+            }
+            .controlSize(.small)
+            .buttonStyle(.glassProminent)
+            .disabled(!canSave)
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: paneHeaderHeight)
+    }
+
+    @ViewBuilder
+    private var introCaption: some View {
+        if isEditing {
+            Text("Edit any field. The model ID is the wire identifier and is locked — change it by removing the row and adding a new one.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("Manually describe a model on \"\(provider.label)\" — for private fine-tunes, renamed-but-real models, or anything the provider doesn't list via discovery.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Sections
+
+    private var identitySection: some View {
+        sectionCard("Identity") {
+            VStack(alignment: .leading, spacing: 10) {
+                CredField("Model ID", hint: isEditing
+                          ? "Locked — wire identifier; change it by removing the row and adding a new one"
+                          : "Wire identifier sent to the provider — e.g. gpt-mystery") {
+                    TextField("gpt-mystery", text: $modelID)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .disabled(isEditing)
+                }
+                CredField("Display name") {
+                    TextField("GPT Mystery", text: $displayName)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+        }
+    }
+
+    private var limitsSection: some View {
+        sectionCard("Limits") {
+            HStack(alignment: .top, spacing: 12) {
+                CredField("Context window", hint: "Tokens (optional)") {
+                    TextField("128000", text: $contextWindowText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                CredField("Max output", hint: "Tokens (optional)") {
+                    TextField("8192", text: $maxOutputTokensText)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+        }
+    }
+
+    private var pricingSection: some View {
+        sectionCard("Pricing — USD per million tokens (all optional)") {
+            VStack(alignment: .leading, spacing: 8) {
+                pricingRow("Input",       $inputPriceText)
+                pricingRow("Output",      $outputPriceText)
+                pricingRow("Cache read",  $cacheReadPriceText)
+                pricingRow("Cache write", $cacheWritePriceText)
+            }
+        }
+    }
+
+    private func pricingRow(_ title: String, _ binding: Binding<String>) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .frame(width: 100, alignment: .leading)
+                .foregroundStyle(.secondary)
+            TextField("0.00", text: binding)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var modalitiesSection: some View {
+        sectionCard("Modalities") {
+            HStack(spacing: 6) {
+                ForEach(Self.modalityChoices, id: \.key) { choice in
+                    ModalityChip(
+                        label: choice.label,
+                        systemImage: choice.systemImage,
+                        isOn: modalities.contains(choice.key)
+                    ) {
+                        if modalities.contains(choice.key) {
+                            modalities.remove(choice.key)
+                        } else {
+                            modalities.insert(choice.key)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var capabilitiesSection: some View {
+        sectionCard("Capabilities") {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Streaming",       isOn: $capStreaming)
+                Toggle("Thinking",        isOn: $capThinking)
+                Toggle("Tool use",        isOn: $capToolUse)
+                Toggle("Vision",          isOn: $capVision)
+                Toggle("Prompt caching",  isOn: $capPromptCaching)
+            }
+            .toggleStyle(.checkbox)
+        }
+    }
+
+    private var cutoffSection: some View {
+        sectionCard("Knowledge cutoff") {
+            HStack(spacing: 10) {
+                Toggle("Set", isOn: $knowledgeCutoffEnabled)
+                    .toggleStyle(.checkbox)
+                if knowledgeCutoffEnabled {
+                    DatePicker("", selection: $knowledgeCutoffDate, displayedComponents: [.date])
+                        .labelsHidden()
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var defaultSettingsSection: some View {
+        sectionCard("Default call settings") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(isEditing
+                     ? "Resolves above the provider defaults but below profile and conversation overrides. Leave fields unset to inherit."
+                     : "Optional — sets the per-model defaults layer of the call-settings chain. Leave collapsed to inherit normally.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if isEditing {
+                    CallSettingsForm(
+                        settings: $defaultSettings,
+                        inheritedSettings: nil,
+                        driverType: providerType,
+                        modelCapabilities: capabilitiesValue
+                    )
+                    .padding(.top, 8)
+                } else {
+                    DisclosureGroup(isExpanded: $defaultSettingsExpanded) {
+                        CallSettingsForm(
+                            settings: $defaultSettings,
+                            inheritedSettings: nil,
+                            driverType: providerType,
+                            modelCapabilities: capabilitiesValue
+                        )
+                        .padding(.top, 8)
+                    } label: {
+                        Text(defaultSettingsExpanded ? "Hide defaults" : "Configure defaults…")
+                            .font(.caption)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Builds a ClarkModelPricing from the four price text fields. Returns nil
+    /// if all four are empty/unparseable — caller can decide what nil means
+    /// (clear-pricing for editing, omit-pricing for adding).
+    private func pricingFromFields() -> ClarkModelPricing? {
+        let i  = parseDouble(inputPriceText)
+        let o  = parseDouble(outputPriceText)
+        let cr = parseDouble(cacheReadPriceText)
+        let cw = parseDouble(cacheWritePriceText)
+        if i == nil && o == nil && cr == nil && cw == nil { return nil }
+        return ClarkModelPricing(
+            inputPerMillion: i,
+            outputPerMillion: o,
+            cacheReadPerMillion: cr,
+            cacheWritePerMillion: cw
+        )
+    }
+
+    private func cutoffFromFields() -> String? {
+        guard knowledgeCutoffEnabled else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.string(from: knowledgeCutoffDate)
+    }
+
+    private var capabilitiesValue: ClarkModelCapabilities {
+        ClarkModelCapabilities(
+            streaming: capStreaming,
+            thinking: capThinking,
+            toolUse: capToolUse,
+            vision: capVision,
+            promptCaching: capPromptCaching
+        )
+    }
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+
+    // MARK: - Seed (edit mode)
+
+    private func seedFromExistingIfNeeded() {
+        guard !seeded else { return }
+        seeded = true
+        guard let m = formMode.existingModel else { return }
+        modelID = m.modelID
+        displayName = m.displayName
+        contextWindowText = m.contextWindow.map { String($0) } ?? ""
+        maxOutputTokensText = m.maxOutputTokens.map { String($0) } ?? ""
+        if let p = m.pricing {
+            inputPriceText      = p.inputPerMillion.map      { String($0) } ?? ""
+            outputPriceText     = p.outputPerMillion.map     { String($0) } ?? ""
+            cacheReadPriceText  = p.cacheReadPerMillion.map  { String($0) } ?? ""
+            cacheWritePriceText = p.cacheWritePerMillion.map { String($0) } ?? ""
+        }
+        modalities = Set(m.modalities)
+        if let c = m.capabilities {
+            capStreaming     = c.streaming
+            capThinking      = c.thinking
+            capToolUse       = c.toolUse
+            capVision        = c.vision
+            capPromptCaching = c.promptCaching
+        }
+        if let kc = m.knowledgeCutoff, !kc.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            if let date = formatter.date(from: kc) {
+                knowledgeCutoffEnabled = true
+                knowledgeCutoffDate = date
+            }
+        }
+        defaultSettings = m.defaultSettings ?? ClarkCallSettings()
+    }
+
+    // MARK: - Save
+
+    private func save() async {
+        isSaving = true; formError = nil
+        defer { isSaving = false }
+
+        let modalitiesArr = Self.modalityChoices.map(\.key).filter { modalities.contains($0) }
+        let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespaces)
+
+        do {
+            if let existing = formMode.existingModel {
+                let cwText = contextWindowText.trimmingCharacters(in: .whitespaces)
+                let moText = maxOutputTokensText.trimmingCharacters(in: .whitespaces)
+                _ = try await providersModel.updateModelFull(
+                    providerID: provider.id,
+                    modelID: existing.modelID,
+                    displayName: trimmedDisplayName,
+                    contextWindow: parseInt32(contextWindowText),
+                    clearContextWindow: cwText.isEmpty,
+                    maxOutputTokens: parseInt32(maxOutputTokensText),
+                    clearMaxOutputTokens: moText.isEmpty,
+                    pricing: pricingFromFields(),
+                    modalities: modalitiesArr,
+                    capabilities: capabilitiesValue,
+                    knowledgeCutoff: cutoffFromFields(),
+                    clearKnowledgeCutoff: !knowledgeCutoffEnabled,
+                    defaultSettings: defaultSettings
+                )
+            } else {
+                _ = try await providersModel.addManualModel(
+                    providerID: provider.id,
+                    modelID: modelID.trimmingCharacters(in: .whitespaces),
+                    displayName: trimmedDisplayName,
+                    contextWindow: parseInt32(contextWindowText),
+                    maxOutputTokens: parseInt32(maxOutputTokensText),
+                    pricing: pricingFromFields(),
+                    modalities: modalitiesArr,
+                    capabilities: capabilitiesValue,
+                    knowledgeCutoff: cutoffFromFields(),
+                    defaultSettings: defaultSettingsExpanded ? defaultSettings : nil
+                )
+            }
+            providersModel.detailMode = .viewing
+        } catch {
+            formError = error.localizedDescription
+        }
+    }
+
+    private func parseInt32(_ s: String) -> Int32? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, let v = Int32(t) else { return nil }
+        return v
+    }
+
+    private func parseDouble(_ s: String) -> Double? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, let v = Double(t) else { return nil }
+        return v
+    }
+}
+
+/// Tappable capsule for the modalities multi-select. Distinct from
+/// `metaChip` because it carries a Toggle-like state with checkmark tint
+/// rather than informational color coding.
+private struct ModalityChip: View {
+    let label: String
+    let systemImage: String
+    let isOn: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.caption2)
+                Text(label)
+                    .font(.caption)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(minWidth: 56)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(
+            isOn
+                ? .regular.tint(Color.accentColor.opacity(0.45)).interactive()
+                : .regular.interactive(),
+            in: .capsule
+        )
+        .foregroundStyle(isOn ? Color.white : Color.primary)
     }
 }

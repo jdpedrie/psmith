@@ -2,13 +2,26 @@ import Foundation
 import Observation
 
 /// Mode for the providers detail column. Controls whether we're showing the
-/// selected provider, an Add form (creating a new one), an Edit form, or a
-/// model-discovery list.
-public enum ProvidersDetailMode: Equatable, Sendable {
+/// selected provider, an Add form (creating a new one), an Edit form, a
+/// model-discovery list, or the provider-level default-settings tab.
+public enum ProvidersDetailMode: Hashable, Sendable {
     case viewing
     case adding
     case editing
     case discovering
+    /// Provider-level default CallSettings tab. Read-only in v1 — the
+    /// `UserModelProvider` proto / Update RPC don't yet carry the
+    /// `default_settings` field, so the form renders disabled with a hint
+    /// flagging it as coming-soon.
+    case settings
+    /// Editing a per-model row — wraps the per-model default settings form
+    /// in a full pane (replaces the gear-icon popover). The associated
+    /// value is the model id within the currently-selected provider.
+    case editingModel(String)
+    /// Adding a manually-described model on the currently-selected provider.
+    /// Replaces the "+ Add custom model" popover with a full pane that
+    /// shares its form definition with `editingModel`.
+    case addingManualModel
 }
 
 /// Live state of a "Test provider" action. Stored per-provider in
@@ -147,7 +160,8 @@ public final class ProvidersViewModel {
             knowledgeCutoff: original.knowledgeCutoff,
             modalities: original.modalities,
             capabilities: original.capabilities,
-            favorite: newValue
+            favorite: newValue,
+            defaultSettings: original.defaultSettings
         )
         do {
             _ = try await client.modelProviders.toggleModelFavorite(providerID: providerID, modelID: modelID, favorite: newValue)
@@ -180,6 +194,67 @@ public final class ProvidersViewModel {
         }
     }
 
+    /// Replaces the provider-level default CallSettings via UpdateUserModelProvider
+    /// (only the `default_settings` field is sent — label/config left alone).
+    /// Updates the in-memory provider list on success so subsequent reads reflect
+    /// the new value without a round-trip to GET.
+    public func updateProviderDefaultSettings(providerID: String, settings: ClarkCallSettings) async throws {
+        let updated = try await client.modelProviders.updateProviderDefaultSettings(providerID: providerID, settings: settings)
+        if let idx = providers.firstIndex(where: { $0.id == providerID }) {
+            providers[idx] = updated
+        }
+    }
+
+    /// Replaces a single user model's default CallSettings via UpdateUserModel.
+    /// Updates the in-memory enabledModels list on success.
+    public func updateModelDefaultSettings(providerID: String, modelID: String, settings: ClarkCallSettings) async throws {
+        let updated = try await client.modelProviders.updateModel(providerID: providerID, modelID: modelID, settings: settings)
+        if let idx = enabledModels.firstIndex(where: { $0.modelID == modelID }) {
+            enabledModels[idx] = updated
+        }
+    }
+
+    /// Full edit of every metadata field on an enabled model row. Every
+    /// argument is overwrite-when-present / leave-when-nil. `modalities`
+    /// uses the proto's update_modalities flag — pass non-nil to replace.
+    @discardableResult
+    public func updateModelFull(
+        providerID: String,
+        modelID: String,
+        displayName: String?,
+        contextWindow: Int32?,
+        clearContextWindow: Bool = false,
+        maxOutputTokens: Int32?,
+        clearMaxOutputTokens: Bool = false,
+        pricing: ClarkModelPricing?,
+        modalities: [String]?,
+        capabilities: ClarkModelCapabilities?,
+        knowledgeCutoff: String?,
+        clearKnowledgeCutoff: Bool = false,
+        defaultSettings: ClarkCallSettings?
+    ) async throws -> ClarkUserModel {
+        let updated = try await client.modelProviders.updateModelFull(
+            providerID: providerID,
+            modelID: modelID,
+            displayName: displayName,
+            contextWindow: contextWindow,
+            clearContextWindow: clearContextWindow,
+            maxOutputTokens: maxOutputTokens,
+            clearMaxOutputTokens: clearMaxOutputTokens,
+            pricing: pricing,
+            modalities: modalities,
+            capabilities: capabilities,
+            knowledgeCutoff: knowledgeCutoff,
+            clearKnowledgeCutoff: clearKnowledgeCutoff,
+            defaultSettings: defaultSettings
+        )
+        if let idx = enabledModels.firstIndex(where: { $0.modelID == modelID }) {
+            enabledModels[idx] = updated
+            enabledModels.sort { $0.displayName < $1.displayName }
+        }
+        return updated
+    }
+
     public func discoverModels(providerID: String) async throws -> [ClarkDiscoveredModel] {
         try await client.modelProviders.discoverModels(providerID: providerID)
     }
@@ -192,6 +267,44 @@ public final class ProvidersViewModel {
         enabledModels.append(contentsOf: fresh)
         enabledModels.sort { $0.displayName < $1.displayName }
         return enabled
+    }
+
+    /// Adds a manually-described model on the named provider — for models
+    /// outside the catalog and outside driver discovery. Inserts the freshly
+    /// enabled row into `enabledModels` (sorted) on success.
+    @discardableResult
+    public func addManualModel(
+        providerID: String,
+        modelID: String,
+        displayName: String,
+        contextWindow: Int32?,
+        maxOutputTokens: Int32?,
+        pricing: ClarkModelPricing?,
+        modalities: [String],
+        capabilities: ClarkModelCapabilities?,
+        knowledgeCutoff: String?,
+        defaultSettings: ClarkCallSettings?
+    ) async throws -> ClarkUserModel {
+        let model = try await client.modelProviders.addManualModel(
+            providerID: providerID,
+            modelID: modelID,
+            displayName: displayName,
+            contextWindow: contextWindow,
+            maxOutputTokens: maxOutputTokens,
+            pricing: pricing,
+            modalities: modalities,
+            capabilities: capabilities,
+            knowledgeCutoff: knowledgeCutoff,
+            defaultSettings: defaultSettings
+        )
+        // Only add when this is the currently-selected provider; otherwise the
+        // caller will refresh through selectProvider on its own.
+        if selectedID == providerID {
+            enabledModels.removeAll { $0.modelID == model.modelID }
+            enabledModels.append(model)
+            enabledModels.sort { $0.displayName < $1.displayName }
+        }
+        return model
     }
 
     // MARK: - Test actions

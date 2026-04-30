@@ -26,6 +26,18 @@ public final class ProfilesViewModel {
     /// inside profile forms. Loaded lazily.
     public var availableModels: [ClarkUserModel] = []
     public var providerLabels: [String: String] = [:]
+    /// Provider driver type keyed by provider ID — used by the profile form
+    /// to pick the right CallSettings extension block (anthropic / openai /
+    /// google) based on the profile's default model.
+    public var providerTypes: [String: String] = [:]
+
+    /// Server's compiled-in plugin registry. Loaded lazily by
+    /// `loadPluginTypes()`. Sorted by display name.
+    public var pluginTypes: [ClarkPluginType] = []
+
+    /// Per-profile plugin pipeline keyed by profile id. Populated by
+    /// `loadPlugins(forProfileID:)` and replaced by `savePlugins(...)`.
+    public var profilePlugins: [String: [ClarkProfilePlugin]] = [:]
 
     public init(client: ClarkClient) { self.client = client }
 
@@ -61,6 +73,7 @@ public final class ProfilesViewModel {
         do {
             let providers = try await client.modelProviders.list()
             let labels = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.label) })
+            let types  = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.type) })
             let models = try await withThrowingTaskGroup(of: [ClarkUserModel].self) { group in
                 for p in providers {
                     group.addTask { try await self.client.modelProviders.listModels(providerID: p.id) }
@@ -70,6 +83,7 @@ public final class ProfilesViewModel {
                 return all.sorted { $0.displayName < $1.displayName }
             }
             providerLabels = labels
+            providerTypes = types
             availableModels = models
         } catch {
             // Non-fatal — picker just stays at whatever was loaded last.
@@ -93,7 +107,8 @@ public final class ProfilesViewModel {
             knowledgeCutoff: original.knowledgeCutoff,
             modalities: original.modalities,
             capabilities: original.capabilities,
-            favorite: newValue
+            favorite: newValue,
+            defaultSettings: original.defaultSettings
         )
         do {
             _ = try await client.modelProviders.toggleModelFavorite(providerID: providerID, modelID: modelID, favorite: newValue)
@@ -201,6 +216,40 @@ public final class ProfilesViewModel {
     /// True if any other profile lists this one as its parent.
     public func hasChildren(_ id: String) -> Bool {
         profiles.contains { $0.parentProfileID == id }
+    }
+
+    // MARK: - Plugins
+
+    /// Loads the server's plugin registry. Sorts the result by display name.
+    /// Errors land in `error` (the existing form error surface).
+    public func loadPluginTypes() async {
+        do {
+            let types = try await client.profiles.listPluginTypes()
+            pluginTypes = types.sorted { lhs, rhs in
+                let l = lhs.name // descriptor doesn't carry a separate display label,
+                let r = rhs.name // so sort by registered name (used as the title in UI).
+                return l.localizedCaseInsensitiveCompare(r) == .orderedAscending
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Loads the plugin pipeline for one profile and stashes it under
+    /// `profilePlugins[id]`.
+    public func loadPlugins(forProfileID id: String) async {
+        do {
+            profilePlugins[id] = try await client.profiles.getProfilePlugins(profileID: id)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Atomic replace. On success the stored slice for `id` is replaced by
+    /// the server-canonical list (with persisted ordinals).
+    public func savePlugins(forProfileID id: String, plugins: [ClarkProfilePlugin]) async throws {
+        let updated = try await client.profiles.setProfilePlugins(profileID: id, plugins: plugins)
+        profilePlugins[id] = updated
     }
 
     public func deleteSelected() async {

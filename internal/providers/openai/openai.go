@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	sdk "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -54,11 +55,16 @@ type Config struct {
 	// "groq", "openrouter". When empty, no enrichment happens and every
 	// model is returned with MetadataSource = SourceDriver.
 	CatalogProviderID string `json:"catalog_provider_id"`
-	// UseChatCompletions, if true, would route Send through the
-	// /v1/chat/completions endpoint instead of the Responses API. Not
-	// implemented in v1 — exposed in the struct so future versions can
-	// honour it without a config-shape break.
-	UseChatCompletions bool `json:"use_chat_completions,omitempty"`
+	// UseChatCompletions routes Send through the `/v1/chat/completions`
+	// endpoint instead of the Responses API. The Responses API is
+	// OpenAI-specific (api.openai.com) and not supported by most
+	// "openai-compatible" backends — Ollama, LM Studio, vLLM, and
+	// OpenRouter for many models only implement chat-completions. Default
+	// resolution: nil = auto (chat-completions unless base_url points at
+	// api.openai.com), true = force chat-completions, false = force
+	// Responses. Stored as `*bool` so JSON `null` / missing is
+	// distinguishable from explicit `false`.
+	UseChatCompletions *bool `json:"use_chat_completions,omitempty"`
 }
 
 // Driver is the live driver instance.
@@ -67,9 +73,43 @@ type Driver struct {
 	deps   providers.Deps
 	client sdk.Client
 
+	// chatCompletions is the resolved routing decision: true → use
+	// `/v1/chat/completions`, false → Responses API. Computed once in
+	// `New()` from `cfg.UseChatCompletions` (explicit override) and
+	// `cfg.BaseURL` (auto-detect). Send() reads this directly instead of
+	// re-resolving per request.
+	chatCompletions bool
+
 	// httpClient lets tests pin a custom *http.Client. The SDK accepts
 	// anything implementing option.HTTPClient; *http.Client satisfies it.
 	httpClient *http.Client
+}
+
+// resolveChatCompletions applies the routing rule:
+//
+//   - cfg.UseChatCompletions == nil  → chat-completions, unless base_url
+//     points at api.openai.com (in which case the official Responses API
+//     is the right path).
+//   - cfg.UseChatCompletions != nil → honour the explicit override.
+//
+// The default favours chat-completions because most backends users will
+// register (Ollama, LM Studio, vLLM, OpenRouter for many models, every
+// self-hosted gateway) only implement chat-completions. The Responses API
+// is OpenAI-specific.
+func resolveChatCompletions(cfg Config) bool {
+	if cfg.UseChatCompletions != nil {
+		return *cfg.UseChatCompletions
+	}
+	return !isOfficialOpenAIBaseURL(cfg.BaseURL)
+}
+
+// isOfficialOpenAIBaseURL reports whether the configured base_url points
+// at OpenAI's own endpoint. Match is permissive — the canonical form is
+// `https://api.openai.com/v1` but variations (trailing slashes, http vs
+// https, project-suffixed paths) all reach the same Responses API.
+func isOfficialOpenAIBaseURL(baseURL string) bool {
+	low := strings.ToLower(baseURL)
+	return strings.Contains(low, "api.openai.com")
 }
 
 // New constructs a Driver from a Config blob and injected deps.
@@ -93,8 +133,9 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 	}
 
 	d := &Driver{
-		cfg:  cfg,
-		deps: deps,
+		cfg:           cfg,
+		deps:          deps,
+		chatCompletions: resolveChatCompletions(cfg),
 	}
 
 	opts := []option.RequestOption{

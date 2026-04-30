@@ -502,9 +502,9 @@ public struct Clark_V1_PluginType: Sendable {
 
   public var description_p: String = String()
 
-  /// JSON Schema describing the per-instance config blob the plugin accepts.
-  /// Empty when the plugin doesn't implement Configurable.
-  public var configSchema: Data = Data()
+  /// Flat list of typed fields describing the per-instance config blob the
+  /// plugin accepts. Empty when the plugin doesn't implement Configurable.
+  public var configFields: [Clark_V1_ConfigField] = []
 
   public var capabilities: Clark_V1_PluginCapabilities {
     get {_capabilities ?? Clark_V1_PluginCapabilities()}
@@ -520,6 +520,98 @@ public struct Clark_V1_PluginType: Sendable {
   public init() {}
 
   fileprivate var _capabilities: Clark_V1_PluginCapabilities? = nil
+}
+
+/// ConfigField is one entry in a plugin's per-instance config descriptor.
+/// The list is flat — there's no nesting — so a UI can render a form by
+/// walking the array once.
+public struct Clark_V1_ConfigField: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var display: String = String()
+
+  public var description_p: String = String()
+
+  public var type: Clark_V1_ConfigField.TypeEnum = .unspecified
+
+  /// JSON-encoded default value (e.g. `1`, `"<choices>"`, `true`). Empty = no default.
+  public var defaultJson: String = String()
+
+  /// Populated only when type == SELECT.
+  public var options: [Clark_V1_ConfigOption] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public enum TypeEnum: SwiftProtobuf.Enum, Swift.CaseIterable {
+    public typealias RawValue = Int
+    case unspecified // = 0
+    case number // = 1
+    case text // = 2
+    case textarea // = 3
+    case boolean // = 4
+    case select // = 5
+    case UNRECOGNIZED(Int)
+
+    public init() {
+      self = .unspecified
+    }
+
+    public init?(rawValue: Int) {
+      switch rawValue {
+      case 0: self = .unspecified
+      case 1: self = .number
+      case 2: self = .text
+      case 3: self = .textarea
+      case 4: self = .boolean
+      case 5: self = .select
+      default: self = .UNRECOGNIZED(rawValue)
+      }
+    }
+
+    public var rawValue: Int {
+      switch self {
+      case .unspecified: return 0
+      case .number: return 1
+      case .text: return 2
+      case .textarea: return 3
+      case .boolean: return 4
+      case .select: return 5
+      case .UNRECOGNIZED(let i): return i
+      }
+    }
+
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    public static let allCases: [Clark_V1_ConfigField.TypeEnum] = [
+      .unspecified,
+      .number,
+      .text,
+      .textarea,
+      .boolean,
+      .select,
+    ]
+
+  }
+
+  public init() {}
+}
+
+/// ConfigOption is one entry in a SELECT field's options list.
+public struct Clark_V1_ConfigOption: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var value: String = String()
+
+  public var label: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// ProfilePlugin is one row in a profile's pipeline. On input to
@@ -1277,7 +1369,7 @@ extension Clark_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Clark_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_schema\0\u{1}capabilities\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1287,7 +1379,7 @@ extension Clark_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
-      case 3: try { try decoder.decodeSingularBytesField(value: &self.configSchema) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.configFields) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
       default: break
       }
@@ -1305,8 +1397,8 @@ extension Clark_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if !self.description_p.isEmpty {
       try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 2)
     }
-    if !self.configSchema.isEmpty {
-      try visitor.visitSingularBytesField(value: self.configSchema, fieldNumber: 3)
+    if !self.configFields.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.configFields, fieldNumber: 3)
     }
     try { if let v = self._capabilities {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
@@ -1317,8 +1409,102 @@ extension Clark_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   public static func ==(lhs: Clark_V1_PluginType, rhs: Clark_V1_PluginType) -> Bool {
     if lhs.name != rhs.name {return false}
     if lhs.description_p != rhs.description_p {return false}
-    if lhs.configSchema != rhs.configSchema {return false}
+    if lhs.configFields != rhs.configFields {return false}
     if lhs._capabilities != rhs._capabilities {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConfigField"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.display) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.type) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.defaultJson) }()
+      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.options) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.display.isEmpty {
+      try visitor.visitSingularStringField(value: self.display, fieldNumber: 2)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
+    }
+    if self.type != .unspecified {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 4)
+    }
+    if !self.defaultJson.isEmpty {
+      try visitor.visitSingularStringField(value: self.defaultJson, fieldNumber: 5)
+    }
+    if !self.options.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.options, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_ConfigField, rhs: Clark_V1_ConfigField) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.display != rhs.display {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.type != rhs.type {return false}
+    if lhs.defaultJson != rhs.defaultJson {return false}
+    if lhs.options != rhs.options {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Clark_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0")
+}
+
+extension Clark_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConfigOption"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0\u{1}label\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Clark_V1_ConfigOption, rhs: Clark_V1_ConfigOption) -> Bool {
+    if lhs.value != rhs.value {return false}
+    if lhs.label != rhs.label {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

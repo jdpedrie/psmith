@@ -10,17 +10,20 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
 	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
 	"github.com/jdpedrie/clark/internal/auth"
 	"github.com/jdpedrie/clark/internal/modelmeta"
+	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
 	"github.com/jdpedrie/clark/internal/store"
 )
@@ -67,25 +70,34 @@ func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[
 	out := make([]*clarkv1.ProviderTemplate, 0, len(provs))
 	for _, p := range provs {
 		var driverType string
+		// apiBase mirrors p.APIBase by default but a few drivers override
+		// it (the Google catalog row carries no api_base because Gemini's
+		// REST surface is a native driver, not an openai-compatible shim;
+		// we hard-code AI Studio's URL here so the UI has a sensible
+		// default to display).
+		apiBase := p.APIBase
 		switch {
 		case p.ID == "anthropic":
 			driverType = "anthropic"
 		case p.ID == "openai":
 			driverType = "openai-compatible"
+		case p.ID == "google":
+			driverType = "google"
+			if apiBase == "" {
+				apiBase = "https://generativelanguage.googleapis.com/v1beta"
+			}
 		case p.APIBase != "":
 			driverType = "openai-compatible"
 		default:
 			// Catalog providers without an api_base and no native driver
-			// (Google's Gemini being the notable case) are skipped here.
-			// Adding them would require a native driver; we don't want to
-			// route Gemini through its OpenAI-compatible shim.
+			// are skipped — we don't have a way to talk to them.
 			continue
 		}
 		tmpl := &clarkv1.ProviderTemplate{
 			CatalogProviderId: p.ID,
 			Name:              p.Name,
 			DriverType:        driverType,
-			ApiBase:           strPtr(p.APIBase),
+			ApiBase:           strPtr(apiBase),
 			EnvKey:            strPtr(p.EnvKey),
 			DocUrl:            strPtr(p.DocURL),
 		}
@@ -100,6 +112,12 @@ func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Requ
 	u := auth.MustFromContext(ctx)
 	if req.Msg.Type == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("type is required"))
+	}
+	// Validate the type up front so we don't accept dead rows that only fail
+	// later on `discoverModels` / `sendMessage`. Cleanup of an invalid row
+	// otherwise requires the user to delete it manually.
+	if !providers.IsRegistered(req.Msg.Type) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown provider type %q (registered: %v)", req.Msg.Type, providers.Types()))
 	}
 	if req.Msg.Label == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("label is required"))
@@ -182,6 +200,21 @@ func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Requ
 		if err := s.queries.UpdateUserModelProviderConfig(ctx, store.UpdateUserModelProviderConfigParams{
 			ID:     row.ID,
 			Config: req.Msg.Config,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+	if req.Msg.DefaultSettings != nil {
+		// Replace semantics: marshal whatever the caller sent (including an
+		// empty CallSettings, which marshals to `{}` and clears any prior
+		// content). Unset on the request leaves the column untouched.
+		raw, err := profiles.MarshalCallSettings(req.Msg.DefaultSettings)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("marshal default_settings: %w", err))
+		}
+		if err := s.queries.UpdateUserModelProviderDefaultSettings(ctx, store.UpdateUserModelProviderDefaultSettingsParams{
+			ID:              row.ID,
+			DefaultSettings: raw,
 		}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
@@ -455,6 +488,208 @@ func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Requ
 	}), nil
 }
 
+// --- UpdateUserModel ---
+
+// UpdateUserModel mutates fields on an enabled user model row. Every
+// metadata field is independently optional — present overwrites, absent
+// leaves the column untouched. The wire `model_id` is the row key and is
+// never updatable; ToggleUserModelFavorite owns the favorite flag.
+//
+// The model row must already exist on the named provider — callers can't
+// create one here. Verification is symmetrical to ToggleUserModelFavorite:
+// own the parent provider, model row exists.
+//
+// Implementation note: rather than maintain a sparse SQL UPDATE with a
+// COALESCE column per field, we read the existing row, apply the requested
+// changes in-memory, then re-call UpsertUserModel with the full set. The
+// merge is one place, easy to read, and stays in sync as the row grows
+// new columns.
+func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[clarkv1.UpdateUserModelRequest]) (*connect.Response[clarkv1.UpdateUserModelResponse], error) {
+	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.ModelId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
+	}
+	existing, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("model not enabled on this provider"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	params := store.UpsertUserModelParams{
+		UserModelProviderID:   row.ID,
+		ModelID:               existing.ModelID,
+		DisplayName:           existing.DisplayName,
+		ContextWindow:         existing.ContextWindow,
+		MaxOutputTokens:       existing.MaxOutputTokens,
+		InputPricePerMillion:  existing.InputPricePerMillion,
+		OutputPricePerMillion: existing.OutputPricePerMillion,
+		CacheReadPerMillion:   existing.CacheReadPerMillion,
+		CacheWritePerMillion:  existing.CacheWritePerMillion,
+		KnowledgeCutoff:       existing.KnowledgeCutoff,
+		Modalities:            existing.Modalities,
+		Capabilities:          existing.Capabilities,
+		DefaultSettings:       existing.DefaultSettings,
+		MetadataSource:        existing.MetadataSource,
+		MetadataSnapshotAt:    time.Now().UTC(),
+	}
+	if req.Msg.DisplayName != nil {
+		dn := strings.TrimSpace(req.Msg.GetDisplayName())
+		if dn == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("display_name cannot be empty"))
+		}
+		params.DisplayName = dn
+	}
+	// Clear flags win over set values — UI sends clear=true with the value
+	// field unset to revert the column to NULL.
+	if req.Msg.ClearContextWindow {
+		params.ContextWindow = nil
+	} else if req.Msg.ContextWindow != nil {
+		v := req.Msg.GetContextWindow()
+		params.ContextWindow = &v
+	}
+	if req.Msg.ClearMaxOutputTokens {
+		params.MaxOutputTokens = nil
+	} else if req.Msg.MaxOutputTokens != nil {
+		v := req.Msg.GetMaxOutputTokens()
+		params.MaxOutputTokens = &v
+	}
+	if p := req.Msg.Pricing; p != nil {
+		// Pricing is replace-block: any subfield not set on the incoming
+		// ModelPricing means "clear that subfield" (matches AddManualModel
+		// semantics where a Pricing object always carries its full intent).
+		params.InputPricePerMillion = p.InputPerMillionTokens
+		params.OutputPricePerMillion = p.OutputPerMillionTokens
+		params.CacheReadPerMillion = p.CacheReadPerMillionTokens
+		params.CacheWritePerMillion = p.CacheWritePerMillionTokens
+	}
+	if c := req.Msg.Capabilities; c != nil {
+		capJSON, err := json.Marshal(modelmeta.Capabilities{
+			Streaming:     c.Streaming,
+			Thinking:      c.Thinking,
+			ToolUse:       c.ToolUse,
+			Vision:        c.Vision,
+			PromptCaching: c.PromptCaching,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal capabilities: %w", err))
+		}
+		params.Capabilities = capJSON
+	}
+	if req.Msg.UpdateModalities {
+		// Always-replace semantics — empty array means "no modalities".
+		params.Modalities = req.Msg.Modalities
+	}
+	if req.Msg.ClearKnowledgeCutoff {
+		params.KnowledgeCutoff = pgtype.Date{}
+	} else if req.Msg.KnowledgeCutoff != nil {
+		params.KnowledgeCutoff = dateFromString(req.Msg.GetKnowledgeCutoff())
+	}
+	if req.Msg.DefaultSettings != nil {
+		raw, err := profiles.MarshalCallSettings(req.Msg.DefaultSettings)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("marshal default_settings: %w", err))
+		}
+		params.DefaultSettings = raw
+	}
+
+	written, err := s.queries.UpsertUserModel(ctx, params)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&clarkv1.UpdateUserModelResponse{
+		UserModel: storeUserModelToProto(written),
+	}), nil
+}
+
+// --- AddManualModel ---
+
+// AddManualModel registers a user-described model on a provider for which
+// driver discovery / catalog lookup didn't surface it. Stores every metadata
+// field verbatim with `metadata_source = manual`. Errors:
+//   - InvalidArgument when model_id or display_name is empty.
+//   - NotFound when the provider doesn't belong to the caller (or doesn't exist).
+//   - AlreadyExists when (provider_id, model_id) is already enabled. The user
+//     should call UpdateUserModel (when implemented for snapshot fields) or
+//     DisableModels first.
+func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[clarkv1.AddManualModelRequest]) (*connect.Response[clarkv1.AddManualModelResponse], error) {
+	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.ModelId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
+	}
+	if req.Msg.DisplayName == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("display_name is required"))
+	}
+
+	// Reject duplicates explicitly — UpsertUserModel would overwrite the
+	// existing snapshot, which is surprising for an "Add" RPC.
+	if _, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+	}); err == nil {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("model already enabled on this provider"))
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	now := time.Now().UTC()
+	params := store.UpsertUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+		DisplayName:         req.Msg.DisplayName,
+		ContextWindow:       req.Msg.ContextWindow,
+		MaxOutputTokens:     req.Msg.MaxOutputTokens,
+		KnowledgeCutoff:     dateFromString(req.Msg.GetKnowledgeCutoff()),
+		Modalities:          req.Msg.Modalities,
+		MetadataSource:      string(modelmeta.SourceManual),
+		MetadataSnapshotAt:  now,
+	}
+	if p := req.Msg.Pricing; p != nil {
+		params.InputPricePerMillion = p.InputPerMillionTokens
+		params.OutputPricePerMillion = p.OutputPerMillionTokens
+		params.CacheReadPerMillion = p.CacheReadPerMillionTokens
+		params.CacheWritePerMillion = p.CacheWritePerMillionTokens
+	}
+	if c := req.Msg.Capabilities; c != nil {
+		capJSON, err := json.Marshal(modelmeta.Capabilities{
+			Streaming:     c.Streaming,
+			Thinking:      c.Thinking,
+			ToolUse:       c.ToolUse,
+			Vision:        c.Vision,
+			PromptCaching: c.PromptCaching,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal capabilities: %w", err))
+		}
+		params.Capabilities = capJSON
+	}
+	if ds := req.Msg.DefaultSettings; ds != nil {
+		raw, err := profiles.MarshalCallSettings(ds)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("marshal default_settings: %w", err))
+		}
+		params.DefaultSettings = raw
+	}
+
+	written, err := s.queries.UpsertUserModel(ctx, params)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&clarkv1.AddManualModelResponse{
+		UserModel: storeUserModelToProto(written),
+	}), nil
+}
+
 // --- Catalog ---
 
 func (s *Service) RefreshModelCatalog(ctx context.Context, _ *connect.Request[clarkv1.RefreshModelCatalogRequest]) (*connect.Response[clarkv1.RefreshModelCatalogResponse], error) {
@@ -528,6 +763,8 @@ func configCatalogProviderID(driverType string, config []byte) string {
 	switch driverType {
 	case "anthropic":
 		return "anthropic"
+	case "google":
+		return "google"
 	case "openai-compatible":
 		var c struct {
 			CatalogProviderID string `json:"catalog_provider_id"`

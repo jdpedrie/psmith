@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
 	"github.com/jdpedrie/clark/internal/auth"
 	"github.com/jdpedrie/clark/internal/modelmeta"
+	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
 	"github.com/jdpedrie/clark/internal/store"
 	"github.com/jdpedrie/clark/internal/stream"
@@ -28,6 +30,11 @@ type fakeStatelessDriver struct {
 	typeName string
 	chunks   []providers.Chunk
 	sendErr  error
+	// Last request received by Send. Captured under mu for tests that want
+	// to inspect what the driver was handed (settings, conversation_id,
+	// wire prefix). Per-instance, fine for the single-Send tests we run.
+	mu          sync.Mutex
+	lastRequest *providers.SendRequest
 }
 
 func (f *fakeStatelessDriver) Type() string                                            { return f.typeName }
@@ -35,7 +42,11 @@ func (f *fakeStatelessDriver) Stateful() bool                                   
 func (f *fakeStatelessDriver) DiscoverModels(_ context.Context) ([]providers.Model, error) { return nil, nil }
 func (f *fakeStatelessDriver) RenderThinkingToText(_ json.RawMessage) string           { return "" }
 
-func (f *fakeStatelessDriver) Send(_ context.Context, _ providers.SendRequest) (<-chan providers.Chunk, error) {
+func (f *fakeStatelessDriver) Send(_ context.Context, req providers.SendRequest) (<-chan providers.Chunk, error) {
+	f.mu.Lock()
+	cp := req
+	f.lastRequest = &cp
+	f.mu.Unlock()
 	if f.sendErr != nil {
 		return nil, f.sendErr
 	}
@@ -55,13 +66,33 @@ func uniqueDriverName(t *testing.T, prefix string) string {
 	return prefix + "-" + n
 }
 
+// driverByType lets tests recover the fake driver instance that was built
+// from a registered type. Indexed at registration so we can fetch the
+// captured request after SendMessage runs.
+var driverByType sync.Map
+
 func registerFakeDriver(t *testing.T, prefix string, chunks []providers.Chunk, sendErr error) string {
 	t.Helper()
 	typeName := uniqueDriverName(t, prefix)
 	providers.Register(typeName, func(_ providers.Deps, _ json.RawMessage) (providers.Provider, error) {
-		return &fakeStatelessDriver{typeName: typeName, chunks: chunks, sendErr: sendErr}, nil
+		// One driver instance per Build so each test gets a fresh
+		// lastRequest; we cache *the latest one* in the global map.
+		d := &fakeStatelessDriver{typeName: typeName, chunks: chunks, sendErr: sendErr}
+		driverByType.Store(typeName, d)
+		return d, nil
 	})
 	return typeName
+}
+
+// fetchDriver pulls the last-built fake driver for a type. Test must call
+// after SendMessage so the driver has actually been instantiated.
+func fetchDriver(t *testing.T, typeName string) *fakeStatelessDriver {
+	t.Helper()
+	v, ok := driverByType.Load(typeName)
+	if !ok {
+		t.Fatalf("no driver registered for type %q", typeName)
+	}
+	return v.(*fakeStatelessDriver)
 }
 
 // --- test scaffolding ---
@@ -432,6 +463,125 @@ func TestSendMessage_DriverSendFails(t *testing.T) {
 }
 
 // --- nil deps ---
+
+// TestSendMessage_FourLayerCallSettingsMerge sets temperature on the
+// provider, top_p on the model, max_tokens on the profile, and overrides
+// temperature on the conversation. Asserts the driver receives:
+//
+//	temperature → 0.7  (conversation; overrides provider's 0.4)
+//	top_p       → 0.9  (model)
+//	max_tokens  → 4096 (profile)
+//
+// This exercises every layer of the resolution chain and the per-field
+// sparse merge across them.
+func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "merge",
+		[]providers.Chunk{textChunk("ok"), doneChunk()}, nil)
+	f := seedSendable(t, q, driverType)
+
+	ctx := context.Background()
+
+	// Layer 4 (lowest): provider sets temperature=0.4.
+	provCS := &clarkv1.CallSettings{Temperature: f64ptr(0.4)}
+	provBlob, err := profiles.MarshalCallSettings(provCS)
+	if err != nil {
+		t.Fatalf("marshal provider cs: %v", err)
+	}
+	if err := q.UpdateUserModelProviderDefaultSettings(ctx, store.UpdateUserModelProviderDefaultSettingsParams{
+		ID: f.provider.ID, DefaultSettings: provBlob,
+	}); err != nil {
+		t.Fatalf("update provider settings: %v", err)
+	}
+
+	// Layer 3: model sets top_p=0.9.
+	modelCS := &clarkv1.CallSettings{TopP: f64ptr(0.9)}
+	modelBlob, err := profiles.MarshalCallSettings(modelCS)
+	if err != nil {
+		t.Fatalf("marshal model cs: %v", err)
+	}
+	// Overwrite the user_model row with the new default_settings. The
+	// fixture upserts with empty defaults; we re-upsert with the blob.
+	if _, err := q.UpsertUserModel(ctx, store.UpsertUserModelParams{
+		UserModelProviderID: f.provider.ID,
+		ModelID:             f.modelID,
+		DisplayName:         "Fake Model",
+		MetadataSource:      "manual",
+		MetadataSnapshotAt:  time.Now().UTC(),
+		DefaultSettings:     modelBlob,
+	}); err != nil {
+		t.Fatalf("upsert model: %v", err)
+	}
+
+	// Layer 2: profile sets max_output_tokens=4096 inside default_settings.call_settings.
+	profileCS := &clarkv1.CallSettings{MaxOutputTokens: i32ptr(4096)}
+	profileCSBlob, err := profiles.MarshalCallSettings(profileCS)
+	if err != nil {
+		t.Fatalf("marshal profile cs: %v", err)
+	}
+	wrapper := struct {
+		CallSettings json.RawMessage `json:"call_settings"`
+	}{CallSettings: profileCSBlob}
+	profileBlob, err := json.Marshal(wrapper)
+	if err != nil {
+		t.Fatalf("marshal profile wrapper: %v", err)
+	}
+	if err := q.UpdateProfileDefaultSettings(ctx, store.UpdateProfileDefaultSettingsParams{
+		ID: f.profile.ID, DefaultSettings: profileBlob,
+	}); err != nil {
+		t.Fatalf("update profile defaults: %v", err)
+	}
+
+	// Layer 1 (highest): conversation overrides temperature=0.7.
+	convCS := &clarkv1.ConversationSettings{
+		CallSettings: &clarkv1.CallSettings{Temperature: f64ptr(0.7)},
+	}
+	convBlob, err := json.Marshal(convCS)
+	if err != nil {
+		t.Fatalf("marshal conv settings: %v", err)
+	}
+	if err := q.UpdateConversationSettings(ctx, store.UpdateConversationSettingsParams{
+		ID: f.conv.ID, Settings: convBlob,
+	}); err != nil {
+		t.Fatalf("update conv settings: %v", err)
+	}
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	if _, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hello",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	})); err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+
+	d := fetchDriver(t, driverType)
+	d.mu.Lock()
+	got := d.lastRequest
+	d.mu.Unlock()
+	if got == nil {
+		t.Fatal("driver never received a Send call")
+	}
+	cs := got.Settings
+	if cs.Temperature == nil || *cs.Temperature != 0.7 {
+		t.Errorf("temperature: %v want 0.7 (conversation override)", cs.Temperature)
+	}
+	if cs.TopP == nil || *cs.TopP != 0.9 {
+		t.Errorf("top_p: %v want 0.9 (from model)", cs.TopP)
+	}
+	if cs.MaxOutputTokens == nil || *cs.MaxOutputTokens != 4096 {
+		t.Errorf("max_output_tokens: %v want 4096 (from profile)", cs.MaxOutputTokens)
+	}
+	if got.ConversationID != f.conv.ID.String() {
+		t.Errorf("conversation_id: %q want %q", got.ConversationID, f.conv.ID.String())
+	}
+}
+
+func f64ptr(v float64) *float64 { return &v }
+func i32ptr(v int32) *int32     { return &v }
 
 func TestSendMessage_NoSupervisor_Unimplemented(t *testing.T) {
 	t.Parallel()

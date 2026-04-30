@@ -38,7 +38,7 @@ type Plugin interface {
 //
 // Constructors must accept a nil/empty config blob and return a usable
 // instance with default values populated. Describe relies on this contract
-// to introspect plugin metadata (capabilities + ConfigSchema) without
+// to introspect plugin metadata (capabilities + ConfigFields) without
 // needing a hand-crafted sample config per plugin.
 type Constructor func(configBytes json.RawMessage) (Plugin, error)
 
@@ -46,13 +46,44 @@ type Constructor func(configBytes json.RawMessage) (Plugin, error)
 // Opt-in capability interfaces.
 // ---------------------------------------------------------------------------
 
+// ConfigFieldType is the small enumeration of input shapes supported by the
+// UI form-builder. The plugin's constructor remains the authoritative
+// validator at runtime; ConfigFields is only a hint to render a form.
+type ConfigFieldType string
+
+const (
+	ConfigFieldNumber   ConfigFieldType = "number"
+	ConfigFieldText     ConfigFieldType = "text"
+	ConfigFieldTextarea ConfigFieldType = "textarea"
+	ConfigFieldBoolean  ConfigFieldType = "boolean"
+	ConfigFieldSelect   ConfigFieldType = "select"
+)
+
+// ConfigField describes one entry in a plugin's per-instance config shape.
+// The list is flat — there's no nesting. Default is JSON-marshaled when
+// shipped over the wire; nil means "no default."
+type ConfigField struct {
+	Name        string
+	Display     string
+	Description string
+	Type        ConfigFieldType
+	Default     any            // JSON-marshaled when sent over the wire; nil = no default
+	Options     []ConfigOption // only when Type==ConfigFieldSelect
+}
+
+// ConfigOption is one entry in a select field's options list.
+type ConfigOption struct {
+	Value string
+	Label string
+}
+
 // Configurable lets the system introspect the plugin's per-instance config
 // shape. Plugins without configuration don't implement this.
 type Configurable interface {
-	// ConfigSchema returns a JSON Schema describing the config blob the
-	// constructor accepts. Used by UIs to render config forms and by the
-	// server to validate config on enable.
-	ConfigSchema() []byte
+	// ConfigFields returns a flat list of typed fields describing the config
+	// blob the constructor accepts. Used by UIs to render config forms; the
+	// constructor remains the source of truth for runtime validation.
+	ConfigFields() []ConfigField
 }
 
 // SystemPrompter contributes to the system slot at prefix-build time.
@@ -334,13 +365,13 @@ type Capabilities struct {
 type TypeDescriptor struct {
 	Name         string
 	Description  string
-	ConfigSchema []byte // empty unless the plugin implements Configurable
+	ConfigFields []ConfigField // empty unless the plugin implements Configurable
 	Capabilities Capabilities
 }
 
 // Describe instantiates the plugin with a nil config (the Constructor
 // contract requires nil to be accepted) and reports its name, description,
-// capability set, and config schema.
+// capability set, and config field descriptors.
 func Describe(name string) (TypeDescriptor, error) {
 	inst, err := Build(name, nil)
 	if err != nil {
@@ -352,7 +383,7 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if c, ok := inst.(Configurable); ok {
 		desc.Capabilities.Configurable = true
-		desc.ConfigSchema = c.ConfigSchema()
+		desc.ConfigFields = c.ConfigFields()
 	}
 	if _, ok := inst.(SystemPrompter); ok {
 		desc.Capabilities.SystemPrompter = true

@@ -605,10 +605,14 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[cl
 
 // pluginTypeToProto converts a plugins.TypeDescriptor to its proto shape.
 func pluginTypeToProto(d plugins.TypeDescriptor) *clarkv1.PluginType {
+	fields := make([]*clarkv1.ConfigField, 0, len(d.ConfigFields))
+	for _, f := range d.ConfigFields {
+		fields = append(fields, configFieldToProto(f))
+	}
 	return &clarkv1.PluginType{
 		Name:         d.Name,
 		Description:  d.Description,
-		ConfigSchema: d.ConfigSchema,
+		ConfigFields: fields,
 		Capabilities: &clarkv1.PluginCapabilities{
 			Configurable:            d.Capabilities.Configurable,
 			SystemPrompter:          d.Capabilities.SystemPrompter,
@@ -618,6 +622,54 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *clarkv1.PluginType {
 			DisplayTransformer:      d.Capabilities.DisplayTransformer,
 			ToolProvider:            d.Capabilities.ToolProvider,
 		},
+	}
+}
+
+// configFieldToProto converts one plugins.ConfigField to its proto shape.
+// The Default is JSON-marshaled into default_json; nil becomes the empty
+// string (which the wire treats as "no default"). Unknown field types map
+// to TYPE_UNSPECIFIED so a malformed plugin descriptor surfaces as an
+// explicit zero-value rather than getting silently coerced.
+func configFieldToProto(f plugins.ConfigField) *clarkv1.ConfigField {
+	out := &clarkv1.ConfigField{
+		Name:        f.Name,
+		Display:     f.Display,
+		Description: f.Description,
+		Type:        configFieldTypeToProto(f.Type),
+	}
+	if f.Default != nil {
+		// json.Marshal on a typed value (int, string, bool) is total — the
+		// only way it errors is on unsupported kinds (channels, funcs), which
+		// shouldn't appear in a config-field default. If somehow it does, we
+		// fall back to empty so the UI gets "no default" instead of crashing.
+		if raw, err := json.Marshal(f.Default); err == nil {
+			out.DefaultJson = string(raw)
+		}
+	}
+	if len(f.Options) > 0 {
+		opts := make([]*clarkv1.ConfigOption, 0, len(f.Options))
+		for _, o := range f.Options {
+			opts = append(opts, &clarkv1.ConfigOption{Value: o.Value, Label: o.Label})
+		}
+		out.Options = opts
+	}
+	return out
+}
+
+func configFieldTypeToProto(t plugins.ConfigFieldType) clarkv1.ConfigField_Type {
+	switch t {
+	case plugins.ConfigFieldNumber:
+		return clarkv1.ConfigField_NUMBER
+	case plugins.ConfigFieldText:
+		return clarkv1.ConfigField_TEXT
+	case plugins.ConfigFieldTextarea:
+		return clarkv1.ConfigField_TEXTAREA
+	case plugins.ConfigFieldBoolean:
+		return clarkv1.ConfigField_BOOLEAN
+	case plugins.ConfigFieldSelect:
+		return clarkv1.ConfigField_SELECT
+	default:
+		return clarkv1.ConfigField_TYPE_UNSPECIFIED
 	}
 }
 
@@ -695,6 +747,13 @@ func defaultsToJSON(d *clarkv1.ProfileDefaults) ([]byte, error) {
 		DefaultModelID:           d.DefaultModelId,
 		IncludeThinkingInHistory: d.IncludeThinkingInHistory,
 	}
+	if d.CallSettings != nil {
+		raw, err := MarshalCallSettings(d.CallSettings)
+		if err != nil {
+			return nil, fmt.Errorf("encode call_settings: %w", err)
+		}
+		out.CallSettings = raw
+	}
 	return json.Marshal(out)
 }
 
@@ -708,17 +767,26 @@ func defaultsFromJSON(b []byte) (*clarkv1.ProfileDefaults, error) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("decode default_settings: %w", err)
 	}
-	return &clarkv1.ProfileDefaults{
+	out := &clarkv1.ProfileDefaults{
 		DefaultProviderId:        s.DefaultProviderID,
 		DefaultModelId:           s.DefaultModelID,
 		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
-	}, nil
+	}
+	if len(s.CallSettings) > 0 {
+		cs, err := UnmarshalCallSettings(s.CallSettings)
+		if err != nil {
+			return nil, fmt.Errorf("decode call_settings: %w", err)
+		}
+		out.CallSettings = cs
+	}
+	return out, nil
 }
 
 type defaultsStorage struct {
-	DefaultProviderID        *string `json:"default_provider_id,omitempty"`
-	DefaultModelID           *string `json:"default_model_id,omitempty"`
-	IncludeThinkingInHistory *bool   `json:"include_thinking_in_history,omitempty"`
+	DefaultProviderID        *string         `json:"default_provider_id,omitempty"`
+	DefaultModelID           *string         `json:"default_model_id,omitempty"`
+	IncludeThinkingInHistory *bool           `json:"include_thinking_in_history,omitempty"`
+	CallSettings             json.RawMessage `json:"call_settings,omitempty"`
 }
 
 func profileToProto(p store.Profile) (*clarkv1.Profile, error) {

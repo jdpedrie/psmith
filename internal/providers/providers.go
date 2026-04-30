@@ -61,6 +61,13 @@ type SendRequest struct {
 	ModelID  string
 	Messages []WireMessage
 	Settings CallSettings
+	// ConversationID is the ID of the conversation this turn belongs to,
+	// threaded through so drivers can use it as a provider-specific cache
+	// key (OpenAI's prompt_cache_key, etc). Empty for off-conversation
+	// invocations such as compression turns. Stringified UUID rather than
+	// a typed uuid.UUID so the providers package stays free of the
+	// google/uuid dependency on the request boundary.
+	ConversationID string
 }
 
 // WireMessage is the shape providers actually see.
@@ -70,14 +77,125 @@ type WireMessage struct {
 	Thinking json.RawMessage // native shape; non-nil only on same-provider sends with thinking enabled
 }
 
-// CallSettings carries per-turn provider settings.
+// CallSettings carries per-turn provider settings. The shape mirrors the
+// `clark.v1.CallSettings` proto (a hybrid common-core + provider-specific
+// design); see proto/clark/v1/types.proto for field-level documentation.
+//
+// Drivers translate the subset of fields they support and silently drop the
+// rest. The 4-layer resolution chain
+// (conversation > profile > model > provider) sparse-merges these structs
+// before dispatch — see internal/profiles/callsettings.go.
 type CallSettings struct {
-	Temperature          *float64
-	MaxOutputTokens      *int
-	ThinkingEnabled      *bool
-	ThinkingBudgetTokens *int
-	Extras               json.RawMessage // provider-specific knobs
+	// --- Common (all three providers) ---
+	Temperature     *float64
+	TopP            *float64
+	MaxOutputTokens *int
+	StopSequences   []string
+
+	// --- Two-of-three (Anthropic + Google) ---
+	TopK *int
+
+	// --- Universal "thinking" knob, translated per driver ---
+	Thinking *ThinkingSettings
+
+	// --- Provider-specific extension blocks ---
+	Anthropic *AnthropicExtras
+	OpenAI    *OpenAIExtras
+	Google    *GoogleExtras
 }
+
+// ThinkingSettings mirrors clark.v1.ThinkingSettings.
+type ThinkingSettings struct {
+	Enabled      *bool
+	BudgetTokens *int
+}
+
+// AnthropicExtras carries Anthropic-specific knobs that don't fit the
+// cross-provider common surface. Mirrors clark.v1.AnthropicExtras.
+type AnthropicExtras struct {
+	// CacheEnabled, when non-nil and false, instructs the driver to skip
+	// the auto cache_control marker placement entirely. nil = inherit
+	// (default behaviour: caching enabled).
+	CacheEnabled *bool
+	// CacheTTL selects the ephemeral cache TTL tier. Zero value
+	// (CacheTTLUnspecified) = the SDK / API default (5 minutes).
+	CacheTTL CacheTTL
+}
+
+// CacheTTL is the Anthropic ephemeral-cache TTL tier. Zero value =
+// unspecified, which the driver interprets as the API default (5m).
+type CacheTTL int
+
+const (
+	CacheTTLUnspecified CacheTTL = 0
+	CacheTTL5m          CacheTTL = 1
+	CacheTTL1h          CacheTTL = 2
+)
+
+// OpenAIExtras carries OpenAI-specific generation knobs.
+type OpenAIExtras struct {
+	Seed              *int
+	FrequencyPenalty  *float64
+	PresencePenalty   *float64
+	TopLogprobs       *int
+	ParallelToolCalls *bool
+	ServiceTier       *ServiceTier
+	ResponseFormat    *ResponseFormat
+	LogitBias         map[int32]float64
+}
+
+// ServiceTier is the OpenAI service-tier selector. Zero value = unspecified.
+type ServiceTier int
+
+const (
+	ServiceTierUnspecified ServiceTier = 0
+	ServiceTierAuto        ServiceTier = 1
+	ServiceTierStandard    ServiceTier = 2
+	ServiceTierPriority    ServiceTier = 3
+)
+
+// ResponseFormat is the OpenAI response-format selector. Exactly one of the
+// pointer fields is non-nil (oneof semantics on the wire).
+type ResponseFormat struct {
+	Text       *bool
+	JSONObject *bool
+	JSONSchema *JSONSchema
+}
+
+// JSONSchema is the OpenAI structured-output schema block.
+type JSONSchema struct {
+	Name        string
+	Description *string
+	Schema      []byte // raw JSON Schema bytes
+	Strict      *bool
+}
+
+// GoogleExtras carries Gemini-specific generation knobs.
+type GoogleExtras struct {
+	SafetySettings   *SafetySettings
+	ResponseMimeType *string
+	ResponseSchema   []byte
+	CandidateCount   *int
+}
+
+// SafetySettings mirrors clark.v1.SafetySettings.
+type SafetySettings struct {
+	Harassment       *HarmThreshold
+	HateSpeech       *HarmThreshold
+	SexuallyExplicit *HarmThreshold
+	DangerousContent *HarmThreshold
+}
+
+// HarmThreshold mirrors clark.v1.HarmThreshold.
+type HarmThreshold int
+
+const (
+	HarmThresholdUnspecified       HarmThreshold = 0
+	HarmThresholdBlockNone         HarmThreshold = 1
+	HarmThresholdBlockLowAndAbove  HarmThreshold = 2
+	HarmThresholdBlockMediumAndAbove HarmThreshold = 3
+	HarmThresholdBlockOnlyHigh     HarmThreshold = 4
+)
 
 // Chunk is the normalized streaming output type.
 //
@@ -167,6 +285,14 @@ func Build(typeName string, deps Deps, config json.RawMessage) (Provider, error)
 		return nil, fmt.Errorf("providers: unknown type %q", typeName)
 	}
 	return c(deps, config)
+}
+
+// IsRegistered reports whether a provider type is in the registry.
+// Used by the management RPCs to validate `type` at create time so we
+// don't persist dead rows that only fail later on driver-touching paths.
+func IsRegistered(typeName string) bool {
+	_, ok := registry[typeName]
+	return ok
 }
 
 // Types returns the names of all registered provider types.

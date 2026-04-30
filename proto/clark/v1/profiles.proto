@@ -125,10 +125,38 @@ message PluginCapabilities {
 message PluginType {
   string name = 1;
   string description = 2;
-  // JSON Schema describing the per-instance config blob the plugin accepts.
-  // Empty when the plugin doesn't implement Configurable.
-  bytes config_schema = 3;
+  // Flat list of typed fields describing the per-instance config blob the
+  // plugin accepts. Empty when the plugin doesn't implement Configurable.
+  repeated ConfigField config_fields = 3;
   PluginCapabilities capabilities = 4;
+}
+
+// ConfigField is one entry in a plugin's per-instance config descriptor.
+// The list is flat — there's no nesting — so a UI can render a form by
+// walking the array once.
+message ConfigField {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    NUMBER = 1;
+    TEXT = 2;
+    TEXTAREA = 3;
+    BOOLEAN = 4;
+    SELECT = 5;
+  }
+  string name = 1;
+  string display = 2;
+  string description = 3;
+  Type type = 4;
+  // JSON-encoded default value (e.g. `1`, `"<choices>"`, `true`). Empty = no default.
+  string default_json = 5;
+  // Populated only when type == SELECT.
+  repeated ConfigOption options = 6;
+}
+
+// ConfigOption is one entry in a SELECT field's options list.
+message ConfigOption {
+  string value = 1;
+  string label = 2;
 }
 
 // ProfilePlugin is one row in a profile's pipeline. On input to

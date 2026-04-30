@@ -47,3 +47,12 @@ WHERE user_model_provider_id = $1 AND model_id = $2;
 UPDATE user_models
 SET favorite = $3
 WHERE user_model_provider_id = $1 AND model_id = $2;
+
+-- name: UpdateUserModelDefaultSettings :exec
+-- Replaces (not merges) the per-model default_settings JSONB blob. NULL
+-- clears it. metadata_snapshot_at is bumped so consumers polling for row
+-- changes notice the update — the row's metadata identity hasn't changed,
+-- but its effective behavior has.
+UPDATE user_models
+SET default_settings = $3, metadata_snapshot_at = NOW()
+WHERE user_model_provider_id = $1 AND model_id = $2;

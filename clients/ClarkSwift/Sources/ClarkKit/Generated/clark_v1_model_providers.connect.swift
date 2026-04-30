@@ -64,6 +64,21 @@ public protocol Clark_V1_ModelProvidersServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `toggleUserModelFavorite`(request: Clark_V1_ToggleUserModelFavoriteRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_ToggleUserModelFavoriteResponse>
 
+    /// Mutate fields on an enabled user model. Currently only `default_settings`
+    /// is writable (per-model default CallSettings layer). The model row must
+    /// already exist (callers can't update a model they haven't enabled).
+    @available(iOS 13, *)
+    func `updateUserModel`(request: Clark_V1_UpdateUserModelRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_UpdateUserModelResponse>
+
+    /// Add a manually-described model to a user provider. For models not in
+    /// the catalog and not surfaced by driver discovery — e.g. private
+    /// fine-tunes, renamed-but-real models, or anything served by an
+    /// openai-compatible endpoint that doesn't list them via /v1/models. The
+    /// resulting row carries `metadata_source = 'manual'`. Caller must own the
+    /// provider; (provider_id, model_id) must not already exist.
+    @available(iOS 13, *)
+    func `addManualModel`(request: Clark_V1_AddManualModelRequest, headers: Connect.Headers) async -> ResponseMessage<Clark_V1_AddManualModelResponse>
+
     /// Verifies a provider's auth + reachability by calling DiscoverModels.
     /// Free for all current drivers (catalog/Anthropic static, openai-compatible
     /// /v1/models). Failures are reported in the response (ok=false) rather than
@@ -160,6 +175,16 @@ public final class Clark_V1_ModelProvidersServiceClient: Clark_V1_ModelProviders
     }
 
     @available(iOS 13, *)
+    public func `updateUserModel`(request: Clark_V1_UpdateUserModelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_UpdateUserModelResponse> {
+        return await self.client.unary(path: "/clark.v1.ModelProvidersService/UpdateUserModel", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `addManualModel`(request: Clark_V1_AddManualModelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_AddManualModelResponse> {
+        return await self.client.unary(path: "/clark.v1.ModelProvidersService/AddManualModel", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `testUserModelProvider`(request: Clark_V1_TestUserModelProviderRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Clark_V1_TestUserModelProviderResponse> {
         return await self.client.unary(path: "/clark.v1.ModelProvidersService/TestUserModelProvider", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -194,6 +219,8 @@ public final class Clark_V1_ModelProvidersServiceClient: Clark_V1_ModelProviders
             public static let listUserModels = Connect.MethodSpec(name: "ListUserModels", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let listAllUserModels = Connect.MethodSpec(name: "ListAllUserModels", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let toggleUserModelFavorite = Connect.MethodSpec(name: "ToggleUserModelFavorite", service: "clark.v1.ModelProvidersService", type: .unary)
+            public static let updateUserModel = Connect.MethodSpec(name: "UpdateUserModel", service: "clark.v1.ModelProvidersService", type: .unary)
+            public static let addManualModel = Connect.MethodSpec(name: "AddManualModel", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let testUserModelProvider = Connect.MethodSpec(name: "TestUserModelProvider", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let testUserModel = Connect.MethodSpec(name: "TestUserModel", service: "clark.v1.ModelProvidersService", type: .unary)
             public static let refreshModelCatalog = Connect.MethodSpec(name: "RefreshModelCatalog", service: "clark.v1.ModelProvidersService", type: .unary)

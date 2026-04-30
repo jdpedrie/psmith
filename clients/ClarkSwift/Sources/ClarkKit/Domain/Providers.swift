@@ -23,6 +23,22 @@ public struct ClarkProviderTemplate: Sendable, Identifiable, Hashable {
     public let apiBase: String?
     public let envKey: String?
     public let docURL: String?
+
+    public init(
+        catalogProviderID: String,
+        name: String,
+        driverType: String,
+        apiBase: String? = nil,
+        envKey: String? = nil,
+        docURL: String? = nil
+    ) {
+        self.catalogProviderID = catalogProviderID
+        self.name = name
+        self.driverType = driverType
+        self.apiBase = apiBase
+        self.envKey = envKey
+        self.docURL = docURL
+    }
 }
 
 extension ClarkProviderTemplate {
@@ -42,6 +58,25 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
     public let label: String
     public let createdAt: Date
     public let updatedAt: Date
+    /// Provider-level default CallSettings — bottom of the resolution chain.
+    /// Sparse: any unset field has no effect on the merge.
+    public let defaultSettings: ClarkCallSettings?
+
+    public init(
+        id: String,
+        type: String,
+        label: String,
+        createdAt: Date,
+        updatedAt: Date,
+        defaultSettings: ClarkCallSettings? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.label = label
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.defaultSettings = defaultSettings
+    }
 }
 
 extension ClarkUserModelProvider {
@@ -51,6 +86,7 @@ extension ClarkUserModelProvider {
         label     = p.label
         createdAt = p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
         updatedAt = p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0)
+        defaultSettings = p.hasDefaultSettings ? ClarkCallSettings(from: p.defaultSettings) : nil
     }
 }
 
@@ -59,6 +95,18 @@ public struct ClarkModelPricing: Sendable, Hashable {
     public let outputPerMillion: Double?
     public let cacheReadPerMillion: Double?
     public let cacheWritePerMillion: Double?
+
+    public init(
+        inputPerMillion: Double?,
+        outputPerMillion: Double?,
+        cacheReadPerMillion: Double?,
+        cacheWritePerMillion: Double?
+    ) {
+        self.inputPerMillion = inputPerMillion
+        self.outputPerMillion = outputPerMillion
+        self.cacheReadPerMillion = cacheReadPerMillion
+        self.cacheWritePerMillion = cacheWritePerMillion
+    }
 }
 
 extension ClarkModelPricing {
@@ -76,6 +124,20 @@ public struct ClarkModelCapabilities: Sendable, Hashable {
     public let toolUse: Bool
     public let vision: Bool
     public let promptCaching: Bool
+
+    public init(
+        streaming: Bool,
+        thinking: Bool,
+        toolUse: Bool,
+        vision: Bool,
+        promptCaching: Bool
+    ) {
+        self.streaming = streaming
+        self.thinking = thinking
+        self.toolUse = toolUse
+        self.vision = vision
+        self.promptCaching = promptCaching
+    }
 }
 
 extension ClarkModelCapabilities {
@@ -100,6 +162,10 @@ public struct ClarkUserModel: Sendable, Identifiable, Hashable {
     public let modalities: [String]
     public let capabilities: ClarkModelCapabilities?
     public let favorite: Bool
+    /// Per-model default CallSettings. Resolves below the profile layer in
+    /// the merge chain — a profile's `defaultSettings.callSettings` overrides
+    /// any field this layer sets.
+    public let defaultSettings: ClarkCallSettings?
 
     public init(
         providerID: String,
@@ -111,7 +177,8 @@ public struct ClarkUserModel: Sendable, Identifiable, Hashable {
         knowledgeCutoff: String?,
         modalities: [String],
         capabilities: ClarkModelCapabilities?,
-        favorite: Bool
+        favorite: Bool,
+        defaultSettings: ClarkCallSettings? = nil
     ) {
         self.providerID = providerID
         self.modelID = modelID
@@ -123,6 +190,7 @@ public struct ClarkUserModel: Sendable, Identifiable, Hashable {
         self.modalities = modalities
         self.capabilities = capabilities
         self.favorite = favorite
+        self.defaultSettings = defaultSettings
     }
 }
 
@@ -138,6 +206,7 @@ extension ClarkUserModel {
         modalities     = p.modalities
         capabilities   = p.hasCapabilities   ? ClarkModelCapabilities(from: p.capabilities) : nil
         favorite       = p.favorite
+        defaultSettings = p.hasDefaultSettings ? ClarkCallSettings(from: p.defaultSettings) : nil
     }
 }
 
@@ -149,6 +218,22 @@ public struct ClarkDiscoveredModel: Sendable, Identifiable, Hashable {
     public let pricing: ClarkModelPricing?
     public let capabilities: ClarkModelCapabilities?
     public let alreadyEnabled: Bool
+
+    public init(
+        modelID: String,
+        displayName: String,
+        contextWindow: Int32? = nil,
+        pricing: ClarkModelPricing? = nil,
+        capabilities: ClarkModelCapabilities? = nil,
+        alreadyEnabled: Bool = false
+    ) {
+        self.modelID = modelID
+        self.displayName = displayName
+        self.contextWindow = contextWindow
+        self.pricing = pricing
+        self.capabilities = capabilities
+        self.alreadyEnabled = alreadyEnabled
+    }
 }
 
 extension ClarkDiscoveredModel {

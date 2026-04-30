@@ -178,6 +178,13 @@ private struct ContextRow: View {
                     systemImage: "dollarsign.circle",
                     text: context.cumulativeCostUsd.formatted(.currency(code: "USD").precision(.fractionLength(4)))
                 )
+                // TODO(cache observability): when the server-side per-context
+                // aggregate is extended to expose cache_read_tokens summed
+                // over the context (and the input price for the involved
+                // model is known here), split this chip into "billed" vs
+                // "saved" to surface the cache delta. Today's
+                // `cumulativeCostUsd` already reflects the cached pricing,
+                // so without the savings figure there's nothing to split.
             }
             Spacer(minLength: 0)
         }

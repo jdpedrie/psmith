@@ -50,12 +50,21 @@ func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) {
 
 // validConfig returns a json.RawMessage that satisfies New's required
 // fields. base_url is filled in by the caller.
+//
+// Forces UseChatCompletions=false so tests routed through validConfig hit
+// the Responses-API path. The default routing (auto: chat-completions
+// unless base_url contains api.openai.com) would otherwise route these
+// tests to chat-completions since httptest base URLs are localhost.
+// Tests that want chat-completions explicitly opt in by constructing
+// their own Config with UseChatCompletions: boolPtr(true).
 func validConfig(t *testing.T, baseURL, catalogProviderID string) json.RawMessage {
 	t.Helper()
+	use := false
 	cfg := Config{
-		APIKey:            "test-key",
-		BaseURL:           baseURL,
-		CatalogProviderID: catalogProviderID,
+		APIKey:             "test-key",
+		BaseURL:            baseURL,
+		CatalogProviderID:  catalogProviderID,
+		UseChatCompletions: &use,
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
@@ -495,7 +504,7 @@ func TestSend_ChatCompletions_Streams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := Config{APIKey: "k", BaseURL: srv.URL, UseChatCompletions: true}
+	cfg := Config{APIKey: "k", BaseURL: srv.URL, UseChatCompletions: boolPtr(true)}
 	raw, _ := json.Marshal(cfg)
 	p, err := New(providers.Deps{}, raw)
 	if err != nil {
@@ -595,6 +604,278 @@ func TestRenderThinkingToText_NoPanicOnNil(t *testing.T) {
 		t.Errorf("nil thinking: got %q want empty", got)
 	}
 }
+
+// ---------- CallSettings translation -------------------------------------
+
+// captureRequest mounts a /chat/completions or /responses handler that
+// records the request body and emits a minimal terminal SSE so the driver
+// returns cleanly.
+func captureRequest(t *testing.T, path string, terminator string) (*httptest.Server, *string) {
+	t.Helper()
+	var captured string
+	mux := http.NewServeMux()
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 64*1024)
+		n, _ := r.Body.Read(buf)
+		captured = string(buf[:n])
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(terminator))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, &captured
+}
+
+func TestSend_ChatCompletions_AllNewFields(t *testing.T) {
+	const term = "data: {\"id\":\"x\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"gpt\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+	srv, captured := captureRequest(t, "/chat/completions", term)
+
+	cfg := Config{APIKey: "k", BaseURL: srv.URL, UseChatCompletions: boolPtr(true)}
+	raw, _ := json.Marshal(cfg)
+	p, err := New(providers.Deps{}, raw)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	seed := 42
+	freqPen := 0.5
+	presPen := -0.25
+	topL := 3
+	parTool := false
+	tier := providers.ServiceTierPriority
+	jsonObj := true
+	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+		ModelID:        "gpt-test",
+		ConversationID: "cv-12345",
+		Messages:       []providers.WireMessage{{Role: "user", Content: "hi"}},
+		Settings: providers.CallSettings{
+			Temperature:   f64Ptr(0.42),
+			TopP:          f64Ptr(0.9),
+			StopSequences: []string{"END"},
+			OpenAI: &providers.OpenAIExtras{
+				Seed:              &seed,
+				FrequencyPenalty:  &freqPen,
+				PresencePenalty:   &presPen,
+				TopLogprobs:       &topL,
+				ParallelToolCalls: &parTool,
+				ServiceTier:       &tier,
+				ResponseFormat: &providers.ResponseFormat{
+					JSONObject: &jsonObj,
+				},
+				LogitBias: map[int32]float64{50256: -100, 198: 1},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	body := *captured
+	checks := []struct {
+		name     string
+		fragment string
+	}{
+		{"temperature", `"temperature":0.42`},
+		{"top_p", `"top_p":0.9`},
+		{"stop", `"stop":["END"]`},
+		{"seed", `"seed":42`},
+		{"frequency_penalty", `"frequency_penalty":0.5`},
+		{"presence_penalty", `"presence_penalty":-0.25`},
+		{"top_logprobs", `"top_logprobs":3`},
+		{"logprobs", `"logprobs":true`},
+		{"parallel_tool_calls", `"parallel_tool_calls":false`},
+		{"service_tier", `"service_tier":"priority"`},
+		{"response_format json_object", `"type":"json_object"`},
+		{"prompt_cache_key", `"prompt_cache_key":"cv-12345"`},
+		{"logit_bias 50256", `"50256":-100`},
+		{"logit_bias 198", `"198":1`},
+	}
+	for _, c := range checks {
+		if !strings.Contains(body, c.fragment) {
+			t.Errorf("%s: expected fragment %q in body; body=%s", c.name, c.fragment, body)
+		}
+	}
+}
+
+// TestSend_ChatCompletions_JSONSchemaResponseFormat covers the json_schema
+// branch of the response_format oneof, which decodes the raw bytes into a
+// proper JSON value (so the SDK doesn't string-quote them on the wire).
+func TestSend_ChatCompletions_JSONSchemaResponseFormat(t *testing.T) {
+	const term = "data: {\"id\":\"x\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"gpt\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+	srv, captured := captureRequest(t, "/chat/completions", term)
+
+	cfg := Config{APIKey: "k", BaseURL: srv.URL, UseChatCompletions: boolPtr(true)}
+	raw, _ := json.Marshal(cfg)
+	p, err := New(providers.Deps{}, raw)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	desc := "shape of the answer"
+	strict := true
+	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+		ModelID:  "gpt-test",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+		Settings: providers.CallSettings{
+			OpenAI: &providers.OpenAIExtras{
+				ResponseFormat: &providers.ResponseFormat{
+					JSONSchema: &providers.JSONSchema{
+						Name:        "answer",
+						Description: &desc,
+						Strict:      &strict,
+						Schema:      []byte(`{"type":"object","properties":{"x":{"type":"integer"}}}`),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	body := *captured
+	if !strings.Contains(body, `"type":"json_schema"`) {
+		t.Errorf("expected json_schema type marker; body=%s", body)
+	}
+	if !strings.Contains(body, `"name":"answer"`) {
+		t.Errorf("expected schema name; body=%s", body)
+	}
+	if !strings.Contains(body, `"description":"shape of the answer"`) {
+		t.Errorf("expected schema description; body=%s", body)
+	}
+	if !strings.Contains(body, `"strict":true`) {
+		t.Errorf("expected strict=true; body=%s", body)
+	}
+	// Schema bytes must round-trip as a JSON object, NOT a quoted string.
+	if !strings.Contains(body, `"properties":{"x":{"type":"integer"}}`) {
+		t.Errorf("schema body should be inlined as JSON, not a string; body=%s", body)
+	}
+}
+
+func TestSend_Responses_AllNewFields(t *testing.T) {
+	srv, captured := captureRequest(t, "/v1/responses", "event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
+
+	p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	tier := providers.ServiceTierAuto
+	enabled := true
+	budget := 6000 // medium effort
+	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+		ModelID:        "gpt-5",
+		ConversationID: "conv-abc",
+		Messages: []providers.WireMessage{
+			{Role: "system", Content: "be brief"},
+			{Role: "user", Content: "hi"},
+		},
+		Settings: providers.CallSettings{
+			Temperature:   f64Ptr(0.3),
+			TopP:          f64Ptr(0.85),
+			Thinking:      &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &budget},
+			StopSequences: []string{"END"}, // dropped on Responses; should not error
+			OpenAI: &providers.OpenAIExtras{
+				ServiceTier: &tier,
+				// These should silently drop on Responses path.
+				FrequencyPenalty: f64Ptr(0.5),
+				PresencePenalty:  f64Ptr(-0.5),
+				TopLogprobs:      intPtr(3),
+				LogitBias:        map[int32]float64{50256: -10},
+				ResponseFormat: &providers.ResponseFormat{
+					JSONObject: boolPtr(true),
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	body := *captured
+	if !strings.Contains(body, `"temperature":0.3`) {
+		t.Errorf("temperature missing; body=%s", body)
+	}
+	if !strings.Contains(body, `"top_p":0.85`) {
+		t.Errorf("top_p missing; body=%s", body)
+	}
+	if !strings.Contains(body, `"prompt_cache_key":"conv-abc"`) {
+		t.Errorf("prompt_cache_key missing; body=%s", body)
+	}
+	if !strings.Contains(body, `"service_tier":"auto"`) {
+		t.Errorf("service_tier missing; body=%s", body)
+	}
+	if !strings.Contains(body, `"effort":"medium"`) {
+		t.Errorf("reasoning effort missing (budget=6000 should derive medium); body=%s", body)
+	}
+	// These should NOT appear in the body — Responses doesn't surface them.
+	for _, fragment := range []string{
+		`"frequency_penalty"`,
+		`"presence_penalty"`,
+		`"top_logprobs"`,
+		`"logit_bias"`,
+		`"response_format"`,
+	} {
+		if strings.Contains(body, fragment) {
+			t.Errorf("Responses body should NOT contain %s; body=%s", fragment, body)
+		}
+	}
+}
+
+// TestSend_Responses_ReasoningEffortFromBudget exercises the budget→effort
+// mapping (<2k → low, 2-8k → medium, >8k → high).
+func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
+	cases := []struct {
+		name   string
+		budget int
+		effort string
+	}{
+		{"low", 1500, "low"},
+		{"medium-low-edge", 2000, "medium"},
+		{"medium-high-edge", 8000, "medium"},
+		{"high", 12000, "high"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, captured := captureRequest(t, "/v1/responses",
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
+			p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			enabled := true
+			b := tc.budget
+			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+				ModelID:  "gpt-5",
+				Messages: []providers.WireMessage{{Role: "user", Content: "x"}},
+				Settings: providers.CallSettings{
+					Thinking: &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &b},
+				},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+			if !strings.Contains(*captured, `"effort":"`+tc.effort+`"`) {
+				t.Errorf("budget=%d expected effort=%s; body=%s", tc.budget, tc.effort, *captured)
+			}
+		})
+	}
+}
+
+func f64Ptr(v float64) *float64 { return &v }
+func intPtr(v int) *int         { return &v }
+func boolPtr(v bool) *bool      { return &v }
 
 // ---------- Registry round trip ------------------------------------------
 

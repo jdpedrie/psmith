@@ -197,11 +197,12 @@ type UserModel struct {
 }
 
 type UserModelProvider struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Type      string
-	Label     string
-	Config    []byte
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Type            string
+	Label           string
+	Config          []byte
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DefaultSettings []byte
 }

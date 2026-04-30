@@ -153,6 +153,14 @@ func sendChunk(ctx context.Context, out chan<- providers.Chunk, c providers.Chun
 // buildMessageParams translates Clark's WireMessage prefix + CallSettings
 // into the SDK's MessageNewParams. The system message (if any) is hoisted
 // out of the messages array — Anthropic carries it on a separate field.
+//
+// Auto prompt-caching: a single `cache_control: {type: "ephemeral"}` marker
+// is placed at the end of the *stable* prefix — i.e., the most recent
+// assistant turn before the new user message (or, if no assistant turn has
+// happened yet, the system block). The cache boundary moves forward by one
+// turn each time, so the cache stays warm across a chat. When the prefix is
+// just the new user message (no prior history), no marker is added — there
+// would be nothing to cache.
 func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error) {
 	out := sdk.MessageNewParams{
 		Model: sdk.Model(req.ModelID),
@@ -162,6 +170,12 @@ func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error)
 	if err != nil {
 		return sdk.MessageNewParams{}, err
 	}
+
+	// Place the auto cache_control marker before assigning to `out`.
+	// The mutator works in place on the slices we just built. Honors the
+	// per-conversation/profile/etc. AnthropicExtras toggle + TTL pick.
+	applyAutoCacheControl(systemBlocks, msgs, req.Settings.Anthropic)
+
 	out.Messages = msgs
 	if len(systemBlocks) > 0 {
 		out.System = systemBlocks
@@ -175,14 +189,94 @@ func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error)
 	if req.Settings.Temperature != nil {
 		out.Temperature = param.NewOpt(*req.Settings.Temperature)
 	}
-	if req.Settings.ThinkingEnabled != nil && *req.Settings.ThinkingEnabled {
+	if req.Settings.TopP != nil {
+		out.TopP = param.NewOpt(*req.Settings.TopP)
+	}
+	if req.Settings.TopK != nil {
+		out.TopK = param.NewOpt(int64(*req.Settings.TopK))
+	}
+	if len(req.Settings.StopSequences) > 0 {
+		out.StopSequences = append([]string(nil), req.Settings.StopSequences...)
+	}
+	if t := req.Settings.Thinking; t != nil && t.Enabled != nil && *t.Enabled {
 		budget := int64(0)
-		if req.Settings.ThinkingBudgetTokens != nil {
-			budget = int64(*req.Settings.ThinkingBudgetTokens)
+		if t.BudgetTokens != nil {
+			budget = int64(*t.BudgetTokens)
 		}
 		out.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
 	}
 	return out, nil
+}
+
+// applyAutoCacheControl marks the end of the stable prefix with an ephemeral
+// cache_control breakpoint. The "stable prefix" is everything up to but not
+// including the latest user turn (which is what the model is being asked to
+// respond to right now and changes every call).
+//
+// Placement priority:
+//  1. If the message list ends with `user` and there's a prior `assistant`
+//     turn, mark the LAST text block of that assistant turn.
+//  2. Otherwise, if there's any system block, mark the LAST one.
+//  3. Otherwise (only the new user turn, no system), don't mark anything —
+//     there's no stable prefix to cache.
+//
+// `extras` carries per-conversation overrides:
+//   - `CacheEnabled = false` → skip placement entirely (return immediately).
+//   - `CacheTTL = 1h` → emit `"ttl":"1h"` on the breakpoint via the SDK's
+//     extra-fields escape hatch (the v1.4 SDK doesn't expose `ttl` on the
+//     non-beta `CacheControlEphemeralParam` struct directly).
+//   - default / `CacheTTL = 5m` / unspecified → SDK's default 5m TTL.
+//
+// The marker mutates the param structs in the slices we were handed; that's
+// fine because translateMessages built them locally for this call.
+func applyAutoCacheControl(systemBlocks []sdk.TextBlockParam, msgs []sdk.MessageParam, extras *providers.AnthropicExtras) {
+	if extras != nil && extras.CacheEnabled != nil && !*extras.CacheEnabled {
+		// Caching explicitly disabled — leave the request marker-free.
+		return
+	}
+
+	cache := sdk.NewCacheControlEphemeralParam()
+	if extras != nil && extras.CacheTTL == providers.CacheTTL1h {
+		// SDK v1.4's non-beta CacheControlEphemeralParam doesn't expose a
+		// TTL field. Fall through to its embedded paramObj's
+		// SetExtraFields escape hatch — the encoder splices the entries
+		// into the marshalled JSON, so the resulting wire payload reads
+		// {"type":"ephemeral","ttl":"1h"} as the API requires.
+		cache.SetExtraFields(map[string]any{"ttl": "1h"})
+	}
+
+	// Find the last assistant turn (scanning from the tail). If the very
+	// last message is an assistant turn, that's the model's *prior*
+	// response and counts as stable. If the last is a user turn, scan
+	// backwards for the most recent assistant response.
+	lastAsst := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == sdk.MessageParamRoleAssistant {
+			lastAsst = i
+			break
+		}
+	}
+
+	if lastAsst >= 0 {
+		// Mark the last text content block of that assistant turn. We mark
+		// text rather than thinking because thinking blocks have signature
+		// constraints we don't want to entangle with caching.
+		blocks := msgs[lastAsst].Content
+		for i := len(blocks) - 1; i >= 0; i-- {
+			if tb := blocks[i].OfText; tb != nil {
+				tb.CacheControl = cache
+				return
+			}
+		}
+		// Assistant turn with no text block (only thinking?) — fall through
+		// to system marking.
+	}
+
+	if len(systemBlocks) > 0 {
+		systemBlocks[len(systemBlocks)-1].CacheControl = cache
+		return
+	}
+	// No stable prefix — don't mark anything.
 }
 
 // translateMessages splits the prefix into the system-prompt blocks and the
