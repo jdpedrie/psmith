@@ -566,11 +566,12 @@ func TestChunkTypeToProto(t *testing.T) {
 func TestStreamRunToProto_OptionalFieldsRoundTrip(t *testing.T) {
 	t.Parallel()
 	// Minimal: only required fields set.
+	provID := mustUUID(t)
 	in := store.StreamRun{
 		ID:             mustUUID(t),
 		ConversationID: mustUUID(t),
 		ContextID:      mustUUID(t),
-		ProviderID:     mustUUID(t),
+		ProviderID:     &provID,
 		ModelID:        "m",
 		Status:         "running",
 		Purpose:        "assistant_response",

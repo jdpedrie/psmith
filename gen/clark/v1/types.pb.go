@@ -2659,9 +2659,15 @@ type Message struct {
 	// `content`), and exposes retry-from-here affordances. The full failure
 	// payload — provider-specific raw fields — is preserved in the database
 	// for debugging; only the human-readable string travels on the wire.
-	ErrorText     *string `protobuf:"bytes,17,opt,name=error_text,json=errorText,proto3,oneof" json:"error_text,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ErrorText *string `protobuf:"bytes,17,opt,name=error_text,json=errorText,proto3,oneof" json:"error_text,omitempty"`
+	// Elapsed wall-clock between the first and last `thinking_delta` chunk
+	// captured during the stream that produced this message. Powers the UI's
+	// "Thought for X.Ys" badge on historical turns. Null when the assistant
+	// didn't reason (or only emitted reasoning tokens without surfacing
+	// thinking_delta chunks — see usage.reasoning_tokens for the latter case).
+	ThinkingDurationMs *int32 `protobuf:"varint,18,opt,name=thinking_duration_ms,json=thinkingDurationMs,proto3,oneof" json:"thinking_duration_ms,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
@@ -2811,6 +2817,13 @@ func (x *Message) GetErrorText() string {
 		return *x.ErrorText
 	}
 	return ""
+}
+
+func (x *Message) GetThinkingDurationMs() int32 {
+	if x != nil && x.ThinkingDurationMs != nil {
+		return *x.ThinkingDurationMs
+	}
+	return 0
 }
 
 // MessageUsage records token usage reported by the provider plus the
@@ -3466,7 +3479,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\xd3\x06\n" +
+	"\x06_title\"\xa3\a\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3490,7 +3503,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x0fdisplay_content\x18\x0f \x01(\tR\x0edisplayContent\x12<\n" +
 	"\tedited_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\aR\beditedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"error_text\x18\x11 \x01(\tH\bR\terrorText\x88\x01\x01B\f\n" +
+	"error_text\x18\x11 \x01(\tH\bR\terrorText\x88\x01\x01\x125\n" +
+	"\x14thinking_duration_ms\x18\x12 \x01(\x05H\tR\x12thinkingDurationMs\x88\x01\x01B\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -3501,7 +3515,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x06_usageB\f\n" +
 	"\n" +
 	"_edited_atB\r\n" +
-	"\v_error_text\"\xb1\x05\n" +
+	"\v_error_textB\x17\n" +
+	"\x15_thinking_duration_ms\"\xb1\x05\n" +
 	"\fMessageUsage\x12&\n" +
 	"\finput_tokens\x18\x01 \x01(\x05H\x00R\vinputTokens\x88\x01\x01\x12(\n" +
 	"\routput_tokens\x18\x02 \x01(\x05H\x01R\foutputTokens\x88\x01\x01\x12/\n" +

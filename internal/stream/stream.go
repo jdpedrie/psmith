@@ -121,8 +121,25 @@ type StartParams struct {
 
 	// Source is the live channel from the driver. The supervisor owns
 	// reading from this channel for the run's lifetime; the caller must not
-	// concurrently read from it after handing it over.
+	// concurrently read from it after handing it over. Either Source or
+	// SendFunc must be set; SendFunc takes precedence (it's the path that
+	// gets retry + per-attempt 60s timeout). Source remains for tests +
+	// callers that don't want retry semantics.
 	Source <-chan providers.Chunk
+
+	// SendFunc opens the upstream stream. The supervisor calls it inside
+	// its run goroutine with retry + per-attempt 60s timeout (see
+	// openStreamWithRetry). On exhaustion the supervisor materialises an
+	// errored assistant message — the user's typed text is never lost.
+	// Mutually exclusive with Source.
+	SendFunc SendFunc
+
+	// Provider is the constructed driver instance. The supervisor uses it at
+	// materialization to populate thinking_provider_type (`Provider.Type()`)
+	// and thinking_rendered_text (`Provider.RenderThinkingToText`) on the
+	// assistant message row. Optional: nil falls back to dropping both
+	// columns to NULL — the same behaviour as before this hook existed.
+	Provider providers.Provider
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't
@@ -217,8 +234,8 @@ type runState struct {
 // backgrounds — cancelling its own context — does not stop the upstream
 // consumer.
 func (s *Supervisor) Start(ctx context.Context, params StartParams) (uuid.UUID, error) {
-	if params.Source == nil {
-		return uuid.Nil, errors.New("stream: Source channel is nil")
+	if params.Source == nil && params.SendFunc == nil {
+		return uuid.Nil, errors.New("stream: must set either Source or SendFunc")
 	}
 	switch params.Purpose {
 	case PurposeAssistantResponse, PurposeCompression:
@@ -230,12 +247,13 @@ func (s *Supervisor) Start(ctx context.Context, params StartParams) (uuid.UUID, 
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("stream: generate run id: %w", err)
 	}
+	providerIDForInsert := params.ProviderID
 	if _, err := s.queries.CreateStreamRun(ctx, store.CreateStreamRunParams{
 		ID:              id,
 		ConversationID:  params.ConversationID,
 		ContextID:       params.ContextID,
 		ParentMessageID: params.ParentMessageID,
-		ProviderID:      params.ProviderID,
+		ProviderID:      &providerIDForInsert,
 		ModelID:         params.ModelID,
 		Status:          statusRunning,
 		Purpose:         string(params.Purpose),

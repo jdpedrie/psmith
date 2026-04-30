@@ -27,7 +27,7 @@ type CreateStreamRunParams struct {
 	ConversationID  uuid.UUID
 	ContextID       uuid.UUID
 	ParentMessageID *uuid.UUID
-	ProviderID      uuid.UUID
+	ProviderID      *uuid.UUID
 	ModelID         string
 	Status          string
 	Purpose         string

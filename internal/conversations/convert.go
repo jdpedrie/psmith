@@ -3,6 +3,7 @@ package conversations
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -150,6 +151,7 @@ func messageToProto(m store.Message) *clarkv1.Message {
 		Thinking:             m.Thinking,
 		ThinkingProviderType: m.ThinkingProviderType,
 		ThinkingRenderedText: m.ThinkingRenderedText,
+		ThinkingDurationMs:   m.ThinkingDurationMs,
 		ModelId:              m.ModelID,
 		CreatedAt:            timestamppb.New(m.CreatedAt),
 	}
@@ -173,23 +175,62 @@ func messageToProto(m store.Message) *clarkv1.Message {
 	return out
 }
 
-// errorTextFromPayload extracts the human-readable .message field from a
-// stored error_payload (the JSON shape used by the stream supervisor — see
-// internal/stream.chunkErrorPayload). Returns "" when the payload is empty
-// or unparseable; in that case the proto's error_text stays absent and the UI
-// treats the message as non-errored. The full payload (including any raw
-// provider blob) stays in the database for debugging.
+// errorTextFromPayload extracts a human-readable error message from the
+// stored error_payload. Tries multiple shapes in priority order so the UI
+// gets something readable regardless of which provider failed and how:
+//
+//  1. Our normalised wrapper (`internal/stream.chunkErrorPayload`):
+//     `{"message": "...", "raw": ...}` — most assistant errors land here.
+//  2. Provider envelope: `{"error": {"message": "...", ...}}` — every
+//     OpenAI-compatible upstream uses this when our wrapper somehow loses
+//     the .message extraction; same shape as Anthropic and Google.
+//  3. A bare top-level JSON string: `"upstream blew up"`.
+//  4. Fallback: the raw payload bytes verbatim. Better to show the user
+//     "{some unparseable blob}" than to silently drop the error and let
+//     them think the turn succeeded.
+//
+// Returns "" only when the payload was empty to begin with — every
+// other path produces something the UI can render.
 func errorTextFromPayload(payload []byte) string {
 	if len(payload) == 0 {
 		return ""
 	}
-	var p struct {
+	// Shape 1: normalised wrapper.
+	var wrap struct {
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(payload, &p); err != nil {
+	if err := json.Unmarshal(payload, &wrap); err == nil && wrap.Message != "" {
+		return wrap.Message
+	}
+	// Shape 2: provider envelope — works for OpenAI, Anthropic, Google.
+	var envelope struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    any    `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err == nil && envelope.Error.Message != "" {
+		return envelope.Error.Message
+	}
+	// Shape 3: a bare JSON string.
+	var s string
+	if err := json.Unmarshal(payload, &s); err == nil && s != "" {
+		return s
+	}
+	// Fallback: raw bytes. Trim outer whitespace; collapse internal
+	// whitespace runs to single spaces so a multi-line payload reads as
+	// a single banner line.
+	raw := strings.TrimSpace(string(payload))
+	if raw == "" {
 		return ""
 	}
-	return p.Message
+	raw = strings.Join(strings.Fields(raw), " ")
+	const cap = 512
+	if len(raw) > cap {
+		raw = raw[:cap] + "…"
+	}
+	return raw
 }
 
 // messageUsageToProto returns a MessageUsage proto if any usage/cost column
@@ -243,6 +284,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *clarkv1.Message {
 		Thinking:             r.Thinking,
 		ThinkingProviderType: r.ThinkingProviderType,
 		ThinkingRenderedText: r.ThinkingRenderedText,
+		ThinkingDurationMs:   r.ThinkingDurationMs,
 		ProviderID:           r.ProviderID,
 		ModelID:              r.ModelID,
 		CreatedAt:            r.CreatedAt,

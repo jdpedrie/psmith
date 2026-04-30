@@ -16,9 +16,13 @@ RETURNING *;
 -- columns populated atomically. error_payload is set when the stream
 -- terminated in an errored/cancelled state — captures the failure inline so
 -- the UI can render the message as a first-class errored history entry.
+-- thinking_duration_ms records the elapsed time (ms) between the first and
+-- last thinking_delta chunk seen on the run; NULL when the assistant didn't
+-- reason at all.
 INSERT INTO messages (
     id, context_id, parent_id, role, content,
     raw_content, thinking, thinking_provider_type, thinking_rendered_text,
+    thinking_duration_ms,
     provider_id, model_id,
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
     reasoning_tokens, provider_usage_raw,
@@ -28,12 +32,13 @@ INSERT INTO messages (
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
-    $10, $11,
-    $12, $13, $14, $15,
-    $16, $17,
-    $18, $19, $20, $21,
-    $22,
-    $23
+    $10,
+    $11, $12,
+    $13, $14, $15, $16,
+    $17, $18,
+    $19, $20, $21, $22,
+    $23,
+    $24
 )
 RETURNING *;
 
@@ -133,6 +138,7 @@ WITH RECURSIVE chain AS (
 )
 SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.raw_content, chain.thinking, chain.thinking_provider_type, chain.thinking_rendered_text,
+       chain.thinking_duration_ms,
        chain.provider_id, chain.model_id,
        chain.input_tokens, chain.output_tokens, chain.cache_read_tokens, chain.cache_write_tokens,
        chain.reasoning_tokens, chain.provider_usage_raw,

@@ -439,6 +439,12 @@ message Message {
   // payload — provider-specific raw fields — is preserved in the database
   // for debugging; only the human-readable string travels on the wire.
   optional string error_text = 17;
+  // Elapsed wall-clock between the first and last `thinking_delta` chunk
+  // captured during the stream that produced this message. Powers the UI's
+  // "Thought for X.Ys" badge on historical turns. Null when the assistant
+  // didn't reason (or only emitted reasoning tokens without surfacing
+  // thinking_delta chunks — see usage.reasoning_tokens for the latter case).
+  optional int32 thinking_duration_ms = 18;
 }
 
 // MessageUsage records token usage reported by the provider plus the

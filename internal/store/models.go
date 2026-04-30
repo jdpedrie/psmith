@@ -62,7 +62,7 @@ type Conversation struct {
 type HarnessSession struct {
 	ID                uuid.UUID
 	ConversationID    uuid.UUID
-	ProviderID        uuid.UUID
+	ProviderID        *uuid.UUID
 	ExternalSessionID string
 	State             []byte
 	CreatedAt         time.Time
@@ -95,6 +95,7 @@ type Message struct {
 	TotalCostUsd         pgtype.Numeric
 	EditedAt             *time.Time
 	ErrorPayload         []byte
+	ThinkingDurationMs   *int32
 }
 
 type Profile struct {
@@ -151,7 +152,7 @@ type StreamRun struct {
 	ConversationID          uuid.UUID
 	ContextID               uuid.UUID
 	ParentMessageID         *uuid.UUID
-	ProviderID              uuid.UUID
+	ProviderID              *uuid.UUID
 	ModelID                 string
 	Status                  string
 	Purpose                 string

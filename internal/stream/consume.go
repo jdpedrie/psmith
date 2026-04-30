@@ -31,13 +31,31 @@ import (
 func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartParams, rs *runState) {
 	logger := s.logger.With("run_id", runID)
 
+	// Resolve the source channel. SendFunc mode (preferred for assistant
+	// turns) calls openStreamWithRetry which applies retry + per-attempt
+	// timeout; on exhaustion it returns a synthetic error stream so the
+	// rest of consume runs the normal aggregation path and materialises
+	// an errored assistant message inline. Source mode is the legacy /
+	// test path: the channel is consumed as-is with no retry.
+	source := params.Source
+	if params.SendFunc != nil {
+		opened, err := openStreamWithRetry(ctx, params.SendFunc, s.logger)
+		if err != nil {
+			source = syntheticErrorStream(err)
+		} else {
+			source = reinjectFirstChunk(opened)
+		}
+	}
+
 	// Aggregators for materialization.
 	var (
-		contentBuilder  strings.Builder
-		thinkingBuilder strings.Builder
-		seenError       *chunkErrorPayload
-		usage           *providers.Usage
-		nextSequence    int64
+		contentBuilder    strings.Builder
+		thinkingBuilder   strings.Builder
+		thinkingFirstAt   time.Time // wall-clock of first thinking_delta seen
+		thinkingLastAt    time.Time // wall-clock of last thinking_delta seen
+		seenError         *chunkErrorPayload
+		usage             *providers.Usage
+		nextSequence      int64
 	)
 
 	buffer := make([]Chunk, 0, flushBatchSize)
@@ -132,14 +150,14 @@ loop:
 			// silently drop them, then exit.
 			for {
 				select {
-				case ch, ok := <-params.Source:
+				case ch, ok := <-source:
 					if !ok {
 						sourceClosed = true
 						break loop
 					}
 					seq := nextSequence
 					nextSequence++
-					applyAggregator(ch, &contentBuilder, &thinkingBuilder, &seenError, &usage)
+					applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
 					buffer = append(buffer, Chunk{
 						Sequence: seq,
 						Type:     ch.Type,
@@ -152,14 +170,14 @@ loop:
 					break loop
 				}
 			}
-		case ch, ok := <-params.Source:
+		case ch, ok := <-source:
 			if !ok {
 				sourceClosed = true
 				break
 			}
 			seq := nextSequence
 			nextSequence++
-			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &seenError, &usage)
+			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
 			buffer = append(buffer, Chunk{
 				Sequence: seq,
 				Type:     ch.Type,
@@ -208,7 +226,12 @@ loop:
 	var resultContextID *uuid.UUID
 	switch params.Purpose {
 	case PurposeAssistantResponse:
-		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), usage, errPayload, logger)
+		var thinkingDurMs *int32
+		if !thinkingFirstAt.IsZero() && !thinkingLastAt.IsZero() {
+			ms := int32(thinkingLastAt.Sub(thinkingFirstAt).Milliseconds())
+			thinkingDurMs = &ms
+		}
+		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, logger)
 		if err != nil {
 			logger.Error("materialize assistant message failed", "err", err)
 		} else if mid != uuid.Nil {
@@ -249,12 +272,13 @@ loop:
 		logger.Error("finalize stream run failed", "err", err)
 		// Best-effort: build a synthetic terminal row from what we know
 		// so subscribers still see something.
+		providerIDPtr := params.ProviderID
 		finalRun = store.StreamRun{
 			ID:              runID,
 			ConversationID:  params.ConversationID,
 			ContextID:       params.ContextID,
 			ParentMessageID: params.ParentMessageID,
-			ProviderID:      params.ProviderID,
+			ProviderID:      &providerIDPtr,
 			ModelID:         params.ModelID,
 			Status:          status,
 			Purpose:         string(params.Purpose),
@@ -287,13 +311,21 @@ loop:
 }
 
 // applyAggregator updates the running content/thinking aggregates, records
-// the first ChunkError seen, and captures the latest usage payload.
-func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, seenError **chunkErrorPayload, usage **providers.Usage) {
+// the first ChunkError seen, captures the latest usage payload, and stamps
+// the first/last wall-clock times a thinking_delta was seen — used at
+// materialization to derive `messages.thinking_duration_ms` for the UI's
+// "Thought for X.Ys" badge.
+func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, thinkingFirstAt, thinkingLastAt *time.Time, seenError **chunkErrorPayload, usage **providers.Usage) {
 	switch ch.Type {
 	case providers.ChunkText:
 		content.WriteString(extractDeltaText(ch.Payload))
 	case providers.ChunkThinking:
 		thinking.WriteString(extractDeltaText(ch.Payload))
+		now := time.Now()
+		if thinkingFirstAt.IsZero() {
+			*thinkingFirstAt = now
+		}
+		*thinkingLastAt = now
 	case providers.ChunkUsage:
 		var u providers.Usage
 		if err := json.Unmarshal(ch.Payload, &u); err == nil {
@@ -330,7 +362,7 @@ func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, see
 // blocks, OpenAI reasoning items) are NOT reconstructed here — they require
 // driver cooperation and are deferred to the (future) inbound transform
 // pipeline. See "Materialization" in the task spec.
-func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
+func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
 	// We always write a row, even with empty content, so the user can
 	// see that an attempt was made and so result_message_id is non-null
 	// for downstream UX.
@@ -344,6 +376,23 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		blob, err := json.Marshal([]thinkingBlock{{Type: "text", Text: thinking}})
 		if err == nil {
 			thinkingJSON = blob
+		}
+	}
+
+	// Populate thinking_provider_type + thinking_rendered_text from the
+	// driver. The provider_type tells future cross-provider sends how to
+	// route the stored thinking ("native if same provider, plaintext-inject
+	// otherwise"); the rendered_text gives the UI a deterministic plaintext
+	// view that survives the wire round-trip without re-parsing per-driver
+	// JSONB. Both NULL when there's no thinking content.
+	var thinkingProviderType *string
+	var thinkingRenderedText *string
+	if len(thinkingJSON) > 0 && params.Provider != nil {
+		t := params.Provider.Type()
+		thinkingProviderType = &t
+		rendered := params.Provider.RenderThinkingToText(thinkingJSON)
+		if rendered != "" {
+			thinkingRenderedText = &rendered
 		}
 	}
 
@@ -364,8 +413,9 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		Content:              content,
 		RawContent:           nil,
 		Thinking:             thinkingJSON,
-		ThinkingProviderType: nil,
-		ThinkingRenderedText: nil,
+		ThinkingProviderType: thinkingProviderType,
+		ThinkingRenderedText: thinkingRenderedText,
+		ThinkingDurationMs:   thinkingDurationMs,
 		ProviderID:           &providerID,
 		ModelID:              &modelID,
 		InputTokens:          usageParams.InputTokens,

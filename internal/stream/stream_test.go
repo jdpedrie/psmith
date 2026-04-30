@@ -706,12 +706,13 @@ func TestRecoverInterrupted(t *testing.T) {
 
 	runID := mustUUID(t)
 	parent := f.parent
+	provID := f.prov.ID
 	if _, err := f.q.CreateStreamRun(context.Background(), store.CreateStreamRunParams{
 		ID:              runID,
 		ConversationID:  f.conv.ID,
 		ContextID:       f.ctx.ID,
 		ParentMessageID: &parent,
-		ProviderID:      f.prov.ID,
+		ProviderID:      &provID,
 		ModelID:         "gpt-test",
 		Status:          statusRunning,
 		Purpose:         string(PurposeAssistantResponse),

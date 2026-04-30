@@ -20,6 +20,9 @@ type Querier interface {
 	// columns populated atomically. error_payload is set when the stream
 	// terminated in an errored/cancelled state — captures the failure inline so
 	// the UI can render the message as a first-class errored history entry.
+	// thinking_duration_ms records the elapsed time (ms) between the first and
+	// last thinking_delta chunk seen on the run; NULL when the assistant didn't
+	// reason at all.
 	CreateAssistantMessageWithUsage(ctx context.Context, arg CreateAssistantMessageWithUsageParams) (Message, error)
 	CreateContext(ctx context.Context, arg CreateContextParams) (Context, error)
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (Conversation, error)
