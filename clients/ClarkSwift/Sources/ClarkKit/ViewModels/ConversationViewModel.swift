@@ -46,6 +46,40 @@ public final class ConversationViewModel {
     /// Optimistic user message text shown before the RPC returns.
     public var pendingUserText: String?
 
+    /// Accumulated thinking text streamed for the active run. Reset to ""
+    /// on stream start; appended on each `.thinkingDelta` chunk; cleared on
+    /// terminal once the assistant message is materialised (the rendered
+    /// text moves to `messages[i].thinkingRenderedText` for historical
+    /// display). Empty string + non-nil `streamingThinkingStartedAt` is the
+    /// "reasoning started, no text yet" marker the UI shows as
+    /// "Thinking… (0.0s)".
+    public var streamingThinking: String = ""
+    /// Wall-clock at which the first thinking delta arrived for the active
+    /// run. Drives the live "Thinking… (X.Ys)" timer client-side: the view
+    /// polls `Date()` and subtracts. Nil before any thinking arrives, and
+    /// reset to nil on terminal.
+    public var streamingThinkingStartedAt: Date?
+    /// True once the assistant has produced its first `.textDelta`. Once
+    /// true, the live "Thinking…" badge in the UI flips to "Thought for
+    /// X.Ys" — reasoning is over for this turn even though the run hasn't
+    /// terminated yet, and we want the badge to read accurately the moment
+    /// the user can see the answer being typed out.
+    public var streamingThinkingFinishedAt: Date?
+
+    /// Open/closed state for the live streaming row's thinking disclosure.
+    /// Owned by the view-model (rather than @State inside the disclosure)
+    /// so a click during the live stream can carry forward to the
+    /// materialised MessageRow at terminal time without the disclosure
+    /// snapping shut on the StreamingRow → MessageRow view-tree swap.
+    public var streamingThinkingExpanded: Bool = false
+
+    /// Open/closed state for thinking disclosures on historical messages,
+    /// keyed by message id. A `Set` of "currently expanded ids" is the
+    /// minimal shape — absence == collapsed (the common case). Persisted
+    /// across `load()` calls so reloading the conversation doesn't snap
+    /// every disclosure shut.
+    public var expandedThinkingMessageIDs: Set<String> = []
+
     // Compact state
     public var isCompacting = false
     public var compactError: String?
@@ -174,18 +208,68 @@ public final class ConversationViewModel {
         loading = true
         defer { loading = false }
         do {
-            let (_, ctx) = try await client.conversations.get(id: conversation.id)
+            let (conv, ctx) = try await client.conversations.get(id: conversation.id)
             self.activeContext = ctx
             self.messages = try await client.conversations.listMessages(contextID: ctx.id)
             self.loadError = nil
-            // Seed model selection from last assistant message (always tracks latest used).
-            if let target = tokenCountTarget {
+            // Selection priority:
+            //   1. conversations.settings.{default_provider_id, default_model_id}
+            //      — explicit per-conversation choice persisted to the
+            //      server. Stays put across deletes / reloads / branch
+            //      switches (the previous behaviour of "default to last
+            //      used assistant" silently shifted the selection when
+            //      messages were deleted, which the user found annoying).
+            //   2. last assistant message in the loaded chain — fallback
+            //      for conversations that haven't had an explicit choice
+            //      written yet (legacy rows or fresh conversations with
+            //      no settings blob).
+            //   3. leave the existing selection alone — caller may have
+            //      seeded from elsewhere.
+            if let s = conv.settings,
+               let p = s.defaultProviderID, !p.isEmpty,
+               let m = s.defaultModelID, !m.isEmpty {
+                selectedProviderID = p
+                selectedModelID    = m
+            } else if let target = tokenCountTarget {
                 selectedProviderID = target.providerID
                 selectedModelID    = target.modelID
             }
             await refreshTokenCount()
+            // Refresh the full message tree alongside the active chain so
+            // the branch switcher knows about every fork. Failures are
+            // non-blocking — chain mode keeps working without it.
+            await loadTree()
         } catch {
-            self.loadError = error.localizedDescription
+            self.loadError = ClarkError.display(error)
+        }
+    }
+
+    /// Updates the per-conversation provider+model selection and persists
+    /// to the server in one shot. Called from the composer's model picker
+    /// when the user picks a different model. Optimistically updates
+    /// local state, then writes; on failure surfaces via `loadError` and
+    /// rolls back to whatever the server returns. Idempotent — picking
+    /// the same model is a no-op write.
+    public func selectModel(providerID: String, modelID: String) async {
+        guard providerID != selectedProviderID || modelID != selectedModelID else { return }
+        selectedProviderID = providerID
+        selectedModelID = modelID
+        // Build the full settings blob (UpdateConversation replaces, doesn't
+        // merge). Start from the existing snapshot so we don't accidentally
+        // wipe call_settings / include_thinking on a model swap.
+        var s = conversation.settings ?? ClarkConversationSettings()
+        s.defaultProviderID = providerID
+        s.defaultModelID    = modelID
+        do {
+            _ = try await client.conversations.updateSettings(
+                id: conversation.id,
+                settings: s
+            )
+        } catch {
+            // Don't roll back the in-memory selection — the user picked it
+            // and should be able to continue using it for this turn even
+            // if persistence fails. Surface the error so they know.
+            loadError = ClarkError.display(error)
         }
     }
 
@@ -329,11 +413,15 @@ public final class ConversationViewModel {
     // MARK: Send
 
     public func send() async {
+        let originalDraft = draft
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !sending, !isCompacting, !hasPendingCompression else { return }
         draft = ""
         sending = true
         streamingText = ""
+        streamingThinking = ""
+        streamingThinkingStartedAt = nil
+        streamingThinkingFinishedAt = nil
         // Show message optimistically before the RPC round-trip completes.
         pendingUserText = text
         defer { sending = false }
@@ -354,14 +442,15 @@ public final class ConversationViewModel {
                 for await event in client.streams.subscribe(streamRunID: run.id) {
                     switch event {
                     case .chunk(let c):
-                        if c.type == .textDelta, let s = c.textIfDelta {
-                            streamingText += s
-                        }
+                        applyStreamChunk(c)
                     case .terminal:
                         await load()
                         await onTerminal()
-                        streamingText = ""
-                        streamRunID = nil
+                        // Hand off any open disclosure to the materialised
+                        // assistant turn so the user's click during the
+                        // stream survives the StreamingRow → MessageRow
+                        // swap.
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
                         // First assistant turn just landed — give the local
                         // titler a chance. Idempotent: bails immediately if
                         // already attempted, profile isn't apple_foundation,
@@ -376,20 +465,21 @@ public final class ConversationViewModel {
                         // is now first-class history.
                         await load()
                         await onTerminal()
-                        streamingText = ""
-                        streamRunID = nil
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
                     }
                 }
             }
         } catch {
             // Pre-stream RPC failure (validation, network before the
-            // server even spawned a run): no message row exists. Reload
-            // so any optimistic state clears, but also keep the inline
-            // error for the composer banner since there's nothing in the
-            // history to surface it.
+            // server even spawned a run): no message row exists. Restore
+            // the user's typed text into the composer so they can retry
+            // without losing what they wrote — losing the draft on a
+            // network blip is worst-case UX. Then reload to clear any
+            // stale optimistic state, and surface the error inline.
             pendingUserText = nil
+            if draft.isEmpty { draft = originalDraft }
             await load()
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
         }
     }
 
@@ -484,7 +574,7 @@ public final class ConversationViewModel {
                 settings: settings
             )
         } catch {
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
         }
     }
 
@@ -527,6 +617,9 @@ public final class ConversationViewModel {
             )
             streamRunID = run.id
             streamingText = ""
+            streamingThinking = ""
+            streamingThinkingStartedAt = nil
+            streamingThinkingFinishedAt = nil
             streamTask?.cancel()
             streamTask = Task { @MainActor in
                 for await event in client.streams.subscribe(streamRunID: run.id) {
@@ -537,13 +630,10 @@ public final class ConversationViewModel {
                         // of staring at a "Summarizing…" placeholder. The
                         // running text gets cleared when the terminal `load()`
                         // pulls in the materialized compression_summary message.
-                        if c.type == .textDelta, let s = c.textIfDelta {
-                            streamingText += s
-                        }
+                        applyStreamChunk(c)
                     case .terminal:
                         isCompacting = false
-                        streamRunID = nil
-                        streamingText = ""
+                        clearStreamingState()
                         await load()
                         await onTerminal()
                     case .failed:
@@ -556,8 +646,7 @@ public final class ConversationViewModel {
                         // affordance — instead of bouncing them back
                         // into the Compact page under a banner.
                         isCompacting = false
-                        streamRunID = nil
-                        streamingText = ""
+                        clearStreamingState()
                         await load()
                         await onTerminal()
                     }
@@ -569,7 +658,7 @@ public final class ConversationViewModel {
             // Compact page so the user can adjust the prompt or model
             // picker and try again.
             isCompacting = false
-            compactError = error.localizedDescription
+            compactError = ClarkError.display(error)
             showingCompactView = true
         }
     }
@@ -583,7 +672,7 @@ public final class ConversationViewModel {
             await loadContexts()
             await onTerminal()
         } catch {
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
         }
     }
 
@@ -605,20 +694,166 @@ public final class ConversationViewModel {
             contextWindow = nil
             await load()
         } catch {
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
         }
     }
 
     // MARK: Message mutations
 
-    public func editMessage(id: String, content: String) async {
+    public func editMessage(id: String, content: String, role: ClarkMessageRole? = nil) async {
         do {
-            let updated = try await client.conversations.editMessage(id: id, content: content)
+            let updated = try await client.conversations.editMessage(id: id, content: content, role: role)
             if let idx = messages.firstIndex(where: { $0.id == id }) {
                 messages[idx] = updated
             }
         } catch {
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
+        }
+    }
+
+    /// Reload-as-fork. Two semantics depending on what was clicked:
+    ///
+    ///  - User turn: re-send a copy of the user content at its parent —
+    ///    creates a sibling user message + a fresh assistant under it.
+    ///    The fork lives at the user level; both branches carry their
+    ///    own user content (which may be identical).
+    ///  - Assistant turn: regenerate. Walk up to the parent user, then
+    ///    start a new assistant stream under that SAME user. The fork
+    ///    lives at the assistant level (one user → many assistants), no
+    ///    duplicate user row. Server-side this is `SendMessage` with
+    ///    `regenerate=true`.
+    ///
+    /// Never edits the existing row in either path. Matches the spec's
+    /// "every Reload creates a fork, don't edit existing messages."
+    public func reloadFromMessage(id: String) async {
+        guard !sending, !isStreaming else { return }
+        guard let target = messages.first(where: { $0.id == id }) else { return }
+        switch target.role {
+        case .user:
+            await sendForking(content: target.content, parentMessageID: target.parentID)
+        case .assistant:
+            guard let pid = target.parentID,
+                  let parent = messages.first(where: { $0.id == pid }),
+                  parent.role == .user else { return }
+            await regenerateAssistant(parentUserMessageID: parent.id)
+        default:
+            return
+        }
+    }
+
+    /// Composer-side reload. Re-streams off the most recent user turn
+    /// using regenerate semantics — produces a sibling assistant under
+    /// the existing user message rather than duplicating the user. Only
+    /// meaningful when the trailing turn is a user message awaiting an
+    /// assistant; the UI gates on this.
+    public func reloadLastUser() async {
+        guard let last = messages.last(where: { $0.role == .user }) else { return }
+        await regenerateAssistant(parentUserMessageID: last.id)
+    }
+
+    /// Regenerate-mode SendMessage. Streams a new assistant under the
+    /// named user message — sibling of any previous assistant on the same
+    /// user. Mirrors `sendForking`'s setup/teardown machinery so chunk
+    /// routing, terminal hand-off, and error resilience are identical.
+    public func regenerateAssistant(parentUserMessageID: String) async {
+        guard !sending, !isCompacting, !hasPendingCompression else { return }
+        sending = true
+        streamingText = ""
+        streamingThinking = ""
+        streamingThinkingStartedAt = nil
+        streamingThinkingFinishedAt = nil
+        defer { sending = false }
+
+        do {
+            let (_, run) = try await client.conversations.regenerateAssistant(
+                conversationID: conversation.id,
+                parentUserMessageID: parentUserMessageID,
+                providerID: selectedProviderID,
+                modelID: selectedModelID
+            )
+            await load()
+            streamRunID = run.id
+            streamTask?.cancel()
+            streamTask = Task { @MainActor in
+                for await event in client.streams.subscribe(streamRunID: run.id) {
+                    switch event {
+                    case .chunk(let c):
+                        applyStreamChunk(c)
+                    case .terminal:
+                        await load()
+                        await onTerminal()
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                        await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
+                    case .failed:
+                        await load()
+                        await onTerminal()
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                    }
+                }
+            }
+        } catch {
+            await load()
+            loadError = ClarkError.display(error)
+        }
+    }
+
+    /// Send-with-explicit-parent. Powers send() (parent = current leaf,
+    /// implicit) and reloadFromMessage (parent = explicit, forking).
+    /// Keeps the streaming/teardown machinery in one place — both call
+    /// sites benefit from the same chunk routing, terminal hand-off, and
+    /// error resilience. Empty content short-circuits silently.
+    public func sendForking(content: String, parentMessageID: String?) async {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !sending, !isCompacting, !hasPendingCompression else { return }
+        sending = true
+        streamingText = ""
+        streamingThinking = ""
+        streamingThinkingStartedAt = nil
+        streamingThinkingFinishedAt = nil
+        pendingUserText = text
+        defer { sending = false }
+
+        do {
+            let (userMsg, run) = try await client.conversations.sendMessage(
+                conversationID: conversation.id,
+                content: text,
+                parentMessageID: parentMessageID,
+                providerID: selectedProviderID,
+                modelID: selectedModelID
+            )
+            pendingUserText = nil
+            // Reload so the new sibling appears alongside the old branch
+            // — appending alone would mis-order the tree view.
+            await load()
+            // Make sure the just-inserted user message is visible in the
+            // local list even if `load()` somehow misses it (ordering
+            // race).
+            if !messages.contains(where: { $0.id == userMsg.id }) {
+                messages.append(userMsg)
+            }
+            streamRunID = run.id
+            streamTask?.cancel()
+            streamTask = Task { @MainActor in
+                for await event in client.streams.subscribe(streamRunID: run.id) {
+                    switch event {
+                    case .chunk(let c):
+                        applyStreamChunk(c)
+                    case .terminal:
+                        await load()
+                        await onTerminal()
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                        await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
+                    case .failed:
+                        await load()
+                        await onTerminal()
+                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                    }
+                }
+            }
+        } catch {
+            pendingUserText = nil
+            await load()
+            loadError = ClarkError.display(error)
         }
     }
 
@@ -627,7 +862,159 @@ public final class ConversationViewModel {
             try await client.conversations.deleteMessage(id: id, cascade: cascade)
             await load()
         } catch {
-            loadError = error.localizedDescription
+            loadError = ClarkError.display(error)
+        }
+    }
+
+    // MARK: - Streaming chunk routing
+
+    /// Routes one chunk from the live stream into the relevant accumulator
+    /// (text → `streamingText`, thinking → `streamingThinking`). Also stamps
+    /// `streamingThinkingStartedAt` on the first thinking delta and
+    /// `streamingThinkingFinishedAt` on the first text delta after thinking
+    /// — that's the moment the live "Thinking…" badge flips to "Thought
+    /// for X.Ys" because reasoning is over even though the run hasn't
+    /// terminated. Other chunk types are ignored at this layer.
+    func applyStreamChunk(_ c: ClarkChunk) {
+        switch c.type {
+        case .textDelta:
+            if let s = c.textIfDelta {
+                if streamingThinkingStartedAt != nil, streamingThinkingFinishedAt == nil {
+                    streamingThinkingFinishedAt = Date()
+                }
+                streamingText += s
+            }
+        case .thinkingDelta:
+            if let s = c.textIfDelta {
+                if streamingThinkingStartedAt == nil {
+                    streamingThinkingStartedAt = Date()
+                }
+                streamingThinking += s
+            }
+        default:
+            break
+        }
+    }
+
+    /// Wipes all per-stream live state. Called from terminal/failed branches
+    /// of every subscribe loop so the next send starts from a clean slate.
+    /// `handOffExpandedTo`, when non-nil, transfers the live disclosure's
+    /// expanded state to the historical-message expanded set under that id
+    /// — so a stream that finished with the disclosure open lands a
+    /// MessageRow with its disclosure also open, no snap-shut on the
+    /// view-tree swap.
+    func clearStreamingState(handOffExpandedTo materialisedMessageID: String? = nil) {
+        if streamingThinkingExpanded, let id = materialisedMessageID {
+            expandedThinkingMessageIDs.insert(id)
+        }
+        streamingText = ""
+        streamingThinking = ""
+        streamingThinkingStartedAt = nil
+        streamingThinkingFinishedAt = nil
+        streamingThinkingExpanded = false
+        streamRunID = nil
+    }
+
+    /// Returns the most recently-created assistant message in the loaded
+    /// list. Used at terminal time to find the just-materialised row so
+    /// `clearStreamingState` can transfer the disclosure-expanded flag
+    /// onto its id. Returns nil when the message list hasn't loaded yet
+    /// or there are no assistant turns (a freshly-failed first send).
+    public var latestAssistantMessageID: String? {
+        messages.last(where: { $0.role == .assistant })?.id
+    }
+
+    // MARK: - Branch / fork navigation
+
+    /// Full tree of messages in the active context — every branch, not
+    /// just the current chain. Used by the branch switcher to discover
+    /// sibling IDs and walk down to the deepest leaf when the user picks
+    /// a different fork. Empty until `loadTree()` runs (called from
+    /// `load()` after the linear chain is populated).
+    public var treeMessages: [ClarkMessage] = []
+
+    /// Children-by-parent map derived from `treeMessages`. Keys are
+    /// parent message ids (or "" for root-level rows whose parent is
+    /// nil). Values are children sorted by created_at — sibling order in
+    /// the switcher matches the order in which forks were spawned.
+    private var childrenByParent: [String: [ClarkMessage]] {
+        var out: [String: [ClarkMessage]] = [:]
+        for m in treeMessages {
+            let key = m.parentID ?? ""
+            out[key, default: []].append(m)
+        }
+        for k in out.keys {
+            out[k]?.sort { ($0.id) < ($1.id) }  // UUIDv7 ids sort by creation
+        }
+        return out
+    }
+
+    /// Sibling info for a given message — its position among messages
+    /// sharing the same parent. Returns nil when the message has no
+    /// siblings (the common case) so the UI can elide the switcher
+    /// entirely. `index` is 0-based.
+    public func branchInfo(for messageID: String) -> (siblingIDs: [String], index: Int)? {
+        guard let m = treeMessages.first(where: { $0.id == messageID }) else { return nil }
+        let key = m.parentID ?? ""
+        let siblings = childrenByParent[key] ?? []
+        guard siblings.count > 1 else { return nil }
+        guard let idx = siblings.firstIndex(where: { $0.id == messageID }) else { return nil }
+        return (siblings.map(\.id), idx)
+    }
+
+    /// Switches the active branch by repositioning the per-context leaf
+    /// cursor to the deepest descendant of `siblingID`. Reloads the
+    /// linear chain afterwards so the UI shows the new branch.
+    /// Best-effort: errors land in `loadError`.
+    public func switchToBranch(siblingID: String) async {
+        guard let activeContext else { return }
+        let leafID = deepestDescendantID(of: siblingID) ?? siblingID
+        do {
+            try await client.conversations.setCurrentLeaf(contextID: activeContext.id, messageID: leafID)
+            await load()
+        } catch {
+            loadError = ClarkError.display(error)
+        }
+    }
+
+    /// Walks `treeMessages` from `messageID` down through its single
+    /// child each time until a leaf (no children) or a fork (>1 child)
+    /// is reached. The first hit is returned. For the branch-switch
+    /// case this is "the natural place to land when picking this
+    /// branch" — most chat UIs feel right when "go to branch" lands at
+    /// the latest activity rather than the parent itself.
+    private func deepestDescendantID(of messageID: String) -> String? {
+        var cur = messageID
+        let map = childrenByParent
+        while true {
+            let kids = map[cur] ?? []
+            switch kids.count {
+            case 0: return cur
+            case 1: cur = kids[0].id
+            default:
+                // Pick the most recently-created child at every fork —
+                // matches the spec's "default: deepest descendant of the
+                // alternate child's subtree" guidance.
+                cur = kids.last!.id
+            }
+        }
+    }
+
+    /// Fetches the full message tree for the active context. Called
+    /// after `load()` so the branch switcher knows who is sibling to
+    /// whom. Failures land in `loadError` but don't block the linear
+    /// chain — the switcher just hides itself when `treeMessages` is
+    /// empty.
+    public func loadTree() async {
+        guard let activeContext else { return }
+        do {
+            self.treeMessages = try await client.conversations.listMessages(
+                contextID: activeContext.id,
+                fullTree: true
+            )
+        } catch {
+            self.treeMessages = []
+            loadError = ClarkError.display(error)
         }
     }
 }

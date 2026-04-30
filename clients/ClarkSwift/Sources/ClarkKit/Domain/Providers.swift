@@ -61,6 +61,12 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
     /// Provider-level default CallSettings — bottom of the resolution chain.
     /// Sparse: any unset field has no effect on the merge.
     public let defaultSettings: ClarkCallSettings?
+    /// `base_url` extracted from the driver-specific config blob — only
+    /// populated for openai-compatible providers, where it's the upstream
+    /// endpoint root. Surfaced so the edit form can show the user what's
+    /// currently set instead of asking them to re-type it from memory.
+    /// `api_key` is intentionally not exposed here — it's a secret.
+    public let baseURL: String?
 
     public init(
         id: String,
@@ -68,7 +74,8 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
         label: String,
         createdAt: Date,
         updatedAt: Date,
-        defaultSettings: ClarkCallSettings? = nil
+        defaultSettings: ClarkCallSettings? = nil,
+        baseURL: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -76,6 +83,7 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.defaultSettings = defaultSettings
+        self.baseURL = baseURL
     }
 }
 
@@ -87,6 +95,20 @@ extension ClarkUserModelProvider {
         createdAt = p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
         updatedAt = p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0)
         defaultSettings = p.hasDefaultSettings ? ClarkCallSettings(from: p.defaultSettings) : nil
+        baseURL = Self.parseBaseURL(from: p.config)
+    }
+
+    /// Parses `base_url` out of the JSON config blob. Returns nil for any
+    /// shape that doesn't carry one (Anthropic, harness drivers, malformed
+    /// JSON, etc.). Tolerant of unknown extra keys.
+    private static func parseBaseURL(from config: Data) -> String? {
+        guard !config.isEmpty,
+              let any = try? JSONSerialization.jsonObject(with: config),
+              let dict = any as? [String: Any],
+              let s = dict["base_url"] as? String,
+              !s.isEmpty
+        else { return nil }
+        return s
     }
 }
 

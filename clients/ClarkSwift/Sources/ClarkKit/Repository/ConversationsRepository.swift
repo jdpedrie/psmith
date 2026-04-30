@@ -109,13 +109,61 @@ public final class ConversationsRepository: Sendable {
         return (ClarkMessage(from: msg.userMessage), ClarkStreamRun(from: msg.streamRun))
     }
 
-    public func listMessages(contextID: String, leafMessageID: String? = nil) async throws -> [ClarkMessage] {
+    /// Regenerate-mode SendMessage. Server-side this skips the user-row
+    /// insert and starts the assistant stream off `parentUserMessageID`
+    /// directly — produces a sibling assistant turn under the SAME user
+    /// message, no duplicate user. Powers the "Reload" affordance on
+    /// assistant rows: every Reload still creates a fork, but at the
+    /// assistant level (one user → many assistants) instead of the user
+    /// level (many user copies → many assistants).
+    public func regenerateAssistant(
+        conversationID: String,
+        parentUserMessageID: String,
+        providerID: String? = nil,
+        modelID: String? = nil
+    ) async throws -> (userMessage: ClarkMessage, streamRun: ClarkStreamRun) {
+        var req = Clark_V1_SendMessageRequest()
+        req.conversationID = conversationID
+        req.parentMessageID = parentUserMessageID
+        req.regenerate = true
+        if let providerID { req.providerID = providerID }
+        if let modelID { req.modelID = modelID }
+        let resp = await client.sendMessage(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("regenerate") }
+        return (ClarkMessage(from: msg.userMessage), ClarkStreamRun(from: msg.streamRun))
+    }
+
+    public func listMessages(
+        contextID: String,
+        leafMessageID: String? = nil,
+        fullTree: Bool = false
+    ) async throws -> [ClarkMessage] {
         var req = Clark_V1_ListMessagesRequest()
         req.contextID = contextID
         if let leafMessageID { req.leafMessageID = leafMessageID }
+        // `full_tree=true` swaps the server from the linear-ancestor-chain
+        // CTE to a flat ListMessagesByContext dump — used by the branch
+        // switcher in the client to discover sibling IDs and walk down to
+        // the deepest descendant of a chosen fork.
+        req.fullTree = fullTree
         let resp = await client.listMessages(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list messages") }
         return msg.messages.map(ClarkMessage.init(from:))
+    }
+
+    /// Repositions the per-context leaf cursor to the given message — the
+    /// branch the user is currently viewing in this context. The next
+    /// SendMessage without an explicit parent will fork off this leaf;
+    /// `listMessages` with no leafMessageID returns the chain ending at it.
+    /// Pass `messageID = nil` to clear the cursor (server falls back to
+    /// latest-by-created_at on the next send).
+    public func setCurrentLeaf(contextID: String, messageID: String?) async throws {
+        var req = Clark_V1_SetCurrentLeafRequest()
+        req.contextID = contextID
+        // Empty string is the "clear" sentinel per the proto comment.
+        req.messageID = messageID ?? ""
+        let resp = await client.setCurrentLeaf(request: req, headers: [:])
+        if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
     }
 
     public func countContextTokens(contextID: String, providerID: String, modelID: String) async throws -> (tokenCount: Int32, contextWindow: Int32) {
@@ -157,10 +205,21 @@ public final class ConversationsRepository: Sendable {
         return ClarkContext(from: msg.context)
     }
 
-    public func editMessage(id: String, content: String) async throws -> ClarkMessage {
+    public func editMessage(
+        id: String,
+        content: String,
+        role: ClarkMessageRole? = nil
+    ) async throws -> ClarkMessage {
         var req = Clark_V1_EditMessageRequest()
         req.id = id
         req.content = content
+        // Optional role override. The server accepts only user/assistant
+        // here (system/context/summary stay locked); we let the server
+        // enforce that and surface the error if the caller passes an
+        // invalid role.
+        if let role {
+            req.role = role.toProto()
+        }
         let resp = await client.editMessage(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("edit message") }
         return ClarkMessage(from: msg.message)

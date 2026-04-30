@@ -200,6 +200,21 @@ public enum ClarkMessageRole: String, Sendable, Hashable {
         default: self = .unknown
         }
     }
+
+    /// Bridge back to the proto enum. Used when the client needs to send
+    /// a role override on EditMessage. `unknown` maps to the proto's
+    /// `MESSAGE_ROLE_UNSPECIFIED` so the server can reject rather than
+    /// silently overwriting.
+    func toProto() -> Clark_V1_MessageRole {
+        switch self {
+        case .system: return .system
+        case .context: return .context
+        case .user: return .user
+        case .assistant: return .assistant
+        case .compressionSummary: return .compressionSummary
+        case .unknown: return .unspecified
+        }
+    }
 }
 
 /// Full token and cost breakdown for a single assistant message.
@@ -281,9 +296,31 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
     /// captured before the failure. Provider/model identification is still
     /// populated so a future retry has all the data it needs.
     public let errorText: String?
+    /// Plain-text rendering of this assistant turn's reasoning, set by the
+    /// supervisor at materialisation (`Provider.RenderThinkingToText` of the
+    /// raw provider-shape blob). The UI uses it directly — historical
+    /// messages don't need to re-parse driver-specific JSONB. Empty / nil for
+    /// non-reasoning turns and for providers that only emit reasoning tokens
+    /// without exposing thinking_delta chunks.
+    public let thinkingRenderedText: String?
+    /// Wall-clock time (ms) elapsed between the first and last
+    /// thinking_delta chunk seen on the stream that produced this message.
+    /// Drives the "Thought for X.Ys" badge on historical turns. Nil when the
+    /// turn didn't surface visible reasoning at all.
+    public let thinkingDurationMs: Int32?
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
+
+    /// True when the model reasoned during this turn. Combines the captured
+    /// rendered text (visible reasoning) and `usage.reasoningTokens > 0`
+    /// (reasoning happened but the provider only reported tokens — e.g.
+    /// OpenAI Responses with summary disabled).
+    public var hasThinking: Bool {
+        if let t = thinkingRenderedText, !t.isEmpty { return true }
+        if let r = usage?.reasoningTokens, r > 0 { return true }
+        return false
+    }
 
     // MARK: - Test support
     /// Public memberwise init so snapshot/unit tests can construct messages
@@ -300,7 +337,9 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
         modelID: String? = nil,
         usage: ClarkMessageUsage? = nil,
         editedAt: Date? = nil,
-        errorText: String? = nil
+        errorText: String? = nil,
+        thinkingRenderedText: String? = nil,
+        thinkingDurationMs: Int32? = nil
     ) {
         self.id = id
         self.contextID = contextID
@@ -314,6 +353,8 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
         self.usage = usage
         self.editedAt = editedAt
         self.errorText = errorText
+        self.thinkingRenderedText = thinkingRenderedText
+        self.thinkingDurationMs = thinkingDurationMs
     }
 }
 
@@ -331,7 +372,11 @@ extension ClarkMessage {
             modelID: p.hasModelID ? p.modelID : nil,
             usage: p.hasUsage ? ClarkMessageUsage(from: p.usage) : nil,
             editedAt: p.hasEditedAt ? p.editedAt.date : nil,
-            errorText: p.hasErrorText ? p.errorText : nil
+            errorText: p.hasErrorText ? p.errorText : nil,
+            thinkingRenderedText: p.hasThinkingRenderedText && !p.thinkingRenderedText.isEmpty
+                ? p.thinkingRenderedText
+                : nil,
+            thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil
         )
     }
 }

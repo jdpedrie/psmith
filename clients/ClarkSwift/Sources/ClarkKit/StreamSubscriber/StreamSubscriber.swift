@@ -12,10 +12,19 @@ public struct ClarkChunk: Sendable, Hashable {
     public let type: ClarkChunkType
     public let payload: Data
 
-    /// Server-side text deltas are JSON-encoded as `{"text":"…"}`. Raw UTF-8
-    /// is the fallback in case a future provider emits unwrapped strings.
+    /// Convenience accessor for text/thinking deltas, both of which the
+    /// server emits as `{"text":"…"}` (raw UTF-8 is the fallback for any
+    /// future provider that emits unwrapped strings). Returns nil for
+    /// other chunk types so callers don't have to guard themselves.
     public var textIfDelta: String? {
-        guard type == .textDelta else { return nil }
+        guard type == .textDelta || type == .thinkingDelta else { return nil }
+        return decodedText
+    }
+
+    /// Same JSON-or-raw-UTF-8 unwrap as `textIfDelta`, but type-agnostic.
+    /// Used internally; exposed here so the consume-side view-model can
+    /// route thinking deltas without re-implementing the unwrap.
+    public var decodedText: String? {
         if let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
            let s = obj["text"] as? String {
             return s

@@ -54,6 +54,13 @@ struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ClarkConversation
     @Environment(AppModel.self) private var app
+    /// Drives keyboard focus into the composer the moment the conversation
+    /// pane mounts (and again when the conversation switches). Without
+    /// this the user has to click into the field after every navigation —
+    /// the spec asks for "on entering a chat, the message box should be
+    /// immediately focused." The bool is the focus payload (single-field
+    /// scope); flipping false→true re-focuses.
+    @FocusState private var composerFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -101,6 +108,19 @@ struct ConversationBody: View {
         .task {
             await model.loadContexts()
             await model.loadAvailableModels()
+        }
+        .onAppear {
+            // Defer to the next runloop so SwiftUI's first layout pass
+            // attaches the focus binding to the underlying NSTextField
+            // before we set it. Without the defer the assignment lands on
+            // a not-yet-mounted field and silently no-ops.
+            DispatchQueue.main.async { composerFocused = true }
+        }
+        .onChange(of: liveConversation.id) { _, _ in
+            // Re-focus on every conversation switch — the user navigates
+            // between chats with the keyboard and expects to land in the
+            // composer immediately.
+            DispatchQueue.main.async { composerFocused = true }
         }
     }
 
@@ -330,9 +350,26 @@ struct ConversationBody: View {
         } else if model.loading && model.messages.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+            // Read the chat pane's actual width once via GeometryReader and
+            // hand it down through the env so MessageRow can cap each
+            // bubble at a fraction of it. `containerRelativeFrame` looked
+            // like the natural fit but proved unreliable here — it didn't
+            // constrain the bubble inside the LazyVStack at all (bubbles
+            // rendered ~98% of pane regardless of the closure result).
+            // GeometryReader + a custom env key is the boring approach
+            // that actually works.
+            GeometryReader { geo in
+                paneScrollBody
+                    .environment(\.chatPaneWidth, geo.size.width)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var paneScrollBody: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(model.messages) { msg in
                             if msg.role == .compressionSummary {
                                 CompressionSummaryCard(message: msg, model: model)
@@ -350,7 +387,14 @@ struct ConversationBody: View {
                         if model.isCompacting {
                             CompactingRow(text: model.streamingText).id("__compacting__")
                         } else if !model.streamingText.isEmpty || model.isStreaming {
-                            StreamingRow(text: model.streamingText).id("__streaming__")
+                            StreamingRow(
+                                text: model.streamingText,
+                                thinkingText: model.streamingThinking,
+                                thinkingStartedAt: model.streamingThinkingStartedAt,
+                                thinkingFinishedAt: model.streamingThinkingFinishedAt,
+                                thinkingExpanded: $model.streamingThinkingExpanded
+                            )
+                            .id("__streaming__")
                         }
                     }
                     .padding()
@@ -374,7 +418,6 @@ struct ConversationBody: View {
                 .onChange(of: model.isCompacting) { _, compacting in
                     if compacting { proxy.scrollTo("__compacting__", anchor: .bottom) }
                 }
-            }
         }
     }
 
@@ -402,6 +445,7 @@ struct ConversationBody: View {
                         .lineLimit(1...8)
                         .textFieldStyle(.plain)
                         .font(.body)
+                        .focused($composerFocused)
                         .onKeyPress(.return) {
                             // shift+Return → insert a literal newline. We
                             // explicitly append "\n" instead of returning
@@ -440,6 +484,16 @@ struct ConversationBody: View {
         }
     }
 
+    /// True when the trailing message in the loaded list is a user turn
+    /// awaiting a response — and the composer has nothing typed. Powers
+    /// the "Send → Reload" swap: in that state, the prominent button
+    /// re-issues the last user message (forking) instead of sending what's
+    /// in the composer.
+    private var canReload: Bool {
+        guard model.draft.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        return model.messages.last?.role == .user
+    }
+
     @ViewBuilder
     private var sendOrStopButton: some View {
         if model.isStreaming {
@@ -451,6 +505,24 @@ struct ConversationBody: View {
             .buttonStyle(.glassProminent)
             .tint(.red)
             .keyboardShortcut(".", modifiers: [.command])
+        } else if canReload {
+            Button {
+                Task { await model.reloadLastUser() }
+            } label: {
+                if model.sending {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .buttonStyle(.glassProminent)
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(
+                model.sending
+                || model.hasPendingCompression
+                || model.isCompacting
+            )
+            .help("Reload — re-send the last user message (forks the conversation)")
         } else {
             Button {
                 Task { await model.send() }
@@ -498,8 +570,7 @@ struct ConversationBody: View {
                     Section(group.label) {
                         ForEach(group.models) { m in
                             Button {
-                                model.selectedProviderID = m.providerID
-                                model.selectedModelID    = m.modelID
+                                Task { await model.selectModel(providerID: m.providerID, modelID: m.modelID) }
                             } label: {
                                 if m.modelID == model.selectedModelID
                                     && m.providerID == model.selectedProviderID {
@@ -537,10 +608,21 @@ struct ConversationBody: View {
 private struct MessageRow: View {
     let message: ClarkMessage
     let model: ConversationViewModel
+    @Environment(\.theme) private var theme
     @State private var showDeleteConfirm = false
     @State private var showUsageDetail = false
     @State private var editDraft: String = ""
+    /// Editor's role choice — defaults to the message's current role on
+    /// edit start. Surfaces a picker in the inline editor so the user can
+    /// flip a row between user/assistant when forking. Not persisted to
+    /// the original row; only carried into the fork at "Save and Resend".
+    @State private var editRoleDraft: ClarkMessageRole = .user
     @State private var showPartialContent = false
+    /// Hover state for the in-bubble quick-action menu (Edit / Reload /
+    /// Copy). Tracked per-MessageRow @State so each bubble shows its own
+    /// menu independently.
+    @State private var isHovering: Bool = false
+    @Environment(\.chatPaneWidth) private var paneWidth
 
     private var isEditing: Bool {
         model.editingMessage?.id == message.id
@@ -551,6 +633,114 @@ private struct MessageRow: View {
     }
 
     var body: some View {
+        roleAlignedContainer {
+            bubble
+                // Right-click menu attached to the BUBBLE (not the wider
+                // outer row). Otherwise macOS uses the anchor view as the
+                // preview and the menu's "selected item" highlight balloons
+                // out to the full pane width when right-clicking near the
+                // edges.
+                .contextMenu { contextMenuItems }
+        }
+        .confirmationDialog(
+            "Delete message?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task { await model.deleteMessage(id: message.id) }
+            }
+        } message: {
+            Text("This message will be removed from the conversation. Children will be stitched to its parent.")
+        }
+    }
+
+    /// Pins user/assistant bubbles to opposite sides of the chat pane and
+    /// caps their width at ~85% of the container — matches the Messages
+    /// app convention without going edge-to-edge. system / context /
+    /// compression-summary rows stay full width since they're framing
+    /// devices, not turns. The cap applies to the bubble container only;
+    /// text inside still wraps to fit.
+    ///
+    /// The opposite-side empty space is occupied by the BranchSwitcher
+    /// when this message has siblings — "< 1/2 >" sits where the bubble
+    /// isn't, so it's always reachable without overlapping content.
+    @ViewBuilder
+    private func roleAlignedContainer<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        // Cap the bubble's width at 85% of the chat pane. Falls back to a
+        // reasonable hard cap (720pt) when paneWidth hasn't propagated yet
+        // (first-mount race) so the bubble isn't wildly wide for a frame
+        // or two before geometry settles.
+        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
+        switch message.role {
+        case .user:
+            HStack(alignment: .top, spacing: 8) {
+                branchSwitcher  // collapses to flexible Spacer when no siblings
+                content()
+                    .frame(maxWidth: cap, alignment: .trailing)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        case .assistant:
+            HStack(alignment: .top, spacing: 8) {
+                content()
+                    .frame(maxWidth: cap, alignment: .leading)
+                branchSwitcher
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        default:
+            content()
+        }
+    }
+
+    /// Renders the "< 1/2 >" arrows when this message is one of multiple
+    /// siblings. Returns an invisible flexible Spacer otherwise so the
+    /// HStack still reserves the opposite-side space symmetrically.
+    @ViewBuilder
+    private var branchSwitcher: some View {
+        if let info = model.branchInfo(for: message.id) {
+            HStack(spacing: 4) {
+                Button {
+                    let prevIdx = (info.index - 1 + info.siblingIDs.count) % info.siblingIDs.count
+                    Task { await model.switchToBranch(siblingID: info.siblingIDs[prevIdx]) }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.caption2.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .help("Previous branch")
+
+                Text("\(info.index + 1)/\(info.siblingIDs.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Button {
+                    let nextIdx = (info.index + 1) % info.siblingIDs.count
+                    Task { await model.switchToBranch(siblingID: info.siblingIDs[nextIdx]) }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .help("Next branch")
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(Color.primary.opacity(0.05))
+            )
+            .overlay(
+                Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            )
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// The styled message bubble. Extracted so `body` can wrap it in role-
+    /// aware horizontal alignment without tangling the visual styling.
+    @ViewBuilder
+    private var bubble: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 if isErrored {
@@ -580,6 +770,20 @@ private struct MessageRow: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+            }
+            // Reasoning disclosure — visible whenever this assistant turn
+            // either captured rendered reasoning text or only reported
+            // reasoning tokens (provider-without-thoughts case). The
+            // disclosure self-disables expansion when there's no text.
+            // Expanded state lives on the view-model's
+            // `expandedThinkingMessageIDs` set so reloads + the live-row
+            // hand-off don't snap it shut.
+            if !isEditing, message.role == .assistant, message.hasThinking {
+                ThinkingDisclosure(
+                    phase: .settled(durationSec: thinkingDurationSeconds(for: message)),
+                    renderedText: message.thinkingRenderedText ?? "",
+                    isExpanded: thinkingExpandedBinding
+                )
             }
             if isEditing {
                 inlineEditor
@@ -612,7 +816,7 @@ private struct MessageRow: View {
         .background {
             if isEditing {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.accentColor.opacity(0.10))
+                    .fill(theme.accent.opacity(0.10))
             } else {
                 bubbleBackground
             }
@@ -621,7 +825,7 @@ private struct MessageRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(
                     isEditing
-                        ? AnyShapeStyle(Color.accentColor.opacity(0.6))
+                        ? AnyShapeStyle(theme.accent.opacity(0.6))
                         : (isErrored
                             ? AnyShapeStyle(Color.orange.opacity(0.55))
                             : AnyShapeStyle(Color.primary.opacity(0.06))),
@@ -629,18 +833,75 @@ private struct MessageRow: View {
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .contextMenu { contextMenuItems }
-        .confirmationDialog(
-            "Delete message?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                Task { await model.deleteMessage(id: message.id) }
+        // Hover quick-action menu — overlays a tiny pill of icon buttons
+        // in the top-right of the bubble. Overlay (not inline) so it
+        // never changes the bubble's footprint as the user mouses over.
+        .overlay(alignment: .topTrailing) {
+            if isHovering, isEditableRole, !isEditing {
+                hoverActions
+                    .padding(6)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
-        } message: {
-            Text("This message will be removed from the conversation. Children will be stitched to its parent.")
         }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = hovering
+            }
+        }
+    }
+
+    /// Floating action pill shown on hover. Edit / Reload / Copy. Lives
+    /// as an overlay on the bubble so it doesn't change the bubble's
+    /// layout — important since the spec calls out the existing bubble
+    /// styling and width as something to preserve.
+    @ViewBuilder
+    private var hoverActions: some View {
+        HStack(spacing: 2) {
+            hoverButton(systemImage: "pencil", help: "Edit") {
+                startEdit()
+            }
+            hoverButton(
+                systemImage: "arrow.clockwise",
+                help: "Reload — re-send this message (forks the conversation)",
+                disabled: !isReloadable
+            ) {
+                Task { await model.reloadFromMessage(id: message.id) }
+            }
+            hoverButton(systemImage: "doc.on.doc", help: "Copy to clipboard") {
+                copyToClipboard()
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
+        .background(
+            Capsule().fill(.thickMaterial)
+        )
+        .overlay(
+            Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 1)
+    }
+
+    /// Single 22pt icon button used inside the hover actions pill.
+    /// `.buttonStyle(.plain)` strips the default macOS button chrome so
+    /// each icon reads as a flat affordance — the pill background is the
+    /// shared chrome.
+    private func hoverButton(
+        systemImage: String,
+        help: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+        .disabled(disabled)
+        .help(help)
     }
 
     /// Body for an errored assistant turn: shows the error text in full,
@@ -675,6 +936,18 @@ private struct MessageRow: View {
 
     private var inlineEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Role picker — server only allows user ↔ assistant flips
+            // (system/context/summary are locked). For those roles we hide
+            // the picker entirely.
+            if isEditableRole {
+                Picker("Role", selection: $editRoleDraft) {
+                    Text("User").tag(ClarkMessageRole.user)
+                    Text("Assistant").tag(ClarkMessageRole.assistant)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 220)
+            }
             TextEditor(text: $editDraft)
                 .font(.body)
                 .frame(minHeight: 100)
@@ -690,17 +963,51 @@ private struct MessageRow: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else { return }
-                    Task { await model.editMessage(id: message.id, content: trimmed) }
-                    model.editingMessage = nil
+                    saveEdit(thenResend: false)
+                }
+                .buttonStyle(.glass)
+                .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Save and Resend") {
+                    saveEdit(thenResend: true)
                 }
                 .buttonStyle(.glassProminent)
-                .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || model.isStreaming
+                )
                 .keyboardShortcut(.defaultAction)
+                .help("Save the edit and immediately fork — re-send the edited message as a sibling of the original.")
             }
         }
-        .onAppear { editDraft = message.content }
+        .onAppear {
+            editDraft = message.content
+            editRoleDraft = (message.role == .assistant) ? .assistant : .user
+        }
+    }
+
+    /// Save handler shared by Save and Save-and-Resend.
+    ///
+    /// - `thenResend == false`: in-place edit via EditMessage. Mutates the
+    ///   existing row; the role override is honoured server-side.
+    /// - `thenResend == true`: a fork — we issue SendMessage with the
+    ///   edited content under the original's parent, leaving the original
+    ///   row untouched. This satisfies the spec's "every Reload creates a
+    ///   fork, don't edit existing messages" semantics for the resend
+    ///   pathway. The plain Save still mutates in place because the spec
+    ///   distinguishes the two ("Save" vs "Save and Resend"). If a later
+    ///   pass wants Save to also fork, flip both branches to use
+    ///   sendForking and drop editMessage from the surface.
+    private func saveEdit(thenResend: Bool) {
+        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let parentForFork = message.parentID
+        let role = editRoleDraft
+        model.editingMessage = nil
+        if thenResend {
+            Task { await model.sendForking(content: trimmed, parentMessageID: parentForFork) }
+        } else {
+            Task { await model.editMessage(id: message.id, content: trimmed, role: role) }
+        }
     }
 
     /// One-line summary: "(in: 1,234  out: 567  cost: $0.0023)"
@@ -723,6 +1030,35 @@ private struct MessageRow: View {
         case .compressionSummary: return "SUMMARY"
         case .unknown: return "?"
         }
+    }
+
+    /// Converts the persisted `thinking_duration_ms` (Int32 ms) into
+    /// seconds for the disclosure's "Thought for X.Ys" badge. Returns nil
+    /// when the column was unset — older rows from before the column
+    /// existed, or live materialisations that didn't observe a thinking
+    /// chunk window. The disclosure renders just "Thought" in that case.
+    private func thinkingDurationSeconds(for message: ClarkMessage) -> Double? {
+        guard let ms = message.thinkingDurationMs else { return nil }
+        return Double(ms) / 1000.0
+    }
+
+    /// Bridges the disclosure's `isExpanded` Binding to the view-model's
+    /// per-message-id set. Reading: contains-check. Writing: insert /
+    /// remove the message id depending on the new value. Same semantics
+    /// the disclosure would get from a `@State Bool` but the value lives
+    /// on the view-model so it survives `load()` reloads and the live-row
+    /// hand-off at terminal time.
+    private var thinkingExpandedBinding: Binding<Bool> {
+        Binding(
+            get: { model.expandedThinkingMessageIDs.contains(message.id) },
+            set: { newValue in
+                if newValue {
+                    model.expandedThinkingMessageIDs.insert(message.id)
+                } else {
+                    model.expandedThinkingMessageIDs.remove(message.id)
+                }
+            }
+        )
     }
 
     /// "<Provider Label> <Model Display Name>" with graceful fallbacks. Looks
@@ -758,7 +1094,7 @@ private struct MessageRow: View {
             switch message.role {
             case .user:
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.accentColor.opacity(0.18))
+                    .fill(theme.accent.opacity(0.18))
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             case .assistant:
                 RoundedRectangle(cornerRadius: 10)
@@ -773,27 +1109,58 @@ private struct MessageRow: View {
         }
     }
 
+    /// Right-click menu items. Mirrors the hover quick-action set MINUS
+    /// Copy (Copy is exclusive to the hover affordance because it's the
+    /// most-frequent action and keeping it out of the right-click menu
+    /// keeps that menu short — closer to a Mac-native context menu). The
+    /// hover menu and this menu reuse the same underlying actions; their
+    /// disable rules track each other.
     @ViewBuilder
     private var contextMenuItems: some View {
-        Button("Edit…") {
-            model.editingMessage = message
+        Button("Edit…") { startEdit() }
+            .disabled(!isEditableRole)
+        Button("Reload from here") {
+            Task { await model.reloadFromMessage(id: message.id) }
         }
-        .disabled(message.role == .system || message.role == .context)
-
+        .disabled(!isReloadable)
         Divider()
+        Button("Delete", role: .destructive) { showDeleteConfirm = true }
+            .disabled(!isEditableRole)
+    }
 
-        Button("Copy") {
-            let text = message.displayContent ?? message.content
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+    /// True for user/assistant turns. system/context/compression-summary
+    /// rows are framing devices users shouldn't be editing or deleting via
+    /// these affordances — admins can still mutate them through other
+    /// surfaces.
+    private var isEditableRole: Bool {
+        switch message.role {
+        case .user, .assistant: return true
+        default: return false
         }
+    }
 
-        Divider()
+    /// Reload makes sense for any turn we can fork from — same set as
+    /// editable. Disabled mid-stream so the user can't double-fire.
+    private var isReloadable: Bool {
+        isEditableRole && !model.isStreaming
+    }
 
-        Button("Delete", role: .destructive) {
-            showDeleteConfirm = true
-        }
-        .disabled(message.role == .system || message.role == .context)
+    /// Click-handler for Edit (hover menu + right-click menu both call
+    /// this). Pre-populates the inline editor with the current message
+    /// content; the role picker defaults to the row's role.
+    private func startEdit() {
+        editDraft = message.content
+        editRoleDraft = message.role
+        model.editingMessage = message
+    }
+
+    /// Copy action — used by the hover menu only (intentionally not in the
+    /// right-click menu). Falls back to the raw `content` when there's no
+    /// displayContent.
+    private func copyToClipboard() {
+        let text = message.displayContent ?? message.content
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 
@@ -801,8 +1168,26 @@ private struct MessageRow: View {
 
 private struct PendingUserRow: View {
     let text: String
+    @Environment(\.theme) private var theme
+    @Environment(\.chatPaneWidth) private var paneWidth
 
     var body: some View {
+        // Mirrors `MessageRow`'s role-aligned wrap so the optimistic user
+        // bubble is right-aligned + width-capped just like a real one.
+        // Without this the pending row pops out as a full-width strip the
+        // moment between send-click and the RPC return — visually jarring
+        // because every other user row is right-aligned at 85%.
+        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            bubble
+                .frame(maxWidth: cap, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private var bubble: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("USER")
@@ -815,7 +1200,7 @@ private struct PendingUserRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+        .background(theme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .opacity(0.7)
@@ -980,17 +1365,47 @@ private struct CompressionSummaryCard: View {
 
 private struct StreamingRow: View {
     let text: String
+    /// Reasoning text accumulated during this stream. Populated by the
+    /// view-model's `.thinkingDelta` chunk handler. Empty for non-reasoning
+    /// turns; non-empty triggers the click-to-expand disclosure.
+    let thinkingText: String
+    /// Wall-clock the first thinking delta arrived. Nil when reasoning
+    /// hasn't started yet (or the model isn't reasoning at all).
+    let thinkingStartedAt: Date?
+    /// Wall-clock the first text delta arrived after thinking. While this
+    /// is nil the badge ticks live; the moment the model flips to producing
+    /// the visible answer we freeze the duration display at "Thought for
+    /// X.Ys" — same UX the user will see on the materialised history row a
+    /// moment later.
+    let thinkingFinishedAt: Date?
+    /// External binding to the disclosure's open/closed state. Lives on
+    /// the ConversationViewModel so the value survives the StreamingRow →
+    /// MessageRow swap at terminal time.
+    @Binding var thinkingExpanded: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text("ASSISTANT")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 ProgressView().controlSize(.mini)
             }
+            if let started = thinkingStartedAt {
+                ThinkingDisclosure(
+                    phase: thinkingFinishedAt.map { f in
+                        .settled(durationSec: f.timeIntervalSince(started))
+                    } ?? .ticking(since: started),
+                    renderedText: thinkingText,
+                    isExpanded: $thinkingExpanded
+                )
+            }
             if text.isEmpty {
-                Text("…").foregroundStyle(.secondary)
+                // Don't render a "…" placeholder while thinking is active —
+                // the disclosure pill is the visible activity indicator.
+                if thinkingStartedAt == nil {
+                    Text("…").foregroundStyle(.secondary)
+                }
             } else {
                 MarkdownText(text)
             }
@@ -1157,6 +1572,25 @@ private struct MessageUsagePopover: View {
                 .foregroundStyle(bold ? .primary : .secondary)
         }
         .font(.callout)
+    }
+}
+
+// MARK: - Env keys
+
+/// Width of the chat pane (the ScrollView's outer frame), measured by a
+/// GeometryReader at the messageScroll level and stamped into the env so
+/// MessageRow / StreamingRow can constrain bubble width as a fraction of
+/// it. Using GeometryReader → env is the boring-but-reliable alternative
+/// to `.containerRelativeFrame`, which we tried first and which silently
+/// failed to constrain bubble width in this layout.
+private struct ChatPaneWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var chatPaneWidth: CGFloat {
+        get { self[ChatPaneWidthKey.self] }
+        set { self[ChatPaneWidthKey.self] = newValue }
     }
 }
 
