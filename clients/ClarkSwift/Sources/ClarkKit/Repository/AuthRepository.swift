@@ -87,6 +87,36 @@ public enum ClarkError: Error, LocalizedError {
     }
 }
 
+/// Result of probing a candidate clarkd URL. The login screen uses
+/// this to decide whether to advance to the username/password form
+/// (`.ok`) or surface a tailored failure message.
+public enum ClarkProbeResult: Sendable, Equatable {
+    /// Server answered cleanly. `serverName` should be "clarkd" for the
+    /// canonical server; clients can warn on anything else. `version` is
+    /// the build identifier, empty for dev builds.
+    case ok(serverName: String, version: String)
+    /// Server reachable but refused the probe — e.g. an unrelated
+    /// service running at this URL, or an old clarkd that doesn't yet
+    /// implement Probe.
+    case wrongServer(detail: String)
+    /// Couldn't reach the URL at all (DNS, refused, timeout, malformed
+    /// URL). `detail` is a human-readable reason.
+    case unreachable(detail: String)
+}
+
+/// Probes a candidate clarkd URL without authentication. Doesn't hold
+/// onto state — constructs a one-shot ClarkClient against the given
+/// URL, calls Probe, returns. Runs on the main actor because AuthState
+/// init is main-actor-isolated; the probe itself is fast and the
+/// network wait is await-suspended off-actor.
+@MainActor
+public func probeClarkServer(url: URL) async -> ClarkProbeResult {
+    let probeStore = InMemoryTokenStore()
+    let probeAuth = AuthState()
+    let client = ClarkClient(host: url, tokenStore: probeStore, authState: probeAuth)
+    return await client.auth.probe()
+}
+
 /// Wraps the generated AuthServiceClient with idiomatic Swift methods. Hides
 /// the request/response message ceremony so views can call
 /// `try await repo.auth.login(username: ..., password: ...)`.
@@ -103,6 +133,32 @@ public final class AuthRepository: Sendable {
         self.client = client
         self.tokenStore = tokenStore
         self.authState = authState
+    }
+
+    /// Calls AuthService.Probe. Returns a typed ClarkProbeResult so the
+    /// LoginView can branch on the failure mode without parsing error
+    /// messages. Doesn't throw — every code path resolves to one of the
+    /// three cases.
+    public func probe() async -> ClarkProbeResult {
+        let resp = await client.probe(request: Clark_V1_ProbeRequest(), headers: [:])
+        if let msg = resp.message {
+            return .ok(serverName: msg.server, version: msg.version)
+        }
+        // resp.error is set when the RPC came back with an error.
+        if let err = resp.error {
+            let detail = err.message ?? String(describing: err.code)
+            // unimplemented or unauthenticated would be a "wrong server"
+            // signal (something is at this URL but it isn't a clarkd that
+            // speaks the Probe RPC). Other codes (unavailable, deadline,
+            // network) are unreachable.
+            switch err.code {
+            case .unimplemented, .unauthenticated, .permissionDenied, .invalidArgument:
+                return .wrongServer(detail: detail)
+            default:
+                return .unreachable(detail: detail)
+            }
+        }
+        return .unreachable(detail: "no response from server")
     }
 
     public func login(username: String, password: String, clientLabel: String? = nil) async throws -> ClarkUser {
