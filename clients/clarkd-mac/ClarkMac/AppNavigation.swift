@@ -145,19 +145,22 @@ struct EmptyStateView: View {
 enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case providers
     case profiles
-    // future: case account, general, appearance, ...
+    case appearance
+    // future: case account, general, ...
 
     var label: String {
         switch self {
-        case .providers: return "Providers"
-        case .profiles:  return "Profiles"
+        case .providers:  return "Providers"
+        case .profiles:   return "Profiles"
+        case .appearance: return "Appearance"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .providers: return "cpu"
-        case .profiles:  return "person.crop.rectangle"
+        case .providers:  return "cpu"
+        case .profiles:   return "person.crop.rectangle"
+        case .appearance: return "paintpalette"
         }
     }
 

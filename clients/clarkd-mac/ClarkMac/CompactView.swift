@@ -28,6 +28,7 @@ import ClarkKit
 struct CompactPane: View {
     @Bindable var model: ConversationViewModel
     @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
 
     @State private var modelSearch: String = ""
     @State private var pickingModel: Bool = false
@@ -314,7 +315,7 @@ struct CompactPane: View {
             .padding(.trailing, 6)
         }
         .glassEffect(
-            isSelected ? .regular.tint(.accentColor.opacity(0.18)).interactive()
+            isSelected ? .regular.tint(theme.accent.opacity(0.18)).interactive()
                        : .regular.interactive(),
             in: .rect(cornerRadius: 10)
         )

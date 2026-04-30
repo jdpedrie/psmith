@@ -129,6 +129,22 @@ struct ProvidersDetail: View {
         } message: {
             Text("All enabled models for this provider will also be removed. Historical messages are unaffected.")
         }
+        // Surface model.error so server-side failures (e.g. an FK violation
+        // when a provider is referenced by a profile/message that hasn't
+        // been migrated to ON DELETE SET NULL) are visible. Silent storage
+        // in `model.error` was masking failures as "delete didn't do anything".
+        .alert(
+            "Provider error",
+            isPresented: Binding(
+                get: { model.error != nil },
+                set: { if !$0 { model.error = nil } }
+            ),
+            presenting: model.error
+        ) { _ in
+            Button("OK") { model.error = nil }
+        } message: { err in
+            Text(err)
+        }
     }
 }
 
@@ -281,6 +297,7 @@ private struct ProviderHeader: View {
 private struct ProviderTestControl: View {
     let provider: ClarkUserModelProvider
     @Bindable var model: ProvidersViewModel
+    @Environment(\.theme) private var theme
 
     private var status: ProviderTestStatus {
         model.providerTestStatus[provider.id] ?? .idle
@@ -332,7 +349,7 @@ private struct ProviderTestControl: View {
         case .success(let r) where r.ok: return .green
         case .success: return .orange
         case .failure: return .orange
-        default: return .accentColor
+        default: return theme.accent
         }
     }
 
@@ -605,6 +622,7 @@ private enum AddProviderSelection: Equatable {
 private struct AddProviderForm: View {
     @Bindable var model: ProvidersViewModel
     @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
 
     @State private var selection: AddProviderSelection?
     @State private var label = ""
@@ -783,10 +801,10 @@ private struct AddProviderForm: View {
                         .buttonStyle(.glass)
                 }
                 .padding(10)
-                .background(Color.accentColor.opacity(0.10))
+                .background(theme.accent.opacity(0.10))
                 .overlay {
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color.accentColor.opacity(0.4))
+                        .strokeBorder(theme.accent.opacity(0.4))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
@@ -890,13 +908,14 @@ private struct AddProviderForm: View {
 /// affordance.
 private struct CustomProviderTile: View {
     let onTap: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
                 Image(systemName: "plus.circle")
                     .font(.title3)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Custom provider")
                         .fontWeight(.semibold)
@@ -914,11 +933,11 @@ private struct CustomProviderTile: View {
             // padding region) to be hittable — without this, hit-testing
             // misses the gaps between the icon and the text.
             .contentShape(Rectangle())
-            .background(Color.accentColor.opacity(0.06))
+            .background(theme.accent.opacity(0.06))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(
-                        Color.accentColor.opacity(0.5),
+                        theme.accent.opacity(0.5),
                         style: StrokeStyle(lineWidth: 1, dash: [4, 3])
                     )
             }
@@ -1024,6 +1043,10 @@ private struct EditProviderForm: View {
         }
         .onAppear {
             label = provider.label
+            // Pre-fill base_url so the user can see the current endpoint
+            // and tweak it instead of re-typing from memory. Empty placeholder
+            // preserved for non-openai providers (no base_url surfaced).
+            baseURL = provider.baseURL ?? ""
             Task { await model.loadTemplates() }
         }
     }
@@ -1185,12 +1208,13 @@ private struct DiscoveredModelRow: View {
     let model: ClarkDiscoveredModel
     let isSelected: Bool
     let onToggle: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onToggle) {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isSelected ? theme.accent : Color.secondary)
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -1320,6 +1344,7 @@ private struct TemplatePill: View {
     let template: ClarkProviderTemplate
     let isSelected: Bool
     let onTap: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onTap) {
@@ -1334,7 +1359,7 @@ private struct TemplatePill: View {
                 Spacer(minLength: 0)
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(theme.accent)
                 }
             }
             .padding(10)
@@ -1349,12 +1374,12 @@ private struct TemplatePill: View {
             // padding around "302.AI") pass through to whatever's underneath
             // — which is why the upper edge of first-row tiles read as dead.
             .contentShape(Rectangle())
-            .background(isSelected ? Color.accentColor.opacity(0.10) : Color.clear)
+            .background(isSelected ? theme.accent.opacity(0.10) : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(
                         isSelected
-                            ? AnyShapeStyle(Color.accentColor.opacity(0.4))
+                            ? AnyShapeStyle(theme.accent.opacity(0.4))
                             : AnyShapeStyle(.separator)
                     )
             }
@@ -1909,6 +1934,7 @@ private struct ModalityChip: View {
     let systemImage: String
     let isOn: Bool
     let onTap: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onTap) {
@@ -1926,7 +1952,7 @@ private struct ModalityChip: View {
         .buttonStyle(.plain)
         .glassEffect(
             isOn
-                ? .regular.tint(Color.accentColor.opacity(0.45)).interactive()
+                ? .regular.tint(theme.accent.opacity(0.45)).interactive()
                 : .regular.interactive(),
             in: .capsule
         )

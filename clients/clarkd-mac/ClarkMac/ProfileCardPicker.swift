@@ -20,6 +20,8 @@ struct ProfileCard: View {
     let onToggleFavorite: () -> Void
     let onOpenSettings: () -> Void
 
+    @Environment(\.theme) private var theme
+
     var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 6) {
@@ -45,7 +47,7 @@ struct ProfileCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : Color.white.opacity(0.06),
+                        isSelected ? theme.accent : Color.white.opacity(0.06),
                         lineWidth: isSelected ? 2 : 1
                     )
             }
@@ -90,7 +92,7 @@ struct ProfileCard: View {
     @ViewBuilder
     private var cardBackground: some View {
         if isSelected {
-            Color.accentColor.opacity(0.18)
+            theme.accent.opacity(0.18)
         } else {
             Color.white.opacity(0.04)
         }
@@ -103,6 +105,8 @@ struct ProfileCard: View {
 struct NoneProfileCard: View {
     let isSelected: Bool
     let onSelect: () -> Void
+
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onSelect) {
@@ -117,11 +121,11 @@ struct NoneProfileCard: View {
             }
             .padding(12)
             .frame(width: 200, height: 116, alignment: .topLeading)
-            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.white.opacity(0.04))
+            .background(isSelected ? theme.accent.opacity(0.18) : Color.white.opacity(0.04))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : Color.white.opacity(0.06),
+                        isSelected ? theme.accent : Color.white.opacity(0.06),
                         style: StrokeStyle(lineWidth: isSelected ? 2 : 1, dash: isSelected ? [] : [4])
                     )
             }

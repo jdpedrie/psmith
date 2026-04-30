@@ -151,10 +151,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
         window.isMovableByWindowBackground = false
-        // Match the title-bar fill to the content background so the area
-        // above the headers reads as one uniform dark surface in normal,
-        // maximized, and fullscreen states.
-        window.backgroundColor = NSColor(white: 0.13, alpha: 1.0)
+        // Match the title-bar fill to the active theme's chrome so the area
+        // above the headers reads as one uniform themed surface in normal,
+        // maximized, and fullscreen states. The dynamic NSColor under the
+        // Color resolves light/dark per the window's effectiveAppearance.
+        window.backgroundColor = NSColor(sharedThemeStore.current.chrome)
         // AppKit-level minimum — SwiftUI's `.frame(minWidth:minHeight:)` on
         // the WindowGroup root doesn't reliably propagate to NSWindow, so
         // without this the user could drag below the three-column floor
@@ -191,6 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct ClarkMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appModel = AppModel()
+    /// Use the shared ThemeStore (defined in Theme.swift) so AppDelegate can
+    /// read the active chrome color for NSWindow.backgroundColor without
+    /// having to thread the env through AppKit.
+    private var themeStore: ThemeStore { sharedThemeStore }
 
     init() {
         // SwiftPM-built executables aren't a proper .app bundle on their own;
@@ -206,10 +211,22 @@ struct ClarkMacApp: App {
                 .environment(appModel)
                 .environment(sharedWindowState)
                 .environment(sharedNavigator)
+                .environment(themeStore)
+                .environment(\.theme, themeStore.current)
+                .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
+                .background(themeStore.current.chrome.ignoresSafeArea())
                 .background(WindowChrome())
                 .navigationTitle("")
                 .task { await appModel.bootstrap() }
+                // Refresh NSWindow.backgroundColor whenever the active theme
+                // flips. AppDelegate.configure pulls from sharedThemeStore,
+                // but it isn't called on a SwiftUI env change — without this
+                // hook the title-bar fill stays on the previous theme's
+                // chrome until the next NSWindow notification fires.
+                .onChange(of: themeStore.current.id) { _, _ in
+                    AppDelegate.configureAndTrackAllWindows()
+                }
         }
         // Default size on first run. macOS state-restores the window's last
         // size on subsequent runs; the AppDelegate.configure NSWindow snap

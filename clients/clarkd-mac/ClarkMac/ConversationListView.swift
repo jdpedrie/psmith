@@ -3,6 +3,7 @@ import ClarkKit
 
 struct ConversationListView: View {
     @Environment(ConversationsModel.self) private var convos
+    @Environment(\.theme) private var theme
     @State private var conversationToDelete: ClarkConversation?
     @State private var sortPopoverShown = false
 
@@ -19,6 +20,7 @@ struct ConversationListView: View {
                 modeContent
             }
             .listStyle(.sidebar)
+            .tint(theme.accent)
             .confirmationDialog(
                 "Delete \"\(conversationToDelete?.title?.isEmpty == false ? conversationToDelete!.title! : "Untitled")\"?",
                 isPresented: Binding(
@@ -91,7 +93,7 @@ struct ConversationListView: View {
         .buttonStyle(.plain)
         .glassEffect(
             active
-                ? .regular.tint(Color.accentColor.opacity(0.85)).interactive()
+                ? .regular.tint(theme.accent.opacity(0.85)).interactive()
                 : .regular.interactive(),
             in: .capsule
         )

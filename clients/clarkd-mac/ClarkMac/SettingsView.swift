@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var category: SettingsCategory = .providers
     @Environment(WindowState.self) private var windowState
     @Environment(Navigator.self) private var navigator
+    @Environment(\.theme) private var theme
 
     /// macOS draws an opaque ~36pt title-bar overlay only when the window is
     /// zoomed — normal and fullscreen leave the title-bar area transparent.
@@ -77,15 +78,43 @@ struct SettingsView: View {
 
     // MARK: - Column 1: categories sidebar
 
+    /// Hand-rolled sidebar instead of `List(.sidebar)` — the AppKit-backed
+    /// sidebar List paints its selection background from
+    /// NSColor.controlAccentColor (the SYSTEM accent), which ignores
+    /// SwiftUI's `.tint()`. Manual rows let the active row honor the active
+    /// theme's accent.
     private var categoriesColumn: some View {
-        List(SettingsCategory.allCases, selection: Binding(
-            get: { Optional(category) },
-            set: { if let new = $0 { category = new } }
-        )) { c in
-            Label(c.label, systemImage: c.systemImage)
-                .tag(Optional(c))
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(SettingsCategory.allCases) { c in
+                categoryRow(c)
+            }
+            Spacer(minLength: 0)
         }
-        .listStyle(.sidebar)
+        .padding(.horizontal, 8)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func categoryRow(_ c: SettingsCategory) -> some View {
+        let active = (category == c)
+        Button {
+            category = c
+        } label: {
+            Label(c.label, systemImage: c.systemImage)
+                .labelStyle(.titleAndIcon)
+                .font(.callout)
+                .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(active ? AnyShapeStyle(theme.accent) : AnyShapeStyle(Color.clear))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Column 2: items list
@@ -97,6 +126,8 @@ struct SettingsView: View {
             ProvidersMiddleColumn(model: providersModel, onBack: onBack)
         case .profiles:
             ProfilesMiddleColumn(model: profilesModel, onBack: onBack)
+        case .appearance:
+            AppearanceMiddleColumn(onBack: onBack)
         }
     }
 
@@ -109,6 +140,50 @@ struct SettingsView: View {
             ProvidersDetail(model: providersModel)
         case .profiles:
             ProfilesDetail(model: profilesModel)
+        case .appearance:
+            AppearanceSettingsView()
+        }
+    }
+}
+
+// MARK: - Appearance middle column
+
+/// Skinny placeholder column for the Appearance category — no item list to
+/// browse, just a back button + section label so the three-column grid still
+/// reads correctly. The detail column carries the actual picker. No create
+/// button in the header (no items to create at this scope), which is why we
+/// hand-roll the header instead of reusing SettingsListHeader.
+private struct AppearanceMiddleColumn: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Appearance")
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("1 section")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: paneHeaderHeight)
+
+            List {
+                Label("Theme", systemImage: "paintpalette")
+                    .listRowBackground(Color.clear)
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+
+            Spacer(minLength: 0)
         }
     }
 }
@@ -125,6 +200,7 @@ struct SettingsListHeader: View {
     let onBack: () -> Void
     let onCreate: () -> Void
     let createDisabled: Bool
+    @Environment(\.theme) private var theme
 
     var body: some View {
         HStack(spacing: 8) {
@@ -146,7 +222,7 @@ struct SettingsListHeader: View {
                 systemImage: "plus",
                 action: onCreate,
                 help: "Create",
-                tint: .accentColor,
+                tint: theme.accent,
                 disabled: createDisabled
             )
         }

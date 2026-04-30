@@ -9,6 +9,7 @@ struct NewConversationView: View {
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
     @Environment(Navigator.self) private var navigator
+    @Environment(\.theme) private var theme
 
     @State private var title: String = ""
     @State private var selectedProfileID: String?
@@ -284,7 +285,7 @@ struct NewConversationView: View {
             }
         }
         .glassEffect(
-            isSelected ? .regular.tint(.accentColor.opacity(0.18)).interactive()
+            isSelected ? .regular.tint(theme.accent.opacity(0.18)).interactive()
                        : .regular.interactive(),
             in: .rect(cornerRadius: 10)
         )

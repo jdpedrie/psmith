@@ -108,6 +108,7 @@ private struct ContextRow: View {
     let parentLabel: String?
     let isActive: Bool
     let onActivate: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Button(action: onActivate) {
@@ -150,7 +151,7 @@ private struct ContextRow: View {
         }
         .buttonStyle(.plain)
         .glassEffect(
-            isActive ? .regular.tint(.accentColor.opacity(0.18)).interactive()
+            isActive ? .regular.tint(theme.accent.opacity(0.18)).interactive()
                      : .regular.interactive(),
             in: .rect(cornerRadius: 12)
         )

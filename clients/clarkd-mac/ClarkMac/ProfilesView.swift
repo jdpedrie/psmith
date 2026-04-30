@@ -129,6 +129,7 @@ struct ProfilesDetail: View {
 private struct ProfileViewer: View {
     let profile: ClarkProfile
     @Bindable var model: ProvidersViewModelHelper
+    @Environment(\.theme) private var theme
 
     init(profile: ClarkProfile, model: ProfilesViewModel) {
         self.profile = profile
@@ -235,7 +236,7 @@ private struct ProfileViewer: View {
                                 if profile.titleProviderKind == ClarkTitleProviderKind.appleFoundation {
                                     HStack(spacing: 6) {
                                         Image(systemName: "apple.logo")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(theme.accent)
                                         Text("Apple Foundation Models")
                                             .font(.callout)
                                         Text("ON DEVICE")
@@ -243,7 +244,7 @@ private struct ProfileViewer: View {
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 5)
                                             .padding(.vertical, 1)
-                                            .background(Color.accentColor.opacity(0.85))
+                                            .background(theme.accent.opacity(0.85))
                                             .clipShape(Capsule())
                                     }
                                 } else if profile.titleProviderID != nil || profile.titleModelID != nil {
@@ -376,6 +377,8 @@ private final class ProvidersViewModelHelper {
 private struct ProfileForm: View {
     @Bindable var model: ProfilesViewModel
     let editing: ClarkProfile?
+
+    @Environment(\.theme) private var theme
 
     @State private var name = ""
     @State private var profileDescription = ""
@@ -680,7 +683,7 @@ private struct ProfileForm: View {
                 systemImage: "apple.logo",
                 badge: "ON DEVICE",
                 isSelected: isLocal,
-                tint: .accentColor
+                tint: theme.accent
             ) {
                 titleProviderKind = ClarkTitleProviderKind.appleFoundation
                 titleProviderID = nil
@@ -693,7 +696,7 @@ private struct ProfileForm: View {
                 systemImage: "cloud",
                 badge: nil,
                 isSelected: isCloud,
-                tint: .accentColor
+                tint: theme.accent
             ) {
                 titleProviderKind = nil
                 // Leave (provider/model) as-is so the picker below opens
