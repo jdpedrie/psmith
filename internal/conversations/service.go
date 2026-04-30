@@ -568,6 +568,26 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[clarkv1
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	// Full-tree mode short-circuits the leaf-resolution path entirely:
+	// caller wants every message in the context (every branch), not the
+	// linear ancestor chain. Used by the client's branch switcher to
+	// discover sibling IDs and walk down to the deepest descendant of a
+	// chosen fork. The recursive CTE used in chain mode doesn't apply
+	// here — we just dump all rows for the context.
+	if req.Msg.FullTree {
+		all, err := s.queries.ListMessagesByContext(ctx, contextID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		out := make([]*clarkv1.Message, 0, len(all))
+		for _, m := range all {
+			proto := messageToProto(m)
+			applyDisplay(proto, pipeline)
+			out = append(out, proto)
+		}
+		return connect.NewResponse(&clarkv1.ListMessagesResponse{Messages: out}), nil
+	}
+
 	// Resolve the leaf to walk the ancestor chain from. Priority:
 	//   1. caller-supplied leaf_message_id (validated below)
 	//   2. context.current_leaf_message_id (the active tip after each send)
@@ -711,8 +731,15 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires supervisor + catalog dependencies"))
 	}
-	if req.Msg.Content == "" {
+	// Regenerate-mode skips the user-message-create step entirely; the
+	// stream parents off an existing user row. Content is meaningless in
+	// that mode (the user row already carries it). Non-regen requires
+	// non-empty content as before.
+	if !req.Msg.Regenerate && req.Msg.Content == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content is required"))
+	}
+	if req.Msg.Regenerate && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id"))
 	}
 	user := auth.MustFromContext(ctx)
 
@@ -783,7 +810,40 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	var userMsgRow store.Message
-	{
+	if req.Msg.Regenerate {
+		// Regenerate: parent_message_id must reference an existing user-
+		// role row in the active context. Don't insert a new row; just
+		// load it and let the rest of the handler use it as the stream's
+		// parent. The new assistant becomes a sibling of any previous
+		// assistant under this same user message.
+		pid, perr := uuid.Parse(*req.Msg.ParentMessageId)
+		if perr != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_message_id: %w", perr))
+		}
+		row, gerr := s.queries.GetMessageByID(ctx, pid)
+		if gerr != nil {
+			if errors.Is(gerr, pgx.ErrNoRows) {
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("parent_message_id not found"))
+			}
+			return nil, connect.NewError(connect.CodeInternal, gerr)
+		}
+		if row.ContextID != activeCtx.ID {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_message_id does not belong to active context"))
+		}
+		if row.Role != "user" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id to reference a user-role message"))
+		}
+		userMsgRow = row
+		// Repoint the context's current leaf to this user. Without it,
+		// subsequent non-explicit-parent sends would parent off whatever
+		// leaf the cursor still pointed at, not this regenerated branch.
+		if _, err := s.queries.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
+			ID:                   activeCtx.ID,
+			CurrentLeafMessageID: &row.ID,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
+		}
+	} else {
 		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
@@ -877,19 +937,21 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
 	}
 
-	// Detach the driver from the HTTP request context so the upstream stream
-	// outlives the request — the supervisor goroutine owns the consumption
-	// lifecycle and only StreamsService.Cancel should kill an in-flight run.
-	// We keep the request ctx's values (auth, logging) via WithoutCancel.
-	driverCtx := context.WithoutCancel(ctx)
-	srcCh, err := stateless.Send(driverCtx, providers.SendRequest{
+	sendReq := providers.SendRequest{
 		ModelID:        modelID,
 		Messages:       wireMessages,
 		Settings:       callSettings,
 		ConversationID: conv.ID.String(),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("driver send: %w", err))
+	}
+	// Build a SendFunc closure for the supervisor. The supervisor calls
+	// it inside its run goroutine with retry + per-attempt 60s timeout
+	// (see `internal/stream/send_retry.go`); on exhaustion the supervisor
+	// materialises an errored assistant message inline. SendMessage
+	// itself returns immediately — the user's typed message is durable
+	// the moment the user-row INSERT commits, regardless of upstream
+	// health.
+	sendFunc := func(driverCtx context.Context) (<-chan providers.Chunk, error) {
+		return stateless.Send(driverCtx, sendReq)
 	}
 
 	// Hand the chunk channel to the supervisor; it persists chunks, fans out to subscribers,
@@ -910,7 +972,12 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		ProviderID:      providerID,
 		ModelID:         modelID,
 		Purpose:         stream.PurposeAssistantResponse,
-		Source:          srcCh,
+		SendFunc:        sendFunc,
+		// Hand the constructed driver to the supervisor so it can populate
+		// thinking_provider_type + thinking_rendered_text on the assistant
+		// row. `stateless` already implements providers.Provider via the
+		// embedded interface chain.
+		Provider: stateless,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start stream: %w", err))
@@ -1597,16 +1664,15 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("driver %q is not a stateless provider; stateful compression not yet wired", provRow.Type))
 	}
 
-	driverCtx := context.WithoutCancel(ctx)
-	srcCh, err := stateless.Send(driverCtx, providers.SendRequest{
+	compactSendReq := providers.SendRequest{
 		ModelID: *modelID,
 		Messages: []providers.WireMessage{
 			{Role: "system", Content: *guide},
 			{Role: "user", Content: "Here is the conversation to compress.\n\n" + transcript + "\n\nProduce the summary."},
 		},
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("driver send: %w", err))
+	}
+	compactSendFunc := func(driverCtx context.Context) (<-chan providers.Chunk, error) {
+		return stateless.Send(driverCtx, compactSendReq)
 	}
 
 	runID, err := s.supervisor.Start(ctx, stream.StartParams{
@@ -1617,7 +1683,8 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 		ModelID:         *modelID,
 		Purpose:         stream.PurposeCompression,
 		CompressionMode: mode,
-		Source:          srcCh,
+		SendFunc:        compactSendFunc,
+		Provider:        stateless,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start compression stream: %w", err))

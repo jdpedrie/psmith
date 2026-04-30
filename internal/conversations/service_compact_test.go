@@ -191,8 +191,8 @@ func TestCompact_OverrideWinsOverProfile(t *testing.T) {
 	if final.Status != "completed" {
 		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
 	}
-	if final.ProviderID != overrideProv.ID {
-		t.Errorf("stream_run provider: got %s want %s (override)", final.ProviderID, overrideProv.ID)
+	if final.ProviderID == nil || *final.ProviderID != overrideProv.ID {
+		t.Errorf("stream_run provider: got %v want %s (override)", final.ProviderID, overrideProv.ID)
 	}
 	if final.ModelID != overrideModelID {
 		t.Errorf("stream_run model: got %s want %s (override)", final.ModelID, overrideModelID)
@@ -288,8 +288,8 @@ func TestCompact_OverrideProviderWithoutModel_Mixed(t *testing.T) {
 		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
 	}
 	// The model + provider should have come from the profile.
-	if final.ProviderID != f.provider.ID {
-		t.Errorf("stream_run provider: got %s want %s (profile)", final.ProviderID, f.provider.ID)
+	if final.ProviderID == nil || *final.ProviderID != f.provider.ID {
+		t.Errorf("stream_run provider: got %v want %s (profile)", final.ProviderID, f.provider.ID)
 	}
 	if final.ModelID != f.modelID {
 		t.Errorf("stream_run model: got %s want %s (profile)", final.ModelID, f.modelID)

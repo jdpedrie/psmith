@@ -446,20 +446,80 @@ func TestSendMessage_ResolvesFromConversationSettings(t *testing.T) {
 
 // --- driver errors ---
 
+// TestSendMessage_DriverSendFails: when driver.Send fails repeatedly, the
+// SendMessage RPC still succeeds — the user-message row is inserted, the
+// stream_run is created, and the supervisor materialises an errored
+// assistant message with the failure inline (`messages.error_payload`).
+// This is the "never lose the user's typed text to a transient blip"
+// contract; Reload becomes the natural retry surface.
+//
+// `withFastSendRetry` shrinks the backoff/timeout vars to keep this test
+// in the millisecond range despite the 3-attempt loop in the helper.
 func TestSendMessage_DriverSendFails(t *testing.T) {
 	t.Parallel()
-	svc, q, _ := newFullSvc(t)
+	withFastSendRetry(t)
+	svc, q, sup := newFullSvc(t)
 	driverType := registerFakeDriver(t, "send-err", nil, errors.New("upstream broken"))
 	f := seedSendable(t, q, driverType)
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
 		ModelId:        &mid,
 	}))
-	assertCode(t, err, connect.CodeInternal)
+	if err != nil {
+		t.Fatalf("SendMessage should succeed even when driver fails; got %v", err)
+	}
+	if resp.Msg.UserMessage == nil {
+		t.Fatal("user_message must be populated")
+	}
+	if resp.Msg.StreamRun == nil {
+		t.Fatal("stream_run must be populated")
+	}
+	// Wait for the supervisor to finalise the run, then assert the
+	// materialised assistant row carries the upstream error inline.
+	runID, err := uuid.Parse(resp.Msg.StreamRun.Id)
+	if err != nil {
+		t.Fatalf("parse run id: %v", err)
+	}
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "errored" {
+		t.Errorf("stream_run status %q want errored", final.Status)
+	}
+	if final.ResultMessageID == nil {
+		t.Fatal("expected materialised assistant message id on errored run")
+	}
+	got, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("load result message: %v", err)
+	}
+	if len(got.ErrorPayload) == 0 {
+		t.Fatal("expected errored assistant message to carry error_payload")
+	}
+	if !strings.Contains(string(got.ErrorPayload), "upstream broken") {
+		t.Errorf("error_payload should mention driver error; got %s", string(got.ErrorPayload))
+	}
+}
+
+// withFastSendRetry shrinks the supervisor's send-retry policy
+// (`internal/stream`) to milliseconds so tests exercising the retry
+// loop don't spend real seconds sleeping between attempts. Cleanup
+// restores the production values via t.Cleanup.
+func withFastSendRetry(t *testing.T) {
+	t.Helper()
+	prevAttempts := stream.MaxSendAttempts
+	prevTimeout := stream.PerAttemptTimeout
+	prevBackoff := stream.InitialBackoff
+	stream.MaxSendAttempts = 3
+	stream.PerAttemptTimeout = 200 * time.Millisecond
+	stream.InitialBackoff = 1 * time.Millisecond
+	t.Cleanup(func() {
+		stream.MaxSendAttempts = prevAttempts
+		stream.PerAttemptTimeout = prevTimeout
+		stream.InitialBackoff = prevBackoff
+	})
 }
 
 // --- nil deps ---

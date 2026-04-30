@@ -983,9 +983,16 @@ func (x *UpdateContextResponse) GetContext() *Context {
 type ListMessagesRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	ContextId string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
-	// If set, return only the linear ancestor chain ending at this leaf
-	// (one branch of the message tree). Otherwise return the full tree.
+	// Pin the linear ancestor chain to this leaf. When unset, server
+	// resolves the leaf via context.current_leaf_message_id, then falls
+	// back to the natural leaf of the tree. Ignored when `full_tree=true`.
 	LeafMessageId *string `protobuf:"bytes,2,opt,name=leaf_message_id,json=leafMessageId,proto3,oneof" json:"leaf_message_id,omitempty"`
+	// When true, return every message in the context — every branch, not
+	// just the active chain. Used by the branch switcher in the client to
+	// discover sibling IDs and walk down to the deepest descendant of the
+	// chosen fork. Default false (chain mode) preserves the original
+	// behaviour for callers that don't opt in.
+	FullTree      bool `protobuf:"varint,3,opt,name=full_tree,json=fullTree,proto3" json:"full_tree,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1032,6 +1039,13 @@ func (x *ListMessagesRequest) GetLeafMessageId() string {
 		return *x.LeafMessageId
 	}
 	return ""
+}
+
+func (x *ListMessagesRequest) GetFullTree() bool {
+	if x != nil {
+		return x.FullTree
+	}
+	return false
 }
 
 type ListMessagesResponse struct {
@@ -1462,9 +1476,17 @@ type SendMessageRequest struct {
 	ParentMessageId *string `protobuf:"bytes,2,opt,name=parent_message_id,json=parentMessageId,proto3,oneof" json:"parent_message_id,omitempty"`
 	Content         string  `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
 	// Per-turn provider/model override; falls back to conversation, then profile, then default.
-	ProviderId    *string       `protobuf:"bytes,4,opt,name=provider_id,json=providerId,proto3,oneof" json:"provider_id,omitempty"`
-	ModelId       *string       `protobuf:"bytes,5,opt,name=model_id,json=modelId,proto3,oneof" json:"model_id,omitempty"`
-	CallSettings  *CallSettings `protobuf:"bytes,6,opt,name=call_settings,json=callSettings,proto3,oneof" json:"call_settings,omitempty"`
+	ProviderId   *string       `protobuf:"bytes,4,opt,name=provider_id,json=providerId,proto3,oneof" json:"provider_id,omitempty"`
+	ModelId      *string       `protobuf:"bytes,5,opt,name=model_id,json=modelId,proto3,oneof" json:"model_id,omitempty"`
+	CallSettings *CallSettings `protobuf:"bytes,6,opt,name=call_settings,json=callSettings,proto3,oneof" json:"call_settings,omitempty"`
+	// Regenerate-only: when true, the server skips creating a new user
+	// message and starts the assistant stream off `parent_message_id`
+	// directly. `parent_message_id` is required in this mode and must
+	// reference an existing user-role row in the active context. Powers the
+	// "regenerate" affordance in the UI — produces a sibling assistant
+	// turn under the SAME user message, no duplicate user. `content` is
+	// ignored when this flag is set.
+	Regenerate    bool `protobuf:"varint,7,opt,name=regenerate,proto3" json:"regenerate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1541,10 +1563,20 @@ func (x *SendMessageRequest) GetCallSettings() *CallSettings {
 	return nil
 }
 
+func (x *SendMessageRequest) GetRegenerate() bool {
+	if x != nil {
+		return x.Regenerate
+	}
+	return false
+}
+
 type SendMessageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserMessage   *Message               `protobuf:"bytes,1,opt,name=user_message,json=userMessage,proto3" json:"user_message,omitempty"`
-	StreamRun     *StreamRun             `protobuf:"bytes,2,opt,name=stream_run,json=streamRun,proto3" json:"stream_run,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Echo of the user message that anchors this turn. When `regenerate`
+	// was set, this is the existing parent user message (no new row); when
+	// false, it's the freshly-inserted user row.
+	UserMessage   *Message   `protobuf:"bytes,1,opt,name=user_message,json=userMessage,proto3" json:"user_message,omitempty"`
+	StreamRun     *StreamRun `protobuf:"bytes,2,opt,name=stream_run,json=streamRun,proto3" json:"stream_run,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1891,11 +1923,12 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01B\b\n" +
 	"\x06_title\"D\n" +
 	"\x15UpdateContextResponse\x12+\n" +
-	"\acontext\x18\x01 \x01(\v2\x11.clark.v1.ContextR\acontext\"u\n" +
+	"\acontext\x18\x01 \x01(\v2\x11.clark.v1.ContextR\acontext\"\x92\x01\n" +
 	"\x13ListMessagesRequest\x12\x1d\n" +
 	"\n" +
 	"context_id\x18\x01 \x01(\tR\tcontextId\x12+\n" +
-	"\x0fleaf_message_id\x18\x02 \x01(\tH\x00R\rleafMessageId\x88\x01\x01B\x12\n" +
+	"\x0fleaf_message_id\x18\x02 \x01(\tH\x00R\rleafMessageId\x88\x01\x01\x12\x1b\n" +
+	"\tfull_tree\x18\x03 \x01(\bR\bfullTreeB\x12\n" +
 	"\x10_leaf_message_id\"E\n" +
 	"\x14ListMessagesResponse\x12-\n" +
 	"\bmessages\x18\x01 \x03(\v2\x11.clark.v1.MessageR\bmessages\"#\n" +
@@ -1918,7 +1951,7 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\"T\n" +
 	"%PromoteCompactionToNewContextResponse\x12+\n" +
-	"\acontext\x18\x01 \x01(\v2\x11.clark.v1.ContextR\acontext\"\xd5\x02\n" +
+	"\acontext\x18\x01 \x01(\v2\x11.clark.v1.ContextR\acontext\"\xf5\x02\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -1926,7 +1959,10 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\vprovider_id\x18\x04 \x01(\tH\x01R\n" +
 	"providerId\x88\x01\x01\x12\x1e\n" +
 	"\bmodel_id\x18\x05 \x01(\tH\x02R\amodelId\x88\x01\x01\x12@\n" +
-	"\rcall_settings\x18\x06 \x01(\v2\x16.clark.v1.CallSettingsH\x03R\fcallSettings\x88\x01\x01B\x14\n" +
+	"\rcall_settings\x18\x06 \x01(\v2\x16.clark.v1.CallSettingsH\x03R\fcallSettings\x88\x01\x01\x12\x1e\n" +
+	"\n" +
+	"regenerate\x18\a \x01(\bR\n" +
+	"regenerateB\x14\n" +
 	"\x12_parent_message_idB\x0e\n" +
 	"\f_provider_idB\v\n" +
 	"\t_model_idB\x10\n" +

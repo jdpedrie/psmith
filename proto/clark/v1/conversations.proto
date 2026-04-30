@@ -175,9 +175,16 @@ message UpdateContextResponse {
 
 message ListMessagesRequest {
   string context_id = 1;
-  // If set, return only the linear ancestor chain ending at this leaf
-  // (one branch of the message tree). Otherwise return the full tree.
+  // Pin the linear ancestor chain to this leaf. When unset, server
+  // resolves the leaf via context.current_leaf_message_id, then falls
+  // back to the natural leaf of the tree. Ignored when `full_tree=true`.
   optional string leaf_message_id = 2;
+  // When true, return every message in the context — every branch, not
+  // just the active chain. Used by the branch switcher in the client to
+  // discover sibling IDs and walk down to the deepest descendant of the
+  // chosen fork. Default false (chain mode) preserves the original
+  // behaviour for callers that don't opt in.
+  bool full_tree = 3;
 }
 message ListMessagesResponse {
   repeated Message messages = 1;
@@ -232,8 +239,19 @@ message SendMessageRequest {
   optional string provider_id = 4;
   optional string model_id = 5;
   optional CallSettings call_settings = 6;
+  // Regenerate-only: when true, the server skips creating a new user
+  // message and starts the assistant stream off `parent_message_id`
+  // directly. `parent_message_id` is required in this mode and must
+  // reference an existing user-role row in the active context. Powers the
+  // "regenerate" affordance in the UI — produces a sibling assistant
+  // turn under the SAME user message, no duplicate user. `content` is
+  // ignored when this flag is set.
+  bool regenerate = 7;
 }
 message SendMessageResponse {
+  // Echo of the user message that anchors this turn. When `regenerate`
+  // was set, this is the existing parent user message (no new row); when
+  // false, it's the freshly-inserted user row.
   Message user_message = 1;
   StreamRun stream_run = 2;
 }
