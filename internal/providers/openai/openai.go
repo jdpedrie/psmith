@@ -87,20 +87,26 @@ type Driver struct {
 
 // resolveChatCompletions applies the routing rule:
 //
-//   - cfg.UseChatCompletions == nil  → chat-completions, unless base_url
-//     points at api.openai.com (in which case the official Responses API
-//     is the right path).
-//   - cfg.UseChatCompletions != nil → honour the explicit override.
-//
-// The default favours chat-completions because most backends users will
-// register (Ollama, LM Studio, vLLM, OpenRouter for many models, every
-// self-hosted gateway) only implement chat-completions. The Responses API
-// is OpenAI-specific.
+//   - base_url ≠ api.openai.com → always chat-completions. The Responses
+//     API only lives at api.openai.com; routing a third-party endpoint
+//     (Ollama, vLLM, OpenRouter, Z.AI, LM Studio, Together, …) at it
+//     produces a 404 every time. The stored UseChatCompletions value is
+//     ignored here — it's likely stale from an older default that picked
+//     Responses for everything, and there's no scenario where a non-OpenAI
+//     backend wants to opt into a non-existent endpoint.
+//   - base_url = api.openai.com + UseChatCompletions == nil → Responses
+//     (the modern, recommended OpenAI path).
+//   - base_url = api.openai.com + UseChatCompletions != nil → honour the
+//     explicit override (some workflows prefer the older chat-completions
+//     shape even on official OpenAI).
 func resolveChatCompletions(cfg Config) bool {
+	if !isOfficialOpenAIBaseURL(cfg.BaseURL) {
+		return true
+	}
 	if cfg.UseChatCompletions != nil {
 		return *cfg.UseChatCompletions
 	}
-	return !isOfficialOpenAIBaseURL(cfg.BaseURL)
+	return false
 }
 
 // isOfficialOpenAIBaseURL reports whether the configured base_url points
@@ -110,6 +116,20 @@ func resolveChatCompletions(cfg Config) bool {
 func isOfficialOpenAIBaseURL(baseURL string) bool {
 	low := strings.ToLower(baseURL)
 	return strings.Contains(low, "api.openai.com")
+}
+
+// ForceResponsesAPIForTest is a testing-only escape hatch. The routing
+// rule in New() forces non-OpenAI base URLs to chat-completions, but
+// httptest base URLs are localhost — so package-external tests that
+// exercise the Responses-API code path (e.g. fakellm round-trips) need
+// to flip the routing manually after construction.
+//
+// Not used by production code; safe to call only on a fresh driver before
+// any Send() invocation.
+func ForceResponsesAPIForTest(p providers.Provider) {
+	if d, ok := p.(*Driver); ok {
+		d.chatCompletions = false
+	}
 }
 
 // New constructs a Driver from a Config blob and injected deps.

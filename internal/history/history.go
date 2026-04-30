@@ -167,6 +167,22 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		if m.Role == roleCompressionSummary {
 			continue
 		}
+		// Errored / cancelled assistant turns: the supervisor materialises a
+		// row even when the upstream produced nothing, so the failure shows
+		// up in the UI as first-class history. Sending those rows back to a
+		// provider on the next turn is wrong on every axis: the content is
+		// usually empty (Gemini rejects outright with "parts[].data: oneof
+		// must have one initialised field"; OpenAI silently accepts but the
+		// model gets a blank assistant turn that confuses follow-ups), and
+		// even when partial content streamed before the failure we don't
+		// want the model to treat a half-finished + crashed answer as the
+		// authoritative reply. Filter every message with a non-null
+		// error_payload — across all providers, including the matched user
+		// turn that prompted the failed attempt is fine, the failed
+		// assistant row is the only thing we drop.
+		if len(m.ErrorPayload) > 0 {
+			continue
+		}
 		wm, err := toWireMessage(m, params.DestProviderType, params.IncludeThinking)
 		if err != nil {
 			return nil, err

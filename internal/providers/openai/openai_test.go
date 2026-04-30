@@ -51,26 +51,39 @@ func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) {
 // validConfig returns a json.RawMessage that satisfies New's required
 // fields. base_url is filled in by the caller.
 //
-// Forces UseChatCompletions=false so tests routed through validConfig hit
-// the Responses-API path. The default routing (auto: chat-completions
-// unless base_url contains api.openai.com) would otherwise route these
-// tests to chat-completions since httptest base URLs are localhost.
-// Tests that want chat-completions explicitly opt in by constructing
-// their own Config with UseChatCompletions: boolPtr(true).
+// Doesn't set UseChatCompletions — the routing rule in New() forces
+// non-OpenAI base URLs (httptest's localhost) to chat-completions, so
+// stored UseChatCompletions=false would be ignored anyway. Tests that
+// need the Responses-API path call `forceResponsesAPI(p)` after New().
+// Tests that want chat-completions just use validConfig as-is.
 func validConfig(t *testing.T, baseURL, catalogProviderID string) json.RawMessage {
 	t.Helper()
-	use := false
 	cfg := Config{
-		APIKey:             "test-key",
-		BaseURL:            baseURL,
-		CatalogProviderID:  catalogProviderID,
-		UseChatCompletions: &use,
+		APIKey:            "test-key",
+		BaseURL:           baseURL,
+		CatalogProviderID: catalogProviderID,
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatalf("marshal cfg: %v", err)
 	}
 	return raw
+}
+
+// forceResponsesAPI flips a freshly-built Driver from chat-completions
+// (the auto-detected default for httptest base URLs) over to the
+// Responses-API path. The routing rule production code uses requires the
+// base URL to be api.openai.com to pick Responses, which httptest can't
+// satisfy — so tests exercising the Responses code path post-mutate the
+// unexported flag here.
+func forceResponsesAPI(t *testing.T, p providers.Provider) providers.Provider {
+	t.Helper()
+	d, ok := p.(*Driver)
+	if !ok {
+		t.Fatalf("provider is not *Driver: %T", p)
+	}
+	d.chatCompletions = false
+	return p
 }
 
 // ---------- New() --------------------------------------------------------
@@ -347,6 +360,7 @@ func TestSend_StreamsTextAndThinking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	p = forceResponsesAPI(t, p)
 	stateless, ok := p.(providers.StatelessProvider)
 	if !ok {
 		t.Fatal("driver does not satisfy StatelessProvider")
@@ -431,6 +445,7 @@ func TestSend_ErrorEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	p = forceResponsesAPI(t, p)
 	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
 		ModelID:  "gpt-test",
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
@@ -766,6 +781,7 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	p = forceResponsesAPI(t, p)
 
 	tier := providers.ServiceTierAuto
 	enabled := true
@@ -852,6 +868,7 @@ func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
+			p = forceResponsesAPI(t, p)
 			enabled := true
 			b := tc.budget
 			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{

@@ -10,7 +10,7 @@ import (
 	"github.com/jdpedrie/clark/fakellm"
 	"github.com/jdpedrie/clark/internal/providers"
 	_ "github.com/jdpedrie/clark/internal/providers/anthropic" // registers driver
-	_ "github.com/jdpedrie/clark/internal/providers/openai"    // registers openai-compatible driver
+	"github.com/jdpedrie/clark/internal/providers/openai"     // registers openai-compatible driver
 )
 
 // TestAnthropicRoundTrip drives the real Anthropic driver against the fake
@@ -282,12 +282,17 @@ func TestOpenAIResponsesRoundTrip(t *testing.T) {
 
 	// Force Responses-API routing — this test asserts the Responses path
 	// works end-to-end. Default routing (chat-completions for non-OpenAI
-	// base URLs) would otherwise route this through chat-completions.
-	cfg := []byte(fmt.Sprintf(`{"api_key":"x","base_url":%q,"use_chat_completions":false}`, fake.URL()+"/v1"))
+	// base URLs) would otherwise route this through chat-completions, and
+	// the new routing rule ignores stored use_chat_completions=false on
+	// non-OpenAI URLs (it's stale data from when the field defaulted to
+	// false). The driver exposes a test-only escape hatch to flip the
+	// flag after construction.
+	cfg := []byte(fmt.Sprintf(`{"api_key":"x","base_url":%q}`, fake.URL()+"/v1"))
 	driver, err := providers.Build("openai-compatible", providers.Deps{Logger: slog.Default()}, cfg)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
+	openai.ForceResponsesAPIForTest(driver)
 	stateless := driver.(providers.StatelessProvider)
 	ch, err := stateless.Send(context.Background(), providers.SendRequest{
 		ModelID:  "gpt-fake",

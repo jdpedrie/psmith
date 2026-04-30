@@ -100,6 +100,34 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 		}
 
 		for _, ch := range chunk.Choices {
+			// Reasoning content arrives via non-standard delta fields the
+			// official OpenAI API doesn't ship: `delta.reasoning` (used by
+			// OpenRouter, Z.AI, and most "thinking" gateways) and
+			// `delta.reasoning_content` (DeepSeek's variant). The SDK
+			// captures unknown JSON keys in `Delta.JSON.ExtraFields` so we
+			// can read both regardless of the upstream's exact field name.
+			// We try the modern OpenRouter spelling first and fall back to
+			// DeepSeek's; if both are populated we concat (rare in practice).
+			if text := extractReasoningDelta(ch.Delta); text != "" {
+				emit(out, providers.ChunkThinking, map[string]string{"text": text})
+			}
+			// Diagnostic: when the upstream sends fields the SDK doesn't
+			// know about (typically `reasoning`, `reasoning_content`, or
+			// some bespoke variant), log the raw delta JSON once so we can
+			// see exactly which key carries thinking on this provider.
+			// Helps when a model populates `usage.reasoning_tokens` but
+			// surfaces no recognised text field.
+			if d.deps.Logger != nil && len(ch.Delta.JSON.ExtraFields) > 0 {
+				keys := make([]string, 0, len(ch.Delta.JSON.ExtraFields))
+				for k := range ch.Delta.JSON.ExtraFields {
+					keys = append(keys, k)
+				}
+				// TEMP: Info-level so it shows under default slog level.
+				// Drop to Debug once we know the field name to read.
+				d.deps.Logger.Info("chat-completions delta extra fields",
+					"keys", keys,
+					"raw", ch.Delta.RawJSON())
+			}
 			if ch.Delta.Content != "" {
 				emit(out, providers.ChunkText, map[string]string{"text": ch.Delta.Content})
 			}
@@ -119,6 +147,36 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 		return
 	}
 	emit(out, providers.ChunkDone, map[string]any{})
+}
+
+// extractReasoningDelta pulls a non-standard reasoning string off a
+// chat-completions stream delta. Official OpenAI doesn't ship this field;
+// every gateway that proxies a thinking model invents its own spelling:
+//
+//   - OpenRouter, Z.AI, Together-via-OR: `delta.reasoning`
+//   - DeepSeek (and a handful of forks): `delta.reasoning_content`
+//
+// Both fields are strings carrying the running thought stream. The SDK
+// captures unknown JSON keys in `Delta.JSON.ExtraFields`; we unwrap the
+// `respjson.Field.Raw()` (which gives a JSON-encoded value) into a Go
+// string. Returns "" when neither field is present.
+func extractReasoningDelta(d openai.ChatCompletionChunkChoiceDelta) string {
+	var out string
+	for _, key := range []string{"reasoning", "reasoning_content"} {
+		f, ok := d.JSON.ExtraFields[key]
+		if !ok || !f.Valid() {
+			continue
+		}
+		raw := f.Raw()
+		if raw == "" || raw == "null" {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal([]byte(raw), &s); err == nil && s != "" {
+			out += s
+		}
+	}
+	return out
 }
 
 // emitChatUsage normalizes a CompletionUsage into ChunkUsage.
