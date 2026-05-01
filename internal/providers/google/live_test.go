@@ -307,6 +307,103 @@ func TestLive_ExplicitCaching(t *testing.T) {
 	}
 }
 
+// TestLive_ImplicitCaching verifies Gemini's implicit cache fires when the
+// same large prefix is sent on consecutive turns:
+//
+//  1. Send a turn with a large stable system_instruction. First call: no
+//     cache hit (cachedContentTokenCount may be zero).
+//  2. Send the SAME prefix immediately. Gemini's implicit cache should
+//     pick it up — usageMetadata.cachedContentTokenCount > 0.
+//
+// Implicit caching is server-controlled and best-effort, so the assert
+// is on the second call only. Per Gemini docs, implicit caching has
+// minimum-prefix sizes (1024 tokens on 2.5-flash, 4096 on 2.5-pro); the
+// shared buildLargeSystemPrompt clears both.
+//
+// To make implicit caching deterministic across runs, the user-turn text
+// is also fixed — Gemini hashes the entire prefix (system + history) up
+// to the cache boundary.
+func TestLive_ImplicitCaching(t *testing.T) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		t.Skip("GOOGLE_API_KEY not set; skipping live test")
+	}
+
+	cfg := Config{APIKey: apiKey}
+	raw, _ := json.Marshal(cfg)
+	p, err := New(providers.Deps{}, raw)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	d := p.(*Driver)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	const modelID = "gemini-2.5-flash"
+	bigSystem := buildLargeSystemPrompt()
+
+	// Run the same call twice. Second call should hit implicit cache.
+	send := func(label string) *providers.Usage {
+		ch, err := d.Send(ctx, providers.SendRequest{
+			ModelID: modelID,
+			Messages: []providers.WireMessage{
+				{Role: "system", Content: bigSystem},
+				{Role: "user", Content: "Reply with exactly the word OK."},
+			},
+		})
+		if err != nil {
+			t.Fatalf("[%s] Send: %v", label, err)
+		}
+		var usage *providers.Usage
+		var sawError bool
+		var errMessage string
+		for c := range ch {
+			switch c.Type {
+			case providers.ChunkUsage:
+				var u providers.Usage
+				if err := json.Unmarshal(c.Payload, &u); err == nil {
+					usage = &u
+				}
+			case providers.ChunkError:
+				sawError = true
+				var p struct {
+					Message string `json:"message"`
+				}
+				_ = json.Unmarshal(c.Payload, &p)
+				errMessage = p.Message
+			}
+		}
+		if sawError {
+			t.Fatalf("[%s] got ChunkError: %s", label, errMessage)
+		}
+		if usage == nil {
+			t.Fatalf("[%s] expected ChunkUsage", label)
+		}
+		fmt.Printf("[%s] in=%v out=%v cache_read=%v\n",
+			label,
+			derefIntPtr(usage.InputTokens),
+			derefIntPtr(usage.OutputTokens),
+			derefIntPtr(usage.CacheReadTokens))
+		return usage
+	}
+
+	first := send("first")
+	second := send("second")
+
+	// First call: implicit cache may or may not have a hit (e.g. if a
+	// recent unrelated test seeded the same prefix). Don't assert.
+	_ = first
+
+	// Second call: must show a cache_read. If this fails consistently
+	// against a quiet account the model probably raised the implicit
+	// minimum — bump buildLargeSystemPrompt's size.
+	if second.CacheReadTokens == nil || *second.CacheReadTokens == 0 {
+		t.Errorf("expected cache_read_tokens > 0 on second call (implicit cache); got %v",
+			second.CacheReadTokens)
+	}
+}
+
 // buildLargeSystemPrompt returns a deterministic chunk of text big enough
 // to satisfy Gemini's minimum cacheable size on gemini-2.5-flash (4096
 // tokens ≈ 16k–20k chars of English). We pad with a repeating but
