@@ -27,6 +27,7 @@ import (
 	"github.com/jdpedrie/clark/internal/modelmeta"
 	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
+	googledriver "github.com/jdpedrie/clark/internal/providers/google"
 	"github.com/jdpedrie/clark/internal/store"
 	"github.com/jdpedrie/clark/internal/stream"
 	"github.com/jdpedrie/clark/plugins"
@@ -969,6 +970,21 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
 	}
 
+	// Gemini explicit cache hook. When call_settings.google.explicit_cache
+	// is true and we're sending to a google driver, look up (or create)
+	// a cachedContents resource for this (context, model). On hit:
+	// trim the wire prefix to the new tail and stash the cache name on
+	// settings.Google.CachedContent for the driver to attach. On miss
+	// or error: send normally; failures are non-fatal.
+	if callSettings.Google != nil && callSettings.Google.ExplicitCache != nil && *callSettings.Google.ExplicitCache {
+		if gd, ok := driver.(*googledriver.Driver); ok {
+			if cacheName, trimmed := s.maybeAttachGeminiCache(ctx, gd, activeCtx.ID, modelID, wireMessages); cacheName != nil {
+				wireMessages = trimmed
+				callSettings.Google.CachedContent = cacheName
+			}
+		}
+	}
+
 	sendReq := providers.SendRequest{
 		ModelID:        modelID,
 		Messages:       wireMessages,
@@ -1357,6 +1373,7 @@ func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings
 	if ge := s.Google; ge != nil {
 		out.Google = &providers.GoogleExtras{
 			ResponseMimeType: ge.ResponseMimeType,
+			ExplicitCache:    ge.ExplicitCache,
 		}
 		if ge.CandidateCount != nil {
 			v := int(*ge.CandidateCount)

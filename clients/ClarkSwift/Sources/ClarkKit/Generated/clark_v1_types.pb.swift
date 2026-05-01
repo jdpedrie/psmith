@@ -1349,9 +1349,7 @@ public struct Clark_V1_JsonSchema: Sendable {
   fileprivate var _strict: Bool? = nil
 }
 
-/// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
-/// intentionally deferred — Gemini 2.x has implicit caching default-on and
-/// explicit cachedContents needs its own design pass.
+/// GoogleExtras carries Gemini-specific knobs.
 public struct Clark_V1_GoogleExtras: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1396,6 +1394,24 @@ public struct Clark_V1_GoogleExtras: Sendable {
   /// Clears the value of `candidateCount`. Subsequent reads from it will return its default value.
   public mutating func clearCandidateCount() {self._candidateCount = nil}
 
+  /// explicit_cache, when true, opts the conversation in to server-
+  /// managed Gemini cachedContents. Clark creates a cache on the first
+  /// turn whose prefix exceeds the model's minimum (1024 tokens on
+  /// Flash, 4096 on Pro), references it on subsequent turns, and
+  /// refreshes when it expires. Useful for preview models where
+  /// implicit caching is unreliable, or any conversation that wants
+  /// deterministic cache hits in exchange for the per-hour storage
+  /// cost. Resolved through the standard 4-layer chain (conversation
+  /// > profile > model > provider) like every other CallSettings field.
+  public var explicitCache: Bool {
+    get {_explicitCache ?? false}
+    set {_explicitCache = newValue}
+  }
+  /// Returns true if `explicitCache` has been explicitly set.
+  public var hasExplicitCache: Bool {self._explicitCache != nil}
+  /// Clears the value of `explicitCache`. Subsequent reads from it will return its default value.
+  public mutating func clearExplicitCache() {self._explicitCache = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1404,6 +1420,7 @@ public struct Clark_V1_GoogleExtras: Sendable {
   fileprivate var _responseMimeType: String? = nil
   fileprivate var _responseSchema: Data? = nil
   fileprivate var _candidateCount: Int32? = nil
+  fileprivate var _explicitCache: Bool? = nil
 }
 
 public struct Clark_V1_SafetySettings: Sendable {
@@ -3481,7 +3498,7 @@ extension Clark_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GoogleExtras"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0\u{3}explicit_cache\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3493,6 +3510,7 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 2: try { try decoder.decodeSingularStringField(value: &self._responseMimeType) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self._responseSchema) }()
       case 4: try { try decoder.decodeSingularInt32Field(value: &self._candidateCount) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self._explicitCache) }()
       default: break
       }
     }
@@ -3515,6 +3533,9 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try { if let v = self._candidateCount {
       try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
     } }()
+    try { if let v = self._explicitCache {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 5)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3523,6 +3544,7 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs._responseMimeType != rhs._responseMimeType {return false}
     if lhs._responseSchema != rhs._responseSchema {return false}
     if lhs._candidateCount != rhs._candidateCount {return false}
+    if lhs._explicitCache != rhs._explicitCache {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

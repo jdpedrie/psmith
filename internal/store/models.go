@@ -31,6 +31,16 @@ type Conversation struct {
 	UpdatedAt time.Time
 }
 
+type GeminiCach struct {
+	ContextID          uuid.UUID
+	ModelID            string
+	CacheName          string
+	PrefixMessageCount int32
+	PrefixHash         string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+}
+
 type HarnessSession struct {
 	ID                uuid.UUID
 	ConversationID    uuid.UUID

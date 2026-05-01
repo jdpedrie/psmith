@@ -305,6 +305,7 @@ func mergeGoogleExtras(higher, lower *clarkv1.GoogleExtras) *clarkv1.GoogleExtra
 	out := &clarkv1.GoogleExtras{
 		ResponseMimeType: pickString(higher.ResponseMimeType, lower.ResponseMimeType),
 		CandidateCount:   pickInt32(higher.CandidateCount, lower.CandidateCount),
+		ExplicitCache:    pickBool(higher.ExplicitCache, lower.ExplicitCache),
 	}
 	out.SafetySettings = mergeSafetySettings(higher.SafetySettings, lower.SafetySettings)
 	if len(higher.ResponseSchema) > 0 {
@@ -322,6 +323,7 @@ func cloneGoogleExtras(g *clarkv1.GoogleExtras) *clarkv1.GoogleExtras {
 	out := &clarkv1.GoogleExtras{
 		ResponseMimeType: copyString(g.ResponseMimeType),
 		CandidateCount:   copyInt32(g.CandidateCount),
+		ExplicitCache:    copyBool(g.ExplicitCache),
 	}
 	out.SafetySettings = cloneSafetySettings(g.SafetySettings)
 	if len(g.ResponseSchema) > 0 {

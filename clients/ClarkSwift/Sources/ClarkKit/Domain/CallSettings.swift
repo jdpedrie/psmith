@@ -398,17 +398,25 @@ public struct ClarkGoogleExtras: Sendable, Hashable {
     public var responseMimeType: String?
     public var responseSchema: Data?
     public var candidateCount: Int32?
+    /// Server-managed Gemini cachedContents auto-placement. When true,
+    /// the conversations service creates a cache when the prefix
+    /// exceeds the model's minimum and references it on subsequent
+    /// turns. Useful for preview models where implicit caching is
+    /// unreliable.
+    public var explicitCache: Bool?
 
     public init(
         safetySettings: ClarkSafetySettings? = nil,
         responseMimeType: String? = nil,
         responseSchema: Data? = nil,
-        candidateCount: Int32? = nil
+        candidateCount: Int32? = nil,
+        explicitCache: Bool? = nil
     ) {
         self.safetySettings = safetySettings
         self.responseMimeType = responseMimeType
         self.responseSchema = responseSchema
         self.candidateCount = candidateCount
+        self.explicitCache = explicitCache
     }
 
     public var isEmpty: Bool {
@@ -416,6 +424,7 @@ public struct ClarkGoogleExtras: Sendable, Hashable {
             && responseMimeType == nil
             && responseSchema == nil
             && candidateCount == nil
+            && explicitCache == nil
     }
 }
 
@@ -425,7 +434,8 @@ extension ClarkGoogleExtras {
             safetySettings:   p.hasSafetySettings   ? ClarkSafetySettings(from: p.safetySettings) : nil,
             responseMimeType: p.hasResponseMimeType ? p.responseMimeType : nil,
             responseSchema:   p.hasResponseSchema   ? p.responseSchema   : nil,
-            candidateCount:   p.hasCandidateCount   ? p.candidateCount   : nil
+            candidateCount:   p.hasCandidateCount   ? p.candidateCount   : nil,
+            explicitCache:    p.hasExplicitCache    ? p.explicitCache    : nil
         )
     }
 
@@ -435,6 +445,7 @@ extension ClarkGoogleExtras {
         if let v = responseMimeType           { s.responseMimeType = v }
         if let v = responseSchema             { s.responseSchema   = v }
         if let v = candidateCount             { s.candidateCount   = v }
+        if let v = explicitCache              { s.explicitCache    = v }
         return s
     }
 }

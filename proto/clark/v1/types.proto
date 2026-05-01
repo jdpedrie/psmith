@@ -251,14 +251,22 @@ message JsonSchema {
   optional bool strict = 4;
 }
 
-// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
-// intentionally deferred — Gemini 2.x has implicit caching default-on and
-// explicit cachedContents needs its own design pass.
+// GoogleExtras carries Gemini-specific knobs.
 message GoogleExtras {
   optional SafetySettings safety_settings = 1;
   optional string response_mime_type      = 2;   // e.g. "application/json"
   optional bytes  response_schema         = 3;   // JSON Schema bytes
   optional int32  candidate_count         = 4;   // [1, 8]
+  // explicit_cache, when true, opts the conversation in to server-
+  // managed Gemini cachedContents. Clark creates a cache on the first
+  // turn whose prefix exceeds the model's minimum (1024 tokens on
+  // Flash, 4096 on Pro), references it on subsequent turns, and
+  // refreshes when it expires. Useful for preview models where
+  // implicit caching is unreliable, or any conversation that wants
+  // deterministic cache hits in exchange for the per-hour storage
+  // cost. Resolved through the standard 4-layer chain (conversation
+  // > profile > model > provider) like every other CallSettings field.
+  optional bool explicit_cache = 5;
 }
 
 message SafetySettings {

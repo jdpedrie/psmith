@@ -724,7 +724,64 @@ struct CallSettingsForm: View {
                 lowerBound: 1,
                 upperBound: 8
             )
+
+            // Explicit caching toggle. Auto-creates a Gemini
+            // cachedContents resource when the prefix exceeds the
+            // model's minimum and references it on subsequent turns.
+            // Worth enabling for preview models where implicit caching
+            // is unreliable, or any conversation where deterministic
+            // cache hits are worth the per-hour storage cost.
+            boolToggleRow(
+                title: "Explicit caching",
+                description: "Server-managed cachedContents auto-placement. Costs per-hour storage but works on preview models where implicit caching is flaky.",
+                value: googleOptBoolBinding(\.explicitCache),
+                inherited: inheritedSettings?.google?.explicitCache
+            )
         }
+    }
+
+    /// Toggle row variant for Bool? (tri-state: nil = inherit, true =
+    /// override-on, false = override-off). Mirrors the existing
+    /// stringRow / int32StepperRow patterns: shows an "Override"
+    /// switch + actual toggle when overriding, otherwise displays the
+    /// inherited value as a mute preview.
+    @ViewBuilder
+    private func boolToggleRow(
+        title: String,
+        description: String,
+        value: Binding<Bool?>,
+        inherited: Bool?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                fieldLabel(title)
+                Spacer()
+                resetButton(
+                    isOverridden: value.wrappedValue != nil,
+                    inheritedSummary: inherited.map { $0 ? "On" : "Off" },
+                    onReset: { value.wrappedValue = nil }
+                )
+            }
+            Text(description)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Toggle(isOn: Binding(
+                get: { value.wrappedValue ?? inherited ?? false },
+                set: { value.wrappedValue = $0 }
+            )) {
+                Text(value.wrappedValue == nil ? "Inherit (\(inherited?.description ?? "off"))" : (value.wrappedValue! ? "Enabled" : "Disabled"))
+                    .font(.callout)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        }
+    }
+
+    private func googleOptBoolBinding(_ keyPath: WritableKeyPath<ClarkGoogleExtras, Bool?>) -> Binding<Bool?> {
+        Binding(
+            get: { settings.google?[keyPath: keyPath] },
+            set: { updateGoogle(keyPath, $0) }
+        )
     }
 
     private func updateGoogle<T>(_ keyPath: WritableKeyPath<ClarkGoogleExtras, T>, _ value: T) {

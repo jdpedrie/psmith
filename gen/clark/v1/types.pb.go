@@ -1909,17 +1909,25 @@ func (x *JsonSchema) GetStrict() bool {
 	return false
 }
 
-// GoogleExtras carries Gemini-specific knobs. Caching (cached_content)
-// intentionally deferred — Gemini 2.x has implicit caching default-on and
-// explicit cachedContents needs its own design pass.
+// GoogleExtras carries Gemini-specific knobs.
 type GoogleExtras struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	SafetySettings   *SafetySettings        `protobuf:"bytes,1,opt,name=safety_settings,json=safetySettings,proto3,oneof" json:"safety_settings,omitempty"`
 	ResponseMimeType *string                `protobuf:"bytes,2,opt,name=response_mime_type,json=responseMimeType,proto3,oneof" json:"response_mime_type,omitempty"` // e.g. "application/json"
 	ResponseSchema   []byte                 `protobuf:"bytes,3,opt,name=response_schema,json=responseSchema,proto3,oneof" json:"response_schema,omitempty"`         // JSON Schema bytes
 	CandidateCount   *int32                 `protobuf:"varint,4,opt,name=candidate_count,json=candidateCount,proto3,oneof" json:"candidate_count,omitempty"`        // [1, 8]
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// explicit_cache, when true, opts the conversation in to server-
+	// managed Gemini cachedContents. Clark creates a cache on the first
+	// turn whose prefix exceeds the model's minimum (1024 tokens on
+	// Flash, 4096 on Pro), references it on subsequent turns, and
+	// refreshes when it expires. Useful for preview models where
+	// implicit caching is unreliable, or any conversation that wants
+	// deterministic cache hits in exchange for the per-hour storage
+	// cost. Resolved through the standard 4-layer chain (conversation
+	// > profile > model > provider) like every other CallSettings field.
+	ExplicitCache *bool `protobuf:"varint,5,opt,name=explicit_cache,json=explicitCache,proto3,oneof" json:"explicit_cache,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GoogleExtras) Reset() {
@@ -1978,6 +1986,13 @@ func (x *GoogleExtras) GetCandidateCount() int32 {
 		return *x.CandidateCount
 	}
 	return 0
+}
+
+func (x *GoogleExtras) GetExplicitCache() bool {
+	if x != nil && x.ExplicitCache != nil {
+		return *x.ExplicitCache
+	}
+	return false
 }
 
 type SafetySettings struct {
@@ -3402,16 +3417,18 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x06schema\x18\x03 \x01(\fR\x06schema\x12\x1b\n" +
 	"\x06strict\x18\x04 \x01(\bH\x01R\x06strict\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\t\n" +
-	"\a_strict\"\xb8\x02\n" +
+	"\a_strict\"\xf7\x02\n" +
 	"\fGoogleExtras\x12F\n" +
 	"\x0fsafety_settings\x18\x01 \x01(\v2\x18.clark.v1.SafetySettingsH\x00R\x0esafetySettings\x88\x01\x01\x121\n" +
 	"\x12response_mime_type\x18\x02 \x01(\tH\x01R\x10responseMimeType\x88\x01\x01\x12,\n" +
 	"\x0fresponse_schema\x18\x03 \x01(\fH\x02R\x0eresponseSchema\x88\x01\x01\x12,\n" +
-	"\x0fcandidate_count\x18\x04 \x01(\x05H\x03R\x0ecandidateCount\x88\x01\x01B\x12\n" +
+	"\x0fcandidate_count\x18\x04 \x01(\x05H\x03R\x0ecandidateCount\x88\x01\x01\x12*\n" +
+	"\x0eexplicit_cache\x18\x05 \x01(\bH\x04R\rexplicitCache\x88\x01\x01B\x12\n" +
 	"\x10_safety_settingsB\x15\n" +
 	"\x13_response_mime_typeB\x12\n" +
 	"\x10_response_schemaB\x12\n" +
-	"\x10_candidate_count\"\xee\x02\n" +
+	"\x10_candidate_countB\x11\n" +
+	"\x0f_explicit_cache\"\xee\x02\n" +
 	"\x0eSafetySettings\x12<\n" +
 	"\n" +
 	"harassment\x18\x01 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x00R\n" +

@@ -183,9 +183,18 @@ type GoogleExtras struct {
 	// Gemini to reuse the pre-tokenized prefix instead of re-billing it.
 	//
 	// Format: the full resource name returned by the create call, e.g.
-	// "cachedContents/abc123". Gemini-only; no proto field — explicit
-	// caching is API-only in v1 (see GoogleExtras proto note).
+	// "cachedContents/abc123". The conversations service populates this
+	// per-turn when ExplicitCache is enabled and a cache exists for the
+	// conversation; not part of the proto — it's a runtime override.
 	CachedContent *string
+
+	// ExplicitCache opts the conversation in to server-managed
+	// cachedContents auto-placement. When true, the conversations
+	// service creates a Gemini cache on the first turn whose prefix
+	// exceeds the model's minimum, references it on subsequent turns,
+	// and refreshes on expiry. Resolved via the standard 4-layer
+	// CallSettings inheritance chain.
+	ExplicitCache *bool
 }
 
 // SafetySettings mirrors clark.v1.SafetySettings.
