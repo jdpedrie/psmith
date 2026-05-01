@@ -153,11 +153,30 @@ struct ProvidersDetail: View {
 private struct ProviderRow: View {
     let provider: ClarkUserModelProvider
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(provider.label).lineLimit(1)
-            Text(provider.type).font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            ProviderLogo(slug: logoSlug, size: 18)
+                .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(provider.label).lineLimit(1)
+                Text(provider.type).font(.caption2).foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Native drivers map their type directly to a logo slug; openai-
+    /// compatible providers carry the slug in `presetID`. Returns nil
+    /// when the provider is custom or otherwise unmapped — ProviderLogo
+    /// then renders the generic globe placeholder.
+    private var logoSlug: String? {
+        switch provider.type {
+        case "anthropic": return "anthropic"
+        case "google":    return "gemini"
+        case "openai-compatible":
+            return provider.presetID
+        default:
+            return nil
+        }
     }
 }
 
@@ -784,7 +803,14 @@ private struct AddProviderForm: View {
         if let sel = selection {
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("Template")
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .center, spacing: 12) {
+                    if case .template(let t) = sel {
+                        ProviderLogo(slug: t.logoSlug, size: 28)
+                            .foregroundStyle(.primary)
+                    } else {
+                        ProviderLogo(slug: nil, size: 28)
+                            .foregroundStyle(.secondary)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         switch sel {
                         case .template(let t):
@@ -1355,7 +1381,9 @@ private struct TemplatePill: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                ProviderLogo(slug: template.logoSlug, size: 22)
+                    .foregroundStyle(.primary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
                         .fontWeight(isSelected ? .semibold : .regular)

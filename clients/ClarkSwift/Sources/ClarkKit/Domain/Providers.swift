@@ -82,6 +82,12 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
     /// currently set instead of asking them to re-type it from memory.
     /// `api_key` is intentionally not exposed here — it's a secret.
     public let baseURL: String?
+    /// `preset_id` extracted from the driver config blob — names the
+    /// openai-compatible preset (xai, deepseek, ...) the driver uses to
+    /// pick its Quirks overlay. Empty for native drivers and for legacy
+    /// "custom" configs without a preset id. Used by the UI to render
+    /// the right provider logo and a friendly display name.
+    public let presetID: String?
 
     public init(
         id: String,
@@ -90,7 +96,8 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
         createdAt: Date,
         updatedAt: Date,
         defaultSettings: ClarkCallSettings? = nil,
-        baseURL: String? = nil
+        baseURL: String? = nil,
+        presetID: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -99,6 +106,7 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
         self.updatedAt = updatedAt
         self.defaultSettings = defaultSettings
         self.baseURL = baseURL
+        self.presetID = presetID
     }
 }
 
@@ -110,20 +118,20 @@ extension ClarkUserModelProvider {
         createdAt = p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
         updatedAt = p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0)
         defaultSettings = p.hasDefaultSettings ? ClarkCallSettings(from: p.defaultSettings) : nil
-        baseURL = Self.parseBaseURL(from: p.config)
+        let dict = Self.parseConfig(p.config)
+        baseURL = (dict["base_url"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        presetID = (dict["preset_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    /// Parses `base_url` out of the JSON config blob. Returns nil for any
-    /// shape that doesn't carry one (Anthropic, harness drivers, malformed
-    /// JSON, etc.). Tolerant of unknown extra keys.
-    private static func parseBaseURL(from config: Data) -> String? {
+    /// Parses the JSON config blob into a dictionary. Returns an empty
+    /// dictionary for any shape we can't decode (malformed JSON, native
+    /// driver configs that aren't dictionaries, harness providers, etc.).
+    private static func parseConfig(_ config: Data) -> [String: Any] {
         guard !config.isEmpty,
               let any = try? JSONSerialization.jsonObject(with: config),
-              let dict = any as? [String: Any],
-              let s = dict["base_url"] as? String,
-              !s.isEmpty
-        else { return nil }
-        return s
+              let dict = any as? [String: Any]
+        else { return [:] }
+        return dict
     }
 }
 

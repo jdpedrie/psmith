@@ -18,7 +18,13 @@ let package = Package(
                 .product(name: "ClarkKit", package: "ClarkSwift"),
                 .product(name: "ClarkUI", package: "ClarkSwift"),
             ],
-            path: "ClarkMac"
+            path: "ClarkMac",
+            // Provider logos bundled at build time. SVGs are LobeHub icons
+            // (https://github.com/lobehub/lobe-icons) — monochrome ones
+            // render with currentColor so they tint to the picker's
+            // foreground style; colored variants (qwen-color) render at
+            // their authored palette.
+            resources: [.copy("Logos")]
         ),
         .executableTarget(
             name: "Verify",
