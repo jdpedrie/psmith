@@ -12,7 +12,7 @@
 # macOS
 .DS_Store
 
-clients/ClarkSwift/.build
-clients/ClarkSwift/.swiftpm
-clients/clarkd-mac/.build
-clients/clarkd-mac/.swiftpm
+clients/ReeveSwift/.build
+clients/ReeveSwift/.swiftpm
+clients/reeved-mac/.build
+clients/reeved-mac/.swiftpm

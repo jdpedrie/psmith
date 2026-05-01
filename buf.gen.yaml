@@ -7,12 +7,12 @@ plugins:
     out: gen
     opt: paths=source_relative
   - remote: buf.build/apple/swift
-    out: clients/ClarkSwift/Sources/ClarkKit/Generated
+    out: clients/ReeveSwift/Sources/ReeveKit/Generated
     opt:
       - Visibility=Public
       - FileNaming=PathToUnderscores
   - remote: buf.build/connectrpc/swift
-    out: clients/ClarkSwift/Sources/ClarkKit/Generated
+    out: clients/ReeveSwift/Sources/ReeveKit/Generated
     opt:
       - Visibility=Public
       - GenerateAsyncMethods=true
