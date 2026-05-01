@@ -635,12 +635,6 @@ private struct MessageRow: View {
     var body: some View {
         roleAlignedContainer {
             bubble
-                // Right-click menu attached to the BUBBLE (not the wider
-                // outer row). Otherwise macOS uses the anchor view as the
-                // preview and the menu's "selected item" highlight balloons
-                // out to the full pane width when right-clicking near the
-                // edges.
-                .contextMenu { contextMenuItems }
         }
         .confirmationDialog(
             "Delete message?",
@@ -811,6 +805,15 @@ private struct MessageRow: View {
                 }
             }
         }
+        // Right-click menu attached HERE — to the inner content VStack
+        // BEFORE the bubble's stacked .background(.regularMaterial) +
+        // .glassEffect ancestors. Attaching above those modifiers caused
+        // macOS 26 to render the menu's anchor preview as a giant black
+        // rectangle (Liquid Glass capture path returns black for some
+        // material chains). Attached early on bare content the menu
+        // host has clean visuals to anchor to and the items render
+        // normally.
+        .contextMenu { contextMenuItems }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background {
