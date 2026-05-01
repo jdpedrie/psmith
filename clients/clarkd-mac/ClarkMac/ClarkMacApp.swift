@@ -192,6 +192,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct ClarkMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appModel = AppModel()
+    /// The shared ServerURLStore. Watching it via @State means the App
+    /// re-renders when the user picks a new server in the LoginView,
+    /// and our `.onChange` hook below rebuilds AppModel against the new
+    /// URL — the new ClarkClient takes effect without needing a relaunch.
+    @State private var urlStore = ServerURLStore.shared
     /// Use the shared ThemeStore (defined in Theme.swift) so AppDelegate can
     /// read the active chrome color for NSWindow.backgroundColor without
     /// having to thread the env through AppKit.
@@ -226,6 +231,15 @@ struct ClarkMacApp: App {
                 // chrome until the next NSWindow notification fires.
                 .onChange(of: themeStore.current.id) { _, _ in
                     AppDelegate.configureAndTrackAllWindows()
+                }
+                // When the user picks a new server URL in LoginView,
+                // ServerURLStore.current changes — rebuild AppModel
+                // against the new URL so ClarkClient (and every
+                // repository it owns) targets the right host. Live swap;
+                // no relaunch.
+                .onChange(of: urlStore.current) { _, _ in
+                    appModel = AppModel()
+                    Task { await appModel.bootstrap() }
                 }
         }
         // Default size on first run. macOS state-restores the window's last

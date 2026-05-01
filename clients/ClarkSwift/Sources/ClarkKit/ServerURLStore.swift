@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Persists the chosen clarkd server URL across app launches via
 /// UserDefaults. Mirrors the ThemeStore pattern: process-wide shared
@@ -10,6 +11,10 @@ import Foundation
 ///      previous AppModel default — useful for dev runs that need to
 ///      override without touching the prefs).
 ///   3. http://127.0.0.1:8080 (the local-dev default).
+///
+/// `@Observable` so the App layer can `.onChange(of:)` the current URL
+/// and rebuild AppModel when the user picks a new server.
+@Observable
 @MainActor
 public final class ServerURLStore {
     public static let shared = ServerURLStore()
