@@ -887,6 +887,13 @@ private struct AddProviderForm: View {
                 if case .template(let t) = sel, !t.catalogProviderID.isEmpty {
                     dict["catalog_provider_id"] = t.catalogProviderID
                 }
+                // preset_id pins the openai driver's Quirks overlay
+                // (xAI's x-grok-conv-id header, future Ollama /api/tags
+                // discovery, etc.). Always present on preset templates;
+                // never on Custom or non-openai-compatible templates.
+                if case .template(let t) = sel, let pid = t.presetID, !pid.isEmpty {
+                    dict["preset_id"] = pid
+                }
             }
             let config = try JSONSerialization.data(withJSONObject: dict)
             let provider = try await model.createProvider(

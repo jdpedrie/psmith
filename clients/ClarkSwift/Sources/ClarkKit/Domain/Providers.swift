@@ -23,6 +23,15 @@ public struct ClarkProviderTemplate: Sendable, Identifiable, Hashable {
     public let apiBase: String?
     public let envKey: String?
     public let docURL: String?
+    /// PresetID for openai-compatible entries — must be persisted in the
+    /// driver config blob as `preset_id` so the server-side driver loads
+    /// the right Quirks overlay (xAI cache header, etc.). Nil for native
+    /// driver entries (anthropic, google).
+    public let presetID: String?
+    /// LobeHub icon slug. The client renders the corresponding bundled
+    /// SVG asset (`Logos/<slug>.svg`). Nil when no logo is available
+    /// (custom OpenAI-compatible).
+    public let logoSlug: String?
 
     public init(
         catalogProviderID: String,
@@ -30,7 +39,9 @@ public struct ClarkProviderTemplate: Sendable, Identifiable, Hashable {
         driverType: String,
         apiBase: String? = nil,
         envKey: String? = nil,
-        docURL: String? = nil
+        docURL: String? = nil,
+        presetID: String? = nil,
+        logoSlug: String? = nil
     ) {
         self.catalogProviderID = catalogProviderID
         self.name = name
@@ -38,6 +49,8 @@ public struct ClarkProviderTemplate: Sendable, Identifiable, Hashable {
         self.apiBase = apiBase
         self.envKey = envKey
         self.docURL = docURL
+        self.presetID = presetID
+        self.logoSlug = logoSlug
     }
 }
 
@@ -46,9 +59,11 @@ extension ClarkProviderTemplate {
         catalogProviderID = p.catalogProviderID
         name              = p.name
         driverType        = p.driverType
-        apiBase           = p.hasApiBase ? p.apiBase : nil
-        envKey            = p.hasEnvKey  ? p.envKey  : nil
-        docURL            = p.hasDocURL  ? p.docURL  : nil
+        apiBase           = p.hasApiBase   ? p.apiBase   : nil
+        envKey            = p.hasEnvKey    ? p.envKey    : nil
+        docURL            = p.hasDocURL    ? p.docURL    : nil
+        presetID          = p.hasPresetID  ? p.presetID  : nil
+        logoSlug          = p.hasLogoSlug  ? p.logoSlug  : nil
     }
 }
 
