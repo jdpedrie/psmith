@@ -33,6 +33,12 @@ type generateContentRequest struct {
 	SystemInstruction *geminiContent       `json:"system_instruction,omitempty"`
 	GenerationConfig  *generationConfig    `json:"generationConfig,omitempty"`
 	SafetySettings    []geminiSafetySetting `json:"safetySettings,omitempty"`
+
+	// CachedContent references a previously-created cachedContents resource
+	// (see Driver.CreateCachedContent). Format: "cachedContents/<id>". When
+	// set, Gemini reuses the cached prefix and bills only the unique
+	// suffix — usage shows up as cachedContentTokenCount.
+	CachedContent string `json:"cachedContent,omitempty"`
 }
 
 type geminiContent struct {
@@ -394,8 +400,13 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 		body.GenerationConfig = gc
 	}
 
-	if g := req.Settings.Google; g != nil && g.SafetySettings != nil {
-		body.SafetySettings = safetySettingsToWire(g.SafetySettings)
+	if g := req.Settings.Google; g != nil {
+		if g.SafetySettings != nil {
+			body.SafetySettings = safetySettingsToWire(g.SafetySettings)
+		}
+		if g.CachedContent != nil && *g.CachedContent != "" {
+			body.CachedContent = *g.CachedContent
+		}
 	}
 
 	return body, nil

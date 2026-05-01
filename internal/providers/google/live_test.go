@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,4 +168,160 @@ func derefIntPtr(p *int) any {
 		return "(nil)"
 	}
 	return *p
+}
+
+// TestLive_ExplicitCaching exercises the cachedContents lifecycle end-to-end
+// against the real Gemini API:
+//
+//  1. Create a cache with a deliberately large system_instruction (Gemini
+//     enforces a per-model minimum — 4096 tokens on 2.5-flash; below the
+//     floor the create call fails with INVALID_ARGUMENT).
+//  2. Send a generation referencing the cache via CallSettings.Google.CachedContent.
+//  3. Assert usageMetadata.cachedContentTokenCount > 0 — proof that the
+//     prefix was reused, not re-billed.
+//  4. Delete the cache to reclaim storage ahead of TTL.
+//
+// Skipped unless GOOGLE_API_KEY is set; runs as part of the live smoke
+// suite.
+func TestLive_ExplicitCaching(t *testing.T) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		t.Skip("GOOGLE_API_KEY not set; skipping live test")
+	}
+
+	cfg := Config{APIKey: apiKey}
+	raw, _ := json.Marshal(cfg)
+	p, err := New(providers.Deps{}, raw)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	d := p.(*Driver)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	// Build a system_instruction large enough to clear the per-model
+	// minimum. ~10k characters of varied text comfortably exceeds the
+	// 4096-token floor on gemini-2.5-flash.
+	const modelID = "gemini-2.5-flash"
+	bigSystem := buildLargeSystemPrompt()
+
+	cc, err := d.CreateCachedContent(ctx, CreateCachedContentRequest{
+		ModelID:           modelID,
+		DisplayName:       "clark-live-test",
+		SystemInstruction: bigSystem,
+		TTL:               "300s",
+	})
+	if err != nil {
+		t.Fatalf("CreateCachedContent: %v", err)
+	}
+	fmt.Printf("created cache: name=%s tokens=%v\n",
+		cc.Name,
+		func() any {
+			if cc.UsageMetadata == nil {
+				return "(nil)"
+			}
+			return cc.UsageMetadata.TotalTokenCount
+		}())
+
+	// Always clean up the cache, even on later failures — leaving these
+	// around runs up storage cost and is hard to find later.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := d.DeleteCachedContent(ctx, cc.Name); err != nil {
+			t.Logf("DeleteCachedContent (cleanup): %v", err)
+		}
+	})
+
+	if cc.Name == "" {
+		t.Fatal("created cache has empty name")
+	}
+
+	// Roundtrip Get to confirm it's queryable.
+	got, err := d.GetCachedContent(ctx, cc.Name)
+	if err != nil {
+		t.Fatalf("GetCachedContent: %v", err)
+	}
+	if got.Name != cc.Name {
+		t.Errorf("get name=%q want %q", got.Name, cc.Name)
+	}
+
+	// Send a generation referencing the cache.
+	cacheRef := cc.Name
+	ch, err := d.Send(ctx, providers.SendRequest{
+		ModelID:  modelID,
+		Messages: []providers.WireMessage{{Role: "user", Content: "Reply with just the word OK."}},
+		Settings: providers.CallSettings{
+			Google: &providers.GoogleExtras{CachedContent: &cacheRef},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	var assembled string
+	var usage *providers.Usage
+	var sawError bool
+	var errMessage string
+	for c := range ch {
+		switch c.Type {
+		case providers.ChunkText:
+			var p struct {
+				Text string `json:"text"`
+			}
+			_ = json.Unmarshal(c.Payload, &p)
+			assembled += p.Text
+		case providers.ChunkUsage:
+			var u providers.Usage
+			if err := json.Unmarshal(c.Payload, &u); err == nil {
+				usage = &u
+			}
+		case providers.ChunkError:
+			sawError = true
+			var p struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(c.Payload, &p)
+			errMessage = p.Message
+		}
+	}
+
+	if sawError {
+		t.Fatalf("got ChunkError: %s", errMessage)
+	}
+	if assembled == "" {
+		t.Error("expected non-empty text")
+	}
+	if usage == nil {
+		t.Fatal("expected ChunkUsage")
+	}
+	fmt.Printf("usage: in=%v out=%v cache_read=%v\n",
+		derefIntPtr(usage.InputTokens),
+		derefIntPtr(usage.OutputTokens),
+		derefIntPtr(usage.CacheReadTokens))
+
+	if usage.CacheReadTokens == nil || *usage.CacheReadTokens == 0 {
+		t.Errorf("expected cache_read_tokens > 0 when referencing cached_content; got %v",
+			usage.CacheReadTokens)
+	}
+}
+
+// buildLargeSystemPrompt returns a deterministic chunk of text big enough
+// to satisfy Gemini's minimum cacheable size on gemini-2.5-flash (4096
+// tokens ≈ 16k–20k chars of English). We pad with a repeating but
+// non-trivial paragraph rather than random bytes so the prefix is stable
+// across runs (helps if Gemini ever reuses the same cache by content
+// hash).
+func buildLargeSystemPrompt() string {
+	const paragraph = `You are a concise assistant. Respond only with what was asked, in the fewest words possible. ` +
+		`Do not add disclaimers, follow-up questions, or commentary. Treat every prompt literally. ` +
+		`When the user asks for a single word, reply with exactly that word and nothing else. ` +
+		`When the user asks for a number, reply with the digits only. When the user asks a yes/no question, ` +
+		`reply with "yes" or "no" — lowercase, no punctuation. `
+	var b strings.Builder
+	for b.Len() < 24*1024 {
+		b.WriteString(paragraph)
+	}
+	return b.String()
 }

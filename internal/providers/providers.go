@@ -176,6 +176,16 @@ type GoogleExtras struct {
 	ResponseMimeType *string
 	ResponseSchema   []byte
 	CandidateCount   *int
+
+	// CachedContent, when set, points at a cached_content resource
+	// previously created via the Driver's CreateCachedContent helper. The
+	// driver passes it to streamGenerateContent as `cachedContent`, telling
+	// Gemini to reuse the pre-tokenized prefix instead of re-billing it.
+	//
+	// Format: the full resource name returned by the create call, e.g.
+	// "cachedContents/abc123". Gemini-only; no proto field — explicit
+	// caching is API-only in v1 (see GoogleExtras proto note).
+	CachedContent *string
 }
 
 // SafetySettings mirrors clark.v1.SafetySettings.
