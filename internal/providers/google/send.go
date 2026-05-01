@@ -442,9 +442,17 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 				Parts: []geminiPart{{Text: m.Content}},
 			})
 		case "assistant":
+			// Reconstruct the full parts array Gemini originally
+			// returned: thought parts (if any) followed by the
+			// answer text. Per Gemini's docs, prior thoughts must be
+			// passed back verbatim for both prefix-cache stability
+			// AND for the model to maintain reasoning context across
+			// turns. Without this, every assistant turn carrying
+			// thinking blocks would silently bust implicit caching.
+			parts := assistantPartsFromWire(m)
 			body.Contents = append(body.Contents, geminiContent{
 				Role:  "model",
-				Parts: []geminiPart{{Text: m.Content}},
+				Parts: parts,
 			})
 		default:
 			return nil, fmt.Errorf("google: unsupported wire role %q", m.Role)
@@ -466,6 +474,44 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 	}
 
 	return body, nil
+}
+
+// assistantPartsFromWire reconstructs the parts array for an assistant
+// turn going BACK out to Gemini. If WireMessage.Thinking carries a
+// previously-stored thought block (Clark's storage shape:
+// `[{"type":"text","text":"<concatenated thoughts>"}]`), prepend it as
+// a thought part before the answer text. Falls back to a bare text
+// part when there's no stored thinking — the common case for
+// conversations that haven't enabled includeThoughts.
+//
+// Per https://ai.google.dev/gemini-api/docs/thinking the prior thought
+// blocks must round-trip on the wire for the model to maintain
+// reasoning context AND for the prefix-cache key to remain stable
+// across turns. Stripping them silently busts implicit caching.
+func assistantPartsFromWire(m providers.WireMessage) []geminiPart {
+	parts := []geminiPart{}
+	if len(m.Thinking) > 0 {
+		var blocks []struct {
+			Text string `json:"text"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(m.Thinking, &blocks); err == nil {
+			for _, b := range blocks {
+				if b.Text == "" {
+					continue
+				}
+				parts = append(parts, geminiPart{Text: b.Text, Thought: true})
+			}
+		}
+	}
+	if m.Content != "" || len(parts) == 0 {
+		// Always emit a content part — Gemini rejects parts arrays
+		// that contain only thought parts. When the assistant
+		// produced no answer text (rare but possible mid-stream
+		// failure) the empty-string part keeps the wire shape valid.
+		parts = append(parts, geminiPart{Text: m.Content})
+	}
+	return parts
 }
 
 // generationConfigFromSettings collapses CallSettings into Gemini's

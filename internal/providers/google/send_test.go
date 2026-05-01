@@ -311,6 +311,88 @@ func TestSend_PreservesUnknownUsageFields(t *testing.T) {
 	}
 }
 
+// TestSend_AssistantThinkingRoundTrips — assistant turns carrying
+// stored thinking blocks must include them on the wire as
+// thought=true parts. Without this, every multi-turn Gemini
+// conversation with thinking enabled silently busts implicit
+// caching (prefix bytes change every turn) AND can drift the
+// model's reasoning continuity.
+func TestSend_AssistantThinkingRoundTrips(t *testing.T) {
+	const term = "data: {}\n\n"
+	srv, captured := captureRequest(t, "/v1beta/models/gemini-test:streamGenerateContent", term)
+
+	d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+
+	thinkingBlob := json.RawMessage(`[{"type":"text","text":"first I considered..."}]`)
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "gemini-test",
+		Messages: []providers.WireMessage{
+			{Role: "user", Content: "hi"},
+			{Role: "assistant", Content: "the answer is 42", Thinking: thinkingBlob},
+			{Role: "user", Content: "why?"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	var parsed generateContentRequest
+	if err := json.Unmarshal([]byte(*captured), &parsed); err != nil {
+		t.Fatalf("parse body: %v; body=%s", err, *captured)
+	}
+	if len(parsed.Contents) != 3 {
+		t.Fatalf("contents len=%d want 3 (user, assistant, user)", len(parsed.Contents))
+	}
+	asst := parsed.Contents[1]
+	if asst.Role != "model" {
+		t.Fatalf("middle role=%q want model", asst.Role)
+	}
+	if len(asst.Parts) != 2 {
+		t.Fatalf("assistant parts=%d want 2 (thought + text); got %+v", len(asst.Parts), asst.Parts)
+	}
+	if !asst.Parts[0].Thought || asst.Parts[0].Text != "first I considered..." {
+		t.Errorf("first part wrong: %+v want {thought:true text:'first I considered...'}", asst.Parts[0])
+	}
+	if asst.Parts[1].Thought || asst.Parts[1].Text != "the answer is 42" {
+		t.Errorf("second part wrong: %+v want {thought:false text:'the answer is 42'}", asst.Parts[1])
+	}
+}
+
+// TestSend_AssistantWithoutThinking — when WireMessage.Thinking is
+// empty (the common case: includeThoughts not enabled), the
+// assistant turn renders as a single bare text part exactly as
+// before. Pure regression guard so the new code path doesn't change
+// behavior for non-thinking conversations.
+func TestSend_AssistantWithoutThinking(t *testing.T) {
+	const term = "data: {}\n\n"
+	srv, captured := captureRequest(t, "/v1beta/models/gemini-test:streamGenerateContent", term)
+
+	d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID: "gemini-test",
+		Messages: []providers.WireMessage{
+			{Role: "user", Content: "hi"},
+			{Role: "assistant", Content: "hello back"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	var parsed generateContentRequest
+	if err := json.Unmarshal([]byte(*captured), &parsed); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	asst := parsed.Contents[1]
+	if len(asst.Parts) != 1 || asst.Parts[0].Thought || asst.Parts[0].Text != "hello back" {
+		t.Errorf("assistant parts=%+v want single bare-text part", asst.Parts)
+	}
+}
+
 func TestSend_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
