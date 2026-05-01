@@ -10,10 +10,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/testutil"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/testutil"
 )
 
 // captureSvc records the context seen by handlers so tests can assert what

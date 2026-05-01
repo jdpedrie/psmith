@@ -9,10 +9,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/fakellm"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/stream"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/fakellm"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/stream"
 )
 
 // runOneTurn drives a single SendMessage end-to-end against the fake server

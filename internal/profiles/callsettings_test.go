@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
 )
 
 // --- helpers ---------------------------------------------------------------

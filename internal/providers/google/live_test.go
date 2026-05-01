@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // TestLive_Send is a smoke test that hits the real Gemini API. It runs only

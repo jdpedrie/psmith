@@ -3,7 +3,7 @@ package profiles
 import (
 	"google.golang.org/protobuf/encoding/protojson"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
 )
 
 // callSettingsMarshaller / callSettingsUnmarshaller pin a protojson config so

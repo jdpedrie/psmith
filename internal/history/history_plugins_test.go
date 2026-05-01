@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/plugins"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // --- Test plugins ----------------------------------------------------------

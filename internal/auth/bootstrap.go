@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // Bootstrap creates an admin user on first run if none exists.

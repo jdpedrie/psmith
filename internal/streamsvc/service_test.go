@@ -14,12 +14,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/stream"
-	"github.com/jdpedrie/clark/internal/testutil"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/stream"
+	"github.com/jdpedrie/reeve/internal/testutil"
 )
 
 // --- Fixture ---------------------------------------------------------------

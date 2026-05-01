@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/providers"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // fakeStatelessDriver is a minimal StatelessProvider with scripted Send output.

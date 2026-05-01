@@ -3,8 +3,8 @@ package conversations
 import (
 	"testing"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/providers"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 func TestProtoCallSettingsToProvider_AnthropicNil(t *testing.T) {

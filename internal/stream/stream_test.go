@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/testutil"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/testutil"
 )
 
 // --- Fixtures --------------------------------------------------------------

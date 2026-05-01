@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // defaultBaseURL is the AI Studio (generativelanguage) endpoint.

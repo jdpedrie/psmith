@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // PresetID identifies one of the built-in provider configurations the UI

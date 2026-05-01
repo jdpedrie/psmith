@@ -19,14 +19,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
-	"github.com/jdpedrie/clark/internal/auth"
-	"github.com/jdpedrie/clark/internal/modelmeta"
-	"github.com/jdpedrie/clark/internal/profiles"
-	"github.com/jdpedrie/clark/internal/providers"
-	openaidriver "github.com/jdpedrie/clark/internal/providers/openai"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/providers"
+	openaidriver "github.com/jdpedrie/reeve/internal/providers/openai"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // Service implements clarkv1connect.ModelProvidersServiceHandler.

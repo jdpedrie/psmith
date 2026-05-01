@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 func main() {

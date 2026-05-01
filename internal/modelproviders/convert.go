@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/modelmeta"
-	"github.com/jdpedrie/clark/internal/profiles"
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // humanizeName converts a name like "openai-compatible" to "Openai Compatible".

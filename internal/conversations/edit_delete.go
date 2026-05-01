@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/auth"
-	"github.com/jdpedrie/clark/internal/profiles"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // nowUTC is a small helper so the call sites read cleanly. time.Now().UTC()

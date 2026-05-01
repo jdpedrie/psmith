@@ -1116,7 +1116,7 @@ const file_clark_v1_auth_proto_rawDesc = "" +
 	"UpdateUser\x12\x1b.clark.v1.UpdateUserRequest\x1a\x1c.clark.v1.UpdateUserResponse\x12G\n" +
 	"\n" +
 	"DeleteUser\x12\x1b.clark.v1.DeleteUserRequest\x1a\x1c.clark.v1.DeleteUserResponse\x12_\n" +
-	"\x12AdminResetPassword\x12#.clark.v1.AdminResetPasswordRequest\x1a$.clark.v1.AdminResetPasswordResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\x12AdminResetPassword\x12#.clark.v1.AdminResetPasswordRequest\x1a$.clark.v1.AdminResetPasswordResponseB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_auth_proto_rawDescOnce sync.Once

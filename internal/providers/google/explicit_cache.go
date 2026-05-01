@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // Google's implementation of providers.ExplicitCacheProvider. Wraps

@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/clark/internal/auth"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/testutil"
+	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/testutil"
 )
 
 func TestBootstrap_NoUsersWithCreds_CreatesAdmin(t *testing.T) {

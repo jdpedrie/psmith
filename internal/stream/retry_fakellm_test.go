@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/clark/fakellm"
-	"github.com/jdpedrie/clark/internal/providers"
-	_ "github.com/jdpedrie/clark/internal/providers/openai" // registers openai-compatible
+	"github.com/jdpedrie/reeve/fakellm"
+	"github.com/jdpedrie/reeve/internal/providers"
+	_ "github.com/jdpedrie/reeve/internal/providers/openai" // registers openai-compatible
 )
 
 // End-to-end retry tests using fakellm + the real openai-compatible

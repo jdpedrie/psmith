@@ -9,10 +9,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/clark/fakellm"
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/plugins"
+	"github.com/jdpedrie/reeve/fakellm"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // attachLetteredChoicesPlugin writes a single profile_plugins row referencing

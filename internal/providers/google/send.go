@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // errorReadLimit caps how much error-body we retain to surface in error

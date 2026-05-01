@@ -2373,7 +2373,7 @@ const file_clark_v1_model_providers_proto_rawDesc = "" +
 	"\x15TestUserModelProvider\x12&.clark.v1.TestUserModelProviderRequest\x1a'.clark.v1.TestUserModelProviderResponse\x12P\n" +
 	"\rTestUserModel\x12\x1e.clark.v1.TestUserModelRequest\x1a\x1f.clark.v1.TestUserModelResponse\x12b\n" +
 	"\x13RefreshModelCatalog\x12$.clark.v1.RefreshModelCatalogRequest\x1a%.clark.v1.RefreshModelCatalogResponse\x12Y\n" +
-	"\x10GetCatalogStatus\x12!.clark.v1.GetCatalogStatusRequest\x1a\".clark.v1.GetCatalogStatusResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\x10GetCatalogStatus\x12!.clark.v1.GetCatalogStatusRequest\x1a\".clark.v1.GetCatalogStatusResponseB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_model_providers_proto_rawDescOnce sync.Once

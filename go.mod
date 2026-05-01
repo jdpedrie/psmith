@@ -1,4 +1,4 @@
-module github.com/jdpedrie/clark
+module github.com/jdpedrie/reeve
 
 go 1.25.5
 

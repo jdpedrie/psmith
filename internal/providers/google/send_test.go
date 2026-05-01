@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // sseFrame writes a single SSE event with a JSON-encoded data payload.

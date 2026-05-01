@@ -1567,7 +1567,7 @@ const file_clark_v1_profiles_proto_rawDesc = "" +
 	"\rDeleteProfile\x12\x1e.clark.v1.DeleteProfileRequest\x1a\x1f.clark.v1.DeleteProfileResponse\x12V\n" +
 	"\x0fListPluginTypes\x12 .clark.v1.ListPluginTypesRequest\x1a!.clark.v1.ListPluginTypesResponse\x12\\\n" +
 	"\x11GetProfilePlugins\x12\".clark.v1.GetProfilePluginsRequest\x1a#.clark.v1.GetProfilePluginsResponse\x12\\\n" +
-	"\x11SetProfilePlugins\x12\".clark.v1.SetProfilePluginsRequest\x1a#.clark.v1.SetProfilePluginsResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\x11SetProfilePlugins\x12\".clark.v1.SetProfilePluginsRequest\x1a#.clark.v1.SetProfilePluginsResponseB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_profiles_proto_rawDescOnce sync.Once

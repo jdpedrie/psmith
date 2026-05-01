@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // Interceptor authenticates RPCs via Authorization: Bearer <token>.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 func TestCountTokens(t *testing.T) {

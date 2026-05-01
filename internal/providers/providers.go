@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jdpedrie/clark/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
 )
 
 // Provider is the registered driver for a backend kind.

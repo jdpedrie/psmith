@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // fakeLoader is an in-memory parentLoader keyed by profile ID.

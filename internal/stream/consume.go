@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/internal/store"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // consume is the supervisor goroutine for one run. It:

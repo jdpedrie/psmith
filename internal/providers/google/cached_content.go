@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // Cached content (explicit caching) is API-only in Clark v1: there's no

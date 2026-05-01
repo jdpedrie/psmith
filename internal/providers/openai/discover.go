@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jdpedrie/clark/internal/modelmeta"
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // DiscoverModels lists models from the configured endpoint's /v1/models

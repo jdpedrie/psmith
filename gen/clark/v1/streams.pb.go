@@ -348,7 +348,7 @@ const file_clark_v1_streams_proto_rawDesc = "" +
 	"\x0eStreamsService\x12X\n" +
 	"\x0fSubscribeStream\x12 .clark.v1.SubscribeStreamRequest\x1a!.clark.v1.SubscribeStreamResponse0\x01\x12M\n" +
 	"\fCancelStream\x12\x1d.clark.v1.CancelStreamRequest\x1a\x1e.clark.v1.CancelStreamResponse\x12M\n" +
-	"\fGetStreamRun\x12\x1d.clark.v1.GetStreamRunRequest\x1a\x1e.clark.v1.GetStreamRunResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\fGetStreamRun\x12\x1d.clark.v1.GetStreamRunRequest\x1a\x1e.clark.v1.GetStreamRunResponseB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_streams_proto_rawDescOnce sync.Once

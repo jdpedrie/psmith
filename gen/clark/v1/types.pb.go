@@ -3690,7 +3690,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x17CHUNK_TYPE_TOOL_USE_END\x10\x05\x12\x14\n" +
 	"\x10CHUNK_TYPE_ERROR\x10\x06\x12\x13\n" +
 	"\x0fCHUNK_TYPE_DONE\x10\a\x12\x14\n" +
-	"\x10CHUNK_TYPE_USAGE\x10\bB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\x10CHUNK_TYPE_USAGE\x10\bB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_types_proto_rawDescOnce sync.Once

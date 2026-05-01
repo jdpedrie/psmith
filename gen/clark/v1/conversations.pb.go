@@ -2014,7 +2014,7 @@ const file_clark_v1_conversations_proto_rawDesc = "" +
 	"\x1dPromoteCompactionToNewContext\x12..clark.v1.PromoteCompactionToNewContextRequest\x1a/.clark.v1.PromoteCompactionToNewContextResponse\x12J\n" +
 	"\vSendMessage\x12\x1c.clark.v1.SendMessageRequest\x1a\x1d.clark.v1.SendMessageResponse\x12>\n" +
 	"\aCompact\x12\x18.clark.v1.CompactRequest\x1a\x19.clark.v1.CompactResponse\x12_\n" +
-	"\x12CountContextTokens\x12#.clark.v1.CountContextTokensRequest\x1a$.clark.v1.CountContextTokensResponseB0Z.github.com/jdpedrie/clark/gen/clark/v1;clarkv1b\x06proto3"
+	"\x12CountContextTokens\x12#.clark.v1.CountContextTokensRequest\x1a$.clark.v1.CountContextTokensResponseB0Z.github.com/jdpedrie/reeve/gen/clark/v1;clarkv1b\x06proto3"
 
 var (
 	file_clark_v1_conversations_proto_rawDescOnce sync.Once

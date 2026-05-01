@@ -30,7 +30,7 @@ import (
 	sdk "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 func init() {

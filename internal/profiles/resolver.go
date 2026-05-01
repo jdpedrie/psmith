@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // MaxParentDepth caps the parent-chain walk to prevent runaway resolution on

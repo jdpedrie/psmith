@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jdpedrie/clark/internal/providers"
+	"github.com/jdpedrie/reeve/internal/providers"
 )
 
 // dummyPlugin is a minimal Plugin used in registry tests.

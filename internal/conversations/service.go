@@ -20,16 +20,16 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
-	"github.com/jdpedrie/clark/internal/auth"
-	"github.com/jdpedrie/clark/internal/history"
-	"github.com/jdpedrie/clark/internal/modelmeta"
-	"github.com/jdpedrie/clark/internal/profiles"
-	"github.com/jdpedrie/clark/internal/providers"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/stream"
-	"github.com/jdpedrie/clark/plugins"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/history"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/stream"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // MaxListPageSize caps page_size in ListConversations regardless of what the

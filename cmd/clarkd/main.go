@@ -17,20 +17,20 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/jdpedrie/clark/gen/clark/v1/clarkv1connect"
-	"github.com/jdpedrie/clark/internal/auth"
-	"github.com/jdpedrie/clark/internal/conversations"
-	"github.com/jdpedrie/clark/internal/modelmeta"
-	"github.com/jdpedrie/clark/internal/modelproviders"
-	"github.com/jdpedrie/clark/internal/profiles"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/internal/stream"
-	"github.com/jdpedrie/clark/internal/streamsvc"
+	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/conversations"
+	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/modelproviders"
+	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/stream"
+	"github.com/jdpedrie/reeve/internal/streamsvc"
 
 	// Driver packages self-register their provider type in init().
-	_ "github.com/jdpedrie/clark/internal/providers/anthropic"
-	_ "github.com/jdpedrie/clark/internal/providers/google"
-	_ "github.com/jdpedrie/clark/internal/providers/openai"
+	_ "github.com/jdpedrie/reeve/internal/providers/anthropic"
+	_ "github.com/jdpedrie/reeve/internal/providers/google"
+	_ "github.com/jdpedrie/reeve/internal/providers/openai"
 )
 
 // stubServices is empty now that all five services have implementations.

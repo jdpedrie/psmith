@@ -10,9 +10,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/internal/store"
-	"github.com/jdpedrie/clark/plugins"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // Message-role wire/storage constants. The DB CHECK constraint enforces these

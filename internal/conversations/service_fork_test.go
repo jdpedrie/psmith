@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/clark/gen/clark/v1"
-	"github.com/jdpedrie/clark/fakellm"
-	"github.com/jdpedrie/clark/internal/store"
+	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	"github.com/jdpedrie/reeve/fakellm"
+	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // TestFork_FromDeepAncestor — build system → u1 → a1 → u2 → a2 → u3 → a3,
