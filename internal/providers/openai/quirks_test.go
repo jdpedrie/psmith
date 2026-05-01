@@ -398,6 +398,101 @@ func TestQuirks_RequestBodyFields_DeterministicOrder(t *testing.T) {
 	}
 }
 
+// TestQuirks_Ollama_DiscoveryHitsApiTags — Ollama preset's DiscoveryFunc
+// translates the configured /v1 base url to /api/tags on the same host
+// and decodes the richer response shape (parameter size + quantization
+// embedded in display name).
+func TestQuirks_Ollama_DiscoveryHitsApiTags(t *testing.T) {
+	var capturedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		switch r.URL.Path {
+		case "/api/tags":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"models": [
+					{
+						"name": "llama3.1:8b",
+						"size": 4920753607,
+						"details": {
+							"family": "llama",
+							"parameter_size": "8.0B",
+							"quantization_level": "Q4_0"
+						}
+					},
+					{
+						"name": "qwen2.5-coder:14b",
+						"size": 9000000000,
+						"details": {
+							"family": "qwen",
+							"parameter_size": "14.0B",
+							"quantization_level": "Q4_K_M"
+						}
+					}
+				]
+			}`))
+		case "/v1/models":
+			t.Errorf("Ollama discovery should hit /api/tags, not /v1/models")
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	d := newOpenAIDriverForTest(t, Config{
+		APIKey:   "ollama", // unauthenticated, value ignored
+		PresetID: PresetOllama,
+		BaseURL:  srv.URL + "/v1",
+	})
+
+	models, err := d.DiscoverModels(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverModels: %v", err)
+	}
+	if capturedPath != "/api/tags" {
+		t.Errorf("captured path=%q want /api/tags", capturedPath)
+	}
+	if len(models) != 2 {
+		t.Fatalf("got %d models want 2", len(models))
+	}
+	want := map[string]string{
+		"llama3.1:8b":         "llama3.1:8b (8.0B, Q4_0)",
+		"qwen2.5-coder:14b":   "qwen2.5-coder:14b (14.0B, Q4_K_M)",
+	}
+	for _, m := range models {
+		if want[m.ID] != m.DisplayName {
+			t.Errorf("model %q display=%q want %q", m.ID, m.DisplayName, want[m.ID])
+		}
+	}
+}
+
+// TestQuirks_Ollama_BaseURLWithoutV1 — defensive: some users front Ollama
+// with a reverse proxy that strips /v1. The path translator must still
+// land at /api/tags regardless of whether the configured base_url ends
+// in /v1 or not.
+func TestQuirks_Ollama_BaseURLWithoutV1(t *testing.T) {
+	var capturedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer srv.Close()
+
+	d := newOpenAIDriverForTest(t, Config{
+		APIKey:   "x",
+		PresetID: PresetOllama,
+		BaseURL:  srv.URL, // no /v1 suffix
+	})
+
+	if _, err := d.DiscoverModels(context.Background()); err != nil {
+		t.Fatalf("DiscoverModels: %v", err)
+	}
+	if capturedPath != "/api/tags" {
+		t.Errorf("captured path=%q want /api/tags", capturedPath)
+	}
+}
+
 func ptrBool(b bool) *bool { return &b }
 
 // newOpenAIDriverForTest builds a Driver pointed at a test server,

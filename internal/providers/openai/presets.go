@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/jdpedrie/clark/internal/providers"
 )
@@ -180,6 +181,15 @@ var presets = map[PresetID]Preset{
 	PresetOllama: {
 		ID: PresetOllama, DisplayName: "Ollama (local)",
 		BaseURL: "http://localhost:11434/v1", LogoSlug: "ollama",
+		Quirks: Quirks{
+			// Ollama's OpenAI-compat /v1/models returns just bare ids.
+			// /api/tags (the native endpoint, sibling of /v1/) returns
+			// model file size, parameter count, quantization level, and
+			// the underlying family — useful in the picker. Falls back
+			// to the SDK pager on failure so users with Ollama behind
+			// a strict OpenAI-compat-only proxy still get a model list.
+			DiscoveryFunc: discoverOllamaModels,
+		},
 	},
 	PresetPerplexity: {
 		ID: PresetPerplexity, DisplayName: "Perplexity",
@@ -308,4 +318,90 @@ func singleSlashJoin(base, segment string) string {
 		return base + segment
 	}
 	return base + "/" + segment
+}
+
+// --- Ollama discovery ----------------------------------------------------
+
+// ollamaTagsResponse is the shape of `GET /api/tags`. Trimmed to fields
+// we actually use; Ollama also returns `digest`, `modified_at`, and a
+// `families` array we don't need.
+type ollamaTagsResponse struct {
+	Models []ollamaTagsModel `json:"models"`
+}
+
+type ollamaTagsModel struct {
+	Name    string `json:"name"`    // "llama3.1:8b"
+	Size    int64  `json:"size"`    // file size in bytes
+	Details struct {
+		Family            string `json:"family"`             // "llama"
+		ParameterSize     string `json:"parameter_size"`     // "8.0B"
+		QuantizationLevel string `json:"quantization_level"` // "Q4_0"
+	} `json:"details"`
+}
+
+// discoverOllamaModels calls /api/tags (sibling of /v1) and synthesizes
+// providers.Model entries. The returned models carry display names that
+// embed the parameter size and quantization level so the picker shows
+// meaningful labels even when models.dev has no local-model entries.
+//
+// Path translation: /v1 base url → /api/tags. The OpenAI-compat root is
+// always at /v1 for default Ollama; we strip that suffix to find /api.
+func discoverOllamaModels(ctx context.Context, d *Driver) ([]providers.Model, error) {
+	u, err := url.Parse(d.cfg.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: parse base_url: %w", err)
+	}
+	// Drop a trailing /v1 (case-sensitive — Ollama's compat path is
+	// always lowercase) so we can address /api/tags on the same host.
+	apiBase := strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), "/v1")
+	u.Path = singleSlashJoin(apiBase, "api/tags")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: build /api/tags request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	httpClient := d.httpClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: /api/tags: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ollama: /api/tags: HTTP %d", resp.StatusCode)
+	}
+
+	var parsed ollamaTagsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("ollama: decode /api/tags: %w", err)
+	}
+
+	out := make([]providers.Model, 0, len(parsed.Models))
+	for _, m := range parsed.Models {
+		display := m.Name
+		// Suffix with quantization + param size when present so the
+		// picker disambiguates "llama3.1:8b (Q4_0, 8.0B)" from a Q8
+		// re-quant of the same tag.
+		if m.Details.QuantizationLevel != "" || m.Details.ParameterSize != "" {
+			parts := []string{}
+			if m.Details.ParameterSize != "" {
+				parts = append(parts, m.Details.ParameterSize)
+			}
+			if m.Details.QuantizationLevel != "" {
+				parts = append(parts, m.Details.QuantizationLevel)
+			}
+			display = fmt.Sprintf("%s (%s)", m.Name, strings.Join(parts, ", "))
+		}
+		model := providers.Model{
+			ID:          m.Name,
+			DisplayName: display,
+			Capabilities: providers.ModelCapabilities{Streaming: true},
+		}
+		out = append(out, model)
+	}
+	return out, nil
 }
