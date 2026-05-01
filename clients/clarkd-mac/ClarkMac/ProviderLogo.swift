@@ -46,7 +46,10 @@ struct ProviderLogo: View {
         let key = slug as NSString
         if let cached = cache.object(forKey: key) { return cached }
 
-        guard let url = Bundle.main.url(forResource: slug, withExtension: "svg", subdirectory: "Logos") else {
+        // Resources declared via Package.swift `resources: [.copy("Logos")]`
+        // land in the SPM-generated module bundle, not Bundle.main. The
+        // `Bundle.module` accessor is auto-generated per target.
+        guard let url = Bundle.module.url(forResource: slug, withExtension: "svg", subdirectory: "Logos") else {
             return nil
         }
         guard let img = NSImage(contentsOf: url) else { return nil }

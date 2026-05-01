@@ -95,6 +95,15 @@ mac-app: mac-build clients/clarkd-mac/AppBundle/AppIcon.icns
 	cp clients/clarkd-mac/AppBundle/Info.plist clients/clarkd-mac/.build/ClarkMac.app/Contents/Info.plist
 	cp clients/clarkd-mac/AppBundle/AppIcon.icns clients/clarkd-mac/.build/ClarkMac.app/Contents/Resources/AppIcon.icns
 	cp clients/clarkd-mac/.build/debug/ClarkMac clients/clarkd-mac/.build/ClarkMac.app/Contents/MacOS/ClarkMac
+	# SwiftPM resource bundle (ClarkMac/Logos/*.svg). The auto-generated
+	# Bundle.module accessor expects it next to the .app — `Bundle.main.bundleURL
+	# .appendingPathComponent("clarkd-mac_ClarkMac.bundle")` — not inside
+	# Contents/Resources/. The if-guard makes mac-app idempotent for
+	# pre-resource-era builds where the bundle doesn't exist.
+	if [ -e clients/clarkd-mac/.build/debug/clarkd-mac_ClarkMac.bundle ]; then \
+		cp -R clients/clarkd-mac/.build/debug/clarkd-mac_ClarkMac.bundle \
+			clients/clarkd-mac/.build/ClarkMac.app/clarkd-mac_ClarkMac.bundle; \
+	fi
 
 mac-app-run: mac-app
 	-pkill -x ClarkMac
