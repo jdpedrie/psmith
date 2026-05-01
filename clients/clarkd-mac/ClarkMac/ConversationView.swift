@@ -834,9 +834,20 @@ private struct MessageRow: View {
             // Usage summary footer — assistant messages only, when data is present.
             if !isEditing, message.role == .assistant, let usage = message.usage {
                 Button { showUsageDetail = true } label: {
-                    Text(usageSummary(usage))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 5) {
+                        if let grade = cacheEfficiencyGrade(usage) {
+                            // Small dot — green/yellow/red — signals at a
+                            // glance how much of the prompt was served
+                            // from cache. Tooltip carries the percentage.
+                            Circle()
+                                .fill(grade.color)
+                                .frame(width: 7, height: 7)
+                                .help(grade.tooltip)
+                        }
+                        Text(usageSummary(usage))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 2)
@@ -1092,6 +1103,40 @@ private struct MessageRow: View {
         } else {
             Task { await model.editMessage(id: messageID, content: trimmed, role: role) }
         }
+    }
+
+    /// Cache-efficiency grade rendered as a small colored dot next to
+    /// the usage summary. Only present when the assistant's prompt
+    /// went through provider-side caching machinery (cache_read OR
+    /// cache_write reported); silent otherwise.
+    ///
+    /// Provider conventions differ on whether `input_tokens` includes
+    /// cached tokens or not:
+    ///   - Anthropic: input excludes cached. Total prompt =
+    ///     input + cache_read.
+    ///   - Google / OpenAI: input INCLUDES cached. Total prompt =
+    ///     input.
+    /// Heuristic: if cache_read > input the source must be the
+    /// "separate" shape (otherwise ratio would exceed 1). Else assume
+    /// "includes" shape. Same answer for both interpretations on real
+    /// data — the heuristic just picks the right denominator.
+    private func cacheEfficiencyGrade(_ u: ClarkMessageUsage) -> CacheGrade? {
+        guard let cacheRead = u.cacheReadTokens, cacheRead > 0,
+              let input = u.inputTokens, input > 0 else { return nil }
+        let totalPrompt: Int32 = (cacheRead > input) ? (cacheRead + input) : input
+        let ratio = Double(cacheRead) / Double(totalPrompt)
+        let pct = Int((ratio * 100).rounded())
+        let color: Color
+        let label: String
+        switch ratio {
+        case 0.8...:
+            color = .green;  label = "Excellent"
+        case 0.3..<0.8:
+            color = .yellow; label = "Partial"
+        default:
+            color = .red;    label = "Poor"
+        }
+        return CacheGrade(color: color, tooltip: "\(label) cache hit — \(pct)% of prompt served from cache")
     }
 
     /// One-line summary: "(in: 1,234 (920 cached)  out: 567  cost: $0.0023)"
@@ -1549,6 +1594,14 @@ private struct CompactingRow: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.3)))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
+}
+
+/// Color + tooltip pair for the cache-efficiency dot rendered next to
+/// the assistant message's usage summary. Computed by
+/// MessageRow.cacheEfficiencyGrade(_:); rendered as a small Circle.
+private struct CacheGrade {
+    let color: Color
+    let tooltip: String
 }
 
 // MARK: - Message usage popover
