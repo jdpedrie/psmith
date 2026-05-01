@@ -1041,35 +1041,22 @@ private struct MessageRow: View {
     private static let collapsedBodyHeight: CGFloat = 80
 
     /// Body for system / context rows. Renders the full MarkdownText but
-    /// caps the height + clips when collapsed; a fade gradient softens
-    /// the cut and signals "more below". Tap "Show more" to expand.
+    /// caps the height + clips when collapsed. A clean clip looked
+    /// better than the previous fade-overlay (which tinted the bottom
+    /// line yellow on top of the bubble's already-yellow background);
+    /// the explicit "Show more" affordance below makes the cut
+    /// unambiguous on its own.
     @ViewBuilder
     private func collapsibleBody(_ text: String) -> some View {
         let collapsed = !bodyExpanded
         VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .bottom) {
-                MarkdownText(text)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: collapsed ? Self.collapsedBodyHeight : .infinity,
-                        alignment: .topLeading
-                    )
-                    .clipped()
-                if collapsed {
-                    // Soft fade to signal "more content below". Uses
-                    // the bubble's tint (system/context rows have a
-                    // pale yellow material) so the gradient blends
-                    // into the bubble background instead of fighting
-                    // it. Slightly opaque at the bottom so the cut
-                    // feels intentional, not torn.
-                    LinearGradient(
-                        colors: [.clear, Color.yellow.opacity(0.10), Color.yellow.opacity(0.18)],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                    .frame(height: 28)
-                    .allowsHitTesting(false)
-                }
-            }
+            MarkdownText(text)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: collapsed ? Self.collapsedBodyHeight : .infinity,
+                    alignment: .topLeading
+                )
+                .clipped()
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { bodyExpanded.toggle() }
             } label: {
@@ -1079,6 +1066,12 @@ private struct MessageRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                // Without contentShape, Button hits register only on
+                // opaque pixels — taps in the gap between the
+                // chevron and the text label fell through silently
+                // (same bug we hit on the model picker chips).
+                .contentShape(Rectangle())
+                .padding(.vertical, 2)
             }
             .buttonStyle(.plain)
         }
