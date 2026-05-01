@@ -990,26 +990,56 @@ private struct MessageRow: View {
 
     /// Save handler shared by Save and Save-and-Resend.
     ///
-    /// - `thenResend == false`: in-place edit via EditMessage. Mutates the
-    ///   existing row; the role override is honoured server-side.
-    /// - `thenResend == true`: a fork — we issue SendMessage with the
-    ///   edited content under the original's parent, leaving the original
-    ///   row untouched. This satisfies the spec's "every Reload creates a
-    ///   fork, don't edit existing messages" semantics for the resend
-    ///   pathway. The plain Save still mutates in place because the spec
-    ///   distinguishes the two ("Save" vs "Save and Resend"). If a later
-    ///   pass wants Save to also fork, flip both branches to use
-    ///   sendForking and drop editMessage from the surface.
+    /// - `thenResend == false`: in-place edit via EditMessage. Mutates
+    ///   the existing row; the role override is honoured server-side.
+    /// - `thenResend == true`: behavior depends on `editRoleDraft`:
+    ///     - `.user`: fork at the user level — issue SendMessage with the
+    ///       edited content under the original's parent. Leaves the
+    ///       original row untouched. The new user gets a fresh assistant
+    ///       under it; both branches live as siblings.
+    ///     - `.assistant`: in-place edit on the existing assistant row,
+    ///       then regenerate a sibling assistant under the SAME parent
+    ///       user. The user's edit is preserved as one branch; the
+    ///       fresh generation is its sibling. Only fires when the
+    ///       assistant has a user parent — for assistants whose parent
+    ///       is system / context (rare, only at conversation start) the
+    ///       resend silently degrades to a plain save.
     private func saveEdit(thenResend: Bool) {
         let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let parentForFork = message.parentID
         let role = editRoleDraft
+        let messageID = message.id
+        let parentForFork = message.parentID
+        // For an assistant resend we need the parent USER's id, walked
+        // up from `message.parentID` while messages[] is still in the
+        // pre-edit state. Capture it now since editMessage will rewrite
+        // the row before we get to regenerateAssistant.
+        let parentUserID: String? = {
+            guard role == .assistant, thenResend else { return nil }
+            guard let pid = parentForFork,
+                  let parent = model.messages.first(where: { $0.id == pid }),
+                  parent.role == .user
+            else { return nil }
+            return parent.id
+        }()
         model.editingMessage = nil
-        if thenResend {
+
+        if thenResend && role == .assistant {
+            // Save the edit, then regenerate a sibling assistant from the
+            // parent user. If there's no user parent, skip the regenerate
+            // — the assistant edit still saves (silently degrades to the
+            // non-resend path) so the user's typing isn't lost.
+            Task {
+                await model.editMessage(id: messageID, content: trimmed, role: .assistant)
+                if let parentUserID {
+                    await model.regenerateAssistant(parentUserMessageID: parentUserID)
+                }
+            }
+        } else if thenResend {
+            // role == .user: fork-at-user via SendMessage.
             Task { await model.sendForking(content: trimmed, parentMessageID: parentForFork) }
         } else {
-            Task { await model.editMessage(id: message.id, content: trimmed, role: role) }
+            Task { await model.editMessage(id: messageID, content: trimmed, role: role) }
         }
     }
 
