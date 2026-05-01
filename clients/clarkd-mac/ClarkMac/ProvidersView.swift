@@ -228,7 +228,7 @@ private struct ProviderRow: View {
     private var logoSlug: String? {
         switch provider.type {
         case "anthropic": return "anthropic"
-        case "google":    return "gemini"
+        case "google":    return "google-color"
         case "openai-compatible":
             return provider.presetID
         default:
@@ -786,26 +786,47 @@ private struct AddProviderForm: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear {
-            // Initialise selection from the view-model. A preselected
-            // preset (sidebar Available row click) wins; otherwise the
-            // user reached this form via "+ Add Custom" — start in
-            // custom mode with sane defaults.
-            if let preset = model.pendingAddPreset {
-                selection = .template(preset)
-                if label.isEmpty { label = preset.name }
-                if baseURL.isEmpty { baseURL = preset.apiBase ?? "" }
-            } else {
-                selection = .custom
-                if label.isEmpty { label = "Custom provider" }
-                customDriverType = "openai-compatible"
-            }
+        .onAppear { resyncFromPendingPreset() }
+        // The form is reused when the user clicks a different
+        // unconfigured row in the sidebar (detailMode stays .adding;
+        // only model.pendingAddPreset changes). Without observing the
+        // change we'd keep showing the original preset's chrome and
+        // post the wrong preset_id on Create. Re-running the appear
+        // logic on every preset id swap fixes the visible state and
+        // resets the credential fields so partial input from the prior
+        // preset doesn't bleed through.
+        .onChange(of: model.pendingAddPreset?.id) { _, _ in
+            resyncFromPendingPreset()
         }
         .onDisappear {
             // Clear the preset signal so a follow-up "+ Add Custom"
             // click doesn't accidentally inherit the previous preset.
             model.pendingAddPreset = nil
         }
+    }
+
+    /// Initialise (or re-initialise) form state from the view-model's
+    /// pendingAddPreset. Resets credential fields on every call so a
+    /// preset-swap mid-form doesn't carry stale values; preserves any
+    /// in-progress API key the user has typed iff they're STILL on the
+    /// same template (caller decides — we always reset since switching
+    /// presets implies starting over).
+    private func resyncFromPendingPreset() {
+        if let preset = model.pendingAddPreset {
+            selection = .template(preset)
+            label = preset.name
+            baseURL = preset.apiBase ?? ""
+        } else {
+            selection = .custom
+            label = "Custom provider"
+            customDriverType = "openai-compatible"
+            baseURL = ""
+        }
+        // Always clear the API key on a (re)sync — it's preset-scoped
+        // (a Anthropic key can't be reused for OpenAI) and silently
+        // carrying it over to a new preset would be a footgun.
+        apiKey = ""
+        formError = nil
     }
 
     /// Compact summary of the chosen template (or "Custom"). No
