@@ -22,8 +22,11 @@ Off-the-shelf chat UIs make easy things easy and hard things impossible. Clark t
 Working today, exercised daily by the author:
 
 - Anthropic, OpenAI (Chat Completions + Responses APIs), Google Gemini, and any OpenAI-compatible endpoint (Ollama, OpenRouter, vLLM, llama.cpp, LM Studio, …).
+- **13 built-in provider presets** (OpenAI, Anthropic, Google, xAI, DeepSeek, Groq, OpenRouter, Mistral, Together, Cerebras, Qwen, Ollama, Perplexity) with per-provider quirks: xAI's `x-grok-conv-id` cache header, OpenRouter's `HTTP-Referer`/`X-Title` app identity, Qwen's `enable_thinking` body field, Ollama's `/api/tags` discovery for local model metadata, and more.
 - Streaming, branching, editing, deleting, manual compression with two-stage promotion.
-- Per-message + per-context cost and token tracking.
+- "Save and Resend" on assistant rows chains a NEW assistant after the edit (two assistants in a row), with synthetic-user wire injection so OpenAI/Gemini accept the trailing-assistant prefix.
+- Per-message + per-context cost and token tracking, plus a **cache-efficiency dot** (red/yellow/green) on each assistant message — at-a-glance signal of how much of the prompt was served from provider-side cache.
+- **Anthropic prompt caching** (auto `cache_control` placement at the stable-prefix boundary), **OpenAI `prompt_cache_key`** routing, **Google implicit caching** + explicit `cachedContents` API support (Go-only; no UI yet).
 - Auto-titling via a small cheap model (or Apple Foundation Models on-device on macOS).
 - Per-conversation overrides for `temperature`, `max_output_tokens`, thinking budget, etc., with 4-layer resolution (conversation → profile → model → provider).
 - macOS client (SwiftUI, Liquid Glass).
@@ -58,9 +61,9 @@ The full design — provider model, conversation/context/message data model, str
 Stack:
 
 - **Server** — Go, single binary (`clarkd`), Postgres for storage, ConnectRPC for transport (HTTP/2, server-streaming RPCs, first-class Go/TS/Swift codegen).
-- **Catalog** — model metadata refreshed periodically from [models.dev](https://models.dev).
+- **Model metadata** — in-process `LiveCatalog` (no DB cache, no periodic refresh goroutine). On first lookup the server fetches [models.dev](https://models.dev) once into memory; subsequent reads are instant. Snapshot the result onto each `user_models` row at provider-add time so per-message cost calc is local and deterministic.
 - **macOS client** — SwiftUI on macOS 26 (Liquid Glass). Shared `ClarkKit` Swift package for repositories/view models so future iOS reuses the non-UI layer.
-- **No multi-provider framework** — drivers use each vendor's official SDK directly so provider-specific features (Anthropic `cache_control` + thinking, OpenAI Responses, Google `safetySettings`) survive intact.
+- **No multi-provider framework** — drivers use each vendor's official SDK directly so provider-specific features (Anthropic `cache_control` + thinking, OpenAI Responses, Google `safetySettings`) survive intact. The OpenAI-compatible driver carries a small `Quirks` overlay for the 11 OAI-compat presets so each provider's deviations (cache headers, extra body fields, custom discovery endpoints) live in one slot per preset rather than forking the driver.
 
 ## Repo layout
 
@@ -141,7 +144,6 @@ Other env vars:
 | `CLARK_DSN` | _(required)_ | Postgres connection string |
 | `CLARK_BOOTSTRAP_ADMIN_USERNAME` | — | One-shot admin bootstrap |
 | `CLARK_BOOTSTRAP_ADMIN_PASSWORD` | — | One-shot admin bootstrap |
-| `CLARK_CATALOG_REFRESH_INTERVAL` | `24h` | models.dev refresh cadence; `0` disables |
 
 ### 4. macOS client
 
@@ -151,9 +153,9 @@ make mac-app-run
 
 `make mac-app-run` builds the Swift package, wraps the binary in a `ClarkMac.app` bundle (so macOS gives it a Dock icon and can be screenshotted/automated), and launches it. Sign in with your bootstrap credentials.
 
-![Providers and enabled models](docs/screenshots/settings.png)
+![Providers and enabled models](docs/screenshots/providers.png)
 
-Add a provider (Settings → Providers → +), pick a type (`anthropic`, `openai-compatible`, `google`), paste the API key, and the client will let you discover and enable specific models. Then create a profile pointing at one of those models:
+The Providers sidebar lists every built-in preset always — configured ones at the top with a green status dot, the rest in an "Available" section greyed out with a `+` affordance. Click any preset → the form opens pre-filled (base URL, label, env-var hint), you paste the API key. The toolbar `+` is reserved for fully-custom OpenAI-compatible endpoints (self-hosted, a fork of a known provider, anything not covered by a preset). Discover models on the provider's detail tab; enable the ones you want. Then create a profile pointing at one:
 
 ![Profile detail](docs/screenshots/profiles.png)
 
