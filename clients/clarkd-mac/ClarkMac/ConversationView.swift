@@ -1094,10 +1094,22 @@ private struct MessageRow: View {
         }
     }
 
-    /// One-line summary: "(in: 1,234  out: 567  cost: $0.0023)"
+    /// One-line summary: "(in: 1,234 (920 cached)  out: 567  cost: $0.0023)"
+    /// — surfaces cache_read inline so cache hits are visible without
+    /// clicking through to the popover. Cache-write is rare enough to
+    /// only render when present.
     private func usageSummary(_ u: ClarkMessageUsage) -> String {
         var parts: [String] = []
-        if let n = u.inputTokens  { parts.append("in: \(n.formatted())") }
+        if let n = u.inputTokens {
+            var inputPart = "in: \(n.formatted())"
+            if let cr = u.cacheReadTokens, cr > 0 {
+                inputPart += " (\(cr.formatted()) cached)"
+            }
+            parts.append(inputPart)
+        }
+        if let cw = u.cacheWriteTokens, cw > 0 {
+            parts.append("cache write: \(cw.formatted())")
+        }
         if let n = u.outputTokens { parts.append("out: \(n.formatted())") }
         if let c = u.totalCostUsd {
             parts.append("cost: \(c.formatted(.currency(code: "USD").precision(.fractionLength(4))))")
