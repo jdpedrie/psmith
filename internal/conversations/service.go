@@ -940,6 +940,24 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
 	}
 
+	// When regenerating with an assistant parent, the wire prefix
+	// naturally ends in "assistant" (no new user row was inserted). Most
+	// providers — OpenAI Chat, Google Gemini — reject a contents array
+	// that doesn't end with a user turn (Gemini returns 400, OpenAI
+	// errors with "messages with role 'assistant' must be followed by a
+	// user message"). Inject a synthetic single-space user message for
+	// the wire ONLY; nothing is persisted to the messages table. The
+	// new assistant's parent_id remains the parent assistant, so the
+	// stored chain still reads user → assistant → assistant. The space
+	// is a minimal-content nudge — using " " over "Continue." avoids
+	// putting words in the user's mouth that they didn't type.
+	if req.Msg.Regenerate && userMsgRow.Role == "assistant" {
+		wireMessages = append(wireMessages, providers.WireMessage{
+			Role:    "user",
+			Content: " ",
+		})
+	}
+
 	// Resolve effective call settings via the 4-layer chain (high precedence
 	// → low): conversation > resolved profile > model > provider. The
 	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat

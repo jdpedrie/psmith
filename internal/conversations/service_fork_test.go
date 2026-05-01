@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -418,6 +419,41 @@ func TestRegenerate_FromAssistantParent(t *testing.T) {
 		tail[1].Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		t.Errorf("trailing roles=%v,%v want assistant,assistant", tail[0].Role, tail[1].Role)
 	}
+
+	// Wire-shape check: the request body sent to the upstream LLM must
+	// include a synthetic trailing user message. Most providers (OpenAI
+	// Chat, Google Gemini) reject a contents array that doesn't end
+	// with a user turn; injecting a single-space user satisfies them
+	// without persisting any extra row.
+	reqs := fake.Requests()
+	if len(reqs) < 2 {
+		t.Fatalf("fakellm captured %d requests, want >=2", len(reqs))
+	}
+	// Second request is the assistant-parent regenerate. Body is
+	// Anthropic-shaped (FlavorAnthropic): {"messages":[{"role":..., "content":...}]}.
+	var bodyShape struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(reqs[1].Body, &bodyShape); err != nil {
+		t.Fatalf("decode wire body: %v; body=%s", err, string(reqs[1].Body))
+	}
+	if n := len(bodyShape.Messages); n == 0 || bodyShape.Messages[n-1].Role != "user" {
+		t.Errorf("wire prefix doesn't end with user turn; got %d messages, last role=%q",
+			n, lastRole(bodyShape.Messages))
+	}
+}
+
+func lastRole(ms []struct {
+	Role    string `json:"role"`
+	Content any    `json:"content"`
+}) string {
+	if len(ms) == 0 {
+		return ""
+	}
+	return ms[len(ms)-1].Role
 }
 
 // TestRegenerate_RejectsSystemParent — only user and assistant parents

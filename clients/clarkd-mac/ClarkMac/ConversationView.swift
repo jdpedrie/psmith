@@ -75,6 +75,16 @@ struct ConversationBody: View {
                 if let err = model.compactError {
                     compactErrorBanner(err)
                 }
+                // loadError surfaced as a dismissible banner above the
+                // composer when there ARE messages — replacing the whole
+                // pane with "Failed to load" would hide the user's
+                // conversation history just because a Send/Regenerate
+                // RPC failed. The full-pane error view inside
+                // messageScroll only fires when the message list is
+                // empty (true initial-load failure).
+                if let err = model.loadError, !model.messages.isEmpty {
+                    loadErrorBanner(err)
+                }
                 messageScroll
                 composer
             }
@@ -337,11 +347,37 @@ struct ConversationBody: View {
         .background(Color.orange.opacity(0.12))
     }
 
+    /// Banner shown above the composer when a Send/Regenerate RPC fails
+    /// AND there are existing messages to keep visible. Mirrors the
+    /// compactError banner's style — dismissible, two-line cap, orange
+    /// accent — so the entire pane doesn't blank out for a transient
+    /// upstream / RPC failure.
+    private func loadErrorBanner(_ message: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
+            Spacer()
+            Button("Dismiss") { model.loadError = nil }
+                .buttonStyle(.borderless)
+                .font(.caption)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.12))
+    }
+
     // MARK: Message scroll
 
     @ViewBuilder
     private var messageScroll: some View {
-        if let err = model.loadError {
+        // Full-pane error only when the conversation truly has no
+        // messages to show — i.e. a real initial-load failure. For
+        // mid-conversation send/regenerate failures, the loadError
+        // banner above the composer carries the message and the user
+        // keeps their history visible.
+        if let err = model.loadError, model.messages.isEmpty {
             EmptyStateView(
                 "Failed to load",
                 systemImage: "exclamationmark.triangle",
@@ -622,6 +658,10 @@ private struct MessageRow: View {
     /// Copy). Tracked per-MessageRow @State so each bubble shows its own
     /// menu independently.
     @State private var isHovering: Bool = false
+    /// Per-bubble "Copied" toast visibility. Set true in copyToClipboard,
+    /// auto-clears after 1.4s. Drives both the swap of the copy icon to
+    /// a checkmark and the floating "Copied" capsule overlay.
+    @State private var showCopiedToast: Bool = false
     @Environment(\.chatPaneWidth) private var paneWidth
 
     private var isEditing: Bool {
@@ -863,14 +903,25 @@ private struct MessageRow: View {
             hoverButton(systemImage: "pencil", help: "Edit") {
                 startEdit()
             }
-            hoverButton(
-                systemImage: "arrow.clockwise",
-                help: "Reload — re-send this message (forks the conversation)",
-                disabled: !isReloadable
-            ) {
-                Task { await model.reloadFromMessage(id: message.id) }
+            // Reload is meaningful on assistant rows (regenerate this
+            // turn) but not on user rows — there's no semantic for "send
+            // my message again" that the user reaches for, and the
+            // composer's Send → Reload swap covers the "redo last user
+            // turn" case anyway. Hidden entirely (not just disabled) on
+            // user rows to keep the pill compact.
+            if message.role != .user {
+                hoverButton(
+                    systemImage: "arrow.clockwise",
+                    help: "Reload — re-send this message (forks the conversation)",
+                    disabled: !isReloadable
+                ) {
+                    Task { await model.reloadFromMessage(id: message.id) }
+                }
             }
-            hoverButton(systemImage: "doc.on.doc", help: "Copy to clipboard") {
+            hoverButton(
+                systemImage: showCopiedToast ? "checkmark" : "doc.on.doc",
+                help: "Copy to clipboard"
+            ) {
                 copyToClipboard()
             }
         }
@@ -883,6 +934,20 @@ private struct MessageRow: View {
             Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
         )
         .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 1)
+        .overlay(alignment: .topTrailing) {
+            if showCopiedToast {
+                Text("Copied")
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.thickMaterial))
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+                    .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 1)
+                    // Tuck above the pill, slightly inset from its right edge.
+                    .offset(x: -4, y: -22)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
     }
 
     /// Single 22pt icon button used inside the hover actions pill.
@@ -1175,11 +1240,18 @@ private struct MessageRow: View {
 
     /// Copy action — used by the hover menu only (intentionally not in the
     /// right-click menu). Falls back to the raw `content` when there's no
-    /// displayContent.
+    /// displayContent. Surfaces a "Copied" toast briefly above the pill
+    /// so the user gets confirmation that the action fired (Pasteboard
+    /// writes succeed silently otherwise).
     private func copyToClipboard() {
         let text = message.displayContent ?? message.content
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        withAnimation(.easeOut(duration: 0.15)) { showCopiedToast = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(.easeIn(duration: 0.2)) { showCopiedToast = false }
+        }
     }
 }
 
