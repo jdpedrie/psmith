@@ -134,6 +134,12 @@ struct SettingsViewWithCategory: View {
             ProvidersMiddleColumn(model: providersModel, onBack: {})
         case .profiles:
             ProfilesMiddleColumn(model: profilesModel, onBack: {})
+        case .appearance:
+            // Appearance column is exercised by AppearanceSettingsView
+            // snapshots; the snapshot of the providers/profiles surface
+            // doesn't need to render it. Empty placeholder keeps the
+            // switch exhaustive.
+            EmptyView()
         }
     }
 
@@ -144,6 +150,8 @@ struct SettingsViewWithCategory: View {
             ProvidersDetail(model: providersModel)
         case .profiles:
             ProfilesDetail(model: profilesModel)
+        case .appearance:
+            EmptyView()
         }
     }
 }
