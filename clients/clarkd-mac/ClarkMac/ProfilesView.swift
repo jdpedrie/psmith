@@ -669,29 +669,45 @@ private struct ProfileForm: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                // contentShape forces the entire HStack frame
+                // (including the chevron and any padding) to be hit-
+                // testable. Without it SwiftUI's Button only registers
+                // taps on opaque content — taps that landed on the
+                // chevron's inter-glyph space (the most natural place
+                // to click "open the dropdown") fell through and the
+                // chip never toggled.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Choose model")
 
             if expandedPicker == slot {
-                ModelPickerList(
-                    models: model.availableModels,
-                    providerLabels: model.providerLabels,
-                    providerTypes: model.providerTypes,
-                    providerPresetIDs: model.providerPresetIDs,
-                    selectedProviderID: provider.wrappedValue,
-                    selectedModelID: modelBinding.wrappedValue,
-                    onUnset: {
-                        provider.wrappedValue = nil
-                        modelBinding.wrappedValue = nil
-                        expandedPicker = nil
-                    },
-                    onSelect: { pid, mid in
-                        provider.wrappedValue = pid
-                        modelBinding.wrappedValue = mid
-                        expandedPicker = nil
-                    }
-                )
+                // Cap the inline expansion at ~360pt so a 30-model
+                // list doesn't push the rest of the form off-screen.
+                // Internal ScrollView handles overflow; the form's
+                // outer scroll keeps working below the picker.
+                ScrollView {
+                    ModelPickerList(
+                        models: model.availableModels,
+                        providerLabels: model.providerLabels,
+                        providerTypes: model.providerTypes,
+                        providerPresetIDs: model.providerPresetIDs,
+                        selectedProviderID: provider.wrappedValue,
+                        selectedModelID: modelBinding.wrappedValue,
+                        onUnset: {
+                            provider.wrappedValue = nil
+                            modelBinding.wrappedValue = nil
+                            expandedPicker = nil
+                        },
+                        onSelect: { pid, mid in
+                            provider.wrappedValue = pid
+                            modelBinding.wrappedValue = mid
+                            expandedPicker = nil
+                        }
+                    )
+                    .padding(.vertical, 4)
+                }
+                .frame(maxHeight: 360)
                 .padding(.top, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }

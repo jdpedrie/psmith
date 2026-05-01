@@ -650,6 +650,7 @@ struct ConversationBody: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
+                .contentShape(Capsule())
                 .glassEffect(.regular.interactive(), in: .capsule)
             }
             .buttonStyle(.plain)
