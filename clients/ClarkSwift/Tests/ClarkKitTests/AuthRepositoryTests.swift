@@ -196,4 +196,34 @@ struct AuthRepositoryTests {
             throw ClarkError.from(err)
         }
     }
+
+    // MARK: - probe()
+
+    @Test("probe against the running clarkd succeeds")
+    func probeSuccess() async throws {
+        let result = await probeClarkServer(url: server.baseURL)
+        switch result {
+        case .ok(let serverName, _):
+            #expect(serverName == "clarkd")
+        case .wrongServer(let detail):
+            Issue.record("expected ok; got wrongServer: \(detail)")
+        case .unreachable(let detail):
+            Issue.record("expected ok; got unreachable: \(detail)")
+        }
+    }
+
+    @Test("probe against an unreachable URL doesn't return .ok")
+    func probeUnreachable() async throws {
+        // Reserved port that nothing listens on.
+        guard let url = URL(string: "http://127.0.0.1:1") else {
+            Issue.record("URL build"); return
+        }
+        let result = await probeClarkServer(url: url)
+        if case .ok = result {
+            Issue.record("expected non-ok, got ok")
+        }
+        // Either .unreachable or .wrongServer is acceptable —
+        // different network stacks classify "connection refused"
+        // differently. The contract is "doesn't return .ok."
+    }
 }

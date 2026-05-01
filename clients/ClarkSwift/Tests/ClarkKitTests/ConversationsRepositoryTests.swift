@@ -688,4 +688,113 @@ struct ConversationsRepositoryTests {
         try await Task.sleep(nanoseconds: 250_000_000)
     }
 
+    // MARK: - new methods (setCurrentLeaf / regenerateAssistant / listMessages full_tree / editMessage role)
+
+    @Test("setCurrentLeaf repositions the per-context cursor")
+    func setCurrentLeafRepositions() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "rep-leaf")
+        let seeded = try await Fixtures.seedReadyToChat(client: client, replyText: "ok")
+        let conv = try await client.conversations.create(profileID: seeded.profile.id)
+        let (_, ctx) = try await client.conversations.get(id: conv.id)
+        // Send a turn so we have a non-trivial chain.
+        let pid = seeded.provider.id
+        let mid = seeded.model.modelID
+        _ = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "hi",
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+        // Reposition the leaf to the user message (not the assistant
+        // that's currently the natural leaf).
+        let all = try await client.conversations.listMessages(contextID: ctx.id, fullTree: true)
+        guard let target = all.first(where: { $0.role == .user }) else {
+            Issue.record("no user message in fixture"); return
+        }
+        try await client.conversations.setCurrentLeaf(contextID: ctx.id, messageID: target.id)
+        // Pulling the chain with no leafMessageID now lands at the
+        // newly-set leaf — the chain should end at the user row.
+        let chain = try await client.conversations.listMessages(contextID: ctx.id)
+        #expect(chain.last?.id == target.id)
+    }
+
+    @Test("listMessages with fullTree returns every branch, not just one chain")
+    func listMessagesFullTreeReturnsAllBranches() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "rep-tree")
+        let seeded = try await Fixtures.seedReadyToChat(client: client, replyText: "x")
+        let conv = try await client.conversations.create(profileID: seeded.profile.id)
+        let (_, ctx) = try await client.conversations.get(id: conv.id)
+        let pid = seeded.provider.id
+        let mid = seeded.model.modelID
+        // Two turns first so the second user has a non-nil parent
+        // (forking off a root-level message is ambiguous server-side).
+        _ = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "first",
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+        let (secondUser, _) = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "second",
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+        // Fork: send a different message under the SAME parent as the
+        // second user.
+        _ = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "second-alt",
+            parentMessageID: secondUser.parentID,
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+
+        let chain = try await client.conversations.listMessages(contextID: ctx.id)
+        let tree = try await client.conversations.listMessages(contextID: ctx.id, fullTree: true)
+        // Tree must include strictly more rows than the chain (the
+        // off-branch user + assistant aren't in the linear chain).
+        #expect(tree.count > chain.count, "tree=\(tree.count) chain=\(chain.count)")
+        let userTurns = tree.filter { $0.role == .user }
+        #expect(userTurns.count == 3)
+    }
+
+    @Test("regenerateAssistant returns a new stream off the same user")
+    func regenerateAssistantReturnsNewStream() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "rep-regen")
+        let seeded = try await Fixtures.seedReadyToChat(client: client, replyText: "x")
+        let conv = try await client.conversations.create(profileID: seeded.profile.id)
+        let pid = seeded.provider.id
+        let mid = seeded.model.modelID
+        let (userMsg, _) = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "hi",
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+        // Regenerate off the same user.
+        let (echoedUser, run) = try await client.conversations.regenerateAssistant(
+            conversationID: conv.id,
+            parentUserMessageID: userMsg.id,
+            providerID: pid, modelID: mid
+        )
+        // Echoed user message is the SAME row, not a new one.
+        #expect(echoedUser.id == userMsg.id)
+        #expect(!run.id.isEmpty)
+    }
+
+    @Test("editMessage with role override flips user → assistant")
+    func editMessageRoleFlip() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "rep-role")
+        let seeded = try await Fixtures.seedReadyToChat(client: client, replyText: "x")
+        let conv = try await client.conversations.create(profileID: seeded.profile.id)
+        let pid = seeded.provider.id
+        let mid = seeded.model.modelID
+        let (userMsg, _) = try await client.conversations.sendMessage(
+            conversationID: conv.id, content: "originally a user",
+            providerID: pid, modelID: mid
+        )
+        try await waitNoActiveStream(client: client, conversationID: conv.id)
+        let updated = try await client.conversations.editMessage(
+            id: userMsg.id, content: "now an assistant", role: .assistant
+        )
+        #expect(updated.role == .assistant)
+        #expect(updated.content == "now an assistant")
+    }
+
 }

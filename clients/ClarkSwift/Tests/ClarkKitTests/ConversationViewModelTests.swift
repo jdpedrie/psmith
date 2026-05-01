@@ -548,4 +548,167 @@ struct ConversationViewModelTests {
         await r.vm.maybeGenerateLocalTitle(profilesByID: [r.profile.id: p])
         #expect(r.vm.loadError == nil)
     }
+
+    // MARK: - selectModel / sendForking / regenerate / branch switching
+
+    @Test("selectModel persists provider+model on the conversation row")
+    func selectModelPersists() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-selmodel")
+        await r.vm.load()
+        await r.vm.loadAvailableModels()
+        // Pick the (only) enabled model on the seeded provider.
+        guard let m = r.vm.availableModels.first else {
+            Issue.record("no available models in fixture")
+            return
+        }
+        await r.vm.selectModel(providerID: m.providerID, modelID: m.modelID)
+        // Local state reflects the pick.
+        #expect(r.vm.selectedProviderID == m.providerID)
+        #expect(r.vm.selectedModelID == m.modelID)
+        // Re-fetching the conversation from the server confirms the
+        // settings blob was written through.
+        let (conv, _) = try await r.client.conversations.get(id: r.conversation.id)
+        #expect(conv.settings?.defaultProviderID == m.providerID)
+        #expect(conv.settings?.defaultModelID == m.modelID)
+    }
+
+    @Test("load prefers conversation.settings over last-assistant for selection")
+    func loadPrefersPersistedSelection() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-loadpref")
+        await r.vm.load()
+        await r.vm.loadAvailableModels()
+        guard let m = r.vm.availableModels.first else {
+            Issue.record("no available models in fixture")
+            return
+        }
+        await r.vm.selectModel(providerID: m.providerID, modelID: m.modelID)
+        // Fresh VM on the same conversation. Should pick up the
+        // persisted selection on load — without it we'd fall back to
+        // last-assistant (nil at this point).
+        let vm2 = ConversationViewModel(
+            conversation: r.conversation,
+            client: r.client,
+            onTerminal: { },
+            localTitler: nil
+        )
+        await vm2.load()
+        #expect(vm2.selectedProviderID == m.providerID)
+        #expect(vm2.selectedModelID == m.modelID)
+    }
+
+    @Test("sendForking under an existing parent creates a sibling user message")
+    func sendForkingCreatesSibling() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-fork")
+        await r.vm.load()
+        // Send TWO turns first so the second user has a non-nil parent
+        // (the first assistant). Forking off a root-level message would
+        // pass parentMessageID=nil to sendMessage which falls through
+        // to the leaf-resolution chain — not a fork.
+        await sendAndAwait(r.vm, text: "first")
+        await sendAndAwait(r.vm, text: "second")
+        guard let secondUser = r.vm.messages.last(where: { $0.role == .user && $0.content == "second" }),
+              let parentID = secondUser.parentID else {
+            Issue.record("expected a user message with a non-nil parent")
+            return
+        }
+        // Fork: send under the same parent as the second user. After
+        // load, both should exist as siblings.
+        await r.vm.sendForking(content: "second-alt", parentMessageID: parentID)
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+
+        await r.vm.loadTree()
+        let userSiblings = r.vm.treeMessages.filter { $0.role == .user && $0.parentID == parentID }
+        #expect(userSiblings.count == 2, "expected two sibling user turns; got \(userSiblings.count)")
+        #expect(userSiblings.map(\.content).sorted() == ["second", "second-alt"])
+    }
+
+    @Test("regenerateAssistant creates a sibling assistant under the same user")
+    func regenerateAssistantCreatesAssistantSibling() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-regen")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "ask once")
+        guard let userTurn = r.vm.messages.last(where: { $0.role == .user }) else {
+            Issue.record("no user turn"); return
+        }
+        // Regenerate: re-stream off the same user. No duplicate user row;
+        // a new assistant becomes a sibling of the original assistant.
+        await r.vm.regenerateAssistant(parentUserMessageID: userTurn.id)
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+
+        await r.vm.loadTree()
+        let users = r.vm.treeMessages.filter { $0.role == .user }
+        let assistants = r.vm.treeMessages.filter { $0.role == .assistant && $0.parentID == userTurn.id }
+        #expect(users.count == 1, "regenerate must NOT duplicate user; got \(users.count)")
+        #expect(assistants.count == 2, "expected two sibling assistant turns; got \(assistants.count)")
+    }
+
+    @Test("reloadFromMessage on assistant uses regenerate semantics")
+    func reloadFromAssistantRegenerates() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-rfa")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "hi")
+        guard let assistant = r.vm.messages.last(where: { $0.role == .assistant }) else {
+            Issue.record("no assistant"); return
+        }
+        await r.vm.reloadFromMessage(id: assistant.id)
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+
+        await r.vm.loadTree()
+        let users = r.vm.treeMessages.filter { $0.role == .user }
+        #expect(users.count == 1, "reload-from-assistant must not duplicate user")
+    }
+
+    @Test("reloadFromMessage on user creates a sibling user")
+    func reloadFromUserForks() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-rfu")
+        await r.vm.load()
+        // Two turns so the second user has a non-nil parent.
+        await sendAndAwait(r.vm, text: "first")
+        await sendAndAwait(r.vm, text: "second")
+        guard let userTurn = r.vm.messages.last(where: { $0.role == .user && $0.content == "second" }),
+              let parentID = userTurn.parentID else {
+            Issue.record("no user with non-nil parent"); return
+        }
+        await r.vm.reloadFromMessage(id: userTurn.id)
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+
+        await r.vm.loadTree()
+        let userSiblings = r.vm.treeMessages.filter {
+            $0.role == .user && $0.parentID == parentID
+        }
+        #expect(userSiblings.count == 2)
+    }
+
+    @Test("branchInfo + switchToBranch flip the active chain")
+    func branchSwitchFlipsChain() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-branch")
+        await r.vm.load()
+        // Two turns so subsequent forks have a non-nil parent.
+        await sendAndAwait(r.vm, text: "first")
+        await sendAndAwait(r.vm, text: "second")
+        guard let secondUser = r.vm.messages.last(where: { $0.role == .user && $0.content == "second" }),
+              let parentID = secondUser.parentID else {
+            Issue.record("no user with non-nil parent"); return
+        }
+        await r.vm.sendForking(content: "second-alt", parentMessageID: parentID)
+        await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
+
+        // After the fork, branchInfo should report 2 siblings for the
+        // active branch's terminal user message.
+        await r.vm.load()
+        guard let activeUser = r.vm.messages.last(where: { $0.role == .user }) else {
+            Issue.record("no active user after load"); return
+        }
+        guard let info = r.vm.branchInfo(for: activeUser.id) else {
+            Issue.record("branchInfo nil despite two siblings"); return
+        }
+        #expect(info.siblingIDs.count == 2)
+        let other = info.siblingIDs.first(where: { $0 != activeUser.id })!
+        await r.vm.switchToBranch(siblingID: other)
+        // After switching, the chain's terminal user turn should be the
+        // other sibling (or its descendant).
+        let newActive = r.vm.messages.last(where: { $0.role == .user })
+        #expect(newActive?.id == other || newActive?.parentID == other,
+                "expected chain to land on or under the chosen sibling")
+    }
 }
