@@ -31,10 +31,11 @@ type Conversation struct {
 	UpdatedAt time.Time
 }
 
-type GeminiCach struct {
+type ExplicitCach struct {
 	ContextID          uuid.UUID
+	ProviderType       string
 	ModelID            string
-	CacheName          string
+	CacheRef           string
 	PrefixMessageCount int32
 	PrefixHash         string
 	CreatedAt          time.Time

@@ -43,6 +43,7 @@ struct CallSettingsForm: View {
             commonSection
             if showsTopK { topKRow }
             if showsThinking { thinkingSection }
+            cachingSection
             switch driverType {
             case "anthropic":
                 anthropicSection
@@ -53,6 +54,24 @@ struct CallSettingsForm: View {
             default:
                 EmptyView()
             }
+        }
+    }
+
+    // MARK: - Caching (cross-cutting)
+
+    /// Provider-agnostic caching toggles. Today only `explicit_cache`
+    /// lives here. Whichever active driver implements
+    /// providers.ExplicitCacheProvider on the server side picks it up
+    /// (Google today; Anthropic later if it grows one). Drivers that
+    /// don't implement the interface no-op silently.
+    private var cachingSection: some View {
+        formSection("Caching") {
+            boolToggleRow(
+                title: "Explicit caching",
+                description: "Server-managed explicit cache. On Google: cachedContents auto-placement (per-hour storage cost). On other providers: no-op until the driver implements the interface.",
+                value: optBoolBinding(\.explicitCache),
+                inherited: inheritedSettings?.explicitCache
+            )
         }
     }
 
@@ -724,19 +743,6 @@ struct CallSettingsForm: View {
                 lowerBound: 1,
                 upperBound: 8
             )
-
-            // Explicit caching toggle. Auto-creates a Gemini
-            // cachedContents resource when the prefix exceeds the
-            // model's minimum and references it on subsequent turns.
-            // Worth enabling for preview models where implicit caching
-            // is unreliable, or any conversation where deterministic
-            // cache hits are worth the per-hour storage cost.
-            boolToggleRow(
-                title: "Explicit caching",
-                description: "Server-managed cachedContents auto-placement. Costs per-hour storage but works on preview models where implicit caching is flaky.",
-                value: googleOptBoolBinding(\.explicitCache),
-                inherited: inheritedSettings?.google?.explicitCache
-            )
         }
     }
 
@@ -777,10 +783,12 @@ struct CallSettingsForm: View {
         }
     }
 
-    private func googleOptBoolBinding(_ keyPath: WritableKeyPath<ClarkGoogleExtras, Bool?>) -> Binding<Bool?> {
+    /// Binding for a top-level Bool? setting — used by the
+    /// cross-cutting cachingSection (and any future similar surfaces).
+    private func optBoolBinding(_ keyPath: WritableKeyPath<ClarkCallSettings, Bool?>) -> Binding<Bool?> {
         Binding(
-            get: { settings.google?[keyPath: keyPath] },
-            set: { updateGoogle(keyPath, $0) }
+            get: { settings[keyPath: keyPath] },
+            set: { settings[keyPath: keyPath] = $0 }
         )
     }
 

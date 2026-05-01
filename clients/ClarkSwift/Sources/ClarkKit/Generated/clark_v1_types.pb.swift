@@ -1091,6 +1091,24 @@ public struct Clark_V1_CallSettings: @unchecked Sendable {
   /// Clears the value of `google`. Subsequent reads from it will return its default value.
   public mutating func clearGoogle() {_uniqueStorage()._google = nil}
 
+  /// --- Cross-cutting: caching ---
+  /// explicit_cache opts the conversation in to server-managed
+  /// explicit caching. Drivers that implement
+  /// providers.ExplicitCacheProvider (currently Google's
+  /// cachedContents; Anthropic's cache_control auto-placement could
+  /// grow into one in the future) hook in. The conversations service
+  /// owns the lookup/create/attach/expire orchestration; drivers
+  /// provide just the upstream call shapes. No-op for drivers that
+  /// don't implement the interface.
+  public var explicitCache: Bool {
+    get {_storage._explicitCache ?? false}
+    set {_uniqueStorage()._explicitCache = newValue}
+  }
+  /// Returns true if `explicitCache` has been explicitly set.
+  public var hasExplicitCache: Bool {_storage._explicitCache != nil}
+  /// Clears the value of `explicitCache`. Subsequent reads from it will return its default value.
+  public mutating func clearExplicitCache() {_uniqueStorage()._explicitCache = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1394,24 +1412,6 @@ public struct Clark_V1_GoogleExtras: Sendable {
   /// Clears the value of `candidateCount`. Subsequent reads from it will return its default value.
   public mutating func clearCandidateCount() {self._candidateCount = nil}
 
-  /// explicit_cache, when true, opts the conversation in to server-
-  /// managed Gemini cachedContents. Clark creates a cache on the first
-  /// turn whose prefix exceeds the model's minimum (1024 tokens on
-  /// Flash, 4096 on Pro), references it on subsequent turns, and
-  /// refreshes when it expires. Useful for preview models where
-  /// implicit caching is unreliable, or any conversation that wants
-  /// deterministic cache hits in exchange for the per-hour storage
-  /// cost. Resolved through the standard 4-layer chain (conversation
-  /// > profile > model > provider) like every other CallSettings field.
-  public var explicitCache: Bool {
-    get {_explicitCache ?? false}
-    set {_explicitCache = newValue}
-  }
-  /// Returns true if `explicitCache` has been explicitly set.
-  public var hasExplicitCache: Bool {self._explicitCache != nil}
-  /// Clears the value of `explicitCache`. Subsequent reads from it will return its default value.
-  public mutating func clearExplicitCache() {self._explicitCache = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1420,7 +1420,6 @@ public struct Clark_V1_GoogleExtras: Sendable {
   fileprivate var _responseMimeType: String? = nil
   fileprivate var _responseSchema: Data? = nil
   fileprivate var _candidateCount: Int32? = nil
-  fileprivate var _explicitCache: Bool? = nil
 }
 
 public struct Clark_V1_SafetySettings: Sendable {
@@ -3120,7 +3119,7 @@ extension Clark_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
 
 extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallSettings"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{3}top_p\0\u{3}max_output_tokens\0\u{3}stop_sequences\0\u{3}top_k\0\u{1}thinking\0\u{2}\u{4}anthropic\0\u{1}openai\0\u{1}google\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{3}top_p\0\u{3}max_output_tokens\0\u{3}stop_sequences\0\u{3}top_k\0\u{1}thinking\0\u{2}\u{4}anthropic\0\u{1}openai\0\u{1}google\0\u{3}explicit_cache\0")
 
   fileprivate class _StorageClass {
     var _temperature: Double? = nil
@@ -3132,6 +3131,7 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     var _anthropic: Clark_V1_AnthropicExtras? = nil
     var _openai: Clark_V1_OpenAIExtras? = nil
     var _google: Clark_V1_GoogleExtras? = nil
+    var _explicitCache: Bool? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -3151,6 +3151,7 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       _anthropic = source._anthropic
       _openai = source._openai
       _google = source._google
+      _explicitCache = source._explicitCache
     }
   }
 
@@ -3178,6 +3179,7 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         case 10: try { try decoder.decodeSingularMessageField(value: &_storage._anthropic) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._openai) }()
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._google) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._explicitCache) }()
         default: break
         }
       }
@@ -3217,6 +3219,9 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       try { if let v = _storage._google {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       } }()
+      try { if let v = _storage._explicitCache {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 13)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -3235,6 +3240,7 @@ extension Clark_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         if _storage._anthropic != rhs_storage._anthropic {return false}
         if _storage._openai != rhs_storage._openai {return false}
         if _storage._google != rhs_storage._google {return false}
+        if _storage._explicitCache != rhs_storage._explicitCache {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -3516,7 +3522,7 @@ extension Clark_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GoogleExtras"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0\u{3}explicit_cache\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3528,7 +3534,6 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 2: try { try decoder.decodeSingularStringField(value: &self._responseMimeType) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self._responseSchema) }()
       case 4: try { try decoder.decodeSingularInt32Field(value: &self._candidateCount) }()
-      case 5: try { try decoder.decodeSingularBoolField(value: &self._explicitCache) }()
       default: break
       }
     }
@@ -3551,9 +3556,6 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try { if let v = self._candidateCount {
       try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
     } }()
-    try { if let v = self._explicitCache {
-      try visitor.visitSingularBoolField(value: v, fieldNumber: 5)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3562,7 +3564,6 @@ extension Clark_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs._responseMimeType != rhs._responseMimeType {return false}
     if lhs._responseSchema != rhs._responseSchema {return false}
     if lhs._candidateCount != rhs._candidateCount {return false}
-    if lhs._explicitCache != rhs._explicitCache {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

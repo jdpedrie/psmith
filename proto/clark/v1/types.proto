@@ -174,6 +174,17 @@ message CallSettings {
   optional AnthropicExtras anthropic = 10;   // empty in v1 — reserved for future
   optional OpenAIExtras    openai    = 11;
   optional GoogleExtras    google    = 12;
+
+  // --- Cross-cutting: caching ---
+  // explicit_cache opts the conversation in to server-managed
+  // explicit caching. Drivers that implement
+  // providers.ExplicitCacheProvider (currently Google's
+  // cachedContents; Anthropic's cache_control auto-placement could
+  // grow into one in the future) hook in. The conversations service
+  // owns the lookup/create/attach/expire orchestration; drivers
+  // provide just the upstream call shapes. No-op for drivers that
+  // don't implement the interface.
+  optional bool explicit_cache = 13;
 }
 
 // ThinkingSettings carries the cross-driver "show your work" knob. Each
@@ -257,16 +268,6 @@ message GoogleExtras {
   optional string response_mime_type      = 2;   // e.g. "application/json"
   optional bytes  response_schema         = 3;   // JSON Schema bytes
   optional int32  candidate_count         = 4;   // [1, 8]
-  // explicit_cache, when true, opts the conversation in to server-
-  // managed Gemini cachedContents. Clark creates a cache on the first
-  // turn whose prefix exceeds the model's minimum (1024 tokens on
-  // Flash, 4096 on Pro), references it on subsequent turns, and
-  // refreshes when it expires. Useful for preview models where
-  // implicit caching is unreliable, or any conversation that wants
-  // deterministic cache hits in exchange for the per-hour storage
-  // cost. Resolved through the standard 4-layer chain (conversation
-  // > profile > model > provider) like every other CallSettings field.
-  optional bool explicit_cache = 5;
 }
 
 message SafetySettings {

@@ -27,7 +27,6 @@ import (
 	"github.com/jdpedrie/clark/internal/modelmeta"
 	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
-	googledriver "github.com/jdpedrie/clark/internal/providers/google"
 	"github.com/jdpedrie/clark/internal/store"
 	"github.com/jdpedrie/clark/internal/stream"
 	"github.com/jdpedrie/clark/plugins"
@@ -976,29 +975,33 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 	// trim the wire prefix to the new tail and stash the cache name on
 	// settings.Google.CachedContent for the driver to attach. On miss
 	// or error: send normally; failures are non-fatal.
-	// explicitCacheAttached records the outcome for forensic stamping
-	// onto the assistant message. nil → not applicable (toggle off or
-	// non-google driver); &true → cache attached; &false → toggle was
-	// on but no cache was attached this turn.
-	var explicitCacheAttached *bool
-	if callSettings.Google != nil && callSettings.Google.ExplicitCache != nil && *callSettings.Google.ExplicitCache {
-		if gd, ok := driver.(*googledriver.Driver); ok {
-			falseVal := false
-			explicitCacheAttached = &falseVal
-			if cacheName, trimmed := s.maybeAttachGeminiCache(ctx, gd, activeCtx.ID, modelID, wireMessages); cacheName != nil {
-				wireMessages = trimmed
-				callSettings.Google.CachedContent = cacheName
-				trueVal := true
-				explicitCacheAttached = &trueVal
-			}
-		}
-	}
-
+	// Build the SendRequest before the cache hook so the hook can
+	// mutate Messages + Settings in place via the driver's
+	// ApplyExplicitCacheRef.
 	sendReq := providers.SendRequest{
 		ModelID:        modelID,
 		Messages:       wireMessages,
 		Settings:       callSettings,
 		ConversationID: conv.ID.String(),
+	}
+
+	// Provider-agnostic explicit-cache hook. The driver opts in by
+	// implementing providers.ExplicitCacheProvider; the conversations
+	// service owns the lifecycle (lookup → check expiry → check
+	// prefix-hash match → attach OR create-and-store). Today only the
+	// Google driver implements the interface; Anthropic could grow
+	// one in the future without changing this code path.
+	//
+	// explicitCacheAttached records the outcome for forensic stamping
+	// onto the assistant message. nil → not applicable (toggle off or
+	// driver doesn't implement caching); &true → cache attached;
+	// &false → toggle was on but no cache attached this turn.
+	var explicitCacheAttached *bool
+	if callSettings.ExplicitCache != nil && *callSettings.ExplicitCache {
+		if cp, ok := driver.(providers.ExplicitCacheProvider); ok {
+			attached := s.maybeAttachExplicitCache(ctx, cp, provRow.Type, activeCtx.ID, modelID, &sendReq)
+			explicitCacheAttached = &attached
+		}
 	}
 	// Build a SendFunc closure for the supervisor. The supervisor calls
 	// it inside its run goroutine with retry + per-attempt 60s timeout
@@ -1323,8 +1326,9 @@ func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings
 		return providers.CallSettings{}
 	}
 	out := providers.CallSettings{
-		Temperature: s.Temperature,
-		TopP:        s.TopP,
+		Temperature:   s.Temperature,
+		TopP:          s.TopP,
+		ExplicitCache: s.ExplicitCache,
 	}
 	if s.MaxOutputTokens != nil {
 		v := int(*s.MaxOutputTokens)
@@ -1383,7 +1387,6 @@ func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings
 	if ge := s.Google; ge != nil {
 		out.Google = &providers.GoogleExtras{
 			ResponseMimeType: ge.ResponseMimeType,
-			ExplicitCache:    ge.ExplicitCache,
 		}
 		if ge.CandidateCount != nil {
 			v := int(*ge.CandidateCount)

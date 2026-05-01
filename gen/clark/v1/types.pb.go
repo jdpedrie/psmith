@@ -1414,9 +1414,19 @@ type CallSettings struct {
 	// --- Universal "thinking" knob, translated per driver ---
 	Thinking *ThinkingSettings `protobuf:"bytes,6,opt,name=thinking,proto3,oneof" json:"thinking,omitempty"`
 	// --- Provider-specific extension blocks ---
-	Anthropic     *AnthropicExtras `protobuf:"bytes,10,opt,name=anthropic,proto3,oneof" json:"anthropic,omitempty"` // empty in v1 — reserved for future
-	Openai        *OpenAIExtras    `protobuf:"bytes,11,opt,name=openai,proto3,oneof" json:"openai,omitempty"`
-	Google        *GoogleExtras    `protobuf:"bytes,12,opt,name=google,proto3,oneof" json:"google,omitempty"`
+	Anthropic *AnthropicExtras `protobuf:"bytes,10,opt,name=anthropic,proto3,oneof" json:"anthropic,omitempty"` // empty in v1 — reserved for future
+	Openai    *OpenAIExtras    `protobuf:"bytes,11,opt,name=openai,proto3,oneof" json:"openai,omitempty"`
+	Google    *GoogleExtras    `protobuf:"bytes,12,opt,name=google,proto3,oneof" json:"google,omitempty"`
+	// --- Cross-cutting: caching ---
+	// explicit_cache opts the conversation in to server-managed
+	// explicit caching. Drivers that implement
+	// providers.ExplicitCacheProvider (currently Google's
+	// cachedContents; Anthropic's cache_control auto-placement could
+	// grow into one in the future) hook in. The conversations service
+	// owns the lookup/create/attach/expire orchestration; drivers
+	// provide just the upstream call shapes. No-op for drivers that
+	// don't implement the interface.
+	ExplicitCache *bool `protobuf:"varint,13,opt,name=explicit_cache,json=explicitCache,proto3,oneof" json:"explicit_cache,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1512,6 +1522,13 @@ func (x *CallSettings) GetGoogle() *GoogleExtras {
 		return x.Google
 	}
 	return nil
+}
+
+func (x *CallSettings) GetExplicitCache() bool {
+	if x != nil && x.ExplicitCache != nil {
+		return *x.ExplicitCache
+	}
+	return false
 }
 
 // ThinkingSettings carries the cross-driver "show your work" knob. Each
@@ -1916,18 +1933,8 @@ type GoogleExtras struct {
 	ResponseMimeType *string                `protobuf:"bytes,2,opt,name=response_mime_type,json=responseMimeType,proto3,oneof" json:"response_mime_type,omitempty"` // e.g. "application/json"
 	ResponseSchema   []byte                 `protobuf:"bytes,3,opt,name=response_schema,json=responseSchema,proto3,oneof" json:"response_schema,omitempty"`         // JSON Schema bytes
 	CandidateCount   *int32                 `protobuf:"varint,4,opt,name=candidate_count,json=candidateCount,proto3,oneof" json:"candidate_count,omitempty"`        // [1, 8]
-	// explicit_cache, when true, opts the conversation in to server-
-	// managed Gemini cachedContents. Clark creates a cache on the first
-	// turn whose prefix exceeds the model's minimum (1024 tokens on
-	// Flash, 4096 on Pro), references it on subsequent turns, and
-	// refreshes when it expires. Useful for preview models where
-	// implicit caching is unreliable, or any conversation that wants
-	// deterministic cache hits in exchange for the per-hour storage
-	// cost. Resolved through the standard 4-layer chain (conversation
-	// > profile > model > provider) like every other CallSettings field.
-	ExplicitCache *bool `protobuf:"varint,5,opt,name=explicit_cache,json=explicitCache,proto3,oneof" json:"explicit_cache,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GoogleExtras) Reset() {
@@ -1986,13 +1993,6 @@ func (x *GoogleExtras) GetCandidateCount() int32 {
 		return *x.CandidateCount
 	}
 	return 0
-}
-
-func (x *GoogleExtras) GetExplicitCache() bool {
-	if x != nil && x.ExplicitCache != nil {
-		return *x.ExplicitCache
-	}
-	return false
 }
 
 type SafetySettings struct {
@@ -3366,7 +3366,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\b_pricingB\x13\n" +
 	"\x11_knowledge_cutoffB\x0f\n" +
 	"\r_capabilitiesB\x13\n" +
-	"\x11_default_settings\"\x91\x04\n" +
+	"\x11_default_settings\"\xd0\x04\n" +
 	"\fCallSettings\x12%\n" +
 	"\vtemperature\x18\x01 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12\x18\n" +
 	"\x05top_p\x18\x02 \x01(\x01H\x01R\x04topP\x88\x01\x01\x12/\n" +
@@ -3377,7 +3377,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\tanthropic\x18\n" +
 	" \x01(\v2\x19.clark.v1.AnthropicExtrasH\x05R\tanthropic\x88\x01\x01\x123\n" +
 	"\x06openai\x18\v \x01(\v2\x16.clark.v1.OpenAIExtrasH\x06R\x06openai\x88\x01\x01\x123\n" +
-	"\x06google\x18\f \x01(\v2\x16.clark.v1.GoogleExtrasH\aR\x06google\x88\x01\x01B\x0e\n" +
+	"\x06google\x18\f \x01(\v2\x16.clark.v1.GoogleExtrasH\aR\x06google\x88\x01\x01\x12*\n" +
+	"\x0eexplicit_cache\x18\r \x01(\bH\bR\rexplicitCache\x88\x01\x01B\x0e\n" +
 	"\f_temperatureB\b\n" +
 	"\x06_top_pB\x14\n" +
 	"\x12_max_output_tokensB\b\n" +
@@ -3386,7 +3387,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"_anthropicB\t\n" +
 	"\a_openaiB\t\n" +
-	"\a_google\"y\n" +
+	"\a_googleB\x11\n" +
+	"\x0f_explicit_cache\"y\n" +
 	"\x10ThinkingSettings\x12\x1d\n" +
 	"\aenabled\x18\x01 \x01(\bH\x00R\aenabled\x88\x01\x01\x12(\n" +
 	"\rbudget_tokens\x18\x02 \x01(\x05H\x01R\fbudgetTokens\x88\x01\x01B\n" +
@@ -3433,18 +3435,16 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x06schema\x18\x03 \x01(\fR\x06schema\x12\x1b\n" +
 	"\x06strict\x18\x04 \x01(\bH\x01R\x06strict\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\t\n" +
-	"\a_strict\"\xf7\x02\n" +
+	"\a_strict\"\xb8\x02\n" +
 	"\fGoogleExtras\x12F\n" +
 	"\x0fsafety_settings\x18\x01 \x01(\v2\x18.clark.v1.SafetySettingsH\x00R\x0esafetySettings\x88\x01\x01\x121\n" +
 	"\x12response_mime_type\x18\x02 \x01(\tH\x01R\x10responseMimeType\x88\x01\x01\x12,\n" +
 	"\x0fresponse_schema\x18\x03 \x01(\fH\x02R\x0eresponseSchema\x88\x01\x01\x12,\n" +
-	"\x0fcandidate_count\x18\x04 \x01(\x05H\x03R\x0ecandidateCount\x88\x01\x01\x12*\n" +
-	"\x0eexplicit_cache\x18\x05 \x01(\bH\x04R\rexplicitCache\x88\x01\x01B\x12\n" +
+	"\x0fcandidate_count\x18\x04 \x01(\x05H\x03R\x0ecandidateCount\x88\x01\x01B\x12\n" +
 	"\x10_safety_settingsB\x15\n" +
 	"\x13_response_mime_typeB\x12\n" +
 	"\x10_response_schemaB\x12\n" +
-	"\x10_candidate_countB\x11\n" +
-	"\x0f_explicit_cache\"\xee\x02\n" +
+	"\x10_candidate_count\"\xee\x02\n" +
 	"\x0eSafetySettings\x12<\n" +
 	"\n" +
 	"harassment\x18\x01 \x01(\x0e2\x17.clark.v1.HarmThresholdH\x00R\n" +

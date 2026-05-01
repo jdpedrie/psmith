@@ -102,6 +102,14 @@ type CallSettings struct {
 	Anthropic *AnthropicExtras
 	OpenAI    *OpenAIExtras
 	Google    *GoogleExtras
+
+	// --- Cross-cutting: caching ---
+	// ExplicitCache opts the conversation in to server-managed
+	// explicit caching. The conversations service owns the lookup /
+	// create / attach / expire orchestration; drivers that implement
+	// ExplicitCacheProvider provide just the upstream call shapes.
+	// Resolved through the standard 4-layer chain.
+	ExplicitCache *bool
 }
 
 // ThinkingSettings mirrors clark.v1.ThinkingSettings.
@@ -178,23 +186,13 @@ type GoogleExtras struct {
 	CandidateCount   *int
 
 	// CachedContent, when set, points at a cached_content resource
-	// previously created via the Driver's CreateCachedContent helper. The
-	// driver passes it to streamGenerateContent as `cachedContent`, telling
-	// Gemini to reuse the pre-tokenized prefix instead of re-billing it.
-	//
-	// Format: the full resource name returned by the create call, e.g.
-	// "cachedContents/abc123". The conversations service populates this
-	// per-turn when ExplicitCache is enabled and a cache exists for the
+	// previously created via the Driver's CreateCachedContent helper.
+	// The driver passes it to streamGenerateContent as `cachedContent`,
+	// telling Gemini to reuse the pre-tokenized prefix instead of
+	// re-billing it. Set per-turn by the conversations service when
+	// CallSettings.ExplicitCache is true and a cache exists for the
 	// conversation; not part of the proto — it's a runtime override.
 	CachedContent *string
-
-	// ExplicitCache opts the conversation in to server-managed
-	// cachedContents auto-placement. When true, the conversations
-	// service creates a Gemini cache on the first turn whose prefix
-	// exceeds the model's minimum, references it on subsequent turns,
-	// and refreshes on expiry. Resolved via the standard 4-layer
-	// CallSettings inheritance chain.
-	ExplicitCache *bool
 }
 
 // SafetySettings mirrors clark.v1.SafetySettings.

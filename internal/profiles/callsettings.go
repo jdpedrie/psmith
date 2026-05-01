@@ -89,6 +89,9 @@ func MergeCallSettings(higher, lower *clarkv1.CallSettings) *clarkv1.CallSetting
 		out.StopSequences = append([]string(nil), lower.StopSequences...)
 	}
 
+	// --- cross-cutting toggles ---
+	out.ExplicitCache = pickBool(higher.ExplicitCache, lower.ExplicitCache)
+
 	// --- nested messages: one level of recursive sparse merge ---
 	out.Thinking = mergeThinking(higher.Thinking, lower.Thinking)
 	out.Anthropic = mergeAnthropicExtras(higher.Anthropic, lower.Anthropic)
@@ -109,6 +112,7 @@ func cloneCallSettings(s *clarkv1.CallSettings) *clarkv1.CallSettings {
 		TopP:            copyFloat(s.TopP),
 		MaxOutputTokens: copyInt32(s.MaxOutputTokens),
 		TopK:            copyInt32(s.TopK),
+		ExplicitCache:   copyBool(s.ExplicitCache),
 	}
 	if len(s.StopSequences) > 0 {
 		out.StopSequences = append([]string(nil), s.StopSequences...)
@@ -305,7 +309,6 @@ func mergeGoogleExtras(higher, lower *clarkv1.GoogleExtras) *clarkv1.GoogleExtra
 	out := &clarkv1.GoogleExtras{
 		ResponseMimeType: pickString(higher.ResponseMimeType, lower.ResponseMimeType),
 		CandidateCount:   pickInt32(higher.CandidateCount, lower.CandidateCount),
-		ExplicitCache:    pickBool(higher.ExplicitCache, lower.ExplicitCache),
 	}
 	out.SafetySettings = mergeSafetySettings(higher.SafetySettings, lower.SafetySettings)
 	if len(higher.ResponseSchema) > 0 {
@@ -323,7 +326,6 @@ func cloneGoogleExtras(g *clarkv1.GoogleExtras) *clarkv1.GoogleExtras {
 	out := &clarkv1.GoogleExtras{
 		ResponseMimeType: copyString(g.ResponseMimeType),
 		CandidateCount:   copyInt32(g.CandidateCount),
-		ExplicitCache:    copyBool(g.ExplicitCache),
 	}
 	out.SafetySettings = cloneSafetySettings(g.SafetySettings)
 	if len(g.ResponseSchema) > 0 {

@@ -22,6 +22,13 @@ public struct ClarkCallSettings: Sendable, Hashable {
     public var anthropic: ClarkAnthropicExtras?
     public var openai: ClarkOpenAIExtras?
     public var google: ClarkGoogleExtras?
+    /// Cross-cutting toggle. When true, the conversations service
+    /// activates server-managed explicit caching for this turn —
+    /// dispatched through providers.ExplicitCacheProvider on the
+    /// active driver (Google's cachedContents today; Anthropic's
+    /// cache_control auto-placement could grow into one). No-op for
+    /// drivers that don't implement the interface.
+    public var explicitCache: Bool?
 
     public init(
         temperature: Double? = nil,
@@ -32,7 +39,8 @@ public struct ClarkCallSettings: Sendable, Hashable {
         thinking: ClarkThinkingSettings? = nil,
         anthropic: ClarkAnthropicExtras? = nil,
         openai: ClarkOpenAIExtras? = nil,
-        google: ClarkGoogleExtras? = nil
+        google: ClarkGoogleExtras? = nil,
+        explicitCache: Bool? = nil
     ) {
         self.temperature = temperature
         self.topP = topP
@@ -43,6 +51,7 @@ public struct ClarkCallSettings: Sendable, Hashable {
         self.anthropic = anthropic
         self.openai = openai
         self.google = google
+        self.explicitCache = explicitCache
     }
 
     /// True when every field is unset / empty. Callers pass `nil` (rather
@@ -57,6 +66,7 @@ public struct ClarkCallSettings: Sendable, Hashable {
             && (anthropic?.isEmpty ?? true)
             && (openai?.isEmpty ?? true)
             && (google?.isEmpty ?? true)
+            && explicitCache == nil
     }
 }
 
@@ -74,7 +84,8 @@ extension ClarkCallSettings {
             thinking:  p.hasThinking  ? ClarkThinkingSettings(from: p.thinking)   : nil,
             anthropic: p.hasAnthropic ? ClarkAnthropicExtras(from: p.anthropic)   : nil,
             openai:    p.hasOpenai    ? ClarkOpenAIExtras(from: p.openai)         : nil,
-            google:    p.hasGoogle    ? ClarkGoogleExtras(from: p.google)         : nil
+            google:    p.hasGoogle    ? ClarkGoogleExtras(from: p.google)         : nil,
+            explicitCache: p.hasExplicitCache ? p.explicitCache : nil
         )
     }
 
@@ -87,6 +98,7 @@ extension ClarkCallSettings {
         if let v = maxOutputTokens { s.maxOutputTokens = v }
         if !stopSequences.isEmpty  { s.stopSequences   = stopSequences }
         if let v = topK            { s.topK            = v }
+        if let v = explicitCache   { s.explicitCache   = v }
         if let t = thinking, !t.isEmpty   { s.thinking  = t.proto }
         if let a = anthropic, !a.isEmpty  { s.anthropic = a.proto }
         if let o = openai, !o.isEmpty     { s.openai    = o.proto }
@@ -398,25 +410,17 @@ public struct ClarkGoogleExtras: Sendable, Hashable {
     public var responseMimeType: String?
     public var responseSchema: Data?
     public var candidateCount: Int32?
-    /// Server-managed Gemini cachedContents auto-placement. When true,
-    /// the conversations service creates a cache when the prefix
-    /// exceeds the model's minimum and references it on subsequent
-    /// turns. Useful for preview models where implicit caching is
-    /// unreliable.
-    public var explicitCache: Bool?
 
     public init(
         safetySettings: ClarkSafetySettings? = nil,
         responseMimeType: String? = nil,
         responseSchema: Data? = nil,
-        candidateCount: Int32? = nil,
-        explicitCache: Bool? = nil
+        candidateCount: Int32? = nil
     ) {
         self.safetySettings = safetySettings
         self.responseMimeType = responseMimeType
         self.responseSchema = responseSchema
         self.candidateCount = candidateCount
-        self.explicitCache = explicitCache
     }
 
     public var isEmpty: Bool {
@@ -424,7 +428,6 @@ public struct ClarkGoogleExtras: Sendable, Hashable {
             && responseMimeType == nil
             && responseSchema == nil
             && candidateCount == nil
-            && explicitCache == nil
     }
 }
 
@@ -434,8 +437,7 @@ extension ClarkGoogleExtras {
             safetySettings:   p.hasSafetySettings   ? ClarkSafetySettings(from: p.safetySettings) : nil,
             responseMimeType: p.hasResponseMimeType ? p.responseMimeType : nil,
             responseSchema:   p.hasResponseSchema   ? p.responseSchema   : nil,
-            candidateCount:   p.hasCandidateCount   ? p.candidateCount   : nil,
-            explicitCache:    p.hasExplicitCache    ? p.explicitCache    : nil
+            candidateCount:   p.hasCandidateCount   ? p.candidateCount   : nil
         )
     }
 
@@ -445,7 +447,6 @@ extension ClarkGoogleExtras {
         if let v = responseMimeType           { s.responseMimeType = v }
         if let v = responseSchema             { s.responseSchema   = v }
         if let v = candidateCount             { s.candidateCount   = v }
-        if let v = explicitCache              { s.explicitCache    = v }
         return s
     }
 }

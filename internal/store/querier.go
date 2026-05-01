@@ -31,7 +31,7 @@ type Querier interface {
 	CreateUserModelProvider(ctx context.Context, arg CreateUserModelProviderParams) (UserModelProvider, error)
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
-	DeleteGeminiCache(ctx context.Context, arg DeleteGeminiCacheParams) error
+	DeleteExplicitCache(ctx context.Context, arg DeleteExplicitCacheParams) error
 	// The cascade=true path. With ON DELETE CASCADE on parent_id (migration 00006),
 	// this single DELETE removes the descendant subtree too.
 	DeleteMessageByID(ctx context.Context, id uuid.UUID) error
@@ -66,7 +66,7 @@ type Querier interface {
 	// most one such message; APPEND-mode compression reads it to chain forward.
 	GetContextRoleMessageInContext(ctx context.Context, contextID uuid.UUID) (Message, error)
 	GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error)
-	GetGeminiCache(ctx context.Context, arg GetGeminiCacheParams) (GeminiCach, error)
+	GetExplicitCache(ctx context.Context, arg GetExplicitCacheParams) (ExplicitCach, error)
 	// Returns the most recent stream_run for a context that recorded prefix
 	// hashes (skipping turns that errored before the prefix was assembled).
 	// Used by the next SendMessage to compute cache-stable prefix length.
@@ -207,7 +207,7 @@ type Querier interface {
 	UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
-	UpsertGeminiCache(ctx context.Context, arg UpsertGeminiCacheParams) error
+	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
 }
 
