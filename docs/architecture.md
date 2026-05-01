@@ -31,7 +31,7 @@ The catalog (refreshed periodically from [models.dev](https://models.dev)) is th
 
 **Refresh:**
 - On startup: synchronous fetch if catalog is empty (server isn't useful otherwise); skipped if already populated.
-- Periodic: `time.Ticker` goroutine. `CLARK_CATALOG_REFRESH_INTERVAL` env var (default 24h, set 0 to disable).
+- Periodic: `time.Ticker` goroutine. `REEVE_CATALOG_REFRESH_INTERVAL` env var (default 24h, set 0 to disable).
 - Manual: admin-only `RefreshModelCatalog` RPC.
 - Idempotent upsert; partial failure leaves stale-but-valid data in place.
 
@@ -424,7 +424,7 @@ Auth is built in from day one to leave room for multi-user later, even though Jo
 
 ### Posture
 - **Always require auth** — no single-user-bypass code path. Long-lived sessions (default 30 days, refreshed on use) make the friction negligible.
-- **Bootstrap admin from env vars on first run.** If no users exist and `CLARK_BOOTSTRAP_ADMIN_USERNAME` + `CLARK_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates the admin user. If no users and no bootstrap env vars, the server refuses to start.
+- **Bootstrap admin from env vars on first run.** If no users exist and `REEVE_BOOTSTRAP_ADMIN_USERNAME` + `REEVE_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates the admin user. If no users and no bootstrap env vars, the server refuses to start.
 - **Per-user resource ownership.** `provider_instances`, `profiles`, `conversations` each belong to exactly one user. No sharing/visibility in v1 — every user procures their own provider credentials, etc. Sharing model is a deliberate future concern (see Open threads).
 
 ### Transport
@@ -471,7 +471,7 @@ Revisit Tier B when:
 
 ### Tier A — Encryption at rest (sketch for when we build it)
 
-- Master key from env var `CLARK_MASTER_KEY` (32 bytes, base64) or KMS reference.
+- Master key from env var `REEVE_MASTER_KEY` (32 bytes, base64) or KMS reference.
 - Sensitive columns become `BYTEA`, encrypted with AES-256-GCM (nonce prepended): `messages.content`, `messages.thinking`, `messages.raw_content`, `messages.thinking_rendered_text`, `profiles.system_message`, `profiles.default_user_message`, `profiles.compression_guide`, `user_model_providers.config` (especially — contains API keys), `harness_sessions.state`.
 - New `internal/crypto` package: `Encrypt(plaintext []byte) ([]byte, error)`, `Decrypt(ciphertext []byte) ([]byte, error)` — driven by the master key.
 - Store-layer wrappers around the affected sqlc methods, or convert at the service-layer boundary.

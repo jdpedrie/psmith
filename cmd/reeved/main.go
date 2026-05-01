@@ -45,10 +45,10 @@ func main() {
 }
 
 func run() error {
-	addr := envOr("CLARK_ADDR", ":8080")
-	dsn := os.Getenv("CLARK_DSN")
+	addr := envOr("REEVE_ADDR", ":8080")
+	dsn := os.Getenv("REEVE_DSN")
 	if dsn == "" {
-		return errors.New("CLARK_DSN is required (Postgres connection string)")
+		return errors.New("REEVE_DSN is required (Postgres connection string)")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,8 +67,8 @@ func run() error {
 	queries := store.New(pool)
 
 	if err := auth.Bootstrap(ctx, queries,
-		os.Getenv("CLARK_BOOTSTRAP_ADMIN_USERNAME"),
-		os.Getenv("CLARK_BOOTSTRAP_ADMIN_PASSWORD"),
+		os.Getenv("REEVE_BOOTSTRAP_ADMIN_USERNAME"),
+		os.Getenv("REEVE_BOOTSTRAP_ADMIN_PASSWORD"),
 	); err != nil {
 		return err
 	}

@@ -126,12 +126,12 @@ make migrate-up
 
 ### 3. Bootstrap and run the server
 
-The server requires `CLARK_DSN`. On first run, if no users exist and `CLARK_BOOTSTRAP_ADMIN_USERNAME` + `CLARK_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates an admin user; if no users and no bootstrap env vars, it refuses to start.
+The server requires `REEVE_DSN`. On first run, if no users exist and `REEVE_BOOTSTRAP_ADMIN_USERNAME` + `REEVE_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates an admin user; if no users and no bootstrap env vars, it refuses to start.
 
 ```bash
-export CLARK_DSN='postgres://clark:clark@localhost:5433/clark?sslmode=disable'
-export CLARK_BOOTSTRAP_ADMIN_USERNAME=john
-export CLARK_BOOTSTRAP_ADMIN_PASSWORD=changeme
+export REEVE_DSN='postgres://clark:clark@localhost:5433/clark?sslmode=disable'
+export REEVE_BOOTSTRAP_ADMIN_USERNAME=john
+export REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme
 make run
 # clarkd listening addr=:8080
 ```
@@ -140,10 +140,10 @@ Other env vars:
 
 | Var | Default | Purpose |
 |---|---|---|
-| `CLARK_ADDR` | `:8080` | Listen address |
-| `CLARK_DSN` | _(required)_ | Postgres connection string |
-| `CLARK_BOOTSTRAP_ADMIN_USERNAME` | — | One-shot admin bootstrap |
-| `CLARK_BOOTSTRAP_ADMIN_PASSWORD` | — | One-shot admin bootstrap |
+| `REEVE_ADDR` | `:8080` | Listen address |
+| `REEVE_DSN` | _(required)_ | Postgres connection string |
+| `REEVE_BOOTSTRAP_ADMIN_USERNAME` | — | One-shot admin bootstrap |
+| `REEVE_BOOTSTRAP_ADMIN_PASSWORD` | — | One-shot admin bootstrap |
 
 ### 4. macOS client
 

@@ -5,7 +5,7 @@ import Foundation
 /// + DB but use distinct user accounts to isolate state.
 ///
 /// Lookup order for the server binary:
-///   1. `CLARK_TEST_BIN` env var if set,
+///   1. `REEVE_TEST_BIN` env var if set,
 ///   2. `<repoRoot>/bin/reeved-test` (pre-built by the harness on first call),
 ///   3. otherwise, `go build -o bin/reeved-test ./cmd/reeved` is run lazily.
 ///
@@ -85,13 +85,13 @@ public final class TestReevedServer: @unchecked Sendable {
         proc.currentDirectoryURL = URL(fileURLWithPath: repoRoot)
 
         var env = ProcessInfo.processInfo.environment
-        env["CLARK_DSN"] = testDSN
-        env["CLARK_ADDR"] = listenAddr
-        env["CLARK_BOOTSTRAP_ADMIN_USERNAME"] = "admin"
-        env["CLARK_BOOTSTRAP_ADMIN_PASSWORD"] = "admin-password-not-secret"
+        env["REEVE_DSN"] = testDSN
+        env["REEVE_ADDR"] = listenAddr
+        env["REEVE_BOOTSTRAP_ADMIN_USERNAME"] = "admin"
+        env["REEVE_BOOTSTRAP_ADMIN_PASSWORD"] = "admin-password-not-secret"
         // Disable the catalog refresh loop — tests don't need it and it
         // makes outbound network calls.
-        env["CLARK_CATALOG_REFRESH_INTERVAL"] = "0"
+        env["REEVE_CATALOG_REFRESH_INTERVAL"] = "0"
         proc.environment = env
 
         let outPipe = Pipe()
@@ -118,8 +118,8 @@ public final class TestReevedServer: @unchecked Sendable {
             port: port,
             dsn: testDSN,
             dbName: dbName,
-            adminUsername: env["CLARK_BOOTSTRAP_ADMIN_USERNAME"]!,
-            adminPassword: env["CLARK_BOOTSTRAP_ADMIN_PASSWORD"]!,
+            adminUsername: env["REEVE_BOOTSTRAP_ADMIN_USERNAME"]!,
+            adminPassword: env["REEVE_BOOTSTRAP_ADMIN_PASSWORD"]!,
             process: proc,
             stdoutPipe: outPipe,
             stderrPipe: errPipe,
@@ -250,7 +250,7 @@ private func findRepoRoot() throws -> String {
 }
 
 private func ensureBinary(repoRoot: String) throws -> String {
-    if let override = ProcessInfo.processInfo.environment["CLARK_TEST_BIN"], !override.isEmpty {
+    if let override = ProcessInfo.processInfo.environment["REEVE_TEST_BIN"], !override.isEmpty {
         return override
     }
     let binPath = (repoRoot as NSString).appendingPathComponent("bin/reeved-test")

@@ -4,7 +4,7 @@ import Observation
 /// Top-level app state: holds the auth state and a configured ReeveClient.
 /// Reusable across macOS / iOS — host apps inject the desired host URL and
 /// token store via the explicit init, or use the convenience init that picks
-/// sensible defaults (FileTokenStore + CLARK_HOST env override).
+/// sensible defaults (FileTokenStore + REEVE_HOST env override).
 @Observable
 @MainActor
 public final class AppModel {
@@ -30,7 +30,7 @@ public final class AppModel {
     }
 
     /// Default factory: pulls the URL from `ServerURLStore` (which falls
-    /// through to CLARK_HOST env, then http://127.0.0.1:8080) and uses a
+    /// through to REEVE_HOST env, then http://127.0.0.1:8080) and uses a
     /// FileTokenStore. Falls back to an in-memory token store if the
     /// file store can't be initialized.
     public convenience init() {

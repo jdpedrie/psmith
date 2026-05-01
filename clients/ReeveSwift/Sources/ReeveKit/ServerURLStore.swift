@@ -7,7 +7,7 @@ import Observation
 ///
 /// The URL the app actually uses on a given launch is resolved by:
 ///   1. Persisted value here, if set.
-///   2. CLARK_HOST environment variable (kept for parity with the
+///   2. REEVE_HOST environment variable (kept for parity with the
 ///      previous AppModel default — useful for dev runs that need to
 ///      override without touching the prefs).
 ///   3. http://127.0.0.1:8080 (the local-dev default).
@@ -35,7 +35,7 @@ public final class ServerURLStore {
         if let saved = UserDefaults.standard.string(forKey: Self.defaultsKey),
            let url = URL(string: saved) {
             self.current = url
-        } else if let env = ProcessInfo.processInfo.environment["CLARK_HOST"],
+        } else if let env = ProcessInfo.processInfo.environment["REEVE_HOST"],
                   let url = URL(string: env) {
             self.current = url
         } else {
@@ -49,7 +49,7 @@ public final class ServerURLStore {
     public func reset() {
         UserDefaults.standard.removeObject(forKey: Self.defaultsKey)
         // Reload from the resolution chain.
-        if let env = ProcessInfo.processInfo.environment["CLARK_HOST"],
+        if let env = ProcessInfo.processInfo.environment["REEVE_HOST"],
            let url = URL(string: env) {
             self.current = url
         } else {

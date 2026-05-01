@@ -8,7 +8,7 @@ import Connect
 ///
 /// Why register-via-admin and not a public Register RPC: clarkd doesn't
 /// expose registration as an unauthenticated RPC. The only paths to a user
-/// row are (a) `auth.Bootstrap` at server start (CLARK_BOOTSTRAP_ADMIN_*)
+/// row are (a) `auth.Bootstrap` at server start (REEVE_BOOTSTRAP_ADMIN_*)
 /// or (b) `AuthService.CreateUser`, which is admin-gated. The harness seeds
 /// an admin via env vars and uses CreateUser for per-test users.
 public enum TestSession {

@@ -39,7 +39,7 @@ designed to be reusable but no iOS app exists yet.
   - `TestClarkdServer` — boots a local clarkd against a fresh
     `pgtestdb`-style isolated Postgres database. Implementation:
     - On first call per test process, fork `go run ./cmd/clarkd` with
-      `CLARK_DSN` pointing at a fresh template-cloned database (mirror the
+      `REEVE_DSN` pointing at a fresh template-cloned database (mirror the
       Go side's `testutil` package's pgtestdb config).
     - Bind to an ephemeral port (`:0`), parse the actual port from the
       stdout startup log, expose as `baseURL`.
