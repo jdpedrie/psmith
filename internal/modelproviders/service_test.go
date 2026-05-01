@@ -227,17 +227,17 @@ func TestListProviderTypes_StatefulHardcoded(t *testing.T) {
 
 // --- ListProviderTemplates ---
 
-func TestListProviderTemplates_FromCatalog(t *testing.T) {
+// TestListProviderTemplates_PresetRegistry verifies the picker emits one
+// entry per built-in preset (native + openai-compatible) and that
+// preset_id / logo_slug / api_base are populated correctly. Catalog
+// metadata (env_key, doc_url) is layered on best-effort.
+func TestListProviderTemplates_PresetRegistry(t *testing.T) {
 	t.Parallel()
 	svc, _, cat, _ := newTestService(t)
-	seedCatalog(t, cat, "anthropic", "Anthropic", "https://api.anthropic.com", "claude-foo", "Claude Foo")
+	// Catalog enrichment: seed the env_key + doc_url for openai so the
+	// preset entry picks them up. Other presets are emitted with no
+	// catalog enrichment to prove templates surface even without it.
 	seedCatalog(t, cat, "openai", "OpenAI", "https://api.openai.com/v1", "gpt-foo", "GPT Foo")
-	seedCatalog(t, cat, "groq", "Groq", "https://api.groq.com/openai/v1", "llama-foo", "Llama Foo")
-	// Google: catalog row carries no api_base; the service is expected to
-	// surface the AI Studio default.
-	seedCatalog(t, cat, "google", "Google", "", "gemini-foo", "Gemini Foo")
-	// Provider with no api_base AND no native driver is skipped.
-	seedCatalog(t, cat, "local-only", "Local", "", "x", "X")
 
 	resp, err := svc.ListProviderTemplates(context.Background(), connect.NewRequest(&clarkv1.ListProviderTemplatesRequest{}))
 	if err != nil {
@@ -248,28 +248,55 @@ func TestListProviderTemplates_FromCatalog(t *testing.T) {
 	for _, t := range resp.Msg.Templates {
 		got[t.CatalogProviderId] = t
 	}
-	if got["anthropic"] == nil || got["anthropic"].DriverType != "anthropic" {
-		t.Errorf("anthropic mapping: %+v", got["anthropic"])
-	}
-	if got["openai"] == nil || got["openai"].DriverType != "openai-compatible" {
-		t.Errorf("openai mapping: %+v", got["openai"])
-	}
-	if got["groq"] == nil || got["groq"].DriverType != "openai-compatible" {
-		t.Errorf("groq mapping: %+v", got["groq"])
-	}
-	if got["google"] == nil {
-		t.Errorf("google template missing")
+
+	// Native drivers: present, no preset_id, logo_slug filled.
+	if a := got["anthropic"]; a == nil || a.DriverType != "anthropic" {
+		t.Errorf("anthropic mapping: %+v", a)
 	} else {
-		if got["google"].DriverType != "google" {
-			t.Errorf("google driver_type=%q want google", got["google"].DriverType)
+		if a.PresetId != nil {
+			t.Errorf("anthropic should have no preset_id (native driver), got %v", *a.PresetId)
 		}
-		if got["google"].ApiBase == nil ||
-			*got["google"].ApiBase != "https://generativelanguage.googleapis.com/v1beta" {
-			t.Errorf("google api_base=%v want AI Studio default", got["google"].ApiBase)
+		if a.LogoSlug == nil || *a.LogoSlug != "anthropic" {
+			t.Errorf("anthropic logo_slug=%v", a.LogoSlug)
 		}
 	}
-	if _, ok := got["local-only"]; ok {
-		t.Error("provider without api_base AND without native driver should be skipped")
+	if g := got["google"]; g == nil || g.DriverType != "google" {
+		t.Errorf("google mapping: %+v", g)
+	} else if g.ApiBase == nil || *g.ApiBase != "https://generativelanguage.googleapis.com/v1beta" {
+		t.Errorf("google api_base=%v", g.ApiBase)
+	}
+
+	// OpenAI-compat presets: every entry from openai.AllPresets() must be
+	// present, with preset_id pointing back at itself.
+	wantPresets := []string{"openai", "xai", "deepseek", "groq", "openrouter",
+		"mistral", "together", "cerebras", "qwen", "ollama", "perplexity"}
+	for _, id := range wantPresets {
+		entry := got[id]
+		if entry == nil {
+			t.Errorf("preset %q missing from templates", id)
+			continue
+		}
+		if entry.DriverType != "openai-compatible" {
+			t.Errorf("preset %q driver_type=%q want openai-compatible", id, entry.DriverType)
+		}
+		if entry.PresetId == nil || *entry.PresetId != id {
+			t.Errorf("preset %q preset_id=%v want %q", id, entry.PresetId, id)
+		}
+		if entry.ApiBase == nil || *entry.ApiBase == "" {
+			t.Errorf("preset %q missing api_base", id)
+		}
+		if entry.LogoSlug == nil || *entry.LogoSlug == "" {
+			t.Errorf("preset %q missing logo_slug", id)
+		}
+	}
+
+	// Catalog enrichment: openai's env_key + doc_url filled from the seed.
+	if oai := got["openai"]; oai == nil {
+		t.Fatal("openai missing")
+	} else {
+		if oai.EnvKey == nil || *oai.EnvKey != "OPENAI_API_KEY" {
+			t.Errorf("openai env_key=%v want OPENAI_API_KEY (catalog-enriched)", oai.EnvKey)
+		}
 	}
 }
 

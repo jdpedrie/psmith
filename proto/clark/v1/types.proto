@@ -50,7 +50,9 @@ message UserModelProvider {
 }
 
 // A template surfaced from the catalog to accelerate "add provider" UX.
-// Pre-fills the driver_type and base URL for known compatible providers.
+// One entry the UI surfaces in the "Add provider" picker. Combines the
+// built-in preset registry (native + openai-compatible) with optional
+// catalog metadata (env var hints, doc URLs from models.dev).
 message ProviderTemplate {
   string catalog_provider_id = 1;   // e.g. 'groq'
   string name = 2;                  // e.g. 'Groq'
@@ -58,6 +60,16 @@ message ProviderTemplate {
   optional string api_base = 4;
   optional string env_key = 5;      // conventional env var for the API key
   optional string doc_url = 6;
+  // preset_id, when present, names the openai-compatible preset (see
+  // internal/providers/openai/presets.go) the client must persist in
+  // config.preset_id so the driver picks the right Quirks at runtime.
+  // Empty for native-driver entries (anthropic, google) where the
+  // driver type already pins behaviour.
+  optional string preset_id = 7;
+  // logo_slug is the LobeHub icon slug bundled with the Mac app. The
+  // client renders `bundleResource("Logos/<slug>.svg")`. Empty when no
+  // logo is bundled (e.g. Custom OpenAI-compatible).
+  optional string logo_slug = 8;
 }
 
 // ---------------------------------------------------------------------------

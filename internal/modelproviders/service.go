@@ -25,6 +25,7 @@ import (
 	"github.com/jdpedrie/clark/internal/modelmeta"
 	"github.com/jdpedrie/clark/internal/profiles"
 	"github.com/jdpedrie/clark/internal/providers"
+	openaidriver "github.com/jdpedrie/clark/internal/providers/openai"
 	"github.com/jdpedrie/clark/internal/store"
 )
 
@@ -62,47 +63,68 @@ func (s *Service) ListProviderTypes(ctx context.Context, _ *connect.Request[clar
 	return connect.NewResponse(&clarkv1.ListProviderTypesResponse{Types: out}), nil
 }
 
+// ListProviderTemplates returns the "Add provider" picker entries:
+//
+//   - Native-driver presets: Anthropic, Google. driver_type names the
+//     dedicated driver; preset_id is empty (the driver_type alone selects
+//     behaviour).
+//   - Openai-compatible presets: every entry from openai.AllPresets()
+//     (OpenAI, xAI, DeepSeek, Groq, ..., Ollama, Perplexity). driver_type
+//     is always "openai-compatible"; preset_id pins the Quirks overlay
+//     the driver loads at runtime.
+//
+// Catalog metadata (env_key, doc_url) is best-effort — we look up the
+// preset's catalog_provider_id in the in-memory catalog and fill those
+// fields when present. Missing catalog entries don't cause the template
+// to be omitted; the UI falls back to its bundled defaults.
 func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[clarkv1.ListProviderTemplatesRequest]) (*connect.Response[clarkv1.ListProviderTemplatesResponse], error) {
-	provs, err := s.catalog.ListProviders(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	out := make([]*clarkv1.ProviderTemplate, 0, len(provs))
-	for _, p := range provs {
-		var driverType string
-		// apiBase mirrors p.APIBase by default but a few drivers override
-		// it (the Google catalog row carries no api_base because Gemini's
-		// REST surface is a native driver, not an openai-compatible shim;
-		// we hard-code AI Studio's URL here so the UI has a sensible
-		// default to display).
-		apiBase := p.APIBase
-		switch {
-		case p.ID == "anthropic":
-			driverType = "anthropic"
-		case p.ID == "openai":
-			driverType = "openai-compatible"
-		case p.ID == "google":
-			driverType = "google"
-			if apiBase == "" {
-				apiBase = "https://generativelanguage.googleapis.com/v1beta"
+	out := make([]*clarkv1.ProviderTemplate, 0, len(openaidriver.AllPresets())+2)
+
+	// Native-driver entries first — they appear at the top of the picker.
+	out = append(out,
+		&clarkv1.ProviderTemplate{
+			CatalogProviderId: "anthropic",
+			Name:              "Anthropic",
+			DriverType:        "anthropic",
+			ApiBase:           strPtr("https://api.anthropic.com"),
+			LogoSlug:          strPtr("anthropic"),
+		},
+		&clarkv1.ProviderTemplate{
+			CatalogProviderId: "google",
+			Name:              "Google Gemini",
+			DriverType:        "google",
+			ApiBase:           strPtr("https://generativelanguage.googleapis.com/v1beta"),
+			LogoSlug:          strPtr("gemini"),
+		},
+	)
+
+	for _, p := range openaidriver.AllPresets() {
+		t := &clarkv1.ProviderTemplate{
+			// catalog_provider_id is the preset id for openai-compat
+			// entries — same string the driver enricher uses for catalog
+			// lookups. It happens to match the models.dev provider slug
+			// for OpenAI/xAI/DeepSeek/etc., which is why catalog
+			// enrichment Just Works.
+			CatalogProviderId: string(p.ID),
+			Name:              p.DisplayName,
+			DriverType:        "openai-compatible",
+			ApiBase:           strPtr(p.BaseURL),
+			PresetId:          strPtr(string(p.ID)),
+			LogoSlug:          strPtr(p.LogoSlug),
+		}
+		// Catalog enrichment: env var hint + docs URL when models.dev has
+		// the provider on file. Live catalog lookup, lazy-fetched.
+		if cat, err := s.catalog.LookupProvider(ctx, string(p.ID)); err == nil && cat != nil {
+			if cat.EnvKey != "" {
+				t.EnvKey = strPtr(cat.EnvKey)
 			}
-		case p.APIBase != "":
-			driverType = "openai-compatible"
-		default:
-			// Catalog providers without an api_base and no native driver
-			// are skipped — we don't have a way to talk to them.
-			continue
+			if cat.DocURL != "" {
+				t.DocUrl = strPtr(cat.DocURL)
+			}
 		}
-		tmpl := &clarkv1.ProviderTemplate{
-			CatalogProviderId: p.ID,
-			Name:              p.Name,
-			DriverType:        driverType,
-			ApiBase:           strPtr(apiBase),
-			EnvKey:            strPtr(p.EnvKey),
-			DocUrl:            strPtr(p.DocURL),
-		}
-		out = append(out, tmpl)
+		out = append(out, t)
 	}
+
 	return connect.NewResponse(&clarkv1.ListProviderTemplatesResponse{Templates: out}), nil
 }
 

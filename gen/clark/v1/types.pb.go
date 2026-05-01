@@ -775,7 +775,9 @@ func (x *UserModelProvider) GetDefaultSettings() *CallSettings {
 }
 
 // A template surfaced from the catalog to accelerate "add provider" UX.
-// Pre-fills the driver_type and base URL for known compatible providers.
+// One entry the UI surfaces in the "Add provider" picker. Combines the
+// built-in preset registry (native + openai-compatible) with optional
+// catalog metadata (env var hints, doc URLs from models.dev).
 type ProviderTemplate struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	CatalogProviderId string                 `protobuf:"bytes,1,opt,name=catalog_provider_id,json=catalogProviderId,proto3" json:"catalog_provider_id,omitempty"` // e.g. 'groq'
@@ -784,8 +786,18 @@ type ProviderTemplate struct {
 	ApiBase           *string                `protobuf:"bytes,4,opt,name=api_base,json=apiBase,proto3,oneof" json:"api_base,omitempty"`
 	EnvKey            *string                `protobuf:"bytes,5,opt,name=env_key,json=envKey,proto3,oneof" json:"env_key,omitempty"` // conventional env var for the API key
 	DocUrl            *string                `protobuf:"bytes,6,opt,name=doc_url,json=docUrl,proto3,oneof" json:"doc_url,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// preset_id, when present, names the openai-compatible preset (see
+	// internal/providers/openai/presets.go) the client must persist in
+	// config.preset_id so the driver picks the right Quirks at runtime.
+	// Empty for native-driver entries (anthropic, google) where the
+	// driver type already pins behaviour.
+	PresetId *string `protobuf:"bytes,7,opt,name=preset_id,json=presetId,proto3,oneof" json:"preset_id,omitempty"`
+	// logo_slug is the LobeHub icon slug bundled with the Mac app. The
+	// client renders `bundleResource("Logos/<slug>.svg")`. Empty when no
+	// logo is bundled (e.g. Custom OpenAI-compatible).
+	LogoSlug      *string `protobuf:"bytes,8,opt,name=logo_slug,json=logoSlug,proto3,oneof" json:"logo_slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProviderTemplate) Reset() {
@@ -856,6 +868,20 @@ func (x *ProviderTemplate) GetEnvKey() string {
 func (x *ProviderTemplate) GetDocUrl() string {
 	if x != nil && x.DocUrl != nil {
 		return *x.DocUrl
+	}
+	return ""
+}
+
+func (x *ProviderTemplate) GetPresetId() string {
+	if x != nil && x.PresetId != nil {
+		return *x.PresetId
+	}
+	return ""
+}
+
+func (x *ProviderTemplate) GetLogoSlug() string {
+	if x != nil && x.LogoSlug != nil {
+		return *x.LogoSlug
 	}
 	return ""
 }
@@ -3212,7 +3238,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12F\n" +
 	"\x10default_settings\x18\b \x01(\v2\x16.clark.v1.CallSettingsH\x00R\x0fdefaultSettings\x88\x01\x01B\x13\n" +
-	"\x11_default_settings\"\xf8\x01\n" +
+	"\x11_default_settings\"\xd8\x02\n" +
 	"\x10ProviderTemplate\x12.\n" +
 	"\x13catalog_provider_id\x18\x01 \x01(\tR\x11catalogProviderId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -3220,12 +3246,18 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"driverType\x12\x1e\n" +
 	"\bapi_base\x18\x04 \x01(\tH\x00R\aapiBase\x88\x01\x01\x12\x1c\n" +
 	"\aenv_key\x18\x05 \x01(\tH\x01R\x06envKey\x88\x01\x01\x12\x1c\n" +
-	"\adoc_url\x18\x06 \x01(\tH\x02R\x06docUrl\x88\x01\x01B\v\n" +
+	"\adoc_url\x18\x06 \x01(\tH\x02R\x06docUrl\x88\x01\x01\x12 \n" +
+	"\tpreset_id\x18\a \x01(\tH\x03R\bpresetId\x88\x01\x01\x12 \n" +
+	"\tlogo_slug\x18\b \x01(\tH\x04R\blogoSlug\x88\x01\x01B\v\n" +
 	"\t_api_baseB\n" +
 	"\n" +
 	"\b_env_keyB\n" +
 	"\n" +
-	"\b_doc_url\"\xa7\x01\n" +
+	"\b_doc_urlB\f\n" +
+	"\n" +
+	"_preset_idB\f\n" +
+	"\n" +
+	"_logo_slug\"\xa7\x01\n" +
 	"\x11ModelCapabilities\x12\x1c\n" +
 	"\tstreaming\x18\x01 \x01(\bR\tstreaming\x12\x1a\n" +
 	"\bthinking\x18\x02 \x01(\bR\bthinking\x12\x19\n" +

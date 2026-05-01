@@ -570,7 +570,9 @@ public struct Clark_V1_UserModelProvider: Sendable {
 }
 
 /// A template surfaced from the catalog to accelerate "add provider" UX.
-/// Pre-fills the driver_type and base URL for known compatible providers.
+/// One entry the UI surfaces in the "Add provider" picker. Combines the
+/// built-in preset registry (native + openai-compatible) with optional
+/// catalog metadata (env var hints, doc URLs from models.dev).
 public struct Clark_V1_ProviderTemplate: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -613,6 +615,32 @@ public struct Clark_V1_ProviderTemplate: Sendable {
   /// Clears the value of `docURL`. Subsequent reads from it will return its default value.
   public mutating func clearDocURL() {self._docURL = nil}
 
+  /// preset_id, when present, names the openai-compatible preset (see
+  /// internal/providers/openai/presets.go) the client must persist in
+  /// config.preset_id so the driver picks the right Quirks at runtime.
+  /// Empty for native-driver entries (anthropic, google) where the
+  /// driver type already pins behaviour.
+  public var presetID: String {
+    get {_presetID ?? String()}
+    set {_presetID = newValue}
+  }
+  /// Returns true if `presetID` has been explicitly set.
+  public var hasPresetID: Bool {self._presetID != nil}
+  /// Clears the value of `presetID`. Subsequent reads from it will return its default value.
+  public mutating func clearPresetID() {self._presetID = nil}
+
+  /// logo_slug is the LobeHub icon slug bundled with the Mac app. The
+  /// client renders `bundleResource("Logos/<slug>.svg")`. Empty when no
+  /// logo is bundled (e.g. Custom OpenAI-compatible).
+  public var logoSlug: String {
+    get {_logoSlug ?? String()}
+    set {_logoSlug = newValue}
+  }
+  /// Returns true if `logoSlug` has been explicitly set.
+  public var hasLogoSlug: Bool {self._logoSlug != nil}
+  /// Clears the value of `logoSlug`. Subsequent reads from it will return its default value.
+  public mutating func clearLogoSlug() {self._logoSlug = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -620,6 +648,8 @@ public struct Clark_V1_ProviderTemplate: Sendable {
   fileprivate var _apiBase: String? = nil
   fileprivate var _envKey: String? = nil
   fileprivate var _docURL: String? = nil
+  fileprivate var _presetID: String? = nil
+  fileprivate var _logoSlug: String? = nil
 }
 
 public struct Clark_V1_ModelCapabilities: Sendable {
@@ -2529,7 +2559,7 @@ extension Clark_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension Clark_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProviderTemplate"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}catalog_provider_id\0\u{1}name\0\u{3}driver_type\0\u{3}api_base\0\u{3}env_key\0\u{3}doc_url\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}catalog_provider_id\0\u{1}name\0\u{3}driver_type\0\u{3}api_base\0\u{3}env_key\0\u{3}doc_url\0\u{3}preset_id\0\u{3}logo_slug\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2543,6 +2573,8 @@ extension Clark_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 4: try { try decoder.decodeSingularStringField(value: &self._apiBase) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self._envKey) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self._docURL) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self._presetID) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self._logoSlug) }()
       default: break
       }
     }
@@ -2571,6 +2603,12 @@ extension Clark_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._Messa
     try { if let v = self._docURL {
       try visitor.visitSingularStringField(value: v, fieldNumber: 6)
     } }()
+    try { if let v = self._presetID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+    } }()
+    try { if let v = self._logoSlug {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2581,6 +2619,8 @@ extension Clark_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs._apiBase != rhs._apiBase {return false}
     if lhs._envKey != rhs._envKey {return false}
     if lhs._docURL != rhs._docURL {return false}
+    if lhs._presetID != rhs._presetID {return false}
+    if lhs._logoSlug != rhs._logoSlug {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
