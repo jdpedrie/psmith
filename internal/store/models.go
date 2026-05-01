@@ -11,34 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type CatalogModel struct {
-	ProviderID            string
-	ModelID               string
-	DisplayName           string
-	ContextWindow         *int32
-	MaxOutputTokens       *int32
-	InputPricePerMillion  *float64
-	OutputPricePerMillion *float64
-	CacheReadPerMillion   *float64
-	CacheWritePerMillion  *float64
-	KnowledgeCutoff       pgtype.Date
-	Modalities            []string
-	Capabilities          []byte
-	Raw                   []byte
-	FetchedAt             time.Time
-}
-
-type CatalogModelProvider struct {
-	ID        string
-	Name      string
-	ApiBase   *string
-	EnvKey    *string
-	DocUrl    *string
-	Npm       *string
-	Raw       []byte
-	FetchedAt time.Time
-}
-
 type Context struct {
 	ID                    uuid.UUID
 	ConversationID        uuid.UUID

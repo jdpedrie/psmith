@@ -6,14 +6,11 @@ package store
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
-	CountCatalogModels(ctx context.Context) (int64, error)
-	CountCatalogProviders(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// Used by the stream supervisor at materialization. Allows the assistant turn
 	// (or the compression_summary record) to be inserted with usage + cost
@@ -46,8 +43,6 @@ type Querier interface {
 	// result_context_id (compression sets the latter) / error_payload.
 	FinalizeStreamRun(ctx context.Context, arg FinalizeStreamRunParams) (StreamRun, error)
 	GetActiveContextByConversation(ctx context.Context, conversationID uuid.UUID) (Context, error)
-	GetCatalogModel(ctx context.Context, arg GetCatalogModelParams) (CatalogModel, error)
-	GetCatalogProvider(ctx context.Context, id string) (CatalogModelProvider, error)
 	// Returns the (single) compression_summary message in a context, if any. Used
 	// by PromoteCompactionToNewContext to read the (possibly user-edited) content
 	// and seed the new context's role=context message.
@@ -97,9 +92,6 @@ type Querier interface {
 	HasRunningStreamForConversation(ctx context.Context, conversationID uuid.UUID) (bool, error)
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
-	LatestCatalogFetch(ctx context.Context) (time.Time, error)
-	ListCatalogModelsByProvider(ctx context.Context, providerID string) ([]CatalogModel, error)
-	ListCatalogProviders(ctx context.Context) ([]CatalogModelProvider, error)
 	// Per-context aggregates (message_count, last_message_total_tokens,
 	// cumulative_cost_usd) are computed in a single query so the client can
 	// render context-list rows without N+1 round trips.
@@ -213,10 +205,6 @@ type Querier interface {
 	UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
-	// Catalog models -----------------------------------------------------------
-	UpsertCatalogModel(ctx context.Context, arg UpsertCatalogModelParams) error
-	// Catalog providers --------------------------------------------------------
-	UpsertCatalogProvider(ctx context.Context, arg UpsertCatalogProviderParams) error
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
 }
 

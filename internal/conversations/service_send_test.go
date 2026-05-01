@@ -110,7 +110,7 @@ func newFullSvcWithPool(t *testing.T) (*Service, *store.Queries, *stream.Supervi
 	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	cat := modelmeta.NewDBCatalog(q, nil)
+	cat := modelmeta.NewLiveCatalog(nil)
 	sup := stream.New(q, slog.Default())
 	return NewService(q, pool, cat, sup, slog.Default()), q, sup, pool
 }

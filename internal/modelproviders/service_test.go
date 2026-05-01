@@ -25,11 +25,11 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-func newTestService(t *testing.T) (*Service, *store.Queries, *modelmeta.DBCatalog, *pgxpool.Pool) {
+func newTestService(t *testing.T) (*Service, *store.Queries, *modelmeta.LiveCatalog, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	cat := modelmeta.NewDBCatalog(q, nil)
+	cat := modelmeta.NewLiveCatalog(nil)
 	return NewService(q, cat, nil), q, cat, pool
 }
 
@@ -143,8 +143,8 @@ func makeProvider(t *testing.T, q *store.Queries, userID uuid.UUID, typeName, la
 	return row
 }
 
-// seedCatalog upserts a tiny fixture into the catalog tables.
-func seedCatalog(t *testing.T, cat *modelmeta.DBCatalog, providerID, providerName, apiBase, modelID, modelName string) {
+// seedCatalog injects a tiny fixture into the in-memory catalog.
+func seedCatalog(t *testing.T, cat *modelmeta.LiveCatalog, providerID, providerName, apiBase, modelID, modelName string) {
 	t.Helper()
 	now := time.Now().UTC()
 	snap := modelmeta.Snapshot{
@@ -178,9 +178,7 @@ func seedCatalog(t *testing.T, cat *modelmeta.DBCatalog, providerID, providerNam
 			},
 		},
 	}
-	if err := cat.Upsert(context.Background(), snap); err != nil {
-		t.Fatalf("seed catalog: %v", err)
-	}
+	cat.MergeSnapshot(snap)
 }
 
 // --- ListProviderTypes ---
@@ -1647,7 +1645,7 @@ func TestHumanizeName(t *testing.T) {
 // capabilities, modalities, default_settings end-to-end through both
 // snapshot paths and the read conversion helpers). ---
 
-func seedCatalogRich(t *testing.T, cat *modelmeta.DBCatalog, providerID, modelID string) modelmeta.Model {
+func seedCatalogRich(t *testing.T, cat *modelmeta.LiveCatalog, providerID, modelID string) modelmeta.Model {
 	t.Helper()
 	now := time.Now().UTC()
 	cutoff := time.Date(2024, 10, 1, 0, 0, 0, 0, time.UTC)
@@ -1685,9 +1683,7 @@ func seedCatalogRich(t *testing.T, cat *modelmeta.DBCatalog, providerID, modelID
 			},
 		},
 	}
-	if err := cat.Upsert(context.Background(), snap); err != nil {
-		t.Fatalf("seedCatalogRich: %v", err)
-	}
+	cat.MergeSnapshot(snap)
 	return model
 }
 

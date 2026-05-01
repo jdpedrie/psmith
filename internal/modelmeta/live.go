@@ -110,6 +110,46 @@ func (c *LiveCatalog) ListModelsByProvider(ctx context.Context, providerID strin
 	return out, nil
 }
 
+// LoadSnapshot replaces the cache with a literal Snapshot, marking it
+// loaded as if Refresh had succeeded. Test-only helper — production code
+// always reaches the cache via the Fetcher (Refresh / lazy-load paths).
+func (c *LiveCatalog) LoadSnapshot(snap Snapshot) {
+	c.replace(snap)
+}
+
+// MergeSnapshot adds the snapshot's providers and models to the cache
+// without removing existing entries. Test-only helper for fixtures that
+// build up the catalog across multiple seedCatalog calls — production
+// flows (Refresh, lazy-load) always replace wholesale to avoid leaking
+// retired entries.
+func (c *LiveCatalog) MergeSnapshot(snap Snapshot) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.providers == nil {
+		c.providers = make(map[string]*Provider)
+	}
+	if c.models == nil {
+		c.models = make(map[string]map[string]*Model)
+	}
+	for _, ps := range snap.Providers {
+		p := ps.Provider
+		c.providers[p.ID] = &p
+		pm, ok := c.models[p.ID]
+		if !ok {
+			pm = make(map[string]*Model, len(ps.Models))
+			c.models[p.ID] = pm
+		}
+		for _, ms := range ps.Models {
+			m := ms.Model
+			pm[m.ID] = &m
+		}
+	}
+	c.loaded = true
+	if snap.FetchedAt.After(c.loadedAt) {
+		c.loadedAt = snap.FetchedAt
+	}
+}
+
 // Refresh forces a fresh fetch and atomically replaces the cache. Used
 // by the UI's "refresh metadata" affordance and by tests.
 func (c *LiveCatalog) Refresh(ctx context.Context) error {
