@@ -430,6 +430,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		CacheWriteCostUsd:    usageParams.CacheWriteCostUsd,
 		TotalCostUsd:         usageParams.TotalCostUsd,
 		ErrorPayload:         errPayload,
+		ExplicitCacheAttached: params.ExplicitCacheAttached,
 	}); err != nil {
 		// If the context row was deleted out from under us (cascade),
 		// log and skip — the run still gets finalized.

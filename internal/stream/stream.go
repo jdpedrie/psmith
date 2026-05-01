@@ -140,6 +140,16 @@ type StartParams struct {
 	// assistant message row. Optional: nil falls back to dropping both
 	// columns to NULL — the same behaviour as before this hook existed.
 	Provider providers.Provider
+
+	// ExplicitCacheAttached records whether Clark attached an explicit
+	// Gemini cachedContents reference to the request that produced this
+	// run. Stamped onto the materialized assistant message's
+	// explicit_cache_attached column for forensics. nil → don't write
+	// the column (non-google driver, toggle off, or this surface
+	// doesn't apply); &true → cache attached; &false → toggle was on
+	// but no cache was attached (most commonly: prefix below the
+	// per-model minimum).
+	ExplicitCacheAttached *bool
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't

@@ -482,6 +482,16 @@ message MessageUsage {
   optional double cache_read_cost_usd = 8;
   optional double cache_write_cost_usd = 9;
   optional double total_cost_usd = 10;
+
+  // explicit_cache_attached records whether Clark attached an
+  // explicit Gemini cachedContents reference to the request that
+  // produced this message. NULL = not applicable (toggle off / non-
+  // google driver / pre-feature message); TRUE = cache attached;
+  // FALSE = toggle on but no cache attached this turn (most often:
+  // prefix below the per-model minimum). Combined with
+  // cache_read_tokens this distinguishes explicit cache hits from
+  // implicit ones.
+  optional bool explicit_cache_attached = 11;
 }
 
 // ---------------------------------------------------------------------------

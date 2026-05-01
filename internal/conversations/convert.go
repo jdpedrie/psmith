@@ -242,20 +242,22 @@ func messageUsageToProto(m store.Message) *clarkv1.MessageUsage {
 		m.ReasoningTokens == nil &&
 		!m.InputCostUsd.Valid && !m.OutputCostUsd.Valid &&
 		!m.CacheReadCostUsd.Valid && !m.CacheWriteCostUsd.Valid &&
-		!m.TotalCostUsd.Valid {
+		!m.TotalCostUsd.Valid &&
+		m.ExplicitCacheAttached == nil {
 		return nil
 	}
 	return &clarkv1.MessageUsage{
-		InputTokens:       m.InputTokens,
-		OutputTokens:      m.OutputTokens,
-		CacheReadTokens:   m.CacheReadTokens,
-		CacheWriteTokens:  m.CacheWriteTokens,
-		ReasoningTokens:   m.ReasoningTokens,
-		InputCostUsd:      numericToFloat64Ptr(m.InputCostUsd),
-		OutputCostUsd:     numericToFloat64Ptr(m.OutputCostUsd),
-		CacheReadCostUsd:  numericToFloat64Ptr(m.CacheReadCostUsd),
-		CacheWriteCostUsd: numericToFloat64Ptr(m.CacheWriteCostUsd),
-		TotalCostUsd:      numericToFloat64Ptr(m.TotalCostUsd),
+		InputTokens:           m.InputTokens,
+		OutputTokens:          m.OutputTokens,
+		CacheReadTokens:       m.CacheReadTokens,
+		CacheWriteTokens:      m.CacheWriteTokens,
+		ReasoningTokens:       m.ReasoningTokens,
+		InputCostUsd:          numericToFloat64Ptr(m.InputCostUsd),
+		OutputCostUsd:         numericToFloat64Ptr(m.OutputCostUsd),
+		CacheReadCostUsd:      numericToFloat64Ptr(m.CacheReadCostUsd),
+		CacheWriteCostUsd:     numericToFloat64Ptr(m.CacheWriteCostUsd),
+		TotalCostUsd:          numericToFloat64Ptr(m.TotalCostUsd),
+		ExplicitCacheAttached: m.ExplicitCacheAttached,
 	}
 }
 

@@ -52,32 +52,33 @@ type HarnessSession struct {
 }
 
 type Message struct {
-	ID                   uuid.UUID
-	ContextID            uuid.UUID
-	ParentID             *uuid.UUID
-	Role                 string
-	Content              string
-	RawContent           *string
-	Thinking             []byte
-	ThinkingProviderType *string
-	ThinkingRenderedText *string
-	ProviderID           *uuid.UUID
-	ModelID              *string
-	CreatedAt            time.Time
-	InputTokens          *int32
-	OutputTokens         *int32
-	CacheReadTokens      *int32
-	CacheWriteTokens     *int32
-	ReasoningTokens      *int32
-	ProviderUsageRaw     []byte
-	InputCostUsd         pgtype.Numeric
-	OutputCostUsd        pgtype.Numeric
-	CacheReadCostUsd     pgtype.Numeric
-	CacheWriteCostUsd    pgtype.Numeric
-	TotalCostUsd         pgtype.Numeric
-	EditedAt             *time.Time
-	ErrorPayload         []byte
-	ThinkingDurationMs   *int32
+	ID                    uuid.UUID
+	ContextID             uuid.UUID
+	ParentID              *uuid.UUID
+	Role                  string
+	Content               string
+	RawContent            *string
+	Thinking              []byte
+	ThinkingProviderType  *string
+	ThinkingRenderedText  *string
+	ProviderID            *uuid.UUID
+	ModelID               *string
+	CreatedAt             time.Time
+	InputTokens           *int32
+	OutputTokens          *int32
+	CacheReadTokens       *int32
+	CacheWriteTokens      *int32
+	ReasoningTokens       *int32
+	ProviderUsageRaw      []byte
+	InputCostUsd          pgtype.Numeric
+	OutputCostUsd         pgtype.Numeric
+	CacheReadCostUsd      pgtype.Numeric
+	CacheWriteCostUsd     pgtype.Numeric
+	TotalCostUsd          pgtype.Numeric
+	EditedAt              *time.Time
+	ErrorPayload          []byte
+	ThinkingDurationMs    *int32
+	ExplicitCacheAttached *bool
 }
 
 type Profile struct {

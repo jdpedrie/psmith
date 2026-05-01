@@ -28,7 +28,8 @@ INSERT INTO messages (
     reasoning_tokens, provider_usage_raw,
     input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd,
     total_cost_usd,
-    error_payload
+    error_payload,
+    explicit_cache_attached
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -38,7 +39,8 @@ INSERT INTO messages (
     $17, $18,
     $19, $20, $21, $22,
     $23,
-    $24
+    $24,
+    $25
 )
 RETURNING *;
 

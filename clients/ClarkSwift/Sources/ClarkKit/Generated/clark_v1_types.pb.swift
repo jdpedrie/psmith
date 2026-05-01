@@ -2196,6 +2196,23 @@ public struct Clark_V1_MessageUsage: Sendable {
   /// Clears the value of `totalCostUsd`. Subsequent reads from it will return its default value.
   public mutating func clearTotalCostUsd() {self._totalCostUsd = nil}
 
+  /// explicit_cache_attached records whether Clark attached an
+  /// explicit Gemini cachedContents reference to the request that
+  /// produced this message. NULL = not applicable (toggle off / non-
+  /// google driver / pre-feature message); TRUE = cache attached;
+  /// FALSE = toggle on but no cache attached this turn (most often:
+  /// prefix below the per-model minimum). Combined with
+  /// cache_read_tokens this distinguishes explicit cache hits from
+  /// implicit ones.
+  public var explicitCacheAttached: Bool {
+    get {_explicitCacheAttached ?? false}
+    set {_explicitCacheAttached = newValue}
+  }
+  /// Returns true if `explicitCacheAttached` has been explicitly set.
+  public var hasExplicitCacheAttached: Bool {self._explicitCacheAttached != nil}
+  /// Clears the value of `explicitCacheAttached`. Subsequent reads from it will return its default value.
+  public mutating func clearExplicitCacheAttached() {self._explicitCacheAttached = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2210,6 +2227,7 @@ public struct Clark_V1_MessageUsage: Sendable {
   fileprivate var _cacheReadCostUsd: Double? = nil
   fileprivate var _cacheWriteCostUsd: Double? = nil
   fileprivate var _totalCostUsd: Double? = nil
+  fileprivate var _explicitCacheAttached: Bool? = nil
 }
 
 public struct Clark_V1_StreamRun: @unchecked Sendable {
@@ -4244,7 +4262,7 @@ extension Clark_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Clark_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MessageUsage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}cache_read_tokens\0\u{3}cache_write_tokens\0\u{3}reasoning_tokens\0\u{3}input_cost_usd\0\u{3}output_cost_usd\0\u{3}cache_read_cost_usd\0\u{3}cache_write_cost_usd\0\u{3}total_cost_usd\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}cache_read_tokens\0\u{3}cache_write_tokens\0\u{3}reasoning_tokens\0\u{3}input_cost_usd\0\u{3}output_cost_usd\0\u{3}cache_read_cost_usd\0\u{3}cache_write_cost_usd\0\u{3}total_cost_usd\0\u{3}explicit_cache_attached\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4262,6 +4280,7 @@ extension Clark_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 8: try { try decoder.decodeSingularDoubleField(value: &self._cacheReadCostUsd) }()
       case 9: try { try decoder.decodeSingularDoubleField(value: &self._cacheWriteCostUsd) }()
       case 10: try { try decoder.decodeSingularDoubleField(value: &self._totalCostUsd) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self._explicitCacheAttached) }()
       default: break
       }
     }
@@ -4302,6 +4321,9 @@ extension Clark_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try { if let v = self._totalCostUsd {
       try visitor.visitSingularDoubleField(value: v, fieldNumber: 10)
     } }()
+    try { if let v = self._explicitCacheAttached {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 11)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4316,6 +4338,7 @@ extension Clark_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs._cacheReadCostUsd != rhs._cacheReadCostUsd {return false}
     if lhs._cacheWriteCostUsd != rhs._cacheWriteCostUsd {return false}
     if lhs._totalCostUsd != rhs._totalCostUsd {return false}
+    if lhs._explicitCacheAttached != rhs._explicitCacheAttached {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

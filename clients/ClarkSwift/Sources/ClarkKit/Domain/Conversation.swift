@@ -229,6 +229,13 @@ public struct ClarkMessageUsage: Sendable, Hashable {
     public let cacheReadCostUsd: Double?
     public let cacheWriteCostUsd: Double?
     public let totalCostUsd: Double?
+    /// True/false/nil per the proto field of the same name. nil = not
+    /// applicable (toggle off, non-google, or pre-feature message);
+    /// true = explicit cache was attached to this turn's request;
+    /// false = toggle was on but no cache attached (most often: prefix
+    /// below the per-model minimum). Combined with cacheReadTokens,
+    /// distinguishes explicit hits from implicit ones.
+    public let explicitCacheAttached: Bool?
 
     // MARK: - Test support
     /// Public memberwise init for fixture construction in snapshot/unit tests.
@@ -243,7 +250,8 @@ public struct ClarkMessageUsage: Sendable, Hashable {
         outputCostUsd: Double? = nil,
         cacheReadCostUsd: Double? = nil,
         cacheWriteCostUsd: Double? = nil,
-        totalCostUsd: Double? = nil
+        totalCostUsd: Double? = nil,
+        explicitCacheAttached: Bool? = nil
     ) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
@@ -255,6 +263,7 @@ public struct ClarkMessageUsage: Sendable, Hashable {
         self.cacheReadCostUsd = cacheReadCostUsd
         self.cacheWriteCostUsd = cacheWriteCostUsd
         self.totalCostUsd = totalCostUsd
+        self.explicitCacheAttached = explicitCacheAttached
     }
 }
 
@@ -270,6 +279,7 @@ extension ClarkMessageUsage {
         cacheReadCostUsd  = p.hasCacheReadCostUsd  ? p.cacheReadCostUsd  : nil
         cacheWriteCostUsd = p.hasCacheWriteCostUsd ? p.cacheWriteCostUsd : nil
         totalCostUsd      = p.hasTotalCostUsd      ? p.totalCostUsd      : nil
+        explicitCacheAttached = p.hasExplicitCacheAttached ? p.explicitCacheAttached : nil
     }
 }
 

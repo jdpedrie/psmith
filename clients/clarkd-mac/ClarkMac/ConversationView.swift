@@ -1738,17 +1738,38 @@ private struct MessageUsagePopover: View {
                     }
                 }
 
-                // Cache savings — surface the dollar value the user
-                // wouldn't have spent on un-cached input. Anthropic gets a
-                // 90% discount on cache reads, OpenAI / Google ~50%.
-                if let cacheRead = u.cacheReadTokens, cacheRead > 0,
-                   let savings = cacheSavings(message: message, cacheReadTokens: cacheRead) {
+                // Cache section. Renders whenever there's any cache
+                // signal — cache_read tokens OR an explicit-cache
+                // toggle outcome to report. The "Source" / "Explicit
+                // cache" rows let the user distinguish implicit hits
+                // (Gemini's automatic) from explicit ones (Clark
+                // attached a cachedContents reference) AND see when
+                // the toggle was on but no cache attached this turn
+                // (most often: prefix below the per-model minimum).
+                let cacheRead = u.cacheReadTokens ?? 0
+                let hasExplicitFlag = u.explicitCacheAttached != nil
+                if cacheRead > 0 || hasExplicitFlag {
                     section("Cache") {
-                        row("Cache read",  cacheRead.formatted())
+                        if cacheRead > 0 {
+                            row("Cache read", cacheRead.formatted())
+                        }
                         if let cw = u.cacheWriteTokens, cw > 0 {
                             row("Cache write", cw.formatted())
                         }
-                        row("Estimated savings", costStr(savings), bold: true)
+                        if let attached = u.explicitCacheAttached {
+                            row(
+                                "Explicit cache",
+                                attached
+                                    ? "Attached"
+                                    : "Enabled — not attached this turn"
+                            )
+                        } else if cacheRead > 0 {
+                            row("Source", "Implicit (provider-side)")
+                        }
+                        if cacheRead > 0,
+                           let savings = cacheSavings(message: message, cacheReadTokens: cacheRead) {
+                            row("Estimated savings", costStr(savings), bold: true)
+                        }
                     }
                 }
 

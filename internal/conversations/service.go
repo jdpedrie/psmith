@@ -976,11 +976,20 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 	// trim the wire prefix to the new tail and stash the cache name on
 	// settings.Google.CachedContent for the driver to attach. On miss
 	// or error: send normally; failures are non-fatal.
+	// explicitCacheAttached records the outcome for forensic stamping
+	// onto the assistant message. nil → not applicable (toggle off or
+	// non-google driver); &true → cache attached; &false → toggle was
+	// on but no cache was attached this turn.
+	var explicitCacheAttached *bool
 	if callSettings.Google != nil && callSettings.Google.ExplicitCache != nil && *callSettings.Google.ExplicitCache {
 		if gd, ok := driver.(*googledriver.Driver); ok {
+			falseVal := false
+			explicitCacheAttached = &falseVal
 			if cacheName, trimmed := s.maybeAttachGeminiCache(ctx, gd, activeCtx.ID, modelID, wireMessages); cacheName != nil {
 				wireMessages = trimmed
 				callSettings.Google.CachedContent = cacheName
+				trueVal := true
+				explicitCacheAttached = &trueVal
 			}
 		}
 	}
@@ -1025,7 +1034,8 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		// thinking_provider_type + thinking_rendered_text on the assistant
 		// row. `stateless` already implements providers.Provider via the
 		// embedded interface chain.
-		Provider: stateless,
+		Provider:              stateless,
+		ExplicitCacheAttached: explicitCacheAttached,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start stream: %w", err))

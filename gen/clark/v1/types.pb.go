@@ -2882,8 +2882,17 @@ type MessageUsage struct {
 	CacheReadCostUsd  *float64               `protobuf:"fixed64,8,opt,name=cache_read_cost_usd,json=cacheReadCostUsd,proto3,oneof" json:"cache_read_cost_usd,omitempty"`
 	CacheWriteCostUsd *float64               `protobuf:"fixed64,9,opt,name=cache_write_cost_usd,json=cacheWriteCostUsd,proto3,oneof" json:"cache_write_cost_usd,omitempty"`
 	TotalCostUsd      *float64               `protobuf:"fixed64,10,opt,name=total_cost_usd,json=totalCostUsd,proto3,oneof" json:"total_cost_usd,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// explicit_cache_attached records whether Clark attached an
+	// explicit Gemini cachedContents reference to the request that
+	// produced this message. NULL = not applicable (toggle off / non-
+	// google driver / pre-feature message); TRUE = cache attached;
+	// FALSE = toggle on but no cache attached this turn (most often:
+	// prefix below the per-model minimum). Combined with
+	// cache_read_tokens this distinguishes explicit cache hits from
+	// implicit ones.
+	ExplicitCacheAttached *bool `protobuf:"varint,11,opt,name=explicit_cache_attached,json=explicitCacheAttached,proto3,oneof" json:"explicit_cache_attached,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *MessageUsage) Reset() {
@@ -2984,6 +2993,13 @@ func (x *MessageUsage) GetTotalCostUsd() float64 {
 		return *x.TotalCostUsd
 	}
 	return 0
+}
+
+func (x *MessageUsage) GetExplicitCacheAttached() bool {
+	if x != nil && x.ExplicitCacheAttached != nil {
+		return *x.ExplicitCacheAttached
+	}
+	return false
 }
 
 type StreamRun struct {
@@ -3565,7 +3581,7 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"_edited_atB\r\n" +
 	"\v_error_textB\x17\n" +
-	"\x15_thinking_duration_ms\"\xb1\x05\n" +
+	"\x15_thinking_duration_ms\"\x8a\x06\n" +
 	"\fMessageUsage\x12&\n" +
 	"\finput_tokens\x18\x01 \x01(\x05H\x00R\vinputTokens\x88\x01\x01\x12(\n" +
 	"\routput_tokens\x18\x02 \x01(\x05H\x01R\foutputTokens\x88\x01\x01\x12/\n" +
@@ -3577,7 +3593,9 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x13cache_read_cost_usd\x18\b \x01(\x01H\aR\x10cacheReadCostUsd\x88\x01\x01\x124\n" +
 	"\x14cache_write_cost_usd\x18\t \x01(\x01H\bR\x11cacheWriteCostUsd\x88\x01\x01\x12)\n" +
 	"\x0etotal_cost_usd\x18\n" +
-	" \x01(\x01H\tR\ftotalCostUsd\x88\x01\x01B\x0f\n" +
+	" \x01(\x01H\tR\ftotalCostUsd\x88\x01\x01\x12;\n" +
+	"\x17explicit_cache_attached\x18\v \x01(\bH\n" +
+	"R\x15explicitCacheAttached\x88\x01\x01B\x0f\n" +
 	"\r_input_tokensB\x10\n" +
 	"\x0e_output_tokensB\x14\n" +
 	"\x12_cache_read_tokensB\x15\n" +
@@ -3587,7 +3605,8 @@ const file_clark_v1_types_proto_rawDesc = "" +
 	"\x10_output_cost_usdB\x16\n" +
 	"\x14_cache_read_cost_usdB\x17\n" +
 	"\x15_cache_write_cost_usdB\x11\n" +
-	"\x0f_total_cost_usd\"\xf3\x06\n" +
+	"\x0f_total_cost_usdB\x1a\n" +
+	"\x18_explicit_cache_attached\"\xf3\x06\n" +
 	"\tStreamRun\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x1d\n" +
