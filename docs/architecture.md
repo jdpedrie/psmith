@@ -221,11 +221,18 @@ stream_chunks (
 Drivers translate provider-specific stream events (Anthropic `content_block_delta`, OpenAI Responses `response.output_text.delta`, harness NDJSON lines, etc.) into a small normalized chunk vocabulary: `text_delta`, `thinking_delta`, `tool_use_*`, `error`, `done`. Clients see a uniform shape regardless of provider.
 
 ### Lifecycle
-- **Initiating a turn** synchronously creates the `stream_runs` row, spawns the supervisor goroutine, and returns the `stream_run_id`. Clients then subscribe. iOS apps can fire-and-forget the send, background, return later, and subscribe to the ID.
-- **Pre-first-token errors** (network, 5xx, rate limit) → supervisor retries transparently with exponential backoff.
-- **Mid-stream errors** → no automatic retry (most providers cannot resume a partial generation). Status set to `errored`; user decides whether to retry from scratch.
-- **Cancellation** → client sends cancel; supervisor stops consuming, status set to `cancelled`, partial content materialized into a message row.
+- **Initiating a turn** is two steps that always happen in this order:
+  1. Handler inserts the user-message row in the DB (transactional). Once this commits the user's typed text is durable — never lost to upstream issues.
+  2. Handler builds a `SendFunc` closure (captures driver + wireMessages + settings) and calls `supervisor.Start`. Start synchronously creates the `stream_runs` row and spawns the supervisor goroutine, then returns the `stream_run_id`. The handler returns immediately.
+
+  The supervisor goroutine drives the upstream call asynchronously. iOS apps can fire-and-forget the send, background, and return later to subscribe.
+- **Pre-first-token retry**: the supervisor calls `SendFunc` up to `MaxSendAttempts` (3) with exponential backoff (1s, 2s). Each attempt has a `PerAttemptTimeout` (60s) budget covering BOTH the call returning AND the first chunk arriving on the channel. A first chunk that's `ChunkError` counts as failure (some SDKs surface HTTP errors that way). Errors aren't classified — a permanent error like 401 burns through 3 attempts in a few seconds; transient errors get up to two recoveries.
+- **Pre-first-token exhaustion**: after retries are out, the supervisor's `syntheticErrorStream` emits a `ChunkError + ChunkDone` so the normal aggregator materializes an errored assistant message inline (`messages.error_payload` populated). Reload becomes the user-visible retry surface.
+- **Mid-stream errors** → no automatic retry (most providers cannot resume a partial generation). Status set to `errored`; user decides whether to retry from scratch via Reload.
+- **Cancellation** → client sends cancel; supervisor stops consuming (cancellation propagates into the retry-helper's `select` on `<-parent.Done()` so it works mid-backoff too), status set to `cancelled`, partial content materialized into a message row.
 - **Server restart** → on startup, all `running` rows are flipped to `interrupted` (the upstream socket died with the process; nothing can be done but retry). User sees the partial assistant message + a retry affordance.
+
+The retry policy lives in `internal/stream/send_retry.go`. Constants are package-level vars (not consts) so tests can shrink them to milliseconds — `shrinkRetryConfigForTest` is the test-local fake clock.
 
 ### Subscriber transport
 ConnectRPC server-streaming RPC: `SubscribeStream(stream_run_id, from_sequence) → stream<Chunk>`. On subscribe, the server first replays from Postgres up to the live cursor, then switches to the in-memory broker for live tailing. Single-process deployment — no need for Postgres LISTEN/NOTIFY.
