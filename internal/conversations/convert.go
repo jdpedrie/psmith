@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -43,18 +43,18 @@ var (
 	}
 )
 
-func settingsToJSON(s *clarkv1.ConversationSettings) ([]byte, error) {
+func settingsToJSON(s *reevev1.ConversationSettings) ([]byte, error) {
 	if s == nil {
 		return nil, nil
 	}
 	return conversationSettingsMarshaller.Marshal(s)
 }
 
-func settingsFromJSON(b []byte) (*clarkv1.ConversationSettings, error) {
+func settingsFromJSON(b []byte) (*reevev1.ConversationSettings, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
-	var s clarkv1.ConversationSettings
+	var s reevev1.ConversationSettings
 	if err := conversationSettingsUnmarshaller.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("decode conversation settings: %w", err)
 	}
@@ -67,19 +67,19 @@ func settingsFromJSON(b []byte) (*clarkv1.ConversationSettings, error) {
 // the seed messages are written). last_activity_at falls back to UpdatedAt
 // (the only proxy available without a join) — list paths that compute the
 // real value should call conversationToProtoWithActivity instead.
-func conversationToProto(c store.Conversation, activeContextID string) (*clarkv1.Conversation, error) {
+func conversationToProto(c store.Conversation, activeContextID string) (*reevev1.Conversation, error) {
 	return conversationToProtoWithActivity(c, activeContextID, c.UpdatedAt)
 }
 
 // conversationToProtoWithActivity is the list-path variant — it accepts the
 // joined max(messages.created_at) so the sidebar can render "Recently Used"
 // without an N+1 round trip.
-func conversationToProtoWithActivity(c store.Conversation, activeContextID string, lastActivityAt time.Time) (*clarkv1.Conversation, error) {
+func conversationToProtoWithActivity(c store.Conversation, activeContextID string, lastActivityAt time.Time) (*reevev1.Conversation, error) {
 	settings, err := settingsFromJSON(c.Settings)
 	if err != nil {
 		return nil, err
 	}
-	return &clarkv1.Conversation{
+	return &reevev1.Conversation{
 		Id:              c.ID.String(),
 		ProfileId:       c.ProfileID.String(),
 		Title:           c.Title,
@@ -92,8 +92,8 @@ func conversationToProtoWithActivity(c store.Conversation, activeContextID strin
 	}, nil
 }
 
-func contextToProto(c store.Context) *clarkv1.Context {
-	out := &clarkv1.Context{
+func contextToProto(c store.Context) *reevev1.Context {
+	out := &reevev1.Context{
 		Id:             c.ID.String(),
 		ConversationId: c.ConversationID.String(),
 		ActivationTime: timestamppb.New(c.ContextActivationTime),
@@ -117,8 +117,8 @@ func contextToProto(c store.Context) *clarkv1.Context {
 // (which carries message_count, last_message_total_tokens, and
 // cumulative_cost_usd) to the Context proto. Single-context queries continue
 // to use contextToProto, which leaves the aggregate fields at zero.
-func listContextRowToProto(r store.ListContextsByConversationRow) *clarkv1.Context {
-	out := &clarkv1.Context{
+func listContextRowToProto(r store.ListContextsByConversationRow) *reevev1.Context {
+	out := &reevev1.Context{
 		Id:                     r.ID.String(),
 		ConversationId:         r.ConversationID.String(),
 		ActivationTime:         timestamppb.New(r.ContextActivationTime),
@@ -141,8 +141,8 @@ func listContextRowToProto(r store.ListContextsByConversationRow) *clarkv1.Conte
 	return out
 }
 
-func messageToProto(m store.Message) *clarkv1.Message {
-	out := &clarkv1.Message{
+func messageToProto(m store.Message) *reevev1.Message {
+	out := &reevev1.Message{
 		Id:                   m.ID.String(),
 		ContextId:            m.ContextID.String(),
 		Role:                 roleStringToEnum(m.Role),
@@ -236,7 +236,7 @@ func errorTextFromPayload(payload []byte) string {
 // messageUsageToProto returns a MessageUsage proto if any usage/cost column
 // is populated. Returns nil otherwise so the wire-message stays compact for
 // non-assistant rows.
-func messageUsageToProto(m store.Message) *clarkv1.MessageUsage {
+func messageUsageToProto(m store.Message) *reevev1.MessageUsage {
 	if m.InputTokens == nil && m.OutputTokens == nil &&
 		m.CacheReadTokens == nil && m.CacheWriteTokens == nil &&
 		m.ReasoningTokens == nil &&
@@ -246,7 +246,7 @@ func messageUsageToProto(m store.Message) *clarkv1.MessageUsage {
 		m.ExplicitCacheAttached == nil {
 		return nil
 	}
-	return &clarkv1.MessageUsage{
+	return &reevev1.MessageUsage{
 		InputTokens:           m.InputTokens,
 		OutputTokens:          m.OutputTokens,
 		CacheReadTokens:       m.CacheReadTokens,
@@ -275,7 +275,7 @@ func numericToFloat64Ptr(n pgtype.Numeric) *float64 {
 
 // chainRowToProto adapts a recursive-CTE row (a value-copy of the message
 // columns plus sibling_count) into the proto Message shape.
-func chainRowToProto(r store.ListMessageAncestorChainRow) *clarkv1.Message {
+func chainRowToProto(r store.ListMessageAncestorChainRow) *reevev1.Message {
 	out := messageToProto(store.Message{
 		ID:                   r.ID,
 		ContextID:            r.ContextID,
@@ -311,7 +311,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *clarkv1.Message {
 // applyDisplay populates m.DisplayContent. When the pipeline is empty (or
 // has no DisplayTransformer plugins), display_content equals content so
 // clients can always read display_content without checking for absence.
-func applyDisplay(m *clarkv1.Message, pipeline plugins.Pipeline) {
+func applyDisplay(m *reevev1.Message, pipeline plugins.Pipeline) {
 	if m == nil {
 		return
 	}
@@ -322,19 +322,19 @@ func applyDisplay(m *clarkv1.Message, pipeline plugins.Pipeline) {
 	m.DisplayContent = pipeline.TransformForDisplay(m.Content)
 }
 
-func roleStringToEnum(s string) clarkv1.MessageRole {
+func roleStringToEnum(s string) reevev1.MessageRole {
 	switch s {
 	case roleSystem:
-		return clarkv1.MessageRole_MESSAGE_ROLE_SYSTEM
+		return reevev1.MessageRole_MESSAGE_ROLE_SYSTEM
 	case roleContext:
-		return clarkv1.MessageRole_MESSAGE_ROLE_CONTEXT
+		return reevev1.MessageRole_MESSAGE_ROLE_CONTEXT
 	case roleUser:
-		return clarkv1.MessageRole_MESSAGE_ROLE_USER
+		return reevev1.MessageRole_MESSAGE_ROLE_USER
 	case roleAssistant:
-		return clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+		return reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT
 	case roleCompressionSummary:
-		return clarkv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY
+		return reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY
 	default:
-		return clarkv1.MessageRole_MESSAGE_ROLE_UNSPECIFIED
+		return reevev1.MessageRole_MESSAGE_ROLE_UNSPECIFIED
 	}
 }

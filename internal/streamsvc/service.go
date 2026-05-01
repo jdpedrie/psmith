@@ -11,16 +11,16 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 )
 
-// Service satisfies clarkv1connect.StreamsServiceHandler.
+// Service satisfies reevev1connect.StreamsServiceHandler.
 type Service struct {
-	clarkv1connect.UnimplementedStreamsServiceHandler
+	reevev1connect.UnimplementedStreamsServiceHandler
 	supervisor *stream.Supervisor
 }
 
@@ -31,7 +31,7 @@ func NewService(supervisor *stream.Supervisor) *Service {
 // SubscribeStream forwards events from supervisor.Subscribe to the Connect
 // server-stream. Closes when the supervisor signals terminal or when the
 // client/context is done.
-func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[clarkv1.SubscribeStreamRequest], serverStream *connect.ServerStream[clarkv1.SubscribeStreamResponse]) error {
+func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[reevev1.SubscribeStreamRequest], serverStream *connect.ServerStream[reevev1.SubscribeStreamResponse]) error {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -46,12 +46,12 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[clar
 	}
 
 	for ev := range events {
-		var msg *clarkv1.SubscribeStreamResponse
+		var msg *reevev1.SubscribeStreamResponse
 		switch {
 		case ev.Chunk != nil:
-			msg = &clarkv1.SubscribeStreamResponse{
-				Event: &clarkv1.SubscribeStreamResponse_Chunk{
-					Chunk: &clarkv1.Chunk{
+			msg = &reevev1.SubscribeStreamResponse{
+				Event: &reevev1.SubscribeStreamResponse_Chunk{
+					Chunk: &reevev1.Chunk{
 						Sequence: ev.Chunk.Sequence,
 						Type:     chunkTypeToProto(ev.Chunk.Type),
 						Payload:  ev.Chunk.Payload,
@@ -59,8 +59,8 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[clar
 				},
 			}
 		case ev.Terminal != nil:
-			msg = &clarkv1.SubscribeStreamResponse{
-				Event: &clarkv1.SubscribeStreamResponse_Terminal{
+			msg = &reevev1.SubscribeStreamResponse{
+				Event: &reevev1.SubscribeStreamResponse_Terminal{
 					Terminal: streamRunToProto(*ev.Terminal),
 				},
 			}
@@ -75,7 +75,7 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[clar
 	return nil
 }
 
-func (s *Service) CancelStream(ctx context.Context, req *connect.Request[clarkv1.CancelStreamRequest]) (*connect.Response[clarkv1.CancelStreamResponse], error) {
+func (s *Service) CancelStream(ctx context.Context, req *connect.Request[reevev1.CancelStreamRequest]) (*connect.Response[reevev1.CancelStreamResponse], error) {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -86,10 +86,10 @@ func (s *Service) CancelStream(ctx context.Context, req *connect.Request[clarkv1
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.CancelStreamResponse{}), nil
+	return connect.NewResponse(&reevev1.CancelStreamResponse{}), nil
 }
 
-func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[clarkv1.GetStreamRunRequest]) (*connect.Response[clarkv1.GetStreamRunResponse], error) {
+func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[reevev1.GetStreamRunRequest]) (*connect.Response[reevev1.GetStreamRunResponse], error) {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -101,13 +101,13 @@ func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[clarkv1
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.GetStreamRunResponse{StreamRun: streamRunToProto(row)}), nil
+	return connect.NewResponse(&reevev1.GetStreamRunResponse{StreamRun: streamRunToProto(row)}), nil
 }
 
 // --- conversions ---
 
-func streamRunToProto(r store.StreamRun) *clarkv1.StreamRun {
-	out := &clarkv1.StreamRun{
+func streamRunToProto(r store.StreamRun) *reevev1.StreamRun {
+	out := &reevev1.StreamRun{
 		Id:             r.ID.String(),
 		ConversationId: r.ConversationID.String(),
 		ContextId:      r.ContextID.String(),
@@ -139,50 +139,50 @@ func streamRunToProto(r store.StreamRun) *clarkv1.StreamRun {
 	return out
 }
 
-func statusToProto(s string) clarkv1.StreamRunStatus {
+func statusToProto(s string) reevev1.StreamRunStatus {
 	switch s {
 	case "running":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
 	case "completed":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
 	case "errored":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
 	case "cancelled":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
 	case "interrupted":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
 	}
-	return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
+	return reevev1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
 }
 
-func purposeToProto(p string) clarkv1.StreamRunPurpose {
+func purposeToProto(p string) reevev1.StreamRunPurpose {
 	switch p {
 	case "assistant_response":
-		return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
+		return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
 	case "compression":
-		return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
+		return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
 	}
-	return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
+	return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
 }
 
-func chunkTypeToProto(t providers.ChunkType) clarkv1.ChunkType {
+func chunkTypeToProto(t providers.ChunkType) reevev1.ChunkType {
 	switch t {
 	case providers.ChunkText:
-		return clarkv1.ChunkType_CHUNK_TYPE_TEXT_DELTA
+		return reevev1.ChunkType_CHUNK_TYPE_TEXT_DELTA
 	case providers.ChunkThinking:
-		return clarkv1.ChunkType_CHUNK_TYPE_THINKING_DELTA
+		return reevev1.ChunkType_CHUNK_TYPE_THINKING_DELTA
 	case providers.ChunkToolUseStart:
-		return clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_START
+		return reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_START
 	case providers.ChunkToolUseDelta:
-		return clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA
+		return reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA
 	case providers.ChunkToolUseEnd:
-		return clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_END
+		return reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_END
 	case providers.ChunkUsage:
-		return clarkv1.ChunkType_CHUNK_TYPE_USAGE
+		return reevev1.ChunkType_CHUNK_TYPE_USAGE
 	case providers.ChunkError:
-		return clarkv1.ChunkType_CHUNK_TYPE_ERROR
+		return reevev1.ChunkType_CHUNK_TYPE_ERROR
 	case providers.ChunkDone:
-		return clarkv1.ChunkType_CHUNK_TYPE_DONE
+		return reevev1.ChunkType_CHUNK_TYPE_DONE
 	}
-	return clarkv1.ChunkType_CHUNK_TYPE_UNSPECIFIED
+	return reevev1.ChunkType_CHUNK_TYPE_UNSPECIFIED
 }

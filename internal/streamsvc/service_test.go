@@ -14,8 +14,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
@@ -36,7 +36,7 @@ type fixture struct {
 	cctx   store.Context
 	parent uuid.UUID
 	srv    *httptest.Server
-	client clarkv1connect.StreamsServiceClient
+	client reevev1connect.StreamsServiceClient
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -87,11 +87,11 @@ func newFixture(t *testing.T) *fixture {
 
 	mux := http.NewServeMux()
 	svc := NewService(sup)
-	mux.Handle(clarkv1connect.NewStreamsServiceHandler(svc))
+	mux.Handle(reevev1connect.NewStreamsServiceHandler(svc))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := clarkv1connect.NewStreamsServiceClient(srv.Client(), srv.URL)
+	client := reevev1connect.NewStreamsServiceClient(srv.Client(), srv.URL)
 
 	return &fixture{
 		q: q, sup: sup, user: user, prov: prov, conv: conv,
@@ -163,7 +163,7 @@ func expectCode(t *testing.T, err error, want connect.Code) {
 func TestSubscribeStream_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	stream, err := f.client.SubscribeStream(context.Background(), connect.NewRequest(&clarkv1.SubscribeStreamRequest{
+	stream, err := f.client.SubscribeStream(context.Background(), connect.NewRequest(&reevev1.SubscribeStreamRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	if err == nil {
@@ -180,7 +180,7 @@ func TestSubscribeStream_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	missing := mustUUID(t).String()
-	stream, _ := f.client.SubscribeStream(context.Background(), connect.NewRequest(&clarkv1.SubscribeStreamRequest{
+	stream, _ := f.client.SubscribeStream(context.Background(), connect.NewRequest(&reevev1.SubscribeStreamRequest{
 		StreamRunId: missing,
 	}))
 	_ = stream.Receive()
@@ -215,7 +215,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&clarkv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&reevev1.SubscribeStreamRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -227,18 +227,18 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 		text       string
 		sawUsage   bool
 		usageInput int32
-		terminal   *clarkv1.StreamRun
+		terminal   *reevev1.StreamRun
 	)
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch e := ev.(type) {
-		case *clarkv1.SubscribeStreamResponse_Chunk:
+		case *reevev1.SubscribeStreamResponse_Chunk:
 			switch e.Chunk.Type {
-			case clarkv1.ChunkType_CHUNK_TYPE_TEXT_DELTA:
+			case reevev1.ChunkType_CHUNK_TYPE_TEXT_DELTA:
 				var p struct{ Text string }
 				_ = json.Unmarshal(e.Chunk.Payload, &p)
 				text += p.Text
-			case clarkv1.ChunkType_CHUNK_TYPE_USAGE:
+			case reevev1.ChunkType_CHUNK_TYPE_USAGE:
 				sawUsage = true
 				var p struct {
 					InputTokens int32 `json:"input_tokens"`
@@ -246,7 +246,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 				_ = json.Unmarshal(e.Chunk.Payload, &p)
 				usageInput = p.InputTokens
 			}
-		case *clarkv1.SubscribeStreamResponse_Terminal:
+		case *reevev1.SubscribeStreamResponse_Terminal:
 			terminal = e.Terminal
 		}
 	}
@@ -265,7 +265,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 	if terminal == nil {
 		t.Fatal("no terminal event received")
 	}
-	if terminal.Status != clarkv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
+	if terminal.Status != reevev1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
 		t.Errorf("terminal status=%v want COMPLETED", terminal.Status)
 	}
 	if terminal.Id != runID.String() {
@@ -306,7 +306,7 @@ func TestSubscribeStream_FromSequenceSkipsPriorChunks(t *testing.T) {
 	// Subscribe from sequence 2 — should skip "a" (seq 0) and "b" (seq 1).
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&clarkv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&reevev1.SubscribeStreamRequest{
 		StreamRunId:  runID.String(),
 		FromSequence: 2,
 	}))
@@ -320,9 +320,9 @@ func TestSubscribeStream_FromSequenceSkipsPriorChunks(t *testing.T) {
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch e := ev.(type) {
-		case *clarkv1.SubscribeStreamResponse_Chunk:
+		case *reevev1.SubscribeStreamResponse_Chunk:
 			seqs = append(seqs, e.Chunk.Sequence)
-		case *clarkv1.SubscribeStreamResponse_Terminal:
+		case *reevev1.SubscribeStreamResponse_Terminal:
 			sawTerminal = true
 		}
 	}
@@ -368,7 +368,7 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 	// persisted chunks via DB replay + a terminal event.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&clarkv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&reevev1.SubscribeStreamRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -380,9 +380,9 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch ev.(type) {
-		case *clarkv1.SubscribeStreamResponse_Chunk:
+		case *reevev1.SubscribeStreamResponse_Chunk:
 			chunkCount++
-		case *clarkv1.SubscribeStreamResponse_Terminal:
+		case *reevev1.SubscribeStreamResponse_Terminal:
 			sawTerminal = true
 		}
 	}
@@ -399,7 +399,7 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 func TestCancelStream_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&clarkv1.CancelStreamRequest{
+	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&reevev1.CancelStreamRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	expectCode(t, err, connect.CodeInvalidArgument)
@@ -408,7 +408,7 @@ func TestCancelStream_InvalidUUID(t *testing.T) {
 func TestCancelStream_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&clarkv1.CancelStreamRequest{
+	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&reevev1.CancelStreamRequest{
 		StreamRunId: mustUUID(t).String(),
 	}))
 	expectCode(t, err, connect.CodeNotFound)
@@ -425,7 +425,7 @@ func TestCancelStream_HappyPath(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := f.client.CancelStream(context.Background(), connect.NewRequest(&clarkv1.CancelStreamRequest{
+	if _, err := f.client.CancelStream(context.Background(), connect.NewRequest(&reevev1.CancelStreamRequest{
 		StreamRunId: runID.String(),
 	})); err != nil {
 		t.Fatalf("CancelStream: %v", err)
@@ -447,7 +447,7 @@ func TestCancelStream_HappyPath(t *testing.T) {
 func TestGetStreamRun_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&clarkv1.GetStreamRunRequest{
+	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&reevev1.GetStreamRunRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	expectCode(t, err, connect.CodeInvalidArgument)
@@ -456,7 +456,7 @@ func TestGetStreamRun_InvalidUUID(t *testing.T) {
 func TestGetStreamRun_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&clarkv1.GetStreamRunRequest{
+	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&reevev1.GetStreamRunRequest{
 		StreamRunId: mustUUID(t).String(),
 	}))
 	expectCode(t, err, connect.CodeNotFound)
@@ -476,7 +476,7 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 	}
 	_ = waitTerminal(t, f.sup, runID, 3*time.Second)
 
-	resp, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&clarkv1.GetStreamRunRequest{
+	resp, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&reevev1.GetStreamRunRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -488,10 +488,10 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 	if resp.Msg.StreamRun.Id != runID.String() {
 		t.Errorf("id=%q want %q", resp.Msg.StreamRun.Id, runID.String())
 	}
-	if resp.Msg.StreamRun.Status != clarkv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
+	if resp.Msg.StreamRun.Status != reevev1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
 		t.Errorf("status=%v want COMPLETED", resp.Msg.StreamRun.Status)
 	}
-	if resp.Msg.StreamRun.Purpose != clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE {
+	if resp.Msg.StreamRun.Purpose != reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE {
 		t.Errorf("purpose=%v want ASSISTANT_RESPONSE", resp.Msg.StreamRun.Purpose)
 	}
 	if resp.Msg.StreamRun.ConversationId != f.conv.ID.String() {
@@ -512,14 +512,14 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 
 func TestStatusToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[string]clarkv1.StreamRunStatus{
-		"running":     clarkv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING,
-		"completed":   clarkv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED,
-		"errored":     clarkv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED,
-		"cancelled":   clarkv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED,
-		"interrupted": clarkv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED,
-		"":            clarkv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
-		"garbage":     clarkv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
+	cases := map[string]reevev1.StreamRunStatus{
+		"running":     reevev1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING,
+		"completed":   reevev1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED,
+		"errored":     reevev1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED,
+		"cancelled":   reevev1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED,
+		"interrupted": reevev1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED,
+		"":            reevev1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
+		"garbage":     reevev1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := statusToProto(in); got != want {
@@ -530,11 +530,11 @@ func TestStatusToProto(t *testing.T) {
 
 func TestPurposeToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[string]clarkv1.StreamRunPurpose{
-		"assistant_response": clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE,
-		"compression":        clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION,
-		"":                   clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
-		"garbage":            clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
+	cases := map[string]reevev1.StreamRunPurpose{
+		"assistant_response": reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE,
+		"compression":        reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION,
+		"":                   reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
+		"garbage":            reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := purposeToProto(in); got != want {
@@ -545,16 +545,16 @@ func TestPurposeToProto(t *testing.T) {
 
 func TestChunkTypeToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[providers.ChunkType]clarkv1.ChunkType{
-		providers.ChunkText:         clarkv1.ChunkType_CHUNK_TYPE_TEXT_DELTA,
-		providers.ChunkThinking:     clarkv1.ChunkType_CHUNK_TYPE_THINKING_DELTA,
-		providers.ChunkToolUseStart: clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
-		providers.ChunkToolUseDelta: clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA,
-		providers.ChunkToolUseEnd:   clarkv1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
-		providers.ChunkUsage:        clarkv1.ChunkType_CHUNK_TYPE_USAGE,
-		providers.ChunkError:        clarkv1.ChunkType_CHUNK_TYPE_ERROR,
-		providers.ChunkDone:         clarkv1.ChunkType_CHUNK_TYPE_DONE,
-		providers.ChunkType("???"):  clarkv1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
+	cases := map[providers.ChunkType]reevev1.ChunkType{
+		providers.ChunkText:         reevev1.ChunkType_CHUNK_TYPE_TEXT_DELTA,
+		providers.ChunkThinking:     reevev1.ChunkType_CHUNK_TYPE_THINKING_DELTA,
+		providers.ChunkToolUseStart: reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
+		providers.ChunkToolUseDelta: reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA,
+		providers.ChunkToolUseEnd:   reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
+		providers.ChunkUsage:        reevev1.ChunkType_CHUNK_TYPE_USAGE,
+		providers.ChunkError:        reevev1.ChunkType_CHUNK_TYPE_ERROR,
+		providers.ChunkDone:         reevev1.ChunkType_CHUNK_TYPE_DONE,
+		providers.ChunkType("???"):  reevev1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := chunkTypeToProto(in); got != want {

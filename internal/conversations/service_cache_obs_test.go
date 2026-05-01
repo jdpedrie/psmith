@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/fakellm"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
@@ -28,7 +28,7 @@ func TestCacheObs_FirstTurnRecordsHashesNullsMetrics(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hello",
 		ProviderId:     &pid,
@@ -170,7 +170,7 @@ func TestCacheObs_ForkProducesShortPrefixDivergesEarly(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	sysStr := f.systemMsgID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &sysStr,
 		Content:         "fork",
@@ -218,7 +218,7 @@ func TestCacheObs_StreamRunProtoExposesFields(t *testing.T) {
 	// Second turn — the response carries the diagnostics for it directly.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "second",
 		ProviderId:     &pid,

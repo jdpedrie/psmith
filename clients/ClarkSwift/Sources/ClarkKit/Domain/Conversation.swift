@@ -41,7 +41,7 @@ public struct ClarkConversation: Sendable, Hashable, Identifiable {
 }
 
 extension ClarkConversation {
-    init(from p: Clark_V1_Conversation) {
+    init(from p: Reeve_V1_Conversation) {
         self.init(
             id: p.id,
             profileID: p.profileID,
@@ -56,13 +56,13 @@ extension ClarkConversation {
     }
 }
 
-/// Mirror of `Clark_V1_ConversationOrder` for the `ConversationsRepository.list`
+/// Mirror of `Reeve_V1_ConversationOrder` for the `ConversationsRepository.list`
 /// surface — keeps the proto enum out of UI/view-model code.
 public enum ClarkConversationOrder: Sendable, Hashable {
     case recentlyUsed
     case recentlyCreated
 
-    var proto: Clark_V1_ConversationOrder {
+    var proto: Reeve_V1_ConversationOrder {
         switch self {
         case .recentlyUsed:    return .recentlyUsed
         case .recentlyCreated: return .recentlyCreated
@@ -71,7 +71,7 @@ public enum ClarkConversationOrder: Sendable, Hashable {
 }
 
 /// Per-conversation overrides that shadow the profile's defaults.
-/// Mirrors `Clark_V1_ConversationSettings` but exposes a Swift-friendly
+/// Mirrors `Reeve_V1_ConversationSettings` but exposes a Swift-friendly
 /// shape (no proto-generated has-getters / value defaults).
 public struct ClarkConversationSettings: Sendable, Hashable {
     public var defaultProviderID: String?
@@ -103,7 +103,7 @@ public struct ClarkConversationSettings: Sendable, Hashable {
             && (callSettings?.isEmpty ?? true)
     }
 
-    public init(from p: Clark_V1_ConversationSettings) {
+    public init(from p: Reeve_V1_ConversationSettings) {
         self.init(
             defaultProviderID:        p.hasDefaultProviderID        ? p.defaultProviderID        : nil,
             defaultModelID:           p.hasDefaultModelID           ? p.defaultModelID           : nil,
@@ -112,8 +112,8 @@ public struct ClarkConversationSettings: Sendable, Hashable {
         )
     }
 
-    var proto: Clark_V1_ConversationSettings {
-        var s = Clark_V1_ConversationSettings()
+    var proto: Reeve_V1_ConversationSettings {
+        var s = Reeve_V1_ConversationSettings()
         if let v = defaultProviderID        { s.defaultProviderID = v }
         if let v = defaultModelID           { s.defaultModelID = v }
         if let v = includeThinkingInHistory { s.includeThinkingInHistory = v }
@@ -144,7 +144,7 @@ public struct ClarkContext: Sendable, Hashable, Identifiable {
     // MARK: - Test support
     /// Public memberwise init so snapshot/unit tests can build deterministic
     /// fixtures without going through the proto round-trip. Production code
-    /// constructs via `init(from p: Clark_V1_Context)`.
+    /// constructs via `init(from p: Reeve_V1_Context)`.
     public init(
         id: String,
         conversationID: String,
@@ -171,7 +171,7 @@ public struct ClarkContext: Sendable, Hashable, Identifiable {
 }
 
 extension ClarkContext {
-    init(from p: Clark_V1_Context) {
+    init(from p: Reeve_V1_Context) {
         self.init(
             id: p.id,
             conversationID: p.conversationID,
@@ -190,7 +190,7 @@ extension ClarkContext {
 public enum ClarkMessageRole: String, Sendable, Hashable {
     case system, context, user, assistant, compressionSummary, unknown
 
-    init(from p: Clark_V1_MessageRole) {
+    init(from p: Reeve_V1_MessageRole) {
         switch p {
         case .system: self = .system
         case .context: self = .context
@@ -205,7 +205,7 @@ public enum ClarkMessageRole: String, Sendable, Hashable {
     /// a role override on EditMessage. `unknown` maps to the proto's
     /// `MESSAGE_ROLE_UNSPECIFIED` so the server can reject rather than
     /// silently overwriting.
-    func toProto() -> Clark_V1_MessageRole {
+    func toProto() -> Reeve_V1_MessageRole {
         switch self {
         case .system: return .system
         case .context: return .context
@@ -239,7 +239,7 @@ public struct ClarkMessageUsage: Sendable, Hashable {
 
     // MARK: - Test support
     /// Public memberwise init for fixture construction in snapshot/unit tests.
-    /// Production code uses `init(from p: Clark_V1_MessageUsage)`.
+    /// Production code uses `init(from p: Reeve_V1_MessageUsage)`.
     public init(
         inputTokens: Int32? = nil,
         outputTokens: Int32? = nil,
@@ -268,7 +268,7 @@ public struct ClarkMessageUsage: Sendable, Hashable {
 }
 
 extension ClarkMessageUsage {
-    init(from p: Clark_V1_MessageUsage) {
+    init(from p: Reeve_V1_MessageUsage) {
         inputTokens       = p.hasInputTokens       ? p.inputTokens       : nil
         outputTokens      = p.hasOutputTokens      ? p.outputTokens      : nil
         cacheReadTokens   = p.hasCacheReadTokens   ? p.cacheReadTokens   : nil
@@ -334,7 +334,7 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
 
     // MARK: - Test support
     /// Public memberwise init so snapshot/unit tests can construct messages
-    /// directly. Production code uses `init(from p: Clark_V1_Message)`.
+    /// directly. Production code uses `init(from p: Reeve_V1_Message)`.
     public init(
         id: String,
         contextID: String,
@@ -369,7 +369,7 @@ public struct ClarkMessage: Sendable, Hashable, Identifiable {
 }
 
 extension ClarkMessage {
-    init(from p: Clark_V1_Message) {
+    init(from p: Reeve_V1_Message) {
         self.init(
             id: p.id,
             contextID: p.contextID,
@@ -504,7 +504,7 @@ public struct ClarkProfile: Sendable, Hashable, Identifiable {
 }
 
 extension ClarkProfile {
-    init(from p: Clark_V1_Profile) {
+    init(from p: Reeve_V1_Profile) {
         let mode: ClarkCompressionMode? = p.hasCompressionMode
             ? {
                 switch p.compressionMode {

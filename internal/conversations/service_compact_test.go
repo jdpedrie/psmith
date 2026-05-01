@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 )
@@ -51,7 +51,7 @@ func TestCompact_ProfileOnly(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
 
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -80,7 +80,7 @@ func TestCompact_OverrideOnly(t *testing.T) {
 	guide := "From override."
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &guide,
 		CompressionProviderId: &pid,
@@ -177,7 +177,7 @@ func TestCompact_OverrideWinsOverProfile(t *testing.T) {
 
 	overrideGuide := "From override guide."
 	pidStr := overrideProv.ID.String()
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &overrideGuide,
 		CompressionProviderId: &pidStr,
@@ -223,7 +223,7 @@ func TestCompact_OverrideToDisabledModel(t *testing.T) {
 	guide := "From override."
 	pidStr := f.provider.ID.String()
 	disabledModel := "definitely-not-enabled"
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &guide,
 		CompressionProviderId: &pidStr,
@@ -275,7 +275,7 @@ func TestCompact_OverrideProviderWithoutModel_Mixed(t *testing.T) {
 
 	// Override only the guide, leave provider/model to the profile.
 	overrideGuide := "Different guide for this run."
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId:   f.conv.ID.String(),
 		CompressionGuide: &overrideGuide,
 	}))
@@ -307,7 +307,7 @@ func TestCompact_NoConfigAtAll(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
 
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
@@ -324,7 +324,7 @@ func TestCompact_InvalidOverrideProviderID(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 
 	bogus := "not-a-uuid"
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionProviderId: &bogus,
 	}))

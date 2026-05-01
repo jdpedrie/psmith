@@ -2,20 +2,20 @@ import Foundation
 import Connect
 
 public final class ProfilesRepository: Sendable {
-    private let client: Clark_V1_ProfilesServiceClientInterface
+    private let client: Reeve_V1_ProfilesServiceClientInterface
 
-    public init(client: Clark_V1_ProfilesServiceClientInterface) {
+    public init(client: Reeve_V1_ProfilesServiceClientInterface) {
         self.client = client
     }
 
     public func list() async throws -> [ClarkProfile] {
-        let resp = await client.listProfiles(request: Clark_V1_ListProfilesRequest(), headers: [:])
+        let resp = await client.listProfiles(request: Reeve_V1_ListProfilesRequest(), headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list profiles") }
         return msg.profiles.map(ClarkProfile.init(from:))
     }
 
     public func get(id: String, resolve: Bool = false) async throws -> (ClarkProfile, ClarkProfile?) {
-        var req = Clark_V1_GetProfileRequest()
+        var req = Reeve_V1_GetProfileRequest()
         req.id = id
         req.resolve = resolve
         let resp = await client.getProfile(request: req, headers: [:])
@@ -26,7 +26,7 @@ public final class ProfilesRepository: Sendable {
     }
 
     public func create(_ patch: ClarkProfilePatch) async throws -> ClarkProfile {
-        var req = Clark_V1_CreateProfileRequest()
+        var req = Reeve_V1_CreateProfileRequest()
         req.name = patch.name ?? ""
         if let v = patch.parentProfileID       { req.parentProfileID = v }
         if let v = patch.systemMessage         { req.systemMessage = v }
@@ -53,7 +53,7 @@ public final class ProfilesRepository: Sendable {
     /// `compression_provider_id`, `compression_model_id`, `default_settings`, `title_provider_id`,
     /// `title_model_id`, `title_guide`, `title_provider_kind`, `parent_profile_id`.
     public func update(id: String, patch: ClarkProfilePatch, clearFields: [String] = []) async throws -> ClarkProfile {
-        var req = Clark_V1_UpdateProfileRequest()
+        var req = Reeve_V1_UpdateProfileRequest()
         req.id = id
         if let v = patch.name                  { req.name = v }
         if let v = patch.systemMessage         { req.systemMessage = v }
@@ -77,7 +77,7 @@ public final class ProfilesRepository: Sendable {
     }
 
     public func delete(id: String) async throws {
-        var req = Clark_V1_DeleteProfileRequest()
+        var req = Reeve_V1_DeleteProfileRequest()
         req.id = id
         let resp = await client.deleteProfile(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
@@ -86,13 +86,13 @@ public final class ProfilesRepository: Sendable {
     // MARK: - Plugins
 
     public func listPluginTypes() async throws -> [ClarkPluginType] {
-        let resp = await client.listPluginTypes(request: Clark_V1_ListPluginTypesRequest(), headers: [:])
+        let resp = await client.listPluginTypes(request: Reeve_V1_ListPluginTypesRequest(), headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list plugin types") }
         return msg.pluginTypes.map(ClarkPluginType.init(from:))
     }
 
     public func getProfilePlugins(profileID: String) async throws -> [ClarkProfilePlugin] {
-        var req = Clark_V1_GetProfilePluginsRequest()
+        var req = Reeve_V1_GetProfilePluginsRequest()
         req.profileID = profileID
         let resp = await client.getProfilePlugins(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("get profile plugins") }
@@ -100,7 +100,7 @@ public final class ProfilesRepository: Sendable {
     }
 
     public func setProfilePlugins(profileID: String, plugins: [ClarkProfilePlugin]) async throws -> [ClarkProfilePlugin] {
-        var req = Clark_V1_SetProfilePluginsRequest()
+        var req = Reeve_V1_SetProfilePluginsRequest()
         req.profileID = profileID
         req.plugins = plugins.map { $0.proto }
         let resp = await client.setProfilePlugins(request: req, headers: [:])
@@ -169,7 +169,7 @@ public struct ClarkProfilePatch: Sendable {
     }
 }
 
-private func pbCompressionMode(_ m: ClarkCompressionMode) -> Clark_V1_CompressionMode {
+private func pbCompressionMode(_ m: ClarkCompressionMode) -> Reeve_V1_CompressionMode {
     switch m {
     case .replace:     return .replace
     case .append:      return .append
@@ -177,8 +177,8 @@ private func pbCompressionMode(_ m: ClarkCompressionMode) -> Clark_V1_Compressio
     }
 }
 
-private func pbDefaults(_ d: ClarkProfileDefaults) -> Clark_V1_ProfileDefaults {
-    var pd = Clark_V1_ProfileDefaults()
+private func pbDefaults(_ d: ClarkProfileDefaults) -> Reeve_V1_ProfileDefaults {
+    var pd = Reeve_V1_ProfileDefaults()
     if let v = d.defaultProviderID         { pd.defaultProviderID = v }
     if let v = d.defaultModelID            { pd.defaultModelID = v }
     if let v = d.includeThinkingInHistory  { pd.includeThinkingInHistory = v }

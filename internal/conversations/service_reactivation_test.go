@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/fakellm"
 	"github.com/jdpedrie/reeve/internal/store"
 )
@@ -45,7 +45,7 @@ func TestReactivation_SendLandsInReactivatedContext(t *testing.T) {
 	}
 
 	// Reactivate the original.
-	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: originalCx.String(),
 	})); err != nil {
 		t.Fatalf("ActivateContext: %v", err)
@@ -54,7 +54,7 @@ func TestReactivation_SendLandsInReactivatedContext(t *testing.T) {
 	// Now send — it should land in originalCx, not newer.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "after reactivation",
 		ProviderId:     &pid,
@@ -105,7 +105,7 @@ func TestReactivation_PreservedCursorDrivesNextSend(t *testing.T) {
 	})
 
 	// Reactivate.
-	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: f.contextID.String(),
 	})); err != nil {
 		t.Fatalf("ActivateContext: %v", err)
@@ -120,7 +120,7 @@ func TestReactivation_PreservedCursorDrivesNextSend(t *testing.T) {
 	// Send — parent should be a1 (the preserved cursor target).
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "follow-up",
 		ProviderId:     &pid,
@@ -148,7 +148,7 @@ func TestReactivation_Idempotent(t *testing.T) {
 
 	// Sleep so the activation_time can move forward (NOW() resolution).
 	time.Sleep(5 * time.Millisecond)
-	resp, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	resp, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -173,7 +173,7 @@ func TestReactivation_CrossUser(t *testing.T) {
 	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
 		ID: bid, Username: "bob-" + t.Name(), PasswordHash: "x",
 	})
-	_, err := svc.ActivateContext(ctxAsUser(bob), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	_, err := svc.ActivateContext(ctxAsUser(bob), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: f.contextID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -229,7 +229,7 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 	}
 
 	// Compact: writes a summary in A; doesn't create a new context.
-	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -249,7 +249,7 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 	summaryID := *cFinal.ResultMessageID
 
 	// Promote: creates Context B as child of A, activates B.
-	pResp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.PromoteCompactionToNewContextRequest{
+	pResp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.PromoteCompactionToNewContextRequest{
 		MessageId: summaryID.String(),
 	}))
 	if err != nil {
@@ -265,14 +265,14 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 
 	// Reactivate A. The summary row is still there, so the next SendMessage
 	// on A is rejected with FailedPrecondition.
-	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	if _, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: contextA.String(),
 	})); err != nil {
 		t.Fatalf("ActivateContext A: %v", err)
 	}
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "back in A (blocked)",
 		ProviderId:     &pid, ModelId: &mid,
@@ -282,14 +282,14 @@ func TestReactivation_AcrossCompression(t *testing.T) {
 	// Delete the summary to clear the gate. Use cascade=true since some
 	// children of the (compaction-time) parent may also need to go; here
 	// the summary is a leaf so this is just a single delete.
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.DeleteMessageRequest{
+	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.DeleteMessageRequest{
 		Id: summaryID.String(),
 	})); err != nil {
 		t.Fatalf("DeleteMessage(summary): %v", err)
 	}
 
 	// Now SendMessage on A succeeds.
-	sresp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	sresp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "back in A",
 		ProviderId:     &pid, ModelId: &mid,

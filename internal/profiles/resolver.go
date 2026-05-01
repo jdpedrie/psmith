@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/store"
 )
 
@@ -99,7 +99,7 @@ func Resolve(ctx context.Context, q parentLoader, start store.Profile) (store.Pr
 // decodeProfileCallSettings extracts the `call_settings` sub-object from a
 // profile's `default_settings` JSONB blob. Returns (nil, nil) when the blob
 // is empty or the field is missing — those layers contribute nothing.
-func decodeProfileCallSettings(p store.Profile) (*clarkv1.CallSettings, error) {
+func decodeProfileCallSettings(p store.Profile) (*reevev1.CallSettings, error) {
 	if len(p.DefaultSettings) == 0 {
 		return nil, nil
 	}
@@ -119,7 +119,7 @@ func decodeProfileCallSettings(p store.Profile) (*clarkv1.CallSettings, error) {
 // existing default_settings JSONB blob, preserving any sibling fields
 // (`default_provider_id`, etc). When the input blob is empty/nil we synthesize
 // a minimal one carrying just call_settings.
-func overlayCallSettings(blob []byte, cs *clarkv1.CallSettings) ([]byte, error) {
+func overlayCallSettings(blob []byte, cs *reevev1.CallSettings) ([]byte, error) {
 	encoded, err := MarshalCallSettings(cs)
 	if err != nil {
 		return nil, fmt.Errorf("encode merged call_settings: %w", err)

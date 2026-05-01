@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/fakellm"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
@@ -22,7 +22,7 @@ func runOneTurn(t *testing.T, svc *Service, sup *stream.Supervisor, q *store.Que
 	t.Helper()
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        content,
 		ProviderId:     &pid,
@@ -189,13 +189,13 @@ func TestMultiTurn_ConcurrentSendsSerialize(t *testing.T) {
 	mid := f.modelID
 
 	var wg sync.WaitGroup
-	results := make([]*clarkv1.SendMessageResponse, N)
+	results := make([]*reevev1.SendMessageResponse, N)
 	errs := make([]error, N)
 	for i := 0; i < N; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+			resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 				ConversationId: f.conv.ID.String(),
 				Content:        "concurrent",
 				ProviderId:     &pid,

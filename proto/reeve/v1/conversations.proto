@@ -1,0 +1,282 @@
+syntax = "proto3";
+
+package reeve.v1;
+
+import "reeve/v1/types.proto";
+
+option go_package = "github.com/jdpedrie/reeve/gen/reeve/v1;reevev1";
+
+service ConversationsService {
+  // Conversation CRUD.
+  rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  rpc UpdateConversation(UpdateConversationRequest) returns (UpdateConversationResponse);
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+
+  // Contexts.
+  rpc ListContexts(ListContextsRequest) returns (ListContextsResponse);
+  // Make the given context the active one (sets activation_time = now).
+  // Used for reactivating older contexts and forking from archived branches.
+  rpc ActivateContext(ActivateContextRequest) returns (ActivateContextResponse);
+  // Move the per-context "currently viewing" cursor to a specific message.
+  // Used by branch navigation: after a user picks an alternate child fork,
+  // the client calls this to update the server-side leaf so the next
+  // SendMessage parents off the chosen branch.
+  rpc SetCurrentLeaf(SetCurrentLeafRequest) returns (SetCurrentLeafResponse);
+
+  // Edit a context's metadata (currently just title). Used to override the
+  // auto-generated title or set one when auto-titles aren't configured.
+  rpc UpdateContext(UpdateContextRequest) returns (UpdateContextResponse);
+
+  // Messages.
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
+
+  // EditMessage mutates a message in place. content is always set; role is
+  // optional and only allowed when both the current role and the new role are
+  // user or assistant (system, context, and compression_summary cannot be
+  // converted into or out of). Sets edited_at = now. Cache observability
+  // detects the change naturally on the next SendMessage. Rejected with
+  // FailedPrecondition when the conversation has any in-flight stream_run.
+  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
+
+  // DeleteMessage removes a message. cascade=false (default) reparents the
+  // message's direct children to its parent (filling the gap); cascade=true
+  // removes the entire descendant subtree. Rejected with FailedPrecondition
+  // when the conversation has any in-flight stream_run. The client is
+  // responsible for confirming the destructive action.
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+
+  // PromoteCompactionToNewContext is the second half of the two-stage
+  // compaction flow. The compression_summary message (produced by Compact)
+  // sits in the active context awaiting user review/edit. This RPC creates a
+  // new Context (parent_context_id = old context, activation_time = now,
+  // current_leaf = null) and seeds it with a single role=context message
+  // whose content is computed from the (possibly user-edited) summary using
+  // the profile's compression_mode. The new context becomes active.
+  rpc PromoteCompactionToNewContext(PromoteCompactionToNewContextRequest) returns (PromoteCompactionToNewContextResponse);
+
+  // Initiate a turn. Synchronously creates the user message and the stream_run,
+  // then returns. Client subscribes to the stream via StreamsService.SubscribeStream.
+  // Setting parent_message_id to a non-leaf creates a fork.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // Trigger compression on the active context. Returns a stream_run that the client
+  // subscribes to for progress; on terminal success, stream_run.result_context_id
+  // points to the new active context.
+  rpc Compact(CompactRequest) returns (CompactResponse);
+
+  // Token count for an active context as it would be sent to a target model.
+  // Used by the UI to show context-window pressure and inform compaction decisions.
+  rpc CountContextTokens(CountContextTokensRequest) returns (CountContextTokensResponse);
+}
+
+// --- Conversation ---
+
+message CreateConversationRequest {
+  string profile_id = 1;
+  optional string title = 2;
+  optional ConversationSettings settings = 3;
+}
+message CreateConversationResponse {
+  Conversation conversation = 1;
+  Context initial_context = 2;
+  // Snapshot rows written to the initial context (system + optional default user message).
+  repeated Message seed_messages = 3;
+}
+
+// Ordering for ListConversations. Default (UNSPECIFIED) = RECENTLY_USED.
+// "Recently used" sorts by the most recent message timestamp across the
+// conversation's contexts, falling back to the conversation's created_at
+// when there are no messages yet (a brand-new conversation appears at the
+// top).
+enum ConversationOrder {
+  CONVERSATION_ORDER_UNSPECIFIED  = 0;
+  CONVERSATION_ORDER_RECENTLY_USED    = 1;
+  CONVERSATION_ORDER_RECENTLY_CREATED = 2;
+}
+
+message ListConversationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  // Sort order for the returned page. Optional; defaults to RECENTLY_USED.
+  optional ConversationOrder order = 3;
+  // Case-insensitive substring match against the conversation's title.
+  // Conversations with no title are excluded when this is set.
+  optional string title_query = 4;
+  // Filter to conversations belonging to a specific profile. Used by the
+  // sidebar's "By Profile" view to render one section per profile.
+  optional string profile_id = 5;
+}
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  string next_page_token = 2;
+}
+
+message GetConversationRequest {
+  string id = 1;
+}
+message GetConversationResponse {
+  Conversation conversation = 1;
+  Context active_context = 2;
+}
+
+message UpdateConversationRequest {
+  string id = 1;
+  optional string title = 2;
+  optional ConversationSettings settings = 3;
+}
+message UpdateConversationResponse {
+  Conversation conversation = 1;
+}
+
+message DeleteConversationRequest {
+  string id = 1;
+}
+message DeleteConversationResponse {}
+
+// --- Contexts ---
+
+message ListContextsRequest {
+  string conversation_id = 1;
+}
+message ListContextsResponse {
+  repeated Context contexts = 1;
+}
+
+message ActivateContextRequest {
+  string context_id = 1;
+}
+message ActivateContextResponse {
+  Context context = 1;
+}
+
+message SetCurrentLeafRequest {
+  string context_id = 1;
+  // Pass empty to clear the cursor (next SendMessage falls back to latest by created_at).
+  string message_id = 2;
+}
+message SetCurrentLeafResponse {
+  Context context = 1;
+}
+
+message UpdateContextRequest {
+  string context_id = 1;
+  // Replace semantics: nil leaves the field alone; an empty string is treated
+  // as "set to empty" (equivalent to clearing).
+  optional string title = 2;
+}
+message UpdateContextResponse {
+  Context context = 1;
+}
+
+// --- Messages ---
+
+message ListMessagesRequest {
+  string context_id = 1;
+  // Pin the linear ancestor chain to this leaf. When unset, server
+  // resolves the leaf via context.current_leaf_message_id, then falls
+  // back to the natural leaf of the tree. Ignored when `full_tree=true`.
+  optional string leaf_message_id = 2;
+  // When true, return every message in the context — every branch, not
+  // just the active chain. Used by the branch switcher in the client to
+  // discover sibling IDs and walk down to the deepest descendant of the
+  // chosen fork. Default false (chain mode) preserves the original
+  // behaviour for callers that don't opt in.
+  bool full_tree = 3;
+}
+message ListMessagesResponse {
+  repeated Message messages = 1;
+}
+
+message GetMessageRequest {
+  string id = 1;
+}
+message GetMessageResponse {
+  Message message = 1;
+}
+
+message EditMessageRequest {
+  string id = 1;
+  string content = 2;
+  // Optional role override. When set, must be MESSAGE_ROLE_USER or
+  // MESSAGE_ROLE_ASSISTANT, AND the message's current role must also be one
+  // of those two. system / context / compression_summary cannot be converted.
+  optional MessageRole role = 3;
+}
+message EditMessageResponse {
+  Message message = 1;
+}
+
+message DeleteMessageRequest {
+  string id = 1;
+  // false = stitch (reparent children to the deleted message's parent).
+  // true  = remove descendant subtree.
+  bool cascade = 2;
+}
+message DeleteMessageResponse {}
+
+message PromoteCompactionToNewContextRequest {
+  // The id of the compression_summary message to promote. Must live in the
+  // active context. Optional: callers may pass a summary in a non-active
+  // context too (e.g., from Context History), but the new context becomes
+  // active either way.
+  string message_id = 1;
+}
+message PromoteCompactionToNewContextResponse {
+  Context context = 1;
+}
+
+// --- Send / Compact / Count ---
+
+message SendMessageRequest {
+  string conversation_id = 1;
+  // Parent for the new user message. Defaults to the leaf of the active context.
+  optional string parent_message_id = 2;
+  string content = 3;
+  // Per-turn provider/model override; falls back to conversation, then profile, then default.
+  optional string provider_id = 4;
+  optional string model_id = 5;
+  optional CallSettings call_settings = 6;
+  // Regenerate-only: when true, the server skips creating a new user
+  // message and starts the assistant stream off `parent_message_id`
+  // directly. `parent_message_id` is required in this mode and must
+  // reference an existing user-role row in the active context. Powers the
+  // "regenerate" affordance in the UI — produces a sibling assistant
+  // turn under the SAME user message, no duplicate user. `content` is
+  // ignored when this flag is set.
+  bool regenerate = 7;
+}
+message SendMessageResponse {
+  // Echo of the user message that anchors this turn. When `regenerate`
+  // was set, this is the existing parent user message (no new row); when
+  // false, it's the freshly-inserted user row.
+  Message user_message = 1;
+  StreamRun stream_run = 2;
+}
+
+message CompactRequest {
+  string conversation_id = 1;
+  // Per-call overrides over the resolved profile values. Each, if set, takes
+  // precedence over what the profile inheritance chain produces. Lets clients
+  // surface a "compact with this prompt + this model" page (per-invocation,
+  // not persisted to the profile) and bypass profile-resolution glitches.
+  optional string compression_guide = 2;
+  optional string compression_provider_id = 3;
+  optional string compression_model_id = 4;
+}
+message CompactResponse {
+  StreamRun stream_run = 1;
+}
+
+message CountContextTokensRequest {
+  string context_id = 1;
+  // The model whose tokenizer + context window we're measuring against.
+  string provider_id = 2;
+  string model_id = 3;
+}
+message CountContextTokensResponse {
+  int32 token_count = 1;
+  int32 context_window = 2;  // for the target model, for convenience
+}

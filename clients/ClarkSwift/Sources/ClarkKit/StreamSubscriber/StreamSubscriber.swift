@@ -36,7 +36,7 @@ public struct ClarkChunk: Sendable, Hashable {
 public enum ClarkChunkType: Sendable, Hashable {
     case textDelta, thinkingDelta, toolUseStart, toolUseDelta, toolUseEnd, error, done, usage, unknown
 
-    init(from p: Clark_V1_ChunkType) {
+    init(from p: Reeve_V1_ChunkType) {
         switch p {
         case .textDelta: self = .textDelta
         case .thinkingDelta: self = .thinkingDelta
@@ -54,7 +54,7 @@ public enum ClarkChunkType: Sendable, Hashable {
 public enum ClarkStreamStatus: Sendable, Hashable {
     case running, completed, errored, cancelled, interrupted, unknown
 
-    init(from p: Clark_V1_StreamRunStatus) {
+    init(from p: Reeve_V1_StreamRunStatus) {
         switch p {
         case .running: self = .running
         case .completed: self = .completed
@@ -76,13 +76,13 @@ public struct ClarkStreamRun: Sendable, Hashable, Identifiable {
 }
 
 extension ClarkChunk {
-    init(from p: Clark_V1_Chunk) {
+    init(from p: Reeve_V1_Chunk) {
         self.init(sequence: p.sequence, type: ClarkChunkType(from: p.type), payload: p.payload)
     }
 }
 
 extension ClarkStreamRun {
-    init(from p: Clark_V1_StreamRun) {
+    init(from p: Reeve_V1_StreamRun) {
         self.init(
             id: p.id,
             conversationID: p.conversationID,
@@ -95,9 +95,9 @@ extension ClarkStreamRun {
 }
 
 public final class StreamSubscriber: Sendable {
-    private let client: Clark_V1_StreamsServiceClientInterface
+    private let client: Reeve_V1_StreamsServiceClientInterface
 
-    public init(client: Clark_V1_StreamsServiceClientInterface) {
+    public init(client: Reeve_V1_StreamsServiceClientInterface) {
         self.client = client
     }
 
@@ -112,7 +112,7 @@ public final class StreamSubscriber: Sendable {
             let stream = client.subscribeStream(headers: [:])
             let task = Task {
                 do {
-                    var req = Clark_V1_SubscribeStreamRequest()
+                    var req = Reeve_V1_SubscribeStreamRequest()
                     req.streamRunID = streamRunID
                     req.fromSequence = fromSequence
                     try stream.send(req)
@@ -157,7 +157,7 @@ public final class StreamSubscriber: Sendable {
     }
 
     public func cancel(streamRunID: String) async throws {
-        var req = Clark_V1_CancelStreamRequest()
+        var req = Reeve_V1_CancelStreamRequest()
         req.streamRunID = streamRunID
         let resp = await client.cancelStream(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }

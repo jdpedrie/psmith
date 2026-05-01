@@ -2,9 +2,9 @@ import Foundation
 import Connect
 
 public final class ConversationsRepository: Sendable {
-    private let client: Clark_V1_ConversationsServiceClientInterface
+    private let client: Reeve_V1_ConversationsServiceClientInterface
 
-    public init(client: Clark_V1_ConversationsServiceClientInterface) {
+    public init(client: Reeve_V1_ConversationsServiceClientInterface) {
         self.client = client
     }
 
@@ -15,7 +15,7 @@ public final class ConversationsRepository: Sendable {
         titleQuery: String? = nil,
         profileID: String? = nil
     ) async throws -> (items: [ClarkConversation], nextPageToken: String?) {
-        var req = Clark_V1_ListConversationsRequest()
+        var req = Reeve_V1_ListConversationsRequest()
         req.pageSize = pageSize
         if let pageToken { req.pageToken = pageToken }
         if let order { req.order = order.proto }
@@ -29,7 +29,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func get(id: String) async throws -> (ClarkConversation, ClarkContext) {
-        var req = Clark_V1_GetConversationRequest()
+        var req = Reeve_V1_GetConversationRequest()
         req.id = id
         let resp = await client.getConversation(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("get conversation") }
@@ -41,7 +41,7 @@ public final class ConversationsRepository: Sendable {
         title: String? = nil,
         settings: ClarkConversationSettings? = nil
     ) async throws -> ClarkConversation {
-        var req = Clark_V1_CreateConversationRequest()
+        var req = Reeve_V1_CreateConversationRequest()
         req.profileID = profileID
         if let title { req.title = title }
         if let settings { req.settings = settings.proto }
@@ -51,7 +51,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func delete(id: String) async throws {
-        var req = Clark_V1_DeleteConversationRequest()
+        var req = Reeve_V1_DeleteConversationRequest()
         req.id = id
         let resp = await client.deleteConversation(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
@@ -63,7 +63,7 @@ public final class ConversationsRepository: Sendable {
     /// the server (the same call any other UI uses for manual rename).
     @discardableResult
     public func updateTitle(id: String, title: String) async throws -> ClarkConversation {
-        var req = Clark_V1_UpdateConversationRequest()
+        var req = Reeve_V1_UpdateConversationRequest()
         req.id = id
         req.title = title
         let resp = await client.updateConversation(request: req, headers: [:])
@@ -82,7 +82,7 @@ public final class ConversationsRepository: Sendable {
         title: String? = nil,
         settings: ClarkConversationSettings
     ) async throws -> ClarkConversation {
-        var req = Clark_V1_UpdateConversationRequest()
+        var req = Reeve_V1_UpdateConversationRequest()
         req.id = id
         if let title { req.title = title }
         req.settings = settings.proto
@@ -98,7 +98,7 @@ public final class ConversationsRepository: Sendable {
         providerID: String? = nil,
         modelID: String? = nil
     ) async throws -> (userMessage: ClarkMessage, streamRun: ClarkStreamRun) {
-        var req = Clark_V1_SendMessageRequest()
+        var req = Reeve_V1_SendMessageRequest()
         req.conversationID = conversationID
         req.content = content
         if let parentMessageID { req.parentMessageID = parentMessageID }
@@ -131,7 +131,7 @@ public final class ConversationsRepository: Sendable {
         providerID: String? = nil,
         modelID: String? = nil
     ) async throws -> (parentMessage: ClarkMessage, streamRun: ClarkStreamRun) {
-        var req = Clark_V1_SendMessageRequest()
+        var req = Reeve_V1_SendMessageRequest()
         req.conversationID = conversationID
         req.parentMessageID = parentMessageID
         req.regenerate = true
@@ -147,7 +147,7 @@ public final class ConversationsRepository: Sendable {
         leafMessageID: String? = nil,
         fullTree: Bool = false
     ) async throws -> [ClarkMessage] {
-        var req = Clark_V1_ListMessagesRequest()
+        var req = Reeve_V1_ListMessagesRequest()
         req.contextID = contextID
         if let leafMessageID { req.leafMessageID = leafMessageID }
         // `full_tree=true` swaps the server from the linear-ancestor-chain
@@ -167,7 +167,7 @@ public final class ConversationsRepository: Sendable {
     /// Pass `messageID = nil` to clear the cursor (server falls back to
     /// latest-by-created_at on the next send).
     public func setCurrentLeaf(contextID: String, messageID: String?) async throws {
-        var req = Clark_V1_SetCurrentLeafRequest()
+        var req = Reeve_V1_SetCurrentLeafRequest()
         req.contextID = contextID
         // Empty string is the "clear" sentinel per the proto comment.
         req.messageID = messageID ?? ""
@@ -176,7 +176,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func countContextTokens(contextID: String, providerID: String, modelID: String) async throws -> (tokenCount: Int32, contextWindow: Int32) {
-        var req = Clark_V1_CountContextTokensRequest()
+        var req = Reeve_V1_CountContextTokensRequest()
         req.contextID = contextID
         req.providerID = providerID
         req.modelID = modelID
@@ -196,7 +196,7 @@ public final class ConversationsRepository: Sendable {
         providerID: String? = nil,
         modelID: String? = nil
     ) async throws -> ClarkStreamRun {
-        var req = Clark_V1_CompactRequest()
+        var req = Reeve_V1_CompactRequest()
         req.conversationID = conversationID
         if let guide      { req.compressionGuide      = guide }
         if let providerID { req.compressionProviderID = providerID }
@@ -207,7 +207,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func promoteCompactionToNewContext(messageID: String) async throws -> ClarkContext {
-        var req = Clark_V1_PromoteCompactionToNewContextRequest()
+        var req = Reeve_V1_PromoteCompactionToNewContextRequest()
         req.messageID = messageID
         let resp = await client.promoteCompactionToNewContext(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("promote compaction") }
@@ -219,7 +219,7 @@ public final class ConversationsRepository: Sendable {
         content: String,
         role: ClarkMessageRole? = nil
     ) async throws -> ClarkMessage {
-        var req = Clark_V1_EditMessageRequest()
+        var req = Reeve_V1_EditMessageRequest()
         req.id = id
         req.content = content
         // Optional role override. The server accepts only user/assistant
@@ -235,7 +235,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func deleteMessage(id: String, cascade: Bool = false) async throws {
-        var req = Clark_V1_DeleteMessageRequest()
+        var req = Reeve_V1_DeleteMessageRequest()
         req.id = id
         req.cascade = cascade
         let resp = await client.deleteMessage(request: req, headers: [:])
@@ -243,7 +243,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func listContexts(conversationID: String) async throws -> [ClarkContext] {
-        var req = Clark_V1_ListContextsRequest()
+        var req = Reeve_V1_ListContextsRequest()
         req.conversationID = conversationID
         let resp = await client.listContexts(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list contexts") }
@@ -251,7 +251,7 @@ public final class ConversationsRepository: Sendable {
     }
 
     public func activateContext(contextID: String) async throws -> ClarkContext {
-        var req = Clark_V1_ActivateContextRequest()
+        var req = Reeve_V1_ActivateContextRequest()
         req.contextID = contextID
         let resp = await client.activateContext(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("activate context") }

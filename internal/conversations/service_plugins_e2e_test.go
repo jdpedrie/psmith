@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jdpedrie/reeve/fakellm"
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -59,7 +59,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	// SendMessage a third time: this is the turn we inspect on the wire.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "third",
 		ProviderId:     &pid,
@@ -145,7 +145,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	}
 
 	// (4) ListMessages populates display_content with tags stripped.
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -153,7 +153,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	}
 	var sawAssistantWithStrippedDisplay bool
 	for _, m := range listResp.Msg.Messages {
-		if m.Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+		if m.Role != reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 			continue
 		}
 		if !strings.Contains(m.Content, "<choices>") {
@@ -189,7 +189,7 @@ func TestPlugins_E2E_NoPluginsDisplayEqualsContent(t *testing.T) {
 
 	_, _ = runOneTurn(t, svc, sup, q, f, "first")
 
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {

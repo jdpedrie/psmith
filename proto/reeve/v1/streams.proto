@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package reeve.v1;
+
+import "reeve/v1/types.proto";
+
+option go_package = "github.com/jdpedrie/reeve/gen/reeve/v1;reevev1";
+
+service StreamsService {
+  // Server-streaming subscription. The server replays persisted chunks from
+  // from_sequence (inclusive), then live-tails new chunks as they arrive.
+  // The stream emits a terminal StreamRun event once status becomes terminal,
+  // then closes.
+  rpc SubscribeStream(SubscribeStreamRequest) returns (stream SubscribeStreamResponse);
+
+  // Cancel an in-flight stream. Idempotent — safe to call on already-terminal runs.
+  rpc CancelStream(CancelStreamRequest) returns (CancelStreamResponse);
+
+  // Status snapshot for a stream run.
+  rpc GetStreamRun(GetStreamRunRequest) returns (GetStreamRunResponse);
+}
+
+message SubscribeStreamRequest {
+  string stream_run_id = 1;
+  // Inclusive starting cursor. Use 0 to replay from the beginning.
+  int64 from_sequence = 2;
+}
+
+message SubscribeStreamResponse {
+  oneof event {
+    Chunk chunk = 1;
+    // Sent exactly once when the run reaches a terminal status; the stream closes after this.
+    StreamRun terminal = 2;
+  }
+}
+
+message CancelStreamRequest {
+  string stream_run_id = 1;
+}
+message CancelStreamResponse {}
+
+message GetStreamRunRequest {
+  string stream_run_id = 1;
+}
+message GetStreamRunResponse {
+  StreamRun stream_run = 1;
+}

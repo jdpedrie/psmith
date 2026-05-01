@@ -8,7 +8,7 @@ public struct ClarkProviderType: Sendable, Identifiable, Hashable {
 }
 
 extension ClarkProviderType {
-    init(from p: Clark_V1_ProviderType) {
+    init(from p: Reeve_V1_ProviderType) {
         name        = p.name
         displayName = p.displayName
         stateful    = p.stateful
@@ -55,7 +55,7 @@ public struct ClarkProviderTemplate: Sendable, Identifiable, Hashable {
 }
 
 extension ClarkProviderTemplate {
-    init(from p: Clark_V1_ProviderTemplate) {
+    init(from p: Reeve_V1_ProviderTemplate) {
         catalogProviderID = p.catalogProviderID
         name              = p.name
         driverType        = p.driverType
@@ -111,7 +111,7 @@ public struct ClarkUserModelProvider: Sendable, Identifiable, Hashable {
 }
 
 extension ClarkUserModelProvider {
-    init(from p: Clark_V1_UserModelProvider) {
+    init(from p: Reeve_V1_UserModelProvider) {
         id        = p.id
         type      = p.type
         label     = p.label
@@ -155,7 +155,7 @@ public struct ClarkModelPricing: Sendable, Hashable {
 }
 
 extension ClarkModelPricing {
-    init(from p: Clark_V1_ModelPricing) {
+    init(from p: Reeve_V1_ModelPricing) {
         inputPerMillion      = p.hasInputPerMillionTokens      ? p.inputPerMillionTokens      : nil
         outputPerMillion     = p.hasOutputPerMillionTokens     ? p.outputPerMillionTokens     : nil
         cacheReadPerMillion  = p.hasCacheReadPerMillionTokens  ? p.cacheReadPerMillionTokens  : nil
@@ -186,7 +186,7 @@ public struct ClarkModelCapabilities: Sendable, Hashable {
 }
 
 extension ClarkModelCapabilities {
-    init(from p: Clark_V1_ModelCapabilities) {
+    init(from p: Reeve_V1_ModelCapabilities) {
         streaming     = p.streaming
         thinking      = p.thinking
         toolUse       = p.toolUse
@@ -240,7 +240,7 @@ public struct ClarkUserModel: Sendable, Identifiable, Hashable {
 }
 
 extension ClarkUserModel {
-    init(from p: Clark_V1_UserModel) {
+    init(from p: Reeve_V1_UserModel) {
         providerID     = p.userModelProviderID
         modelID        = p.modelID
         displayName    = p.displayName
@@ -282,7 +282,7 @@ public struct ClarkDiscoveredModel: Sendable, Identifiable, Hashable {
 }
 
 extension ClarkDiscoveredModel {
-    init(from p: Clark_V1_DiscoveredModel) {
+    init(from p: Reeve_V1_DiscoveredModel) {
         modelID       = p.modelID
         displayName   = p.displayName
         contextWindow = p.hasContextWindow ? p.contextWindow : nil
@@ -312,7 +312,7 @@ public struct ClarkProviderTestResult: Sendable, Hashable {
 }
 
 extension ClarkProviderTestResult {
-    init(from p: Clark_V1_TestUserModelProviderResponse) {
+    init(from p: Reeve_V1_TestUserModelProviderResponse) {
         ok = p.ok
         errorMessage = p.errorMessage
         modelCount = p.modelCount
@@ -342,7 +342,7 @@ public struct ClarkModelTestResult: Sendable, Hashable {
 }
 
 extension ClarkModelTestResult {
-    init(from p: Clark_V1_TestUserModelResponse) {
+    init(from p: Reeve_V1_TestUserModelResponse) {
         ok = p.ok
         errorMessage = p.errorMessage
         latencyMs = p.latencyMs

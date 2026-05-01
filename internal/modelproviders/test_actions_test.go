@@ -9,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
@@ -91,7 +91,7 @@ func TestTestUserModelProvider_Success(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-prov-ok", models, nil, nil, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelProviderRequest{
+	resp, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelProviderRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -118,7 +118,7 @@ func TestTestUserModelProvider_DriverError_PackedIntoResponse(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-prov-err", nil, errors.New("auth failed: 401"), nil, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelProviderRequest{
+	resp, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelProviderRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -141,7 +141,7 @@ func TestTestUserModelProvider_OtherUserNotFound(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-prov-other", nil, nil, nil, nil)
 	prov := makeProvider(t, q, alice.ID, typeName, "main", nil)
 
-	_, err := svc.TestUserModelProvider(ctxAs(bob), connect.NewRequest(&clarkv1.TestUserModelProviderRequest{
+	_, err := svc.TestUserModelProvider(ctxAs(bob), connect.NewRequest(&reevev1.TestUserModelProviderRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -153,7 +153,7 @@ func TestTestUserModelProvider_UnknownDriverType_FailedPrecondition(t *testing.T
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "no-such-driver-"+uuid.NewString(), "main", nil)
 
-	_, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelProviderRequest{
+	_, err := svc.TestUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelProviderRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
@@ -173,7 +173,7 @@ func TestTestUserModel_HappyPath(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-ok", nil, nil, chunks, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "any-model-id",
 	}))
@@ -202,7 +202,7 @@ func TestTestUserModel_StreamErrorChunk_PackedIntoResponse(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-err", nil, nil, chunks, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "any-model-id",
 	}))
@@ -224,7 +224,7 @@ func TestTestUserModel_DriverSendError_PackedIntoResponse(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-send-err", nil, nil, nil, errors.New("connection refused"))
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "any-model-id",
 	}))
@@ -248,7 +248,7 @@ func TestTestUserModel_StatefulDriver_PackedFailure(t *testing.T) {
 	typeName := registerFakeDriver(t, "test-model-stateful", nil, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "x",
 	}))
@@ -270,7 +270,7 @@ func TestTestUserModel_EmptyModelID_InvalidArgument(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-noid", nil, nil, nil, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	_, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	_, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "",
 	}))
@@ -285,7 +285,7 @@ func TestTestUserModel_OtherUserNotFound(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-other", nil, nil, nil, nil)
 	prov := makeProvider(t, q, alice.ID, typeName, "main", nil)
 
-	_, err := svc.TestUserModel(ctxAs(bob), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	_, err := svc.TestUserModel(ctxAs(bob), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "x",
 	}))
@@ -301,7 +301,7 @@ func TestTestUserModel_NoOutput_PackedFailure(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-empty", nil, nil, chunks, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "x",
 	}))
@@ -328,7 +328,7 @@ func TestTestUserModel_SampleTextCappedAt80(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "test-model-long", nil, nil, chunks, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&clarkv1.TestUserModelRequest{
+	resp, err := svc.TestUserModel(ctxAs(user), connect.NewRequest(&reevev1.TestUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "x",
 	}))

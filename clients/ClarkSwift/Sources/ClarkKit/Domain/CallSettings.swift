@@ -3,7 +3,7 @@ import Foundation
 // MARK: - CallSettings (universal common-core)
 
 /// Cross-driver per-call settings. Hybrid common-core + provider-specific
-/// shape that mirrors `Clark_V1_CallSettings`:
+/// shape that mirrors `Reeve_V1_CallSettings`:
 ///   * The first block is universal (every driver translates it).
 ///   * `topK` is shared by Anthropic + Google.
 ///   * `thinking` is the universal "extended reasoning" knob translated
@@ -74,7 +74,7 @@ extension ClarkCallSettings {
     /// Round-trip from the proto into the domain struct. Every "unset"
     /// proto optional becomes a Swift `nil`; sub-messages recurse and
     /// collapse to `nil` when wholly empty.
-    public init(from p: Clark_V1_CallSettings) {
+    public init(from p: Reeve_V1_CallSettings) {
         self.init(
             temperature:     p.hasTemperature     ? p.temperature     : nil,
             topP:            p.hasTopP            ? p.topP            : nil,
@@ -91,8 +91,8 @@ extension ClarkCallSettings {
 
     /// Lossless export to the proto shape. Every field is sparsely set —
     /// only writes the proto presence flag when the Swift field is non-nil.
-    public var proto: Clark_V1_CallSettings {
-        var s = Clark_V1_CallSettings()
+    public var proto: Reeve_V1_CallSettings {
+        var s = Reeve_V1_CallSettings()
         if let v = temperature     { s.temperature     = v }
         if let v = topP            { s.topP            = v }
         if let v = maxOutputTokens { s.maxOutputTokens = v }
@@ -122,15 +122,15 @@ public struct ClarkThinkingSettings: Sendable, Hashable {
 }
 
 extension ClarkThinkingSettings {
-    public init(from p: Clark_V1_ThinkingSettings) {
+    public init(from p: Reeve_V1_ThinkingSettings) {
         self.init(
             enabled:      p.hasEnabled      ? p.enabled      : nil,
             budgetTokens: p.hasBudgetTokens ? p.budgetTokens : nil
         )
     }
 
-    public var proto: Clark_V1_ThinkingSettings {
-        var s = Clark_V1_ThinkingSettings()
+    public var proto: Reeve_V1_ThinkingSettings {
+        var s = Reeve_V1_ThinkingSettings()
         if let v = enabled      { s.enabled      = v }
         if let v = budgetTokens { s.budgetTokens = v }
         return s
@@ -165,7 +165,7 @@ public enum ClarkCacheTTL: Sendable, Hashable {
     case fiveMinutes
     case oneHour
 
-    init?(from p: Clark_V1_CacheTTL) {
+    init?(from p: Reeve_V1_CacheTTL) {
         switch p {
         case .cacheTtl5M: self = .fiveMinutes
         case .cacheTtl1H: self = .oneHour
@@ -173,7 +173,7 @@ public enum ClarkCacheTTL: Sendable, Hashable {
         }
     }
 
-    var proto: Clark_V1_CacheTTL {
+    var proto: Reeve_V1_CacheTTL {
         switch self {
         case .fiveMinutes: return .cacheTtl5M
         case .oneHour:     return .cacheTtl1H
@@ -182,15 +182,15 @@ public enum ClarkCacheTTL: Sendable, Hashable {
 }
 
 extension ClarkAnthropicExtras {
-    public init(from p: Clark_V1_AnthropicExtras) {
+    public init(from p: Reeve_V1_AnthropicExtras) {
         self.init(
             cacheEnabled: p.hasCacheEnabled ? p.cacheEnabled : nil,
             cacheTTL:     p.hasCacheTtl     ? ClarkCacheTTL(from: p.cacheTtl) : nil
         )
     }
 
-    public var proto: Clark_V1_AnthropicExtras {
-        var s = Clark_V1_AnthropicExtras()
+    public var proto: Reeve_V1_AnthropicExtras {
+        var s = Reeve_V1_AnthropicExtras()
         if let v = cacheEnabled { s.cacheEnabled = v }
         if let v = cacheTTL     { s.cacheTtl     = v.proto }
         return s
@@ -204,7 +204,7 @@ public enum ClarkServiceTier: Sendable, Hashable {
     case standard
     case priority
 
-    init?(from p: Clark_V1_ServiceTier) {
+    init?(from p: Reeve_V1_ServiceTier) {
         switch p {
         case .auto:     self = .auto
         case .standard: self = .standard
@@ -213,7 +213,7 @@ public enum ClarkServiceTier: Sendable, Hashable {
         }
     }
 
-    var proto: Clark_V1_ServiceTier {
+    var proto: Reeve_V1_ServiceTier {
         switch self {
         case .auto:     return .auto
         case .standard: return .standard
@@ -229,7 +229,7 @@ public enum ClarkResponseFormat: Sendable, Hashable {
     case jsonObject
     case jsonSchema(name: String, description: String?, schema: Data, strict: Bool?)
 
-    init?(from p: Clark_V1_ResponseFormat) {
+    init?(from p: Reeve_V1_ResponseFormat) {
         guard let kind = p.kind else { return nil }
         switch kind {
         case .text:        self = .text
@@ -244,15 +244,15 @@ public enum ClarkResponseFormat: Sendable, Hashable {
         }
     }
 
-    var proto: Clark_V1_ResponseFormat {
-        var rf = Clark_V1_ResponseFormat()
+    var proto: Reeve_V1_ResponseFormat {
+        var rf = Reeve_V1_ResponseFormat()
         switch self {
         case .text:
             rf.text = true
         case .jsonObject:
             rf.jsonObject = true
         case .jsonSchema(let name, let description, let schema, let strict):
-            var js = Clark_V1_JsonSchema()
+            var js = Reeve_V1_JsonSchema()
             js.name = name
             if let d = description { js.description_p = d }
             js.schema = schema
@@ -306,7 +306,7 @@ public struct ClarkOpenAIExtras: Sendable, Hashable {
 }
 
 extension ClarkOpenAIExtras {
-    public init(from p: Clark_V1_OpenAIExtras) {
+    public init(from p: Reeve_V1_OpenAIExtras) {
         self.init(
             seed:              p.hasSeed              ? p.seed              : nil,
             frequencyPenalty:  p.hasFrequencyPenalty  ? p.frequencyPenalty  : nil,
@@ -319,8 +319,8 @@ extension ClarkOpenAIExtras {
         )
     }
 
-    public var proto: Clark_V1_OpenAIExtras {
-        var s = Clark_V1_OpenAIExtras()
+    public var proto: Reeve_V1_OpenAIExtras {
+        var s = Reeve_V1_OpenAIExtras()
         if let v = seed              { s.seed              = v }
         if let v = frequencyPenalty  { s.frequencyPenalty  = v }
         if let v = presencePenalty   { s.presencePenalty   = v }
@@ -341,7 +341,7 @@ public enum ClarkHarmThreshold: Sendable, Hashable {
     case blockMediumAndAbove
     case blockOnlyHigh
 
-    init?(from p: Clark_V1_HarmThreshold) {
+    init?(from p: Reeve_V1_HarmThreshold) {
         switch p {
         case .blockNone:            self = .blockNone
         case .blockLowAndAbove:     self = .blockLowAndAbove
@@ -351,7 +351,7 @@ public enum ClarkHarmThreshold: Sendable, Hashable {
         }
     }
 
-    var proto: Clark_V1_HarmThreshold {
+    var proto: Reeve_V1_HarmThreshold {
         switch self {
         case .blockNone:           return .blockNone
         case .blockLowAndAbove:    return .blockLowAndAbove
@@ -386,7 +386,7 @@ public struct ClarkSafetySettings: Sendable, Hashable {
 }
 
 extension ClarkSafetySettings {
-    public init(from p: Clark_V1_SafetySettings) {
+    public init(from p: Reeve_V1_SafetySettings) {
         self.init(
             harassment:       p.hasHarassment       ? ClarkHarmThreshold(from: p.harassment)       : nil,
             hateSpeech:       p.hasHateSpeech       ? ClarkHarmThreshold(from: p.hateSpeech)       : nil,
@@ -395,8 +395,8 @@ extension ClarkSafetySettings {
         )
     }
 
-    public var proto: Clark_V1_SafetySettings {
-        var s = Clark_V1_SafetySettings()
+    public var proto: Reeve_V1_SafetySettings {
+        var s = Reeve_V1_SafetySettings()
         if let v = harassment       { s.harassment       = v.proto }
         if let v = hateSpeech       { s.hateSpeech       = v.proto }
         if let v = sexuallyExplicit { s.sexuallyExplicit = v.proto }
@@ -432,7 +432,7 @@ public struct ClarkGoogleExtras: Sendable, Hashable {
 }
 
 extension ClarkGoogleExtras {
-    public init(from p: Clark_V1_GoogleExtras) {
+    public init(from p: Reeve_V1_GoogleExtras) {
         self.init(
             safetySettings:   p.hasSafetySettings   ? ClarkSafetySettings(from: p.safetySettings) : nil,
             responseMimeType: p.hasResponseMimeType ? p.responseMimeType : nil,
@@ -441,8 +441,8 @@ extension ClarkGoogleExtras {
         )
     }
 
-    public var proto: Clark_V1_GoogleExtras {
-        var s = Clark_V1_GoogleExtras()
+    public var proto: Reeve_V1_GoogleExtras {
+        var s = Reeve_V1_GoogleExtras()
         if let v = safetySettings, !v.isEmpty { s.safetySettings   = v.proto }
         if let v = responseMimeType           { s.responseMimeType = v }
         if let v = responseSchema             { s.responseSchema   = v }

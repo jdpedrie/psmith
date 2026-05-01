@@ -12,17 +12,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/store"
 )
 
 // SessionTTL is the lifetime of a freshly-issued session.
 const SessionTTL = 30 * 24 * time.Hour
 
-// Service implements clarkv1connect.AuthServiceHandler.
+// Service implements reevev1connect.AuthServiceHandler.
 type Service struct {
-	clarkv1connect.UnimplementedAuthServiceHandler
+	reevev1connect.UnimplementedAuthServiceHandler
 	queries *store.Queries
 }
 
@@ -37,8 +37,8 @@ func NewService(queries *store.Queries) *Service {
 // hit, no token check; the existence of a successful response is the
 // signal. Server name is hard-coded to "clarkd" — forks should bump
 // this so a misconfigured client can warn.
-func (s *Service) Probe(_ context.Context, _ *connect.Request[clarkv1.ProbeRequest]) (*connect.Response[clarkv1.ProbeResponse], error) {
-	return connect.NewResponse(&clarkv1.ProbeResponse{
+func (s *Service) Probe(_ context.Context, _ *connect.Request[reevev1.ProbeRequest]) (*connect.Response[reevev1.ProbeResponse], error) {
+	return connect.NewResponse(&reevev1.ProbeResponse{
 		Server:  "clarkd",
 		Version: serverVersion(),
 	}), nil
@@ -56,7 +56,7 @@ func serverVersion() string {
 // "no version stamped" (dev builds).
 var buildVersion = ""
 
-func (s *Service) Login(ctx context.Context, req *connect.Request[clarkv1.LoginRequest]) (*connect.Response[clarkv1.LoginResponse], error) {
+func (s *Service) Login(ctx context.Context, req *connect.Request[reevev1.LoginRequest]) (*connect.Response[reevev1.LoginResponse], error) {
 	if req.Msg.Username == "" || req.Msg.Password == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("username and password are required"))
 	}
@@ -88,14 +88,14 @@ func (s *Service) Login(ctx context.Context, req *connect.Request[clarkv1.LoginR
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&clarkv1.LoginResponse{
+	return connect.NewResponse(&reevev1.LoginResponse{
 		SessionToken: raw,
 		ExpiresAt:    timestamppb.New(expiresAt),
 		User:         storeUserToProto(user),
 	}), nil
 }
 
-func (s *Service) Logout(ctx context.Context, req *connect.Request[clarkv1.LogoutRequest]) (*connect.Response[clarkv1.LogoutResponse], error) {
+func (s *Service) Logout(ctx context.Context, req *connect.Request[reevev1.LogoutRequest]) (*connect.Response[reevev1.LogoutResponse], error) {
 	// We don't have the raw token at this point — read it from the request header.
 	auth := req.Header().Get("Authorization")
 	if len(auth) < len("Bearer ") {
@@ -105,15 +105,15 @@ func (s *Service) Logout(ctx context.Context, req *connect.Request[clarkv1.Logou
 	if err := s.queries.DeleteSession(ctx, hashToken(raw)); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.LogoutResponse{}), nil
+	return connect.NewResponse(&reevev1.LogoutResponse{}), nil
 }
 
-func (s *Service) WhoAmI(ctx context.Context, req *connect.Request[clarkv1.WhoAmIRequest]) (*connect.Response[clarkv1.WhoAmIResponse], error) {
+func (s *Service) WhoAmI(ctx context.Context, req *connect.Request[reevev1.WhoAmIRequest]) (*connect.Response[reevev1.WhoAmIResponse], error) {
 	u := MustFromContext(ctx)
-	return connect.NewResponse(&clarkv1.WhoAmIResponse{User: userToProto(u)}), nil
+	return connect.NewResponse(&reevev1.WhoAmIResponse{User: userToProto(u)}), nil
 }
 
-func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[clarkv1.ChangePasswordRequest]) (*connect.Response[clarkv1.ChangePasswordResponse], error) {
+func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[reevev1.ChangePasswordRequest]) (*connect.Response[reevev1.ChangePasswordResponse], error) {
 	if req.Msg.NewPassword == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("new_password is required"))
 	}
@@ -137,12 +137,12 @@ func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[clark
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.ChangePasswordResponse{}), nil
+	return connect.NewResponse(&reevev1.ChangePasswordResponse{}), nil
 }
 
 // --- Admin user management ---
 
-func (s *Service) CreateUser(ctx context.Context, req *connect.Request[clarkv1.CreateUserRequest]) (*connect.Response[clarkv1.CreateUserResponse], error) {
+func (s *Service) CreateUser(ctx context.Context, req *connect.Request[reevev1.CreateUserRequest]) (*connect.Response[reevev1.CreateUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -167,10 +167,10 @@ func (s *Service) CreateUser(ctx context.Context, req *connect.Request[clarkv1.C
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.CreateUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&reevev1.CreateUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) ListUsers(ctx context.Context, req *connect.Request[clarkv1.ListUsersRequest]) (*connect.Response[clarkv1.ListUsersResponse], error) {
+func (s *Service) ListUsers(ctx context.Context, req *connect.Request[reevev1.ListUsersRequest]) (*connect.Response[reevev1.ListUsersResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -178,14 +178,14 @@ func (s *Service) ListUsers(ctx context.Context, req *connect.Request[clarkv1.Li
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*clarkv1.User, 0, len(users))
+	out := make([]*reevev1.User, 0, len(users))
 	for _, u := range users {
 		out = append(out, storeUserToProto(u))
 	}
-	return connect.NewResponse(&clarkv1.ListUsersResponse{Users: out}), nil
+	return connect.NewResponse(&reevev1.ListUsersResponse{Users: out}), nil
 }
 
-func (s *Service) GetUser(ctx context.Context, req *connect.Request[clarkv1.GetUserRequest]) (*connect.Response[clarkv1.GetUserResponse], error) {
+func (s *Service) GetUser(ctx context.Context, req *connect.Request[reevev1.GetUserRequest]) (*connect.Response[reevev1.GetUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -200,10 +200,10 @@ func (s *Service) GetUser(ctx context.Context, req *connect.Request[clarkv1.GetU
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.GetUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&reevev1.GetUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[clarkv1.UpdateUserRequest]) (*connect.Response[clarkv1.UpdateUserResponse], error) {
+func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[reevev1.UpdateUserRequest]) (*connect.Response[reevev1.UpdateUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -237,10 +237,10 @@ func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[clarkv1.U
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.UpdateUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&reevev1.UpdateUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[clarkv1.DeleteUserRequest]) (*connect.Response[clarkv1.DeleteUserResponse], error) {
+func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[reevev1.DeleteUserRequest]) (*connect.Response[reevev1.DeleteUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -255,10 +255,10 @@ func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[clarkv1.D
 	if err := s.queries.DeleteUser(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.DeleteUserResponse{}), nil
+	return connect.NewResponse(&reevev1.DeleteUserResponse{}), nil
 }
 
-func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[clarkv1.AdminResetPasswordRequest]) (*connect.Response[clarkv1.AdminResetPasswordResponse], error) {
+func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[reevev1.AdminResetPasswordRequest]) (*connect.Response[reevev1.AdminResetPasswordResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[c
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.AdminResetPasswordResponse{}), nil
+	return connect.NewResponse(&reevev1.AdminResetPasswordResponse{}), nil
 }
 
 // --- helpers ---
@@ -292,8 +292,8 @@ func requireAdmin(ctx context.Context) error {
 	return nil
 }
 
-func storeUserToProto(u store.User) *clarkv1.User {
-	return &clarkv1.User{
+func storeUserToProto(u store.User) *reevev1.User {
+	return &reevev1.User{
 		Id:          u.ID.String(),
 		Username:    u.Username,
 		DisplayName: u.DisplayName,
@@ -303,8 +303,8 @@ func storeUserToProto(u store.User) *clarkv1.User {
 	}
 }
 
-func userToProto(u User) *clarkv1.User {
-	return &clarkv1.User{
+func userToProto(u User) *reevev1.User {
+	return &reevev1.User{
 		Id:          u.ID.String(),
 		Username:    u.Username,
 		DisplayName: u.DisplayName,

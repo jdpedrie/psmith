@@ -24,7 +24,7 @@ public enum TestSession {
         let username = "\(usernamePrefix)-\(UUID().uuidString.prefix(8))".lowercased()
         let password = "test-password-\(UUID().uuidString.prefix(8))"
 
-        var req = Clark_V1_CreateUserRequest()
+        var req = Reeve_V1_CreateUserRequest()
         req.username = username
         req.password = password
         req.isAdmin = false
@@ -49,7 +49,7 @@ public enum TestSession {
         let unauthRaw = await makeRawAuthClient(
             server: server, withSessionFromTokenStore: nil
         )
-        var loginReq = Clark_V1_LoginRequest()
+        var loginReq = Reeve_V1_LoginRequest()
         loginReq.username = server.adminUsername
         loginReq.password = server.adminPassword
         let resp = await unauthRaw.login(request: loginReq, headers: [:])
@@ -108,7 +108,7 @@ public enum TestSession {
     private static func makeRawAuthClient(
         server: TestClarkdServer,
         withSessionFromTokenStore tokenStore: TokenStore?
-    ) async -> Clark_V1_AuthServiceClient {
+    ) async -> Reeve_V1_AuthServiceClient {
         var interceptors: [InterceptorFactory] = []
         if let tokenStore {
             let authState = await MainActor.run { AuthState() }
@@ -122,18 +122,18 @@ public enum TestSession {
             interceptors: interceptors
         )
         let proto = ProtocolClient(httpClient: URLSessionHTTPClient(), config: config)
-        return Clark_V1_AuthServiceClient(client: proto)
+        return Reeve_V1_AuthServiceClient(client: proto)
     }
 }
 
 /// An admin-authenticated session: both a `ClarkClient` (for repository-shaped
-/// operations) and a raw generated `Clark_V1_AuthServiceClient` (for admin
+/// operations) and a raw generated `Reeve_V1_AuthServiceClient` (for admin
 /// RPCs like `CreateUser` that aren't on the public AuthRepository surface).
 public final class AdminHandle: Sendable {
     public let clarkClient: ClarkClient
-    public let rawAuthClient: Clark_V1_AuthServiceClient
+    public let rawAuthClient: Reeve_V1_AuthServiceClient
 
-    init(clarkClient: ClarkClient, rawAuthClient: Clark_V1_AuthServiceClient) {
+    init(clarkClient: ClarkClient, rawAuthClient: Reeve_V1_AuthServiceClient) {
         self.clarkClient = clarkClient
         self.rawAuthClient = rawAuthClient
     }

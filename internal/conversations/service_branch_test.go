@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 )
@@ -58,7 +58,7 @@ func TestSetCurrentLeaf_UpdatesCursor(t *testing.T) {
 	parent := f.systemMsgID
 	other := insertMessage(t, q, f.contextID, &parent, "user", "hello")
 
-	resp, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	resp, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: other.ID.String(),
 	}))
@@ -89,7 +89,7 @@ func TestSetCurrentLeaf_ClearsCursor(t *testing.T) {
 		t.Fatalf("UpdateContextCurrentLeaf: %v", err)
 	}
 
-	resp, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	resp, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: "",
 	}))
@@ -115,7 +115,7 @@ func TestSetCurrentLeaf_MessageInDifferentContext(t *testing.T) {
 	other := insertContext(t, q, f.conv.ID, time.Now().UTC().Add(-time.Hour), nil)
 	stray := insertMessage(t, q, other.ID, nil, "user", "stray")
 
-	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: stray.ID.String(),
 	}))
@@ -129,7 +129,7 @@ func TestSetCurrentLeaf_MessageNotFound(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 
 	missing := uuid.New().String()
-	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: missing,
 	}))
@@ -146,7 +146,7 @@ func TestSetCurrentLeaf_CrossUserContext(t *testing.T) {
 	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
 		ID: bid, Username: "bob-" + t.Name(), PasswordHash: "x",
 	})
-	_, err := svc.SetCurrentLeaf(ctxAsUser(bob), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	_, err := svc.SetCurrentLeaf(ctxAsUser(bob), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: f.systemMsgID.String(),
 	}))
@@ -177,7 +177,7 @@ func TestSendMessage_HonorsCurrentLeafCursor(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "next",
 		ProviderId:     &pid,
@@ -220,7 +220,7 @@ func TestSendMessage_FallbackWhenNoCursor(t *testing.T) {
 	// back to that system message via the latest-by-created_at rule.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -255,7 +255,7 @@ func TestSendMessage_ExplicitParentBeatsCursor(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	bID := b.ID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &bID,
 		Content:         "fork to B",
@@ -278,7 +278,7 @@ func TestSetCurrentLeaf_InvalidContextID(t *testing.T) {
 	driverType := registerFakeDriver(t, "leaf-bad-cx", nil, nil)
 	f := seedSendable(t, q, driverType)
 
-	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: "not-a-uuid",
 		MessageId: f.systemMsgID.String(),
 	}))
@@ -291,7 +291,7 @@ func TestSetCurrentLeaf_InvalidMessageID(t *testing.T) {
 	driverType := registerFakeDriver(t, "leaf-bad-mid", nil, nil)
 	f := seedSendable(t, q, driverType)
 
-	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SetCurrentLeafRequest{
+	_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&reevev1.SetCurrentLeafRequest{
 		ContextId: f.contextID.String(),
 		MessageId: "not-a-uuid",
 	}))
@@ -316,7 +316,7 @@ func TestActivateContext_PreservesCurrentLeaf(t *testing.T) {
 	}
 	_ = insertContext(t, q, f.conv.ID, time.Now().UTC().Add(time.Hour), nil)
 
-	resp, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ActivateContextRequest{
+	resp, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.ActivateContextRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -349,7 +349,7 @@ func TestListMessages_SiblingCountPopulated(t *testing.T) {
 	a1 := insertMessage(t, q, f.contextID, &a.ID, "user", "a1")
 
 	leaf := a1.ID.String()
-	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -393,7 +393,7 @@ func TestListMessages_NoLeafWalksAncestorChain(t *testing.T) {
 
 	// No leaf supplied — service must find "c" as the natural leaf and return
 	// the full chain root-first.
-	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -491,7 +491,7 @@ func TestCompact_StageOnlyMaterializesSummary(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "tell me a story")
 
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -524,7 +524,7 @@ func TestCompact_StageOnlyMaterializesSummary(t *testing.T) {
 	// summary is promoted or deleted.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "next",
 		ProviderId:     &pid,

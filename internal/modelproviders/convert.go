@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/providers"
@@ -37,8 +37,8 @@ var knownStatefulTypes = map[string]bool{
 }
 
 // storeProviderToProto maps a store row to its proto shape.
-func storeProviderToProto(p store.UserModelProvider) *clarkv1.UserModelProvider {
-	out := &clarkv1.UserModelProvider{
+func storeProviderToProto(p store.UserModelProvider) *reevev1.UserModelProvider {
+	out := &reevev1.UserModelProvider{
 		Id:          p.ID.String(),
 		Type:        p.Type,
 		Label:       p.Label,
@@ -54,8 +54,8 @@ func storeProviderToProto(p store.UserModelProvider) *clarkv1.UserModelProvider 
 }
 
 // storeUserModelToProto maps a store user_models row to its proto shape.
-func storeUserModelToProto(m store.UserModel) *clarkv1.UserModel {
-	out := &clarkv1.UserModel{
+func storeUserModelToProto(m store.UserModel) *reevev1.UserModel {
+	out := &reevev1.UserModel{
 		UserModelProviderId: m.UserModelProviderID.String(),
 		ModelId:             m.ModelID,
 		DisplayName:         m.DisplayName,
@@ -83,11 +83,11 @@ func storeUserModelToProto(m store.UserModel) *clarkv1.UserModel {
 	return out
 }
 
-func pricingFromCols(in, out, cr, cw *float64) *clarkv1.ModelPricing {
+func pricingFromCols(in, out, cr, cw *float64) *reevev1.ModelPricing {
 	if in == nil && out == nil && cr == nil && cw == nil {
 		return nil
 	}
-	return &clarkv1.ModelPricing{
+	return &reevev1.ModelPricing{
 		InputPerMillionTokens:      in,
 		OutputPerMillionTokens:     out,
 		CacheReadPerMillionTokens:  cr,
@@ -95,7 +95,7 @@ func pricingFromCols(in, out, cr, cw *float64) *clarkv1.ModelPricing {
 	}
 }
 
-func capabilitiesFromJSON(b []byte) *clarkv1.ModelCapabilities {
+func capabilitiesFromJSON(b []byte) *reevev1.ModelCapabilities {
 	var c modelmeta.Capabilities
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil
@@ -103,8 +103,8 @@ func capabilitiesFromJSON(b []byte) *clarkv1.ModelCapabilities {
 	return capabilitiesToProto(c)
 }
 
-func capabilitiesToProto(c modelmeta.Capabilities) *clarkv1.ModelCapabilities {
-	return &clarkv1.ModelCapabilities{
+func capabilitiesToProto(c modelmeta.Capabilities) *reevev1.ModelCapabilities {
+	return &reevev1.ModelCapabilities{
 		Streaming:     c.Streaming,
 		Thinking:      c.Thinking,
 		ToolUse:       c.ToolUse,
@@ -113,8 +113,8 @@ func capabilitiesToProto(c modelmeta.Capabilities) *clarkv1.ModelCapabilities {
 	}
 }
 
-func providerCapsToProto(c providers.ModelCapabilities) *clarkv1.ModelCapabilities {
-	return &clarkv1.ModelCapabilities{
+func providerCapsToProto(c providers.ModelCapabilities) *reevev1.ModelCapabilities {
+	return &reevev1.ModelCapabilities{
 		Streaming:     c.Streaming,
 		Thinking:      c.Thinking,
 		ToolUse:       c.ToolUse,
@@ -127,7 +127,7 @@ func providerCapsToProto(c providers.ModelCapabilities) *clarkv1.ModelCapabiliti
 // `user_models.default_settings` (or `user_model_providers.default_settings`)
 // back into a proto CallSettings. The blob is protojson — see
 // profiles.MarshalCallSettings — so we delegate to that codec.
-func callSettingsFromJSON(b []byte) *clarkv1.CallSettings {
+func callSettingsFromJSON(b []byte) *reevev1.CallSettings {
 	if len(b) == 0 {
 		return nil
 	}
@@ -152,8 +152,8 @@ func encodeCallSettings(s providers.CallSettings) ([]byte, error) {
 // callSettingsToProto converts a driver-side CallSettings to the proto type.
 // Returns nil when every field is unset — so callers can skip persisting an
 // empty blob entirely.
-func callSettingsToProto(s providers.CallSettings) *clarkv1.CallSettings {
-	out := &clarkv1.CallSettings{
+func callSettingsToProto(s providers.CallSettings) *reevev1.CallSettings {
+	out := &reevev1.CallSettings{
 		Temperature: s.Temperature,
 		TopP:        s.TopP,
 	}
@@ -169,7 +169,7 @@ func callSettingsToProto(s providers.CallSettings) *clarkv1.CallSettings {
 		out.StopSequences = append([]string(nil), s.StopSequences...)
 	}
 	if t := s.Thinking; t != nil {
-		ts := &clarkv1.ThinkingSettings{Enabled: t.Enabled}
+		ts := &reevev1.ThinkingSettings{Enabled: t.Enabled}
 		if t.BudgetTokens != nil {
 			v := int32(*t.BudgetTokens)
 			ts.BudgetTokens = &v
@@ -186,7 +186,7 @@ func callSettingsToProto(s providers.CallSettings) *clarkv1.CallSettings {
 
 // isCallSettingsEmpty returns true when every field on the proto is unset.
 // Helps the encode path skip writing a useless `{}` blob.
-func isCallSettingsEmpty(cs *clarkv1.CallSettings) bool {
+func isCallSettingsEmpty(cs *reevev1.CallSettings) bool {
 	if cs == nil {
 		return true
 	}
@@ -195,35 +195,35 @@ func isCallSettingsEmpty(cs *clarkv1.CallSettings) bool {
 		cs.Thinking == nil && cs.Anthropic == nil && cs.Openai == nil && cs.Google == nil
 }
 
-func stringToMetadataSourceEnum(s string) clarkv1.MetadataSource {
+func stringToMetadataSourceEnum(s string) reevev1.MetadataSource {
 	switch modelmeta.Source(s) {
 	case modelmeta.SourceCatalog:
-		return clarkv1.MetadataSource_METADATA_SOURCE_CATALOG
+		return reevev1.MetadataSource_METADATA_SOURCE_CATALOG
 	case modelmeta.SourceDriver:
-		return clarkv1.MetadataSource_METADATA_SOURCE_DRIVER
+		return reevev1.MetadataSource_METADATA_SOURCE_DRIVER
 	case modelmeta.SourceManual:
-		return clarkv1.MetadataSource_METADATA_SOURCE_MANUAL
+		return reevev1.MetadataSource_METADATA_SOURCE_MANUAL
 	}
-	return clarkv1.MetadataSource_METADATA_SOURCE_UNSPECIFIED
+	return reevev1.MetadataSource_METADATA_SOURCE_UNSPECIFIED
 }
 
 // catalogModelToDiscovered builds a DiscoveredModel from a catalog Model.
 // Used by the catalog-driven discovery path (every provider with a
 // `catalog_provider_id`); pricing/context/etc come straight from the
 // curated catalog so the user picks from a metadata-rich list.
-func catalogModelToDiscovered(m *modelmeta.Model, alreadyEnabled bool) *clarkv1.DiscoveredModel {
-	out := &clarkv1.DiscoveredModel{
+func catalogModelToDiscovered(m *modelmeta.Model, alreadyEnabled bool) *reevev1.DiscoveredModel {
+	out := &reevev1.DiscoveredModel{
 		ModelId:        m.ID,
 		DisplayName:    m.DisplayName,
 		Modalities:     m.Modalities,
-		Capabilities: &clarkv1.ModelCapabilities{
+		Capabilities: &reevev1.ModelCapabilities{
 			Streaming:     m.Capabilities.Streaming,
 			Thinking:      m.Capabilities.Thinking,
 			ToolUse:       m.Capabilities.ToolUse,
 			Vision:        m.Capabilities.Vision,
 			PromptCaching: m.Capabilities.PromptCaching,
 		},
-		MetadataSource: clarkv1.MetadataSource_METADATA_SOURCE_CATALOG,
+		MetadataSource: reevev1.MetadataSource_METADATA_SOURCE_CATALOG,
 		AlreadyEnabled: alreadyEnabled,
 	}
 	if m.ContextWindow > 0 {
@@ -246,8 +246,8 @@ func catalogModelToDiscovered(m *modelmeta.Model, alreadyEnabled bool) *clarkv1.
 }
 
 // providerModelToDiscovered builds a DiscoveredModel from a providers.Model.
-func providerModelToDiscovered(m providers.Model, alreadyEnabled bool) *clarkv1.DiscoveredModel {
-	out := &clarkv1.DiscoveredModel{
+func providerModelToDiscovered(m providers.Model, alreadyEnabled bool) *reevev1.DiscoveredModel {
+	out := &reevev1.DiscoveredModel{
 		ModelId:        m.ID,
 		DisplayName:    m.DisplayName,
 		Modalities:     m.Modalities,
@@ -274,23 +274,23 @@ func providerModelToDiscovered(m providers.Model, alreadyEnabled bool) *clarkv1.
 	return out
 }
 
-func sourceToEnum(s modelmeta.Source) clarkv1.MetadataSource {
+func sourceToEnum(s modelmeta.Source) reevev1.MetadataSource {
 	switch s {
 	case modelmeta.SourceCatalog:
-		return clarkv1.MetadataSource_METADATA_SOURCE_CATALOG
+		return reevev1.MetadataSource_METADATA_SOURCE_CATALOG
 	case modelmeta.SourceDriver:
-		return clarkv1.MetadataSource_METADATA_SOURCE_DRIVER
+		return reevev1.MetadataSource_METADATA_SOURCE_DRIVER
 	case modelmeta.SourceManual:
-		return clarkv1.MetadataSource_METADATA_SOURCE_MANUAL
+		return reevev1.MetadataSource_METADATA_SOURCE_MANUAL
 	}
-	return clarkv1.MetadataSource_METADATA_SOURCE_DRIVER
+	return reevev1.MetadataSource_METADATA_SOURCE_DRIVER
 }
 
-func pricingToProto(in, out, cr, cw float64) *clarkv1.ModelPricing {
+func pricingToProto(in, out, cr, cw float64) *reevev1.ModelPricing {
 	if in == 0 && out == 0 && cr == 0 && cw == 0 {
 		return nil
 	}
-	p := &clarkv1.ModelPricing{}
+	p := &reevev1.ModelPricing{}
 	if in != 0 {
 		v := in
 		p.InputPerMillionTokens = &v

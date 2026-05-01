@@ -23,21 +23,21 @@ public final class ClarkClient: Sendable {
             config: config
         )
         self.auth = AuthRepository(
-            client: Clark_V1_AuthServiceClient(client: protocolClient),
+            client: Reeve_V1_AuthServiceClient(client: protocolClient),
             tokenStore: tokenStore,
             authState: authState
         )
         self.conversations = ConversationsRepository(
-            client: Clark_V1_ConversationsServiceClient(client: protocolClient)
+            client: Reeve_V1_ConversationsServiceClient(client: protocolClient)
         )
         self.profiles = ProfilesRepository(
-            client: Clark_V1_ProfilesServiceClient(client: protocolClient)
+            client: Reeve_V1_ProfilesServiceClient(client: protocolClient)
         )
         self.streams = StreamSubscriber(
-            client: Clark_V1_StreamsServiceClient(client: protocolClient)
+            client: Reeve_V1_StreamsServiceClient(client: protocolClient)
         )
         self.modelProviders = ModelProvidersRepository(
-            client: Clark_V1_ModelProvidersServiceClient(client: protocolClient)
+            client: Reeve_V1_ModelProvidersServiceClient(client: protocolClient)
         )
     }
 }

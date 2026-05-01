@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/history"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
@@ -36,13 +36,13 @@ import (
 // client requests.
 const MaxListPageSize = 100
 
-// Service implements clarkv1connect.ConversationsServiceHandler.
+// Service implements reevev1connect.ConversationsServiceHandler.
 //
 // catalog, supervisor, logger may be nil when only CRUD is exercised
 // (e.g., older tests). SendMessage / Compact require all three plus pool
 // (for the per-context-row lock that serializes concurrent sends).
 type Service struct {
-	clarkv1connect.UnimplementedConversationsServiceHandler
+	reevev1connect.UnimplementedConversationsServiceHandler
 	queries    *store.Queries
 	pool       *pgxpool.Pool
 	catalog    modelmeta.Catalog
@@ -71,7 +71,7 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 
 // --- CreateConversation ---
 
-func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[clarkv1.CreateConversationRequest]) (*connect.Response[clarkv1.CreateConversationResponse], error) {
+func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[reevev1.CreateConversationRequest]) (*connect.Response[reevev1.CreateConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	profileID, err := uuid.Parse(req.Msg.ProfileId)
@@ -148,7 +148,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[c
 	}
 
 	// Snapshot seed messages from the resolved profile.
-	seeds := make([]*clarkv1.Message, 0, 2)
+	seeds := make([]*reevev1.Message, 0, 2)
 	var systemMsgID *uuid.UUID
 	if resolved.SystemMessage != nil && *resolved.SystemMessage != "" {
 		id, err := uuid.NewV7()
@@ -194,7 +194,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[c
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.CreateConversationResponse{
+	return connect.NewResponse(&reevev1.CreateConversationResponse{
 		Conversation:   convoProto,
 		InitialContext: contextToProto(contextRow),
 		SeedMessages:   seeds,
@@ -203,7 +203,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[c
 
 // --- ListConversations ---
 
-func (s *Service) ListConversations(ctx context.Context, req *connect.Request[clarkv1.ListConversationsRequest]) (*connect.Response[clarkv1.ListConversationsResponse], error) {
+func (s *Service) ListConversations(ctx context.Context, req *connect.Request[reevev1.ListConversationsRequest]) (*connect.Response[reevev1.ListConversationsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	var titleQuery *string
@@ -228,7 +228,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[cl
 	}
 	var rows []row
 	switch req.Msg.GetOrder() {
-	case clarkv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
+	case reevev1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
 		raw, err := s.queries.ListConversationsByUserRecentlyCreated(ctx, store.ListConversationsByUserRecentlyCreatedParams{
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
@@ -278,7 +278,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[cl
 		rows = rows[:limit]
 	}
 
-	out := make([]*clarkv1.Conversation, 0, len(rows))
+	out := make([]*reevev1.Conversation, 0, len(rows))
 	for _, r := range rows {
 		// active_context_id is left empty in list responses — clients can
 		// fetch the full conversation via GetConversation when they need it.
@@ -289,12 +289,12 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[cl
 		}
 		out = append(out, p)
 	}
-	return connect.NewResponse(&clarkv1.ListConversationsResponse{Conversations: out}), nil
+	return connect.NewResponse(&reevev1.ListConversationsResponse{Conversations: out}), nil
 }
 
 // --- GetConversation ---
 
-func (s *Service) GetConversation(ctx context.Context, req *connect.Request[clarkv1.GetConversationRequest]) (*connect.Response[clarkv1.GetConversationResponse], error) {
+func (s *Service) GetConversation(ctx context.Context, req *connect.Request[reevev1.GetConversationRequest]) (*connect.Response[reevev1.GetConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -321,7 +321,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[clar
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.GetConversationResponse{
+	return connect.NewResponse(&reevev1.GetConversationResponse{
 		Conversation:  convoProto,
 		ActiveContext: contextToProto(active),
 	}), nil
@@ -329,7 +329,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[clar
 
 // --- UpdateConversation ---
 
-func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[clarkv1.UpdateConversationRequest]) (*connect.Response[clarkv1.UpdateConversationResponse], error) {
+func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[reevev1.UpdateConversationRequest]) (*connect.Response[reevev1.UpdateConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -382,12 +382,12 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[c
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.UpdateConversationResponse{Conversation: proto}), nil
+	return connect.NewResponse(&reevev1.UpdateConversationResponse{Conversation: proto}), nil
 }
 
 // --- DeleteConversation ---
 
-func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[clarkv1.DeleteConversationRequest]) (*connect.Response[clarkv1.DeleteConversationResponse], error) {
+func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[reevev1.DeleteConversationRequest]) (*connect.Response[reevev1.DeleteConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -403,12 +403,12 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[c
 	if err := s.queries.DeleteConversation(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.DeleteConversationResponse{}), nil
+	return connect.NewResponse(&reevev1.DeleteConversationResponse{}), nil
 }
 
 // --- ListContexts ---
 
-func (s *Service) ListContexts(ctx context.Context, req *connect.Request[clarkv1.ListContextsRequest]) (*connect.Response[clarkv1.ListContextsResponse], error) {
+func (s *Service) ListContexts(ctx context.Context, req *connect.Request[reevev1.ListContextsRequest]) (*connect.Response[reevev1.ListContextsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	convoID, err := uuid.Parse(req.Msg.ConversationId)
@@ -423,16 +423,16 @@ func (s *Service) ListContexts(ctx context.Context, req *connect.Request[clarkv1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*clarkv1.Context, 0, len(rows))
+	out := make([]*reevev1.Context, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, listContextRowToProto(r))
 	}
-	return connect.NewResponse(&clarkv1.ListContextsResponse{Contexts: out}), nil
+	return connect.NewResponse(&reevev1.ListContextsResponse{Contexts: out}), nil
 }
 
 // --- ActivateContext ---
 
-func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[clarkv1.ActivateContextRequest]) (*connect.Response[clarkv1.ActivateContextResponse], error) {
+func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[reevev1.ActivateContextRequest]) (*connect.Response[reevev1.ActivateContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.ContextId)
@@ -454,7 +454,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[clar
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.ActivateContextResponse{Context: contextToProto(updated)}), nil
+	return connect.NewResponse(&reevev1.ActivateContextResponse{Context: contextToProto(updated)}), nil
 }
 
 // --- SetCurrentLeaf ---
@@ -467,7 +467,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[clar
 //
 // Pass message_id == "" to clear the cursor (next SendMessage falls back to
 // latest by created_at).
-func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[clarkv1.SetCurrentLeafRequest]) (*connect.Response[clarkv1.SetCurrentLeafResponse], error) {
+func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[reevev1.SetCurrentLeafRequest]) (*connect.Response[reevev1.SetCurrentLeafResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	cxID, err := uuid.Parse(req.Msg.ContextId)
@@ -510,7 +510,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[clark
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
+	return connect.NewResponse(&reevev1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
 }
 
 // --- UpdateContext ---
@@ -518,7 +518,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[clark
 // UpdateContext edits a context's mutable metadata. Currently just `title`.
 // Replace semantics: nil leaves alone, non-nil sets (empty string clears).
 // Conversation-lock applies (no in-flight stream).
-func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[clarkv1.UpdateContextRequest]) (*connect.Response[clarkv1.UpdateContextResponse], error) {
+func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[reevev1.UpdateContextRequest]) (*connect.Response[reevev1.UpdateContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	cxID, err := uuid.Parse(req.Msg.ContextId)
@@ -547,12 +547,12 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[clarkv
 		cxRow.Title = title
 	}
 
-	return connect.NewResponse(&clarkv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
+	return connect.NewResponse(&reevev1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
 }
 
 // --- ListMessages ---
 
-func (s *Service) ListMessages(ctx context.Context, req *connect.Request[clarkv1.ListMessagesRequest]) (*connect.Response[clarkv1.ListMessagesResponse], error) {
+func (s *Service) ListMessages(ctx context.Context, req *connect.Request[reevev1.ListMessagesRequest]) (*connect.Response[reevev1.ListMessagesResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	contextID, err := uuid.Parse(req.Msg.ContextId)
@@ -579,13 +579,13 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[clarkv1
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		out := make([]*clarkv1.Message, 0, len(all))
+		out := make([]*reevev1.Message, 0, len(all))
 		for _, m := range all {
 			proto := messageToProto(m)
 			applyDisplay(proto, pipeline)
 			out = append(out, proto)
 		}
-		return connect.NewResponse(&clarkv1.ListMessagesResponse{Messages: out}), nil
+		return connect.NewResponse(&reevev1.ListMessagesResponse{Messages: out}), nil
 	}
 
 	// Resolve the leaf to walk the ancestor chain from. Priority:
@@ -621,7 +621,7 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[clarkv1
 		leaf, err := s.queries.GetContextLeafMessage(ctx, contextID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return connect.NewResponse(&clarkv1.ListMessagesResponse{}), nil
+				return connect.NewResponse(&reevev1.ListMessagesResponse{}), nil
 			}
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
@@ -632,18 +632,18 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[clarkv1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*clarkv1.Message, 0, len(rows))
+	out := make([]*reevev1.Message, 0, len(rows))
 	for _, r := range rows {
 		proto := chainRowToProto(r)
 		applyDisplay(proto, pipeline)
 		out = append(out, proto)
 	}
-	return connect.NewResponse(&clarkv1.ListMessagesResponse{Messages: out}), nil
+	return connect.NewResponse(&reevev1.ListMessagesResponse{Messages: out}), nil
 }
 
 // --- GetMessage ---
 
-func (s *Service) GetMessage(ctx context.Context, req *connect.Request[clarkv1.GetMessageRequest]) (*connect.Response[clarkv1.GetMessageResponse], error) {
+func (s *Service) GetMessage(ctx context.Context, req *connect.Request[reevev1.GetMessageRequest]) (*connect.Response[reevev1.GetMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -673,7 +673,7 @@ func (s *Service) GetMessage(ctx context.Context, req *connect.Request[clarkv1.G
 	}
 	proto := messageToProto(msg)
 	applyDisplay(proto, pipeline)
-	return connect.NewResponse(&clarkv1.GetMessageResponse{Message: proto}), nil
+	return connect.NewResponse(&reevev1.GetMessageResponse{Message: proto}), nil
 }
 
 // --- helpers ---
@@ -727,7 +727,7 @@ func (s *Service) fetchOwnedContext(ctx context.Context, id, userID uuid.UUID) (
 
 // SendMessage initiates a turn. Synchronously creates the user message and the
 // stream_run, then returns. Client subscribes to the stream via StreamsService.
-func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.SendMessageRequest]) (*connect.Response[clarkv1.SendMessageResponse], error) {
+func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.SendMessageRequest]) (*connect.Response[reevev1.SendMessageResponse], error) {
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires supervisor + catalog dependencies"))
 	}
@@ -1060,7 +1060,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 
 	userProto := messageToProto(userMsgRow)
 	applyDisplay(userProto, pipeline)
-	return connect.NewResponse(&clarkv1.SendMessageResponse{
+	return connect.NewResponse(&reevev1.SendMessageResponse{
 		UserMessage: userProto,
 		StreamRun:   streamRunToProto(runRow),
 	}), nil
@@ -1068,7 +1068,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 
 // resolveProviderModel walks the per-turn → conversation → profile chain to
 // determine which provider/model to use. Both ids must be set together.
-func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversation, msg *clarkv1.SendMessageRequest) (uuid.UUID, string, error) {
+func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversation, msg *reevev1.SendMessageRequest) (uuid.UUID, string, error) {
 	// Per-turn override.
 	if msg.ProviderId != nil || msg.ModelId != nil {
 		if msg.ProviderId == nil || msg.ModelId == nil {
@@ -1083,7 +1083,7 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 
 	// Conversation settings.
 	if conv.Settings != nil {
-		var settings clarkv1.ConversationSettings
+		var settings reevev1.ConversationSettings
 		if err := json.Unmarshal(conv.Settings, &settings); err == nil {
 			if settings.DefaultProviderId != nil && settings.DefaultModelId != nil {
 				pid, err := uuid.Parse(*settings.DefaultProviderId)
@@ -1104,7 +1104,7 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 		return uuid.Nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
 	}
 	if resolved.DefaultSettings != nil {
-		var defaults clarkv1.ProfileDefaults
+		var defaults reevev1.ProfileDefaults
 		if err := json.Unmarshal(resolved.DefaultSettings, &defaults); err == nil {
 			if defaults.DefaultProviderId != nil && defaults.DefaultModelId != nil {
 				pid, err := uuid.Parse(*defaults.DefaultProviderId)
@@ -1122,7 +1122,7 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 // resolveIncludeThinking walks conversation settings → profile defaults, default false.
 func (s *Service) resolveIncludeThinking(ctx context.Context, conv store.Conversation) bool {
 	if conv.Settings != nil {
-		var settings clarkv1.ConversationSettings
+		var settings reevev1.ConversationSettings
 		if err := json.Unmarshal(conv.Settings, &settings); err == nil && settings.IncludeThinkingInHistory != nil {
 			return *settings.IncludeThinkingInHistory
 		}
@@ -1136,7 +1136,7 @@ func (s *Service) resolveIncludeThinking(ctx context.Context, conv store.Convers
 		return false
 	}
 	if resolved.DefaultSettings != nil {
-		var defaults clarkv1.ProfileDefaults
+		var defaults reevev1.ProfileDefaults
 		if err := json.Unmarshal(resolved.DefaultSettings, &defaults); err == nil && defaults.IncludeThinkingInHistory != nil {
 			return *defaults.IncludeThinkingInHistory
 		}
@@ -1201,7 +1201,7 @@ func (s *Service) resolveParent(ctx context.Context, q *store.Queries, activeCtx
 // `user_models.default_settings` (the model layer of the resolution chain)
 // into a proto CallSettings. Returns nil for an empty/invalid blob — the
 // model layer contributes nothing in that case.
-func decodeCallSettingsBytes(b []byte) *clarkv1.CallSettings {
+func decodeCallSettingsBytes(b []byte) *reevev1.CallSettings {
 	if len(b) == 0 {
 		return nil
 	}
@@ -1215,7 +1215,7 @@ func decodeCallSettingsBytes(b []byte) *clarkv1.CallSettings {
 // loadProviderDefaultSettings loads the bottom-of-chain provider-level
 // CallSettings from `user_model_providers.default_settings`. Returns
 // (nil, nil) when the column is NULL — that layer contributes nothing.
-func (s *Service) loadProviderDefaultSettings(ctx context.Context, providerID uuid.UUID) (*clarkv1.CallSettings, error) {
+func (s *Service) loadProviderDefaultSettings(ctx context.Context, providerID uuid.UUID) (*reevev1.CallSettings, error) {
 	prov, err := s.queries.GetUserModelProvider(ctx, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("load provider %s: %w", providerID, err)
@@ -1281,7 +1281,7 @@ func (s *Service) assembleCallSettings(
 // extractProfileCallSettings pulls the call_settings sub-object out of a
 // profile's default_settings JSONB blob. Returns nil for an empty blob or
 // missing field — that layer contributes nothing to the merge.
-func extractProfileCallSettings(blob []byte) *clarkv1.CallSettings {
+func extractProfileCallSettings(blob []byte) *reevev1.CallSettings {
 	if len(blob) == 0 {
 		return nil
 	}
@@ -1307,11 +1307,11 @@ func extractProfileCallSettings(blob []byte) *clarkv1.CallSettings {
 // proto's optional-field presence rules.
 var conversationSettingsExtractUnmarshaller = protojson.UnmarshalOptions{DiscardUnknown: true}
 
-func extractConversationCallSettings(blob []byte) *clarkv1.CallSettings {
+func extractConversationCallSettings(blob []byte) *reevev1.CallSettings {
 	if len(blob) == 0 {
 		return nil
 	}
-	var settings clarkv1.ConversationSettings
+	var settings reevev1.ConversationSettings
 	if err := conversationSettingsExtractUnmarshaller.Unmarshal(blob, &settings); err != nil {
 		return nil
 	}
@@ -1321,7 +1321,7 @@ func extractConversationCallSettings(blob []byte) *clarkv1.CallSettings {
 // protoCallSettingsToProvider converts a proto CallSettings (the wire/storage
 // shape) into the driver-side struct (what providers.SendRequest carries).
 // Drivers pluck whatever subset they support; the rest is silently dropped.
-func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings {
+func protoCallSettingsToProvider(s *reevev1.CallSettings) providers.CallSettings {
 	if s == nil {
 		return providers.CallSettings{}
 	}
@@ -1407,44 +1407,44 @@ func protoCallSettingsToProvider(s *clarkv1.CallSettings) providers.CallSettings
 	return out
 }
 
-func convertProtoCacheTTL(in *clarkv1.CacheTTL) providers.CacheTTL {
+func convertProtoCacheTTL(in *reevev1.CacheTTL) providers.CacheTTL {
 	if in == nil {
 		return providers.CacheTTLUnspecified
 	}
 	switch *in {
-	case clarkv1.CacheTTL_CACHE_TTL_5M:
+	case reevev1.CacheTTL_CACHE_TTL_5M:
 		return providers.CacheTTL5m
-	case clarkv1.CacheTTL_CACHE_TTL_1H:
+	case reevev1.CacheTTL_CACHE_TTL_1H:
 		return providers.CacheTTL1h
 	}
 	return providers.CacheTTLUnspecified
 }
 
-func convertProtoServiceTier(in clarkv1.ServiceTier) providers.ServiceTier {
+func convertProtoServiceTier(in reevev1.ServiceTier) providers.ServiceTier {
 	switch in {
-	case clarkv1.ServiceTier_SERVICE_TIER_AUTO:
+	case reevev1.ServiceTier_SERVICE_TIER_AUTO:
 		return providers.ServiceTierAuto
-	case clarkv1.ServiceTier_SERVICE_TIER_STANDARD:
+	case reevev1.ServiceTier_SERVICE_TIER_STANDARD:
 		return providers.ServiceTierStandard
-	case clarkv1.ServiceTier_SERVICE_TIER_PRIORITY:
+	case reevev1.ServiceTier_SERVICE_TIER_PRIORITY:
 		return providers.ServiceTierPriority
 	}
 	return providers.ServiceTierUnspecified
 }
 
-func convertProtoResponseFormat(rf *clarkv1.ResponseFormat) *providers.ResponseFormat {
+func convertProtoResponseFormat(rf *reevev1.ResponseFormat) *providers.ResponseFormat {
 	if rf == nil {
 		return nil
 	}
 	out := &providers.ResponseFormat{}
 	switch k := rf.Kind.(type) {
-	case *clarkv1.ResponseFormat_Text:
+	case *reevev1.ResponseFormat_Text:
 		v := k.Text
 		out.Text = &v
-	case *clarkv1.ResponseFormat_JsonObject:
+	case *reevev1.ResponseFormat_JsonObject:
 		v := k.JsonObject
 		out.JSONObject = &v
-	case *clarkv1.ResponseFormat_JsonSchema:
+	case *reevev1.ResponseFormat_JsonSchema:
 		if k.JsonSchema != nil {
 			out.JSONSchema = &providers.JSONSchema{
 				Name:        k.JsonSchema.Name,
@@ -1459,19 +1459,19 @@ func convertProtoResponseFormat(rf *clarkv1.ResponseFormat) *providers.ResponseF
 	return out
 }
 
-func convertProtoHarmThreshold(in *clarkv1.HarmThreshold) *providers.HarmThreshold {
+func convertProtoHarmThreshold(in *reevev1.HarmThreshold) *providers.HarmThreshold {
 	if in == nil {
 		return nil
 	}
 	var v providers.HarmThreshold
 	switch *in {
-	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE:
+	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE:
 		v = providers.HarmThresholdBlockNone
-	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE:
+	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE:
 		v = providers.HarmThresholdBlockLowAndAbove
-	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE:
+	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE:
 		v = providers.HarmThresholdBlockMediumAndAbove
-	case clarkv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH:
+	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH:
 		v = providers.HarmThresholdBlockOnlyHigh
 	default:
 		v = providers.HarmThresholdUnspecified
@@ -1480,8 +1480,8 @@ func convertProtoHarmThreshold(in *clarkv1.HarmThreshold) *providers.HarmThresho
 }
 
 // streamRunToProto converts a store.StreamRun to its proto shape.
-func streamRunToProto(r store.StreamRun) *clarkv1.StreamRun {
-	out := &clarkv1.StreamRun{
+func streamRunToProto(r store.StreamRun) *reevev1.StreamRun {
+	out := &reevev1.StreamRun{
 		Id:                r.ID.String(),
 		ConversationId:    r.ConversationID.String(),
 		ContextId:         r.ContextID.String(),
@@ -1514,30 +1514,30 @@ func streamRunToProto(r store.StreamRun) *clarkv1.StreamRun {
 	return out
 }
 
-func statusToProto(s string) clarkv1.StreamRunStatus {
+func statusToProto(s string) reevev1.StreamRunStatus {
 	switch s {
 	case "running":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
 	case "completed":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
 	case "errored":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
 	case "cancelled":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
 	case "interrupted":
-		return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
+		return reevev1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
 	}
-	return clarkv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
+	return reevev1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
 }
 
-func purposeToProto(p string) clarkv1.StreamRunPurpose {
+func purposeToProto(p string) reevev1.StreamRunPurpose {
 	switch p {
 	case "assistant_response":
-		return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
+		return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
 	case "compression":
-		return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
+		return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
 	}
-	return clarkv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
+	return reevev1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
 }
 
 // silence "imported and not used" for the time package if helpers above don't reference it directly.
@@ -1609,7 +1609,7 @@ func (s *Service) resolvePipelineForConversation(ctx context.Context, conv store
 //     dual-writes the compression_summary message in the OLD context (with
 //     usage/cost) plus a new Context with the role=context message containing
 //     the calculated REPLACE/APPEND content.
-func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.CompactRequest]) (*connect.Response[clarkv1.CompactResponse], error) {
+func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.CompactRequest]) (*connect.Response[reevev1.CompactResponse], error) {
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Compact requires supervisor + catalog dependencies"))
 	}
@@ -1755,7 +1755,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[clarkv1.Comp
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
+	return connect.NewResponse(&reevev1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
 }
 
 // renderTranscript turns the active context's messages into a plain-text
@@ -1788,7 +1788,7 @@ func (s *Service) renderTranscript(ctx context.Context, contextID uuid.UUID) (st
 //
 // Returns Unimplemented if the destination driver doesn't satisfy
 // providers.TokenCounter (OpenAI-compat doesn't, currently).
-func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[clarkv1.CountContextTokensRequest]) (*connect.Response[clarkv1.CountContextTokensResponse], error) {
+func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[reevev1.CountContextTokensRequest]) (*connect.Response[reevev1.CountContextTokensResponse], error) {
 	if s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("CountContextTokens requires catalog dependency"))
 	}
@@ -1859,7 +1859,7 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[c
 	if enabled.ContextWindow != nil {
 		ctxWindow = *enabled.ContextWindow
 	}
-	return connect.NewResponse(&clarkv1.CountContextTokensResponse{
+	return connect.NewResponse(&reevev1.CountContextTokensResponse{
 		TokenCount:    int32(count),
 		ContextWindow: ctxWindow,
 	}), nil

@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/fakellm"
 	_ "github.com/jdpedrie/reeve/internal/providers/anthropic" // registers the real driver
 	"github.com/jdpedrie/reeve/internal/store"
@@ -38,7 +38,7 @@ func TestSendMessage_E2E_AnthropicViaFakeLLM(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jdpedrie/reeve/fakellm"
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/store"
 )
 
@@ -285,7 +285,7 @@ func TestTitle_E2E_PostCompactionContextTitle(t *testing.T) {
 	_ = waitForTitlePopulated(t, q, f.conv.ID, 3*time.Second)
 
 	// Compact + Promote.
-	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&clarkv1.CompactRequest{ConversationId: f.conv.ID.String()}))
+	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{ConversationId: f.conv.ID.String()}))
 	if err != nil {
 		t.Fatalf("Compact: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestTitle_E2E_PostCompactionContextTitle(t *testing.T) {
 	if cFinal.ResultMessageID == nil {
 		t.Fatal("compact: no summary id")
 	}
-	pResp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.PromoteCompactionToNewContextRequest{
+	pResp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.PromoteCompactionToNewContextRequest{
 		MessageId: cFinal.ResultMessageID.String(),
 	}))
 	if err != nil {
@@ -335,7 +335,7 @@ func TestUpdateContext_SetTitle(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 
 	title := "Custom Title"
-	resp, err := svc.UpdateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.UpdateContextRequest{
+	resp, err := svc.UpdateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.UpdateContextRequest{
 		ContextId: f.contextID.String(),
 		Title:     &title,
 	}))
@@ -362,7 +362,7 @@ func TestUpdateContext_ClearTitle(t *testing.T) {
 	})
 
 	empty := ""
-	if _, err := svc.UpdateContext(ctxAsUser(f.user), connect.NewRequest(&clarkv1.UpdateContextRequest{
+	if _, err := svc.UpdateContext(ctxAsUser(f.user), connect.NewRequest(&reevev1.UpdateContextRequest{
 		ContextId: f.contextID.String(),
 		Title:     &empty,
 	})); err != nil {
@@ -383,7 +383,7 @@ func TestUpdateContext_CrossUserNotFound(t *testing.T) {
 		ID: uuid.New(), Username: "bob-" + t.Name(), PasswordHash: "x",
 	})
 	title := "x"
-	_, err := svc.UpdateContext(ctxAsUser(bob), connect.NewRequest(&clarkv1.UpdateContextRequest{
+	_, err := svc.UpdateContext(ctxAsUser(bob), connect.NewRequest(&reevev1.UpdateContextRequest{
 		ContextId: f.contextID.String(), Title: &title,
 	}))
 	assertCode(t, err, connect.CodeNotFound)

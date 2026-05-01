@@ -35,7 +35,7 @@ struct AppModelTests {
         let admin = try await TestSession.adminHandle(server: server)
         let username = "appmodel-bootstrap-\(UUID().uuidString.prefix(6))".lowercased()
         let password = "p-\(UUID().uuidString.prefix(8))"
-        var req = Clark_V1_CreateUserRequest()
+        var req = Reeve_V1_CreateUserRequest()
         req.username = username
         req.password = password
         let createResp = await admin.rawAuthClient.createUser(request: req, headers: [:])
@@ -87,7 +87,7 @@ struct AppModelTests {
         let admin = try await TestSession.adminHandle(server: server)
         let username = "appmodel-idem-\(UUID().uuidString.prefix(6))".lowercased()
         let password = "p-\(UUID().uuidString.prefix(8))"
-        var req = Clark_V1_CreateUserRequest()
+        var req = Reeve_V1_CreateUserRequest()
         req.username = username
         req.password = password
         let createResp = await admin.rawAuthClient.createUser(request: req, headers: [:])
@@ -130,8 +130,8 @@ struct AppModelTests {
             codec: ProtoCodec()
         )
         let proto = ProtocolClient(httpClient: URLSessionHTTPClient(), config: config)
-        let raw = Clark_V1_AuthServiceClient(client: proto)
-        var req = Clark_V1_LoginRequest()
+        let raw = Reeve_V1_AuthServiceClient(client: proto)
+        var req = Reeve_V1_LoginRequest()
         req.username = username
         req.password = password
         let resp = await raw.login(request: req, headers: [:])

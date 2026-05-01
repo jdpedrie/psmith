@@ -121,12 +121,12 @@ public func probeClarkServer(url: URL) async -> ClarkProbeResult {
 /// the request/response message ceremony so views can call
 /// `try await repo.auth.login(username: ..., password: ...)`.
 public final class AuthRepository: Sendable {
-    private let client: Clark_V1_AuthServiceClientInterface
+    private let client: Reeve_V1_AuthServiceClientInterface
     private let tokenStore: TokenStore
     private let authState: AuthState
 
     public init(
-        client: Clark_V1_AuthServiceClientInterface,
+        client: Reeve_V1_AuthServiceClientInterface,
         tokenStore: TokenStore,
         authState: AuthState
     ) {
@@ -140,7 +140,7 @@ public final class AuthRepository: Sendable {
     /// messages. Doesn't throw — every code path resolves to one of the
     /// three cases.
     public func probe() async -> ClarkProbeResult {
-        let resp = await client.probe(request: Clark_V1_ProbeRequest(), headers: [:])
+        let resp = await client.probe(request: Reeve_V1_ProbeRequest(), headers: [:])
         if let msg = resp.message {
             return .ok(serverName: msg.server, version: msg.version)
         }
@@ -162,7 +162,7 @@ public final class AuthRepository: Sendable {
     }
 
     public func login(username: String, password: String, clientLabel: String? = nil) async throws -> ClarkUser {
-        var req = Clark_V1_LoginRequest()
+        var req = Reeve_V1_LoginRequest()
         req.username = username
         req.password = password
         if let clientLabel { req.clientLabel = clientLabel }
@@ -179,7 +179,7 @@ public final class AuthRepository: Sendable {
     }
 
     public func whoAmI() async throws -> ClarkUser {
-        let resp = await client.whoAmI(request: Clark_V1_WhoAmIRequest(), headers: [:])
+        let resp = await client.whoAmI(request: Reeve_V1_WhoAmIRequest(), headers: [:])
         guard let msg = resp.message else {
             throw map(error: resp.error) ?? ClarkError.missingPayload("whoami response")
         }
@@ -189,7 +189,7 @@ public final class AuthRepository: Sendable {
     }
 
     public func logout() async throws {
-        let resp = await client.logout(request: Clark_V1_LogoutRequest(), headers: [:])
+        let resp = await client.logout(request: Reeve_V1_LogoutRequest(), headers: [:])
         if resp.message == nil, let err = map(error: resp.error) {
             throw err
         }
@@ -228,7 +228,7 @@ public final class AuthRepository: Sendable {
 }
 
 extension ClarkUser {
-    init(from p: Clark_V1_User) {
+    init(from p: Reeve_V1_User) {
         self.init(
             id: p.id,
             username: p.username,

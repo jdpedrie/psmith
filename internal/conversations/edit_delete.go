@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/store"
@@ -26,7 +26,7 @@ func nowUTC() time.Time { return time.Now().UTC() }
 //     be transmuted into or out of)
 //   - rejected when the conversation has any in-flight stream_run
 //   - sets edited_at = NOW unconditionally
-func (s *Service) EditMessage(ctx context.Context, req *connect.Request[clarkv1.EditMessageRequest]) (*connect.Response[clarkv1.EditMessageResponse], error) {
+func (s *Service) EditMessage(ctx context.Context, req *connect.Request[reevev1.EditMessageRequest]) (*connect.Response[reevev1.EditMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -85,7 +85,7 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[clarkv1.
 	pipeline, _ := s.resolvePipelineForConversation(ctx, conv)
 	proto := messageToProto(updated)
 	applyDisplay(proto, pipeline)
-	return connect.NewResponse(&clarkv1.EditMessageResponse{Message: proto}), nil
+	return connect.NewResponse(&reevev1.EditMessageResponse{Message: proto}), nil
 }
 
 // DeleteMessage removes a message. cascade=false stitches direct children to
@@ -94,7 +94,7 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[clarkv1.
 //
 // Rejected when the conversation has any in-flight stream_run. The client is
 // responsible for confirming the destructive action (especially cascade=true).
-func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[clarkv1.DeleteMessageRequest]) (*connect.Response[clarkv1.DeleteMessageResponse], error) {
+func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[reevev1.DeleteMessageRequest]) (*connect.Response[reevev1.DeleteMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -126,7 +126,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[clarkv
 		if err := s.queries.DeleteMessageByID(ctx, id); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete (cascade): %w", err))
 		}
-		return connect.NewResponse(&clarkv1.DeleteMessageResponse{}), nil
+		return connect.NewResponse(&reevev1.DeleteMessageResponse{}), nil
 	}
 
 	// Stitch path: reparent direct children to msg.ParentID, THEN delete.
@@ -156,7 +156,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[clarkv
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	return connect.NewResponse(&clarkv1.DeleteMessageResponse{}), nil
+	return connect.NewResponse(&reevev1.DeleteMessageResponse{}), nil
 }
 
 // PromoteCompactionToNewContext is the second half of the two-stage
@@ -171,7 +171,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[clarkv
 // contexts seeded from the same summary, both becoming sequential active
 // contexts (one then the other; the latter wins). Useful as "compact and
 // branch into two directions."
-func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connect.Request[clarkv1.PromoteCompactionToNewContextRequest]) (*connect.Response[clarkv1.PromoteCompactionToNewContextResponse], error) {
+func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connect.Request[reevev1.PromoteCompactionToNewContextRequest]) (*connect.Response[reevev1.PromoteCompactionToNewContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	mid, err := uuid.Parse(req.Msg.MessageId)
@@ -290,7 +290,7 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	return connect.NewResponse(&clarkv1.PromoteCompactionToNewContextResponse{
+	return connect.NewResponse(&reevev1.PromoteCompactionToNewContextResponse{
 		Context: contextToProto(newCtx),
 	}), nil
 }
@@ -304,17 +304,17 @@ func roleEditable(role string) bool {
 // messageRoleToStorage maps the wire enum to the storage string used in the
 // messages.role CHECK constraint. Returns an error for unspecified or
 // unknown values; callers funnel that into InvalidArgument.
-func messageRoleToStorage(r clarkv1.MessageRole) (string, error) {
+func messageRoleToStorage(r reevev1.MessageRole) (string, error) {
 	switch r {
-	case clarkv1.MessageRole_MESSAGE_ROLE_SYSTEM:
+	case reevev1.MessageRole_MESSAGE_ROLE_SYSTEM:
 		return roleSystem, nil
-	case clarkv1.MessageRole_MESSAGE_ROLE_CONTEXT:
+	case reevev1.MessageRole_MESSAGE_ROLE_CONTEXT:
 		return roleContext, nil
-	case clarkv1.MessageRole_MESSAGE_ROLE_USER:
+	case reevev1.MessageRole_MESSAGE_ROLE_USER:
 		return roleUser, nil
-	case clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
+	case reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT:
 		return roleAssistant, nil
-	case clarkv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
+	case reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
 		return roleCompressionSummary, nil
 	default:
 		return "", fmt.Errorf("unspecified or unknown role")

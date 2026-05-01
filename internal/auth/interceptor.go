@@ -21,7 +21,7 @@ type Interceptor struct {
 }
 
 // NewInterceptor constructs an interceptor with the given unauthenticated
-// procedure paths (use the per-procedure constants from clarkv1connect).
+// procedure paths (use the per-procedure constants from reevev1connect).
 func NewInterceptor(queries *store.Queries, unauthenticated ...string) *Interceptor {
 	al := make(map[string]struct{}, len(unauthenticated))
 	for _, p := range unauthenticated {

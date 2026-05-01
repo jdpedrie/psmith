@@ -3,7 +3,7 @@ package profiles
 import (
 	"google.golang.org/protobuf/encoding/protojson"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 )
 
 // callSettingsMarshaller / callSettingsUnmarshaller pin a protojson config so
@@ -23,7 +23,7 @@ var (
 
 // MarshalCallSettings encodes a *CallSettings to JSONB-compatible bytes.
 // Returns (nil, nil) for nil input — the column stays NULL.
-func MarshalCallSettings(cs *clarkv1.CallSettings) ([]byte, error) {
+func MarshalCallSettings(cs *reevev1.CallSettings) ([]byte, error) {
 	if cs == nil {
 		return nil, nil
 	}
@@ -33,11 +33,11 @@ func MarshalCallSettings(cs *clarkv1.CallSettings) ([]byte, error) {
 // UnmarshalCallSettings decodes JSONB bytes back to a *CallSettings. Empty
 // input returns (nil, nil). Unknown fields are discarded so old binaries
 // gracefully read forward-compatible rows.
-func UnmarshalCallSettings(b []byte) (*clarkv1.CallSettings, error) {
+func UnmarshalCallSettings(b []byte) (*reevev1.CallSettings, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
-	var out clarkv1.CallSettings
+	var out reevev1.CallSettings
 	if err := callSettingsUnmarshaller.Unmarshal(b, &out); err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func UnmarshalCallSettings(b []byte) (*clarkv1.CallSettings, error) {
 // otherwise-empty `OpenAIExtras` block on top.
 //
 // Either argument may be nil. If both are nil the result is nil.
-func MergeCallSettings(higher, lower *clarkv1.CallSettings) *clarkv1.CallSettings {
+func MergeCallSettings(higher, lower *reevev1.CallSettings) *reevev1.CallSettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -74,7 +74,7 @@ func MergeCallSettings(higher, lower *clarkv1.CallSettings) *clarkv1.CallSetting
 		return cloneCallSettings(higher)
 	}
 
-	out := &clarkv1.CallSettings{}
+	out := &reevev1.CallSettings{}
 
 	// --- scalar fields ---
 	out.Temperature = pickFloat(higher.Temperature, lower.Temperature)
@@ -103,11 +103,11 @@ func MergeCallSettings(higher, lower *clarkv1.CallSettings) *clarkv1.CallSetting
 
 // cloneCallSettings returns a deep copy. Used when only one of higher/lower
 // is non-nil so we never hand the caller our input back.
-func cloneCallSettings(s *clarkv1.CallSettings) *clarkv1.CallSettings {
+func cloneCallSettings(s *reevev1.CallSettings) *reevev1.CallSettings {
 	if s == nil {
 		return nil
 	}
-	out := &clarkv1.CallSettings{
+	out := &reevev1.CallSettings{
 		Temperature:     copyFloat(s.Temperature),
 		TopP:            copyFloat(s.TopP),
 		MaxOutputTokens: copyInt32(s.MaxOutputTokens),
@@ -126,7 +126,7 @@ func cloneCallSettings(s *clarkv1.CallSettings) *clarkv1.CallSettings {
 
 // --- ThinkingSettings -------------------------------------------------------
 
-func mergeThinking(higher, lower *clarkv1.ThinkingSettings) *clarkv1.ThinkingSettings {
+func mergeThinking(higher, lower *reevev1.ThinkingSettings) *reevev1.ThinkingSettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -136,17 +136,17 @@ func mergeThinking(higher, lower *clarkv1.ThinkingSettings) *clarkv1.ThinkingSet
 	if lower == nil {
 		return cloneThinking(higher)
 	}
-	return &clarkv1.ThinkingSettings{
+	return &reevev1.ThinkingSettings{
 		Enabled:      pickBool(higher.Enabled, lower.Enabled),
 		BudgetTokens: pickInt32(higher.BudgetTokens, lower.BudgetTokens),
 	}
 }
 
-func cloneThinking(t *clarkv1.ThinkingSettings) *clarkv1.ThinkingSettings {
+func cloneThinking(t *reevev1.ThinkingSettings) *reevev1.ThinkingSettings {
 	if t == nil {
 		return nil
 	}
-	return &clarkv1.ThinkingSettings{
+	return &reevev1.ThinkingSettings{
 		Enabled:      copyBool(t.Enabled),
 		BudgetTokens: copyInt32(t.BudgetTokens),
 	}
@@ -157,7 +157,7 @@ func cloneThinking(t *clarkv1.ThinkingSettings) *clarkv1.ThinkingSettings {
 // mergeAnthropicExtras sparse-merges two AnthropicExtras blocks per-field.
 // `higher` wins where set; `lower` fills in unset slots. Either side nil is
 // equivalent to that side carrying no fields.
-func mergeAnthropicExtras(higher, lower *clarkv1.AnthropicExtras) *clarkv1.AnthropicExtras {
+func mergeAnthropicExtras(higher, lower *reevev1.AnthropicExtras) *reevev1.AnthropicExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -167,23 +167,23 @@ func mergeAnthropicExtras(higher, lower *clarkv1.AnthropicExtras) *clarkv1.Anthr
 	if lower == nil {
 		return cloneAnthropicExtras(higher)
 	}
-	return &clarkv1.AnthropicExtras{
+	return &reevev1.AnthropicExtras{
 		CacheEnabled: pickBool(higher.CacheEnabled, lower.CacheEnabled),
 		CacheTtl:     pickCacheTTL(higher.CacheTtl, lower.CacheTtl),
 	}
 }
 
-func cloneAnthropicExtras(a *clarkv1.AnthropicExtras) *clarkv1.AnthropicExtras {
+func cloneAnthropicExtras(a *reevev1.AnthropicExtras) *reevev1.AnthropicExtras {
 	if a == nil {
 		return nil
 	}
-	return &clarkv1.AnthropicExtras{
+	return &reevev1.AnthropicExtras{
 		CacheEnabled: copyBool(a.CacheEnabled),
 		CacheTtl:     copyCacheTTL(a.CacheTtl),
 	}
 }
 
-func pickCacheTTL(higher, lower *clarkv1.CacheTTL) *clarkv1.CacheTTL {
+func pickCacheTTL(higher, lower *reevev1.CacheTTL) *reevev1.CacheTTL {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -195,7 +195,7 @@ func pickCacheTTL(higher, lower *clarkv1.CacheTTL) *clarkv1.CacheTTL {
 	return nil
 }
 
-func copyCacheTTL(v *clarkv1.CacheTTL) *clarkv1.CacheTTL {
+func copyCacheTTL(v *reevev1.CacheTTL) *reevev1.CacheTTL {
 	if v == nil {
 		return nil
 	}
@@ -205,7 +205,7 @@ func copyCacheTTL(v *clarkv1.CacheTTL) *clarkv1.CacheTTL {
 
 // --- OpenAIExtras -----------------------------------------------------------
 
-func mergeOpenAIExtras(higher, lower *clarkv1.OpenAIExtras) *clarkv1.OpenAIExtras {
+func mergeOpenAIExtras(higher, lower *reevev1.OpenAIExtras) *reevev1.OpenAIExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -215,7 +215,7 @@ func mergeOpenAIExtras(higher, lower *clarkv1.OpenAIExtras) *clarkv1.OpenAIExtra
 	if lower == nil {
 		return cloneOpenAIExtras(higher)
 	}
-	out := &clarkv1.OpenAIExtras{
+	out := &reevev1.OpenAIExtras{
 		Seed:              pickInt32(higher.Seed, lower.Seed),
 		FrequencyPenalty:  pickFloat(higher.FrequencyPenalty, lower.FrequencyPenalty),
 		PresencePenalty:   pickFloat(higher.PresencePenalty, lower.PresencePenalty),
@@ -240,11 +240,11 @@ func mergeOpenAIExtras(higher, lower *clarkv1.OpenAIExtras) *clarkv1.OpenAIExtra
 	return out
 }
 
-func cloneOpenAIExtras(o *clarkv1.OpenAIExtras) *clarkv1.OpenAIExtras {
+func cloneOpenAIExtras(o *reevev1.OpenAIExtras) *reevev1.OpenAIExtras {
 	if o == nil {
 		return nil
 	}
-	out := &clarkv1.OpenAIExtras{
+	out := &reevev1.OpenAIExtras{
 		Seed:              copyInt32(o.Seed),
 		FrequencyPenalty:  copyFloat(o.FrequencyPenalty),
 		PresencePenalty:   copyFloat(o.PresencePenalty),
@@ -259,20 +259,20 @@ func cloneOpenAIExtras(o *clarkv1.OpenAIExtras) *clarkv1.OpenAIExtras {
 	return out
 }
 
-func cloneResponseFormat(rf *clarkv1.ResponseFormat) *clarkv1.ResponseFormat {
+func cloneResponseFormat(rf *reevev1.ResponseFormat) *reevev1.ResponseFormat {
 	if rf == nil {
 		return nil
 	}
-	out := &clarkv1.ResponseFormat{}
+	out := &reevev1.ResponseFormat{}
 	switch k := rf.Kind.(type) {
-	case *clarkv1.ResponseFormat_Text:
-		out.Kind = &clarkv1.ResponseFormat_Text{Text: k.Text}
-	case *clarkv1.ResponseFormat_JsonObject:
-		out.Kind = &clarkv1.ResponseFormat_JsonObject{JsonObject: k.JsonObject}
-	case *clarkv1.ResponseFormat_JsonSchema:
-		var schema *clarkv1.JsonSchema
+	case *reevev1.ResponseFormat_Text:
+		out.Kind = &reevev1.ResponseFormat_Text{Text: k.Text}
+	case *reevev1.ResponseFormat_JsonObject:
+		out.Kind = &reevev1.ResponseFormat_JsonObject{JsonObject: k.JsonObject}
+	case *reevev1.ResponseFormat_JsonSchema:
+		var schema *reevev1.JsonSchema
 		if k.JsonSchema != nil {
-			schema = &clarkv1.JsonSchema{
+			schema = &reevev1.JsonSchema{
 				Name:        k.JsonSchema.Name,
 				Description: copyString(k.JsonSchema.Description),
 				Strict:      copyBool(k.JsonSchema.Strict),
@@ -281,7 +281,7 @@ func cloneResponseFormat(rf *clarkv1.ResponseFormat) *clarkv1.ResponseFormat {
 				schema.Schema = append([]byte(nil), k.JsonSchema.Schema...)
 			}
 		}
-		out.Kind = &clarkv1.ResponseFormat_JsonSchema{JsonSchema: schema}
+		out.Kind = &reevev1.ResponseFormat_JsonSchema{JsonSchema: schema}
 	}
 	return out
 }
@@ -296,7 +296,7 @@ func cloneLogitBias(in map[int32]float64) map[int32]float64 {
 
 // --- GoogleExtras -----------------------------------------------------------
 
-func mergeGoogleExtras(higher, lower *clarkv1.GoogleExtras) *clarkv1.GoogleExtras {
+func mergeGoogleExtras(higher, lower *reevev1.GoogleExtras) *reevev1.GoogleExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -306,7 +306,7 @@ func mergeGoogleExtras(higher, lower *clarkv1.GoogleExtras) *clarkv1.GoogleExtra
 	if lower == nil {
 		return cloneGoogleExtras(higher)
 	}
-	out := &clarkv1.GoogleExtras{
+	out := &reevev1.GoogleExtras{
 		ResponseMimeType: pickString(higher.ResponseMimeType, lower.ResponseMimeType),
 		CandidateCount:   pickInt32(higher.CandidateCount, lower.CandidateCount),
 	}
@@ -319,11 +319,11 @@ func mergeGoogleExtras(higher, lower *clarkv1.GoogleExtras) *clarkv1.GoogleExtra
 	return out
 }
 
-func cloneGoogleExtras(g *clarkv1.GoogleExtras) *clarkv1.GoogleExtras {
+func cloneGoogleExtras(g *reevev1.GoogleExtras) *reevev1.GoogleExtras {
 	if g == nil {
 		return nil
 	}
-	out := &clarkv1.GoogleExtras{
+	out := &reevev1.GoogleExtras{
 		ResponseMimeType: copyString(g.ResponseMimeType),
 		CandidateCount:   copyInt32(g.CandidateCount),
 	}
@@ -334,7 +334,7 @@ func cloneGoogleExtras(g *clarkv1.GoogleExtras) *clarkv1.GoogleExtras {
 	return out
 }
 
-func mergeSafetySettings(higher, lower *clarkv1.SafetySettings) *clarkv1.SafetySettings {
+func mergeSafetySettings(higher, lower *reevev1.SafetySettings) *reevev1.SafetySettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -344,7 +344,7 @@ func mergeSafetySettings(higher, lower *clarkv1.SafetySettings) *clarkv1.SafetyS
 	if lower == nil {
 		return cloneSafetySettings(higher)
 	}
-	return &clarkv1.SafetySettings{
+	return &reevev1.SafetySettings{
 		Harassment:       pickHarmThreshold(higher.Harassment, lower.Harassment),
 		HateSpeech:       pickHarmThreshold(higher.HateSpeech, lower.HateSpeech),
 		SexuallyExplicit: pickHarmThreshold(higher.SexuallyExplicit, lower.SexuallyExplicit),
@@ -352,11 +352,11 @@ func mergeSafetySettings(higher, lower *clarkv1.SafetySettings) *clarkv1.SafetyS
 	}
 }
 
-func cloneSafetySettings(s *clarkv1.SafetySettings) *clarkv1.SafetySettings {
+func cloneSafetySettings(s *reevev1.SafetySettings) *reevev1.SafetySettings {
 	if s == nil {
 		return nil
 	}
-	return &clarkv1.SafetySettings{
+	return &reevev1.SafetySettings{
 		Harassment:       copyHarmThreshold(s.Harassment),
 		HateSpeech:       copyHarmThreshold(s.HateSpeech),
 		SexuallyExplicit: copyHarmThreshold(s.SexuallyExplicit),
@@ -414,7 +414,7 @@ func pickString(higher, lower *string) *string {
 	return nil
 }
 
-func pickServiceTier(higher, lower *clarkv1.ServiceTier) *clarkv1.ServiceTier {
+func pickServiceTier(higher, lower *reevev1.ServiceTier) *reevev1.ServiceTier {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -426,7 +426,7 @@ func pickServiceTier(higher, lower *clarkv1.ServiceTier) *clarkv1.ServiceTier {
 	return nil
 }
 
-func copyServiceTier(v *clarkv1.ServiceTier) *clarkv1.ServiceTier {
+func copyServiceTier(v *reevev1.ServiceTier) *reevev1.ServiceTier {
 	if v == nil {
 		return nil
 	}
@@ -434,7 +434,7 @@ func copyServiceTier(v *clarkv1.ServiceTier) *clarkv1.ServiceTier {
 	return &x
 }
 
-func pickHarmThreshold(higher, lower *clarkv1.HarmThreshold) *clarkv1.HarmThreshold {
+func pickHarmThreshold(higher, lower *reevev1.HarmThreshold) *reevev1.HarmThreshold {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -478,7 +478,7 @@ func copyString(v *string) *string {
 	return &x
 }
 
-func copyHarmThreshold(v *clarkv1.HarmThreshold) *clarkv1.HarmThreshold {
+func copyHarmThreshold(v *reevev1.HarmThreshold) *reevev1.HarmThreshold {
 	if v == nil {
 		return nil
 	}

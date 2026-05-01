@@ -110,7 +110,7 @@ public struct ClarkProfilePlugin: Sendable, Hashable, Identifiable {
 // MARK: - Proto bridging
 
 extension ClarkPluginCapabilities {
-    init(from p: Clark_V1_PluginCapabilities) {
+    init(from p: Reeve_V1_PluginCapabilities) {
         self.init(
             configurable: p.configurable,
             systemPrompter: p.systemPrompter,
@@ -124,7 +124,7 @@ extension ClarkPluginCapabilities {
 }
 
 extension ClarkConfigFieldType {
-    init(from p: Clark_V1_ConfigField.TypeEnum) {
+    init(from p: Reeve_V1_ConfigField.TypeEnum) {
         switch p {
         case .number:   self = .number
         case .text:     self = .text
@@ -138,13 +138,13 @@ extension ClarkConfigFieldType {
 }
 
 extension ClarkConfigOption {
-    init(from p: Clark_V1_ConfigOption) {
+    init(from p: Reeve_V1_ConfigOption) {
         self.init(value: p.value, label: p.label)
     }
 }
 
 extension ClarkConfigField {
-    init(from p: Clark_V1_ConfigField) {
+    init(from p: Reeve_V1_ConfigField) {
         self.init(
             name: p.name,
             display: p.display,
@@ -157,7 +157,7 @@ extension ClarkConfigField {
 }
 
 extension ClarkPluginType {
-    init(from p: Clark_V1_PluginType) {
+    init(from p: Reeve_V1_PluginType) {
         self.init(
             name: p.name,
             description: p.description_p,
@@ -168,7 +168,7 @@ extension ClarkPluginType {
 }
 
 extension ClarkProfilePlugin {
-    init(from p: Clark_V1_ProfilePlugin) {
+    init(from p: Reeve_V1_ProfilePlugin) {
         self.init(
             pluginName: p.pluginName,
             ordinal: p.ordinal,
@@ -176,8 +176,8 @@ extension ClarkProfilePlugin {
         )
     }
 
-    var proto: Clark_V1_ProfilePlugin {
-        var p = Clark_V1_ProfilePlugin()
+    var proto: Reeve_V1_ProfilePlugin {
+        var p = Reeve_V1_ProfilePlugin()
         p.pluginName = pluginName
         p.ordinal = ordinal
         p.config = config

@@ -187,7 +187,7 @@ struct AuthRepositoryTests {
 
     private func createUser(username: String, password: String) async throws {
         let admin = try await TestSession.adminHandle(server: server)
-        var req = Clark_V1_CreateUserRequest()
+        var req = Reeve_V1_CreateUserRequest()
         req.username = username
         req.password = password
         req.isAdmin = false

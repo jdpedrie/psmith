@@ -17,7 +17,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
@@ -87,8 +87,8 @@ func run() error {
 
 	authSvc := auth.NewService(queries)
 	authInterceptor := auth.NewInterceptor(queries,
-		clarkv1connect.AuthServiceLoginProcedure,
-		clarkv1connect.AuthServiceProbeProcedure,
+		reevev1connect.AuthServiceLoginProcedure,
+		reevev1connect.AuthServiceProbeProcedure,
 	)
 	opts := connect.WithInterceptors(authInterceptor)
 
@@ -102,11 +102,11 @@ func run() error {
 	streamsSvc := streamsvc.NewService(supervisor)
 
 	mux := http.NewServeMux()
-	mux.Handle(clarkv1connect.NewAuthServiceHandler(authSvc, opts))
-	mux.Handle(clarkv1connect.NewModelProvidersServiceHandler(modelProvidersSvc, opts))
-	mux.Handle(clarkv1connect.NewProfilesServiceHandler(profilesSvc, opts))
-	mux.Handle(clarkv1connect.NewConversationsServiceHandler(conversationsSvc, opts))
-	mux.Handle(clarkv1connect.NewStreamsServiceHandler(streamsSvc, opts))
+	mux.Handle(reevev1connect.NewAuthServiceHandler(authSvc, opts))
+	mux.Handle(reevev1connect.NewModelProvidersServiceHandler(modelProvidersSvc, opts))
+	mux.Handle(reevev1connect.NewProfilesServiceHandler(profilesSvc, opts))
+	mux.Handle(reevev1connect.NewConversationsServiceHandler(conversationsSvc, opts))
+	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
 
 	srv := &http.Server{
 		Addr:    addr,

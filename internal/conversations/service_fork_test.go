@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/fakellm"
 	"github.com/jdpedrie/reeve/internal/store"
 )
@@ -42,7 +42,7 @@ func TestFork_FromDeepAncestor(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	u1Str := u1.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &u1Str,
 		Content:         "fork from u1",
@@ -76,7 +76,7 @@ func TestFork_FromDeepAncestor(t *testing.T) {
 	// So u1 has two children: a1 and fork-user. From the fork branch's
 	// perspective, fork-user has 1 sibling (a1).
 	leaf := final.ResultMessageID.String()
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -111,7 +111,7 @@ func TestFork_FromSystemMessage(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	sysStr := f.systemMsgID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &sysStr,
 		Content:         "second thread",
@@ -140,7 +140,7 @@ func TestFork_FromSystemMessage(t *testing.T) {
 	if leaf == "" {
 		t.Fatal("no result_message_id for fork run")
 	}
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -178,7 +178,7 @@ func TestFork_RejectsCrossContextParent(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	otherIDStr := otherMsg.ID.String()
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &otherIDStr,
 		Content:         "wrong context",
@@ -199,7 +199,7 @@ func TestFork_ParentNotFound(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	missing := uuid.New().String()
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &missing,
 		Content:         "ghost parent",
@@ -233,7 +233,7 @@ func TestFork_TwoForksFromSameParent_SiblingCountReflects(t *testing.T) {
 	u1Str := u1.String()
 
 	// Fork 1.
-	resp1, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp1, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &u1Str,
 		Content:         "fork-1",
@@ -246,7 +246,7 @@ func TestFork_TwoForksFromSameParent_SiblingCountReflects(t *testing.T) {
 	_ = waitForTerminal(t, sup, runID1)
 
 	// Fork 2 off the same u1.
-	resp2, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp2, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &u1Str,
 		Content:         "fork-2",
@@ -262,7 +262,7 @@ func TestFork_TwoForksFromSameParent_SiblingCountReflects(t *testing.T) {
 	// Listing through fork-2's leaf:
 	//   system → u1 → fork-2-user → a-fork-2
 	leaf := final2.ResultMessageID.String()
-	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -300,7 +300,7 @@ func TestFork_FromAssistantMessage(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	a1Str := a1.ID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &a1Str,
 		Content:         "different msg-2",
@@ -319,7 +319,7 @@ func TestFork_FromAssistantMessage(t *testing.T) {
 	// the fork makes 2 total children, so the fork user should report 1 sibling.
 	final, _ := q.GetStreamRunByID(context.Background(), runID)
 	leaf := final.ResultMessageID.String()
-	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -358,7 +358,7 @@ func TestRegenerate_FromAssistantParent(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	a1Str := a1.ID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &a1Str,
 		Regenerate:      true,
@@ -374,7 +374,7 @@ func TestRegenerate_FromAssistantParent(t *testing.T) {
 	if resp.Msg.UserMessage.Id != a1Str {
 		t.Errorf("echoed parent id=%q want %q", resp.Msg.UserMessage.Id, a1Str)
 	}
-	if resp.Msg.UserMessage.Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+	if resp.Msg.UserMessage.Role != reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		t.Errorf("echoed parent role=%v want assistant", resp.Msg.UserMessage.Role)
 	}
 
@@ -402,7 +402,7 @@ func TestRegenerate_FromAssistantParent(t *testing.T) {
 
 	// Final wire chain: system → u1 → a1 → newAsst (4 rows).
 	leaf := final.ResultMessageID.String()
-	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
 		ContextId:     f.contextID.String(),
 		LeafMessageId: &leaf,
 	}))
@@ -415,8 +415,8 @@ func TestRegenerate_FromAssistantParent(t *testing.T) {
 			len(listResp.Msg.Messages), roles)
 	}
 	tail := listResp.Msg.Messages[len(listResp.Msg.Messages)-2:]
-	if tail[0].Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT ||
-		tail[1].Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+	if tail[0].Role != reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT ||
+		tail[1].Role != reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		t.Errorf("trailing roles=%v,%v want assistant,assistant", tail[0].Role, tail[1].Role)
 	}
 
@@ -483,7 +483,7 @@ func TestRegenerate_RejectsSystemParent(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	sysStr := sysID.String()
-	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &sysStr,
 		Regenerate:      true,
@@ -533,7 +533,7 @@ func TestFork_DifferentModelOnFork(t *testing.T) {
 	// Fork off u1 using the OTHER model.
 	pid := f.provider.ID.String()
 	u1Str := u1.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &u1Str,
 		Content:         "fork on other model",

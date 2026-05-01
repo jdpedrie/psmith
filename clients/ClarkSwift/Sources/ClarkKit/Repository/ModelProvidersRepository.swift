@@ -2,9 +2,9 @@ import Foundation
 import Connect
 
 public final class ModelProvidersRepository: Sendable {
-    private let client: Clark_V1_ModelProvidersServiceClientInterface
+    private let client: Reeve_V1_ModelProvidersServiceClientInterface
 
-    public init(client: Clark_V1_ModelProvidersServiceClientInterface) {
+    public init(client: Reeve_V1_ModelProvidersServiceClientInterface) {
         self.client = client
     }
 
@@ -27,7 +27,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func get(id: String) async throws -> (ClarkUserModelProvider, [ClarkUserModel]) {
-        var req = Clark_V1_GetUserModelProviderRequest()
+        var req = Reeve_V1_GetUserModelProviderRequest()
         req.id = id
         let resp = await client.getUserModelProvider(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("get provider") }
@@ -35,7 +35,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func create(type: String, label: String, config: Data) async throws -> ClarkUserModelProvider {
-        var req = Clark_V1_CreateUserModelProviderRequest()
+        var req = Reeve_V1_CreateUserModelProviderRequest()
         req.type   = type
         req.label  = label
         req.config = config
@@ -45,7 +45,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func update(id: String, label: String? = nil, config: Data? = nil) async throws -> ClarkUserModelProvider {
-        var req = Clark_V1_UpdateUserModelProviderRequest()
+        var req = Reeve_V1_UpdateUserModelProviderRequest()
         req.id = id
         if let l = label  { req.label  = l }
         if let c = config { req.config = c }
@@ -55,14 +55,14 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func delete(id: String) async throws {
-        var req = Clark_V1_DeleteUserModelProviderRequest()
+        var req = Reeve_V1_DeleteUserModelProviderRequest()
         req.id = id
         let resp = await client.deleteUserModelProvider(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ClarkError.from(err) }
     }
 
     public func discoverModels(providerID: String) async throws -> [ClarkDiscoveredModel] {
-        var req = Clark_V1_DiscoverModelsRequest()
+        var req = Reeve_V1_DiscoverModelsRequest()
         req.userModelProviderID = providerID
         let resp = await client.discoverModels(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("discover models") }
@@ -70,7 +70,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func enableModels(providerID: String, modelIDs: [String]) async throws -> [ClarkUserModel] {
-        var req = Clark_V1_EnableModelsRequest()
+        var req = Reeve_V1_EnableModelsRequest()
         req.userModelProviderID = providerID
         req.modelIds = modelIDs
         let resp = await client.enableModels(request: req, headers: [:])
@@ -79,7 +79,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func disableModels(providerID: String, modelIDs: [String]) async throws {
-        var req = Clark_V1_DisableModelsRequest()
+        var req = Reeve_V1_DisableModelsRequest()
         req.userModelProviderID = providerID
         req.modelIds = modelIDs
         let resp = await client.disableModels(request: req, headers: [:])
@@ -87,7 +87,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func listModels(providerID: String) async throws -> [ClarkUserModel] {
-        var req = Clark_V1_ListUserModelsRequest()
+        var req = Reeve_V1_ListUserModelsRequest()
         req.userModelProviderID = providerID
         let resp = await client.listUserModels(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("list models") }
@@ -95,7 +95,7 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func toggleModelFavorite(providerID: String, modelID: String, favorite: Bool) async throws -> ClarkUserModel {
-        var req = Clark_V1_ToggleUserModelFavoriteRequest()
+        var req = Reeve_V1_ToggleUserModelFavoriteRequest()
         req.userModelProviderID = providerID
         req.modelID = modelID
         req.favorite = favorite
@@ -109,7 +109,7 @@ public final class ModelProvidersRepository: Sendable {
     /// "unset," letting upper layers contribute. Pass `ClarkCallSettings()` to
     /// effectively clear the column.
     public func updateProviderDefaultSettings(providerID: String, settings: ClarkCallSettings) async throws -> ClarkUserModelProvider {
-        var req = Clark_V1_UpdateUserModelProviderRequest()
+        var req = Reeve_V1_UpdateUserModelProviderRequest()
         req.id = providerID
         req.defaultSettings = settings.proto
         let resp = await client.updateUserModelProvider(request: req, headers: [:])
@@ -121,7 +121,7 @@ public final class ModelProvidersRepository: Sendable {
     /// `updateProviderDefaultSettings`. The model row must already be enabled
     /// on the provider — otherwise the server returns NotFound.
     public func updateModel(providerID: String, modelID: String, settings: ClarkCallSettings) async throws -> ClarkUserModel {
-        var req = Clark_V1_UpdateUserModelRequest()
+        var req = Reeve_V1_UpdateUserModelRequest()
         req.userModelProviderID = providerID
         req.modelID = modelID
         req.defaultSettings = settings.proto
@@ -149,7 +149,7 @@ public final class ModelProvidersRepository: Sendable {
         clearKnowledgeCutoff: Bool = false,
         defaultSettings: ClarkCallSettings?
     ) async throws -> ClarkUserModel {
-        var req = Clark_V1_UpdateUserModelRequest()
+        var req = Reeve_V1_UpdateUserModelRequest()
         req.userModelProviderID = providerID
         req.modelID = modelID
         if let dn = displayName { req.displayName = dn }
@@ -169,7 +169,7 @@ public final class ModelProvidersRepository: Sendable {
             req.clearMaxOutputTokens_p = true
         }
         if let p = pricing {
-            var pr = Clark_V1_ModelPricing()
+            var pr = Reeve_V1_ModelPricing()
             if let v = p.inputPerMillion      { pr.inputPerMillionTokens      = v }
             if let v = p.outputPerMillion     { pr.outputPerMillionTokens     = v }
             if let v = p.cacheReadPerMillion  { pr.cacheReadPerMillionTokens  = v }
@@ -181,7 +181,7 @@ public final class ModelProvidersRepository: Sendable {
             req.modalities = m
         }
         if let c = capabilities {
-            var cap = Clark_V1_ModelCapabilities()
+            var cap = Reeve_V1_ModelCapabilities()
             cap.streaming     = c.streaming
             cap.thinking      = c.thinking
             cap.toolUse       = c.toolUse
@@ -220,14 +220,14 @@ public final class ModelProvidersRepository: Sendable {
         knowledgeCutoff: String?,
         defaultSettings: ClarkCallSettings?
     ) async throws -> ClarkUserModel {
-        var req = Clark_V1_AddManualModelRequest()
+        var req = Reeve_V1_AddManualModelRequest()
         req.userModelProviderID = providerID
         req.modelID = modelID
         req.displayName = displayName
         if let cw = contextWindow { req.contextWindow = cw }
         if let mo = maxOutputTokens { req.maxOutputTokens = mo }
         if let p = pricing {
-            var pr = Clark_V1_ModelPricing()
+            var pr = Reeve_V1_ModelPricing()
             if let v = p.inputPerMillion      { pr.inputPerMillionTokens      = v }
             if let v = p.outputPerMillion     { pr.outputPerMillionTokens     = v }
             if let v = p.cacheReadPerMillion  { pr.cacheReadPerMillionTokens  = v }
@@ -236,7 +236,7 @@ public final class ModelProvidersRepository: Sendable {
         }
         req.modalities = modalities
         if let c = capabilities {
-            var cap = Clark_V1_ModelCapabilities()
+            var cap = Reeve_V1_ModelCapabilities()
             cap.streaming     = c.streaming
             cap.thinking      = c.thinking
             cap.toolUse       = c.toolUse
@@ -257,7 +257,7 @@ public final class ModelProvidersRepository: Sendable {
     /// wrong" failures — we surface those inline. Connection-level errors
     /// (couldn't reach clarkd at all) still throw.
     public func testProvider(providerID: String) async throws -> ClarkProviderTestResult {
-        var req = Clark_V1_TestUserModelProviderRequest()
+        var req = Reeve_V1_TestUserModelProviderRequest()
         req.userModelProviderID = providerID
         let resp = await client.testUserModelProvider(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ClarkError.from) ?? .missingPayload("test provider") }
@@ -268,7 +268,7 @@ public final class ModelProvidersRepository: Sendable {
     /// testProvider: ok=false in the body for "your auth was good but the
     /// model errored", thrown errors only for transport-level issues.
     public func testModel(providerID: String, modelID: String) async throws -> ClarkModelTestResult {
-        var req = Clark_V1_TestUserModelRequest()
+        var req = Reeve_V1_TestUserModelRequest()
         req.userModelProviderID = providerID
         req.modelID = modelID
         let resp = await client.testUserModel(request: req, headers: [:])

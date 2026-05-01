@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	clarkv1 "github.com/jdpedrie/reeve/gen/clark/v1"
-	"github.com/jdpedrie/reeve/gen/clark/v1/clarkv1connect"
+	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
@@ -58,12 +58,12 @@ var validTitleProviderKinds = map[string]struct{}{
 	TitleProviderKindAppleFoundation: {},
 }
 
-// Service implements clarkv1connect.ProfilesServiceHandler.
+// Service implements reevev1connect.ProfilesServiceHandler.
 //
 // pool is required for the SetProfilePlugins atomic-replace transaction.
 // Older callers / tests that only exercise CRUD may pass nil.
 type Service struct {
-	clarkv1connect.UnimplementedProfilesServiceHandler
+	reevev1connect.UnimplementedProfilesServiceHandler
 	queries *store.Queries
 	pool    *pgxpool.Pool
 }
@@ -77,7 +77,7 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool) *Service {
 
 // --- CreateProfile ---
 
-func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[clarkv1.CreateProfileRequest]) (*connect.Response[clarkv1.CreateProfileResponse], error) {
+func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[reevev1.CreateProfileRequest]) (*connect.Response[reevev1.CreateProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	if req.Msg.Name == "" {
@@ -184,12 +184,12 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[clarkv
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.CreateProfileResponse{Profile: proto}), nil
+	return connect.NewResponse(&reevev1.CreateProfileResponse{Profile: proto}), nil
 }
 
 // --- ListProfiles ---
 
-func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[clarkv1.ListProfilesRequest]) (*connect.Response[clarkv1.ListProfilesResponse], error) {
+func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[reevev1.ListProfilesRequest]) (*connect.Response[reevev1.ListProfilesResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	rows, err := s.queries.ListProfilesByUser(ctx, caller.ID)
@@ -197,7 +197,7 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[clarkv1
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	out := make([]*clarkv1.Profile, 0, len(rows))
+	out := make([]*reevev1.Profile, 0, len(rows))
 	for _, r := range rows {
 		p, err := profileToProto(r)
 		if err != nil {
@@ -205,12 +205,12 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[clarkv1
 		}
 		out = append(out, p)
 	}
-	return connect.NewResponse(&clarkv1.ListProfilesResponse{Profiles: out}), nil
+	return connect.NewResponse(&reevev1.ListProfilesResponse{Profiles: out}), nil
 }
 
 // --- GetProfile ---
 
-func (s *Service) GetProfile(ctx context.Context, req *connect.Request[clarkv1.GetProfileRequest]) (*connect.Response[clarkv1.GetProfileResponse], error) {
+func (s *Service) GetProfile(ctx context.Context, req *connect.Request[reevev1.GetProfileRequest]) (*connect.Response[reevev1.GetProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -228,7 +228,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[clarkv1.G
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	resp := &clarkv1.GetProfileResponse{Profile: proto}
+	resp := &reevev1.GetProfileResponse{Profile: proto}
 
 	if req.Msg.Resolve {
 		resolved, err := Resolve(ctx, s.queries, row)
@@ -247,7 +247,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[clarkv1.G
 
 // --- UpdateProfile ---
 
-func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[clarkv1.UpdateProfileRequest]) (*connect.Response[clarkv1.UpdateProfileResponse], error) {
+func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[reevev1.UpdateProfileRequest]) (*connect.Response[reevev1.UpdateProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -462,12 +462,12 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[clarkv
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.UpdateProfileResponse{Profile: proto}), nil
+	return connect.NewResponse(&reevev1.UpdateProfileResponse{Profile: proto}), nil
 }
 
 // --- DeleteProfile ---
 
-func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[clarkv1.DeleteProfileRequest]) (*connect.Response[clarkv1.DeleteProfileResponse], error) {
+func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[reevev1.DeleteProfileRequest]) (*connect.Response[reevev1.DeleteProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -488,7 +488,7 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[clarkv
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&clarkv1.DeleteProfileResponse{}), nil
+	return connect.NewResponse(&reevev1.DeleteProfileResponse{}), nil
 }
 
 // --- ListPluginTypes ---
@@ -496,16 +496,16 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[clarkv
 // ListPluginTypes returns metadata for every plugin type compiled into the
 // server. The set is fixed at build time (registered in init()); the proto
 // shape mirrors plugins.TypeDescriptor with a flat capabilities sub-message.
-func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[clarkv1.ListPluginTypesRequest]) (*connect.Response[clarkv1.ListPluginTypesResponse], error) {
+func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[reevev1.ListPluginTypesRequest]) (*connect.Response[reevev1.ListPluginTypesResponse], error) {
 	descs, err := plugins.DescribeAll()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("describe plugins: %w", err))
 	}
-	out := make([]*clarkv1.PluginType, 0, len(descs))
+	out := make([]*reevev1.PluginType, 0, len(descs))
 	for _, d := range descs {
 		out = append(out, pluginTypeToProto(d))
 	}
-	return connect.NewResponse(&clarkv1.ListPluginTypesResponse{PluginTypes: out}), nil
+	return connect.NewResponse(&reevev1.ListPluginTypesResponse{PluginTypes: out}), nil
 }
 
 // --- GetProfilePlugins ---
@@ -513,7 +513,7 @@ func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[clarkv
 // GetProfilePlugins returns the plugin pipeline attached to ONE profile (no
 // parent-chain walk). Empty list = "inherit from parent" per the
 // architecture's all-or-nothing inheritance rule.
-func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[clarkv1.GetProfilePluginsRequest]) (*connect.Response[clarkv1.GetProfilePluginsResponse], error) {
+func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[reevev1.GetProfilePluginsRequest]) (*connect.Response[reevev1.GetProfilePluginsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	profileID, err := uuid.Parse(req.Msg.ProfileId)
 	if err != nil {
@@ -526,15 +526,15 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[cl
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*clarkv1.ProfilePlugin, 0, len(rows))
+	out := make([]*reevev1.ProfilePlugin, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, &clarkv1.ProfilePlugin{
+		out = append(out, &reevev1.ProfilePlugin{
 			PluginName: r.PluginName,
 			Ordinal:    r.Ordinal,
 			Config:     r.Config,
 		})
 	}
-	return connect.NewResponse(&clarkv1.GetProfilePluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&reevev1.GetProfilePluginsResponse{Plugins: out}), nil
 }
 
 // --- SetProfilePlugins ---
@@ -545,7 +545,7 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[cl
 // or malformed config aborts the request without touching the existing
 // pipeline. The replace itself runs in a transaction (delete-then-insert)
 // so concurrent reads either see the old or the new full pipeline.
-func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[clarkv1.SetProfilePluginsRequest]) (*connect.Response[clarkv1.SetProfilePluginsResponse], error) {
+func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[reevev1.SetProfilePluginsRequest]) (*connect.Response[reevev1.SetProfilePluginsResponse], error) {
 	if s.pool == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SetProfilePlugins requires pool dependency"))
 	}
@@ -580,7 +580,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[cl
 	if err := qtx.ReplaceProfilePlugins(ctx, profileID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear existing plugins: %w", err))
 	}
-	out := make([]*clarkv1.ProfilePlugin, 0, len(req.Msg.Plugins))
+	out := make([]*reevev1.ProfilePlugin, 0, len(req.Msg.Plugins))
 	for i, p := range req.Msg.Plugins {
 		row, err := qtx.InsertProfilePlugin(ctx, store.InsertProfilePluginParams{
 			ProfileID:  profileID,
@@ -591,7 +591,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[cl
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("insert plugins[%d]: %w", i, err))
 		}
-		out = append(out, &clarkv1.ProfilePlugin{
+		out = append(out, &reevev1.ProfilePlugin{
 			PluginName: row.PluginName,
 			Ordinal:    row.Ordinal,
 			Config:     row.Config,
@@ -600,20 +600,20 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[cl
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	return connect.NewResponse(&clarkv1.SetProfilePluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&reevev1.SetProfilePluginsResponse{Plugins: out}), nil
 }
 
 // pluginTypeToProto converts a plugins.TypeDescriptor to its proto shape.
-func pluginTypeToProto(d plugins.TypeDescriptor) *clarkv1.PluginType {
-	fields := make([]*clarkv1.ConfigField, 0, len(d.ConfigFields))
+func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
+	fields := make([]*reevev1.ConfigField, 0, len(d.ConfigFields))
 	for _, f := range d.ConfigFields {
 		fields = append(fields, configFieldToProto(f))
 	}
-	return &clarkv1.PluginType{
+	return &reevev1.PluginType{
 		Name:         d.Name,
 		Description:  d.Description,
 		ConfigFields: fields,
-		Capabilities: &clarkv1.PluginCapabilities{
+		Capabilities: &reevev1.PluginCapabilities{
 			Configurable:            d.Capabilities.Configurable,
 			SystemPrompter:          d.Capabilities.SystemPrompter,
 			OutgoingUserTransformer: d.Capabilities.OutgoingUserTransformer,
@@ -630,8 +630,8 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *clarkv1.PluginType {
 // string (which the wire treats as "no default"). Unknown field types map
 // to TYPE_UNSPECIFIED so a malformed plugin descriptor surfaces as an
 // explicit zero-value rather than getting silently coerced.
-func configFieldToProto(f plugins.ConfigField) *clarkv1.ConfigField {
-	out := &clarkv1.ConfigField{
+func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
+	out := &reevev1.ConfigField{
 		Name:        f.Name,
 		Display:     f.Display,
 		Description: f.Description,
@@ -647,29 +647,29 @@ func configFieldToProto(f plugins.ConfigField) *clarkv1.ConfigField {
 		}
 	}
 	if len(f.Options) > 0 {
-		opts := make([]*clarkv1.ConfigOption, 0, len(f.Options))
+		opts := make([]*reevev1.ConfigOption, 0, len(f.Options))
 		for _, o := range f.Options {
-			opts = append(opts, &clarkv1.ConfigOption{Value: o.Value, Label: o.Label})
+			opts = append(opts, &reevev1.ConfigOption{Value: o.Value, Label: o.Label})
 		}
 		out.Options = opts
 	}
 	return out
 }
 
-func configFieldTypeToProto(t plugins.ConfigFieldType) clarkv1.ConfigField_Type {
+func configFieldTypeToProto(t plugins.ConfigFieldType) reevev1.ConfigField_Type {
 	switch t {
 	case plugins.ConfigFieldNumber:
-		return clarkv1.ConfigField_NUMBER
+		return reevev1.ConfigField_NUMBER
 	case plugins.ConfigFieldText:
-		return clarkv1.ConfigField_TEXT
+		return reevev1.ConfigField_TEXT
 	case plugins.ConfigFieldTextarea:
-		return clarkv1.ConfigField_TEXTAREA
+		return reevev1.ConfigField_TEXTAREA
 	case plugins.ConfigFieldBoolean:
-		return clarkv1.ConfigField_BOOLEAN
+		return reevev1.ConfigField_BOOLEAN
 	case plugins.ConfigFieldSelect:
-		return clarkv1.ConfigField_SELECT
+		return reevev1.ConfigField_SELECT
 	default:
-		return clarkv1.ConfigField_TYPE_UNSPECIFIED
+		return reevev1.ConfigField_TYPE_UNSPECIFIED
 	}
 }
 
@@ -710,33 +710,33 @@ func (s *Service) assertProviderOwned(ctx context.Context, providerID, userID uu
 	return nil
 }
 
-func compressionModeToString(m clarkv1.CompressionMode) (string, error) {
+func compressionModeToString(m reevev1.CompressionMode) (string, error) {
 	switch m {
-	case clarkv1.CompressionMode_COMPRESSION_MODE_REPLACE:
+	case reevev1.CompressionMode_COMPRESSION_MODE_REPLACE:
 		return compressionModeReplace, nil
-	case clarkv1.CompressionMode_COMPRESSION_MODE_APPEND:
+	case reevev1.CompressionMode_COMPRESSION_MODE_APPEND:
 		return compressionModeAppend, nil
-	case clarkv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED:
+	case reevev1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED:
 		return "", errors.New("compression_mode is unspecified")
 	default:
 		return "", fmt.Errorf("unknown compression_mode: %v", m)
 	}
 }
 
-func compressionModeFromString(s string) clarkv1.CompressionMode {
+func compressionModeFromString(s string) reevev1.CompressionMode {
 	switch s {
 	case compressionModeReplace:
-		return clarkv1.CompressionMode_COMPRESSION_MODE_REPLACE
+		return reevev1.CompressionMode_COMPRESSION_MODE_REPLACE
 	case compressionModeAppend:
-		return clarkv1.CompressionMode_COMPRESSION_MODE_APPEND
+		return reevev1.CompressionMode_COMPRESSION_MODE_APPEND
 	default:
-		return clarkv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED
+		return reevev1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED
 	}
 }
 
 // defaultsToJSON marshals a ProfileDefaults message to a JSON blob suitable
 // for the JSONB column. Returns nil for a nil input (so the column stays NULL).
-func defaultsToJSON(d *clarkv1.ProfileDefaults) ([]byte, error) {
+func defaultsToJSON(d *reevev1.ProfileDefaults) ([]byte, error) {
 	if d == nil {
 		return nil, nil
 	}
@@ -759,7 +759,7 @@ func defaultsToJSON(d *clarkv1.ProfileDefaults) ([]byte, error) {
 
 // defaultsFromJSON unmarshals a JSONB blob back into a ProfileDefaults message.
 // Returns nil for empty input.
-func defaultsFromJSON(b []byte) (*clarkv1.ProfileDefaults, error) {
+func defaultsFromJSON(b []byte) (*reevev1.ProfileDefaults, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
@@ -767,7 +767,7 @@ func defaultsFromJSON(b []byte) (*clarkv1.ProfileDefaults, error) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("decode default_settings: %w", err)
 	}
-	out := &clarkv1.ProfileDefaults{
+	out := &reevev1.ProfileDefaults{
 		DefaultProviderId:        s.DefaultProviderID,
 		DefaultModelId:           s.DefaultModelID,
 		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
@@ -789,12 +789,12 @@ type defaultsStorage struct {
 	CallSettings             json.RawMessage `json:"call_settings,omitempty"`
 }
 
-func profileToProto(p store.Profile) (*clarkv1.Profile, error) {
+func profileToProto(p store.Profile) (*reevev1.Profile, error) {
 	defaults, err := defaultsFromJSON(p.DefaultSettings)
 	if err != nil {
 		return nil, err
 	}
-	out := &clarkv1.Profile{
+	out := &reevev1.Profile{
 		Id:                 p.ID.String(),
 		Name:               p.Name,
 		SystemMessage:      p.SystemMessage,
