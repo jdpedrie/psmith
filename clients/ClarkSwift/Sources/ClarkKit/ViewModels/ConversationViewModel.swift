@@ -735,7 +735,7 @@ public final class ConversationViewModel {
             guard let pid = target.parentID,
                   let parent = messages.first(where: { $0.id == pid }),
                   parent.role == .user else { return }
-            await regenerateAssistant(parentUserMessageID: parent.id)
+            await regenerateAssistant(parentMessageID: parent.id)
         default:
             return
         }
@@ -748,14 +748,21 @@ public final class ConversationViewModel {
     /// assistant; the UI gates on this.
     public func reloadLastUser() async {
         guard let last = messages.last(where: { $0.role == .user }) else { return }
-        await regenerateAssistant(parentUserMessageID: last.id)
+        await regenerateAssistant(parentMessageID: last.id)
     }
 
-    /// Regenerate-mode SendMessage. Streams a new assistant under the
-    /// named user message — sibling of any previous assistant on the same
-    /// user. Mirrors `sendForking`'s setup/teardown machinery so chunk
+    /// Regenerate-mode SendMessage. Streams a new assistant parented to
+    /// `parentMessageID`. Two valid shapes (server-validated):
+    ///
+    /// - parent.role == .user: sibling assistant under the same user.
+    ///   Powers Reload on assistant rows.
+    /// - parent.role == .assistant: chained assistant — produces two
+    ///   assistants in a row (parent stays put, new one continues from
+    ///   it). Powers Save and Resend on edited assistant rows.
+    ///
+    /// Mirrors `sendForking`'s setup/teardown machinery so chunk
     /// routing, terminal hand-off, and error resilience are identical.
-    public func regenerateAssistant(parentUserMessageID: String) async {
+    public func regenerateAssistant(parentMessageID: String) async {
         guard !sending, !isCompacting, !hasPendingCompression else { return }
         sending = true
         streamingText = ""
@@ -767,7 +774,7 @@ public final class ConversationViewModel {
         do {
             let (_, run) = try await client.conversations.regenerateAssistant(
                 conversationID: conversation.id,
-                parentUserMessageID: parentUserMessageID,
+                parentMessageID: parentMessageID,
                 providerID: selectedProviderID,
                 modelID: selectedModelID
             )

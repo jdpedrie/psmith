@@ -110,21 +110,30 @@ public final class ConversationsRepository: Sendable {
     }
 
     /// Regenerate-mode SendMessage. Server-side this skips the user-row
-    /// insert and starts the assistant stream off `parentUserMessageID`
-    /// directly — produces a sibling assistant turn under the SAME user
-    /// message, no duplicate user. Powers the "Reload" affordance on
-    /// assistant rows: every Reload still creates a fork, but at the
-    /// assistant level (one user → many assistants) instead of the user
-    /// level (many user copies → many assistants).
+    /// insert and starts the assistant stream off `parentMessageID`
+    /// directly. Two valid shapes:
+    ///
+    /// - parent.role == .user: the new assistant becomes a SIBLING of any
+    ///   previous assistant under the same user message. Powers the
+    ///   "Reload" affordance on assistant rows.
+    /// - parent.role == .assistant: the new assistant chains AFTER the
+    ///   parent assistant — produces two assistants in a row. Powers
+    ///   "Save and Resend" on an edited assistant: the edit stays in
+    ///   place and the model continues from there. Not all upstream
+    ///   providers support a wire prefix that ends in assistant
+    ///   (Anthropic does via prefill, OpenAI Chat may error). The server
+    ///   surfaces upstream errors verbatim.
+    ///
+    /// Other roles are rejected by the server.
     public func regenerateAssistant(
         conversationID: String,
-        parentUserMessageID: String,
+        parentMessageID: String,
         providerID: String? = nil,
         modelID: String? = nil
-    ) async throws -> (userMessage: ClarkMessage, streamRun: ClarkStreamRun) {
+    ) async throws -> (parentMessage: ClarkMessage, streamRun: ClarkStreamRun) {
         var req = Clark_V1_SendMessageRequest()
         req.conversationID = conversationID
-        req.parentMessageID = parentUserMessageID
+        req.parentMessageID = parentMessageID
         req.regenerate = true
         if let providerID { req.providerID = providerID }
         if let modelID { req.modelID = modelID }

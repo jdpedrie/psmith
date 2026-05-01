@@ -332,6 +332,135 @@ func TestFork_FromAssistantMessage(t *testing.T) {
 	}
 }
 
+// TestRegenerate_FromAssistantParent — chained assistant generation.
+// Powers the Mac client's "Save and Resend" affordance on edited
+// assistant rows: the edit stays put, the model continues from there,
+// and the result is two assistants in a row (a1 → a2 under the SAME
+// user). regenerate=true with parent=assistant skips the user-row
+// insert; the new assistant is parented directly to the existing
+// assistant.
+func TestRegenerate_FromAssistantParent(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "a1"}}})
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "continuation"}}})
+
+	svc, q, sup := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, fake.URL())
+
+	u1, a1 := runOneTurn(t, svc, sup, q, f, "msg-1")
+	_ = u1
+
+	// Regenerate with a1 as the parent — should chain a NEW assistant
+	// after a1 (not a sibling under u1, which is the user-parent path).
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	a1Str := a1.ID.String()
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId:  f.conv.ID.String(),
+		ParentMessageId: &a1Str,
+		Regenerate:      true,
+		ProviderId:      &pid, ModelId: &mid,
+	}))
+	if err != nil {
+		t.Fatalf("regenerate from assistant: %v", err)
+	}
+	// Echoed parent_message in the response is the existing assistant
+	// row (regenerate skips user-row insert). The proto field is named
+	// `user_message` for historical reasons; for assistant-parent
+	// regenerate it carries the assistant we parented off of.
+	if resp.Msg.UserMessage.Id != a1Str {
+		t.Errorf("echoed parent id=%q want %q", resp.Msg.UserMessage.Id, a1Str)
+	}
+	if resp.Msg.UserMessage.Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+		t.Errorf("echoed parent role=%v want assistant", resp.Msg.UserMessage.Role)
+	}
+
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "completed" {
+		t.Fatalf("regenerate stream status=%q", final.Status)
+	}
+	if final.ResultMessageID == nil {
+		t.Fatal("no result_message_id on terminal stream")
+	}
+
+	// The new assistant's parent_id must point at a1 (chained), not at
+	// u1 (which would be the sibling-pattern).
+	newAsst, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID(new asst): %v", err)
+	}
+	if newAsst.Role != "assistant" {
+		t.Errorf("new turn role=%q want assistant", newAsst.Role)
+	}
+	if newAsst.ParentID == nil || *newAsst.ParentID != a1.ID {
+		t.Errorf("new asst.parent_id=%v want %s (chained after a1)", newAsst.ParentID, a1.ID)
+	}
+
+	// Final wire chain: system → u1 → a1 → newAsst (4 rows).
+	leaf := final.ResultMessageID.String()
+	listResp, _ := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&clarkv1.ListMessagesRequest{
+		ContextId:     f.contextID.String(),
+		LeafMessageId: &leaf,
+	}))
+	if len(listResp.Msg.Messages) != 4 {
+		var roles []string
+		for _, m := range listResp.Msg.Messages {
+			roles = append(roles, m.Role.String())
+		}
+		t.Fatalf("chain len=%d want 4 (system, u1, a1, newAsst); got %v",
+			len(listResp.Msg.Messages), roles)
+	}
+	tail := listResp.Msg.Messages[len(listResp.Msg.Messages)-2:]
+	if tail[0].Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT ||
+		tail[1].Role != clarkv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+		t.Errorf("trailing roles=%v,%v want assistant,assistant", tail[0].Role, tail[1].Role)
+	}
+}
+
+// TestRegenerate_RejectsSystemParent — only user and assistant parents
+// are valid for regenerate; system / context / summary stay rejected.
+func TestRegenerate_RejectsSystemParent(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://unused")
+
+	// Find the system-seeded message (set up by seedAnthropicSendable).
+	rows, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	if err != nil {
+		t.Fatalf("ListMessagesByContext: %v", err)
+	}
+	var sysID uuid.UUID
+	for _, m := range rows {
+		if m.Role == "system" {
+			sysID = m.ID
+			break
+		}
+	}
+	if sysID == uuid.Nil {
+		t.Fatal("no system message in fixture")
+	}
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	sysStr := sysID.String()
+	_, err = svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&clarkv1.SendMessageRequest{
+		ConversationId:  f.conv.ID.String(),
+		ParentMessageId: &sysStr,
+		Regenerate:      true,
+		ProviderId:      &pid, ModelId: &mid,
+	}))
+	if err == nil {
+		t.Fatal("expected InvalidArgument; regenerate from system should be rejected")
+	}
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Errorf("err code=%v want InvalidArgument", got)
+	}
+}
+
 // TestFork_DifferentModelOnFork — fork using a different model than the
 // original turn used. Confirms history.Build copes with cross-model prefix
 // when assembling the new turn's wire shape.

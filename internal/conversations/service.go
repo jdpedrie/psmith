@@ -811,11 +811,25 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 	}
 	var userMsgRow store.Message
 	if req.Msg.Regenerate {
-		// Regenerate: parent_message_id must reference an existing user-
-		// role row in the active context. Don't insert a new row; just
-		// load it and let the rest of the handler use it as the stream's
-		// parent. The new assistant becomes a sibling of any previous
-		// assistant under this same user message.
+		// Regenerate: parent_message_id references an existing row in the
+		// active context. Don't insert a new user row; just load the
+		// parent and let the rest of the handler use it as the stream's
+		// parent. Two valid shapes:
+		//
+		//   - parent.role == "user": new assistant becomes a sibling of
+		//     any previous assistant under this user message. Standard
+		//     "Reload" affordance on an assistant turn.
+		//   - parent.role == "assistant": new assistant chains AFTER the
+		//     parent assistant — produces two assistants in a row. Powers
+		//     "Save and Resend" on an edited assistant: the edit stays
+		//     in place and the model continues from there. The wire
+		//     prefix sent to the LLM ends with the parent assistant; not
+		//     all providers support that gracefully (Anthropic does via
+		//     prefill, OpenAI Chat may error). We surface upstream
+		//     errors verbatim rather than refusing the request.
+		//
+		// Other roles (system, summary, context) remain rejected — they
+		// have no defined "regenerate from here" semantics.
 		pid, perr := uuid.Parse(*req.Msg.ParentMessageId)
 		if perr != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_message_id: %w", perr))
@@ -830,8 +844,8 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[clarkv1.
 		if row.ContextID != activeCtx.ID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_message_id does not belong to active context"))
 		}
-		if row.Role != "user" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id to reference a user-role message"))
+		if row.Role != "user" && row.Role != "assistant" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id to reference a user or assistant message"))
 		}
 		userMsgRow = row
 		// Repoint the context's current leaf to this user. Without it,

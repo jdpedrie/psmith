@@ -770,7 +770,7 @@ struct ConversationsRepositoryTests {
         // Regenerate off the same user.
         let (echoedUser, run) = try await client.conversations.regenerateAssistant(
             conversationID: conv.id,
-            parentUserMessageID: userMsg.id,
+            parentMessageID: userMsg.id,
             providerID: pid, modelID: mid
         )
         // Echoed user message is the SAME row, not a new one.

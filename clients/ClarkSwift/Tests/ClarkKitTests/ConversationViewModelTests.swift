@@ -632,7 +632,7 @@ struct ConversationViewModelTests {
         }
         // Regenerate: re-stream off the same user. No duplicate user row;
         // a new assistant becomes a sibling of the original assistant.
-        await r.vm.regenerateAssistant(parentUserMessageID: userTurn.id)
+        await r.vm.regenerateAssistant(parentMessageID: userTurn.id)
         await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
 
         await r.vm.loadTree()

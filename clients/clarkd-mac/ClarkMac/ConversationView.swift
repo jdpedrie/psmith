@@ -998,42 +998,28 @@ private struct MessageRow: View {
     ///       original row untouched. The new user gets a fresh assistant
     ///       under it; both branches live as siblings.
     ///     - `.assistant`: in-place edit on the existing assistant row,
-    ///       then regenerate a sibling assistant under the SAME parent
-    ///       user. The user's edit is preserved as one branch; the
-    ///       fresh generation is its sibling. Only fires when the
-    ///       assistant has a user parent — for assistants whose parent
-    ///       is system / context (rare, only at conversation start) the
-    ///       resend silently degrades to a plain save.
+    ///       then regenerate a NEW assistant chained AFTER the edited
+    ///       one. Result: the user sees two assistant messages in a row
+    ///       — the edited version, then the freshly generated one. The
+    ///       edit's role is preserved exactly. Server-side this maps to
+    ///       SendMessage(regenerate=true, parent=editedAssistant);
+    ///       upstream LLMs that don't support a wire prefix ending in
+    ///       assistant will surface their own error verbatim.
     private func saveEdit(thenResend: Bool) {
         let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let role = editRoleDraft
         let messageID = message.id
         let parentForFork = message.parentID
-        // For an assistant resend we need the parent USER's id, walked
-        // up from `message.parentID` while messages[] is still in the
-        // pre-edit state. Capture it now since editMessage will rewrite
-        // the row before we get to regenerateAssistant.
-        let parentUserID: String? = {
-            guard role == .assistant, thenResend else { return nil }
-            guard let pid = parentForFork,
-                  let parent = model.messages.first(where: { $0.id == pid }),
-                  parent.role == .user
-            else { return nil }
-            return parent.id
-        }()
         model.editingMessage = nil
 
         if thenResend && role == .assistant {
-            // Save the edit, then regenerate a sibling assistant from the
-            // parent user. If there's no user parent, skip the regenerate
-            // — the assistant edit still saves (silently degrades to the
-            // non-resend path) so the user's typing isn't lost.
+            // Save the edit on the existing assistant row, then chain a
+            // new assistant under it. The edit stays; the new generation
+            // continues from there. Two assistants in a row is intended.
             Task {
                 await model.editMessage(id: messageID, content: trimmed, role: .assistant)
-                if let parentUserID {
-                    await model.regenerateAssistant(parentUserMessageID: parentUserID)
-                }
+                await model.regenerateAssistant(parentMessageID: messageID)
             }
         } else if thenResend {
             // role == .user: fork-at-user via SendMessage.
