@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -66,23 +67,36 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 }
 
 // perRequestOptions assembles per-call SDK options driven by the active
-// quirks overlay. Today only HeaderInjector contributes; future hooks
-// (per-request body modifiers) would land here too.
+// quirks overlay: HeaderInjector contributes WithHeader entries,
+// RequestBodyFields contributes WithJSONSet entries (the "extra_body"
+// pattern several providers need for non-standard fields).
 func (d *Driver) perRequestOptions(req providers.SendRequest) []option.RequestOption {
-	if d.quirks.HeaderInjector == nil {
-		return nil
-	}
-	h := http.Header{}
-	d.quirks.HeaderInjector(h, req)
-	if len(h) == 0 {
-		return nil
-	}
-	opts := make([]option.RequestOption, 0, len(h))
-	for k, vs := range h {
-		for _, v := range vs {
-			opts = append(opts, option.WithHeader(k, v))
+	var opts []option.RequestOption
+
+	if d.quirks.HeaderInjector != nil {
+		h := http.Header{}
+		d.quirks.HeaderInjector(h, req)
+		for k, vs := range h {
+			for _, v := range vs {
+				opts = append(opts, option.WithHeader(k, v))
+			}
 		}
 	}
+
+	if d.quirks.RequestBodyFields != nil {
+		fields := d.quirks.RequestBodyFields(req)
+		// Iterate sorted keys so the resulting opts list is deterministic
+		// — helps when comparing request bodies in tests.
+		keys := make([]string, 0, len(fields))
+		for k := range fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			opts = append(opts, option.WithJSONSet(k, fields[k]))
+		}
+	}
+
 	return opts
 }
 

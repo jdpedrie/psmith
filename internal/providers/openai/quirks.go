@@ -49,6 +49,17 @@ type Quirks struct {
 	// window, modalities) — pricing comes from the models.dev one-shot
 	// at provider-add time.
 	HardcodedModels []providers.Model
+
+	// RequestBodyFields runs once per Send call and returns
+	// provider-specific JSON fields to merge into the request body via
+	// the SDK's option.WithJSONSet. Used for the "extra_body" pattern
+	// that several providers need: Mistral's `safe_prompt`,
+	// Qwen's `enable_thinking`, Perplexity's `search_*`, OpenRouter's
+	// `provider`/`models`. Returning an empty map is a no-op. Keys
+	// override anything the SDK's typed params set for the same field —
+	// last-write-wins, since WithJSONSet runs after the typed params
+	// serialize.
+	RequestBodyFields func(req providers.SendRequest) map[string]any
 }
 
 // IsEmpty reports whether every hook is unset. Used by the driver to
@@ -56,5 +67,6 @@ type Quirks struct {
 func (q Quirks) IsEmpty() bool {
 	return q.HeaderInjector == nil &&
 		q.DiscoveryFunc == nil &&
-		len(q.HardcodedModels) == 0
+		len(q.HardcodedModels) == 0 &&
+		q.RequestBodyFields == nil
 }

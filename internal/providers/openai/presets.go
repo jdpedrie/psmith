@@ -126,10 +126,29 @@ var presets = map[PresetID]Preset{
 	PresetOpenRouter: {
 		ID: PresetOpenRouter, DisplayName: "OpenRouter",
 		BaseURL: "https://openrouter.ai/api/v1", LogoSlug: "openrouter",
+		Quirks: Quirks{
+			// OpenRouter strongly recommends app-identity headers for
+			// analytics + leaderboard inclusion. Static values; no need
+			// to inspect SendRequest.
+			HeaderInjector: func(h http.Header, _ providers.SendRequest) {
+				h.Set("HTTP-Referer", openRouterReferer)
+				h.Set("X-Title", openRouterTitle)
+			},
+		},
 	},
 	PresetMistral: {
 		ID: PresetMistral, DisplayName: "Mistral",
 		BaseURL: "https://api.mistral.ai/v1", LogoSlug: "mistral",
+		Quirks: Quirks{
+			// `safe_prompt` is a Mistral-specific top-level body field
+			// that prepends an authored safety preamble. Default off —
+			// when we add a UI surface for it, populate from settings.
+			// For now no-op; the registration is here so the hook fires
+			// the moment we wire it.
+			RequestBodyFields: func(_ providers.SendRequest) map[string]any {
+				return nil
+			},
+		},
 	},
 	PresetTogether: {
 		ID: PresetTogether, DisplayName: "Together AI",
@@ -143,6 +162,20 @@ var presets = map[PresetID]Preset{
 		ID: PresetQwen, DisplayName: "Qwen",
 		BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
 		LogoSlug: "qwen-color",
+		Quirks: Quirks{
+			// Qwen3 hybrid-thinking models accept `enable_thinking` at
+			// the top level. We mirror our universal Thinking.Enabled
+			// signal here — if the user turned thinking on for the
+			// turn (or it inherited from the profile/model layer), Qwen
+			// gets the boolean; otherwise the field is omitted and
+			// Qwen falls back to its default (off for most snapshots).
+			RequestBodyFields: func(req providers.SendRequest) map[string]any {
+				if req.Settings.Thinking == nil || req.Settings.Thinking.Enabled == nil {
+					return nil
+				}
+				return map[string]any{"enable_thinking": *req.Settings.Thinking.Enabled}
+			},
+		},
 	},
 	PresetOllama: {
 		ID: PresetOllama, DisplayName: "Ollama (local)",
@@ -151,8 +184,27 @@ var presets = map[PresetID]Preset{
 	PresetPerplexity: {
 		ID: PresetPerplexity, DisplayName: "Perplexity",
 		BaseURL: "https://api.perplexity.ai", LogoSlug: "perplexity",
+		Quirks: Quirks{
+			// Perplexity's `search_*` controls live at the top level of
+			// the request body. They aren't surfaced through Clark
+			// settings yet — when they are (per-conversation
+			// recency/domain filters), wire from req.Settings here. The
+			// stub registers the hook so future wiring is one-line.
+			RequestBodyFields: func(_ providers.SendRequest) map[string]any {
+				return nil
+			},
+		},
 	},
 }
+
+// OpenRouter app-identity defaults. Sent on every request from this
+// preset; the title shows up in OpenRouter's per-app dashboards.
+// `clark://` is a non-resolving URI by design — it identifies the app
+// without exposing any user-facing URL.
+const (
+	openRouterReferer = "clark://app"
+	openRouterTitle   = "Clark"
+)
 
 // --- xAI discovery -------------------------------------------------------
 

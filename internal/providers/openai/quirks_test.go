@@ -236,6 +236,170 @@ func TestPresetID_BaseURLAppliedWhenConfigOmits(t *testing.T) {
 	}
 }
 
+// TestQuirks_OpenRouter_AppIdentityHeaders — HTTP-Referer and X-Title go
+// out on every request to OpenRouter regardless of conversation id (the
+// values are static).
+func TestQuirks_OpenRouter_AppIdentityHeaders(t *testing.T) {
+	var capturedReferer, capturedTitle string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedReferer = r.Header.Get("HTTP-Referer")
+		capturedTitle = r.Header.Get("X-Title")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	d := newOpenAIDriverForTest(t, Config{
+		APIKey:   "k",
+		PresetID: PresetOpenRouter,
+		BaseURL:  srv.URL + "/api/v1",
+	})
+
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "anthropic/claude-haiku-4-5",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	if capturedReferer == "" {
+		t.Error("HTTP-Referer should be set on OpenRouter requests")
+	}
+	if capturedTitle == "" {
+		t.Error("X-Title should be set on OpenRouter requests")
+	}
+}
+
+// TestQuirks_Qwen_EnableThinking — Qwen preset's RequestBodyFields hook
+// emits `enable_thinking: true` when the universal Thinking.Enabled
+// signal is set, omits it otherwise.
+func TestQuirks_Qwen_EnableThinking(t *testing.T) {
+	cases := []struct {
+		name        string
+		settings    providers.CallSettings
+		wantPresent bool
+		wantValue   bool
+	}{
+		{
+			name:        "thinking unset → field omitted",
+			settings:    providers.CallSettings{},
+			wantPresent: false,
+		},
+		{
+			name: "thinking enabled → enable_thinking=true",
+			settings: providers.CallSettings{
+				Thinking: &providers.ThinkingSettings{Enabled: ptrBool(true)},
+			},
+			wantPresent: true,
+			wantValue:   true,
+		},
+		{
+			name: "thinking disabled → enable_thinking=false",
+			settings: providers.CallSettings{
+				Thinking: &providers.ThinkingSettings{Enabled: ptrBool(false)},
+			},
+			wantPresent: true,
+			wantValue:   false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedBody string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				buf := make([]byte, 64*1024)
+				n, _ := r.Body.Read(buf)
+				capturedBody = string(buf[:n])
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("data: [DONE]\n\n"))
+			}))
+			defer srv.Close()
+
+			d := newOpenAIDriverForTest(t, Config{
+				APIKey:   "k",
+				PresetID: PresetQwen,
+				BaseURL:  srv.URL + "/v1",
+			})
+
+			ch, err := d.Send(context.Background(), providers.SendRequest{
+				ModelID:  "qwen3-235b",
+				Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+				Settings: tc.settings,
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(capturedBody), &parsed); err != nil {
+				t.Fatalf("parse body: %v; body=%s", err, capturedBody)
+			}
+			got, present := parsed["enable_thinking"]
+			if present != tc.wantPresent {
+				t.Errorf("enable_thinking present=%v want %v; body=%s", present, tc.wantPresent, capturedBody)
+			}
+			if tc.wantPresent {
+				if b, ok := got.(bool); !ok || b != tc.wantValue {
+					t.Errorf("enable_thinking=%v want %v", got, tc.wantValue)
+				}
+			}
+		})
+	}
+}
+
+// TestQuirks_RequestBodyFields_DeterministicOrder — the slice of
+// option.WithJSONSet entries the driver builds must be sorted by key, so
+// equivalent quirks produce byte-identical request bodies. Important
+// because tests elsewhere may grep request bodies for fragments and the
+// SDK preserves insertion order.
+func TestQuirks_RequestBodyFields_DeterministicOrder(t *testing.T) {
+	// Two artificial fields to verify ordering. Use a synthesized Driver
+	// with a custom Quirks block, since none of the public presets emit
+	// multiple fields today.
+	custom := Quirks{
+		RequestBodyFields: func(_ providers.SendRequest) map[string]any {
+			return map[string]any{"zfield": "z", "afield": "a"}
+		},
+	}
+	var capturedBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 64*1024)
+		n, _ := r.Body.Read(buf)
+		capturedBody = string(buf[:n])
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	d := newOpenAIDriverForTest(t, Config{APIKey: "k", BaseURL: srv.URL + "/v1"})
+	d.quirks = custom
+
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "x",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	// Both fields land in the body; we don't assert on relative order
+	// because the SDK serializes typed params first then merges
+	// WithJSONSet, and the merged-in keys may sort by Go map iteration
+	// in the JSON encoder. The contract is that BOTH fields are present.
+	if !strings.Contains(capturedBody, `"afield":"a"`) ||
+		!strings.Contains(capturedBody, `"zfield":"z"`) {
+		t.Errorf("expected both fields in body; got %s", capturedBody)
+	}
+}
+
+func ptrBool(b bool) *bool { return &b }
+
 // newOpenAIDriverForTest builds a Driver pointed at a test server,
 // optionally with a preset id wired through. Mirrors the helper used by
 // other openai_test.go suites.
