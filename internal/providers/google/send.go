@@ -76,11 +76,19 @@ type geminiSafetySetting struct {
 // --- Streaming response shape -------------------------------------------
 
 // streamEnvelope is one Server-Sent Event payload from streamGenerateContent.
+//
+// UsageMetadata is captured as raw JSON so we can store the original
+// upstream bytes verbatim in messages.provider_usage_raw — preserving
+// fields our typed struct doesn't know about (toolUsePromptTokenCount,
+// the *TokensDetails per-modality breakdowns, future Gemini additions).
+// The pump unmarshals the raw bytes into `usageMetadata` separately for
+// typed access; both paths share the same source bytes so they can't
+// drift.
 type streamEnvelope struct {
-	Candidates    []candidate    `json:"candidates,omitempty"`
-	UsageMetadata *usageMetadata `json:"usageMetadata,omitempty"`
+	Candidates     []candidate      `json:"candidates,omitempty"`
+	UsageMetadata  json.RawMessage  `json:"usageMetadata,omitempty"`
 	PromptFeedback *json.RawMessage `json:"promptFeedback,omitempty"`
-	Error         *geminiError   `json:"error,omitempty"`
+	Error          *geminiError     `json:"error,omitempty"`
 }
 
 type candidate struct {
@@ -90,12 +98,46 @@ type candidate struct {
 	SafetyRatings []json.RawMessage `json:"safetyRatings,omitempty"`
 }
 
+// usageMetadata mirrors the v1 Gemini UsageMetadata shape from
+// https://ai.google.dev/api/generate-content#UsageMetadata. We capture
+// every documented field so cache/cost accounting reflects what the API
+// actually reported, including the per-modality breakdowns. The raw
+// bytes are stored separately on messages.provider_usage_raw — this
+// struct is solely for typed access during the stream.
 type usageMetadata struct {
-	PromptTokenCount        int `json:"promptTokenCount,omitempty"`
-	CandidatesTokenCount    int `json:"candidatesTokenCount,omitempty"`
-	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
-	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
-	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
+	PromptTokenCount         int                   `json:"promptTokenCount,omitempty"`
+	CandidatesTokenCount     int                   `json:"candidatesTokenCount,omitempty"`
+	TotalTokenCount          int                   `json:"totalTokenCount,omitempty"`
+	CachedContentTokenCount  int                   `json:"cachedContentTokenCount,omitempty"`
+	ThoughtsTokenCount       int                   `json:"thoughtsTokenCount,omitempty"`
+	ToolUsePromptTokenCount  int                   `json:"toolUsePromptTokenCount,omitempty"`
+	PromptTokensDetails      []modalityTokenCount  `json:"promptTokensDetails,omitempty"`
+	CacheTokensDetails       []modalityTokenCount  `json:"cacheTokensDetails,omitempty"`
+	CandidatesTokensDetails  []modalityTokenCount  `json:"candidatesTokensDetails,omitempty"`
+	ToolUsePromptTokensDetails []modalityTokenCount `json:"toolUsePromptTokensDetails,omitempty"`
+}
+
+// modalityTokenCount is the per-modality token breakdown Gemini emits
+// alongside the summary counts. We sum them as a fallback for
+// CachedContentTokenCount since some models / API versions emit only
+// the breakdown and not the summary.
+type modalityTokenCount struct {
+	Modality   string `json:"modality,omitempty"`
+	TokenCount int    `json:"tokenCount,omitempty"`
+}
+
+// effectiveCacheReadTokens prefers the explicit summary; falls back to
+// summing the per-modality breakdown so we don't miss cache data when
+// Gemini emits one but not the other.
+func (u usageMetadata) effectiveCacheReadTokens() int {
+	if u.CachedContentTokenCount > 0 {
+		return u.CachedContentTokenCount
+	}
+	sum := 0
+	for _, m := range u.CacheTokensDetails {
+		sum += m.TokenCount
+	}
+	return sum
 }
 
 type geminiError struct {
@@ -243,9 +285,19 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 				}
 			}
 		}
-		if env.UsageMetadata != nil {
-			lastUsage = env.UsageMetadata
-			lastUsageRaw, _ = json.Marshal(env.UsageMetadata)
+		if len(env.UsageMetadata) > 0 {
+			// Store the upstream bytes verbatim so the DB's
+			// provider_usage_raw column reflects what Gemini actually
+			// sent — including fields our typed struct doesn't model
+			// (toolUsePrompt counters, *TokensDetails breakdowns,
+			// future API additions). Then parse a typed view for our
+			// own accounting; if the parse fails we still keep the raw
+			// bytes around for forensics.
+			lastUsageRaw = env.UsageMetadata
+			var um usageMetadata
+			if err := json.Unmarshal(env.UsageMetadata, &um); err == nil {
+				lastUsage = &um
+			}
 		}
 		return true
 	}
@@ -295,8 +347,12 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	emit(out, providers.ChunkDone, map[string]any{})
 }
 
-// emitUsage normalizes a usageMetadata into ChunkUsage. CachedContentTokenCount
-// maps to cache_read_tokens; ThoughtsTokenCount to reasoning_tokens.
+// emitUsage normalizes a usageMetadata into ChunkUsage. Cache reads
+// map to cache_read_tokens via effectiveCacheReadTokens() — prefers
+// the explicit CachedContentTokenCount summary, falls back to summing
+// the per-modality CacheTokensDetails breakdown when the summary is
+// absent (some Gemini models / API versions emit one but not both).
+// ThoughtsTokenCount maps to reasoning_tokens.
 func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage) {
 	in := u.PromptTokenCount
 	outTok := u.CandidatesTokenCount
@@ -307,8 +363,8 @@ func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage)
 	if outTok > 0 {
 		usage.OutputTokens = &outTok
 	}
-	if u.CachedContentTokenCount > 0 {
-		v := u.CachedContentTokenCount
+	if cr := u.effectiveCacheReadTokens(); cr > 0 {
+		v := cr
 		usage.CacheReadTokens = &v
 	}
 	if u.ThoughtsTokenCount > 0 {

@@ -22,6 +22,14 @@ func sseFrame(w http.ResponseWriter, payload any) {
 	}
 }
 
+// mustMarshalUsage wraps a typed usageMetadata as json.RawMessage so
+// tests can express "the upstream sent this usage shape" while the
+// pump's contract is "I receive raw bytes in env.UsageMetadata."
+func mustMarshalUsage(u usageMetadata) json.RawMessage {
+	b, _ := json.Marshal(u)
+	return b
+}
+
 // streamHandler emits a canned generateContent SSE sequence:
 //   - text deltas split across two events
 //   - a final event carrying usage metadata
@@ -58,11 +66,11 @@ func streamHandler(t *testing.T) http.Handler {
 				}},
 			})
 			sseFrame(w, streamEnvelope{
-				UsageMetadata: &usageMetadata{
+				UsageMetadata: mustMarshalUsage(usageMetadata{
 					PromptTokenCount:     12,
 					CandidatesTokenCount: 3,
 					TotalTokenCount:      15,
-				},
+				}),
 			})
 		})
 	return mux
@@ -195,12 +203,12 @@ func TestSend_CachedContentTokensAsCacheRead(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		sseFrame(w, streamEnvelope{
-			UsageMetadata: &usageMetadata{
+			UsageMetadata: mustMarshalUsage(usageMetadata{
 				PromptTokenCount:        100,
 				CandidatesTokenCount:    20,
 				CachedContentTokenCount: 75,
 				ThoughtsTokenCount:      4,
-			},
+			}),
 		})
 	}))
 	defer srv.Close()
@@ -225,6 +233,81 @@ func TestSend_CachedContentTokensAsCacheRead(t *testing.T) {
 	}
 	if usage.ReasoningTokens == nil || *usage.ReasoningTokens != 4 {
 		t.Errorf("reasoning_tokens=%v want 4", usage.ReasoningTokens)
+	}
+}
+
+// TestSend_CacheTokensDetailsFallback — when Gemini emits the
+// per-modality breakdown (cacheTokensDetails) but omits the
+// CachedContentTokenCount summary, the driver must sum the breakdown
+// rather than reporting nil. Defends against the silent-no-cache
+// failure mode the user surfaced from the docs.
+func TestSend_CacheTokensDetailsFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		// Hand-rolled JSON because we want a payload that has
+		// cacheTokensDetails but NOT cachedContentTokenCount — our
+		// typed usageMetadata struct would happily round-trip both,
+		// hiding the very condition we're testing.
+		fmt.Fprintln(w, `data: {"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":20,"cacheTokensDetails":[{"modality":"TEXT","tokenCount":60},{"modality":"IMAGE","tokenCount":15}]}}`)
+		fmt.Fprintln(w)
+	}))
+	defer srv.Close()
+
+	d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "gemini-test",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	var usage providers.Usage
+	for c := range ch {
+		if c.Type == providers.ChunkUsage {
+			_ = json.Unmarshal(c.Payload, &usage)
+		}
+	}
+	if usage.CacheReadTokens == nil || *usage.CacheReadTokens != 75 {
+		t.Errorf("cache_read_tokens=%v want 75 (sum of modality breakdown 60+15)", usage.CacheReadTokens)
+	}
+}
+
+// TestSend_PreservesUnknownUsageFields — provider_usage_raw must carry
+// the upstream bytes verbatim so unknown / new Gemini fields
+// (toolUsePromptTokenCount, *TokensDetails arrays, future additions)
+// survive into the DB. Pre-fix, the pump re-marshaled our typed struct
+// and silently dropped any field we didn't model.
+func TestSend_PreservesUnknownUsageFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":20,"toolUsePromptTokenCount":33,"someFutureField":{"foo":"bar"}}}`)
+		fmt.Fprintln(w)
+	}))
+	defer srv.Close()
+
+	d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "gemini-test",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	var usage providers.Usage
+	for c := range ch {
+		if c.Type == providers.ChunkUsage {
+			_ = json.Unmarshal(c.Payload, &usage)
+		}
+	}
+	if len(usage.ProviderRaw) == 0 {
+		t.Fatal("ProviderRaw missing")
+	}
+	rawStr := string(usage.ProviderRaw)
+	if !strings.Contains(rawStr, "toolUsePromptTokenCount") {
+		t.Errorf("toolUsePromptTokenCount not preserved in raw bytes: %s", rawStr)
+	}
+	if !strings.Contains(rawStr, "someFutureField") {
+		t.Errorf("unknown field someFutureField dropped from raw bytes: %s", rawStr)
 	}
 }
 
