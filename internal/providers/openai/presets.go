@@ -52,7 +52,7 @@ type Preset struct {
 
 // PresetByID returns the preset for id, or PresetCustom (empty) if id is
 // unknown. Unknown ids are not an error — they let us tolerate downgrades
-// where a config references a preset the running clarkd doesn't yet know.
+// where a config references a preset the running reeved doesn't yet know.
 func PresetByID(id PresetID) Preset {
 	if p, ok := presets[id]; ok {
 		return p
@@ -196,7 +196,7 @@ var presets = map[PresetID]Preset{
 		BaseURL: "https://api.perplexity.ai", LogoSlug: "perplexity",
 		Quirks: Quirks{
 			// Perplexity's `search_*` controls live at the top level of
-			// the request body. They aren't surfaced through Clark
+			// the request body. They aren't surfaced through Reeve
 			// settings yet — when they are (per-conversation
 			// recency/domain filters), wire from req.Settings here. The
 			// stub registers the hook so future wiring is one-line.
@@ -209,11 +209,11 @@ var presets = map[PresetID]Preset{
 
 // OpenRouter app-identity defaults. Sent on every request from this
 // preset; the title shows up in OpenRouter's per-app dashboards.
-// `clark://` is a non-resolving URI by design — it identifies the app
+// `reeve://` is a non-resolving URI by design — it identifies the app
 // without exposing any user-facing URL.
 const (
-	openRouterReferer = "clark://app"
-	openRouterTitle   = "Clark"
+	openRouterReferer = "reeve://app"
+	openRouterTitle   = "Reeve"
 )
 
 // --- xAI discovery -------------------------------------------------------

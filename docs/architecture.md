@@ -1,6 +1,6 @@
-# Clark — architecture and design decisions
+# Reeve — architecture and design decisions
 
-Clark is a self-hosted AI chat orchestrator with a server + thin clients architecture, for John's personal use.
+Reeve is a self-hosted AI chat orchestrator with a server + thin clients architecture, for John's personal use.
 
 ## Topology
 - **Server** (source of truth): owns model/provider catalog, all API interactions, all conversation/message storage.
@@ -12,7 +12,7 @@ Clark is a self-hosted AI chat orchestrator with a server + thin clients archite
 - **Server lang:** Go.
 - **Storage:** Postgres.
 - **Transport:** ConnectRPC (chosen for first-class Go/TS/Swift codegen, browser support without a gRPC-Web proxy, and clean server-streaming for token streams). Streaming responses are `stream` RPCs from day one — don't retrofit.
-- **Durable execution / Temporal:** explicitly not adopted. Reconsidered specifically against the resumable-streams requirement; the rejection sharpens rather than weakens. Temporal's value is *execution durability* — workflows resume on a different worker after process death. But the upstream provider stream is held open by an HTTP socket (or harness subprocess pipe) bound to the live process; when the process dies, the socket dies, and no workflow framework can revive it. The hard problem we actually have — *token durability + client reconnection* — is solved by `INSERT INTO stream_chunks` and an in-process pub/sub broker. Adopting Temporal would add a Temporal cluster's worth of operational burden to do a job a goroutine and a table already do. Revisit only if Clark grows multi-step agent orchestration with independently-resumable steps, multi-process work distribution, or complex cross-conversation scheduled jobs.
+- **Durable execution / Temporal:** explicitly not adopted. Reconsidered specifically against the resumable-streams requirement; the rejection sharpens rather than weakens. Temporal's value is *execution durability* — workflows resume on a different worker after process death. But the upstream provider stream is held open by an HTTP socket (or harness subprocess pipe) bound to the live process; when the process dies, the socket dies, and no workflow framework can revive it. The hard problem we actually have — *token durability + client reconnection* — is solved by `INSERT INTO stream_chunks` and an in-process pub/sub broker. Adopting Temporal would add a Temporal cluster's worth of operational burden to do a job a goroutine and a table already do. Revisit only if Reeve grows multi-step agent orchestration with independently-resumable steps, multi-process work distribution, or complex cross-conversation scheduled jobs.
 
 ## Provider model
 Three layers, intentionally separate so each can evolve independently.
@@ -39,13 +39,13 @@ The catalog (refreshed periodically from [models.dev](https://models.dev)) is th
 
 This guarantees: (a) catalog rows can come and go without breaking user setups; (b) pricing changes don't surprise users; (c) hand-edits stick; (d) "manual" models work on the same code path.
 
-**Provider templates** are surfaced via `ListProviderTemplates`. Each template maps a catalog provider to a Clark driver type (e.g., `groq` → `openai-compatible` with `api_base` prefilled). The UI uses these to skip the "what's the base URL?" friction.
+**Provider templates** are surfaced via `ListProviderTemplates`. Each template maps a catalog provider to a Reeve driver type (e.g., `groq` → `openai-compatible` with `api_base` prefilled). The UI uses these to skip the "what's the base URL?" friction.
 
 ## Stateless vs stateful providers — first-class divergence
 - **Stateless providers** (HTTP APIs): server owns canonical history, sends full relevant prefix every turn. Supports forking, per-message model switching, full plugin pipeline.
 - **Stateful harness providers** (Claude Code, Codex, etc.): chat is bound to a harness `session_id`; harness owns canonical context. Server only sends the latest message to the harness. Server's stored history is **informational only** (for display), and is allowed to drift from the harness's session.
   - **Forking and per-message model switching are explicitly disallowed** for harness-backed chats. Trade accepted to keep the harness session coherent.
-  - Plugin history transforms in this mode can only operate on the single outgoing message, not on history (the harness owns history, not Clark).
+  - Plugin history transforms in this mode can only operate on the single outgoing message, not on history (the harness owns history, not Reeve).
 
 ## Data model: Conversation / Context / Message
 
@@ -110,7 +110,7 @@ Messages within a Context form a tree via `parent_id`. Linear conversations are 
 **A message referenced by `current_leaf_message_id` getting deleted** → `ON DELETE SET NULL` clears the column; the fallback chain catches it on the next `SendMessage`.
 
 ### Thinking handling
-*(Applies to stateless-provider chats only. Stateful harness chats — Claude Code, Codex — let the harness own reasoning state; Clark never round-trips thinking for those.)*
+*(Applies to stateless-provider chats only. Stateful harness chats — Claude Code, Codex — let the harness own reasoning state; Reeve never round-trips thinking for those.)*
 
 - `include_thinking_in_history` is a **per-conversation setting**, not per-turn (toggling busts cache for the prefix from that point forward). **Default: off** — matches the typical use case where deep thinking lives on harness backends anyway.
 - Each message stores `thinking` (`jsonb`, raw per-provider shape including Anthropic signatures), `thinking_provider_type`, and `thinking_rendered_text` (plain-text rendering, generated once on inbound by the producing driver via `RenderThinkingToText`, deterministic and cache-stable).
@@ -242,7 +242,7 @@ Buffer chunks in the supervisor and flush to Postgres on a 50ms window or 16-chu
 
 ## Chat plugins
 
-A **chat plugin** is the unit of customization for how Clark shapes a conversation: it can contribute to the system prompt, transform outgoing user messages before send, mutate stored history at prefix-build time, process inbound chunk streams, transform stored content for display, and provide tools the model can call. Bundling these capabilities under one plugin (instead of treating each as a separate primitive) is deliberate — features like "interactive lettered choices" need a system-prompt instruction, an outbound history-strip, and a display rewrite to all stay coherent. Putting them in one config row is the only way they don't drift.
+A **chat plugin** is the unit of customization for how Reeve shapes a conversation: it can contribute to the system prompt, transform outgoing user messages before send, mutate stored history at prefix-build time, process inbound chunk streams, transform stored content for display, and provide tools the model can call. Bundling these capabilities under one plugin (instead of treating each as a separate primitive) is deliberate — features like "interactive lettered choices" need a system-prompt instruction, an outbound history-strip, and a display rewrite to all stay coherent. Putting them in one config row is the only way they don't drift.
 
 ### Required surface and opt-in capabilities
 
@@ -377,7 +377,7 @@ Profile-only scope is the v1 cut. Provider-level, conversation-level, and per-me
 
 ### Cache observability (no self-declaration)
 
-Anthropic-style prompt caching matches byte-stable prefixes. Plugins that change a settled message's bytes between turns invalidate cache from that position onward — but "is this plugin cache-stable?" is a graded question, not a binary one, and asking plugin authors to self-declare leads to wrong answers (subtle position dependence is easy to miss). Clark detects cache impact empirically.
+Anthropic-style prompt caching matches byte-stable prefixes. Plugins that change a settled message's bytes between turns invalidate cache from that position onward — but "is this plugin cache-stable?" is a graded question, not a binary one, and asking plugin authors to self-declare leads to wrong answers (subtle position dependence is easy to miss). Reeve detects cache impact empirically.
 
 **Mechanism:**
 
@@ -407,7 +407,7 @@ John wants to mix cloud APIs with local agentic CLIs, reshape history before sen
 - Conversation forking and per-turn model choice are core requirements for stateless-provider chats; design the message tree, history-builder, and transport with these in mind from the start.
 
 ## Library / SDK decisions (April 2026)
-- **No multi-provider framework.** Evaluated LangChainGo, Eino (Cloudwego), Genkit-Go: all either flatten provider-specific features (Anthropic cache_control/thinking, OpenAI Responses API specifics) or impose a conversation-memory model that would fight Clark's message tree. The "common interface over providers" is Clark's own Go interface, not a framework's.
+- **No multi-provider framework.** Evaluated LangChainGo, Eino (Cloudwego), Genkit-Go: all either flatten provider-specific features (Anthropic cache_control/thinking, OpenAI Responses API specifics) or impose a conversation-memory model that would fight Reeve's message tree. The "common interface over providers" is Reeve's own Go interface, not a framework's.
 - **Per-provider official SDKs:**
   - Anthropic: `github.com/anthropics/anthropic-sdk-go` (exposes cache_control, extended thinking, batch).
   - OpenAI: `github.com/openai/openai-go` (Responses API first-class). Reuse the same SDK with a custom `BaseURL` for any OpenAI-compatible endpoint (Ollama, OpenRouter, Together, Groq, vLLM, llama.cpp, LM Studio).
@@ -439,29 +439,29 @@ Auth is built in from day one to leave room for multi-user later, even though Jo
 - **API tokens** for programmatic access deferred — the same `sessions` mechanism could be reused with `expires_at = NULL` and a `kind` discriminator if needed.
 
 ### AuthService surface
-`Login`, `Logout`, `WhoAmI`, `ChangePassword` for everyone. Admin-only (enforced server-side via `user.is_admin`): `CreateUser`, `ListUsers`, `GetUser`, `UpdateUser`, `DeleteUser`, `AdminResetPassword`. See [proto/clark/v1/auth.proto](../proto/clark/v1/auth.proto).
+`Login`, `Logout`, `WhoAmI`, `ChangePassword` for everyone. Admin-only (enforced server-side via `user.is_admin`): `CreateUser`, `ListUsers`, `GetUser`, `UpdateUser`, `DeleteUser`, `AdminResetPassword`. See [proto/reeve/v1/auth.proto](../proto/reeve/v1/auth.proto).
 
 ## Encryption (deferred)
 
-**Current posture: no application-level encryption.** Host-level disk encryption (FileVault / dm-crypt / equivalent) covers the realistic threat at self-hosted personal scale — the stolen-disk case. Anything stronger trades off against Clark's defining capability (server-side stream supervision, plugin pipelines, compression, history-building) and is deferred until the threat model actually changes.
+**Current posture: no application-level encryption.** Host-level disk encryption (FileVault / dm-crypt / equivalent) covers the realistic threat at self-hosted personal scale — the stolen-disk case. Anything stronger trades off against Reeve's defining capability (server-side stream supervision, plugin pipelines, compression, history-building) and is deferred until the threat model actually changes.
 
 ### Why true E2E is incompatible with the architecture
-Clark's value is server-side intelligence on plaintext: the stream supervisor assembling chunks while iOS is backgrounded, plugin pipelines running before/after the wire, compression invoking another LLM call, history-builder composing prefixes. All require plaintext at the server. Strict client-side E2E (server stores ciphertext only) breaks every one of those. If genuine "no provider sees this" privacy is needed, the answer is to run a local model via the `openai-compatible` driver — Clark's processing then stays on the user's machine.
+Reeve's value is server-side intelligence on plaintext: the stream supervisor assembling chunks while iOS is backgrounded, plugin pipelines running before/after the wire, compression invoking another LLM call, history-builder composing prefixes. All require plaintext at the server. Strict client-side E2E (server stores ciphertext only) breaks every one of those. If genuine "no provider sees this" privacy is needed, the answer is to run a local model via the `openai-compatible` driver — Reeve's processing then stays on the user's machine.
 
 ### Threat tiers and which we'd address
 
 | Tier | Threat | What defends it | Status |
 |---|---|---|---|
-| T1 | Disk / DB backup leaks history | Host-level disk encryption | Covered by OS, no Clark work |
+| T1 | Disk / DB backup leaks history | Host-level disk encryption | Covered by OS, no Reeve work |
 | T1+ | Someone with logical DB access but not host filesystem | Column-level encryption at rest (Tier A below) | Deferred |
-| T3 | Operator (Clark admin) shouldn't read other users' data | Per-user keys derived from password (Tier B below) | Deferred until multi-user |
+| T3 | Operator (Reeve admin) shouldn't read other users' data | Per-user keys derived from password (Tier B below) | Deferred until multi-user |
 | T4 | Provider (Anthropic, OpenAI) shouldn't see content | Impossible — they process it | Out of scope; use local model |
 | T5 | Server itself never has plaintext | True E2E | Architecturally incompatible; not pursued |
 
 ### Triggers to revisit
 
 Revisit Tier A if any of:
-- Clark is exposed beyond `localhost` (reverse-proxy for travel access, deployed to VPS, etc.)
+- Reeve is exposed beyond `localhost` (reverse-proxy for travel access, deployed to VPS, etc.)
 - Database hosted somewhere host-disk encryption can't be assumed
 - Backups stored on devices without filesystem encryption
 

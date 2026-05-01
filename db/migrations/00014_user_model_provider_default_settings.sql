@@ -8,7 +8,7 @@
 --
 -- Storage shape mirrors the upper layers (`profiles.default_settings`,
 -- `user_models.default_settings`): a JSONB blob carrying a `call_settings`
--- key whose contents marshal to `clark.v1.CallSettings`. Additive — existing
+-- key whose contents marshal to `reeve.v1.CallSettings`. Additive — existing
 -- rows carry NULL and resolve identically to "all unset, inherit nothing."
 ALTER TABLE user_model_providers
     ADD COLUMN default_settings JSONB;

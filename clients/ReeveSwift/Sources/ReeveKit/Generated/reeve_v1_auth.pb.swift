@@ -21,8 +21,8 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 }
 
 /// ProbeRequest is empty — clients call Probe with no arguments to
-/// confirm a candidate URL hosts a clarkd. The response shape is the
-/// signal: a successful response means a clarkd answered.
+/// confirm a candidate URL hosts a reeved. The response shape is the
+/// signal: a successful response means a reeved answered.
 public struct Reeve_V1_ProbeRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -38,8 +38,8 @@ public struct Reeve_V1_ProbeResponse: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// Server identifier. Always "clarkd" for the canonical server. Future
-  /// forks can change this to surface "this isn't the clarkd you think
+  /// Server identifier. Always "reeved" for the canonical server. Future
+  /// forks can change this to surface "this isn't the reeved you think
   /// it is" before login auth.
   public var server: String = String()
 

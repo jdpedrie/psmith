@@ -141,7 +141,7 @@ type StartParams struct {
 	// columns to NULL — the same behaviour as before this hook existed.
 	Provider providers.Provider
 
-	// ExplicitCacheAttached records whether Clark attached an explicit
+	// ExplicitCacheAttached records whether Reeve attached an explicit
 	// Gemini cachedContents reference to the request that produced this
 	// run. Stamped onto the materialized assistant message's
 	// explicit_cache_attached column for forensics. nil → don't write

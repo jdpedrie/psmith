@@ -406,7 +406,7 @@ func readBoundedError(resp *http.Response) string {
 
 // --- Request building ---------------------------------------------------
 
-// buildRequestBody translates Clark's wire shape into Gemini's request body.
+// buildRequestBody translates Reeve's wire shape into Gemini's request body.
 //
 // Roles:
 //   - "system" → system_instruction (separate field; not part of contents).
@@ -478,7 +478,7 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 
 // assistantPartsFromWire reconstructs the parts array for an assistant
 // turn going BACK out to Gemini. If WireMessage.Thinking carries a
-// previously-stored thought block (Clark's storage shape:
+// previously-stored thought block (Reeve's storage shape:
 // `[{"type":"text","text":"<concatenated thoughts>"}]`), prepend it as
 // a thought part before the answer text. Falls back to a bare text
 // part when there's no stored thinking — the common case for
@@ -584,7 +584,7 @@ func generationConfigFromSettings(s providers.CallSettings) *generationConfig {
 	return gc
 }
 
-// safetySettingsToWire translates Clark's SafetySettings struct into the
+// safetySettingsToWire translates Reeve's SafetySettings struct into the
 // Gemini wire shape. Each non-nil threshold becomes one entry. Unset
 // thresholds are simply omitted (Gemini falls back to its default).
 func safetySettingsToWire(s *providers.SafetySettings) []geminiSafetySetting {
@@ -612,7 +612,7 @@ func safetySettingsToWire(s *providers.SafetySettings) []geminiSafetySetting {
 	return out
 }
 
-// harmThresholdToWire maps Clark's enum to Gemini's enum strings.
+// harmThresholdToWire maps Reeve's enum to Gemini's enum strings.
 func harmThresholdToWire(t providers.HarmThreshold) string {
 	switch t {
 	case providers.HarmThresholdBlockNone:

@@ -1,4 +1,4 @@
-// Package plugins implements Clark's chat-plugin system. A chat plugin is a
+// Package plugins implements Reeve's chat-plugin system. A chat plugin is a
 // compiled-in unit that can contribute to the system prompt, transform
 // outgoing user messages, mutate stored history at prefix-build time, process
 // inbound chunk streams, transform stored content for display, and provide

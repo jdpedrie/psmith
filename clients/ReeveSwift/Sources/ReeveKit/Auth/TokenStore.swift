@@ -19,7 +19,7 @@ public final class KeychainTokenStore: TokenStore {
     private let service: String
     private let account: String
 
-    public init(service: String = "clark.session", account: String = "default") {
+    public init(service: String = "reeve.session", account: String = "default") {
         self.service = service
         self.account = account
     }

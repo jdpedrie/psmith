@@ -23,8 +23,8 @@ const (
 )
 
 // ProbeRequest is empty — clients call Probe with no arguments to
-// confirm a candidate URL hosts a clarkd. The response shape is the
-// signal: a successful response means a clarkd answered.
+// confirm a candidate URL hosts a reeved. The response shape is the
+// signal: a successful response means a reeved answered.
 type ProbeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -63,8 +63,8 @@ func (*ProbeRequest) Descriptor() ([]byte, []int) {
 
 type ProbeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Server identifier. Always "clarkd" for the canonical server. Future
-	// forks can change this to surface "this isn't the clarkd you think
+	// Server identifier. Always "reeved" for the canonical server. Future
+	// forks can change this to surface "this isn't the reeved you think
 	// it is" before login auth.
 	Server string `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
 	// Build/version string. Empty when the build didn't stamp one (dev

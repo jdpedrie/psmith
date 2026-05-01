@@ -9,7 +9,7 @@ import (
 )
 
 // emitOpenAIResponses writes a Script as an OpenAI Responses API SSE event
-// stream. Minimum sequence to satisfy the SDK parser + Clark driver:
+// stream. Minimum sequence to satisfy the SDK parser + Reeve driver:
 //
 //	event: response.created
 //	data: {"response":{"id":"resp_x","status":"in_progress"}}

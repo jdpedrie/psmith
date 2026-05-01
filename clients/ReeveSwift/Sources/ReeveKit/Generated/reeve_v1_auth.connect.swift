@@ -21,7 +21,7 @@ import SwiftProtobuf
 public protocol Reeve_V1_AuthServiceClientInterface: Sendable {
 
     /// Probe is an unauthenticated identity ping — the client uses it to
-    /// confirm "yes there is a clarkd at this URL" before showing the
+    /// confirm "yes there is a reeved at this URL" before showing the
     /// login form. Returns server identity (name + version) so future
     /// clients can warn on incompatible versions. Cheap; no DB hit.
     @available(iOS 13, *)

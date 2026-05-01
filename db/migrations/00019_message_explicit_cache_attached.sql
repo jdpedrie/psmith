@@ -1,5 +1,5 @@
 -- +goose Up
--- Per-message record of whether Clark attached an explicit Gemini
+-- Per-message record of whether Reeve attached an explicit Gemini
 -- cachedContents reference to the request that produced this row.
 --
 -- NULL  → not applicable (non-google driver, toggle off, or pre-19

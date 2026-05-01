@@ -584,7 +584,7 @@ public struct Reeve_V1_ProviderTemplate: Sendable {
   /// e.g. 'Groq'
   public var name: String = String()
 
-  /// which Clark driver to use, e.g. 'openai-compatible'
+  /// which Reeve driver to use, e.g. 'openai-compatible'
   public var driverType: String = String()
 
   public var apiBase: String {
@@ -2195,7 +2195,7 @@ public struct Reeve_V1_MessageUsage: Sendable {
   /// Clears the value of `totalCostUsd`. Subsequent reads from it will return its default value.
   public mutating func clearTotalCostUsd() {self._totalCostUsd = nil}
 
-  /// explicit_cache_attached records whether Clark attached an
+  /// explicit_cache_attached records whether Reeve attached an
   /// explicit Gemini cachedContents reference to the request that
   /// produced this message. NULL = not applicable (toggle off / non-
   /// google driver / pre-feature message); TRUE = cache attached;

@@ -32,7 +32,7 @@ public final class AuthState {
     }
 }
 
-/// Plain Swift mirror of clark.v1.User. Decoupled from generated types so
+/// Plain Swift mirror of reeve.v1.User. Decoupled from generated types so
 /// views don't import SwiftProtobuf.
 public struct ReeveUser: Sendable, Hashable, Identifiable {
     public let id: String

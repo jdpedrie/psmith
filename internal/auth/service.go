@@ -33,13 +33,13 @@ func NewService(queries *store.Queries) *Service {
 // --- Probe / Login / Logout / WhoAmI ---
 
 // Probe is the unauthenticated identity ping. Clients use it to confirm
-// "yes this URL hosts a clarkd" before showing the login form. No DB
+// "yes this URL hosts a reeved" before showing the login form. No DB
 // hit, no token check; the existence of a successful response is the
-// signal. Server name is hard-coded to "clarkd" — forks should bump
+// signal. Server name is hard-coded to "reeved" — forks should bump
 // this so a misconfigured client can warn.
 func (s *Service) Probe(_ context.Context, _ *connect.Request[reevev1.ProbeRequest]) (*connect.Response[reevev1.ProbeResponse], error) {
 	return connect.NewResponse(&reevev1.ProbeResponse{
-		Server:  "clarkd",
+		Server:  "reeved",
 		Version: serverVersion(),
 	}), nil
 }

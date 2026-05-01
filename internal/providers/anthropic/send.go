@@ -25,7 +25,7 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 
 	// NewStreaming returns a *Stream that lazily decodes; errors surface via
 	// stream.Err() during iteration. We hand the iteration to a goroutine and
-	// translate events into Clark's chunk vocabulary.
+	// translate events into Reeve's chunk vocabulary.
 	stream := d.client.Messages.NewStreaming(ctx, params)
 
 	out := make(chan providers.Chunk, 16)
@@ -150,7 +150,7 @@ func sendChunk(ctx context.Context, out chan<- providers.Chunk, c providers.Chun
 	}
 }
 
-// buildMessageParams translates Clark's WireMessage prefix + CallSettings
+// buildMessageParams translates Reeve's WireMessage prefix + CallSettings
 // into the SDK's MessageNewParams. The system message (if any) is hoisted
 // out of the messages array — Anthropic carries it on a separate field.
 //

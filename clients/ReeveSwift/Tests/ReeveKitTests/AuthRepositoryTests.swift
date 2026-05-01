@@ -4,7 +4,7 @@ import Connect
 @testable import ReeveKit
 import ReeveKitTestHarness
 
-/// Layer 1 integration tests for AuthRepository against a real clarkd
+/// Layer 1 integration tests for AuthRepository against a real reeved
 /// subprocess. Covers tests #1–#10 from the testing plan.
 ///
 /// Notes on plan drift:
@@ -199,12 +199,12 @@ struct AuthRepositoryTests {
 
     // MARK: - probe()
 
-    @Test("probe against the running clarkd succeeds")
+    @Test("probe against the running reeved succeeds")
     func probeSuccess() async throws {
         let result = await probeReeveServer(url: server.baseURL)
         switch result {
         case .ok(let serverName, _):
-            #expect(serverName == "clarkd")
+            #expect(serverName == "reeved")
         case .wrongServer(let detail):
             Issue.record("expected ok; got wrongServer: \(detail)")
         case .unreachable(let detail):

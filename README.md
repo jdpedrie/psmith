@@ -1,6 +1,6 @@
-# Clark
+# Reeve
 
-Clark is a self-hosted AI chat orchestrator. It mixes cloud APIs (Anthropic, OpenAI, Google, OpenRouter, anything OpenAI-compatible) and — eventually — local agentic CLIs behind a single chat UI, with a server that owns history so iOS clients can disconnect and reconnect without losing tokens mid-stream.
+Reeve is a self-hosted AI chat orchestrator. It mixes cloud APIs (Anthropic, OpenAI, Google, OpenRouter, anything OpenAI-compatible) and — eventually — local agentic CLIs behind a single chat UI, with a server that owns history so iOS clients can disconnect and reconnect without losing tokens mid-stream.
 
 It's a personal project. The roadmap, scope, and tradeoffs are biased toward "one developer using this every day," not "platform for many tenants."
 
@@ -8,7 +8,7 @@ It's a personal project. The roadmap, scope, and tradeoffs are biased toward "on
 
 ## Why this exists
 
-Off-the-shelf chat UIs make easy things easy and hard things impossible. Clark trades polish for knobs:
+Off-the-shelf chat UIs make easy things easy and hard things impossible. Reeve trades polish for knobs:
 
 - **Mix providers in one conversation** — pick the model per turn. Ask Claude for code, hand the result to Gemini for review, settle the dispute with GPT-5.
 - **Server-owned streams** — the server consumes upstream provider streams to completion regardless of client state. Background the iOS app, return five minutes later, the message is finished and waiting.
@@ -60,18 +60,17 @@ The full design — provider model, conversation/context/message data model, str
 
 Stack:
 
-- **Server** — Go, single binary (`clarkd`), Postgres for storage, ConnectRPC for transport (HTTP/2, server-streaming RPCs, first-class Go/TS/Swift codegen).
+- **Server** — Go, single binary (`reeved`), Postgres for storage, ConnectRPC for transport (HTTP/2, server-streaming RPCs, first-class Go/TS/Swift codegen).
 - **Model metadata** — in-process `LiveCatalog` (no DB cache, no periodic refresh goroutine). On first lookup the server fetches [models.dev](https://models.dev) once into memory; subsequent reads are instant. Snapshot the result onto each `user_models` row at provider-add time so per-message cost calc is local and deterministic.
-- **macOS client** — SwiftUI on macOS 26 (Liquid Glass). Shared `ClarkKit` Swift package for repositories/view models so future iOS reuses the non-UI layer.
+- **macOS client** — SwiftUI on macOS 26 (Liquid Glass). Shared `ReeveKit` Swift package for repositories/view models so future iOS reuses the non-UI layer.
 - **No multi-provider framework** — drivers use each vendor's official SDK directly so provider-specific features (Anthropic `cache_control` + thinking, OpenAI Responses, Google `safetySettings`) survive intact. The OpenAI-compatible driver carries a small `Quirks` overlay for the 11 OAI-compat presets so each provider's deviations (cache headers, extra body fields, custom discovery endpoints) live in one slot per preset rather than forking the driver.
 
 ## Repo layout
 
 ```
-clarkd/                   # convenience launcher
-cmd/clarkd/               # server entrypoint
+cmd/reeved/               # server entrypoint
 cmd/seeduser/             # admin user bootstrap utility
-proto/clark/v1/           # ConnectRPC service definitions
+proto/reeve/v1/           # ConnectRPC service definitions
 gen/                      # generated Go bindings (buf)
 db/migrations/            # goose-format SQL migrations
 internal/
@@ -87,8 +86,8 @@ internal/
   stream/                 # supervisor, broker, run lifecycle
 plugins/                  # in-tree chat plugins
 clients/
-  ClarkSwift/             # shared Swift package (ClarkKit + tests)
-  clarkd-mac/             # macOS app + snapshot tests
+  ReeveSwift/             # shared Swift package (ReeveKit + tests)
+  reeved-mac/             # macOS app + snapshot tests
 docs/
   architecture.md         # design decisions
   testing-plan.md         # Swift L1+L2 testing strategy
@@ -133,7 +132,7 @@ export REEVE_DSN='postgres://clark:clark@localhost:5433/clark?sslmode=disable'
 export REEVE_BOOTSTRAP_ADMIN_USERNAME=john
 export REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme
 make run
-# clarkd listening addr=:8080
+# reeved listening addr=:8080
 ```
 
 Other env vars:
@@ -151,7 +150,7 @@ Other env vars:
 make mac-app-run
 ```
 
-`make mac-app-run` builds the Swift package, wraps the binary in a `ClarkMac.app` bundle (so macOS gives it a Dock icon and can be screenshotted/automated), and launches it. Sign in with your bootstrap credentials.
+`make mac-app-run` builds the Swift package, wraps the binary in a `ReeveMac.app` bundle (so macOS gives it a Dock icon and can be screenshotted/automated), and launches it. Sign in with your bootstrap credentials.
 
 ![Providers and enabled models](docs/screenshots/providers.png)
 
@@ -178,8 +177,8 @@ make tidy     # go mod tidy
 
 ```bash
 make test            # full Go test suite (unit + pgtestdb integration)
-make swift-test      # ClarkKit L1 (integration) + ClarkMac L2 (snapshot)
-make swift-test-l1   # ClarkKit only
+make swift-test      # ReeveKit L1 (integration) + ReeveMac L2 (snapshot)
+make swift-test-l1   # ReeveKit only
 make swift-test-l2   # snapshot only
 make swift-test-l2-record  # re-baseline snapshots after intentional UI changes
 ```
@@ -187,7 +186,7 @@ make swift-test-l2-record  # re-baseline snapshots after intentional UI changes
 The repo's testing posture is documented in [`docs/testing-plan.md`](docs/testing-plan.md). Short version:
 
 - **Backend** — Go unit tests for pure functions, [`pgtestdb`](https://github.com/peterldowns/pgtestdb) for anything that touches Postgres (each test gets a fresh, migrated DB).
-- **Swift L1** — every public Repository/ViewModel method gets an integration test that drives it against a freshly-spawned `clarkd` subprocess on an ephemeral port + isolated DB.
+- **Swift L1** — every public Repository/ViewModel method gets an integration test that drives it against a freshly-spawned `reeved` subprocess on an ephemeral port + isolated DB.
 - **Swift L2** — every load-bearing SwiftUI view (or non-trivial state of one) gets a snapshot test against committed PNG baselines.
 
 `CLAUDE.md` makes this a hard rule: don't merge a vertical slice without tests. `pgtestdb` failures usually mean the connection string in `internal/testutil` doesn't match your Postgres — set `PGTESTDB_*` env vars to override.
@@ -206,7 +205,7 @@ func New(deps providers.Deps, config json.RawMessage) (providers.Provider, error
 }
 ```
 
-Implement `providers.Provider` plus either `StatelessProvider.Send` (full prefix every turn — server owns history) or `StatefulProvider.{StartSession, SendInSession, TerminateSession}` (long-lived harness session — harness owns history). Then add a blank import in `cmd/clarkd/main.go` so the package is linked. See `internal/providers/anthropic/`, `internal/providers/openai/`, and `internal/providers/google/` as references.
+Implement `providers.Provider` plus either `StatelessProvider.Send` (full prefix every turn — server owns history) or `StatefulProvider.{StartSession, SendInSession, TerminateSession}` (long-lived harness session — harness owns history). Then add a blank import in `cmd/reeved/main.go` so the package is linked. See `internal/providers/anthropic/`, `internal/providers/openai/`, and `internal/providers/google/` as references.
 
 ### Adding a chat plugin
 

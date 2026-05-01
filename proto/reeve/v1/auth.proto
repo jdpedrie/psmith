@@ -18,7 +18,7 @@ option go_package = "github.com/jdpedrie/reeve/gen/reeve/v1;reevev1";
 // allowlist is enforced by the interceptor, not by proto annotations.
 service AuthService {
   // Probe is an unauthenticated identity ping — the client uses it to
-  // confirm "yes there is a clarkd at this URL" before showing the
+  // confirm "yes there is a reeved at this URL" before showing the
   // login form. Returns server identity (name + version) so future
   // clients can warn on incompatible versions. Cheap; no DB hit.
   rpc Probe(ProbeRequest) returns (ProbeResponse);
@@ -50,12 +50,12 @@ service AuthService {
 // --- Probe / Login / Logout / WhoAmI ---
 
 // ProbeRequest is empty — clients call Probe with no arguments to
-// confirm a candidate URL hosts a clarkd. The response shape is the
-// signal: a successful response means a clarkd answered.
+// confirm a candidate URL hosts a reeved. The response shape is the
+// signal: a successful response means a reeved answered.
 message ProbeRequest {}
 message ProbeResponse {
-  // Server identifier. Always "clarkd" for the canonical server. Future
-  // forks can change this to surface "this isn't the clarkd you think
+  // Server identifier. Always "reeved" for the canonical server. Future
+  // forks can change this to surface "this isn't the reeved you think
   // it is" before login auth.
   string server = 1;
   // Build/version string. Empty when the build didn't stamp one (dev

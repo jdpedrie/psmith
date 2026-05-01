@@ -62,7 +62,7 @@ const (
 // AuthServiceClient is a client for the reeve.v1.AuthService service.
 type AuthServiceClient interface {
 	// Probe is an unauthenticated identity ping — the client uses it to
-	// confirm "yes there is a clarkd at this URL" before showing the
+	// confirm "yes there is a reeved at this URL" before showing the
 	// login form. Returns server identity (name + version) so future
 	// clients can warn on incompatible versions. Cheap; no DB hit.
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
@@ -236,7 +236,7 @@ func (c *authServiceClient) AdminResetPassword(ctx context.Context, req *connect
 // AuthServiceHandler is an implementation of the reeve.v1.AuthService service.
 type AuthServiceHandler interface {
 	// Probe is an unauthenticated identity ping — the client uses it to
-	// confirm "yes there is a clarkd at this URL" before showing the
+	// confirm "yes there is a reeved at this URL" before showing the
 	// login form. Returns server identity (name + version) so future
 	// clients can warn on incompatible versions. Cheap; no DB hit.
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)

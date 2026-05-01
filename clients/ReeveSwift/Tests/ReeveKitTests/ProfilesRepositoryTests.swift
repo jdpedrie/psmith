@@ -4,7 +4,7 @@ import Connect
 @testable import ReeveKit
 import ReeveKitTestHarness
 
-/// Layer 1 integration tests for ProfilesRepository against a real clarkd
+/// Layer 1 integration tests for ProfilesRepository against a real reeved
 /// subprocess. Covers tests #1–#22 from the testing plan.
 ///
 /// Drift notes:

@@ -255,7 +255,7 @@ public final class ModelProvidersRepository: Sendable {
     /// Verifies a provider's auth + reachability. Server returns ok=false in
     /// the response payload (not as an RPC error) for normal "your key is
     /// wrong" failures — we surface those inline. Connection-level errors
-    /// (couldn't reach clarkd at all) still throw.
+    /// (couldn't reach reeved at all) still throw.
     public func testProvider(providerID: String) async throws -> ReeveProviderTestResult {
         var req = Reeve_V1_TestUserModelProviderRequest()
         req.userModelProviderID = providerID

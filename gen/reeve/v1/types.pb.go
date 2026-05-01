@@ -782,7 +782,7 @@ type ProviderTemplate struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	CatalogProviderId string                 `protobuf:"bytes,1,opt,name=catalog_provider_id,json=catalogProviderId,proto3" json:"catalog_provider_id,omitempty"` // e.g. 'groq'
 	Name              string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                      // e.g. 'Groq'
-	DriverType        string                 `protobuf:"bytes,3,opt,name=driver_type,json=driverType,proto3" json:"driver_type,omitempty"`                        // which Clark driver to use, e.g. 'openai-compatible'
+	DriverType        string                 `protobuf:"bytes,3,opt,name=driver_type,json=driverType,proto3" json:"driver_type,omitempty"`                        // which Reeve driver to use, e.g. 'openai-compatible'
 	ApiBase           *string                `protobuf:"bytes,4,opt,name=api_base,json=apiBase,proto3,oneof" json:"api_base,omitempty"`
 	EnvKey            *string                `protobuf:"bytes,5,opt,name=env_key,json=envKey,proto3,oneof" json:"env_key,omitempty"` // conventional env var for the API key
 	DocUrl            *string                `protobuf:"bytes,6,opt,name=doc_url,json=docUrl,proto3,oneof" json:"doc_url,omitempty"`
@@ -2882,7 +2882,7 @@ type MessageUsage struct {
 	CacheReadCostUsd  *float64               `protobuf:"fixed64,8,opt,name=cache_read_cost_usd,json=cacheReadCostUsd,proto3,oneof" json:"cache_read_cost_usd,omitempty"`
 	CacheWriteCostUsd *float64               `protobuf:"fixed64,9,opt,name=cache_write_cost_usd,json=cacheWriteCostUsd,proto3,oneof" json:"cache_write_cost_usd,omitempty"`
 	TotalCostUsd      *float64               `protobuf:"fixed64,10,opt,name=total_cost_usd,json=totalCostUsd,proto3,oneof" json:"total_cost_usd,omitempty"`
-	// explicit_cache_attached records whether Clark attached an
+	// explicit_cache_attached records whether Reeve attached an
 	// explicit Gemini cachedContents reference to the request that
 	// produced this message. NULL = not applicable (toggle off / non-
 	// google driver / pre-feature message); TRUE = cache attached;

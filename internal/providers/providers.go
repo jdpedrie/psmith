@@ -78,8 +78,8 @@ type WireMessage struct {
 }
 
 // CallSettings carries per-turn provider settings. The shape mirrors the
-// `clark.v1.CallSettings` proto (a hybrid common-core + provider-specific
-// design); see proto/clark/v1/types.proto for field-level documentation.
+// `reeve.v1.CallSettings` proto (a hybrid common-core + provider-specific
+// design); see proto/reeve/v1/types.proto for field-level documentation.
 //
 // Drivers translate the subset of fields they support and silently drop the
 // rest. The 4-layer resolution chain
@@ -112,14 +112,14 @@ type CallSettings struct {
 	ExplicitCache *bool
 }
 
-// ThinkingSettings mirrors clark.v1.ThinkingSettings.
+// ThinkingSettings mirrors reeve.v1.ThinkingSettings.
 type ThinkingSettings struct {
 	Enabled      *bool
 	BudgetTokens *int
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the
-// cross-provider common surface. Mirrors clark.v1.AnthropicExtras.
+// cross-provider common surface. Mirrors reeve.v1.AnthropicExtras.
 type AnthropicExtras struct {
 	// CacheEnabled, when non-nil and false, instructs the driver to skip
 	// the auto cache_control marker placement entirely. nil = inherit
@@ -195,7 +195,7 @@ type GoogleExtras struct {
 	CachedContent *string
 }
 
-// SafetySettings mirrors clark.v1.SafetySettings.
+// SafetySettings mirrors reeve.v1.SafetySettings.
 type SafetySettings struct {
 	Harassment       *HarmThreshold
 	HateSpeech       *HarmThreshold
@@ -203,7 +203,7 @@ type SafetySettings struct {
 	DangerousContent *HarmThreshold
 }
 
-// HarmThreshold mirrors clark.v1.HarmThreshold.
+// HarmThreshold mirrors reeve.v1.HarmThreshold.
 type HarmThreshold int
 
 const (

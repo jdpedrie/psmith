@@ -1,4 +1,4 @@
-// Package openai implements the Clark provider driver for any backend that
+// Package openai implements the Reeve provider driver for any backend that
 // speaks the OpenAI HTTP API. The same driver covers OpenAI direct,
 // OpenRouter, Together, Groq, Fireworks, Ollama, vLLM, llama.cpp, LM Studio
 // and any other OpenAI-compatible endpoint — the only difference is the
@@ -15,7 +15,7 @@
 // are inconsistent about whether they expose a /v1/tokenize-style endpoint
 // (some do — vLLM, llama.cpp; many don't), and the official openai-go SDK
 // doesn't ship a tiktoken-style local helper. Adding a heavy local tokenizer
-// dependency for a single optional method isn't worth it; if Clark needs
+// dependency for a single optional method isn't worth it; if Reeve needs
 // token counts it will plumb through a separate utility (or rely on the
 // provider's own usage stats reported on stream completion).
 package openai
@@ -184,7 +184,7 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
 		option.WithBaseURL(cfg.BaseURL),
-		// Clark's stream supervisor owns retry policy. Disable SDK retries
+		// Reeve's stream supervisor owns retry policy. Disable SDK retries
 		// to keep behaviour predictable in tests and prod.
 		option.WithMaxRetries(0),
 	}

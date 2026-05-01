@@ -6,7 +6,7 @@ Conventions:
 - Each screen is shared between macOS and iOS unless tagged **(macOS only)** or **(iOS only)**.
 - "Element" = a visible or interactive UI piece.
 - "Functionality" = behavior + the server RPC(s) it triggers.
-- RPCs are listed by the canonical name from `proto/clark/v1/*.proto`.
+- RPCs are listed by the canonical name from `proto/reeve/v1/*.proto`.
 - A consolidated RPC inventory (with what's implemented vs deferred) lives at the bottom.
 
 ---
@@ -15,7 +15,7 @@ Conventions:
 
 ### 1.1 Login
 
-**Purpose:** authenticate against a Clark server.
+**Purpose:** authenticate against a Reeve server.
 
 **Elements:**
 - Server URL field (with default; persisted in UserDefaults)
@@ -472,7 +472,7 @@ Sections:
 ## 8. macOS-only chrome
 
 ### 8.1 Menu bar
-- **Clark menu:** About, Preferences (⌘,), Quit (⌘Q)
+- **Reeve menu:** About, Preferences (⌘,), Quit (⌘Q)
 - **File menu:** New Conversation (⌘N), New Profile, New Provider, Close Window (⌘W), Export Transcript
 - **Edit menu:** standard Cut/Copy/Paste/Find; "Find in conversation…" (⌘F)
 - **View menu:** Show/Hide sidebar, Show/Hide context history, Toggle compact mode, Show stream runs panel
@@ -496,7 +496,7 @@ Sections:
 - Tap result → deep link into Conversation View at that message
 
 ### 8.5 Services menu
-- "New Clark conversation with selection" — invokable from any app via the Services menu; opens a new conversation with the selected text as the first user message.
+- "New Reeve conversation with selection" — invokable from any app via the Services menu; opens a new conversation with the selected text as the first user message.
 
 ### 8.6 Status bar item *(optional)*
 - Menu bar icon showing active stream count
@@ -523,7 +523,7 @@ Sections:
   - Notification Service Extension: pre-fetches the assistant message body so it's instant on launch.
 
 ### 9.4 Share sheet integration
-- "Send to Clark" share extension — accept text/URLs from any app, open new conversation seeded with that content.
+- "Send to Reeve" share extension — accept text/URLs from any app, open new conversation seeded with that content.
 
 ### 9.5 Swipe actions on Conversation List
 - Swipe left: Delete, Rename
@@ -544,7 +544,7 @@ Sections:
 - **Loading vs error states** — every list view has explicit empty / loading / error variants, not just a blank screen.
 - **Optimistic updates** where safe (rename conversation, edit profile name) with rollback on server failure.
 - **Local cache** — SwiftData (or Codable) for: conversations list, recent contexts, recent message chains. Server is source of truth; cache is a perf/offline read-only layer. No write-side conflict resolution needed — every mutation goes through the server.
-- **Deep links** (both platforms) — `clark://conversation/<id>`, `clark://conversation/<id>/message/<id>`, `clark://profile/<id>`. Used by Spotlight (macOS) and push notifications (iOS).
+- **Deep links** (both platforms) — `reeve://conversation/<id>`, `reeve://conversation/<id>/message/<id>`, `reeve://profile/<id>`. Used by Spotlight (macOS) and push notifications (iOS).
 
 ---
 

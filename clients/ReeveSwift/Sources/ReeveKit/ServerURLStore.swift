@@ -19,7 +19,7 @@ import Observation
 public final class ServerURLStore {
     public static let shared = ServerURLStore()
 
-    private static let defaultsKey = "clark.server.url"
+    private static let defaultsKey = "reeve.server.url"
 
     /// Currently-active server URL. Setting it persists immediately to
     /// UserDefaults so the next launch starts there. Owners that need

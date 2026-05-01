@@ -208,7 +208,7 @@ func TestLive_ExplicitCaching(t *testing.T) {
 
 	cc, err := d.CreateCachedContent(ctx, CreateCachedContentRequest{
 		ModelID:           modelID,
-		DisplayName:       "clark-live-test",
+		DisplayName:       "reeve-live-test",
 		SystemInstruction: bigSystem,
 		TTL:               "300s",
 	})

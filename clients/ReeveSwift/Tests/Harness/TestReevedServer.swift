@@ -326,7 +326,7 @@ extension TestReevedServer {
         let pass = env["PGTESTDB_PASSWORD"] ?? "clark"
         let root = env["PGTESTDB_DB"] ?? "clark"
         // FORCE disconnects any leftover sessions; otherwise DROP fails if
-        // clarkd hasn't fully released its pool.
+        // reeved hasn't fully released its pool.
         let (rc, out) = try runPSQLInContainer(
             user: user, password: pass, db: root,
             sql: "DROP DATABASE IF EXISTS \"\(dbName)\" WITH (FORCE);"

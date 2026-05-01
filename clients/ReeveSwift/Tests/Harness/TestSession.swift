@@ -6,7 +6,7 @@ import Connect
 /// register a uuid-suffixed user via the bootstrap admin, log them in, and hand
 /// back the authenticated client + the user record.
 ///
-/// Why register-via-admin and not a public Register RPC: clarkd doesn't
+/// Why register-via-admin and not a public Register RPC: reeved doesn't
 /// expose registration as an unauthenticated RPC. The only paths to a user
 /// row are (a) `auth.Bootstrap` at server start (REEVE_BOOTSTRAP_ADMIN_*)
 /// or (b) `AuthService.CreateUser`, which is admin-gated. The harness seeds

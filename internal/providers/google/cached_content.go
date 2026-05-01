@@ -12,7 +12,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
-// Cached content (explicit caching) is API-only in Clark v1: there's no
+// Cached content (explicit caching) is API-only in Reeve v1: there's no
 // proto field, no UI surface, and no automatic placement. Callers that
 // want to reuse a long stable prefix (e.g. a tool catalog or a system
 // prompt that exceeds Gemini's implicit-cache threshold) explicitly
@@ -52,7 +52,7 @@ type CachedContent struct {
 
 // CachedContentUsage is the subset of the cachedContents.usageMetadata we
 // care about. Gemini reports more (audio/video tokens, etc.) but those
-// don't apply to text-only Clark.
+// don't apply to text-only Reeve.
 type CachedContentUsage struct {
 	TotalTokenCount int `json:"totalTokenCount,omitempty"`
 }

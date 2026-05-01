@@ -56,7 +56,7 @@ message UserModelProvider {
 message ProviderTemplate {
   string catalog_provider_id = 1;   // e.g. 'groq'
   string name = 2;                  // e.g. 'Groq'
-  string driver_type = 3;           // which Clark driver to use, e.g. 'openai-compatible'
+  string driver_type = 3;           // which Reeve driver to use, e.g. 'openai-compatible'
   optional string api_base = 4;
   optional string env_key = 5;      // conventional env var for the API key
   optional string doc_url = 6;
@@ -484,7 +484,7 @@ message MessageUsage {
   optional double cache_write_cost_usd = 9;
   optional double total_cost_usd = 10;
 
-  // explicit_cache_attached records whether Clark attached an
+  // explicit_cache_attached records whether Reeve attached an
   // explicit Gemini cachedContents reference to the request that
   // produced this message. NULL = not applicable (toggle off / non-
   // google driver / pre-feature message); TRUE = cache attached;

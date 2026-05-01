@@ -87,16 +87,16 @@ public enum ReeveError: Error, LocalizedError {
     }
 }
 
-/// Result of probing a candidate clarkd URL. The login screen uses
+/// Result of probing a candidate reeved URL. The login screen uses
 /// this to decide whether to advance to the username/password form
 /// (`.ok`) or surface a tailored failure message.
 public enum ReeveProbeResult: Sendable, Equatable {
-    /// Server answered cleanly. `serverName` should be "clarkd" for the
+    /// Server answered cleanly. `serverName` should be "reeved" for the
     /// canonical server; clients can warn on anything else. `version` is
     /// the build identifier, empty for dev builds.
     case ok(serverName: String, version: String)
     /// Server reachable but refused the probe — e.g. an unrelated
-    /// service running at this URL, or an old clarkd that doesn't yet
+    /// service running at this URL, or an old reeved that doesn't yet
     /// implement Probe.
     case wrongServer(detail: String)
     /// Couldn't reach the URL at all (DNS, refused, timeout, malformed
@@ -104,7 +104,7 @@ public enum ReeveProbeResult: Sendable, Equatable {
     case unreachable(detail: String)
 }
 
-/// Probes a candidate clarkd URL without authentication. Doesn't hold
+/// Probes a candidate reeved URL without authentication. Doesn't hold
 /// onto state — constructs a one-shot ReeveClient against the given
 /// URL, calls Probe, returns. Runs on the main actor because AuthState
 /// init is main-actor-isolated; the probe itself is fast and the
@@ -148,7 +148,7 @@ public final class AuthRepository: Sendable {
         if let err = resp.error {
             let detail = err.message ?? String(describing: err.code)
             // unimplemented or unauthenticated would be a "wrong server"
-            // signal (something is at this URL but it isn't a clarkd that
+            // signal (something is at this URL but it isn't a reeved that
             // speaks the Probe RPC). Other codes (unavailable, deadline,
             // network) are unreachable.
             switch err.code {

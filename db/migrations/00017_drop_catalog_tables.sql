@@ -12,7 +12,7 @@ DROP TABLE IF EXISTS catalog_model_providers;
 -- +goose Down
 -- Recreate the original 00001_initial.sql shape so a downgrade restores
 -- a valid (empty) catalog. The DBCatalog code that populated these is
--- gone, so a downgraded clarkd would still need to rehydrate from
+-- gone, so a downgraded reeved would still need to rehydrate from
 -- models.dev — there's no path back to the prior cached state.
 
 CREATE TABLE catalog_model_providers (

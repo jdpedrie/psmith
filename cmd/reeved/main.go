@@ -1,4 +1,4 @@
-// clarkd is the Clark server.
+// reeved is the Reeve server.
 package main
 
 import (
@@ -115,7 +115,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("clarkd listening", "addr", addr)
+		slog.Info("reeved listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
