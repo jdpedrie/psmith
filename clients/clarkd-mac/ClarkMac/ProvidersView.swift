@@ -491,12 +491,7 @@ private struct ModelRow: View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.displayName).fontWeight(.medium).lineLimit(1)
-                ModelMetaStrip(
-                    contextWindow: model.contextWindow,
-                    pricing: model.pricing,
-                    knowledgeCutoff: model.knowledgeCutoff,
-                    capabilities: model.capabilities
-                )
+                ModelMetaStrip(snapshot: model.metaSnapshot(providerLabel: providersModel.providers.first(where: { $0.id == model.providerID })?.label))
                 // Inline test result chip — sits below the meta strip so it
                 // doesn't fight for horizontal real estate. Hidden when idle.
                 ModelTestResultChip(
@@ -1241,12 +1236,7 @@ private struct DiscoveredModelRow: View {
                             EnabledBadge()
                         }
                     }
-                    ModelMetaStrip(
-                        contextWindow: model.contextWindow,
-                        pricing: model.pricing,
-                        knowledgeCutoff: nil,  // discovery rows don't carry it
-                        capabilities: model.capabilities
-                    )
+                    ModelMetaStrip(snapshot: model.metaSnapshot(providerLabel: nil))
                 }
                 Spacer()
             }
@@ -1271,38 +1261,93 @@ private struct EnabledBadge: View {
     }
 }
 
+/// Aggregate view-model for ModelMetaStrip + ModelDetailPopover. Lets
+/// both enabled-model rows (ClarkUserModel) and discovery rows
+/// (ClarkDiscoveredModel) feed the same widget without making each
+/// caller inflate a full ClarkUserModel.
+struct ModelMetaSnapshot {
+    let displayName: String
+    let modelID: String
+    /// Provider human-readable name when known; nil during discovery
+    /// where the row isn't yet bound to a configured provider.
+    let providerLabel: String?
+    let contextWindow: Int32?
+    let maxOutputTokens: Int32?
+    let pricing: ClarkModelPricing?
+    let knowledgeCutoff: String?
+    let modalities: [String]
+    let capabilities: ClarkModelCapabilities?
+}
+
+extension ClarkUserModel {
+    func metaSnapshot(providerLabel: String?) -> ModelMetaSnapshot {
+        ModelMetaSnapshot(
+            displayName: displayName, modelID: modelID,
+            providerLabel: providerLabel,
+            contextWindow: contextWindow, maxOutputTokens: maxOutputTokens,
+            pricing: pricing, knowledgeCutoff: knowledgeCutoff,
+            modalities: modalities, capabilities: capabilities
+        )
+    }
+}
+
+extension ClarkDiscoveredModel {
+    func metaSnapshot(providerLabel: String?) -> ModelMetaSnapshot {
+        // Discovery rows don't carry knowledge cutoff / max output tokens
+        // / modalities — the wire shape only includes what we need to
+        // render the row + decide whether to enable.
+        ModelMetaSnapshot(
+            displayName: displayName, modelID: modelID,
+            providerLabel: providerLabel,
+            contextWindow: contextWindow, maxOutputTokens: nil,
+            pricing: pricing, knowledgeCutoff: nil,
+            modalities: [], capabilities: capabilities
+        )
+    }
+}
+
 /// Compact metadata strip for a model row: ctx · cost-bucket · cutoff ·
 /// capability icons. Each chip is fixed-width-natural so they never wrap;
 /// capabilities are condensed to single SF Symbols to keep the strip thin.
-/// Every chip and icon has a tooltip with the full detail.
+/// Tooltips on each chip show the full detail; tapping anywhere on the
+/// strip opens a popover with the full breakdown (pricing per token
+/// type, expanded capability descriptions, modalities, context limits).
 private struct ModelMetaStrip: View {
-    let contextWindow: Int32?
-    let pricing: ClarkModelPricing?
-    let knowledgeCutoff: String?
-    let capabilities: ClarkModelCapabilities?
+    let snapshot: ModelMetaSnapshot
+
+    @State private var showDetail = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            if let ctx = contextWindow {
-                metaChip(ctxLabel(ctx), help: "Context window: \(ctx.formatted()) tokens")
-            }
-            if let bucket = costBucket(pricing) {
-                metaChip(bucket, .orange, help: pricingTooltip)
-            }
-            if let cutoff = knowledgeCutoff, !cutoff.isEmpty {
-                metaChip(cutoff, help: "Knowledge cutoff: \(cutoff)")
-            }
-            if let caps = capabilities {
-                HStack(spacing: 4) {
-                    if caps.thinking      { capabilityIcon("brain",                .purple, "Thinking — model exposes its chain-of-thought.") }
-                    if caps.vision        { capabilityIcon("eye",                  .blue,   "Vision — accepts images as input.") }
-                    if caps.toolUse       { capabilityIcon("wrench.adjustable",    .teal,   "Tool use — supports function calling.") }
-                    if caps.promptCaching { capabilityIcon("tray.full",            .green,  "Prompt caching — reuses cached prefixes for cheaper repeat calls.") }
+        Button(action: { showDetail.toggle() }) {
+            HStack(spacing: 6) {
+                if let ctx = snapshot.contextWindow {
+                    metaChip(ctxLabel(ctx), help: "Context window: \(ctx.formatted()) tokens — click for details")
                 }
-                .padding(.leading, 2)
+                if let bucket = costBucket(snapshot.pricing) {
+                    metaChip(bucket, .orange, help: pricingTooltip)
+                }
+                if let cutoff = snapshot.knowledgeCutoff, !cutoff.isEmpty {
+                    metaChip(cutoff, help: "Knowledge cutoff: \(cutoff)")
+                }
+                if let caps = snapshot.capabilities {
+                    HStack(spacing: 4) {
+                        if caps.thinking      { capabilityIcon("brain",                .purple, "Thinking — model exposes its chain-of-thought.") }
+                        if caps.vision        { capabilityIcon("eye",                  .blue,   "Vision — accepts images as input.") }
+                        if caps.toolUse       { capabilityIcon("wrench.adjustable",    .teal,   "Tool use — supports function calling.") }
+                        if caps.promptCaching { capabilityIcon("tray.full",            .green,  "Prompt caching — reuses cached prefixes for cheaper repeat calls.") }
+                    }
+                    .padding(.leading, 2)
+                }
             }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showDetail, arrowEdge: .bottom) {
+            ModelDetailPopover(snapshot: snapshot)
         }
     }
+
+    private var pricing: ClarkModelPricing? { snapshot.pricing }
 
     private func ctxLabel(_ n: Int32) -> String {
         n >= 1_000_000 ? "\(n / 1_000_000)M"
@@ -1353,6 +1398,135 @@ private struct ModelMetaStrip: View {
             .font(.caption2)
             .foregroundStyle(color)
             .help(help)
+    }
+}
+
+// MARK: - Model detail popover
+//
+// Mirrors MessageUsagePopover's section/row idiom for visual consistency:
+// uppercased small caption header per section, label-left/value-right
+// rows in callout font. Surfaces every field on ModelMetaSnapshot the
+// strip's chips can only hint at — full per-token pricing, context AND
+// max output limits, expanded capability descriptions, modalities.
+
+private struct ModelDetailPopover: View {
+    let snapshot: ModelMetaSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            section("Model") {
+                row("Name", snapshot.displayName)
+                row("ID", snapshot.modelID)
+                if let label = snapshot.providerLabel {
+                    row("Provider", label)
+                }
+            }
+
+            // Limits — context + max output. Both rendered as raw token
+            // counts (the chip uses the K/M abbreviation for compactness).
+            let hasLimits = snapshot.contextWindow != nil || snapshot.maxOutputTokens != nil
+            if hasLimits {
+                section("Limits") {
+                    if let n = snapshot.contextWindow {
+                        row("Context window", "\(n.formatted()) tokens")
+                    }
+                    if let n = snapshot.maxOutputTokens {
+                        row("Max output", "\(n.formatted()) tokens")
+                    }
+                }
+            }
+
+            if let p = snapshot.pricing,
+               (p.inputPerMillion ?? 0) > 0 || (p.outputPerMillion ?? 0) > 0 ||
+               (p.cacheReadPerMillion ?? 0) > 0 || (p.cacheWritePerMillion ?? 0) > 0 {
+                section("Pricing (USD per 1M tokens)") {
+                    if let v = p.inputPerMillion, v > 0       { row("Input",       priceStr(v)) }
+                    if let v = p.outputPerMillion, v > 0      { row("Output",      priceStr(v)) }
+                    if let v = p.cacheReadPerMillion, v > 0   { row("Cache read",  priceStr(v)) }
+                    if let v = p.cacheWritePerMillion, v > 0  { row("Cache write", priceStr(v)) }
+                }
+            }
+
+            if let caps = snapshot.capabilities,
+               caps.thinking || caps.vision || caps.toolUse || caps.promptCaching || caps.streaming {
+                section("Capabilities") {
+                    if caps.streaming     { capabilityRow("waveform",             "Streaming",      "Server-sent token-by-token output.") }
+                    if caps.thinking      { capabilityRow("brain",                "Thinking",       "Exposes its chain-of-thought.") }
+                    if caps.vision        { capabilityRow("eye",                  "Vision",         "Accepts images as input.") }
+                    if caps.toolUse       { capabilityRow("wrench.adjustable",    "Tool use",       "Function calling supported.") }
+                    if caps.promptCaching { capabilityRow("tray.full",            "Prompt caching", "Reuses cached prefixes for cheaper repeat calls.") }
+                }
+            }
+
+            if !snapshot.modalities.isEmpty {
+                section("Modalities") {
+                    row("Input/Output", snapshot.modalities.joined(separator: ", "))
+                }
+            }
+
+            if let cutoff = snapshot.knowledgeCutoff, !cutoff.isEmpty {
+                section("Knowledge") {
+                    row("Cutoff", cutoff)
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 300, idealWidth: 340, maxWidth: 420)
+    }
+
+    private func priceStr(_ v: Double) -> String {
+        // Reuse the strip's price formatting feel: dense-but-readable,
+        // 2-3 decimals depending on magnitude.
+        if v >= 100 { return String(format: "$%.0f", v) }
+        if v >= 1   { return String(format: "$%.2f", v) }
+        return String(format: "$%.3f", v)
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ label: String, _ value: String, bold: Bool = false) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(bold ? .semibold : .regular)
+                .foregroundStyle(bold ? .primary : .secondary)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+        .font(.callout)
+    }
+
+    /// Capability row: icon + name on the left, prose explanation on
+    /// the right. The explanation echoes the chip tooltip so the user
+    /// has the same context here.
+    @ViewBuilder
+    private func capabilityRow(_ icon: String, _ name: String, _ description: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.callout)
+                Text(description)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
     }
 }
 
