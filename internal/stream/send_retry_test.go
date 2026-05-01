@@ -131,6 +131,62 @@ func TestOpenStreamRetry_FirstChunkTimeout(t *testing.T) {
 	}
 }
 
+// TestOpenStreamRetry_ParentCancelDuringBackoff: hitting Stop while the
+// supervisor is mid-backoff (no chunks yet, between two failed attempts)
+// should propagate the cancellation immediately — the helper exits
+// without waiting for the next attempt or the rest of the backoff.
+// Cancellation reaches the helper via the parent context the supervisor
+// runs in; cancellation tears down the upstream send too because the
+// per-attempt context is derived from parent.
+func TestOpenStreamRetry_ParentCancelDuringBackoff(t *testing.T) {
+	// Long-ish backoff so the test reliably catches the helper IN the
+	// backoff window rather than racing.
+	prevAttempts := MaxSendAttempts
+	prevTimeout := PerAttemptTimeout
+	prevBackoff := InitialBackoff
+	MaxSendAttempts = 5
+	PerAttemptTimeout = 1 * time.Second
+	InitialBackoff = 500 * time.Millisecond
+	t.Cleanup(func() {
+		MaxSendAttempts = prevAttempts
+		PerAttemptTimeout = prevTimeout
+		InitialBackoff = prevBackoff
+	})
+
+	s := &scriptedSend{}
+	s.script = func(int) (<-chan providers.Chunk, error) {
+		return nil, errors.New("upstream busy")
+	}
+
+	parent, cancel := context.WithCancel(context.Background())
+	// Cancel after the first failed attempt has happened and we're
+	// somewhere in the 500ms backoff. 200ms is plenty for the first
+	// attempt (returns instantly) and lands us mid-backoff before the
+	// second attempt fires.
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err := openStreamWithRetry(parent, s.fn(), slog.Default())
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	// One attempt fires immediately; the cancel should return us before
+	// the second attempt OR the full backoff window. Allow up to ~400ms
+	// for slow CI hosts.
+	if elapsed > 400*time.Millisecond {
+		t.Errorf("cancel didn't propagate fast enough: %v elapsed", elapsed)
+	}
+	// We should have fired at most 1 attempt before cancellation hit.
+	if got := s.calls.Load(); got > 1 {
+		t.Errorf("Send called %d times during cancel; want ≤1", got)
+	}
+}
+
 // TestOpenStreamRetry_FirstChunkArrivesJustInTime: SendFunc returns
 // successfully and the channel produces a chunk just before the
 // timeout. Should accept the chunk and return success on the first
