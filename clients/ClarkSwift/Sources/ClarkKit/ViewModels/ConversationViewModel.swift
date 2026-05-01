@@ -138,8 +138,23 @@ public final class ConversationViewModel {
     /// Used by views to decide which CallSettings extension block to render
     /// and to compute cache-savings discount factors.
     public var providerTypes: [String: String] = [:]
+    /// Per-provider preset id parsed out of the JSON config — only
+    /// populated for openai-compatible providers that were created from
+    /// a preset (xAI, OpenRouter, DeepSeek, …). Native drivers
+    /// (anthropic, google) and pre-preset legacy custom configs map to
+    /// nil here; the type alone is sufficient for those to find a logo
+    /// (see ConversationView's logoSlug helper). Drives the input
+    /// composer's model chip rendering + the new ConversationModelPicker.
+    public var providerPresetIDs: [String: String] = [:]
     public var selectedProviderID: String?
     public var selectedModelID: String?
+
+    // Conversation model picker page (page-replaces-pane pattern,
+    // sibling to Compact / Contexts / Settings). When true, the
+    // conversation pane swaps the message scroll for a model-picker
+    // surface that lists available models grouped by provider with the
+    // same metadata strip as the providers Settings page.
+    public var showingModelPicker: Bool = false
 
     // Token count (advisory; nil when unavailable)
     public var tokenCount: Int32?
@@ -380,6 +395,9 @@ public final class ConversationViewModel {
             let providers = try await client.modelProviders.list()
             providerLabels = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.label) })
             providerTypes  = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.type) })
+            providerPresetIDs = Dictionary(uniqueKeysWithValues:
+                providers.compactMap { p in p.presetID.map { (p.id, $0) } }
+            )
             availableModels = try await withThrowingTaskGroup(of: [ClarkUserModel].self) { group in
                 for p in providers {
                     group.addTask { try await self.client.modelProviders.listModels(providerID: p.id) }

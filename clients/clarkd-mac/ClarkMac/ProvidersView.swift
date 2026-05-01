@@ -1312,7 +1312,7 @@ extension ClarkDiscoveredModel {
 /// Tooltips on each chip show the full detail; tapping anywhere on the
 /// strip opens a popover with the full breakdown (pricing per token
 /// type, expanded capability descriptions, modalities, context limits).
-private struct ModelMetaStrip: View {
+struct ModelMetaStrip: View {
     let snapshot: ModelMetaSnapshot
 
     @State private var showDetail = false

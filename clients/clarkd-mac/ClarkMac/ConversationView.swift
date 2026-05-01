@@ -70,6 +70,8 @@ struct ConversationBody: View {
                 CompactPane(model: model)
             } else if model.showingSettingsView {
                 ConversationSettingsView(model: model)
+            } else if model.showingModelPicker {
+                ConversationModelPicker(model: model)
             } else {
                 statusStrip
                 if let err = model.compactError {
@@ -101,7 +103,7 @@ struct ConversationBody: View {
             ToolbarItem(placement: .navigation) {
                 leadingToolbarItem
             }
-            if !model.showingContextList && !model.showingCompactView && !model.showingSettingsView {
+            if !model.showingContextList && !model.showingCompactView && !model.showingSettingsView && !model.showingModelPicker {
                 ToolbarItem(placement: .primaryAction) {
                     settingsButton
                 }
@@ -174,6 +176,7 @@ struct ConversationBody: View {
         if model.showingContextList { return "Contexts" }
         if model.showingCompactView { return "Compact" }
         if model.showingSettingsView { return "Settings" }
+        if model.showingModelPicker { return "Choose model" }
         let base = liveConversation.title?.isEmpty == false ? liveConversation.title! : "Untitled"
         let cost = model.conversationCost
         if cost > 0 {
@@ -185,7 +188,7 @@ struct ConversationBody: View {
     /// Window-title-bar subtitle. Hidden (empty) on the page-swap screens so
     /// the chrome stays clean — those screens render their own structure.
     private var navSubtitle: String {
-        if model.showingContextList || model.showingCompactView || model.showingSettingsView { return "" }
+        if model.showingContextList || model.showingCompactView || model.showingSettingsView || model.showingModelPicker { return "" }
         return activeContextSubtitle
     }
 
@@ -304,6 +307,14 @@ struct ConversationBody: View {
         } else if model.showingSettingsView {
             Button {
                 model.showingSettingsView = false
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .help("Back to conversation")
+            .keyboardShortcut(.cancelAction)
+        } else if model.showingModelPicker {
+            Button {
+                model.showingModelPicker = false
             } label: {
                 Image(systemName: "chevron.left")
             }
@@ -598,29 +609,38 @@ struct ConversationBody: View {
         return model.selectedModelID ?? "Default"
     }
 
+    /// Logo slug for the currently-selected model's provider. Drives
+    /// the composer chip's icon. Native drivers map by type; openai-
+    /// compatible providers carry the slug in their preset id (parsed
+    /// out of the JSON config and exposed via providerPresetIDs). Nil
+    /// when nothing is selected or when we have no logo for the
+    /// configured provider — caller falls back to the cpu glyph.
+    private var selectedProviderLogoSlug: String? {
+        guard let pid = model.selectedProviderID else { return nil }
+        return providerLogoSlug(providerID: pid,
+                                type: model.providerTypes[pid],
+                                presetID: model.providerPresetIDs[pid])
+    }
+
     @ViewBuilder
     private var modelPickerChip: some View {
         if !model.availableModels.isEmpty {
-            Menu {
-                ForEach(groupedModels, id: \.providerID) { group in
-                    Section(group.label) {
-                        ForEach(group.models) { m in
-                            Button {
-                                Task { await model.selectModel(providerID: m.providerID, modelID: m.modelID) }
-                            } label: {
-                                if m.modelID == model.selectedModelID
-                                    && m.providerID == model.selectedProviderID {
-                                    Label(m.displayName, systemImage: "checkmark")
-                                } else {
-                                    Text(m.displayName)
-                                }
-                            }
-                        }
-                    }
-                }
+            // The system Menu (legacy) showed a flat dropdown — fine for
+            // a few models, awful for many providers × many models. Now
+            // a button that opens a full-pane picker page (sibling to
+            // Compact / Contexts / Settings) that lists models with
+            // their metadata strip + popover, matching the providers
+            // settings UX.
+            Button {
+                model.showingModelPicker = true
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "cpu")
+                HStack(spacing: 6) {
+                    if let slug = selectedProviderLogoSlug {
+                        ProviderLogo(slug: slug, size: 14)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "cpu")
+                    }
                     Text(selectedModelLabel)
                     Image(systemName: "chevron.up.chevron.down")
                         .imageScale(.small)
@@ -632,9 +652,25 @@ struct ConversationBody: View {
                 .padding(.vertical, 5)
                 .glassEffect(.regular.interactive(), in: .capsule)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .help("Choose model")
             .fixedSize()
+        }
+    }
+
+    /// Logo slug for a provider — anthropic and google have static
+    /// slugs; openai-compatible providers carry the slug in their
+    /// preset id. Returns nil for custom (no preset) configs so the
+    /// caller can render a fallback (cpu glyph in the chip, generic
+    /// globe in ProviderLogo).
+    fileprivate func providerLogoSlug(providerID: String, type: String?, presetID: String?) -> String? {
+        switch type {
+        case "anthropic": return "anthropic"
+        case "google":    return "google-color"
+        case "openai-compatible":
+            return presetID
+        default:
+            return nil
         }
     }
 }
