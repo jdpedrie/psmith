@@ -699,6 +699,12 @@ private struct MessageRow: View {
     /// auto-clears after 1.4s. Drives both the swap of the copy icon to
     /// a checkmark and the floating "Copied" capsule overlay.
     @State private var showCopiedToast: Bool = false
+    /// Per-bubble expand state for system + context message bodies.
+    /// These rows can carry long pasted content (system prompts) or
+    /// a compressed prior conversation (context). Default collapsed
+    /// to ~4 lines; tap "Show more" to expand. Only relevant when
+    /// `isCollapsibleRole` is true; ignored otherwise.
+    @State private var bodyExpanded: Bool = false
     @Environment(\.chatPaneWidth) private var paneWidth
 
     private var isEditing: Bool {
@@ -864,6 +870,8 @@ private struct MessageRow: View {
                 let displayText = message.displayContent ?? message.content
                 if displayText.isEmpty {
                     Text("(empty)").foregroundStyle(.secondary)
+                } else if isCollapsibleRole {
+                    collapsibleBody(displayText)
                 } else {
                     MarkdownText(displayText)
                 }
@@ -1018,6 +1026,62 @@ private struct MessageRow: View {
         .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
         .disabled(disabled)
         .help(help)
+    }
+
+    /// True for system + context rows — both can carry pasted long-form
+    /// content (a verbose system prompt, a compressed prior conversation)
+    /// that crowds the conversation scroll. We collapse their bodies to
+    /// ~4 lines by default with an inline expand affordance.
+    private var isCollapsibleRole: Bool {
+        message.role == .system || message.role == .context
+    }
+
+    /// Approx height for ~4 lines of body text. Body uses .font(.body)
+    /// (~13pt + line spacing); 80pt fits comfortably.
+    private static let collapsedBodyHeight: CGFloat = 80
+
+    /// Body for system / context rows. Renders the full MarkdownText but
+    /// caps the height + clips when collapsed; a fade gradient softens
+    /// the cut and signals "more below". Tap "Show more" to expand.
+    @ViewBuilder
+    private func collapsibleBody(_ text: String) -> some View {
+        let collapsed = !bodyExpanded
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .bottom) {
+                MarkdownText(text)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: collapsed ? Self.collapsedBodyHeight : .infinity,
+                        alignment: .topLeading
+                    )
+                    .clipped()
+                if collapsed {
+                    // Soft fade to signal "more content below". Uses
+                    // the bubble's tint (system/context rows have a
+                    // pale yellow material) so the gradient blends
+                    // into the bubble background instead of fighting
+                    // it. Slightly opaque at the bottom so the cut
+                    // feels intentional, not torn.
+                    LinearGradient(
+                        colors: [.clear, Color.yellow.opacity(0.10), Color.yellow.opacity(0.18)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 28)
+                    .allowsHitTesting(false)
+                }
+            }
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { bodyExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: bodyExpanded ? "chevron.up" : "chevron.down")
+                    Text(bodyExpanded ? "Show less" : "Show more")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     /// Body for an errored assistant turn: shows the error text in full,
