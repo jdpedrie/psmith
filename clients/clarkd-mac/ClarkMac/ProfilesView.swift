@@ -1,6 +1,15 @@
 import SwiftUI
 import ClarkKit
 
+/// Identifies which of the three profile-form model pickers is
+/// currently expanded for inline selection. Only one is open at a
+/// time; nil means all collapsed.
+private enum ModelPickerSlot {
+    case `default`     // The profile's main default model
+    case compression   // Per-profile compression model override
+    case title         // Per-profile auto-title model override
+}
+
 // MARK: - Sidebar
 
 struct ProfilesMiddleColumn: View {
@@ -388,6 +397,13 @@ private struct ProfileForm: View {
     @State private var defaultUserMessage = ""
     @State private var defaultProviderID: String?
     @State private var defaultModelID: String?
+
+    /// Which model-picker row is currently expanded (showing the
+    /// inline ModelPickerList). Only one open at a time; nil means
+    /// all collapsed. Three sites: .default / .compression / .title.
+    /// Inline expansion (not a popover or sheet) keeps the form's
+    /// "no popups" rule intact.
+    @State private var expandedPicker: ModelPickerSlot? = nil
     /// Editable per-profile default CallSettings. Inherits from the model
     /// layer below at SendMessage time on the server — the form renders
     /// "(inherited)" placeholders for unset fields.
@@ -502,7 +518,7 @@ private struct ProfileForm: View {
                     formSection("Default model") {
                         formRow(label: "Model",
                                 description: "Used for normal turns when the conversation doesn't override.") {
-                            modelPicker(provider: $defaultProviderID, model: $defaultModelID)
+                            modelPicker(slot: .default, provider: $defaultProviderID, model: $defaultModelID)
                         }
                     }
 
@@ -533,7 +549,7 @@ private struct ProfileForm: View {
                         }
                         formRow(label: "Model",
                                 description: "Model used to write the summary.") {
-                            modelPicker(provider: $compressionProviderID, model: $compressionModelID)
+                            modelPicker(slot: .compression, provider: $compressionProviderID, model: $compressionModelID)
                         }
                         formRow(label: "Guide",
                                 description: "Optional extra instruction for the summariser.") {
@@ -553,7 +569,7 @@ private struct ProfileForm: View {
                         if titleProviderKind != ClarkTitleProviderKind.appleFoundation {
                             formRow(label: "Cloud model",
                                     description: "Used when the local generator is unavailable or you want a specific model.") {
-                                modelPicker(provider: $titleProviderID, model: $titleModelID)
+                                modelPicker(slot: .title, provider: $titleProviderID, model: $titleModelID)
                             }
                         }
                         formRow(label: "Guide",
@@ -623,46 +639,79 @@ private struct ProfileForm: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    /// Reusable provider+model picker. Sets both bindings together; (nil, nil)
-    /// means "inherit" / "unset". Grouped by provider in the menu.
+    /// Reusable provider+model picker. Renders a chip showing the
+    /// currently-selected provider's logo + model name. Tapping toggles
+    /// an inline expansion below the row containing the full
+    /// ModelPickerList (provider sections, per-row metadata strip).
+    /// Selecting a row collapses + sets both bindings; the "(unset —
+    /// inherit)" affordance at the top of the list clears them.
+    /// Inline (no popover or sheet) per the project's "no popups" rule.
+    @ViewBuilder
     private func modelPicker(
+        slot: ModelPickerSlot,
         provider: Binding<String?>,
         model modelBinding: Binding<String?>
     ) -> some View {
-        Menu {
-            Button("(unset — inherit)") {
-                provider.wrappedValue = nil
-                modelBinding.wrappedValue = nil
-            }
-            Divider()
-            let grouped = Dictionary(grouping: model.availableModels, by: \.providerID)
-            ForEach(grouped.keys.sorted(), id: \.self) { pid in
-                Section(model.providerLabels[pid] ?? pid) {
-                    ForEach(grouped[pid] ?? []) { m in
-                        Button {
-                            provider.wrappedValue = m.providerID
-                            modelBinding.wrappedValue = m.modelID
-                        } label: {
-                            if m.providerID == provider.wrappedValue && m.modelID == modelBinding.wrappedValue {
-                                Label(m.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(m.displayName)
-                            }
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                expandedPicker = (expandedPicker == slot ? nil : slot)
+            } label: {
+                HStack(spacing: 6) {
+                    if let slug = selectedLogoSlug(provider: provider.wrappedValue) {
+                        ProviderLogo(slug: slug, size: 14)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "cpu").font(.caption2)
                     }
+                    Text(modelLabel(provider: provider.wrappedValue, model: modelBinding.wrappedValue))
+                    Image(systemName: expandedPicker == slot ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
                 }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "cpu").font(.caption2)
-                Text(modelLabel(provider: provider.wrappedValue, model: modelBinding.wrappedValue))
-                Image(systemName: "chevron.down").font(.caption2)
+            .buttonStyle(.plain)
+            .help("Choose model")
+
+            if expandedPicker == slot {
+                ModelPickerList(
+                    models: model.availableModels,
+                    providerLabels: model.providerLabels,
+                    providerTypes: model.providerTypes,
+                    providerPresetIDs: model.providerPresetIDs,
+                    selectedProviderID: provider.wrappedValue,
+                    selectedModelID: modelBinding.wrappedValue,
+                    onUnset: {
+                        provider.wrappedValue = nil
+                        modelBinding.wrappedValue = nil
+                        expandedPicker = nil
+                    },
+                    onSelect: { pid, mid in
+                        provider.wrappedValue = pid
+                        modelBinding.wrappedValue = mid
+                        expandedPicker = nil
+                    }
+                )
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+    }
+
+    /// Resolve a logo slug for the chip from the picker's currently-set
+    /// providerID. Mirrors ConversationView's helper — anthropic/google
+    /// have static slugs, openai-compatible carry the slug in their
+    /// preset id, custom configs return nil → cpu glyph fallback.
+    private func selectedLogoSlug(provider providerID: String?) -> String? {
+        guard let providerID else { return nil }
+        switch model.providerTypes[providerID] {
+        case "anthropic": return "anthropic"
+        case "google":    return "google-color"
+        case "openai-compatible":
+            return model.providerPresetIDs[providerID]
+        default:
+            return nil
+        }
     }
 
     /// Two inline glass cards — Apple Foundation Models (on-device) vs.

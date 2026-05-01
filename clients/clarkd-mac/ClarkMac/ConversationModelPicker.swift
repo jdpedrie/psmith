@@ -1,44 +1,71 @@
 import SwiftUI
 import ClarkKit
 
-/// Full-pane model picker shown when the user taps the model chip in the
-/// conversation composer. Replaces the legacy system Menu dropdown which
-/// flattened the list and lost the per-model metadata. Sibling to
-/// ContextListPane / CompactPane / ConversationSettingsView — same
-/// page-replaces-pane pattern, back navigation lives in the toolbar.
-///
-/// Models are grouped by provider with the provider's logo in each
-/// section header. Each row mirrors the providers settings page: model
-/// display name + the same clickable ModelMetaStrip (ctx · cost · caps,
-/// tap for the full popover). Tapping a row selects + dismisses.
-struct ConversationModelPicker: View {
-    @Bindable var model: ConversationViewModel
+// MARK: - Reusable model picker list
+//
+// The view that does the actual rendering — provider sections with
+// logo headers, sorted model rows with the per-model metadata strip
+// (clickable for the popover), accent-bordered selected row.
+// Stateless, layout-only — both ConversationModelPicker (full-pane,
+// composer chip target) and ProfileForm's inline expansion (one of
+// three default-model fields) embed this.
+
+struct ModelPickerList: View {
+    let models: [ClarkUserModel]
+    let providerLabels: [String: String]
+    let providerTypes: [String: String]
+    let providerPresetIDs: [String: String]
+    /// Currently-selected (providerID, modelID). Either nil → no row
+    /// gets the accent border (used by ProfileForm where "unset"
+    /// means inherit from parent).
+    let selectedProviderID: String?
+    let selectedModelID: String?
+    /// Optional "(unset — inherit)" affordance shown above the list.
+    /// When non-nil, ProfileForm uses it to clear both bindings.
+    let onUnset: (() -> Void)?
+    let onSelect: (_ providerID: String, _ modelID: String) -> Void
+
+    @Environment(\.theme) private var theme
+
+    init(
+        models: [ClarkUserModel],
+        providerLabels: [String: String],
+        providerTypes: [String: String],
+        providerPresetIDs: [String: String],
+        selectedProviderID: String?,
+        selectedModelID: String?,
+        onUnset: (() -> Void)? = nil,
+        onSelect: @escaping (_ providerID: String, _ modelID: String) -> Void
+    ) {
+        self.models = models
+        self.providerLabels = providerLabels
+        self.providerTypes = providerTypes
+        self.providerPresetIDs = providerPresetIDs
+        self.selectedProviderID = selectedProviderID
+        self.selectedModelID = selectedModelID
+        self.onUnset = onUnset
+        self.onSelect = onSelect
+    }
 
     var body: some View {
-        Group {
-            if model.availableModels.isEmpty {
-                EmptyStateView(
-                    "No models available",
-                    systemImage: "cpu",
-                    description: "Configure a provider in Settings to enable models."
-                )
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        sectionLabel("\(model.availableModels.count) models across \(grouped.count) provider\(grouped.count == 1 ? "" : "s")")
-                            .padding(.horizontal, 4)
-                        ForEach(grouped, id: \.providerID) { group in
-                            providerSection(group)
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
+        if models.isEmpty {
+            EmptyStateView(
+                "No models available",
+                systemImage: "cpu",
+                description: "Configure a provider in Settings to enable models."
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                if let onUnset {
+                    UnsetRow(isSelected: selectedProviderID == nil && selectedModelID == nil,
+                             accent: theme.accent,
+                             onSelect: onUnset)
+                }
+                ForEach(grouped, id: \.providerID) { group in
+                    providerSection(group)
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 28) // title-bar overlay inset, matches other panes
     }
 
     private func providerSection(_ group: GroupedProvider) -> some View {
@@ -56,48 +83,36 @@ struct ConversationModelPicker: View {
                     PickerModelRow(
                         model: m,
                         providerLabel: group.label,
-                        isSelected: m.modelID == model.selectedModelID
-                            && m.providerID == model.selectedProviderID,
-                        onSelect: {
-                            Task {
-                                await model.selectModel(providerID: m.providerID, modelID: m.modelID)
-                                model.showingModelPicker = false
-                            }
-                        }
+                        isSelected: m.modelID == selectedModelID
+                            && m.providerID == selectedProviderID,
+                        onSelect: { onSelect(m.providerID, m.modelID) }
                     )
                 }
             }
         }
     }
 
-    // MARK: - Grouping
-
-    /// Provider-grouped slice of `availableModels` for ForEach. Sorted
-    /// by provider label so the section order is stable across
-    /// reloads. The first group also surfaces the provider's logo
-    /// slug (anthropic/google → static; openai-compatible → preset id
-    /// from providerPresetIDs).
     private var grouped: [GroupedProvider] {
-        let byProvider = Dictionary(grouping: model.availableModels, by: \.providerID)
+        let byProvider = Dictionary(grouping: models, by: \.providerID)
         return byProvider.keys.sorted { lhs, rhs in
-            (model.providerLabels[lhs] ?? lhs) < (model.providerLabels[rhs] ?? rhs)
+            (providerLabels[lhs] ?? lhs) < (providerLabels[rhs] ?? rhs)
         }.compactMap { id in
-            guard let models = byProvider[id], !models.isEmpty else { return nil }
+            guard let ms = byProvider[id], !ms.isEmpty else { return nil }
             return GroupedProvider(
                 providerID: id,
-                label: model.providerLabels[id] ?? id,
+                label: providerLabels[id] ?? id,
                 logoSlug: logoSlug(for: id),
-                models: models.sorted { $0.displayName < $1.displayName }
+                models: ms.sorted { $0.displayName < $1.displayName }
             )
         }
     }
 
     private func logoSlug(for providerID: String) -> String? {
-        switch model.providerTypes[providerID] {
+        switch providerTypes[providerID] {
         case "anthropic": return "anthropic"
         case "google":    return "google-color"
         case "openai-compatible":
-            return model.providerPresetIDs[providerID]
+            return providerPresetIDs[providerID]
         default:
             return nil
         }
@@ -109,6 +124,50 @@ struct ConversationModelPicker: View {
         let logoSlug: String?
         let models: [ClarkUserModel]
     }
+}
+
+// MARK: - Conversation full-pane wrapper
+
+/// Full-pane model picker shown when the user taps the model chip in the
+/// conversation composer. Sibling to ContextListPane / CompactPane /
+/// ConversationSettingsView — page-replaces-pane pattern, back navigation
+/// in the toolbar.
+struct ConversationModelPicker: View {
+    @Bindable var model: ConversationViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if !model.availableModels.isEmpty {
+                    sectionLabel("\(model.availableModels.count) models across \(providerCount) provider\(providerCount == 1 ? "" : "s")")
+                        .padding(.horizontal, 4)
+                }
+                ModelPickerList(
+                    models: model.availableModels,
+                    providerLabels: model.providerLabels,
+                    providerTypes: model.providerTypes,
+                    providerPresetIDs: model.providerPresetIDs,
+                    selectedProviderID: model.selectedProviderID,
+                    selectedModelID: model.selectedModelID,
+                    onSelect: { providerID, modelID in
+                        Task {
+                            await model.selectModel(providerID: providerID, modelID: modelID)
+                            model.showingModelPicker = false
+                        }
+                    }
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, 28) // title-bar overlay inset, matches other panes
+    }
+
+    private var providerCount: Int {
+        Set(model.availableModels.map(\.providerID)).count
+    }
 
     @ViewBuilder
     private func sectionLabel(_ text: String) -> some View {
@@ -119,12 +178,8 @@ struct ConversationModelPicker: View {
     }
 }
 
-// MARK: - Picker row
+// MARK: - Picker row (used by ModelPickerList)
 
-/// A single model entry in the picker. Tap-to-select; the inner
-/// ModelMetaStrip stays interactive (its own popover-on-tap) since it
-/// uses a Button — SwiftUI dispatches to the inner button when the
-/// click lands on it, falling through to this row's onSelect otherwise.
 private struct PickerModelRow: View {
     let model: ClarkUserModel
     let providerLabel: String?
@@ -160,6 +215,54 @@ private struct PickerModelRow: View {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
                         isSelected ? AnyShapeStyle(theme.accent.opacity(0.4)) : AnyShapeStyle(.separator),
+                        lineWidth: isSelected ? 1.5 : 0.5
+                    )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// "(unset — inherit)" affordance shown at the top of the list when
+/// the embedding form supports clearing the selection (profile form's
+/// default/compression/title pickers — selecting nothing means inherit
+/// from parent profile or skip the action). Hidden in the conversation
+/// picker, where you must always have an explicit model.
+private struct UnsetRow: View {
+    let isSelected: Bool
+    let accent: Color
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up.right")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Unset — inherit")
+                        .fontWeight(isSelected ? .semibold : .regular)
+                    Text("Use parent profile's setting (or skip auto-titling).")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(accent)
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(isSelected ? accent.opacity(0.10) : Color.primary.opacity(0.025))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(
+                        isSelected ? AnyShapeStyle(accent.opacity(0.4)) : AnyShapeStyle(.separator),
                         lineWidth: isSelected ? 1.5 : 0.5
                     )
             }

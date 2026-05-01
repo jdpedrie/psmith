@@ -30,6 +30,11 @@ public final class ProfilesViewModel {
     /// to pick the right CallSettings extension block (anthropic / openai /
     /// google) based on the profile's default model.
     public var providerTypes: [String: String] = [:]
+    /// openai-compatible preset id keyed by provider ID — used by the
+    /// profile form's model picker to render the right provider logo on
+    /// each section header. Empty for native drivers and pre-preset
+    /// custom configs.
+    public var providerPresetIDs: [String: String] = [:]
 
     /// Server's compiled-in plugin registry. Loaded lazily by
     /// `loadPluginTypes()`. Sorted by display name.
@@ -84,6 +89,9 @@ public final class ProfilesViewModel {
             }
             providerLabels = labels
             providerTypes = types
+            providerPresetIDs = Dictionary(uniqueKeysWithValues:
+                providers.compactMap { p in p.presetID.map { (p.id, $0) } }
+            )
             availableModels = models
         } catch {
             // Non-fatal — picker just stays at whatever was loaded last.
