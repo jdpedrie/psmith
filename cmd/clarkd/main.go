@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -33,8 +32,6 @@ import (
 	_ "github.com/jdpedrie/clark/internal/providers/google"
 	_ "github.com/jdpedrie/clark/internal/providers/openai"
 )
-
-const defaultCatalogRefreshInterval = 24 * time.Hour
 
 // stubServices is empty now that all five services have implementations.
 // Kept as a placeholder so future services can land here if needed.
@@ -76,11 +73,12 @@ func run() error {
 		return err
 	}
 
-	catalog := modelmeta.NewDBCatalog(queries, nil)
-	if err := primeCatalog(ctx, catalog); err != nil {
-		return err
-	}
-	go runCatalogRefreshLoop(ctx, catalog, catalogRefreshInterval())
+	// LiveCatalog: in-memory cache, lazy fetch from models.dev. No DB
+	// tables, no periodic refresh. The cache populates on first lookup
+	// (typically within seconds of the first DiscoverModels or
+	// LookupModel call) and refreshes only when the user explicitly
+	// invokes the RefreshCatalog RPC.
+	catalog := modelmeta.NewLiveCatalog(nil)
 
 	supervisor := stream.New(queries, slog.Default())
 	if err := supervisor.RecoverInterrupted(ctx); err != nil {
@@ -135,58 +133,6 @@ func run() error {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 	return srv.Shutdown(shutdownCtx)
-}
-
-// primeCatalog ensures the model catalog has at least one refresh on disk.
-// On first start, this is synchronous so the server is useful immediately.
-// On subsequent starts, the table is already populated and the periodic
-// refresh goroutine handles updates.
-func primeCatalog(ctx context.Context, catalog *modelmeta.DBCatalog) error {
-	status, err := catalog.Status(ctx)
-	if err != nil {
-		return err
-	}
-	if status.ProvidersCount > 0 {
-		return nil
-	}
-	slog.Info("catalog empty — performing initial models.dev refresh")
-	return catalog.Refresh(ctx)
-}
-
-func runCatalogRefreshLoop(ctx context.Context, catalog *modelmeta.DBCatalog, interval time.Duration) {
-	if interval <= 0 {
-		slog.Info("catalog periodic refresh disabled")
-		return
-	}
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := catalog.Refresh(ctx); err != nil {
-				slog.Warn("catalog refresh failed", "err", err)
-			}
-		}
-	}
-}
-
-func catalogRefreshInterval() time.Duration {
-	v := os.Getenv("CLARK_CATALOG_REFRESH_INTERVAL")
-	if v == "" {
-		return defaultCatalogRefreshInterval
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil {
-		// Fall back to integer seconds for ergonomic env values like "0".
-		if n, e2 := strconv.Atoi(v); e2 == nil {
-			return time.Duration(n) * time.Second
-		}
-		slog.Warn("invalid CLARK_CATALOG_REFRESH_INTERVAL — using default", "value", v)
-		return defaultCatalogRefreshInterval
-	}
-	return d
 }
 
 func envOr(k, d string) string {
