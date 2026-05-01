@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	openai "github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
@@ -38,12 +40,14 @@ import (
 // reason). Cancellation of ctx propagates to the SDK and closes the
 // channel after a final ChunkError.
 func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan providers.Chunk, error) {
+	reqOpts := d.perRequestOptions(req)
+
 	if d.chatCompletions {
 		params, err := buildChatCompletionParams(req)
 		if err != nil {
 			return nil, fmt.Errorf("openai-compatible: build chat params: %w", err)
 		}
-		stream := d.client.Chat.Completions.NewStreaming(ctx, params)
+		stream := d.client.Chat.Completions.NewStreaming(ctx, params, reqOpts...)
 		out := make(chan providers.Chunk, 16)
 		go d.pumpChatStream(ctx, stream, out)
 		return out, nil
@@ -54,11 +58,32 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 		return nil, fmt.Errorf("openai-compatible: build params: %w", err)
 	}
 
-	stream := d.client.Responses.NewStreaming(ctx, params)
+	stream := d.client.Responses.NewStreaming(ctx, params, reqOpts...)
 
 	out := make(chan providers.Chunk, 16)
 	go d.pumpStream(ctx, stream, out)
 	return out, nil
+}
+
+// perRequestOptions assembles per-call SDK options driven by the active
+// quirks overlay. Today only HeaderInjector contributes; future hooks
+// (per-request body modifiers) would land here too.
+func (d *Driver) perRequestOptions(req providers.SendRequest) []option.RequestOption {
+	if d.quirks.HeaderInjector == nil {
+		return nil
+	}
+	h := http.Header{}
+	d.quirks.HeaderInjector(h, req)
+	if len(h) == 0 {
+		return nil
+	}
+	opts := make([]option.RequestOption, 0, len(h))
+	for k, vs := range h {
+		for _, v := range vs {
+			opts = append(opts, option.WithHeader(k, v))
+		}
+	}
+	return opts
 }
 
 // chatStreamLike is the subset of the SDK's chat-completions stream we use.

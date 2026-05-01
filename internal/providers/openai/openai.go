@@ -44,11 +44,20 @@ type Config struct {
 	// llama.cpp running without auth) configure any non-empty placeholder —
 	// the value is sent in the Authorization header but ignored upstream.
 	APIKey string `json:"api_key"`
-	// BaseURL is required. Examples:
+	// BaseURL is required for PresetCustom configs. When PresetID is set,
+	// the preset's BaseURL applies unless this field overrides it (UI lets
+	// power users point e.g. the OpenAI preset at an Azure deployment).
+	// Examples:
 	//   - https://api.openai.com/v1
 	//   - https://openrouter.ai/api/v1
 	//   - http://localhost:11434/v1   (Ollama)
 	BaseURL string `json:"base_url"`
+	// PresetID, when non-empty, names a built-in provider preset (see
+	// presets.go) that supplies the default BaseURL and a Quirks overlay
+	// (cache headers, custom discovery endpoint, hardcoded model list).
+	// Empty = PresetCustom = no quirks, behaves as vanilla OpenAI. Pre-
+	// preset configs leave this unset and continue to work unchanged.
+	PresetID PresetID `json:"preset_id,omitempty"`
 	// CatalogProviderID is an optional hint for the modelmeta catalog
 	// lookup. When set, DiscoverModels enriches each discovered model by
 	// LookupModel(catalog_provider_id, model_id). Examples: "openai",
@@ -79,6 +88,11 @@ type Driver struct {
 	// `cfg.BaseURL` (auto-detect). Send() reads this directly instead of
 	// re-resolving per request.
 	chatCompletions bool
+
+	// quirks is the resolved provider-quirks overlay. Sourced from
+	// PresetByID(cfg.PresetID); empty for PresetCustom and legacy
+	// pre-preset configs.
+	quirks Quirks
 
 	// httpClient lets tests pin a custom *http.Client. The SDK accepts
 	// anything implementing option.HTTPClient; *http.Client satisfies it.
@@ -148,6 +162,14 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 	if cfg.APIKey == "" {
 		return nil, errors.New("openai-compatible: api_key is required")
 	}
+
+	// Apply preset defaults: when a preset_id is set, fill in BaseURL
+	// from the preset if the user didn't override it. Quirks always come
+	// from the preset (config can't redefine them — they're code).
+	preset := PresetByID(cfg.PresetID)
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = preset.BaseURL
+	}
 	if cfg.BaseURL == "" {
 		return nil, errors.New("openai-compatible: base_url is required")
 	}
@@ -156,6 +178,7 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 		cfg:           cfg,
 		deps:          deps,
 		chatCompletions: resolveChatCompletions(cfg),
+		quirks:        preset.Quirks,
 	}
 
 	opts := []option.RequestOption{
