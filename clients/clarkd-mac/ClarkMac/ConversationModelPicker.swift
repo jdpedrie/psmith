@@ -21,8 +21,13 @@ struct ModelPickerList: View {
     let selectedProviderID: String?
     let selectedModelID: String?
     /// Optional "(unset — inherit)" affordance shown above the list.
-    /// When non-nil, ProfileForm uses it to clear both bindings.
+    /// When non-nil, the embedding form uses it to clear both
+    /// bindings. `unsetDescription` overrides the row's caption — each
+    /// caller wants different copy (default model: "use parent
+    /// profile's", title: "use parent or skip auto-titling",
+    /// compression: "use parent compression model").
     let onUnset: (() -> Void)?
+    let unsetDescription: String?
     let onSelect: (_ providerID: String, _ modelID: String) -> Void
 
     @Environment(\.theme) private var theme
@@ -35,6 +40,7 @@ struct ModelPickerList: View {
         selectedProviderID: String?,
         selectedModelID: String?,
         onUnset: (() -> Void)? = nil,
+        unsetDescription: String? = nil,
         onSelect: @escaping (_ providerID: String, _ modelID: String) -> Void
     ) {
         self.models = models
@@ -44,6 +50,7 @@ struct ModelPickerList: View {
         self.selectedProviderID = selectedProviderID
         self.selectedModelID = selectedModelID
         self.onUnset = onUnset
+        self.unsetDescription = unsetDescription
         self.onSelect = onSelect
     }
 
@@ -58,6 +65,7 @@ struct ModelPickerList: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let onUnset {
                     UnsetRow(isSelected: selectedProviderID == nil && selectedModelID == nil,
+                             description: unsetDescription ?? "Use parent profile's setting.",
                              accent: theme.accent,
                              onSelect: onUnset)
                 }
@@ -231,6 +239,7 @@ private struct PickerModelRow: View {
 /// picker, where you must always have an explicit model.
 private struct UnsetRow: View {
     let isSelected: Bool
+    let description: String
     let accent: Color
     let onSelect: () -> Void
 
@@ -243,7 +252,7 @@ private struct UnsetRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Unset — inherit")
                         .fontWeight(isSelected ? .semibold : .regular)
-                    Text("Use parent profile's setting (or skip auto-titling).")
+                    Text(description)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }

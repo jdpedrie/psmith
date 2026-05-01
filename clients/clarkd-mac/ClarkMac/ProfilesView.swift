@@ -699,6 +699,7 @@ private struct ProfileForm: View {
                             modelBinding.wrappedValue = nil
                             expandedPicker = nil
                         },
+                        unsetDescription: unsetDescription(for: slot),
                         onSelect: { pid, mid in
                             provider.wrappedValue = pid
                             modelBinding.wrappedValue = mid
@@ -711,6 +712,21 @@ private struct ProfileForm: View {
                 .padding(.top, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+        }
+    }
+
+    /// Per-slot description for the picker's "Unset — inherit" row.
+    /// Each profile-form slot wants different copy: the title slot
+    /// mentions auto-titling, default/compression talk about parent
+    /// inheritance only.
+    private func unsetDescription(for slot: ModelPickerSlot) -> String {
+        switch slot {
+        case .default:
+            return "Use parent profile's default model."
+        case .compression:
+            return "Use parent profile's compression model (or skip compression)."
+        case .title:
+            return "Use parent profile's setting (or skip auto-titling)."
         }
     }
 
