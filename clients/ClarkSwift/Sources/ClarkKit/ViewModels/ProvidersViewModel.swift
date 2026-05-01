@@ -74,8 +74,22 @@ public final class ProvidersViewModel {
 
     /// Templates fetched lazily on first Add. Cached for the life of the model
     /// so re-entering Add doesn't re-fetch.
+    ///
+    /// Now reused for the sidebar's "available providers" section — every
+    /// preset that doesn't yet have a configured user_model_provider gets
+    /// a row there. We trigger loadTemplates() on the initial load() so
+    /// the sidebar can render immediately without waiting for the Add
+    /// flow to fire it.
     public var templates: [ClarkProviderTemplate] = []
     public var templatesLoaded = false
+
+    /// When non-nil, AddProviderForm skips the template picker and opens
+    /// pre-filled for this preset. Set by the sidebar when the user
+    /// clicks an unconfigured preset row; cleared when the form
+    /// dismisses or the user clicks "Change". A nil value means the
+    /// user reached the form via the "+ Add Custom" affordance — they
+    /// get the bare custom-driver form, no preset selection.
+    public var pendingAddPreset: ClarkProviderTemplate?
 
     /// Transient per-provider test results — keyed by provider ID. Memory-only;
     /// reset across app launches and overwritten on each re-test.
@@ -99,6 +113,48 @@ public final class ProvidersViewModel {
         } catch {
             self.error = error.localizedDescription
         }
+        // Templates power both the Add flow AND the sidebar's
+        // "available providers" section. Fetch eagerly on first load
+        // so the sidebar isn't waiting on a click. Cached for the
+        // lifetime of the view-model.
+        if !templatesLoaded {
+            await loadTemplates()
+        }
+    }
+
+    /// Returns the subset of templates that don't have a configured
+    /// provider yet. Comparison is by preset_id (for openai-compatible
+    /// presets) or by driver type (for native drivers — anthropic,
+    /// google). The sidebar shows these as greyed-out rows the user can
+    /// click to start the Add flow with the preset preselected.
+    public var unconfiguredTemplates: [ClarkProviderTemplate] {
+        let configuredPresetIDs = Set(providers.compactMap { $0.presetID })
+        let configuredNativeTypes = Set(providers.filter { $0.presetID == nil }.map { $0.type })
+        return templates.filter { t in
+            if let pid = t.presetID, !pid.isEmpty {
+                return !configuredPresetIDs.contains(pid)
+            }
+            // Native-driver template (anthropic, google) — match by
+            // driver_type. Only consider it unconfigured when no
+            // existing provider with that driver type AND no preset_id
+            // is on file.
+            return !configuredNativeTypes.contains(t.driverType)
+        }
+    }
+
+    /// Sidebar entry-point for clicking an unconfigured preset row.
+    /// Opens AddProviderForm pre-filled with the preset's defaults.
+    public func startAddingWithPreset(_ template: ClarkProviderTemplate) {
+        pendingAddPreset = template
+        detailMode = .adding
+    }
+
+    /// Sidebar entry-point for the "+ Add Custom" affordance. Opens
+    /// AddProviderForm with no preset preselected — the user picks the
+    /// driver type and supplies a base URL manually.
+    public func startAddingCustom() {
+        pendingAddPreset = nil
+        detailMode = .adding
     }
 
     public func selectProvider(_ id: String) async {

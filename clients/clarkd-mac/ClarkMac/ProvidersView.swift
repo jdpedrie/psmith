@@ -14,11 +14,15 @@ struct ProvidersMiddleColumn: View {
             SettingsListHeader(
                 title: "Providers",
                 count: model.providers.count,
-                countNoun: "provider",
+                countNoun: "configured",
                 onBack: onBack,
+                // The "+" affordance now means "add a CUSTOM provider"
+                // — every built-in preset is already clickable in the
+                // sidebar's Available section below, so the picker
+                // grid is gone. Custom is for OpenAI-compat endpoints
+                // we don't ship a preset for (self-hosted, niche).
                 onCreate: {
-                    model.detailMode = .adding
-                    Task { await model.loadTemplates() }
+                    model.startAddingCustom()
                 },
                 createDisabled: model.detailMode == .adding
             )
@@ -26,45 +30,90 @@ struct ProvidersMiddleColumn: View {
             if model.isLoadingProviders {
                 ProgressView().padding()
                 Spacer()
-            } else if model.providers.isEmpty {
-                EmptyStateView(
-                    "No providers yet",
-                    systemImage: "server.rack",
-                    description: "Tap + to add the first one."
-                )
             } else {
-                List(model.providers, id: \.id, selection: Binding(
+                List(selection: Binding(
                     get: { model.detailMode == .adding ? nil : model.selectedID },
                     set: { id in if let id { Task { await model.selectProvider(id) } } }
-                )) { provider in
-                    ProviderRow(provider: provider)
-                        .tag(provider.id)
-                        .contextMenu {
-                            Button("Edit…") {
-                                Task {
-                                    await model.selectProvider(provider.id)
-                                    model.detailMode = .editing
-                                }
-                            }
-                            Button("Discover models") {
-                                Task {
-                                    await model.selectProvider(provider.id)
-                                    model.detailMode = .discovering
-                                }
-                            }
-                            Divider()
-                            Button("Delete", role: .destructive) {
-                                Task {
-                                    await model.selectProvider(provider.id)
-                                    model.showDeleteConfirm = true
-                                }
+                )) {
+                    if !model.providers.isEmpty {
+                        Section("Configured") {
+                            ForEach(model.providers, id: \.id) { provider in
+                                ProviderRow(provider: provider)
+                                    .tag(provider.id)
+                                    .contextMenu {
+                                        Button("Edit…") {
+                                            Task {
+                                                await model.selectProvider(provider.id)
+                                                model.detailMode = .editing
+                                            }
+                                        }
+                                        Button("Discover models") {
+                                            Task {
+                                                await model.selectProvider(provider.id)
+                                                model.detailMode = .discovering
+                                            }
+                                        }
+                                        Divider()
+                                        Button("Delete", role: .destructive) {
+                                            Task {
+                                                await model.selectProvider(provider.id)
+                                                model.showDeleteConfirm = true
+                                            }
+                                        }
+                                    }
                             }
                         }
+                    }
+                    if !model.unconfiguredTemplates.isEmpty {
+                        Section("Available") {
+                            ForEach(model.unconfiguredTemplates, id: \.id) { tmpl in
+                                AvailableProviderRow(template: tmpl) {
+                                    model.startAddingWithPreset(tmpl)
+                                }
+                                // Selection-tag intentionally omitted —
+                                // unconfigured rows aren't selectable
+                                // targets, they're action affordances.
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
                 .scrollContentBackground(.hidden)
             }
         }
+    }
+}
+
+/// Sidebar entry for a preset that doesn't yet have a configured
+/// provider. Looks like ProviderRow but greyed (foreground=secondary)
+/// and renders a "+" trailing affordance instead of a status icon. Tap
+/// anywhere on the row starts the Add flow with this preset preselected.
+private struct AvailableProviderRow: View {
+    let template: ClarkProviderTemplate
+    let onAdd: () -> Void
+
+    var body: some View {
+        Button(action: onAdd) {
+            HStack(spacing: 8) {
+                ProviderLogo(slug: template.logoSlug, size: 18)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(template.name)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("Not configured")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Image(systemName: "plus.circle")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -160,6 +209,14 @@ private struct ProviderRow: View {
                 Text(provider.label).lineLimit(1)
                 Text(provider.type).font(.caption2).foregroundStyle(.secondary)
             }
+            Spacer()
+            // Small green dot reads as "configured / enabled" — pairs
+            // with the "Available" section's tertiary "+" affordance to
+            // make the configured/unconfigured state obvious at a
+            // glance without doubling the row height for explicit text.
+            Circle()
+                .fill(.green)
+                .frame(width: 6, height: 6)
         }
         .padding(.vertical, 2)
     }
@@ -625,25 +682,31 @@ private func costBucket(_ pricing: ClarkModelPricing?) -> String? {
 
 // MARK: - Add provider (inline)
 
-/// Drives the AddProviderForm's "what kind of provider are we creating"
-/// state: a catalog template (Anthropic / Groq / etc.) or a fully-custom
-/// configuration (user picks the driver type, label, base URL, api key from
-/// scratch). The custom case is for self-hosted endpoints, forks of known
-/// providers with a different URL, or any openai-compatible service that
-/// hasn't been catalogued.
+/// What kind of provider this AddProviderForm instance is creating.
+/// `.template(t)` — pre-filled by the sidebar's "Available" section
+/// click; the user can't change preset here, only fill in credentials
+/// (Cancel + click a different sidebar row to switch). `.custom` — the
+/// "+ Add Custom" toolbar entry-point; user picks driver type and base
+/// URL manually.
 private enum AddProviderSelection: Equatable {
     case template(ClarkProviderTemplate)
     case custom
 }
 
 /// Inline form replacing the old AddProviderSheet. Lives in the providers
-/// detail column when `detailMode == .adding`.
+/// detail column when `detailMode == .adding`. The picker grid that used
+/// to populate this form (back when models.dev fed a 70+ template list)
+/// is gone — every preset is now a sidebar row, and Custom is the
+/// toolbar "+" affordance.
 private struct AddProviderForm: View {
     @Bindable var model: ProvidersViewModel
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
 
-    @State private var selection: AddProviderSelection?
+    /// Resolved on appear from `model.pendingAddPreset`: a preset when
+    /// the user clicked an Available sidebar row, .custom when they hit
+    /// the "+ Add Custom" toolbar button.
+    @State private var selection: AddProviderSelection = .custom
     @State private var label = ""
     @State private var apiKey = ""
     @State private var baseURL = ""
@@ -657,7 +720,6 @@ private struct AddProviderForm: View {
         switch selection {
         case .template(let t): return t.driverType == "openai-compatible"
         case .custom:          return customDriverType == "openai-compatible"
-        case nil:              return false
         }
     }
 
@@ -668,12 +730,10 @@ private struct AddProviderForm: View {
         switch selection {
         case .template(let t): return t.driverType
         case .custom:          return customDriverType
-        case nil:              return ""
         }
     }
 
     private var canCreate: Bool {
-        guard selection != nil else { return false }
         if label.trimmingCharacters(in: .whitespaces).isEmpty { return false }
         if apiKey.isEmpty { return false }
         if isOpenAICompatibleSelection && baseURL.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -713,12 +773,8 @@ private struct AddProviderForm: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if selection == nil {
-                        templatePicker
-                    } else {
-                        selectedTemplateRow
-                        credentialsSection
-                    }
+                    selectedTemplateRow
+                    credentialsSection
                     if let formError {
                         Text(formError)
                             .font(.caption)
@@ -730,110 +786,63 @@ private struct AddProviderForm: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    /// Full grid shown until a template is picked. The "Custom" tile is
-    /// pinned at the top so users searching for a self-hosted-or-similar
-    /// path don't have to scroll past 70+ catalog templates first.
-    private var templatePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Pick a template")
-            // Standalone Custom tile — full row width, distinct visual style
-            // (dashed border + plus icon) so it doesn't blend in with the
-            // catalog grid below.
-            CustomProviderTile {
+        .onAppear {
+            // Initialise selection from the view-model. A preselected
+            // preset (sidebar Available row click) wins; otherwise the
+            // user reached this form via "+ Add Custom" — start in
+            // custom mode with sane defaults.
+            if let preset = model.pendingAddPreset {
+                selection = .template(preset)
+                if label.isEmpty { label = preset.name }
+                if baseURL.isEmpty { baseURL = preset.apiBase ?? "" }
+            } else {
                 selection = .custom
                 if label.isEmpty { label = "Custom provider" }
                 customDriverType = "openai-compatible"
             }
-            if model.templates.isEmpty {
-                ProgressView().controlSize(.small)
-                    .padding(.top, 4)
-            } else {
-                // VGrid (not LazyVGrid) deliberately — LazyVGrid mis-renders
-                // hit areas on the first row when the form first appears
-                // (clicks on the upper ~25px land on no button). The catalog
-                // is bounded (~70 templates) so non-lazy is fine here, and
-                // the eager layout fixes the click-hole reliably.
-                Grid(alignment: .topLeading, horizontalSpacing: 8, verticalSpacing: 8) {
-                    ForEach(templateRows, id: \.self) { row in
-                        GridRow {
-                            ForEach(row, id: \.id) { t in
-                                TemplatePill(template: t, isSelected: false) {
-                                    selection = .template(t)
-                                    if label.isEmpty { label = t.name }
-                                    if baseURL.isEmpty { baseURL = t.apiBase ?? "" }
-                                }
-                            }
-                            // Pad the trailing column on the last row so the
-                            // single tile doesn't span the full width.
-                            if row.count == 1 {
-                                Color.clear.frame(maxWidth: .infinity)
-                            }
-                        }
-                    }
-                }
-            }
+        }
+        .onDisappear {
+            // Clear the preset signal so a follow-up "+ Add Custom"
+            // click doesn't accidentally inherit the previous preset.
+            model.pendingAddPreset = nil
         }
     }
 
-    /// Catalog templates packed into rows of 2. Two columns mirror the prior
-    /// LazyVGrid `.adaptive(minimum: 200, maximum: 280)` density — wider columns
-    /// would look stretched, narrower columns lose readable label space.
-    private var templateRows: [[ClarkProviderTemplate]] {
-        let columns = 2
-        var rows: [[ClarkProviderTemplate]] = []
-        var current: [ClarkProviderTemplate] = []
-        for t in model.templates {
-            current.append(t)
-            if current.count == columns {
-                rows.append(current)
-                current = []
-            }
-        }
-        if !current.isEmpty { rows.append(current) }
-        return rows
-    }
-
-    /// Compact summary of the chosen template (or "Custom"), with a "Change"
-    /// button to reopen the picker. Stays at the top of the form so it's
-    /// immediately clear what's being added.
+    /// Compact summary of the chosen template (or "Custom"). No
+    /// "Change" affordance — the user can switch by cancelling and
+    /// clicking the right sidebar row.
     @ViewBuilder
     private var selectedTemplateRow: some View {
-        if let sel = selection {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Template")
-                HStack(alignment: .center, spacing: 12) {
-                    if case .template(let t) = sel {
-                        ProviderLogo(slug: t.logoSlug, size: 28)
-                            .foregroundStyle(.primary)
-                    } else {
-                        ProviderLogo(slug: nil, size: 28)
-                            .foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        switch sel {
-                        case .template(let t):
-                            Text(t.name).fontWeight(.semibold)
-                            Text(t.driverType).font(.caption2).foregroundStyle(.secondary)
-                        case .custom:
-                            Text("Custom provider").fontWeight(.semibold)
-                            Text("Pick a driver type and configure manually")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    Button("Change") { selection = nil }
-                        .buttonStyle(.glass)
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle(selection == .custom ? "Custom" : "Provider")
+            HStack(alignment: .center, spacing: 12) {
+                if case .template(let t) = selection {
+                    ProviderLogo(slug: t.logoSlug, size: 28)
+                        .foregroundStyle(.primary)
+                } else {
+                    ProviderLogo(slug: nil, size: 28)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(10)
-                .background(theme.accent.opacity(0.10))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(theme.accent.opacity(0.4))
+                VStack(alignment: .leading, spacing: 2) {
+                    switch selection {
+                    case .template(let t):
+                        Text(t.name).fontWeight(.semibold)
+                        Text(t.driverType).font(.caption2).foregroundStyle(.secondary)
+                    case .custom:
+                        Text("Custom provider").fontWeight(.semibold)
+                        Text("Pick a driver type and configure manually")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                Spacer()
             }
+            .padding(10)
+            .background(theme.accent.opacity(0.10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(theme.accent.opacity(0.4))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 
@@ -898,7 +907,7 @@ private struct AddProviderForm: View {
     }
 
     private func save() async {
-        guard let sel = selection else { return }
+        let sel = selection
         isCreating = true; formError = nil
         defer { isCreating = false }
         do {
@@ -932,51 +941,6 @@ private struct AddProviderForm: View {
         } catch {
             formError = error.localizedDescription
         }
-    }
-}
-
-/// Pinned tile at the top of the templates picker that opens the form in
-/// custom-provider mode. Visual: dashed accent border + plus icon, distinct
-/// from the catalog's solid-border tiles so it reads as a different kind of
-/// affordance.
-private struct CustomProviderTile: View {
-    let onTap: () -> Void
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                Image(systemName: "plus.circle")
-                    .font(.title3)
-                    .foregroundStyle(theme.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Custom provider")
-                        .fontWeight(.semibold)
-                    Text("Configure manually — for self-hosted or uncatalogued endpoints")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // contentShape forces the entire frame (including transparent
-            // padding region) to be hittable — without this, hit-testing
-            // misses the gaps between the icon and the text.
-            .contentShape(Rectangle())
-            .background(theme.accent.opacity(0.06))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(
-                        theme.accent.opacity(0.5),
-                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
-                    )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -1368,59 +1332,6 @@ private struct ModelMetaStrip: View {
             .font(.caption2)
             .foregroundStyle(color)
             .help(help)
-    }
-}
-
-// MARK: - Template pill (used in AddProviderForm)
-
-private struct TemplatePill: View {
-    let template: ClarkProviderTemplate
-    let isSelected: Bool
-    let onTap: () -> Void
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                ProviderLogo(slug: template.logoSlug, size: 22)
-                    .foregroundStyle(.primary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(template.name)
-                        .fontWeight(isSelected ? .semibold : .regular)
-                    Text(template.driverType)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(theme.accent)
-                }
-            }
-            .padding(10)
-            // maxWidth: .infinity expands the label to fill the grid cell so
-            // the entire visible tile is one hit target. Without it the
-            // HStack's intrinsic width stops short of the column boundary
-            // and clicks on the right edge land on no view.
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // contentShape extends hit-testing to the full padded frame
-            // including the transparent .background(Color.clear) area.
-            // Without this, clicks on the un-text part of the tile (i.e. the
-            // padding around "302.AI") pass through to whatever's underneath
-            // — which is why the upper edge of first-row tiles read as dead.
-            .contentShape(Rectangle())
-            .background(isSelected ? theme.accent.opacity(0.10) : Color.clear)
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(
-                        isSelected
-                            ? AnyShapeStyle(theme.accent.opacity(0.4))
-                            : AnyShapeStyle(.separator)
-                    )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
     }
 }
 

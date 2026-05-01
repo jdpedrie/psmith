@@ -53,6 +53,17 @@ struct ProviderLogo: View {
             return nil
         }
         guard let img = NSImage(contentsOf: url) else { return nil }
+
+        // Light/dark adaptation: monochrome SVGs (which LobeHub authors
+        // with `fill="currentColor"`) need NSImage.isTemplate=true so
+        // SwiftUI's foregroundStyle actually tints them — without it
+        // AppKit renders the SVG's currentColor fallback (typically
+        // black) regardless of color scheme. Color variants
+        // (qwen-color, anything else ending `-color`) keep their
+        // authored palette.
+        let isColorVariant = slug.hasSuffix("-color")
+        img.isTemplate = !isColorVariant
+
         cache.setObject(img, forKey: key)
         return img
     }
