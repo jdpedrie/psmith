@@ -880,8 +880,12 @@ type PluginType struct {
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	// Flat list of typed fields describing the per-instance config blob the
 	// plugin accepts. Empty when the plugin doesn't implement Configurable.
-	ConfigFields  []*ConfigField      `protobuf:"bytes,3,rep,name=config_fields,json=configFields,proto3" json:"config_fields,omitempty"`
-	Capabilities  *PluginCapabilities `protobuf:"bytes,4,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	ConfigFields []*ConfigField      `protobuf:"bytes,3,rep,name=config_fields,json=configFields,proto3" json:"config_fields,omitempty"`
+	Capabilities *PluginCapabilities `protobuf:"bytes,4,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	// Human-friendly label shown everywhere in the UI (e.g. "Brave Search").
+	// The `name` field above is the stable machine identifier used as the
+	// plugin's primary key.
+	DisplayName   string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -944,6 +948,13 @@ func (x *PluginType) GetCapabilities() *PluginCapabilities {
 	return nil
 }
 
+func (x *PluginType) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
 // ConfigField is one entry in a plugin's per-instance config descriptor.
 // The list is flat — there's no nesting — so a UI can render a form by
 // walking the array once.
@@ -956,7 +967,20 @@ type ConfigField struct {
 	// JSON-encoded default value (e.g. `1`, `"<choices>"`, `true`). Empty = no default.
 	DefaultJson string `protobuf:"bytes,5,opt,name=default_json,json=defaultJson,proto3" json:"default_json,omitempty"`
 	// Populated only when type == SELECT.
-	Options       []*ConfigOption `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
+	Options []*ConfigOption `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
+	// True when the form must collect a value before the plugin can be
+	// saved. UIs disable the parent Save button and show inline validation
+	// when a required field is empty. The plugin's constructor remains
+	// the authoritative validator at runtime.
+	Required bool `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
+	// True when this field lives at user scope rather than profile scope
+	// (e.g. credentials the user only wants to enter once across every
+	// profile that uses the plugin). UIs render global fields on a
+	// separate "Plugin settings" surface; the per-profile plugin form
+	// omits them. The server merges the user's stored global value into
+	// the per-profile config blob handed to the plugin constructor at
+	// pipeline-build time.
+	Global        bool `protobuf:"varint,8,opt,name=global,proto3" json:"global,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1031,6 +1055,20 @@ func (x *ConfigField) GetOptions() []*ConfigOption {
 		return x.Options
 	}
 	return nil
+}
+
+func (x *ConfigField) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *ConfigField) GetGlobal() bool {
+	if x != nil {
+		return x.Global
+	}
+	return false
 }
 
 // ConfigOption is one entry in a SELECT field's options list.
@@ -1414,6 +1452,325 @@ func (x *SetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
 	return nil
 }
 
+// One stored global-config blob for a (calling user, plugin) pair.
+type UserPluginSettings struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PluginName string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Raw JSON object. Caller-responsible for matching the plugin type's
+	// `Global=true` ConfigField shape.
+	Config        []byte `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserPluginSettings) Reset() {
+	*x = UserPluginSettings{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserPluginSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserPluginSettings) ProtoMessage() {}
+
+func (x *UserPluginSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserPluginSettings.ProtoReflect.Descriptor instead.
+func (*UserPluginSettings) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *UserPluginSettings) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *UserPluginSettings) GetConfig() []byte {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type GetUserPluginSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserPluginSettingsRequest) Reset() {
+	*x = GetUserPluginSettingsRequest{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserPluginSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserPluginSettingsRequest) ProtoMessage() {}
+
+func (x *GetUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
+func (*GetUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetUserPluginSettingsRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+type GetUserPluginSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      *UserPluginSettings    `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserPluginSettingsResponse) Reset() {
+	*x = GetUserPluginSettingsResponse{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserPluginSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserPluginSettingsResponse) ProtoMessage() {}
+
+func (x *GetUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
+func (*GetUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GetUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+type ListUserPluginSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserPluginSettingsRequest) Reset() {
+	*x = ListUserPluginSettingsRequest{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserPluginSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserPluginSettingsRequest) ProtoMessage() {}
+
+func (x *ListUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ListUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{24}
+}
+
+type ListUserPluginSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      []*UserPluginSettings  `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserPluginSettingsResponse) Reset() {
+	*x = ListUserPluginSettingsResponse{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserPluginSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserPluginSettingsResponse) ProtoMessage() {}
+
+func (x *ListUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ListUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListUserPluginSettingsResponse) GetSettings() []*UserPluginSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+type UpsertUserPluginSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	Config        []byte                 `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertUserPluginSettingsRequest) Reset() {
+	*x = UpsertUserPluginSettingsRequest{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertUserPluginSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertUserPluginSettingsRequest) ProtoMessage() {}
+
+func (x *UpsertUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
+func (*UpsertUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *UpsertUserPluginSettingsRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *UpsertUserPluginSettingsRequest) GetConfig() []byte {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type UpsertUserPluginSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      *UserPluginSettings    `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertUserPluginSettingsResponse) Reset() {
+	*x = UpsertUserPluginSettingsResponse{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertUserPluginSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertUserPluginSettingsResponse) ProtoMessage() {}
+
+func (x *UpsertUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
+func (*UpsertUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *UpsertUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
 var File_reeve_v1_profiles_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_profiles_proto_rawDesc = "" +
@@ -1513,20 +1870,23 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x13history_transformer\x18\x04 \x01(\bR\x12historyTransformer\x12+\n" +
 	"\x11chunk_transformer\x18\x05 \x01(\bR\x10chunkTransformer\x12/\n" +
 	"\x13display_transformer\x18\x06 \x01(\bR\x12displayTransformer\x12#\n" +
-	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\"\xc0\x01\n" +
+	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\"\xe3\x01\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\rconfig_fields\x18\x03 \x03(\v2\x15.reeve.v1.ConfigFieldR\fconfigFields\x12@\n" +
-	"\fcapabilities\x18\x04 \x01(\v2\x1c.reeve.v1.PluginCapabilitiesR\fcapabilities\"\xbd\x02\n" +
+	"\fcapabilities\x18\x04 \x01(\v2\x1c.reeve.v1.PluginCapabilitiesR\fcapabilities\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\"\xf1\x02\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12.\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x1a.reeve.v1.ConfigField.TypeR\x04type\x12!\n" +
 	"\fdefault_json\x18\x05 \x01(\tR\vdefaultJson\x120\n" +
-	"\aoptions\x18\x06 \x03(\v2\x16.reeve.v1.ConfigOptionR\aoptions\"Y\n" +
+	"\aoptions\x18\x06 \x03(\v2\x16.reeve.v1.ConfigOptionR\aoptions\x12\x1a\n" +
+	"\brequired\x18\a \x01(\bR\brequired\x12\x16\n" +
+	"\x06global\x18\b \x01(\bR\x06global\"Y\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +
@@ -1557,7 +1917,25 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x121\n" +
 	"\aplugins\x18\x02 \x03(\v2\x17.reeve.v1.ProfilePluginR\aplugins\"N\n" +
 	"\x19SetProfilePluginsResponse\x121\n" +
-	"\aplugins\x18\x01 \x03(\v2\x17.reeve.v1.ProfilePluginR\aplugins2\xb3\x05\n" +
+	"\aplugins\x18\x01 \x03(\v2\x17.reeve.v1.ProfilePluginR\aplugins\"M\n" +
+	"\x12UserPluginSettings\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12\x16\n" +
+	"\x06config\x18\x02 \x01(\fR\x06config\"?\n" +
+	"\x1cGetUserPluginSettingsRequest\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\"Y\n" +
+	"\x1dGetUserPluginSettingsResponse\x128\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1c.reeve.v1.UserPluginSettingsR\bsettings\"\x1f\n" +
+	"\x1dListUserPluginSettingsRequest\"Z\n" +
+	"\x1eListUserPluginSettingsResponse\x128\n" +
+	"\bsettings\x18\x01 \x03(\v2\x1c.reeve.v1.UserPluginSettingsR\bsettings\"Z\n" +
+	"\x1fUpsertUserPluginSettingsRequest\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12\x16\n" +
+	"\x06config\x18\x02 \x01(\fR\x06config\"\\\n" +
+	" UpsertUserPluginSettingsResponse\x128\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1c.reeve.v1.UserPluginSettingsR\bsettings2\xfd\a\n" +
 	"\x0fProfilesService\x12P\n" +
 	"\rCreateProfile\x12\x1e.reeve.v1.CreateProfileRequest\x1a\x1f.reeve.v1.CreateProfileResponse\x12M\n" +
 	"\fListProfiles\x12\x1d.reeve.v1.ListProfilesRequest\x1a\x1e.reeve.v1.ListProfilesResponse\x12G\n" +
@@ -1567,7 +1945,10 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\rDeleteProfile\x12\x1e.reeve.v1.DeleteProfileRequest\x1a\x1f.reeve.v1.DeleteProfileResponse\x12V\n" +
 	"\x0fListPluginTypes\x12 .reeve.v1.ListPluginTypesRequest\x1a!.reeve.v1.ListPluginTypesResponse\x12\\\n" +
 	"\x11GetProfilePlugins\x12\".reeve.v1.GetProfilePluginsRequest\x1a#.reeve.v1.GetProfilePluginsResponse\x12\\\n" +
-	"\x11SetProfilePlugins\x12\".reeve.v1.SetProfilePluginsRequest\x1a#.reeve.v1.SetProfilePluginsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"\x11SetProfilePlugins\x12\".reeve.v1.SetProfilePluginsRequest\x1a#.reeve.v1.SetProfilePluginsResponse\x12h\n" +
+	"\x15GetUserPluginSettings\x12&.reeve.v1.GetUserPluginSettingsRequest\x1a'.reeve.v1.GetUserPluginSettingsResponse\x12k\n" +
+	"\x16ListUserPluginSettings\x12'.reeve.v1.ListUserPluginSettingsRequest\x1a(.reeve.v1.ListUserPluginSettingsResponse\x12q\n" +
+	"\x18UpsertUserPluginSettings\x12).reeve.v1.UpsertUserPluginSettingsRequest\x1a*.reeve.v1.UpsertUserPluginSettingsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_profiles_proto_rawDescOnce sync.Once
@@ -1582,44 +1963,51 @@ func file_reeve_v1_profiles_proto_rawDescGZIP() []byte {
 }
 
 var file_reeve_v1_profiles_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reeve_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_reeve_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_reeve_v1_profiles_proto_goTypes = []any{
-	(ConfigField_Type)(0),             // 0: reeve.v1.ConfigField.Type
-	(*CreateProfileRequest)(nil),      // 1: reeve.v1.CreateProfileRequest
-	(*CreateProfileResponse)(nil),     // 2: reeve.v1.CreateProfileResponse
-	(*ListProfilesRequest)(nil),       // 3: reeve.v1.ListProfilesRequest
-	(*ListProfilesResponse)(nil),      // 4: reeve.v1.ListProfilesResponse
-	(*GetProfileRequest)(nil),         // 5: reeve.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),        // 6: reeve.v1.GetProfileResponse
-	(*UpdateProfileRequest)(nil),      // 7: reeve.v1.UpdateProfileRequest
-	(*UpdateProfileResponse)(nil),     // 8: reeve.v1.UpdateProfileResponse
-	(*DeleteProfileRequest)(nil),      // 9: reeve.v1.DeleteProfileRequest
-	(*DeleteProfileResponse)(nil),     // 10: reeve.v1.DeleteProfileResponse
-	(*PluginCapabilities)(nil),        // 11: reeve.v1.PluginCapabilities
-	(*PluginType)(nil),                // 12: reeve.v1.PluginType
-	(*ConfigField)(nil),               // 13: reeve.v1.ConfigField
-	(*ConfigOption)(nil),              // 14: reeve.v1.ConfigOption
-	(*ProfilePlugin)(nil),             // 15: reeve.v1.ProfilePlugin
-	(*ListPluginTypesRequest)(nil),    // 16: reeve.v1.ListPluginTypesRequest
-	(*ListPluginTypesResponse)(nil),   // 17: reeve.v1.ListPluginTypesResponse
-	(*GetProfilePluginsRequest)(nil),  // 18: reeve.v1.GetProfilePluginsRequest
-	(*GetProfilePluginsResponse)(nil), // 19: reeve.v1.GetProfilePluginsResponse
-	(*SetProfilePluginsRequest)(nil),  // 20: reeve.v1.SetProfilePluginsRequest
-	(*SetProfilePluginsResponse)(nil), // 21: reeve.v1.SetProfilePluginsResponse
-	(CompressionMode)(0),              // 22: reeve.v1.CompressionMode
-	(*ProfileDefaults)(nil),           // 23: reeve.v1.ProfileDefaults
-	(*Profile)(nil),                   // 24: reeve.v1.Profile
+	(ConfigField_Type)(0),                    // 0: reeve.v1.ConfigField.Type
+	(*CreateProfileRequest)(nil),             // 1: reeve.v1.CreateProfileRequest
+	(*CreateProfileResponse)(nil),            // 2: reeve.v1.CreateProfileResponse
+	(*ListProfilesRequest)(nil),              // 3: reeve.v1.ListProfilesRequest
+	(*ListProfilesResponse)(nil),             // 4: reeve.v1.ListProfilesResponse
+	(*GetProfileRequest)(nil),                // 5: reeve.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),               // 6: reeve.v1.GetProfileResponse
+	(*UpdateProfileRequest)(nil),             // 7: reeve.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),            // 8: reeve.v1.UpdateProfileResponse
+	(*DeleteProfileRequest)(nil),             // 9: reeve.v1.DeleteProfileRequest
+	(*DeleteProfileResponse)(nil),            // 10: reeve.v1.DeleteProfileResponse
+	(*PluginCapabilities)(nil),               // 11: reeve.v1.PluginCapabilities
+	(*PluginType)(nil),                       // 12: reeve.v1.PluginType
+	(*ConfigField)(nil),                      // 13: reeve.v1.ConfigField
+	(*ConfigOption)(nil),                     // 14: reeve.v1.ConfigOption
+	(*ProfilePlugin)(nil),                    // 15: reeve.v1.ProfilePlugin
+	(*ListPluginTypesRequest)(nil),           // 16: reeve.v1.ListPluginTypesRequest
+	(*ListPluginTypesResponse)(nil),          // 17: reeve.v1.ListPluginTypesResponse
+	(*GetProfilePluginsRequest)(nil),         // 18: reeve.v1.GetProfilePluginsRequest
+	(*GetProfilePluginsResponse)(nil),        // 19: reeve.v1.GetProfilePluginsResponse
+	(*SetProfilePluginsRequest)(nil),         // 20: reeve.v1.SetProfilePluginsRequest
+	(*SetProfilePluginsResponse)(nil),        // 21: reeve.v1.SetProfilePluginsResponse
+	(*UserPluginSettings)(nil),               // 22: reeve.v1.UserPluginSettings
+	(*GetUserPluginSettingsRequest)(nil),     // 23: reeve.v1.GetUserPluginSettingsRequest
+	(*GetUserPluginSettingsResponse)(nil),    // 24: reeve.v1.GetUserPluginSettingsResponse
+	(*ListUserPluginSettingsRequest)(nil),    // 25: reeve.v1.ListUserPluginSettingsRequest
+	(*ListUserPluginSettingsResponse)(nil),   // 26: reeve.v1.ListUserPluginSettingsResponse
+	(*UpsertUserPluginSettingsRequest)(nil),  // 27: reeve.v1.UpsertUserPluginSettingsRequest
+	(*UpsertUserPluginSettingsResponse)(nil), // 28: reeve.v1.UpsertUserPluginSettingsResponse
+	(CompressionMode)(0),                     // 29: reeve.v1.CompressionMode
+	(*ProfileDefaults)(nil),                  // 30: reeve.v1.ProfileDefaults
+	(*Profile)(nil),                          // 31: reeve.v1.Profile
 }
 var file_reeve_v1_profiles_proto_depIdxs = []int32{
-	22, // 0: reeve.v1.CreateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
-	23, // 1: reeve.v1.CreateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
-	24, // 2: reeve.v1.CreateProfileResponse.profile:type_name -> reeve.v1.Profile
-	24, // 3: reeve.v1.ListProfilesResponse.profiles:type_name -> reeve.v1.Profile
-	24, // 4: reeve.v1.GetProfileResponse.profile:type_name -> reeve.v1.Profile
-	24, // 5: reeve.v1.GetProfileResponse.resolved:type_name -> reeve.v1.Profile
-	22, // 6: reeve.v1.UpdateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
-	23, // 7: reeve.v1.UpdateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
-	24, // 8: reeve.v1.UpdateProfileResponse.profile:type_name -> reeve.v1.Profile
+	29, // 0: reeve.v1.CreateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
+	30, // 1: reeve.v1.CreateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
+	31, // 2: reeve.v1.CreateProfileResponse.profile:type_name -> reeve.v1.Profile
+	31, // 3: reeve.v1.ListProfilesResponse.profiles:type_name -> reeve.v1.Profile
+	31, // 4: reeve.v1.GetProfileResponse.profile:type_name -> reeve.v1.Profile
+	31, // 5: reeve.v1.GetProfileResponse.resolved:type_name -> reeve.v1.Profile
+	29, // 6: reeve.v1.UpdateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
+	30, // 7: reeve.v1.UpdateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
+	31, // 8: reeve.v1.UpdateProfileResponse.profile:type_name -> reeve.v1.Profile
 	13, // 9: reeve.v1.PluginType.config_fields:type_name -> reeve.v1.ConfigField
 	11, // 10: reeve.v1.PluginType.capabilities:type_name -> reeve.v1.PluginCapabilities
 	0,  // 11: reeve.v1.ConfigField.type:type_name -> reeve.v1.ConfigField.Type
@@ -1628,27 +2016,36 @@ var file_reeve_v1_profiles_proto_depIdxs = []int32{
 	15, // 14: reeve.v1.GetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
 	15, // 15: reeve.v1.SetProfilePluginsRequest.plugins:type_name -> reeve.v1.ProfilePlugin
 	15, // 16: reeve.v1.SetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
-	1,  // 17: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
-	3,  // 18: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
-	5,  // 19: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
-	7,  // 20: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
-	9,  // 21: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
-	16, // 22: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
-	18, // 23: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
-	20, // 24: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
-	2,  // 25: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
-	4,  // 26: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
-	6,  // 27: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
-	8,  // 28: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
-	10, // 29: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
-	17, // 30: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
-	19, // 31: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
-	21, // 32: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
-	25, // [25:33] is the sub-list for method output_type
-	17, // [17:25] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	22, // 17: reeve.v1.GetUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	22, // 18: reeve.v1.ListUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	22, // 19: reeve.v1.UpsertUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	1,  // 20: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
+	3,  // 21: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
+	5,  // 22: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
+	7,  // 23: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
+	9,  // 24: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
+	16, // 25: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
+	18, // 26: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
+	20, // 27: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
+	23, // 28: reeve.v1.ProfilesService.GetUserPluginSettings:input_type -> reeve.v1.GetUserPluginSettingsRequest
+	25, // 29: reeve.v1.ProfilesService.ListUserPluginSettings:input_type -> reeve.v1.ListUserPluginSettingsRequest
+	27, // 30: reeve.v1.ProfilesService.UpsertUserPluginSettings:input_type -> reeve.v1.UpsertUserPluginSettingsRequest
+	2,  // 31: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
+	4,  // 32: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
+	6,  // 33: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
+	8,  // 34: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
+	10, // 35: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
+	17, // 36: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
+	19, // 37: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
+	21, // 38: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
+	24, // 39: reeve.v1.ProfilesService.GetUserPluginSettings:output_type -> reeve.v1.GetUserPluginSettingsResponse
+	26, // 40: reeve.v1.ProfilesService.ListUserPluginSettings:output_type -> reeve.v1.ListUserPluginSettingsResponse
+	28, // 41: reeve.v1.ProfilesService.UpsertUserPluginSettings:output_type -> reeve.v1.UpsertUserPluginSettingsResponse
+	31, // [31:42] is the sub-list for method output_type
+	20, // [20:31] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_profiles_proto_init() }
@@ -1666,7 +2063,7 @@ func file_reeve_v1_profiles_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_profiles_proto_rawDesc), len(file_reeve_v1_profiles_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

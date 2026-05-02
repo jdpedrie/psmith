@@ -4,7 +4,7 @@
 // inbound chunk streams, transform stored content for display, and provide
 // tools the model can call.
 //
-// The required Plugin interface is intentionally tiny — name + description.
+// The required Plugin interface is intentionally tiny — name + display name + description.
 // Every behavior is a separate opt-in interface, detected by type assertion
 // at the call sites that care. A plugin implements as many sub-interfaces
 // as it needs.
@@ -28,8 +28,16 @@ import (
 
 // Plugin is the minimum shape every plugin satisfies. Behavior comes from
 // optional sub-interfaces declared below.
+//
+//   - Name is the stable machine identifier (e.g. `brave_search`). Used as
+//     the primary key in profile_plugins / user_plugin_settings rows; do
+//     not change between releases.
+//   - DisplayName is the human-friendly label (e.g. `Brave Search`)
+//     rendered everywhere in the UI. Free to evolve over time.
+//   - Description is the one-paragraph blurb shown next to the display name.
 type Plugin interface {
 	Name() string
+	DisplayName() string
 	Description() string
 }
 
@@ -69,6 +77,22 @@ type ConfigField struct {
 	Type        ConfigFieldType
 	Default     any            // JSON-marshaled when sent over the wire; nil = no default
 	Options     []ConfigOption // only when Type==ConfigFieldSelect
+	// Required is a hint for the UI: a plugin can't be considered ready
+	// until this field has a non-empty value (or, for booleans/numbers,
+	// an explicit value chosen). The plugin's constructor remains the
+	// authoritative validator — Required is purely a UX signal so the
+	// form can disable Save and surface inline errors before the user
+	// hits the server-side rejection.
+	Required bool
+	// Global marks the field as living at user scope rather than
+	// profile scope. Use it for credentials and other values the user
+	// only wants to enter once (e.g. brave_search's api_key). At
+	// pipeline-build time the server merges the user's stored global
+	// value into the per-profile config blob handed to the plugin
+	// constructor; profile-scoped config can still override on a
+	// per-key basis. UIs render global fields on a separate "Plugin
+	// settings" surface, NOT in the per-profile plugin form.
+	Global bool
 }
 
 // ConfigOption is one entry in a select field's options list.
@@ -364,6 +388,7 @@ type Capabilities struct {
 // Returned by Describe and DescribeAll for use by management RPCs.
 type TypeDescriptor struct {
 	Name         string
+	DisplayName  string
 	Description  string
 	ConfigFields []ConfigField // empty unless the plugin implements Configurable
 	Capabilities Capabilities
@@ -379,6 +404,7 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	desc := TypeDescriptor{
 		Name:        inst.Name(),
+		DisplayName: inst.DisplayName(),
 		Description: inst.Description(),
 	}
 	if c, ok := inst.(Configurable); ok {

@@ -29,6 +29,21 @@ service ProfilesService {
   // config is validated by attempting to construct it; an unknown plugin
   // name or malformed config aborts the replace before any DB change.
   rpc SetProfilePlugins(SetProfilePluginsRequest) returns (SetProfilePluginsResponse);
+
+  // Read the calling user's global config blob for one plugin. Used by
+  // the "Plugin settings" UI to seed the form with previously-saved
+  // values for fields the plugin marks `Global=true`. Empty / missing
+  // row returns an empty config (`{}`).
+  rpc GetUserPluginSettings(GetUserPluginSettingsRequest) returns (GetUserPluginSettingsResponse);
+  // List every plugin the calling user has stored a global config for.
+  // Drives the "Plugin settings" landing page; absence of an entry for
+  // a registered plugin means "not yet configured globally".
+  rpc ListUserPluginSettings(ListUserPluginSettingsRequest) returns (ListUserPluginSettingsResponse);
+  // Replace the calling user's global config blob for one plugin.
+  // Idempotent (insert-or-update). Empty config (`{}`) is a valid
+  // stored value — it means "the user explicitly cleared every global
+  // field" and overrides the absence-is-empty fallback at merge time.
+  rpc UpsertUserPluginSettings(UpsertUserPluginSettingsRequest) returns (UpsertUserPluginSettingsResponse);
 }
 
 message CreateProfileRequest {
@@ -129,6 +144,10 @@ message PluginType {
   // plugin accepts. Empty when the plugin doesn't implement Configurable.
   repeated ConfigField config_fields = 3;
   PluginCapabilities capabilities = 4;
+  // Human-friendly label shown everywhere in the UI (e.g. "Brave Search").
+  // The `name` field above is the stable machine identifier used as the
+  // plugin's primary key.
+  string display_name = 5;
 }
 
 // ConfigField is one entry in a plugin's per-instance config descriptor.
@@ -151,6 +170,19 @@ message ConfigField {
   string default_json = 5;
   // Populated only when type == SELECT.
   repeated ConfigOption options = 6;
+  // True when the form must collect a value before the plugin can be
+  // saved. UIs disable the parent Save button and show inline validation
+  // when a required field is empty. The plugin's constructor remains
+  // the authoritative validator at runtime.
+  bool required = 7;
+  // True when this field lives at user scope rather than profile scope
+  // (e.g. credentials the user only wants to enter once across every
+  // profile that uses the plugin). UIs render global fields on a
+  // separate "Plugin settings" surface; the per-profile plugin form
+  // omits them. The server merges the user's stored global value into
+  // the per-profile config blob handed to the plugin constructor at
+  // pipeline-build time.
+  bool global = 8;
 }
 
 // ConfigOption is one entry in a SELECT field's options list.
@@ -187,4 +219,34 @@ message SetProfilePluginsRequest {
 }
 message SetProfilePluginsResponse {
   repeated ProfilePlugin plugins = 1;
+}
+
+// --- User-scoped plugin settings (`Global` config fields) ----------------
+
+// One stored global-config blob for a (calling user, plugin) pair.
+message UserPluginSettings {
+  string plugin_name = 1;
+  // Raw JSON object. Caller-responsible for matching the plugin type's
+  // `Global=true` ConfigField shape.
+  bytes config = 2;
+}
+
+message GetUserPluginSettingsRequest {
+  string plugin_name = 1;
+}
+message GetUserPluginSettingsResponse {
+  UserPluginSettings settings = 1;
+}
+
+message ListUserPluginSettingsRequest {}
+message ListUserPluginSettingsResponse {
+  repeated UserPluginSettings settings = 1;
+}
+
+message UpsertUserPluginSettingsRequest {
+  string plugin_name = 1;
+  bytes config = 2;
+}
+message UpsertUserPluginSettingsResponse {
+  UserPluginSettings settings = 1;
 }

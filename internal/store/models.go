@@ -192,3 +192,11 @@ type UserModelProvider struct {
 	UpdatedAt       time.Time
 	DefaultSettings []byte
 }
+
+type UserPluginSetting struct {
+	UserID     uuid.UUID
+	PluginName string
+	Config     []byte
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}

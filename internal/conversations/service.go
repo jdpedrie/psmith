@@ -1562,16 +1562,31 @@ var _ = time.Now
 // architecture's "all-or-nothing" inheritance: a child with any plugin rows
 // overrides its parent's pipeline entirely.
 //
+// Per-plugin user-scoped global settings (`Global=true` ConfigField rows
+// stored in user_plugin_settings) are merged INTO the profile-level
+// config blob before the constructor runs. Profile-level config wins on
+// per-key collisions; absence of a global row is treated as an empty
+// object.
+//
 // Cycle-protected: a malformed parent_profile_id loop would otherwise hang;
 // detected cycles return an error rather than infinite-looping.
 func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID) (plugins.Pipeline, error) {
 	cur := profileID
 	seen := make(map[uuid.UUID]bool)
+	var owner uuid.UUID
 	for {
 		if seen[cur] {
 			return nil, fmt.Errorf("plugin resolve: parent-profile cycle at %s", cur)
 		}
 		seen[cur] = true
+
+		// Cache the profile lookup so we can both check parent_profile_id
+		// (loop continuation) and fish out user_id (global-merge keying).
+		prof, err := s.queries.GetProfileByID(ctx, cur)
+		if err != nil {
+			return nil, fmt.Errorf("get profile %s: %w", cur, err)
+		}
+		owner = prof.UserID
 
 		rows, err := s.queries.ListProfilePlugins(ctx, cur)
 		if err != nil {
@@ -1580,20 +1595,75 @@ func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID
 		if len(rows) > 0 {
 			specs := make([]plugins.Spec, 0, len(rows))
 			for _, r := range rows {
-				specs = append(specs, plugins.Spec{Name: r.PluginName, Config: r.Config})
+				merged, mErr := s.mergeGlobalIntoProfileConfig(ctx, owner, r.PluginName, r.Config)
+				if mErr != nil {
+					return nil, fmt.Errorf("merge globals for %q: %w", r.PluginName, mErr)
+				}
+				specs = append(specs, plugins.Spec{Name: r.PluginName, Config: merged})
 			}
 			return plugins.Resolve(specs)
 		}
 
-		prof, err := s.queries.GetProfileByID(ctx, cur)
-		if err != nil {
-			return nil, fmt.Errorf("get profile %s: %w", cur, err)
-		}
 		if prof.ParentProfileID == nil {
 			return nil, nil
 		}
 		cur = *prof.ParentProfileID
 	}
+}
+
+// mergeGlobalIntoProfileConfig fetches the calling user's global config
+// for one plugin and overlays the profile-level config on top (profile
+// wins on per-key collisions). Empty results everywhere → returns the
+// profile config unchanged. Plugins with no Global=true fields and no
+// stored row simply get their original config back.
+func (s *Service) mergeGlobalIntoProfileConfig(ctx context.Context, userID uuid.UUID, pluginName string, profileConfig []byte) ([]byte, error) {
+	row, err := s.queries.GetUserPluginSettings(ctx, store.GetUserPluginSettingsParams{
+		UserID:     userID,
+		PluginName: pluginName,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return profileConfig, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(row.Config) == 0 || string(row.Config) == "{}" {
+		return profileConfig, nil
+	}
+
+	// Decode both blobs, shallow-merge, re-encode. Both halves are flat
+	// JSON objects (the ConfigField shape is flat — no nesting); the
+	// merge is just key-by-key.
+	var globalMap, profileMap map[string]any
+	if err := json.Unmarshal(row.Config, &globalMap); err != nil {
+		// Malformed global blob → treat as empty rather than failing the
+		// whole pipeline build. The user's profile sends should not be
+		// gated by a stale-shape global row.
+		return profileConfig, nil
+	}
+	if globalMap == nil {
+		globalMap = map[string]any{}
+	}
+	if len(profileConfig) > 0 {
+		if err := json.Unmarshal(profileConfig, &profileMap); err != nil {
+			return nil, fmt.Errorf("decode profile config: %w", err)
+		}
+	}
+	if profileMap == nil {
+		profileMap = map[string]any{}
+	}
+	merged := make(map[string]any, len(globalMap)+len(profileMap))
+	for k, v := range globalMap {
+		merged[k] = v
+	}
+	for k, v := range profileMap {
+		merged[k] = v
+	}
+	out, err := json.Marshal(merged)
+	if err != nil {
+		return nil, fmt.Errorf("encode merged config: %w", err)
+	}
+	return out, nil
 }
 
 // resolvePipelineForConversation is a convenience wrapper that fetches the

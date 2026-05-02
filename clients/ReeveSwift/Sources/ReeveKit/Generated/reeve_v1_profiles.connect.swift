@@ -45,6 +45,26 @@ public protocol Reeve_V1_ProfilesServiceClientInterface: Sendable {
     /// name or malformed config aborts the replace before any DB change.
     @available(iOS 13, *)
     func `setProfilePlugins`(request: Reeve_V1_SetProfilePluginsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_SetProfilePluginsResponse>
+
+    /// Read the calling user's global config blob for one plugin. Used by
+    /// the "Plugin settings" UI to seed the form with previously-saved
+    /// values for fields the plugin marks `Global=true`. Empty / missing
+    /// row returns an empty config (`{}`).
+    @available(iOS 13, *)
+    func `getUserPluginSettings`(request: Reeve_V1_GetUserPluginSettingsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_GetUserPluginSettingsResponse>
+
+    /// List every plugin the calling user has stored a global config for.
+    /// Drives the "Plugin settings" landing page; absence of an entry for
+    /// a registered plugin means "not yet configured globally".
+    @available(iOS 13, *)
+    func `listUserPluginSettings`(request: Reeve_V1_ListUserPluginSettingsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListUserPluginSettingsResponse>
+
+    /// Replace the calling user's global config blob for one plugin.
+    /// Idempotent (insert-or-update). Empty config (`{}`) is a valid
+    /// stored value — it means "the user explicitly cleared every global
+    /// field" and overrides the absence-is-empty fallback at merge time.
+    @available(iOS 13, *)
+    func `upsertUserPluginSettings`(request: Reeve_V1_UpsertUserPluginSettingsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_UpsertUserPluginSettingsResponse>
 }
 
 /// Concrete implementation of `Reeve_V1_ProfilesServiceClientInterface`.
@@ -95,6 +115,21 @@ public final class Reeve_V1_ProfilesServiceClient: Reeve_V1_ProfilesServiceClien
         return await self.client.unary(path: "/reeve.v1.ProfilesService/SetProfilePlugins", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `getUserPluginSettings`(request: Reeve_V1_GetUserPluginSettingsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_GetUserPluginSettingsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ProfilesService/GetUserPluginSettings", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listUserPluginSettings`(request: Reeve_V1_ListUserPluginSettingsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ListUserPluginSettingsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ProfilesService/ListUserPluginSettings", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `upsertUserPluginSettings`(request: Reeve_V1_UpsertUserPluginSettingsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_UpsertUserPluginSettingsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ProfilesService/UpsertUserPluginSettings", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let createProfile = Connect.MethodSpec(name: "CreateProfile", service: "reeve.v1.ProfilesService", type: .unary)
@@ -105,6 +140,9 @@ public final class Reeve_V1_ProfilesServiceClient: Reeve_V1_ProfilesServiceClien
             public static let listPluginTypes = Connect.MethodSpec(name: "ListPluginTypes", service: "reeve.v1.ProfilesService", type: .unary)
             public static let getProfilePlugins = Connect.MethodSpec(name: "GetProfilePlugins", service: "reeve.v1.ProfilesService", type: .unary)
             public static let setProfilePlugins = Connect.MethodSpec(name: "SetProfilePlugins", service: "reeve.v1.ProfilesService", type: .unary)
+            public static let getUserPluginSettings = Connect.MethodSpec(name: "GetUserPluginSettings", service: "reeve.v1.ProfilesService", type: .unary)
+            public static let listUserPluginSettings = Connect.MethodSpec(name: "ListUserPluginSettings", service: "reeve.v1.ProfilesService", type: .unary)
+            public static let upsertUserPluginSettings = Connect.MethodSpec(name: "UpsertUserPluginSettings", service: "reeve.v1.ProfilesService", type: .unary)
         }
     }
 }

@@ -234,13 +234,44 @@ public final class ProfilesViewModel {
         do {
             let types = try await client.profiles.listPluginTypes()
             pluginTypes = types.sorted { lhs, rhs in
-                let l = lhs.name // descriptor doesn't carry a separate display label,
-                let r = rhs.name // so sort by registered name (used as the title in UI).
-                return l.localizedCaseInsensitiveCompare(r) == .orderedAscending
+                lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// Per-user, per-plugin global config blobs. Populated by
+    /// `loadUserPluginSettings()`; `globalSettings(for:)` returns the
+    /// blob (or nil) for one plugin. Replaces and is replaced by
+    /// `upsertUserPluginSettings(...)`.
+    public var userPluginSettings: [String: ReeveUserPluginSettings] = [:]
+
+    /// Currently-selected plugin name on the Plugin Settings surface;
+    /// drives the middle column's highlight + the detail column's form
+    /// binding. Nil → empty state.
+    public var selectedPluginID: String?
+
+    public func loadUserPluginSettings() async {
+        do {
+            let rows = try await client.profiles.listUserPluginSettings()
+            var map: [String: ReeveUserPluginSettings] = [:]
+            for row in rows { map[row.pluginName] = row }
+            userPluginSettings = map
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    public func upsertUserPluginSettings(pluginName: String, config: Data) async throws {
+        let updated = try await client.profiles.upsertUserPluginSettings(pluginName: pluginName, config: config)
+        userPluginSettings[pluginName] = updated
+    }
+
+    /// Returns the stored global config for a plugin (or `{}` when the
+    /// user hasn't configured it yet).
+    public func globalSettings(for pluginName: String) -> ReeveUserPluginSettings {
+        userPluginSettings[pluginName] ?? ReeveUserPluginSettings(pluginName: pluginName, config: Data())
     }
 
     /// Loads the plugin pipeline for one profile and stashes it under

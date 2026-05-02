@@ -126,6 +126,8 @@ struct SettingsView: View {
             ProvidersMiddleColumn(model: providersModel, onBack: onBack)
         case .profiles:
             ProfilesMiddleColumn(model: profilesModel, onBack: onBack)
+        case .plugins:
+            PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
         case .appearance:
             AppearanceMiddleColumn(onBack: onBack)
         }
@@ -140,6 +142,8 @@ struct SettingsView: View {
             ProvidersDetail(model: providersModel)
         case .profiles:
             ProfilesDetail(model: profilesModel)
+        case .plugins:
+            PluginSettingsDetail(model: profilesModel)
         case .appearance:
             AppearanceSettingsView()
         }

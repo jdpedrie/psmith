@@ -90,7 +90,8 @@ func init() {
 	Register(LetteredChoicesName, newLetteredChoices)
 }
 
-func (p *letteredChoices) Name() string { return LetteredChoicesName }
+func (p *letteredChoices) Name() string        { return LetteredChoicesName }
+func (p *letteredChoices) DisplayName() string { return "Lettered Choices" }
 
 func (p *letteredChoices) Description() string {
 	return "Instructs the model to emit lettered choices wrapped in tag delimiters; " +
@@ -140,12 +141,15 @@ func (p *letteredChoices) AppendSystemMessage() string {
 	if p.cfg.SystemInstructionOverride != "" {
 		return p.cfg.SystemInstructionOverride
 	}
-	return fmt.Sprintf(
-		"When you offer the user a discrete choice between options, list them "+
-			"as lettered choices wrapped in the literal delimiters %s and %s. "+
-			"Example:\n%sA) Attack\nB) Flee\nC) Negotiate%s\n"+
-			"Place the wrapped block at the end of your reply. The user will "+
-			"respond with just a letter.",
+	return fmt.Sprintf(`Always offer the user 3-5 lettered choices as lettered choices wrapped in the literal delimiters %s and %s. Choices may be one word up to a short sentence. Use the following format:
+	
+%s
+### Choices
+A. Attack
+B. Flee
+C. Negotiate
+D. Stop and think a while
+%s`,
 		p.cfg.OpenTag, p.cfg.CloseTag, p.cfg.OpenTag, p.cfg.CloseTag,
 	)
 }

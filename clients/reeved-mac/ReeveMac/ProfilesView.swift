@@ -429,13 +429,51 @@ private struct ProfileForm: View {
     @State private var isSaving = false
     @State private var formError: String?
 
+    // Plugins live on the profile but are persisted via a separate RPC
+    // (SetProfilePlugins). We hoist their draft into ProfileForm so the
+    // main Save button can flush both atomically — the user no longer
+    // sees "Save plugins" as a separate affordance.
+    @State private var pluginsDraft: [DraftPlugin] = []
+    @State private var pluginsBaseline: [ReeveProfilePlugin] = []
+    @State private var pluginsLoaded = false
+    @State private var configuringPluginLocalID: UUID?
+    @State private var showingAddPluginPicker = false
+
     private var isEdit: Bool { editing != nil }
 
     private var canSave: Bool {
-        !isSaving && !name.trimmingCharacters(in: .whitespaces).isEmpty
+        !isSaving
+            && !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && pluginsAreValid
+    }
+
+    /// True when every required PROFILE-SCOPED field on every attached
+    /// plugin is satisfied. Globals are validated on the Plugin Settings
+    /// surface — leaving a global blank only triggers a warning chip
+    /// on the plugin card, not a Save block (the user might still want
+    /// to save the profile and configure the global later).
+    private var pluginsAreValid: Bool {
+        for plugin in pluginsDraft {
+            guard let pluginType = model.pluginTypes.first(where: { $0.name == plugin.pluginName }) else {
+                continue // unknown type — let the server reject
+            }
+            for field in pluginType.profileScopedConfigFields where field.isUnsatisfied(by: plugin.config[field.name]) {
+                return false
+            }
+        }
+        return true
     }
 
     var body: some View {
+        if let id = configuringPluginLocalID,
+           let index = pluginsDraft.firstIndex(where: { $0.localID == id }) {
+            pluginSettingsSubScreen(index: index)
+        } else {
+            mainForm
+        }
+    }
+
+    private var mainForm: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — same paneHeaderHeight band as ProfileViewer / ProviderHeader
             // for column-to-column visual rhythm.
@@ -557,9 +595,7 @@ private struct ProfileForm: View {
                         }
                     }
 
-                    if let editing {
-                        PluginsSection(model: model, profileID: editing.id)
-                    }
+                    pluginsSection
 
                     formSection("Auto-titling") {
                         formRow(label: "Generator",
@@ -589,6 +625,31 @@ private struct ProfileForm: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { seedFromEditing() }
+        .task {
+            // Plugin types descriptor (display name, fields, capabilities)
+            // — needed regardless of edit/add mode so the Add Plugin
+            // picker has something to render.
+            if model.pluginTypes.isEmpty {
+                await model.loadPluginTypes()
+            }
+            // User-scoped global plugin settings power the per-card
+            // "global setup needed" badge.
+            await model.loadUserPluginSettings()
+            // Existing-profile plugins seed the draft baseline. New
+            // profiles start with an empty draft.
+            if let editing {
+                await model.loadPlugins(forProfileID: editing.id)
+                let stored = model.profilePlugins[editing.id] ?? []
+                pluginsBaseline = stored
+                pluginsDraft = stored.map { plugin in
+                    DraftPlugin(
+                        pluginName: plugin.pluginName,
+                        config: decodeConfigDict(plugin.config) ?? [:]
+                    )
+                }
+            }
+            pluginsLoaded = true
+        }
     }
 
 
@@ -1000,205 +1061,291 @@ private struct ProfileForm: View {
         }
 
         do {
+            // Step 1: profile fields.
+            let profileID: String
             if let editing {
                 _ = try await model.update(id: editing.id, patch: patch, clearFields: clearFields)
+                profileID = editing.id
             } else {
                 let p = try await model.create(patch)
                 model.selectedID = p.id
+                profileID = p.id
             }
+
+            // Step 2: plugins (when dirty). On Add mode the baseline is
+            // empty so any attached draft plugins flush to the
+            // freshly-created profile id. On Edit mode we diff against
+            // the loaded baseline; equality skips the round-trip.
+            if pluginsAreDirty {
+                let plugins: [ReeveProfilePlugin] = try pluginsDraft.enumerated().map { ordinal, plugin in
+                    let data = try JSONSerialization.data(withJSONObject: plugin.config, options: [.sortedKeys])
+                    return ReeveProfilePlugin(
+                        pluginName: plugin.pluginName,
+                        ordinal: Int32(ordinal),
+                        config: data
+                    )
+                }
+                try await model.savePlugins(forProfileID: profileID, plugins: plugins)
+            }
+
             model.detailMode = .viewing
         } catch {
             formError = error.localizedDescription
         }
     }
-}
 
-// MARK: - Plugins section
+    /// True when the plugin draft differs from the baseline loaded on
+    /// `.task`. Drives both the dirty-indicator and the conditional
+    /// `setProfilePlugins` call inside `save()`.
+    private var pluginsAreDirty: Bool {
+        guard pluginsBaseline.count == pluginsDraft.count else { return true }
+        for (b, d) in zip(pluginsBaseline, pluginsDraft) {
+            if b.pluginName != d.pluginName { return true }
+            let baselineDict = decodeConfigDict(b.config) ?? [:]
+            if !configsEqual(baselineDict, d.config) { return true }
+        }
+        return false
+    }
 
-/// Inline plugins editor lives at the bottom of ProfileForm. Owns its own
-/// draft list (so edits don't mutate ProfilesViewModel.profilePlugins until
-/// the user clicks Save plugins). Loads from the server on appear.
-private struct PluginsSection: View {
-    @Bindable var model: ProfilesViewModel
-    let profileID: String
+    // MARK: - Plugins UI
 
-    @State private var draft: [DraftPlugin] = []
-    @State private var loaded = false
-    @State private var isSaving = false
-    @State private var saveError: String?
-    @State private var addPopoverShown = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Plugins")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                if isDirty {
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        if isSaving { ProgressView().controlSize(.small) }
-                        else { Text("Save plugins") }
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.glassProminent)
-                    .disabled(isSaving)
-                }
-            }
-
-            if !loaded {
+    /// Inline plugins section that lives inside the main profile form.
+    /// Lists attached plugins as tappable cards; tapping a card pushes
+    /// the per-plugin settings sub-screen. New plugins are added via an
+    /// inline-expanding picker (no popover — see no-popups rule).
+    @ViewBuilder
+    private var pluginsSection: some View {
+        formSection("Plugins") {
+            if !pluginsLoaded {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Loading plugins…").font(.caption).foregroundStyle(.secondary)
                 }
-            } else if draft.isEmpty {
-                Text("No plugins. Inherits from parent profile.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(draft.enumerated()), id: \.element.localID) { index, plugin in
-                        pluginRow(index: index, plugin: plugin)
+                if pluginsDraft.isEmpty {
+                    Text(isEdit
+                         ? "No plugins. Inherits from parent profile."
+                         : "No plugins yet. Add one below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(pluginsDraft.enumerated()), id: \.element.localID) { idx, plugin in
+                            pluginCard(at: idx, plugin: plugin)
+                        }
                     }
                 }
+                addPluginPickerInline
             }
-
-            addPluginButton
-                .disabled(model.pluginTypes.isEmpty)
-
-            if let saveError {
-                Text(saveError).font(.caption).foregroundStyle(.red)
-            }
-        }
-        .task {
-            if model.pluginTypes.isEmpty {
-                await model.loadPluginTypes()
-            }
-            await model.loadPlugins(forProfileID: profileID)
-            seedDraft()
-            loaded = true
         }
     }
 
     @ViewBuilder
-    private func pluginRow(index: Int, plugin: DraftPlugin) -> some View {
+    private func pluginCard(at index: Int, plugin: DraftPlugin) -> some View {
         let pluginType = model.pluginTypes.first(where: { $0.name == plugin.pluginName })
-        let title = pluginType?.name ?? plugin.pluginName
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.callout.weight(.medium))
-                    if let desc = pluginType?.description, !desc.isEmpty {
-                        Text(desc)
+        let title = pluginType?.displayName ?? plugin.pluginName
+        let description = pluginType?.description ?? ""
+        // Profile-scoped fields drive the drill-down; if a plugin only
+        // exposes global fields, the card is non-drillable (settings
+        // live on the Plugin Settings surface, not in the profile form).
+        let profileScopedFields = pluginType?.profileScopedConfigFields ?? []
+        let drillable = !profileScopedFields.isEmpty
+        let unsatisfiedCount = profileScopedFields
+            .filter { $0.isUnsatisfied(by: plugin.config[$0.name]) }
+            .count
+        let globalUnsatisfiedCount = (pluginType?.globalConfigFields ?? []).filter { field in
+            field.required && globalConfigValue(plugin: plugin.pluginName, key: field.name) == nil
+        }.count
+
+        Button {
+            if drillable {
+                configuringPluginLocalID = plugin.localID
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(title).font(.callout.weight(.medium))
+                        if unsatisfiedCount > 0 {
+                            warningChip(text: "\(unsatisfiedCount) required")
+                        }
+                        if globalUnsatisfiedCount > 0 {
+                            warningChip(text: "global setup needed")
+                                .help("This plugin's global settings have unsatisfied required fields. Open Plugin Settings to configure.")
+                        }
+                    }
+                    if !description.isEmpty {
+                        Text(description)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
+                    capabilityChips(pluginType?.capabilities)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 GlassCircleButton(
                     systemImage: "minus",
-                    action: { remove(at: index) },
+                    action: { removePlugin(at: index) },
                     help: "Remove plugin",
                     tint: .red
                 )
-            }
-
-            if let pluginType, !pluginType.configFields.isEmpty {
-                PluginConfigForm(
-                    fields: pluginType.configFields,
-                    config: Binding(
-                        get: { draft[index].config },
-                        set: { draft[index].config = $0 }
-                    )
-                )
-                .padding(.leading, 4)
-            }
-        }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.04))
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-        )
-    }
-
-    private var addPluginButton: some View {
-        Button {
-            addPopoverShown = true
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                Text("Add plugin")
-            }
-            .font(.callout)
-        }
-        .controlSize(.small)
-        .buttonStyle(.glass)
-        .popover(isPresented: $addPopoverShown, arrowEdge: .bottom) {
-            addPluginPopoverContent
-        }
-    }
-
-    private var addPluginPopoverContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if model.pluginTypes.isEmpty {
-                Text("No plugins available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
-            } else {
-                ForEach(model.pluginTypes) { pluginType in
-                    Button {
-                        addPopoverShown = false
-                        attach(pluginType)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pluginType.name)
-                                .foregroundStyle(.primary)
-                                .font(.callout)
-                            if !pluginType.description.isEmpty {
-                                Text(pluginType.description)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                if drillable {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
             }
-        }
-        .frame(minWidth: 260)
-        .padding(.vertical, 4)
-    }
-
-    // MARK: state helpers
-
-    private func seedDraft() {
-        let stored = model.profilePlugins[profileID] ?? []
-        draft = stored.map { plugin in
-            DraftPlugin(
-                pluginName: plugin.pluginName,
-                config: decodeConfigDict(plugin.config) ?? [:]
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.primary.opacity(0.04))
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(
+                        (unsatisfiedCount + globalUnsatisfiedCount) > 0
+                            ? AnyShapeStyle(Color.orange.opacity(0.45))
+                            : AnyShapeStyle(Color.primary.opacity(0.06)),
+                        lineWidth: (unsatisfiedCount + globalUnsatisfiedCount) > 0 ? 1.2 : 1
+                    )
             )
         }
+        .buttonStyle(.plain)
+        .disabled(!drillable && pluginType != nil)
     }
 
-    private func attach(_ pluginType: ReevePluginType) {
-        // Initialize the dict from each field's defaultJSON so the row
-        // has sensible starting values.
+    private func warningChip(text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text(text)
+                .font(.caption2.weight(.medium))
+        }
+        .foregroundStyle(.orange)
+    }
+
+    /// Lookup helper for the per-card "global setup needed" check.
+    /// Decodes the cached blob from the view-model on the fly; safe to
+    /// call before the loadUserPluginSettings task completes (returns
+    /// nil for missing rows).
+    private func globalConfigValue(plugin: String, key: String) -> Any? {
+        let blob = model.globalSettings(for: plugin).config
+        guard !blob.isEmpty,
+              let dict = try? JSONSerialization.jsonObject(with: blob, options: []) as? [String: Any]
+        else { return nil }
+        let value = dict[key]
+        if let s = value as? String, s.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
+        return value
+    }
+
+    @ViewBuilder
+    private func capabilityChips(_ caps: ReevePluginCapabilities?) -> some View {
+        if let caps {
+            HStack(spacing: 4) {
+                if caps.toolProvider          { miniChip("Tool") }
+                if caps.systemPrompter        { miniChip("System") }
+                if caps.outgoingUserTransformer { miniChip("Outgoing") }
+                if caps.historyTransformer    { miniChip("History") }
+                if caps.chunkTransformer      { miniChip("Chunks") }
+                if caps.displayTransformer    { miniChip("Display") }
+            }
+        }
+    }
+
+    private func miniChip(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(Capsule().fill(Color.primary.opacity(0.06)))
+    }
+
+    /// Inline-expanding plugin picker (mirrors the model picker's UX
+    /// pattern — no popover, no Menu, scrollable card list inline).
+    @ViewBuilder
+    private var addPluginPickerInline: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                showingAddPluginPicker.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showingAddPluginPicker ? "chevron.up" : "plus")
+                    Text(showingAddPluginPicker ? "Cancel" : "Add plugin")
+                }
+                .font(.callout)
+            }
+            .controlSize(.small)
+            .buttonStyle(.glass)
+            .disabled(model.pluginTypes.isEmpty)
+
+            if showingAddPluginPicker {
+                let attachedNames = Set(pluginsDraft.map { $0.pluginName })
+                let available = model.pluginTypes.filter { !attachedNames.contains($0.name) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if available.isEmpty {
+                            Text("Every available plugin is already attached.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 4)
+                        } else {
+                            ForEach(available) { pluginType in
+                                pluginTypeCard(pluginType)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(maxHeight: 240)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.12), value: showingAddPluginPicker)
+    }
+
+    private func pluginTypeCard(_ pluginType: ReevePluginType) -> some View {
+        Button {
+            attachPlugin(pluginType)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(pluginType.displayName).font(.callout.weight(.medium))
+                    Spacer()
+                    Image(systemName: "plus.circle")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                }
+                if !pluginType.description.isEmpty {
+                    Text(pluginType.description)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                capabilityChips(pluginType.capabilities)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(0.03))
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func attachPlugin(_ pluginType: ReevePluginType) {
+        // Initialise the dict from each field's defaultJSON so the row
+        // has sensible starting values; required fields stay missing
+        // (they have no default) and surface as the warning chip until
+        // the user enters a value.
         var initial: [String: Any] = [:]
         for field in pluginType.configFields {
             if !field.defaultJSON.isEmpty,
@@ -1207,44 +1354,118 @@ private struct PluginsSection: View {
                 initial[field.name] = any
             }
         }
-        draft.append(DraftPlugin(pluginName: pluginType.name, config: initial))
-    }
-
-    private func remove(at index: Int) {
-        guard draft.indices.contains(index) else { return }
-        draft.remove(at: index)
-    }
-
-    private var isDirty: Bool {
-        let stored = model.profilePlugins[profileID] ?? []
-        guard stored.count == draft.count else { return true }
-        for (s, d) in zip(stored, draft) {
-            if s.pluginName != d.pluginName { return true }
-            let storedDict = decodeConfigDict(s.config) ?? [:]
-            if !configsEqual(storedDict, d.config) { return true }
+        let draft = DraftPlugin(pluginName: pluginType.name, config: initial)
+        pluginsDraft.append(draft)
+        showingAddPluginPicker = false
+        // Drill into settings immediately when the plugin has any
+        // profile-scoped config to fill in. Plugins exposing only
+        // global fields land back on the profile form (the user
+        // configures them on the Plugin Settings surface instead).
+        if !pluginType.profileScopedConfigFields.isEmpty {
+            configuringPluginLocalID = draft.localID
         }
-        return false
     }
 
-    private func save() async {
-        isSaving = true; saveError = nil
-        defer { isSaving = false }
-        do {
-            let plugins: [ReeveProfilePlugin] = try draft.enumerated().map { ordinal, plugin in
-                let data = try JSONSerialization.data(withJSONObject: plugin.config, options: [.sortedKeys])
-                return ReeveProfilePlugin(
-                    pluginName: plugin.pluginName,
-                    ordinal: Int32(ordinal),
-                    config: data
-                )
+    private func removePlugin(at index: Int) {
+        guard pluginsDraft.indices.contains(index) else { return }
+        pluginsDraft.remove(at: index)
+    }
+
+    /// Sub-screen that fully replaces the profile form pane with the
+    /// per-plugin config form. Edits flow into the parent draft via
+    /// Binding; Back returns to the main form preserving in-flight
+    /// state. No Save button on this screen — the parent profile-form
+    /// Save persists everything atomically.
+    @ViewBuilder
+    private func pluginSettingsSubScreen(index: Int) -> some View {
+        let plugin = pluginsDraft[index]
+        let pluginType = model.pluginTypes.first(where: { $0.name == plugin.pluginName })
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                Button {
+                    configuringPluginLocalID = nil
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .font(.callout)
+                }
+                .controlSize(.small)
+                .buttonStyle(.glass)
+                .keyboardShortcut(.cancelAction)
+
+                Text(pluginType?.displayName ?? plugin.pluginName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+                Text("Edits flow into the parent profile draft. Save on the profile screen to persist.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+                    .frame(maxWidth: 320, alignment: .trailing)
             }
-            try await model.savePlugins(forProfileID: profileID, plugins: plugins)
-            seedDraft()
-        } catch {
-            saveError = error.localizedDescription
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let pluginType, !pluginType.description.isEmpty {
+                        Text(pluginType.description)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let pluginType {
+                        let profileFields = pluginType.profileScopedConfigFields
+                        let globalFields = pluginType.globalConfigFields
+                        if profileFields.isEmpty && globalFields.isEmpty {
+                            Text("This plugin has no settings.")
+                                .foregroundStyle(.secondary)
+                        } else if profileFields.isEmpty {
+                            // Pure global plugin — drill-down has nothing
+                            // to render; nudge the user to the right
+                            // surface.
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("All of this plugin's settings live at user scope.")
+                                    .foregroundStyle(.secondary)
+                                Text("Open Plugin Settings (in the app's main settings) to configure them once across every profile that uses this plugin.")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } else {
+                            PluginConfigForm(
+                                fields: profileFields,
+                                config: Binding(
+                                    get: { pluginsDraft[index].config },
+                                    set: { pluginsDraft[index].config = $0 }
+                                )
+                            )
+                            if !globalFields.isEmpty {
+                                Divider().padding(.vertical, 6)
+                                Text("Other settings for this plugin (such as credentials) live at user scope. Edit them in the app's Plugin Settings — they apply to every profile that uses this plugin.")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    } else {
+                        Text("This plugin has no settings.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
+
 
 private struct DraftPlugin {
     let localID = UUID()

@@ -107,6 +107,31 @@ public final class ProfilesRepository: Sendable {
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("set profile plugins") }
         return msg.plugins.map(ReeveProfilePlugin.init(from:))
     }
+
+    // MARK: - User-scoped global plugin settings
+
+    public func getUserPluginSettings(pluginName: String) async throws -> ReeveUserPluginSettings {
+        var req = Reeve_V1_GetUserPluginSettingsRequest()
+        req.pluginName = pluginName
+        let resp = await client.getUserPluginSettings(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("get user plugin settings") }
+        return ReeveUserPluginSettings(from: msg.settings)
+    }
+
+    public func listUserPluginSettings() async throws -> [ReeveUserPluginSettings] {
+        let resp = await client.listUserPluginSettings(request: Reeve_V1_ListUserPluginSettingsRequest(), headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list user plugin settings") }
+        return msg.settings.map(ReeveUserPluginSettings.init(from:))
+    }
+
+    public func upsertUserPluginSettings(pluginName: String, config: Data) async throws -> ReeveUserPluginSettings {
+        var req = Reeve_V1_UpsertUserPluginSettingsRequest()
+        req.pluginName = pluginName
+        req.config = config
+        let resp = await client.upsertUserPluginSettings(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("upsert user plugin settings") }
+        return ReeveUserPluginSettings(from: msg.settings)
+    }
 }
 
 /// Optional-each-field patch shape for create/update. `nil` = don't set.

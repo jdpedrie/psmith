@@ -27,10 +27,24 @@ struct PluginConfigForm: View {
 
     @ViewBuilder
     private func fieldRow(_ field: ReeveConfigField) -> some View {
+        let unsatisfied = field.isUnsatisfied(by: config[field.name])
         VStack(alignment: .leading, spacing: 4) {
-            Text(field.display.isEmpty ? field.name : field.display)
-                .font(.callout.weight(.medium))
+            HStack(spacing: 4) {
+                Text(field.display.isEmpty ? field.name : field.display)
+                    .font(.callout.weight(.medium))
+                if field.required {
+                    Text("*")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(unsatisfied ? .red : .secondary)
+                        .help("Required")
+                }
+            }
             control(for: field)
+            if unsatisfied {
+                Text("Required.")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.red)
+            }
             if !field.description.isEmpty {
                 Text(field.description)
                     .font(.caption2)

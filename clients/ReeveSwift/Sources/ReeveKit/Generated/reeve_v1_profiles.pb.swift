@@ -515,6 +515,11 @@ public struct Reeve_V1_PluginType: Sendable {
   /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
   public mutating func clearCapabilities() {self._capabilities = nil}
 
+  /// Human-friendly label shown everywhere in the UI (e.g. "Brave Search").
+  /// The `name` field above is the stable machine identifier used as the
+  /// plugin's primary key.
+  public var displayName: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -543,6 +548,21 @@ public struct Reeve_V1_ConfigField: Sendable {
 
   /// Populated only when type == SELECT.
   public var options: [Reeve_V1_ConfigOption] = []
+
+  /// True when the form must collect a value before the plugin can be
+  /// saved. UIs disable the parent Save button and show inline validation
+  /// when a required field is empty. The plugin's constructor remains
+  /// the authoritative validator at runtime.
+  public var required: Bool = false
+
+  /// True when this field lives at user scope rather than profile scope
+  /// (e.g. credentials the user only wants to enter once across every
+  /// profile that uses the plugin). UIs render global fields on a
+  /// separate "Plugin settings" surface; the per-profile plugin form
+  /// omits them. The server merges the user's stored global value into
+  /// the per-profile config blob handed to the plugin constructor at
+  /// pipeline-build time.
+  public var global: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -704,6 +724,113 @@ public struct Reeve_V1_SetProfilePluginsResponse: Sendable {
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+}
+
+/// One stored global-config blob for a (calling user, plugin) pair.
+public struct Reeve_V1_UserPluginSettings: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var pluginName: String = String()
+
+  /// Raw JSON object. Caller-responsible for matching the plugin type's
+  /// `Global=true` ConfigField shape.
+  public var config: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_GetUserPluginSettingsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var pluginName: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_GetUserPluginSettingsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var settings: Reeve_V1_UserPluginSettings {
+    get {_settings ?? Reeve_V1_UserPluginSettings()}
+    set {_settings = newValue}
+  }
+  /// Returns true if `settings` has been explicitly set.
+  public var hasSettings: Bool {self._settings != nil}
+  /// Clears the value of `settings`. Subsequent reads from it will return its default value.
+  public mutating func clearSettings() {self._settings = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _settings: Reeve_V1_UserPluginSettings? = nil
+}
+
+public struct Reeve_V1_ListUserPluginSettingsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_ListUserPluginSettingsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var settings: [Reeve_V1_UserPluginSettings] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_UpsertUserPluginSettingsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var pluginName: String = String()
+
+  public var config: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_UpsertUserPluginSettingsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var settings: Reeve_V1_UserPluginSettings {
+    get {_settings ?? Reeve_V1_UserPluginSettings()}
+    set {_settings = newValue}
+  }
+  /// Returns true if `settings` has been explicitly set.
+  public var hasSettings: Bool {self._settings != nil}
+  /// Clears the value of `settings`. Subsequent reads from it will return its default value.
+  public mutating func clearSettings() {self._settings = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _settings: Reeve_V1_UserPluginSettings? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -1369,7 +1496,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1381,6 +1508,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       case 2: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.configFields) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
       default: break
       }
     }
@@ -1403,6 +1531,9 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     try { if let v = self._capabilities {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     } }()
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1411,6 +1542,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.description_p != rhs.description_p {return false}
     if lhs.configFields != rhs.configFields {return false}
     if lhs._capabilities != rhs._capabilities {return false}
+    if lhs.displayName != rhs.displayName {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1418,7 +1550,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1432,6 +1564,8 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 4: try { try decoder.decodeSingularEnumField(value: &self.type) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.defaultJson) }()
       case 6: try { try decoder.decodeRepeatedMessageField(value: &self.options) }()
+      case 7: try { try decoder.decodeSingularBoolField(value: &self.required) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.global) }()
       default: break
       }
     }
@@ -1456,6 +1590,12 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.options.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.options, fieldNumber: 6)
     }
+    if self.required != false {
+      try visitor.visitSingularBoolField(value: self.required, fieldNumber: 7)
+    }
+    if self.global != false {
+      try visitor.visitSingularBoolField(value: self.global, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1466,6 +1606,8 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.type != rhs.type {return false}
     if lhs.defaultJson != rhs.defaultJson {return false}
     if lhs.options != rhs.options {return false}
+    if lhs.required != rhs.required {return false}
+    if lhs.global != rhs.global {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1719,6 +1861,223 @@ extension Reeve_V1_SetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtob
 
   public static func ==(lhs: Reeve_V1_SetProfilePluginsResponse, rhs: Reeve_V1_SetProfilePluginsResponse) -> Bool {
     if lhs.plugins != rhs.plugins {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_UserPluginSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UserPluginSettings"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}config\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.pluginName) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.config) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.pluginName.isEmpty {
+      try visitor.visitSingularStringField(value: self.pluginName, fieldNumber: 1)
+    }
+    if !self.config.isEmpty {
+      try visitor.visitSingularBytesField(value: self.config, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_UserPluginSettings, rhs: Reeve_V1_UserPluginSettings) -> Bool {
+    if lhs.pluginName != rhs.pluginName {return false}
+    if lhs.config != rhs.config {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_GetUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetUserPluginSettingsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.pluginName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.pluginName.isEmpty {
+      try visitor.visitSingularStringField(value: self.pluginName, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_GetUserPluginSettingsRequest, rhs: Reeve_V1_GetUserPluginSettingsRequest) -> Bool {
+    if lhs.pluginName != rhs.pluginName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_GetUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetUserPluginSettingsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._settings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._settings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_GetUserPluginSettingsResponse, rhs: Reeve_V1_GetUserPluginSettingsResponse) -> Bool {
+    if lhs._settings != rhs._settings {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ListUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListUserPluginSettingsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListUserPluginSettingsRequest, rhs: Reeve_V1_ListUserPluginSettingsRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ListUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListUserPluginSettingsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.settings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.settings.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.settings, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListUserPluginSettingsResponse, rhs: Reeve_V1_ListUserPluginSettingsResponse) -> Bool {
+    if lhs.settings != rhs.settings {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_UpsertUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpsertUserPluginSettingsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}config\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.pluginName) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.config) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.pluginName.isEmpty {
+      try visitor.visitSingularStringField(value: self.pluginName, fieldNumber: 1)
+    }
+    if !self.config.isEmpty {
+      try visitor.visitSingularBytesField(value: self.config, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_UpsertUserPluginSettingsRequest, rhs: Reeve_V1_UpsertUserPluginSettingsRequest) -> Bool {
+    if lhs.pluginName != rhs.pluginName {return false}
+    if lhs.config != rhs.config {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_UpsertUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpsertUserPluginSettingsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._settings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._settings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_UpsertUserPluginSettingsResponse, rhs: Reeve_V1_UpsertUserPluginSettingsResponse) -> Bool {
+    if lhs._settings != rhs._settings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

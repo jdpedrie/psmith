@@ -603,6 +603,83 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[re
 	return connect.NewResponse(&reevev1.SetProfilePluginsResponse{Plugins: out}), nil
 }
 
+// --- User-scoped plugin settings (`Global` config fields) -------------------
+
+// GetUserPluginSettings returns the calling user's stored global config
+// blob for one plugin. Missing row → empty config (`{}`); the UI seeds
+// the form with field defaults from the plugin descriptor.
+func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Request[reevev1.GetUserPluginSettingsRequest]) (*connect.Response[reevev1.GetUserPluginSettingsResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	name := req.Msg.PluginName
+	if name == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("plugin_name is required"))
+	}
+	row, err := s.queries.GetUserPluginSettings(ctx, store.GetUserPluginSettingsParams{
+		UserID:     caller.ID,
+		PluginName: name,
+	})
+	settings := &reevev1.UserPluginSettings{PluginName: name, Config: []byte("{}")}
+	if err == nil {
+		settings.Config = row.Config
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&reevev1.GetUserPluginSettingsResponse{Settings: settings}), nil
+}
+
+// ListUserPluginSettings returns every plugin the calling user has
+// stored a global config for. Plugins not in the list are "not yet
+// configured globally"; merging treats absence as an empty object.
+func (s *Service) ListUserPluginSettings(ctx context.Context, req *connect.Request[reevev1.ListUserPluginSettingsRequest]) (*connect.Response[reevev1.ListUserPluginSettingsResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	rows, err := s.queries.ListUserPluginSettings(ctx, caller.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*reevev1.UserPluginSettings, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, &reevev1.UserPluginSettings{
+			PluginName: r.PluginName,
+			Config:     r.Config,
+		})
+	}
+	return connect.NewResponse(&reevev1.ListUserPluginSettingsResponse{Settings: out}), nil
+}
+
+// UpsertUserPluginSettings replaces the calling user's global config blob
+// for one plugin. Validates by attempting to construct the plugin with the
+// supplied (global-only) config — same pre-write check as
+// SetProfilePlugins, so a malformed JSON or unknown plugin name surfaces
+// as InvalidArgument before any DB write.
+func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Request[reevev1.UpsertUserPluginSettingsRequest]) (*connect.Response[reevev1.UpsertUserPluginSettingsResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	name := req.Msg.PluginName
+	if name == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("plugin_name is required"))
+	}
+	cfg := req.Msg.Config
+	if len(cfg) == 0 {
+		cfg = []byte("{}")
+	}
+	if _, err := plugins.Build(name, cfg); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugin %q: %w", name, err))
+	}
+	row, err := s.queries.UpsertUserPluginSettings(ctx, store.UpsertUserPluginSettingsParams{
+		UserID:     caller.ID,
+		PluginName: name,
+		Config:     cfg,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&reevev1.UpsertUserPluginSettingsResponse{
+		Settings: &reevev1.UserPluginSettings{
+			PluginName: row.PluginName,
+			Config:     row.Config,
+		},
+	}), nil
+}
+
 // pluginTypeToProto converts a plugins.TypeDescriptor to its proto shape.
 func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 	fields := make([]*reevev1.ConfigField, 0, len(d.ConfigFields))
@@ -611,6 +688,7 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 	}
 	return &reevev1.PluginType{
 		Name:         d.Name,
+		DisplayName:  d.DisplayName,
 		Description:  d.Description,
 		ConfigFields: fields,
 		Capabilities: &reevev1.PluginCapabilities{
@@ -636,6 +714,8 @@ func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
 		Display:     f.Display,
 		Description: f.Description,
 		Type:        configFieldTypeToProto(f.Type),
+		Required:    f.Required,
+		Global:      f.Global,
 	}
 	if f.Default != nil {
 		// json.Marshal on a typed value (int, string, bool) is total — the

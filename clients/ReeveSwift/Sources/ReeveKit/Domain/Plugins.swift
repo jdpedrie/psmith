@@ -52,6 +52,15 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
     /// Empty string means no default.
     public let defaultJSON: String
     public let options: [ReeveConfigOption]
+    /// True when the form must collect a value before the plugin can be
+    /// considered valid. The parent (profile form) Save button stays
+    /// disabled while any required field on any attached plugin is empty.
+    public let required: Bool
+    /// True when this field lives at user scope rather than profile
+    /// scope. Global fields render on a separate "Plugin settings"
+    /// surface instead of in the per-profile plugin form (the user
+    /// only enters credentials and other shared values once).
+    public let global: Bool
 
     public init(
         name: String,
@@ -59,7 +68,9 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         description: String,
         type: ReeveConfigFieldType,
         defaultJSON: String,
-        options: [ReeveConfigOption]
+        options: [ReeveConfigOption],
+        required: Bool = false,
+        global: Bool = false
     ) {
         self.name = name
         self.display = display
@@ -67,26 +78,81 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         self.type = type
         self.defaultJSON = defaultJSON
         self.options = options
+        self.required = required
+        self.global = global
+    }
+
+    /// True when `value` is missing or blank for a required field.
+    /// Number/boolean treat any present value as satisfying — the runtime
+    /// validator on the server has the final say.
+    public func isUnsatisfied(by value: Any?) -> Bool {
+        guard required else { return false }
+        switch type {
+        case .text, .textarea, .select:
+            if let s = value as? String { return s.trimmingCharacters(in: .whitespaces).isEmpty }
+            return true
+        case .number:
+            return value == nil
+        case .boolean:
+            // For required booleans, "false" still counts as a chosen value.
+            return value == nil
+        }
     }
 }
 
 public struct ReevePluginType: Sendable, Hashable, Identifiable {
     public var id: String { name }
     public let name: String
+    /// Human-friendly label for the UI; falls back to `name` when the
+    /// server doesn't ship one (older builds).
+    public let displayName: String
     public let description: String
     public let capabilities: ReevePluginCapabilities
     public let configFields: [ReeveConfigField]
 
     public init(
         name: String,
+        displayName: String? = nil,
         description: String,
         capabilities: ReevePluginCapabilities,
         configFields: [ReeveConfigField]
     ) {
         self.name = name
+        self.displayName = displayName ?? name
         self.description = description
         self.capabilities = capabilities
         self.configFields = configFields
+    }
+
+    /// Fields that live on the per-profile plugin form.
+    public var profileScopedConfigFields: [ReeveConfigField] {
+        configFields.filter { !$0.global }
+    }
+
+    /// Fields that live on the global "Plugin settings" surface.
+    public var globalConfigFields: [ReeveConfigField] {
+        configFields.filter { $0.global }
+    }
+}
+
+/// Per-user, per-plugin global config blob (mirrors the proto
+/// UserPluginSettings shape). Returned by Get/List/Upsert RPCs.
+public struct ReeveUserPluginSettings: Sendable, Hashable, Identifiable {
+    public var id: String { pluginName }
+    public let pluginName: String
+    /// Raw JSON object with the global-scoped field values. Empty data
+    /// (zero bytes) is treated as `{}` by the merge code on the server.
+    public let config: Data
+
+    public init(pluginName: String, config: Data) {
+        self.pluginName = pluginName
+        self.config = config
+    }
+}
+
+extension ReeveUserPluginSettings {
+    init(from p: Reeve_V1_UserPluginSettings) {
+        self.init(pluginName: p.pluginName, config: p.config)
     }
 }
 
@@ -151,7 +217,9 @@ extension ReeveConfigField {
             description: p.description_p,
             type: ReeveConfigFieldType(from: p.type),
             defaultJSON: p.defaultJson,
-            options: p.options.map(ReeveConfigOption.init(from:))
+            options: p.options.map(ReeveConfigOption.init(from:)),
+            required: p.required,
+            global: p.global
         )
     }
 }
@@ -160,6 +228,7 @@ extension ReevePluginType {
     init(from p: Reeve_V1_PluginType) {
         self.init(
             name: p.name,
+            displayName: p.displayName.isEmpty ? p.name : p.displayName,
             description: p.description_p,
             capabilities: ReevePluginCapabilities(from: p.capabilities),
             configFields: p.configFields.map(ReeveConfigField.init(from:))

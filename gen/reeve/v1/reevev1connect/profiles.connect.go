@@ -57,6 +57,15 @@ const (
 	// ProfilesServiceSetProfilePluginsProcedure is the fully-qualified name of the ProfilesService's
 	// SetProfilePlugins RPC.
 	ProfilesServiceSetProfilePluginsProcedure = "/reeve.v1.ProfilesService/SetProfilePlugins"
+	// ProfilesServiceGetUserPluginSettingsProcedure is the fully-qualified name of the
+	// ProfilesService's GetUserPluginSettings RPC.
+	ProfilesServiceGetUserPluginSettingsProcedure = "/reeve.v1.ProfilesService/GetUserPluginSettings"
+	// ProfilesServiceListUserPluginSettingsProcedure is the fully-qualified name of the
+	// ProfilesService's ListUserPluginSettings RPC.
+	ProfilesServiceListUserPluginSettingsProcedure = "/reeve.v1.ProfilesService/ListUserPluginSettings"
+	// ProfilesServiceUpsertUserPluginSettingsProcedure is the fully-qualified name of the
+	// ProfilesService's UpsertUserPluginSettings RPC.
+	ProfilesServiceUpsertUserPluginSettingsProcedure = "/reeve.v1.ProfilesService/UpsertUserPluginSettings"
 )
 
 // ProfilesServiceClient is a client for the reeve.v1.ProfilesService service.
@@ -80,6 +89,20 @@ type ProfilesServiceClient interface {
 	// config is validated by attempting to construct it; an unknown plugin
 	// name or malformed config aborts the replace before any DB change.
 	SetProfilePlugins(context.Context, *connect.Request[v1.SetProfilePluginsRequest]) (*connect.Response[v1.SetProfilePluginsResponse], error)
+	// Read the calling user's global config blob for one plugin. Used by
+	// the "Plugin settings" UI to seed the form with previously-saved
+	// values for fields the plugin marks `Global=true`. Empty / missing
+	// row returns an empty config (`{}`).
+	GetUserPluginSettings(context.Context, *connect.Request[v1.GetUserPluginSettingsRequest]) (*connect.Response[v1.GetUserPluginSettingsResponse], error)
+	// List every plugin the calling user has stored a global config for.
+	// Drives the "Plugin settings" landing page; absence of an entry for
+	// a registered plugin means "not yet configured globally".
+	ListUserPluginSettings(context.Context, *connect.Request[v1.ListUserPluginSettingsRequest]) (*connect.Response[v1.ListUserPluginSettingsResponse], error)
+	// Replace the calling user's global config blob for one plugin.
+	// Idempotent (insert-or-update). Empty config (`{}`) is a valid
+	// stored value — it means "the user explicitly cleared every global
+	// field" and overrides the absence-is-empty fallback at merge time.
+	UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error)
 }
 
 // NewProfilesServiceClient constructs a client for the reeve.v1.ProfilesService service. By
@@ -141,19 +164,40 @@ func NewProfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(profilesServiceMethods.ByName("SetProfilePlugins")),
 			connect.WithClientOptions(opts...),
 		),
+		getUserPluginSettings: connect.NewClient[v1.GetUserPluginSettingsRequest, v1.GetUserPluginSettingsResponse](
+			httpClient,
+			baseURL+ProfilesServiceGetUserPluginSettingsProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("GetUserPluginSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		listUserPluginSettings: connect.NewClient[v1.ListUserPluginSettingsRequest, v1.ListUserPluginSettingsResponse](
+			httpClient,
+			baseURL+ProfilesServiceListUserPluginSettingsProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("ListUserPluginSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		upsertUserPluginSettings: connect.NewClient[v1.UpsertUserPluginSettingsRequest, v1.UpsertUserPluginSettingsResponse](
+			httpClient,
+			baseURL+ProfilesServiceUpsertUserPluginSettingsProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("UpsertUserPluginSettings")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // profilesServiceClient implements ProfilesServiceClient.
 type profilesServiceClient struct {
-	createProfile     *connect.Client[v1.CreateProfileRequest, v1.CreateProfileResponse]
-	listProfiles      *connect.Client[v1.ListProfilesRequest, v1.ListProfilesResponse]
-	getProfile        *connect.Client[v1.GetProfileRequest, v1.GetProfileResponse]
-	updateProfile     *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
-	deleteProfile     *connect.Client[v1.DeleteProfileRequest, v1.DeleteProfileResponse]
-	listPluginTypes   *connect.Client[v1.ListPluginTypesRequest, v1.ListPluginTypesResponse]
-	getProfilePlugins *connect.Client[v1.GetProfilePluginsRequest, v1.GetProfilePluginsResponse]
-	setProfilePlugins *connect.Client[v1.SetProfilePluginsRequest, v1.SetProfilePluginsResponse]
+	createProfile            *connect.Client[v1.CreateProfileRequest, v1.CreateProfileResponse]
+	listProfiles             *connect.Client[v1.ListProfilesRequest, v1.ListProfilesResponse]
+	getProfile               *connect.Client[v1.GetProfileRequest, v1.GetProfileResponse]
+	updateProfile            *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
+	deleteProfile            *connect.Client[v1.DeleteProfileRequest, v1.DeleteProfileResponse]
+	listPluginTypes          *connect.Client[v1.ListPluginTypesRequest, v1.ListPluginTypesResponse]
+	getProfilePlugins        *connect.Client[v1.GetProfilePluginsRequest, v1.GetProfilePluginsResponse]
+	setProfilePlugins        *connect.Client[v1.SetProfilePluginsRequest, v1.SetProfilePluginsResponse]
+	getUserPluginSettings    *connect.Client[v1.GetUserPluginSettingsRequest, v1.GetUserPluginSettingsResponse]
+	listUserPluginSettings   *connect.Client[v1.ListUserPluginSettingsRequest, v1.ListUserPluginSettingsResponse]
+	upsertUserPluginSettings *connect.Client[v1.UpsertUserPluginSettingsRequest, v1.UpsertUserPluginSettingsResponse]
 }
 
 // CreateProfile calls reeve.v1.ProfilesService.CreateProfile.
@@ -196,6 +240,21 @@ func (c *profilesServiceClient) SetProfilePlugins(ctx context.Context, req *conn
 	return c.setProfilePlugins.CallUnary(ctx, req)
 }
 
+// GetUserPluginSettings calls reeve.v1.ProfilesService.GetUserPluginSettings.
+func (c *profilesServiceClient) GetUserPluginSettings(ctx context.Context, req *connect.Request[v1.GetUserPluginSettingsRequest]) (*connect.Response[v1.GetUserPluginSettingsResponse], error) {
+	return c.getUserPluginSettings.CallUnary(ctx, req)
+}
+
+// ListUserPluginSettings calls reeve.v1.ProfilesService.ListUserPluginSettings.
+func (c *profilesServiceClient) ListUserPluginSettings(ctx context.Context, req *connect.Request[v1.ListUserPluginSettingsRequest]) (*connect.Response[v1.ListUserPluginSettingsResponse], error) {
+	return c.listUserPluginSettings.CallUnary(ctx, req)
+}
+
+// UpsertUserPluginSettings calls reeve.v1.ProfilesService.UpsertUserPluginSettings.
+func (c *profilesServiceClient) UpsertUserPluginSettings(ctx context.Context, req *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error) {
+	return c.upsertUserPluginSettings.CallUnary(ctx, req)
+}
+
 // ProfilesServiceHandler is an implementation of the reeve.v1.ProfilesService service.
 type ProfilesServiceHandler interface {
 	CreateProfile(context.Context, *connect.Request[v1.CreateProfileRequest]) (*connect.Response[v1.CreateProfileResponse], error)
@@ -217,6 +276,20 @@ type ProfilesServiceHandler interface {
 	// config is validated by attempting to construct it; an unknown plugin
 	// name or malformed config aborts the replace before any DB change.
 	SetProfilePlugins(context.Context, *connect.Request[v1.SetProfilePluginsRequest]) (*connect.Response[v1.SetProfilePluginsResponse], error)
+	// Read the calling user's global config blob for one plugin. Used by
+	// the "Plugin settings" UI to seed the form with previously-saved
+	// values for fields the plugin marks `Global=true`. Empty / missing
+	// row returns an empty config (`{}`).
+	GetUserPluginSettings(context.Context, *connect.Request[v1.GetUserPluginSettingsRequest]) (*connect.Response[v1.GetUserPluginSettingsResponse], error)
+	// List every plugin the calling user has stored a global config for.
+	// Drives the "Plugin settings" landing page; absence of an entry for
+	// a registered plugin means "not yet configured globally".
+	ListUserPluginSettings(context.Context, *connect.Request[v1.ListUserPluginSettingsRequest]) (*connect.Response[v1.ListUserPluginSettingsResponse], error)
+	// Replace the calling user's global config blob for one plugin.
+	// Idempotent (insert-or-update). Empty config (`{}`) is a valid
+	// stored value — it means "the user explicitly cleared every global
+	// field" and overrides the absence-is-empty fallback at merge time.
+	UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error)
 }
 
 // NewProfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -274,6 +347,24 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(profilesServiceMethods.ByName("SetProfilePlugins")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profilesServiceGetUserPluginSettingsHandler := connect.NewUnaryHandler(
+		ProfilesServiceGetUserPluginSettingsProcedure,
+		svc.GetUserPluginSettings,
+		connect.WithSchema(profilesServiceMethods.ByName("GetUserPluginSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profilesServiceListUserPluginSettingsHandler := connect.NewUnaryHandler(
+		ProfilesServiceListUserPluginSettingsProcedure,
+		svc.ListUserPluginSettings,
+		connect.WithSchema(profilesServiceMethods.ByName("ListUserPluginSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profilesServiceUpsertUserPluginSettingsHandler := connect.NewUnaryHandler(
+		ProfilesServiceUpsertUserPluginSettingsProcedure,
+		svc.UpsertUserPluginSettings,
+		connect.WithSchema(profilesServiceMethods.ByName("UpsertUserPluginSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reeve.v1.ProfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProfilesServiceCreateProfileProcedure:
@@ -292,6 +383,12 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 			profilesServiceGetProfilePluginsHandler.ServeHTTP(w, r)
 		case ProfilesServiceSetProfilePluginsProcedure:
 			profilesServiceSetProfilePluginsHandler.ServeHTTP(w, r)
+		case ProfilesServiceGetUserPluginSettingsProcedure:
+			profilesServiceGetUserPluginSettingsHandler.ServeHTTP(w, r)
+		case ProfilesServiceListUserPluginSettingsProcedure:
+			profilesServiceListUserPluginSettingsHandler.ServeHTTP(w, r)
+		case ProfilesServiceUpsertUserPluginSettingsProcedure:
+			profilesServiceUpsertUserPluginSettingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -331,4 +428,16 @@ func (UnimplementedProfilesServiceHandler) GetProfilePlugins(context.Context, *c
 
 func (UnimplementedProfilesServiceHandler) SetProfilePlugins(context.Context, *connect.Request[v1.SetProfilePluginsRequest]) (*connect.Response[v1.SetProfilePluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ProfilesService.SetProfilePlugins is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) GetUserPluginSettings(context.Context, *connect.Request[v1.GetUserPluginSettingsRequest]) (*connect.Response[v1.GetUserPluginSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ProfilesService.GetUserPluginSettings is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) ListUserPluginSettings(context.Context, *connect.Request[v1.ListUserPluginSettingsRequest]) (*connect.Response[v1.ListUserPluginSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ProfilesService.ListUserPluginSettings is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ProfilesService.UpsertUserPluginSettings is not implemented"))
 }

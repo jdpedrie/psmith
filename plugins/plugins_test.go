@@ -12,6 +12,7 @@ import (
 type dummyPlugin struct{ name string }
 
 func (d *dummyPlugin) Name() string        { return d.name }
+func (d *dummyPlugin) DisplayName() string { return d.name }
 func (d *dummyPlugin) Description() string { return "dummy" }
 
 func TestRegistry_BuildUnknown(t *testing.T) {

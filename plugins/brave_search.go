@@ -131,7 +131,8 @@ func init() {
 	Register(BraveSearchName, newBraveSearch)
 }
 
-func (p *braveSearch) Name() string { return BraveSearchName }
+func (p *braveSearch) Name() string        { return BraveSearchName }
+func (p *braveSearch) DisplayName() string { return "Brave Search" }
 
 func (p *braveSearch) Description() string {
 	return "Gives the model a web_search tool backed by the Brave Search API. " +
@@ -146,8 +147,10 @@ func (p *braveSearch) ConfigFields() []ConfigField {
 		{
 			Name:        "api_key",
 			Display:     "API key",
-			Description: "Brave Search subscription token. Get one at api.search.brave.com.",
+			Description: "Brave Search subscription token. Get one at api.search.brave.com. Shared across every profile that uses this plugin.",
 			Type:        ConfigFieldText,
+			Required:    true,
+			Global:      true,
 		},
 		{
 			Name:        "default_count",

@@ -40,6 +40,7 @@ type Querier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserModel(ctx context.Context, arg DeleteUserModelParams) error
 	DeleteUserModelProvider(ctx context.Context, id uuid.UUID) error
+	DeleteUserPluginSettings(ctx context.Context, arg DeleteUserPluginSettingsParams) error
 	// Sets a terminal status, ended_at, optional result_message_id /
 	// result_context_id (compression sets the latter) / error_payload.
 	FinalizeStreamRun(ctx context.Context, arg FinalizeStreamRunParams) (StreamRun, error)
@@ -79,6 +80,10 @@ type Querier interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error)
 	GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error)
+	// Returns the row for one (user, plugin) — caller decides what "missing"
+	// means (sqlc emits ErrNoRows on no match; the service layer treats that
+	// as an empty config and returns `{}` to the wire).
+	GetUserPluginSettings(ctx context.Context, arg GetUserPluginSettingsParams) (UserPluginSetting, error)
 	// True iff the context contains at least one role=compression_summary row that
 	// did NOT fail (error_payload IS NULL). SendMessage / Compact use this as a
 	// precondition: a clean pending summary must be promoted
@@ -139,6 +144,10 @@ type Querier interface {
 	ListUserModelProvidersByUser(ctx context.Context, userID uuid.UUID) ([]UserModelProvider, error)
 	ListUserModelsByProvider(ctx context.Context, userModelProviderID uuid.UUID) ([]UserModel, error)
 	ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([]UserModel, error)
+	// All globally-configured plugins for a user. Drives the "Plugin
+	// settings" page; missing rows mean "not yet configured" and need a
+	// defaults-from-descriptor render at the UI layer.
+	ListUserPluginSettings(ctx context.Context, userID uuid.UUID) ([]UserPluginSetting, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	// Called once on server boot. The upstream sockets died with the process and
 	// cannot be resumed; users see a partial assistant message + retry affordance.
@@ -209,6 +218,11 @@ type Querier interface {
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
+	// Idempotent: insert-or-update. updated_at is bumped to NOW() on every
+	// save. Empty config (`{}`) is a valid stored value — it means "the
+	// user explicitly cleared every global field" and should beat the
+	// absence-is-empty fallback at merge time.
+	UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPluginSettingsParams) (UserPluginSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

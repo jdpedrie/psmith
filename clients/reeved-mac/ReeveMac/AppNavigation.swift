@@ -145,6 +145,7 @@ struct EmptyStateView: View {
 enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case providers
     case profiles
+    case plugins
     case appearance
     // future: case account, general, ...
 
@@ -152,6 +153,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         switch self {
         case .providers:  return "Providers"
         case .profiles:   return "Profiles"
+        case .plugins:    return "Plugins"
         case .appearance: return "Appearance"
         }
     }
@@ -160,6 +162,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         switch self {
         case .providers:  return "cpu"
         case .profiles:   return "person.crop.rectangle"
+        case .plugins:    return "puzzlepiece.extension"
         case .appearance: return "paintpalette"
         }
     }
