@@ -219,4 +219,4 @@ API tokens for programmatic access are deferred but trivial to add (same `sessio
 
 ## License
 
-Personal project, no license declared yet. If you have a use for any of this, open an issue.
+MIT — see [`LICENSE`](LICENSE).
