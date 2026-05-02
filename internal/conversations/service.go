@@ -983,6 +983,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		Messages:       wireMessages,
 		Settings:       callSettings,
 		ConversationID: conv.ID.String(),
+		Tools:          collectPipelineTools(pipeline),
 	}
 
 	// Provider-agnostic explicit-cache hook. The driver opts in by
@@ -1010,8 +1011,17 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 	// itself returns immediately — the user's typed message is durable
 	// the moment the user-row INSERT commits, regardless of upstream
 	// health.
-	sendFunc := func(driverCtx context.Context) (<-chan providers.Chunk, error) {
-		return stateless.Send(driverCtx, sendReq)
+	var sendFunc func(driverCtx context.Context) (<-chan providers.Chunk, error)
+	if len(sendReq.Tools) > 0 {
+		// Tools present → wrap the driver's Send in a per-round tool loop
+		// that drains tool_use, dispatches to the owning plugin, and
+		// re-issues the request with tool_results. The supervisor sees a
+		// single linear chunk stream.
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger)
+	} else {
+		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
+			return stateless.Send(driverCtx, sendReq)
+		}
 	}
 
 	// Hand the chunk channel to the supervisor; it persists chunks, fans out to subscribers,
@@ -1104,13 +1114,12 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 		return uuid.Nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
 	}
 	if resolved.DefaultSettings != nil {
-		var defaults reevev1.ProfileDefaults
-		if err := json.Unmarshal(resolved.DefaultSettings, &defaults); err == nil {
-			if defaults.DefaultProviderId != nil && defaults.DefaultModelId != nil {
-				pid, err := uuid.Parse(*defaults.DefaultProviderId)
-				if err == nil {
-					return pid, *defaults.DefaultModelId, nil
-				}
+		defaults, err := profiles.DefaultsFromJSON(resolved.DefaultSettings)
+		if err == nil && defaults != nil &&
+			defaults.DefaultProviderId != nil && defaults.DefaultModelId != nil {
+			pid, perr := uuid.Parse(*defaults.DefaultProviderId)
+			if perr == nil {
+				return pid, *defaults.DefaultModelId, nil
 			}
 		}
 	}
@@ -1136,8 +1145,8 @@ func (s *Service) resolveIncludeThinking(ctx context.Context, conv store.Convers
 		return false
 	}
 	if resolved.DefaultSettings != nil {
-		var defaults reevev1.ProfileDefaults
-		if err := json.Unmarshal(resolved.DefaultSettings, &defaults); err == nil && defaults.IncludeThinkingInHistory != nil {
+		defaults, err := profiles.DefaultsFromJSON(resolved.DefaultSettings)
+		if err == nil && defaults != nil && defaults.IncludeThinkingInHistory != nil {
 			return *defaults.IncludeThinkingInHistory
 		}
 	}

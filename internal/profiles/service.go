@@ -757,8 +757,15 @@ func defaultsToJSON(d *reevev1.ProfileDefaults) ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// defaultsFromJSON unmarshals a JSONB blob back into a ProfileDefaults message.
-// Returns nil for empty input.
+// DefaultsFromJSON unmarshals a JSONB blob back into a ProfileDefaults message.
+// Returns nil for empty input. Exported so other packages (e.g. conversations)
+// can decode profiles.default_settings without re-implementing the storage
+// shape — the snake_case JSON keys don't match protojson's camelCase output,
+// so a vanilla json.Unmarshal into ProfileDefaults silently misses every field.
+func DefaultsFromJSON(b []byte) (*reevev1.ProfileDefaults, error) {
+	return defaultsFromJSON(b)
+}
+
 func defaultsFromJSON(b []byte) (*reevev1.ProfileDefaults, error) {
 	if len(b) == 0 {
 		return nil, nil

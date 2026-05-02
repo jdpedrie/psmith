@@ -24,7 +24,8 @@ INSERT INTO messages (
     input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd,
     total_cost_usd,
     error_payload,
-    explicit_cache_attached
+    explicit_cache_attached,
+    tool_calls
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -35,9 +36,10 @@ INSERT INTO messages (
     $19, $20, $21, $22,
     $23,
     $24,
-    $25
+    $25,
+    $26
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls
 `
 
 type CreateAssistantMessageWithUsageParams struct {
@@ -66,6 +68,7 @@ type CreateAssistantMessageWithUsageParams struct {
 	TotalCostUsd          pgtype.Numeric
 	ErrorPayload          []byte
 	ExplicitCacheAttached *bool
+	ToolCalls             []byte
 }
 
 // Used by the stream supervisor at materialization. Allows the assistant turn
@@ -103,6 +106,7 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		arg.TotalCostUsd,
 		arg.ErrorPayload,
 		arg.ExplicitCacheAttached,
+		arg.ToolCalls,
 	)
 	var i Message
 	err := row.Scan(
@@ -133,6 +137,7 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
@@ -147,7 +152,7 @@ INSERT INTO messages (
     $6, $7, $8, $9,
     $10, $11
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls
 `
 
 type CreateMessageParams struct {
@@ -207,6 +212,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
@@ -223,7 +229,7 @@ func (q *Queries) DeleteMessageByID(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCompressionSummaryInContext = `-- name: GetCompressionSummaryInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls FROM messages
 WHERE context_id = $1 AND role = 'compression_summary'
 ORDER BY created_at DESC
 LIMIT 1
@@ -263,12 +269,13 @@ func (q *Queries) GetCompressionSummaryInContext(ctx context.Context, contextID 
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
 
 const getContextLeafMessage = `-- name: GetContextLeafMessage :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached FROM messages m
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls FROM messages m
 WHERE m.context_id = $1
   AND m.id NOT IN (
     SELECT DISTINCT c.parent_id FROM messages c
@@ -314,12 +321,13 @@ func (q *Queries) GetContextLeafMessage(ctx context.Context, contextID uuid.UUID
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
 
 const getContextRoleMessageInContext = `-- name: GetContextRoleMessageInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls FROM messages
 WHERE context_id = $1 AND role = 'context'
 ORDER BY created_at
 LIMIT 1
@@ -358,12 +366,13 @@ func (q *Queries) GetContextRoleMessageInContext(ctx context.Context, contextID 
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
 
 const getMessageByID = `-- name: GetMessageByID :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached FROM messages WHERE id = $1
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error) {
@@ -397,6 +406,7 @@ func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, er
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }
@@ -426,11 +436,11 @@ func (q *Queries) HasCompressionSummaryInContext(ctx context.Context, contextID 
 
 const listMessageAncestorChain = `-- name: ListMessageAncestorChain :many
 WITH RECURSIVE chain AS (
-    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, 0 AS depth
+    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, 0 AS depth
     FROM messages
     WHERE messages.id = $1
     UNION ALL
-    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, m.error_payload, m.thinking_duration_ms, m.explicit_cache_attached, c.depth + 1
+    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, m.error_payload, m.thinking_duration_ms, m.explicit_cache_attached, m.tool_calls, c.depth + 1
     FROM messages m
     INNER JOIN chain c ON m.id = c.parent_id
 )
@@ -540,7 +550,7 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 }
 
 const listMessagesByContext = `-- name: ListMessagesByContext :many
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls FROM messages
 WHERE context_id = $1
 ORDER BY created_at, id
 `
@@ -582,6 +592,7 @@ func (q *Queries) ListMessagesByContext(ctx context.Context, contextID uuid.UUID
 			&i.ErrorPayload,
 			&i.ThinkingDurationMs,
 			&i.ExplicitCacheAttached,
+			&i.ToolCalls,
 		); err != nil {
 			return nil, err
 		}
@@ -618,7 +629,7 @@ SET content   = $2,
     role      = COALESCE($3, role),
     edited_at = NOW()
 WHERE id = $1
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls
 `
 
 type UpdateMessageContentRoleParams struct {
@@ -662,6 +673,7 @@ func (q *Queries) UpdateMessageContentRole(ctx context.Context, arg UpdateMessag
 		&i.ErrorPayload,
 		&i.ThinkingDurationMs,
 		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
 	)
 	return i, err
 }

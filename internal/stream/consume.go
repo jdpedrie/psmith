@@ -56,6 +56,7 @@ func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartP
 		seenError         *chunkErrorPayload
 		usage             *providers.Usage
 		nextSequence      int64
+		toolCalls         = newToolCallAggregator()
 	)
 
 	buffer := make([]Chunk, 0, flushBatchSize)
@@ -158,6 +159,7 @@ loop:
 					seq := nextSequence
 					nextSequence++
 					applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
+				toolCalls.observe(ch)
 					buffer = append(buffer, Chunk{
 						Sequence: seq,
 						Type:     ch.Type,
@@ -178,6 +180,7 @@ loop:
 			seq := nextSequence
 			nextSequence++
 			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
+				toolCalls.observe(ch)
 			buffer = append(buffer, Chunk{
 				Sequence: seq,
 				Type:     ch.Type,
@@ -231,7 +234,7 @@ loop:
 			ms := int32(thinkingLastAt.Sub(thinkingFirstAt).Milliseconds())
 			thinkingDurMs = &ms
 		}
-		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, logger)
+		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, toolCalls.serialise(), logger)
 		if err != nil {
 			logger.Error("materialize assistant message failed", "err", err)
 		} else if mid != uuid.Nil {
@@ -362,7 +365,7 @@ func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, thi
 // blocks, OpenAI reasoning items) are NOT reconstructed here — they require
 // driver cooperation and are deferred to the (future) inbound transform
 // pipeline. See "Materialization" in the task spec.
-func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
+func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, toolCallsJSON []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
 	// We always write a row, even with empty content, so the user can
 	// see that an attempt was made and so result_message_id is non-null
 	// for downstream UX.
@@ -431,6 +434,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		TotalCostUsd:         usageParams.TotalCostUsd,
 		ErrorPayload:         errPayload,
 		ExplicitCacheAttached: params.ExplicitCacheAttached,
+		ToolCalls:            toolCallsJSON,
 	}); err != nil {
 		// If the context row was deleted out from under us (cascade),
 		// log and skip — the run still gets finalized.

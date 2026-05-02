@@ -466,6 +466,24 @@ message Message {
   // didn't reason (or only emitted reasoning tokens without surfacing
   // thinking_delta chunks — see usage.reasoning_tokens for the latter case).
   optional int32 thinking_duration_ms = 18;
+  // Tool calls executed by the conversations-side tool loop while
+  // producing this message. One entry per tool invocation, in invocation
+  // order. Empty when the model didn't request any tools.
+  repeated ToolCall tool_calls = 19;
+}
+
+// One tool call recorded on an assistant message — the model's request
+// (id, name, input) plus the loop's execution result (output OR error,
+// elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  bytes input = 3;
+  // Exactly one of output / error is set.
+  bytes output = 4;
+  optional string error = 5;
+  int64 elapsed_ms = 6;
+  optional string provider_opaque = 7;
 }
 
 // MessageUsage records token usage reported by the provider plus the
@@ -552,6 +570,16 @@ enum ChunkType {
   CHUNK_TYPE_ERROR = 6;
   CHUNK_TYPE_DONE = 7;
   CHUNK_TYPE_USAGE = 8;
+  // Synthetic — emitted by the conversations-side tool loop after
+  // executing one tool_use. Carries the tool_use_id, the plugin output (or
+  // error), and the wall-clock duration. Surfaces both during live streams
+  // and on history reads (the chunk row is replayed, and the materialised
+  // assistant message also encodes the same data in `tool_calls`).
+  CHUNK_TYPE_TOOL_RESULT = 9;
+  // Anthropic-only signed thinking signature, emitted at the end of a
+  // thinking block. Reeve stores the (text, signature) pair on
+  // messages.thinking so it can be round-tripped on the next request.
+  CHUNK_TYPE_THINKING_SIGNATURE = 10;
 }
 
 message Chunk {

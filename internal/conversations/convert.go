@@ -172,6 +172,48 @@ func messageToProto(m store.Message) *reevev1.Message {
 	if errText := errorTextFromPayload(m.ErrorPayload); errText != "" {
 		out.ErrorText = &errText
 	}
+	if calls := toolCallsFromJSON(m.ToolCalls); len(calls) > 0 {
+		out.ToolCalls = calls
+	}
+	return out
+}
+
+// toolCallsFromJSON decodes the messages.tool_calls JSONB column into the
+// proto ToolCall slice. Returns nil on empty / invalid payload — the proto
+// shape is repeated, so a missing field is just an empty list.
+func toolCallsFromJSON(payload []byte) []*reevev1.ToolCall {
+	if len(payload) == 0 {
+		return nil
+	}
+	var raw []struct {
+		ID             string          `json:"id"`
+		Name           string          `json:"name"`
+		Input          json.RawMessage `json:"input"`
+		Output         json.RawMessage `json:"output"`
+		Error          string          `json:"error"`
+		ElapsedMs      int64           `json:"elapsed_ms"`
+		ProviderOpaque string          `json:"provider_opaque"`
+	}
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return nil
+	}
+	out := make([]*reevev1.ToolCall, 0, len(raw))
+	for _, r := range raw {
+		tc := &reevev1.ToolCall{
+			Id:        r.ID,
+			Name:      r.Name,
+			Input:     []byte(r.Input),
+			Output:    []byte(r.Output),
+			ElapsedMs: r.ElapsedMs,
+		}
+		if r.Error != "" {
+			tc.Error = &r.Error
+		}
+		if r.ProviderOpaque != "" {
+			tc.ProviderOpaque = &r.ProviderOpaque
+		}
+		out = append(out, tc)
+	}
 	return out
 }
 

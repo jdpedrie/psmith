@@ -459,31 +459,45 @@ const (
 	ChunkType_CHUNK_TYPE_ERROR          ChunkType = 6
 	ChunkType_CHUNK_TYPE_DONE           ChunkType = 7
 	ChunkType_CHUNK_TYPE_USAGE          ChunkType = 8
+	// Synthetic — emitted by the conversations-side tool loop after
+	// executing one tool_use. Carries the tool_use_id, the plugin output (or
+	// error), and the wall-clock duration. Surfaces both during live streams
+	// and on history reads (the chunk row is replayed, and the materialised
+	// assistant message also encodes the same data in `tool_calls`).
+	ChunkType_CHUNK_TYPE_TOOL_RESULT ChunkType = 9
+	// Anthropic-only signed thinking signature, emitted at the end of a
+	// thinking block. Reeve stores the (text, signature) pair on
+	// messages.thinking so it can be round-tripped on the next request.
+	ChunkType_CHUNK_TYPE_THINKING_SIGNATURE ChunkType = 10
 )
 
 // Enum value maps for ChunkType.
 var (
 	ChunkType_name = map[int32]string{
-		0: "CHUNK_TYPE_UNSPECIFIED",
-		1: "CHUNK_TYPE_TEXT_DELTA",
-		2: "CHUNK_TYPE_THINKING_DELTA",
-		3: "CHUNK_TYPE_TOOL_USE_START",
-		4: "CHUNK_TYPE_TOOL_USE_DELTA",
-		5: "CHUNK_TYPE_TOOL_USE_END",
-		6: "CHUNK_TYPE_ERROR",
-		7: "CHUNK_TYPE_DONE",
-		8: "CHUNK_TYPE_USAGE",
+		0:  "CHUNK_TYPE_UNSPECIFIED",
+		1:  "CHUNK_TYPE_TEXT_DELTA",
+		2:  "CHUNK_TYPE_THINKING_DELTA",
+		3:  "CHUNK_TYPE_TOOL_USE_START",
+		4:  "CHUNK_TYPE_TOOL_USE_DELTA",
+		5:  "CHUNK_TYPE_TOOL_USE_END",
+		6:  "CHUNK_TYPE_ERROR",
+		7:  "CHUNK_TYPE_DONE",
+		8:  "CHUNK_TYPE_USAGE",
+		9:  "CHUNK_TYPE_TOOL_RESULT",
+		10: "CHUNK_TYPE_THINKING_SIGNATURE",
 	}
 	ChunkType_value = map[string]int32{
-		"CHUNK_TYPE_UNSPECIFIED":    0,
-		"CHUNK_TYPE_TEXT_DELTA":     1,
-		"CHUNK_TYPE_THINKING_DELTA": 2,
-		"CHUNK_TYPE_TOOL_USE_START": 3,
-		"CHUNK_TYPE_TOOL_USE_DELTA": 4,
-		"CHUNK_TYPE_TOOL_USE_END":   5,
-		"CHUNK_TYPE_ERROR":          6,
-		"CHUNK_TYPE_DONE":           7,
-		"CHUNK_TYPE_USAGE":          8,
+		"CHUNK_TYPE_UNSPECIFIED":        0,
+		"CHUNK_TYPE_TEXT_DELTA":         1,
+		"CHUNK_TYPE_THINKING_DELTA":     2,
+		"CHUNK_TYPE_TOOL_USE_START":     3,
+		"CHUNK_TYPE_TOOL_USE_DELTA":     4,
+		"CHUNK_TYPE_TOOL_USE_END":       5,
+		"CHUNK_TYPE_ERROR":              6,
+		"CHUNK_TYPE_DONE":               7,
+		"CHUNK_TYPE_USAGE":              8,
+		"CHUNK_TYPE_TOOL_RESULT":        9,
+		"CHUNK_TYPE_THINKING_SIGNATURE": 10,
 	}
 )
 
@@ -2707,8 +2721,12 @@ type Message struct {
 	// didn't reason (or only emitted reasoning tokens without surfacing
 	// thinking_delta chunks — see usage.reasoning_tokens for the latter case).
 	ThinkingDurationMs *int32 `protobuf:"varint,18,opt,name=thinking_duration_ms,json=thinkingDurationMs,proto3,oneof" json:"thinking_duration_ms,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Tool calls executed by the conversations-side tool loop while
+	// producing this message. One entry per tool invocation, in invocation
+	// order. Empty when the model didn't request any tools.
+	ToolCalls     []*ToolCall `protobuf:"bytes,19,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
@@ -2867,6 +2885,109 @@ func (x *Message) GetThinkingDurationMs() int32 {
 	return 0
 }
 
+func (x *Message) GetToolCalls() []*ToolCall {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return nil
+}
+
+// One tool call recorded on an assistant message — the model's request
+// (id, name, input) plus the loop's execution result (output OR error,
+// elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
+type ToolCall struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Input []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	// Exactly one of output / error is set.
+	Output         []byte  `protobuf:"bytes,4,opt,name=output,proto3" json:"output,omitempty"`
+	Error          *string `protobuf:"bytes,5,opt,name=error,proto3,oneof" json:"error,omitempty"`
+	ElapsedMs      int64   `protobuf:"varint,6,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
+	ProviderOpaque *string `protobuf:"bytes,7,opt,name=provider_opaque,json=providerOpaque,proto3,oneof" json:"provider_opaque,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ToolCall) Reset() {
+	*x = ToolCall{}
+	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolCall) ProtoMessage() {}
+
+func (x *ToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
+func (*ToolCall) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ToolCall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ToolCall) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolCall) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+func (x *ToolCall) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+func (x *ToolCall) GetError() string {
+	if x != nil && x.Error != nil {
+		return *x.Error
+	}
+	return ""
+}
+
+func (x *ToolCall) GetElapsedMs() int64 {
+	if x != nil {
+		return x.ElapsedMs
+	}
+	return 0
+}
+
+func (x *ToolCall) GetProviderOpaque() string {
+	if x != nil && x.ProviderOpaque != nil {
+		return *x.ProviderOpaque
+	}
+	return ""
+}
+
 // MessageUsage records token usage reported by the provider plus the
 // per-component cost computed at the moment of materialization (using the
 // pricing snapshotted on user_models when the model was enabled).
@@ -2897,7 +3018,7 @@ type MessageUsage struct {
 
 func (x *MessageUsage) Reset() {
 	*x = MessageUsage{}
-	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	mi := &file_reeve_v1_types_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2909,7 +3030,7 @@ func (x *MessageUsage) String() string {
 func (*MessageUsage) ProtoMessage() {}
 
 func (x *MessageUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	mi := &file_reeve_v1_types_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2922,7 +3043,7 @@ func (x *MessageUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageUsage.ProtoReflect.Descriptor instead.
 func (*MessageUsage) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{23}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *MessageUsage) GetInputTokens() int32 {
@@ -3038,7 +3159,7 @@ type StreamRun struct {
 
 func (x *StreamRun) Reset() {
 	*x = StreamRun{}
-	mi := &file_reeve_v1_types_proto_msgTypes[24]
+	mi := &file_reeve_v1_types_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3050,7 +3171,7 @@ func (x *StreamRun) String() string {
 func (*StreamRun) ProtoMessage() {}
 
 func (x *StreamRun) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[24]
+	mi := &file_reeve_v1_types_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3063,7 +3184,7 @@ func (x *StreamRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRun.ProtoReflect.Descriptor instead.
 func (*StreamRun) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{24}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *StreamRun) GetId() string {
@@ -3189,7 +3310,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_reeve_v1_types_proto_msgTypes[25]
+	mi := &file_reeve_v1_types_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3201,7 +3322,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[25]
+	mi := &file_reeve_v1_types_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3214,7 +3335,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{25}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Chunk) GetSequence() int64 {
@@ -3544,7 +3665,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\xa3\a\n" +
+	"\x06_title\"\xd6\a\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3569,7 +3690,9 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\tedited_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\aR\beditedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"error_text\x18\x11 \x01(\tH\bR\terrorText\x88\x01\x01\x125\n" +
-	"\x14thinking_duration_ms\x18\x12 \x01(\x05H\tR\x12thinkingDurationMs\x88\x01\x01B\f\n" +
+	"\x14thinking_duration_ms\x18\x12 \x01(\x05H\tR\x12thinkingDurationMs\x88\x01\x01\x121\n" +
+	"\n" +
+	"tool_calls\x18\x13 \x03(\v2\x12.reeve.v1.ToolCallR\ttoolCallsB\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -3581,7 +3704,18 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"_edited_atB\r\n" +
 	"\v_error_textB\x17\n" +
-	"\x15_thinking_duration_ms\"\x8a\x06\n" +
+	"\x15_thinking_duration_ms\"\xe2\x01\n" +
+	"\bToolCall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\x12\x16\n" +
+	"\x06output\x18\x04 \x01(\fR\x06output\x12\x19\n" +
+	"\x05error\x18\x05 \x01(\tH\x00R\x05error\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"elapsed_ms\x18\x06 \x01(\x03R\telapsedMs\x12,\n" +
+	"\x0fprovider_opaque\x18\a \x01(\tH\x01R\x0eproviderOpaque\x88\x01\x01B\b\n" +
+	"\x06_errorB\x12\n" +
+	"\x10_provider_opaque\"\x8a\x06\n" +
 	"\fMessageUsage\x12&\n" +
 	"\finput_tokens\x18\x01 \x01(\x05H\x00R\vinputTokens\x88\x01\x01\x12(\n" +
 	"\routput_tokens\x18\x02 \x01(\x05H\x01R\foutputTokens\x88\x01\x01\x12/\n" +
@@ -3680,7 +3814,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x10StreamRunPurpose\x12\"\n" +
 	"\x1eSTREAM_RUN_PURPOSE_UNSPECIFIED\x10\x00\x12)\n" +
 	"%STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE\x10\x01\x12\"\n" +
-	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xfd\x01\n" +
+	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xbc\x02\n" +
 	"\tChunkType\x12\x1a\n" +
 	"\x16CHUNK_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CHUNK_TYPE_TEXT_DELTA\x10\x01\x12\x1d\n" +
@@ -3690,7 +3824,10 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x17CHUNK_TYPE_TOOL_USE_END\x10\x05\x12\x14\n" +
 	"\x10CHUNK_TYPE_ERROR\x10\x06\x12\x13\n" +
 	"\x0fCHUNK_TYPE_DONE\x10\a\x12\x14\n" +
-	"\x10CHUNK_TYPE_USAGE\x10\bB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"\x10CHUNK_TYPE_USAGE\x10\b\x12\x1a\n" +
+	"\x16CHUNK_TYPE_TOOL_RESULT\x10\t\x12!\n" +
+	"\x1dCHUNK_TYPE_THINKING_SIGNATURE\x10\n" +
+	"B0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_types_proto_rawDescOnce sync.Once
@@ -3705,7 +3842,7 @@ func file_reeve_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_reeve_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_reeve_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: reeve.v1.MetadataSource
 	(CacheTTL)(0),                 // 1: reeve.v1.CacheTTL
@@ -3739,28 +3876,29 @@ var file_reeve_v1_types_proto_goTypes = []any{
 	(*Conversation)(nil),          // 29: reeve.v1.Conversation
 	(*Context)(nil),               // 30: reeve.v1.Context
 	(*Message)(nil),               // 31: reeve.v1.Message
-	(*MessageUsage)(nil),          // 32: reeve.v1.MessageUsage
-	(*StreamRun)(nil),             // 33: reeve.v1.StreamRun
-	(*Chunk)(nil),                 // 34: reeve.v1.Chunk
-	nil,                           // 35: reeve.v1.OpenAIExtras.LogitBiasEntry
-	(*timestamppb.Timestamp)(nil), // 36: google.protobuf.Timestamp
+	(*ToolCall)(nil),              // 32: reeve.v1.ToolCall
+	(*MessageUsage)(nil),          // 33: reeve.v1.MessageUsage
+	(*StreamRun)(nil),             // 34: reeve.v1.StreamRun
+	(*Chunk)(nil),                 // 35: reeve.v1.Chunk
+	nil,                           // 36: reeve.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 37: google.protobuf.Timestamp
 }
 var file_reeve_v1_types_proto_depIdxs = []int32{
-	36, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	36, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	36, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	37, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	37, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 4: reeve.v1.UserModelProvider.default_settings:type_name -> reeve.v1.CallSettings
-	36, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	37, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
 	14, // 6: reeve.v1.CatalogModel.pricing:type_name -> reeve.v1.ModelPricing
 	13, // 7: reeve.v1.CatalogModel.capabilities:type_name -> reeve.v1.ModelCapabilities
-	36, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	37, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
 	14, // 9: reeve.v1.UserModel.pricing:type_name -> reeve.v1.ModelPricing
 	13, // 10: reeve.v1.UserModel.capabilities:type_name -> reeve.v1.ModelCapabilities
 	18, // 11: reeve.v1.UserModel.default_settings:type_name -> reeve.v1.CallSettings
 	0,  // 12: reeve.v1.UserModel.metadata_source:type_name -> reeve.v1.MetadataSource
-	36, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	36, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	37, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	37, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
 	19, // 15: reeve.v1.CallSettings.thinking:type_name -> reeve.v1.ThinkingSettings
 	20, // 16: reeve.v1.CallSettings.anthropic:type_name -> reeve.v1.AnthropicExtras
 	21, // 17: reeve.v1.CallSettings.openai:type_name -> reeve.v1.OpenAIExtras
@@ -3768,7 +3906,7 @@ var file_reeve_v1_types_proto_depIdxs = []int32{
 	1,  // 19: reeve.v1.AnthropicExtras.cache_ttl:type_name -> reeve.v1.CacheTTL
 	2,  // 20: reeve.v1.OpenAIExtras.service_tier:type_name -> reeve.v1.ServiceTier
 	22, // 21: reeve.v1.OpenAIExtras.response_format:type_name -> reeve.v1.ResponseFormat
-	35, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
+	36, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
 	23, // 23: reeve.v1.ResponseFormat.json_schema:type_name -> reeve.v1.JsonSchema
 	25, // 24: reeve.v1.GoogleExtras.safety_settings:type_name -> reeve.v1.SafetySettings
 	3,  // 25: reeve.v1.SafetySettings.harassment:type_name -> reeve.v1.HarmThreshold
@@ -3778,29 +3916,30 @@ var file_reeve_v1_types_proto_depIdxs = []int32{
 	18, // 29: reeve.v1.ProfileDefaults.call_settings:type_name -> reeve.v1.CallSettings
 	4,  // 30: reeve.v1.Profile.compression_mode:type_name -> reeve.v1.CompressionMode
 	26, // 31: reeve.v1.Profile.default_settings:type_name -> reeve.v1.ProfileDefaults
-	36, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	36, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	37, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 34: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
 	28, // 35: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
-	36, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	36, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	36, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	36, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	37, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	37, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	37, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	37, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
 	5,  // 41: reeve.v1.Message.role:type_name -> reeve.v1.MessageRole
-	36, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	32, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
-	36, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	6,  // 45: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
-	7,  // 46: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
-	36, // 47: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	36, // 48: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 49: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
-	50, // [50:50] is the sub-list for method output_type
-	50, // [50:50] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	37, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	33, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
+	37, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	32, // 45: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
+	6,  // 46: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
+	7,  // 47: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
+	37, // 48: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	37, // 49: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 50: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
+	51, // [51:51] is the sub-list for method output_type
+	51, // [51:51] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_types_proto_init() }
@@ -3835,13 +3974,14 @@ func file_reeve_v1_types_proto_init() {
 	file_reeve_v1_types_proto_msgTypes[22].OneofWrappers = []any{}
 	file_reeve_v1_types_proto_msgTypes[23].OneofWrappers = []any{}
 	file_reeve_v1_types_proto_msgTypes[24].OneofWrappers = []any{}
+	file_reeve_v1_types_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_types_proto_rawDesc), len(file_reeve_v1_types_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

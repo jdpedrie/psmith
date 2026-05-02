@@ -97,9 +97,22 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 					}) {
 						return
 					}
+				case sdk.SignatureDelta:
+					// Anthropic emits one signature_delta per thinking block,
+					// at the end of the block. Reeve forwards it so the
+					// conversations-side tool loop can pair it with the
+					// preceding thinking text and round-trip the signed pair
+					// back on the next request.
+					payload, _ := json.Marshal(map[string]string{"signature": d.Signature})
+					if !sendChunk(ctx, out, providers.Chunk{
+						Type: providers.ChunkThinkingSignature, Payload: payload,
+					}) {
+						return
+					}
 				default:
-					// signature_delta / citations_delta don't have a normalized
-					// chunk type yet — stay silent rather than fabricating one.
+					// citations_delta and other future deltas don't have a
+					// normalized chunk type yet — stay silent rather than
+					// fabricating one.
 				}
 			case sdk.ContentBlockStopEvent:
 				if toolBlocks[v.Index] {
@@ -205,6 +218,34 @@ func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error)
 		}
 		out.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
 	}
+	if len(req.Tools) > 0 {
+		tools, err := translateTools(req.Tools)
+		if err != nil {
+			return sdk.MessageNewParams{}, err
+		}
+		out.Tools = tools
+	}
+	return out, nil
+}
+
+// translateTools converts plugin-provided tool defs into the Anthropic
+// SDK's `ToolUnionParam` shape.
+func translateTools(in []providers.ToolDef) ([]sdk.ToolUnionParam, error) {
+	out := make([]sdk.ToolUnionParam, 0, len(in))
+	for _, t := range in {
+		var schema sdk.ToolInputSchemaParam
+		if len(t.InputSchema) > 0 {
+			if err := json.Unmarshal(t.InputSchema, &schema); err != nil {
+				return nil, fmt.Errorf("anthropic: tool %q input schema: %w", t.Name, err)
+			}
+		}
+		tool := sdk.ToolParam{
+			Name:        t.Name,
+			Description: param.NewOpt(t.Description),
+			InputSchema: schema,
+		}
+		out = append(out, sdk.ToolUnionParam{OfTool: &tool})
+	}
 	return out, nil
 }
 
@@ -291,7 +332,11 @@ func translateMessages(in []providers.WireMessage) ([]sdk.TextBlockParam, []sdk.
 		case "system":
 			sys = append(sys, sdk.TextBlockParam{Text: m.Content})
 		case "user":
-			msgs = append(msgs, sdk.NewUserMessage(sdk.NewTextBlock(m.Content)))
+			blocks, err := userBlocks(m)
+			if err != nil {
+				return nil, nil, err
+			}
+			msgs = append(msgs, sdk.NewUserMessage(blocks...))
 		case "assistant":
 			blocks, err := assistantBlocks(m)
 			if err != nil {
@@ -303,6 +348,29 @@ func translateMessages(in []providers.WireMessage) ([]sdk.TextBlockParam, []sdk.
 		}
 	}
 	return sys, msgs, nil
+}
+
+// userBlocks builds content for a user-role message. Tool results
+// emit native `tool_result` blocks; the message's text content (if any)
+// follows.
+func userBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, error) {
+	var blocks []sdk.ContentBlockParamUnion
+	for _, tr := range m.ToolResults {
+		body := string(tr.Output)
+		isError := false
+		if tr.Error != "" {
+			body = tr.Error
+			isError = true
+		}
+		blocks = append(blocks, sdk.NewToolResultBlock(tr.ToolUseID, body, isError))
+	}
+	if m.Content != "" {
+		blocks = append(blocks, sdk.NewTextBlock(m.Content))
+	}
+	if len(blocks) == 0 {
+		blocks = append(blocks, sdk.NewTextBlock(""))
+	}
+	return blocks, nil
 }
 
 // thinkingPersisted is the on-disk shape of an assistant turn's thinking
@@ -336,6 +404,13 @@ func assistantBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, err
 	}
 	if m.Content != "" {
 		blocks = append(blocks, sdk.NewTextBlock(m.Content))
+	}
+	for _, tu := range m.ToolUses {
+		input := tu.Input
+		if len(input) == 0 {
+			input = json.RawMessage(`{}`)
+		}
+		blocks = append(blocks, sdk.NewToolUseBlock(tu.ID, input, tu.Name))
 	}
 	return blocks, nil
 }

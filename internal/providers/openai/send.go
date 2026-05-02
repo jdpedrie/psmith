@@ -121,6 +121,25 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 	defer close(out)
 	defer stream.Close()
 
+	// Tool call accumulator keyed by the per-choice index OpenAI assigns.
+	// The first delta for an index carries the call id + function name;
+	// subsequent deltas append argument JSON fragments. We emit a Start
+	// the moment we have an id, a Delta per arguments fragment, and an
+	// End when finish_reason fires (or at stream close).
+	type pendingCall struct {
+		id      string
+		started bool
+	}
+	pending := map[int64]*pendingCall{}
+	emitEnds := func() {
+		for _, p := range pending {
+			if p.started {
+				emit(out, providers.ChunkToolUseEnd, map[string]any{})
+			}
+		}
+		pending = map[int64]*pendingCall{}
+	}
+
 	finishSeen := false
 	for stream.Next() {
 		chunk := stream.Current()
@@ -150,41 +169,44 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 			if text := extractReasoningDelta(ch.Delta); text != "" {
 				emit(out, providers.ChunkThinking, map[string]string{"text": text})
 			}
-			// Diagnostic: when the upstream sends fields the SDK doesn't
-			// know about (typically `reasoning`, `reasoning_content`, or
-			// some bespoke variant), log the raw delta JSON once so we can
-			// see exactly which key carries thinking on this provider.
-			// Helps when a model populates `usage.reasoning_tokens` but
-			// surfaces no recognised text field.
-			if d.deps.Logger != nil && len(ch.Delta.JSON.ExtraFields) > 0 {
-				keys := make([]string, 0, len(ch.Delta.JSON.ExtraFields))
-				for k := range ch.Delta.JSON.ExtraFields {
-					keys = append(keys, k)
-				}
-				// TEMP: Info-level so it shows under default slog level.
-				// Drop to Debug once we know the field name to read.
-				d.deps.Logger.Info("chat-completions delta extra fields",
-					"keys", keys,
-					"raw", ch.Delta.RawJSON())
-			}
 			if ch.Delta.Content != "" {
 				emit(out, providers.ChunkText, map[string]string{"text": ch.Delta.Content})
 			}
+			for _, tc := range ch.Delta.ToolCalls {
+				p, ok := pending[tc.Index]
+				if !ok {
+					p = &pendingCall{}
+					pending[tc.Index] = p
+				}
+				if !p.started && (tc.ID != "" || tc.Function.Name != "") {
+					if tc.ID != "" {
+						p.id = tc.ID
+					}
+					emit(out, providers.ChunkToolUseStart, map[string]string{
+						"id":   p.id,
+						"name": tc.Function.Name,
+					})
+					p.started = true
+				}
+				if tc.Function.Arguments != "" {
+					emit(out, providers.ChunkToolUseDelta, map[string]string{
+						"partial_json": tc.Function.Arguments,
+					})
+				}
+			}
 			if ch.FinishReason != "" {
 				finishSeen = true
+				emitEnds()
 				// Don't emit Done yet — wait for the usage chunk that follows.
 			}
 		}
 	}
+	emitEnds()
 	if err := stream.Err(); err != nil {
 		emit(out, providers.ChunkError, map[string]string{"message": err.Error()})
 		return
 	}
-	if !finishSeen {
-		// Stream ended without finish_reason — synthesize Done.
-		emit(out, providers.ChunkDone, map[string]any{})
-		return
-	}
+	_ = finishSeen
 	emit(out, providers.ChunkDone, map[string]any{})
 }
 
@@ -244,7 +266,7 @@ func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage) {
 }
 
 // buildChatCompletionParams translates Reeve's wire shape into the SDK's
-// ChatCompletionNewParams. Tool use, refusals, and audio are not yet wired.
+// ChatCompletionNewParams. Refusals and audio are not yet wired.
 func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletionNewParams, error) {
 	if req.ModelID == "" {
 		return openai.ChatCompletionNewParams{}, errors.New("model_id is required")
@@ -263,6 +285,25 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 				},
 			})
 		case "user":
+			// A user wire message with tool_results is the synthetic
+			// turn the conversations-side tool loop emits after running
+			// every tool. Translate each result into its own
+			// `role=tool` message — Chat Completions models them
+			// individually, NOT as a wrapped user turn.
+			if len(m.ToolResults) > 0 {
+				for _, tr := range m.ToolResults {
+					content := chatToolResultContent(tr)
+					params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
+						OfTool: &openai.ChatCompletionToolMessageParam{
+							ToolCallID: tr.ToolUseID,
+							Content: openai.ChatCompletionToolMessageParamContentUnion{
+								OfString: param.NewOpt(content),
+							},
+						},
+					})
+				}
+				continue
+			}
 			params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
 				OfUser: &openai.ChatCompletionUserMessageParam{
 					Content: openai.ChatCompletionUserMessageParamContentUnion{
@@ -271,15 +312,50 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 				},
 			})
 		case "assistant":
-			params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-					Content: openai.ChatCompletionAssistantMessageParamContentUnion{
-						OfString: param.NewOpt(m.Content),
-					},
+			asst := &openai.ChatCompletionAssistantMessageParam{
+				Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+					OfString: param.NewOpt(m.Content),
 				},
+			}
+			if len(m.ToolUses) > 0 {
+				asst.ToolCalls = make([]openai.ChatCompletionMessageToolCallParam, 0, len(m.ToolUses))
+				for _, tu := range m.ToolUses {
+					args := string(tu.Input)
+					if args == "" {
+						args = "{}"
+					}
+					asst.ToolCalls = append(asst.ToolCalls, openai.ChatCompletionMessageToolCallParam{
+						ID: tu.ID,
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      tu.Name,
+							Arguments: args,
+						},
+					})
+				}
+			}
+			params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
+				OfAssistant: asst,
 			})
 		default:
 			return openai.ChatCompletionNewParams{}, fmt.Errorf("unsupported wire role %q", m.Role)
+		}
+	}
+
+	// Translate the tool catalog from the conversations-side pipeline.
+	if len(req.Tools) > 0 {
+		params.Tools = make([]openai.ChatCompletionToolParam, 0, len(req.Tools))
+		for _, t := range req.Tools {
+			fn := shared.FunctionDefinitionParam{Name: t.Name}
+			if t.Description != "" {
+				fn.Description = param.NewOpt(t.Description)
+			}
+			if len(t.InputSchema) > 0 {
+				var schema map[string]any
+				if err := json.Unmarshal(t.InputSchema, &schema); err == nil {
+					fn.Parameters = shared.FunctionParameters(schema)
+				}
+			}
+			params.Tools = append(params.Tools, openai.ChatCompletionToolParam{Function: fn})
 		}
 	}
 	if req.Settings.Temperature != nil {
@@ -348,6 +424,20 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 		IncludeUsage: param.NewOpt(true),
 	}
 	return params, nil
+}
+
+// chatToolResultContent renders a ToolResultBlock as the string the
+// `tool` message expects. OpenAI's content slot is a string; objects
+// must be JSON-stringified. On error we send the human-readable error
+// text — the model can react.
+func chatToolResultContent(tr providers.ToolResultBlock) string {
+	if tr.Error != "" {
+		return tr.Error
+	}
+	if len(tr.Output) == 0 {
+		return ""
+	}
+	return string(tr.Output)
 }
 
 // chatServiceTier maps the Reeve enum to the SDK's ChatCompletionNewParamsServiceTier.

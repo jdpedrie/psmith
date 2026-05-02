@@ -68,6 +68,19 @@ type SendRequest struct {
 	// a typed uuid.UUID so the providers package stays free of the
 	// google/uuid dependency on the request boundary.
 	ConversationID string
+	// Tools is the set of plugin-provided tool declarations to expose on
+	// this turn. Drivers translate these into their native tools shape;
+	// providers that don't support tools silently drop them.
+	Tools []ToolDef
+}
+
+// ToolDef is the driver-facing description of a single callable tool.
+// Mirrors plugins.ToolDef without taking the dependency — the providers
+// package must stay free of plugins to avoid an import cycle.
+type ToolDef struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
 }
 
 // WireMessage is the shape providers actually see.
@@ -75,6 +88,35 @@ type WireMessage struct {
 	Role     string          // "system" | "user" | "assistant"
 	Content  string
 	Thinking json.RawMessage // native shape; non-nil only on same-provider sends with thinking enabled
+	// ToolUses is set on assistant messages that contain tool invocations
+	// from a previous round. Drivers that support tools translate these
+	// alongside Content into native content blocks; drivers that don't
+	// silently drop them.
+	ToolUses []ToolUseBlock
+	// ToolResults is set on user messages that carry tool results coming
+	// back to the model after a previous tool_use turn.
+	ToolResults []ToolResultBlock
+}
+
+// ToolUseBlock is one tool invocation captured from an assistant turn.
+// Stored on the assistant message + replayed in WireMessage on follow-up
+// turns so the model has a coherent record of what it called.
+type ToolUseBlock struct {
+	ID    string          // provider-assigned id; e.g. Anthropic "toolu_…"
+	Name  string          // tool name (matches a registered plugin tool)
+	Input json.RawMessage // JSON arguments object the model emitted
+	// ProviderOpaque carries provider-specific metadata that must
+	// round-trip back on the next round (Gemini's `thoughtSignature`).
+	// Drivers that don't emit a signature leave this empty.
+	ProviderOpaque string
+}
+
+// ToolResultBlock is the corresponding result for a previous ToolUseBlock.
+// Either Output or Error is set, never both.
+type ToolResultBlock struct {
+	ToolUseID string          // matches ToolUseBlock.ID
+	Output    json.RawMessage // tool's JSON output; empty if Error is set
+	Error     string          // human-readable failure message; empty on success
 }
 
 // CallSettings carries per-turn provider settings. The shape mirrors the
@@ -228,14 +270,19 @@ type Chunk struct {
 type ChunkType string
 
 const (
-	ChunkText         ChunkType = "text_delta"
-	ChunkThinking     ChunkType = "thinking_delta"
-	ChunkToolUseStart ChunkType = "tool_use_start"
-	ChunkToolUseDelta ChunkType = "tool_use_delta"
-	ChunkToolUseEnd   ChunkType = "tool_use_end"
-	ChunkUsage        ChunkType = "usage"
-	ChunkError        ChunkType = "error"
-	ChunkDone         ChunkType = "done"
+	ChunkText                ChunkType = "text_delta"
+	ChunkThinking            ChunkType = "thinking_delta"
+	ChunkThinkingSignature   ChunkType = "thinking_signature"
+	ChunkToolUseStart        ChunkType = "tool_use_start"
+	ChunkToolUseDelta        ChunkType = "tool_use_delta"
+	ChunkToolUseEnd          ChunkType = "tool_use_end"
+	// ChunkToolResult is synthesized by the conversations-side tool-loop
+	// wrapper after a plugin's ExecuteTool returns. Payload:
+	//   {"tool_use_id": "...", "output": <raw json>, "error": "...", "elapsed_ms": <int>}
+	ChunkToolResult ChunkType = "tool_result"
+	ChunkUsage      ChunkType = "usage"
+	ChunkError      ChunkType = "error"
+	ChunkDone       ChunkType = "done"
 )
 
 // Usage is the normalized token-usage payload emitted via ChunkUsage.

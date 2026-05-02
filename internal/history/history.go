@@ -10,6 +10,7 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -186,6 +187,23 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		wm, err := toWireMessage(m, params.DestProviderType, params.IncludeThinking)
 		if err != nil {
 			return nil, err
+		}
+		// If the assistant turn had tool calls, splice the model's tool_use
+		// blocks back onto the assistant message and append a synthetic
+		// user message carrying the matching tool_result blocks. This is
+		// the wire shape every provider expects for tool-calling history.
+		if m.Role == roleAssistant && len(m.ToolCalls) > 0 {
+			uses, results, ok := splitStoredToolCalls(m.ToolCalls)
+			if ok {
+				wm.ToolUses = uses
+				asm = append(asm, assembled{wm: wm, storedRole: m.Role})
+				toolResultMsg := providers.WireMessage{
+					Role:        wireUser,
+					ToolResults: results,
+				}
+				asm = append(asm, assembled{wm: toolResultMsg, storedRole: roleUser})
+				continue
+			}
 		}
 		asm = append(asm, assembled{wm: wm, storedRole: m.Role})
 	}
@@ -382,6 +400,47 @@ func toWireMessage(m store.Message, destProviderType string, includeThinking boo
 		wm.Thinking = thinking
 	}
 	return wm, nil
+}
+
+// splitStoredToolCalls decodes the messages.tool_calls JSONB column into
+// the (assistant.ToolUses, user.ToolResults) pair the wire shape expects.
+// Returns ok=false on empty / malformed payload so the caller can fall back
+// to the no-tools path.
+func splitStoredToolCalls(payload []byte) ([]providers.ToolUseBlock, []providers.ToolResultBlock, bool) {
+	if len(payload) == 0 {
+		return nil, nil, false
+	}
+	var raw []struct {
+		ID             string          `json:"id"`
+		Name           string          `json:"name"`
+		Input          json.RawMessage `json:"input"`
+		Output         json.RawMessage `json:"output"`
+		Error          string          `json:"error"`
+		ProviderOpaque string          `json:"provider_opaque"`
+	}
+	if err := json.Unmarshal(payload, &raw); err != nil || len(raw) == 0 {
+		return nil, nil, false
+	}
+	uses := make([]providers.ToolUseBlock, 0, len(raw))
+	results := make([]providers.ToolResultBlock, 0, len(raw))
+	for _, r := range raw {
+		input := r.Input
+		if len(input) == 0 {
+			input = json.RawMessage(`{}`)
+		}
+		uses = append(uses, providers.ToolUseBlock{
+			ID:             r.ID,
+			Name:           r.Name,
+			Input:          input,
+			ProviderOpaque: r.ProviderOpaque,
+		})
+		results = append(results, providers.ToolResultBlock{
+			ToolUseID: r.ID,
+			Output:    r.Output,
+			Error:     r.Error,
+		})
+	}
+	return uses, results, true
 }
 
 // wireRoleFor maps a stored role to its wire-side role. role=context is

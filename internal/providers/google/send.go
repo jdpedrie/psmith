@@ -33,6 +33,7 @@ type generateContentRequest struct {
 	SystemInstruction *geminiContent       `json:"system_instruction,omitempty"`
 	GenerationConfig  *generationConfig    `json:"generationConfig,omitempty"`
 	SafetySettings    []geminiSafetySetting `json:"safetySettings,omitempty"`
+	Tools             []geminiToolEntry    `json:"tools,omitempty"`
 
 	// CachedContent references a previously-created cachedContents resource
 	// (see Driver.CreateCachedContent). Format: "cachedContents/<id>". When
@@ -41,14 +42,52 @@ type generateContentRequest struct {
 	CachedContent string `json:"cachedContent,omitempty"`
 }
 
+// geminiToolEntry is one element of the request's `tools` array. Gemini
+// groups function declarations under a single tool entry.
+type geminiToolEntry struct {
+	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations"`
+}
+
+type geminiFunctionDeclaration struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+}
+
 type geminiContent struct {
 	Role  string       `json:"role,omitempty"` // "user" or "model"; omitted for system_instruction
 	Parts []geminiPart `json:"parts"`
 }
 
+// geminiPart is one element of a content's parts array. Exactly one of
+// Text / FunctionCall / FunctionResponse is populated per part.
+//
+// ThoughtSignature lives at the part level (NOT nested inside
+// functionCall) per Gemini's wire shape. It MUST round-trip back on the
+// same part on the next request — Gemini rejects HTTP 400 with
+// "Function call is missing a thought_signature" otherwise.
 type geminiPart struct {
-	Text    string `json:"text,omitempty"`
-	Thought bool   `json:"thought,omitempty"`
+	Text             string              `json:"text,omitempty"`
+	Thought          bool                `json:"thought,omitempty"`
+	ThoughtSignature string              `json:"thoughtSignature,omitempty"`
+	FunctionCall     *geminiFunctionCall `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFunctionResp `json:"functionResponse,omitempty"`
+}
+
+// geminiFunctionCall is what Gemini emits when the model invokes a
+// declared function. The thoughtSignature lives one level up on
+// geminiPart — see that type's doc for round-trip rules.
+type geminiFunctionCall struct {
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// geminiFunctionResp carries tool output back to the model.
+// Gemini documents `response` as an object; non-object payloads get
+// wrapped via wrapAsObject.
+type geminiFunctionResp struct {
+	Name     string          `json:"name"`
+	Response json.RawMessage `json:"response"`
 }
 
 type generationConfig struct {
@@ -248,6 +287,9 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
+	// Synthetic id sequence for tool calls (Gemini doesn't return ids).
+	fcSeq := 0
+
 	var dataAccum strings.Builder
 	flush := func() bool {
 		if dataAccum.Len() == 0 {
@@ -275,6 +317,10 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 		}
 		for _, c := range env.Candidates {
 			for _, p := range c.Content.Parts {
+				if p.FunctionCall != nil {
+					emitGeminiToolCall(out, p.FunctionCall, p.ThoughtSignature, &fcSeq)
+					continue
+				}
 				if p.Text == "" {
 					continue
 				}
@@ -345,6 +391,32 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 		emitUsage(out, *lastUsage, lastUsageRaw)
 	}
 	emit(out, providers.ChunkDone, map[string]any{})
+}
+
+// emitGeminiToolCall translates one functionCall part into the
+// supervisor's three-chunk tool_use sequence. The part-level
+// thoughtSignature rides the Start chunk as `provider_opaque` so the
+// loop wrapper can stash it on the ToolUseBlock and the next-round
+// emit reattaches it.
+func emitGeminiToolCall(out chan<- providers.Chunk, fc *geminiFunctionCall, thoughtSignature string, seq *int) {
+	*seq++
+	id := makeGeminiToolID(fc.Name, *seq)
+	startPayload := map[string]string{
+		"id":   id,
+		"name": fc.Name,
+	}
+	if thoughtSignature != "" {
+		startPayload["provider_opaque"] = thoughtSignature
+	}
+	emit(out, providers.ChunkToolUseStart, startPayload)
+	args := fc.Args
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	emit(out, providers.ChunkToolUseDelta, map[string]string{
+		"partial_json": string(args),
+	})
+	emit(out, providers.ChunkToolUseEnd, map[string]any{})
 }
 
 // emitUsage normalizes a usageMetadata into ChunkUsage. Cache reads
@@ -439,7 +511,7 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 		case "user":
 			body.Contents = append(body.Contents, geminiContent{
 				Role:  "user",
-				Parts: []geminiPart{{Text: m.Content}},
+				Parts: userPartsFromWire(m),
 			})
 		case "assistant":
 			// Reconstruct the full parts array Gemini originally
@@ -473,7 +545,96 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 		}
 	}
 
+	if len(req.Tools) > 0 {
+		body.Tools = []geminiToolEntry{
+			{FunctionDeclarations: toolsToFunctionDeclarations(req.Tools)},
+		}
+	}
+
 	return body, nil
+}
+
+// toolsToFunctionDeclarations maps the driver-facing ToolDef list into
+// Gemini's flat list of functionDeclarations.
+func toolsToFunctionDeclarations(tools []providers.ToolDef) []geminiFunctionDeclaration {
+	out := make([]geminiFunctionDeclaration, 0, len(tools))
+	for _, t := range tools {
+		params := t.InputSchema
+		if len(params) == 0 {
+			params = json.RawMessage(`{"type":"object"}`)
+		}
+		out = append(out, geminiFunctionDeclaration{
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  params,
+		})
+	}
+	return out
+}
+
+// userPartsFromWire builds the parts array for a user-role content,
+// emitting functionResponse parts for any tool results in the message.
+// Gemini identifies tool calls by name (no id), so we encode the name
+// in the synthetic id we mint on inbound (see makeGeminiToolID) and
+// recover it here via nameFromGeminiToolID.
+func userPartsFromWire(m providers.WireMessage) []geminiPart {
+	parts := []geminiPart{}
+	for _, tr := range m.ToolResults {
+		name := nameFromGeminiToolID(tr.ToolUseID)
+		var responseObj json.RawMessage
+		if tr.Error != "" {
+			payload, _ := json.Marshal(map[string]string{"error": tr.Error})
+			responseObj = payload
+		} else if len(tr.Output) > 0 {
+			responseObj = wrapAsObject(tr.Output)
+		} else {
+			responseObj = json.RawMessage(`{}`)
+		}
+		parts = append(parts, geminiPart{
+			FunctionResponse: &geminiFunctionResp{
+				Name:     name,
+				Response: responseObj,
+			},
+		})
+	}
+	if m.Content != "" {
+		parts = append(parts, geminiPart{Text: m.Content})
+	}
+	if len(parts) == 0 {
+		parts = append(parts, geminiPart{Text: ""})
+	}
+	return parts
+}
+
+// wrapAsObject ensures `response` is a JSON object — Gemini requires
+// an object even when the tool returned an array or primitive.
+func wrapAsObject(raw json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace([]byte(raw))
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		return raw
+	}
+	wrapper, err := json.Marshal(map[string]json.RawMessage{"result": raw})
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return wrapper
+}
+
+const geminiToolIDPrefix = "gem-fc-"
+
+func makeGeminiToolID(name string, seq int) string {
+	return fmt.Sprintf("%s%s-%d", geminiToolIDPrefix, name, seq)
+}
+
+func nameFromGeminiToolID(id string) string {
+	if !strings.HasPrefix(id, geminiToolIDPrefix) {
+		return id
+	}
+	body := strings.TrimPrefix(id, geminiToolIDPrefix)
+	if idx := strings.LastIndex(body, "-"); idx > 0 {
+		return body[:idx]
+	}
+	return body
 }
 
 // assistantPartsFromWire reconstructs the parts array for an assistant
@@ -504,12 +665,27 @@ func assistantPartsFromWire(m providers.WireMessage) []geminiPart {
 			}
 		}
 	}
-	if m.Content != "" || len(parts) == 0 {
-		// Always emit a content part — Gemini rejects parts arrays
-		// that contain only thought parts. When the assistant
-		// produced no answer text (rare but possible mid-stream
-		// failure) the empty-string part keeps the wire shape valid.
+	if m.Content != "" {
 		parts = append(parts, geminiPart{Text: m.Content})
+	}
+	for _, tu := range m.ToolUses {
+		args := tu.Input
+		if len(args) == 0 {
+			args = json.RawMessage(`{}`)
+		}
+		// thoughtSignature belongs ONLY at the part level on the wire —
+		// Gemini rejects HTTP 400 with "Unknown name 'thoughtSignature'"
+		// when nested inside functionCall.
+		parts = append(parts, geminiPart{
+			ThoughtSignature: tu.ProviderOpaque,
+			FunctionCall: &geminiFunctionCall{
+				Name: tu.Name,
+				Args: args,
+			},
+		})
+	}
+	if len(parts) == 0 {
+		parts = append(parts, geminiPart{Text: ""})
 	}
 	return parts
 }

@@ -389,6 +389,18 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
   case error // = 6
   case done // = 7
   case usage // = 8
+
+  /// Synthetic — emitted by the conversations-side tool loop after
+  /// executing one tool_use. Carries the tool_use_id, the plugin output (or
+  /// error), and the wall-clock duration. Surfaces both during live streams
+  /// and on history reads (the chunk row is replayed, and the materialised
+  /// assistant message also encodes the same data in `tool_calls`).
+  case toolResult // = 9
+
+  /// Anthropic-only signed thinking signature, emitted at the end of a
+  /// thinking block. Reeve stores the (text, signature) pair on
+  /// messages.thinking so it can be round-tripped on the next request.
+  case thinkingSignature // = 10
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -406,6 +418,8 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 6: self = .error
     case 7: self = .done
     case 8: self = .usage
+    case 9: self = .toolResult
+    case 10: self = .thinkingSignature
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -421,6 +435,8 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .error: return 6
     case .done: return 7
     case .usage: return 8
+    case .toolResult: return 9
+    case .thinkingSignature: return 10
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -436,6 +452,8 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     .error,
     .done,
     .usage,
+    .toolResult,
+    .thinkingSignature,
   ]
 
 }
@@ -2090,11 +2108,64 @@ public struct Reeve_V1_Message: @unchecked Sendable {
   /// Clears the value of `thinkingDurationMs`. Subsequent reads from it will return its default value.
   public mutating func clearThinkingDurationMs() {_uniqueStorage()._thinkingDurationMs = nil}
 
+  /// Tool calls executed by the conversations-side tool loop while
+  /// producing this message. One entry per tool invocation, in invocation
+  /// order. Empty when the model didn't request any tools.
+  public var toolCalls: [Reeve_V1_ToolCall] {
+    get {_storage._toolCalls}
+    set {_uniqueStorage()._toolCalls = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// One tool call recorded on an assistant message — the model's request
+/// (id, name, input) plus the loop's execution result (output OR error,
+/// elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
+public struct Reeve_V1_ToolCall: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var name: String = String()
+
+  public var input: Data = Data()
+
+  /// Exactly one of output / error is set.
+  public var output: Data = Data()
+
+  public var error: String {
+    get {_error ?? String()}
+    set {_error = newValue}
+  }
+  /// Returns true if `error` has been explicitly set.
+  public var hasError: Bool {self._error != nil}
+  /// Clears the value of `error`. Subsequent reads from it will return its default value.
+  public mutating func clearError() {self._error = nil}
+
+  public var elapsedMs: Int64 = 0
+
+  public var providerOpaque: String {
+    get {_providerOpaque ?? String()}
+    set {_providerOpaque = newValue}
+  }
+  /// Returns true if `providerOpaque` has been explicitly set.
+  public var hasProviderOpaque: Bool {self._providerOpaque != nil}
+  /// Clears the value of `providerOpaque`. Subsequent reads from it will return its default value.
+  public mutating func clearProviderOpaque() {self._providerOpaque = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _error: String? = nil
+  fileprivate var _providerOpaque: String? = nil
 }
 
 /// MessageUsage records token usage reported by the provider plus the
@@ -2415,7 +2486,7 @@ extension Reeve_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Reeve_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0")
 }
 
 extension Reeve_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -4074,7 +4145,7 @@ extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4095,6 +4166,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _editedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _errorText: String? = nil
     var _thinkingDurationMs: Int32? = nil
+    var _toolCalls: [Reeve_V1_ToolCall] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4123,6 +4195,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _editedAt = source._editedAt
       _errorText = source._errorText
       _thinkingDurationMs = source._thinkingDurationMs
+      _toolCalls = source._toolCalls
     }
   }
 
@@ -4159,6 +4232,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 16: try { try decoder.decodeSingularMessageField(value: &_storage._editedAt) }()
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorText) }()
         case 18: try { try decoder.decodeSingularInt32Field(value: &_storage._thinkingDurationMs) }()
+        case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._toolCalls) }()
         default: break
         }
       }
@@ -4225,6 +4299,9 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._thinkingDurationMs {
         try visitor.visitSingularInt32Field(value: v, fieldNumber: 18)
       } }()
+      if !_storage._toolCalls.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._toolCalls, fieldNumber: 19)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4252,10 +4329,75 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._editedAt != rhs_storage._editedAt {return false}
         if _storage._errorText != rhs_storage._errorText {return false}
         if _storage._thinkingDurationMs != rhs_storage._thinkingDurationMs {return false}
+        if _storage._toolCalls != rhs_storage._toolCalls {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ToolCall"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}input\0\u{1}output\0\u{1}error\0\u{3}elapsed_ms\0\u{3}provider_opaque\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.input) }()
+      case 4: try { try decoder.decodeSingularBytesField(value: &self.output) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._error) }()
+      case 6: try { try decoder.decodeSingularInt64Field(value: &self.elapsedMs) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self._providerOpaque) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if !self.input.isEmpty {
+      try visitor.visitSingularBytesField(value: self.input, fieldNumber: 3)
+    }
+    if !self.output.isEmpty {
+      try visitor.visitSingularBytesField(value: self.output, fieldNumber: 4)
+    }
+    try { if let v = self._error {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
+    if self.elapsedMs != 0 {
+      try visitor.visitSingularInt64Field(value: self.elapsedMs, fieldNumber: 6)
+    }
+    try { if let v = self._providerOpaque {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ToolCall, rhs: Reeve_V1_ToolCall) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.input != rhs.input {return false}
+    if lhs.output != rhs.output {return false}
+    if lhs._error != rhs._error {return false}
+    if lhs.elapsedMs != rhs.elapsedMs {return false}
+    if lhs._providerOpaque != rhs._providerOpaque {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

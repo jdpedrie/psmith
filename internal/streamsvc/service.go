@@ -183,6 +183,10 @@ func chunkTypeToProto(t providers.ChunkType) reevev1.ChunkType {
 		return reevev1.ChunkType_CHUNK_TYPE_ERROR
 	case providers.ChunkDone:
 		return reevev1.ChunkType_CHUNK_TYPE_DONE
+	case providers.ChunkToolResult:
+		return reevev1.ChunkType_CHUNK_TYPE_TOOL_RESULT
+	case providers.ChunkThinkingSignature:
+		return reevev1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE
 	}
 	return reevev1.ChunkType_CHUNK_TYPE_UNSPECIFIED
 }

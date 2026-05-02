@@ -80,6 +80,7 @@ type Message struct {
 	ErrorPayload          []byte
 	ThinkingDurationMs    *int32
 	ExplicitCacheAttached *bool
+	ToolCalls             []byte
 }
 
 type Profile struct {
