@@ -144,11 +144,8 @@ struct ConversationListView: View {
                         .listRowSeparator(.hidden)
                 }
                 ForEach(convos.conversations) { c in
-                    ConversationRow(conversation: c)
+                    ConversationRow(conversation: c, onDelete: { conversationToDelete = c })
                         .tag(c.id)
-                        .contextMenu {
-                            Button("Delete", role: .destructive) { conversationToDelete = c }
-                        }
                 }
             } header: {
                 sortMenu
@@ -163,11 +160,8 @@ struct ConversationListView: View {
                             .listRowSeparator(.hidden)
                     }
                     ForEach(buckets) { c in
-                        ConversationRow(conversation: c, hideProfileLabel: true)
+                        ConversationRow(conversation: c, hideProfileLabel: true, onDelete: { conversationToDelete = c })
                             .tag(c.id)
-                            .contextMenu {
-                                Button("Delete", role: .destructive) { conversationToDelete = c }
-                            }
                     }
                 } header: {
                     Text(profile.name)
@@ -185,11 +179,8 @@ struct ConversationListView: View {
                         .listRowSeparator(.hidden)
                 } else {
                     ForEach(convos.conversations) { c in
-                        ConversationRow(conversation: c)
+                        ConversationRow(conversation: c, onDelete: { conversationToDelete = c })
                             .tag(c.id)
-                            .contextMenu {
-                                Button("Delete", role: .destructive) { conversationToDelete = c }
-                            }
                     }
                 }
             }
@@ -261,19 +252,56 @@ struct ConversationRow: View {
     /// In By-Profile mode the section header already names the profile, so
     /// the subtitle would just repeat it. Hidden in that mode.
     var hideProfileLabel: Bool = false
+    /// Hover-revealed delete callback. Owned by the parent so the
+    /// confirmation sheet stays at the list level. nil → no trash icon
+    /// in the row chrome (defensive — every current call site provides one).
+    var onDelete: (() -> Void)? = nil
+    @State private var hovering = false
     @Environment(ConversationsModel.self) private var convos
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
-                .lineLimit(1)
-            if !hideProfileLabel, let profileName = profileName {
-                Text(profileName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        // Right-click context menus are unusable on macOS 26 sidebar
+        // List rows (the menu's backdrop renders as a window-wide black
+        // box, same Liquid Glass capture-path family of bugs we've hit
+        // elsewhere). Hover-revealed trash icon is the workaround:
+        // discoverable, no contextMenu involvement, no Liquid Glass
+        // capture path.
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
                     .lineLimit(1)
+                if !hideProfileLabel, let profileName = profileName {
+                    Text(profileName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Delete conversation")
+                .opacity(hovering ? 1 : 0)
+                // Always reserve the layout slot so hover doesn't shift
+                // the title; only fade in/out.
+                .allowsHitTesting(hovering)
             }
         }
+        .contentShape(Rectangle())
+        // .onHover with a plain @State write (no withAnimation wrapper)
+        // is the safe pattern on macOS 26 — wrapping the write in
+        // withAnimation has historically crashed mid-stream-churn.
+        .onHover { isOver in
+            hovering = isOver
+        }
+        .animation(.easeInOut(duration: 0.12), value: hovering)
     }
 
     private var profileName: String? {

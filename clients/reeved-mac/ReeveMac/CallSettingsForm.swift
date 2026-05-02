@@ -62,13 +62,13 @@ struct CallSettingsForm: View {
     /// Provider-agnostic caching toggles. Today only `explicit_cache`
     /// lives here. Whichever active driver implements
     /// providers.ExplicitCacheProvider on the server side picks it up
-    /// (Google today; Anthropic later if it grows one). Drivers that
-    /// don't implement the interface no-op silently.
+    /// (Google + Anthropic today). Drivers that don't implement the
+    /// interface no-op silently.
     private var cachingSection: some View {
         formSection("Caching") {
             boolToggleRow(
                 title: "Explicit caching",
-                description: "Server-managed explicit cache. On Google: cachedContents auto-placement (per-hour storage cost). On other providers: no-op until the driver implements the interface.",
+                description: "Server-managed explicit cache. On Google: cachedContents auto-placement (per-hour storage cost). On Anthropic: bumps the cache_control TTL from 5 minutes to 1 hour for stable conversations. On providers without an explicit-cache implementation: no-op.",
                 value: optBoolBinding(\.explicitCache),
                 inherited: inheritedSettings?.explicitCache
             )

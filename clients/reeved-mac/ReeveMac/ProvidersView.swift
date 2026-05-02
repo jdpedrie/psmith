@@ -1585,10 +1585,15 @@ private struct ProviderDefaultSettingsTab: View {
                     modelCapabilities: nil
                 )
             }
-            .padding(.horizontal, 14)
+            // Generous leading padding clears the macOS scroll indicator
+            // gutter — without it, the overlay indicator was clipping the
+            // first character of every label in this pane.
+            .padding(.leading, 24)
+            .padding(.trailing, 14)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
         .onAppear {
             // Seed once per appearance — re-seeding on every .onAppear would
             // clobber an in-flight edit if the parent re-renders the same
