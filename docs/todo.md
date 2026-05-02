@@ -143,6 +143,95 @@ Recorded here for grep-ability; the canonical discussion is in [architecture.md]
 
 ---
 
+## Plugin hook ideas
+
+Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, `SystemPrompter`, `OutgoingUserTransformer`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `ToolProvider`, `MessageLifecycleHook` is `onAssistantMaterialized` today — internal-only). Three gaps are obvious enough they're worth designing now; the rest noted-but-deferred until a concrete plugin pulls on them.
+
+### Worth designing now
+
+- **`AssistantContentTransformer`** — symmetric to `OutgoingUserTransformer`. Mutates assistant content **at materialization time, persisted on the row** (vs `DisplayTransformer`, which only modifies rendering). Runs once in `materializeAssistant` before the `messages` insert. Use cases: strip ANSI/control chars from coding-tool output; auto-link bare URLs; watermark assistant turns with provider/model metadata; sanitize tool-call cruft. Without this, "rewrite once and forever" semantics are only available on the user side.
+  ```go
+  type AssistantContentTransformer interface {
+      TransformAssistantContent(content string) string
+  }
+  ```
+
+- **`PreSendContextInjector`** — non-persisted, per-turn injection of synthetic wire messages BEFORE the user turn. Distinct from `SystemPrompter` (static, persisted across turns) and `OutgoingUserTransformer` (mutates the user row that gets persisted). Returns zero or more `providers.WireMessage` values that splice into the wire prefix only for this turn. Unblocks the RAG/memory family: vector-search prior conversations and inject top-K snippets; pull recent calendar/email; inject project-scoped docs; auto-search on trigger keywords. Without this, RAG plugins either pollute the persisted user message (bust the prefix cache every turn — `basic_grounding`'s reason for being) or jam everything into the system slot (useless when relevant docs change per-turn).
+  ```go
+  type PreSendContextInjector interface {
+      // Empty slice = no contribution this turn.
+      InjectPreSend(userContent string) []providers.WireMessage
+  }
+  ```
+
+- **`MessageLifecycleHook`** — fire-and-forget post-write callback. Runs in a detached goroutine after the `messages` insert (same place `onAssistantMaterialized` already fires for titling). No back-pressure on the supervisor; no return value. Use cases: embedding generation (so future `PreSendContextInjector` calls can retrieve them); webhooks; auto-tagging via a small classifier; external audit logs. Pairs naturally with `PreSendContextInjector` to form the building blocks for a memory plugin.
+  ```go
+  type MessageLifecycleHook interface {
+      OnMessagePersisted(ctx context.Context, m PersistedMessage)
+  }
+  type PersistedMessage struct {
+      ID, ContextID, Role, Content, ProviderID, ModelID string
+  }
+  ```
+
+- **`ContentRenderer` (server-driven UI fragments)** — generalises the display path from text-rewrites into structured rendering. Today the chain is `string → DisplayTransformer chain → string` and the Mac client renders the result as Markdown. New shape: `string → DisplayTransformer chain → string → ContentRenderer chain → []ContentPart`, where each part is either literal text or a typed `UIFragment` the client renders with a native SwiftUI view. The whole point is that this is **NOT tool-specific** — any plugin can opt in. `lettered_choices` is the immediate motivating case: it strips delimiters today, but the choices block could be a tappable card-list of options instead of a markdown bullet list. `brave_search` would render its tool result as cards. A future "mermaid" plugin would substitute fenced ```mermaid blocks with rendered SVG.
+
+  ```go
+  type ContentRenderer interface {
+      // Walks the (possibly already-display-transformed) string and
+      // returns an ordered mix of literal text spans and structured
+      // UI fragments. Plugins downstream in the pipeline operate on
+      // the parts list, free to split/replace any text part. A
+      // returned single-text-part = pass-through.
+      RenderContent(content string, role MessageRole) []ContentPart
+  }
+
+  type ContentPart struct {
+      // Exactly one of Text or Fragment is set.
+      Text     string
+      Fragment *UIFragment
+  }
+
+  type UIFragment struct {
+      Component string          // "card_list" | "choice_list" | "key_value" | ...
+      Props     json.RawMessage // schema per Component, validated client-side
+      // Optional: stable id so the client can preserve view-state
+      // (selection, expand, scroll position) across re-renders.
+      Key string
+  }
+  ```
+
+  Initial component set scoped to what we'd actually use:
+  - **`card_list`** — `[{title, description, url?, image?, badges?}]` — Brave Search and any future search plugin.
+  - **`choice_list`** — `[{label, value}]` plus an `action` template (`compose:{value}` to drop the choice into the composer, or `tool:foo?bar={value}` to fire a tool). `lettered_choices` ships this on day one.
+  - **`key_value`** — `[{key, value}]` definition-list — for "stat-style" plugins (weather, status).
+  - **`image`** / **`image_grid`** — `[{url, alt?, caption?}]` — plugins that return media.
+  - **`error`** — `{message, code?, retry?: action}` — typed error rendering.
+  - **`raw_json`** — explicit fallback the existing JSON pretty-print path migrates to.
+
+  Each component lives as a SwiftUI view in `clients/reeved-mac/ReeveMac/PluginRenderers/`; plugins are pure-Go authors describing structure, not native code. The same proto fragment ships to a future iOS/web client and they render their own component set. **Behaviour** rides on declarative `action` strings on interactive components: `compose:{text}`, `tool:{name}?{key}={value}`, `external:{https://…}` (with the link-safety prompt), `nav:conversation:{id}`. Anything beyond that is a signal the action set should grow, NOT that we should ship a JS sandbox.
+
+  Wire shape: a new `Message.ui_fragments []UIFragment` proto field (per message, ordered, may be empty); persisted alongside content. Server runs ContentRenderer pipeline at materialisation (assistant turns) AND at fetch (read-time, so old messages benefit when a renderer plugin is added later — the fragments are derived, not stored, so re-deriving on read is correct).
+
+  Open design questions worth chewing on before starting:
+  - Read-time vs write-time rendering. Read-time means the same content adapts as the active pipeline changes; write-time freezes the rendering. Read-time is more flexible but adds work to every fetch.
+  - Span replacement vs whole-content replacement. The `[]ContentPart` model lets one plugin replace just a substring while another renders the surrounding text. Worth it for composability (e.g. a `citations` plugin co-existing with `mermaid`); cost is a trickier API shape than "give me one fragment."
+  - DisplayTransformer migration path. They're a strict subset of ContentRenderer (single text part out). Either keep both interfaces and document overlap, or deprecate DisplayTransformer in favor of ContentRenderer-emitting-text. Lean toward keeping both — DisplayTransformer is simpler when you only need a regex strip, and there's no reason to force every plugin to learn the parts model.
+
+Suggested order: `AssistantContentTransformer` + `MessageLifecycleHook` first (each ~few-hundred lines, low surface). `ContentRenderer` is the bigger piece (proto change, Swift component scaffolding, action-dispatch wiring) — worth deferring until at least one plugin's needs (`lettered_choices`'s choice cards is the clearest candidate) drives the schema. `PreSendContextInjector` once a concrete RAG/memory plugin pulls on it.
+
+### Considered, deferred until a real use case lands
+
+- **`ToolMiddleware`** (wrap `ExecuteTool` for validation/logging/rate-limiting). No current need; revisit when an audit-style tool plugin is requested.
+- **`CompressionTransformer`** (pre/post compression hooks). Per-profile guide + provider/model knobs already cover the customization users actually ask for.
+- **`HealthCheck`** (declare readiness; UI shows "warming up / unhealthy"). Required-field warning chip already covers the most common "missing API key" case.
+- **`ProviderRequestMutator`** (tweak `SendRequest` per-call). Overlaps heavily with the resolved CallSettings layer; a plugin that wants dynamic temperature is doing something exotic.
+- **`StreamCancelHook`** (notify on cancel). Becomes useful when a long-running tool plugin (e.g. shell-execution) lands; design with the real use case in hand.
+- **`ConversationLifecycleHook`** (created/deleted). Narrow use cases; `MessageLifecycleHook` covers most of what people want here.
+- **`TitleGenerator`** (pluginify auto-titling). Current Apple-Foundation + cloud-model + per-profile-guide path is already configurable; haven't hit the wall.
+
+---
+
 ## How to use this doc
 
 When you defer something, add a one-bullet entry here with: package/file, what was skipped, why, and (if known) when to revisit. When you complete an item, delete it.
