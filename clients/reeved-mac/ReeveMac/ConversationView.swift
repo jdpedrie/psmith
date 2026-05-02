@@ -439,7 +439,8 @@ struct ConversationBody: View {
                                 thinkingText: model.streamingThinking,
                                 thinkingStartedAt: model.streamingThinkingStartedAt,
                                 thinkingFinishedAt: model.streamingThinkingFinishedAt,
-                                thinkingExpanded: $model.streamingThinkingExpanded
+                                thinkingExpanded: $model.streamingThinkingExpanded,
+                                toolCalls: model.streamingToolCalls
                             )
                             .id("__streaming__")
                         }
@@ -861,6 +862,18 @@ private struct MessageRow: View {
                     renderedText: message.thinkingRenderedText ?? "",
                     isExpanded: thinkingExpandedBinding
                 )
+            }
+            // Historical tool calls — one settled disclosure per call.
+            // Index disambiguates Gemini's reused synthetic ids; the
+            // expanded-state set on the view-model is keyed by
+            // "<messageID>:<index>".
+            if !isEditing, message.role == .assistant, !message.toolCalls.isEmpty {
+                ForEach(Array(message.toolCalls.enumerated()), id: \.offset) { idx, call in
+                    ToolCallSettledDisclosure(
+                        call: call,
+                        isExpanded: toolCallExpandedBinding(index: idx)
+                    )
+                }
             }
             if isEditing {
                 inlineEditor
@@ -1296,6 +1309,23 @@ private struct MessageRow: View {
         )
     }
 
+    /// One Set entry per (message, tool-call-index) pair. Index, not id,
+    /// because Gemini reuses synthetic ids across tool-loop rounds and the
+    /// disclosure state must distinguish them.
+    private func toolCallExpandedBinding(index: Int) -> Binding<Bool> {
+        let key = "\(message.id):\(index)"
+        return Binding(
+            get: { model.expandedToolCallKeys.contains(key) },
+            set: { newValue in
+                if newValue {
+                    model.expandedToolCallKeys.insert(key)
+                } else {
+                    model.expandedToolCallKeys.remove(key)
+                }
+            }
+        )
+    }
+
     /// "<Provider Label> <Model Display Name>" with graceful fallbacks. Looks
     /// up the human-readable strings via the view-model's loaded providers
     /// list; falls back to raw IDs when either lookup misses (legacy rows,
@@ -1624,6 +1654,11 @@ private struct StreamingRow: View {
     /// the ConversationViewModel so the value survives the StreamingRow →
     /// MessageRow swap at terminal time.
     @Binding var thinkingExpanded: Bool
+    /// Tool calls captured on the active stream, in start order. Each
+    /// renders as a non-interactive timer pill (`ToolCallLivePill`) — see
+    /// the file header in `ToolCallDisclosure.swift` for crash-safety
+    /// rationale on keeping live pills Button-free.
+    let toolCalls: [LiveToolCall]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1642,10 +1677,14 @@ private struct StreamingRow: View {
                     isExpanded: $thinkingExpanded
                 )
             }
+            ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, call in
+                ToolCallLivePill(call: call)
+            }
             if text.isEmpty {
-                // Don't render a "…" placeholder while thinking is active —
-                // the disclosure pill is the visible activity indicator.
-                if thinkingStartedAt == nil {
+                // Don't render a "…" placeholder while thinking is active or
+                // a tool call is in flight — those pills are the visible
+                // activity indicators.
+                if thinkingStartedAt == nil, toolCalls.isEmpty {
                     Text("…").foregroundStyle(.secondary)
                 }
             } else {

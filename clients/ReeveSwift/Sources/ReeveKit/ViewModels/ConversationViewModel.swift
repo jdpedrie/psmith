@@ -80,6 +80,20 @@ public final class ConversationViewModel {
     /// every disclosure shut.
     public var expandedThinkingMessageIDs: Set<String> = []
 
+    /// Tool calls captured on the active stream, ordered by start time.
+    /// Built up from `tool_use_start` / `tool_use_delta` / `tool_use_end` /
+    /// `tool_result` chunks. Each entry's computed `phase` flips through
+    /// generating → executing → done as more chunks arrive. Wiped on
+    /// terminal — historical tool calls live on the materialised
+    /// message row's `toolCalls` instead.
+    public var streamingToolCalls: [LiveToolCall] = []
+
+    /// Open/closed state for tool-call disclosures on historical messages,
+    /// keyed by `"\(messageID):\(toolCallIndex)"` to disambiguate when a
+    /// single message carries multiple calls and Gemini's synthetic
+    /// per-round id resets cause id collisions.
+    public var expandedToolCallKeys: Set<String> = []
+
     // Compact state
     public var isCompacting = false
     public var compactError: String?
@@ -440,6 +454,7 @@ public final class ConversationViewModel {
         streamingThinking = ""
         streamingThinkingStartedAt = nil
         streamingThinkingFinishedAt = nil
+        streamingToolCalls = []
         // Show message optimistically before the RPC round-trip completes.
         pendingUserText = text
         defer { sending = false }
@@ -638,6 +653,7 @@ public final class ConversationViewModel {
             streamingThinking = ""
             streamingThinkingStartedAt = nil
             streamingThinkingFinishedAt = nil
+            streamingToolCalls = []
             streamTask?.cancel()
             streamTask = Task { @MainActor in
                 for await event in client.streams.subscribe(streamRunID: run.id) {
@@ -787,6 +803,7 @@ public final class ConversationViewModel {
         streamingThinking = ""
         streamingThinkingStartedAt = nil
         streamingThinkingFinishedAt = nil
+        streamingToolCalls = []
         defer { sending = false }
 
         do {
@@ -835,6 +852,7 @@ public final class ConversationViewModel {
         streamingThinking = ""
         streamingThinkingStartedAt = nil
         streamingThinkingFinishedAt = nil
+        streamingToolCalls = []
         pendingUserText = text
         defer { sending = false }
 
@@ -916,6 +934,41 @@ public final class ConversationViewModel {
                 }
                 streamingThinking += s
             }
+        case .toolUseStart:
+            if let info = c.toolUseStartInfo {
+                streamingToolCalls.append(LiveToolCall(id: info.id, name: info.name, startedAt: Date()))
+            }
+        case .toolUseDelta:
+            if let partial = c.toolUseDeltaPartialJSON,
+               let last = streamingToolCalls.indices.last {
+                streamingToolCalls[last].input.append(partial)
+            }
+        case .toolUseEnd:
+            // Match against the most-recent live call without an
+            // `argsCompletedAt` — the loop dispatches serially, so this
+            // is invariant-safe even when Gemini reuses synthetic ids.
+            if let idx = streamingToolCalls.lastIndex(where: { $0.argsCompletedAt == nil }) {
+                streamingToolCalls[idx].argsCompletedAt = Date()
+            }
+        case .toolResult:
+            guard let info = c.toolResultInfo else { break }
+            // Same "last unresolved" lookup as above; falls back to id
+            // match when somehow ahead of the args-end chunk (defensive).
+            let idx = streamingToolCalls.lastIndex(where: { $0.resultArrivedAt == nil })
+                ?? streamingToolCalls.lastIndex(where: { $0.id == info.toolUseID })
+            if let idx {
+                streamingToolCalls[idx].output = info.output
+                streamingToolCalls[idx].error = info.error
+                streamingToolCalls[idx].elapsedMs = info.elapsedMs
+                streamingToolCalls[idx].resultArrivedAt = Date()
+                // Defensive: if we got the result before the End chunk
+                // (shouldn't happen, but the wire is non-deterministic),
+                // synthesise the args-done timestamp so phase doesn't
+                // get stuck in `.generating`.
+                if streamingToolCalls[idx].argsCompletedAt == nil {
+                    streamingToolCalls[idx].argsCompletedAt = streamingToolCalls[idx].resultArrivedAt
+                }
+            }
         default:
             break
         }
@@ -937,6 +990,7 @@ public final class ConversationViewModel {
         streamingThinkingStartedAt = nil
         streamingThinkingFinishedAt = nil
         streamingThinkingExpanded = false
+        streamingToolCalls = []
         streamRunID = nil
     }
 

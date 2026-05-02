@@ -283,6 +283,112 @@ extension ReeveMessageUsage {
     }
 }
 
+/// Historical record of one tool invocation captured on an assistant message.
+/// Decoded from `messages.tool_calls` JSONB via the proto. Renders as a
+/// pill-with-disclosure in the UI; expanded body shows pretty-printed input
+/// and output (or the error string).
+public struct ReeveToolCall: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let name: String
+    /// Raw JSON bytes of the model-emitted input. Pretty-printed at render time.
+    public let input: Data
+    /// Raw JSON bytes of the plugin's return value. Empty when `error` is set.
+    public let output: Data
+    /// Human-readable failure when the dispatch failed; nil on success.
+    public let error: String?
+    /// Server-measured plugin dispatch duration. Powers the "Used X · 0.4s" badge.
+    public let elapsedMs: Int64
+    /// Provider-specific opaque (Gemini's thoughtSignature). Not displayed —
+    /// kept for completeness so test fixtures can round-trip.
+    public let providerOpaque: String?
+
+    // MARK: - Test support
+    public init(
+        id: String,
+        name: String,
+        input: Data = Data(),
+        output: Data = Data(),
+        error: String? = nil,
+        elapsedMs: Int64 = 0,
+        providerOpaque: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.input = input
+        self.output = output
+        self.error = error
+        self.elapsedMs = elapsedMs
+        self.providerOpaque = providerOpaque
+    }
+}
+
+extension ReeveToolCall {
+    init(from p: Reeve_V1_ToolCall) {
+        self.init(
+            id: p.id,
+            name: p.name,
+            input: p.input,
+            output: p.output,
+            error: p.hasError && !p.error.isEmpty ? p.error : nil,
+            elapsedMs: p.elapsedMs,
+            providerOpaque: p.hasProviderOpaque && !p.providerOpaque.isEmpty ? p.providerOpaque : nil
+        )
+    }
+}
+
+/// One tool call accumulating during a live stream. Built up from
+/// `tool_use_start` / `tool_use_delta` / `tool_use_end` / `tool_result`
+/// chunks; the computed `phase` drives the live pill's label.
+///
+/// Phase boundaries:
+///   - generating  → executing  on tool_use_end (`argsCompletedAt` set)
+///   - executing   → done       on tool_result  (`resultArrivedAt` set)
+public struct LiveToolCall: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let name: String
+    public let startedAt: Date
+    public var argsCompletedAt: Date?
+    public var resultArrivedAt: Date?
+    public var input: String
+    public var output: Data?
+    public var error: String?
+    public var elapsedMs: Int64?
+
+    public init(id: String, name: String, startedAt: Date) {
+        self.id = id
+        self.name = name
+        self.startedAt = startedAt
+        self.input = ""
+    }
+
+    public enum Phase: Sendable, Hashable {
+        case generating(since: Date)
+        case executing(since: Date)
+        case done(durationSec: Double, hasError: Bool)
+    }
+
+    public var phase: Phase {
+        if let result = resultArrivedAt {
+            // Prefer the server-measured elapsed_ms — it captures the plugin
+            // dispatch time precisely. Fall back to wall-clock between
+            // tool_use_end and tool_result when the server didn't report it.
+            let dur: Double
+            if let ms = elapsedMs, ms > 0 {
+                dur = Double(ms) / 1000.0
+            } else if let argsDone = argsCompletedAt {
+                dur = result.timeIntervalSince(argsDone)
+            } else {
+                dur = result.timeIntervalSince(startedAt)
+            }
+            return .done(durationSec: dur, hasError: error != nil)
+        }
+        if let argsDone = argsCompletedAt {
+            return .executing(since: argsDone)
+        }
+        return .generating(since: startedAt)
+    }
+}
+
 public struct ReeveMessage: Sendable, Hashable, Identifiable {
     public let id: String
     public let contextID: String
@@ -318,6 +424,10 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
     /// Drives the "Thought for X.Ys" badge on historical turns. Nil when the
     /// turn didn't surface visible reasoning at all.
     public let thinkingDurationMs: Int32?
+    /// Tool calls executed by the conversations-side tool loop while
+    /// producing this message, in invocation order. Empty when the model
+    /// didn't request any tools.
+    public let toolCalls: [ReeveToolCall]
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -349,7 +459,8 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
         editedAt: Date? = nil,
         errorText: String? = nil,
         thinkingRenderedText: String? = nil,
-        thinkingDurationMs: Int32? = nil
+        thinkingDurationMs: Int32? = nil,
+        toolCalls: [ReeveToolCall] = []
     ) {
         self.id = id
         self.contextID = contextID
@@ -365,6 +476,7 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
         self.errorText = errorText
         self.thinkingRenderedText = thinkingRenderedText
         self.thinkingDurationMs = thinkingDurationMs
+        self.toolCalls = toolCalls
     }
 }
 
@@ -386,7 +498,8 @@ extension ReeveMessage {
             thinkingRenderedText: p.hasThinkingRenderedText && !p.thinkingRenderedText.isEmpty
                 ? p.thinkingRenderedText
                 : nil,
-            thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil
+            thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil,
+            toolCalls: p.toolCalls.map(ReeveToolCall.init(from:))
         )
     }
 }

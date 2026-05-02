@@ -94,10 +94,45 @@ struct ConversationViewSnapshots {
         assertViewSnapshots(body(for: model), sizes: columnSizes)
     }
 
-    // SKIP: tool-use stub — ReeveMessageRole has no `.toolUse` / `.tool`
-    // case in the v1 domain model (tool calls are folded into the
-    // assistant role today). Re-enable once the role enum grows a tool
-    // variant.
+    @Test
+    func historicalToolCalls() {
+        // Two tool calls on the assistant message — one ok (412ms) and
+        // one errored (1240ms). Renders the settled disclosure pills
+        // collapsed; expansion is exercised separately.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.systemMessage(),
+                SnapshotFixtures.userMessage(content: "What horses are running in the 2026 Kentucky Derby?"),
+                SnapshotFixtures.assistantMessage(
+                    content: "Here is the field for the 152nd running of the Kentucky Derby.",
+                    toolCalls: SnapshotFixtures.sampleToolCalls()
+                ),
+            ]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
+    func liveStreamingToolCall() {
+        // Mid-stream: one tool call has already resolved (so the timer
+        // freezes at the deterministic `done` value rather than ticking
+        // against `Date()`, which would make the snapshot non-deterministic).
+        let started = Date()
+        var live = LiveToolCall(id: "call-1", name: "web_search", startedAt: started)
+        live.argsCompletedAt = started
+        live.resultArrivedAt = started
+        live.elapsedMs = 412
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.systemMessage(),
+                SnapshotFixtures.userMessage(content: "What's the weather in Tokyo?"),
+            ],
+            streamRunID: "stream-run-1",
+            streamingText: "Tokyo is currently",
+            streamingToolCalls: [live]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
 
     @Test
     func streaming() {

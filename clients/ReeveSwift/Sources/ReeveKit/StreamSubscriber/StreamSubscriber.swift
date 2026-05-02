@@ -31,10 +31,74 @@ public struct ReeveChunk: Sendable, Hashable {
         }
         return String(data: payload, encoding: .utf8)
     }
+
+    /// Decoded `{id, name, provider_opaque}` payload for ChunkToolUseStart;
+    /// nil when this isn't a start chunk or the payload is malformed.
+    public var toolUseStartInfo: ToolUseStartInfo? {
+        guard type == .toolUseStart else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let id = obj["id"] as? String,
+              let name = obj["name"] as? String
+        else { return nil }
+        return ToolUseStartInfo(
+            id: id,
+            name: name,
+            providerOpaque: obj["provider_opaque"] as? String
+        )
+    }
+
+    /// Decoded `{partial_json}` payload for ChunkToolUseDelta. Nil when this
+    /// isn't a delta chunk or the payload is malformed.
+    public var toolUseDeltaPartialJSON: String? {
+        guard type == .toolUseDelta else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let s = obj["partial_json"] as? String
+        else { return nil }
+        return s
+    }
+
+    /// Decoded `{tool_use_id, output, error, elapsed_ms}` payload for
+    /// ChunkToolResult; nil when this isn't a result chunk or the payload
+    /// is malformed. `output` carries the plugin's return value as JSON
+    /// bytes (re-serialised so consumers can pretty-print without re-parsing).
+    public var toolResultInfo: ToolResultInfo? {
+        guard type == .toolResult else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let id = obj["tool_use_id"] as? String
+        else { return nil }
+        var outputData = Data()
+        if let outAny = obj["output"], !(outAny is NSNull) {
+            outputData = (try? JSONSerialization.data(withJSONObject: outAny)) ?? Data()
+        }
+        let errString = obj["error"] as? String
+        let elapsed = (obj["elapsed_ms"] as? NSNumber)?.int64Value ?? 0
+        return ToolResultInfo(
+            toolUseID: id,
+            output: outputData,
+            error: errString.flatMap { $0.isEmpty ? nil : $0 },
+            elapsedMs: elapsed
+        )
+    }
+
+    public struct ToolUseStartInfo: Sendable, Hashable {
+        public let id: String
+        public let name: String
+        public let providerOpaque: String?
+    }
+
+    public struct ToolResultInfo: Sendable, Hashable {
+        public let toolUseID: String
+        public let output: Data
+        public let error: String?
+        public let elapsedMs: Int64
+    }
 }
 
 public enum ReeveChunkType: Sendable, Hashable {
-    case textDelta, thinkingDelta, toolUseStart, toolUseDelta, toolUseEnd, error, done, usage, unknown
+    case textDelta, thinkingDelta
+    case toolUseStart, toolUseDelta, toolUseEnd, toolResult
+    case thinkingSignature
+    case error, done, usage, unknown
 
     init(from p: Reeve_V1_ChunkType) {
         switch p {
@@ -43,6 +107,8 @@ public enum ReeveChunkType: Sendable, Hashable {
         case .toolUseStart: self = .toolUseStart
         case .toolUseDelta: self = .toolUseDelta
         case .toolUseEnd: self = .toolUseEnd
+        case .toolResult: self = .toolResult
+        case .thinkingSignature: self = .thinkingSignature
         case .error: self = .error
         case .done: self = .done
         case .usage: self = .usage

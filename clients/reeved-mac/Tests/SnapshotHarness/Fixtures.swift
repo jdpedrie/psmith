@@ -270,7 +270,8 @@ public enum SnapshotFixtures {
         content: String = "Snapshot testing is the standard approach. Render the view to a bitmap, compare against a committed reference image, and fail on diff.",
         providerID: String? = "provider-anthropic",
         modelID: String? = "claude-opus-4-7",
-        usage: ReeveMessageUsage? = SnapshotFixtures.standardUsage()
+        usage: ReeveMessageUsage? = SnapshotFixtures.standardUsage(),
+        toolCalls: [ReeveToolCall] = []
     ) -> ReeveMessage {
         ReeveMessage(
             id: id,
@@ -280,8 +281,40 @@ public enum SnapshotFixtures {
             content: content,
             providerID: providerID,
             modelID: modelID,
-            usage: usage
+            usage: usage,
+            toolCalls: toolCalls
         )
+    }
+
+    /// Two web-search tool calls — one successful, one with an error —
+    /// suitable for snapshotting the historical pill rendering on a
+    /// MessageRow. Output bytes are deterministic so the snapshot diff
+    /// stays stable across runs.
+    public static func sampleToolCalls() -> [ReeveToolCall] {
+        let input1 = #"{"query":"who won the 2026 kentucky derby"}"#.data(using: .utf8)!
+        let output1 = #"{"results":[{"title":"Sample","url":"https://example.com","description":"…"}]}"#
+            .data(using: .utf8)!
+        let input2 = #"{"query":"2026 derby field"}"#.data(using: .utf8)!
+        return [
+            ReeveToolCall(
+                id: "call-1",
+                name: "web_search",
+                input: input1,
+                output: output1,
+                error: nil,
+                elapsedMs: 412,
+                providerOpaque: nil
+            ),
+            ReeveToolCall(
+                id: "call-2",
+                name: "web_search",
+                input: input2,
+                output: Data(),
+                error: "upstream rate-limited",
+                elapsedMs: 1_240,
+                providerOpaque: nil
+            ),
+        ]
     }
 
     /// Standard token + cost shape for a typical assistant turn. Includes

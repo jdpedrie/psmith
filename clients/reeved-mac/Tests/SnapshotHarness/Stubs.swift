@@ -80,6 +80,7 @@ public enum SnapshotStubs {
         sending: Bool = false,
         streamRunID: String? = nil,
         streamingText: String = "",
+        streamingToolCalls: [LiveToolCall] = [],
         isCompacting: Bool = false,
         showingCompactView: Bool = false,
         showingContextList: Bool = false,
@@ -114,6 +115,7 @@ public enum SnapshotStubs {
         vm.sending = sending
         vm.streamRunID = streamRunID
         vm.streamingText = streamingText
+        vm.streamingToolCalls = streamingToolCalls
         vm.isCompacting = isCompacting
         vm.showingCompactView = showingCompactView
         vm.showingContextList = showingContextList
