@@ -8,6 +8,8 @@ public struct ReevePluginCapabilities: Sendable, Hashable {
     public let chunkTransformer: Bool
     public let displayTransformer: Bool
     public let toolProvider: Bool
+    public let assistantContentTransformer: Bool
+    public let messageLifecycleHook: Bool
 
     public init(
         configurable: Bool = false,
@@ -16,7 +18,9 @@ public struct ReevePluginCapabilities: Sendable, Hashable {
         historyTransformer: Bool = false,
         chunkTransformer: Bool = false,
         displayTransformer: Bool = false,
-        toolProvider: Bool = false
+        toolProvider: Bool = false,
+        assistantContentTransformer: Bool = false,
+        messageLifecycleHook: Bool = false
     ) {
         self.configurable = configurable
         self.systemPrompter = systemPrompter
@@ -25,6 +29,8 @@ public struct ReevePluginCapabilities: Sendable, Hashable {
         self.chunkTransformer = chunkTransformer
         self.displayTransformer = displayTransformer
         self.toolProvider = toolProvider
+        self.assistantContentTransformer = assistantContentTransformer
+        self.messageLifecycleHook = messageLifecycleHook
     }
 }
 
@@ -184,7 +190,9 @@ extension ReevePluginCapabilities {
             historyTransformer: p.historyTransformer,
             chunkTransformer: p.chunkTransformer,
             displayTransformer: p.displayTransformer,
-            toolProvider: p.toolProvider
+            toolProvider: p.toolProvider,
+            assistantContentTransformer: p.assistantContentTransformer,
+            messageLifecycleHook: p.messageLifecycleHook
         )
     }
 }

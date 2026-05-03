@@ -15,6 +15,7 @@ import (
 
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // consume is the supervisor goroutine for one run. It:
@@ -408,6 +409,14 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	// Compute usage params and per-component cost from the user_model snapshot.
 	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, logger)
 
+	// AssistantContentTransformer plugins rewrite the just-finalised
+	// assistant text BEFORE the row is inserted. The persisted bytes
+	// match the post-transform output, so subsequent history builds
+	// and display reads see the rewritten content forever.
+	if !params.Pipeline.Empty() {
+		content = params.Pipeline.TransformAssistantContent(content)
+	}
+
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                   msgID,
 		ContextID:            params.ContextID,
@@ -464,6 +473,21 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	// burn another LLM call against a model that already failed.
 	if s.onAssistantMaterialized != nil && len(errPayload) == 0 {
 		go s.onAssistantMaterialized(context.Background(), params, msgID)
+	}
+
+	// Fire MessageLifecycleHook plugins (fire-and-forget). Same skip rule
+	// as the title hook above — errored runs don't fan out (the row
+	// exists for UI surfacing but downstream processing — embedding,
+	// auto-tag — would be working with garbage content).
+	if !params.Pipeline.Empty() && len(errPayload) == 0 {
+		params.Pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+			ID:         msgID.String(),
+			ContextID:  params.ContextID.String(),
+			Role:       "assistant",
+			Content:    content,
+			ProviderID: providerID.String(),
+			ModelID:    modelID,
+		}, s.logger)
 	}
 	return msgID, nil
 }
@@ -638,6 +662,19 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 		CurrentLeafMessageID: &summaryID,
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error("materialize compression: advance current_leaf failed", "context_id", params.ContextID, "err", err)
+	}
+
+	// Fire MessageLifecycleHook plugins for the compression_summary row.
+	// Skip on errored runs (same rationale as materializeAssistant).
+	if !params.Pipeline.Empty() && len(errPayload) == 0 {
+		params.Pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+			ID:         summaryID.String(),
+			ContextID:  params.ContextID.String(),
+			Role:       "compression_summary",
+			Content:    summary,
+			ProviderID: providerID.String(),
+			ModelID:    modelID,
+		}, s.logger)
 	}
 	return summaryID, uuid.Nil, nil
 }

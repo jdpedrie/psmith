@@ -134,6 +134,13 @@ message PluginCapabilities {
   bool chunk_transformer = 5;
   bool display_transformer = 6;
   bool tool_provider = 7;
+  // Mirrors OutgoingUserTransformer for the assistant side: rewrites
+  // assistant content at materialization time, persisted on the row.
+  bool assistant_content_transformer = 8;
+  // Fires after each message persist (user, assistant, compression
+  // summary) in a detached goroutine. Use cases: embedding generation,
+  // webhooks, auto-tagging, audit logs.
+  bool message_lifecycle_hook = 9;
 }
 
 // PluginType is one entry in the server's compiled-in plugin registry.

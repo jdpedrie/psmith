@@ -692,13 +692,15 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 		Description:  d.Description,
 		ConfigFields: fields,
 		Capabilities: &reevev1.PluginCapabilities{
-			Configurable:            d.Capabilities.Configurable,
-			SystemPrompter:          d.Capabilities.SystemPrompter,
-			OutgoingUserTransformer: d.Capabilities.OutgoingUserTransformer,
-			HistoryTransformer:      d.Capabilities.HistoryTransformer,
-			ChunkTransformer:        d.Capabilities.ChunkTransformer,
-			DisplayTransformer:      d.Capabilities.DisplayTransformer,
-			ToolProvider:            d.Capabilities.ToolProvider,
+			Configurable:                d.Capabilities.Configurable,
+			SystemPrompter:              d.Capabilities.SystemPrompter,
+			OutgoingUserTransformer:     d.Capabilities.OutgoingUserTransformer,
+			HistoryTransformer:          d.Capabilities.HistoryTransformer,
+			ChunkTransformer:            d.Capabilities.ChunkTransformer,
+			DisplayTransformer:          d.Capabilities.DisplayTransformer,
+			ToolProvider:                d.Capabilities.ToolProvider,
+			AssistantContentTransformer: d.Capabilities.AssistantContentTransformer,
+			MessageLifecycleHook:        d.Capabilities.MessageLifecycleHook,
 		},
 	}
 }

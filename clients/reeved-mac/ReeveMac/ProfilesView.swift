@@ -1244,12 +1244,14 @@ private struct ProfileForm: View {
     private func capabilityChips(_ caps: ReevePluginCapabilities?) -> some View {
         if let caps {
             HStack(spacing: 4) {
-                if caps.toolProvider          { miniChip("Tool") }
-                if caps.systemPrompter        { miniChip("System") }
-                if caps.outgoingUserTransformer { miniChip("Outgoing") }
-                if caps.historyTransformer    { miniChip("History") }
-                if caps.chunkTransformer      { miniChip("Chunks") }
-                if caps.displayTransformer    { miniChip("Display") }
+                if caps.toolProvider                 { miniChip("Tool") }
+                if caps.systemPrompter               { miniChip("System") }
+                if caps.outgoingUserTransformer      { miniChip("Outgoing") }
+                if caps.assistantContentTransformer  { miniChip("Assistant") }
+                if caps.historyTransformer           { miniChip("History") }
+                if caps.chunkTransformer             { miniChip("Chunks") }
+                if caps.displayTransformer           { miniChip("Display") }
+                if caps.messageLifecycleHook         { miniChip("Lifecycle") }
             }
         }
     }

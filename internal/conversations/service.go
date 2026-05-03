@@ -927,6 +927,19 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
 	}
 
+	// Fire MessageLifecycleHook plugins on the just-committed user
+	// message (skipped on Regenerate where userMsgRow is the existing
+	// parent assistant turn, not a freshly-persisted user message).
+	// Detached goroutines, no back-pressure on this RPC.
+	if !pipeline.Empty() && !req.Msg.Regenerate {
+		pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+			ID:        userMsgRow.ID.String(),
+			ContextID: userMsgRow.ContextID.String(),
+			Role:      userMsgRow.Role,
+			Content:   userMsgRow.Content,
+		}, s.logger)
+	}
+
 	// Build the wire prefix from history, ending at the just-inserted user message.
 	includeThinking := s.resolveIncludeThinking(ctx, conv)
 	wireMessages, err := history.Build(ctx, s.queries, history.Params{
@@ -1049,6 +1062,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// embedded interface chain.
 		Provider:              stateless,
 		ExplicitCacheAttached: explicitCacheAttached,
+		Pipeline:              pipeline,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start stream: %w", err))
@@ -1816,6 +1830,14 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 		return stateless.Send(driverCtx, compactSendReq)
 	}
 
+	// Pipeline is threaded through to the supervisor so MessageLifecycleHook
+	// plugins fire when the compression_summary row is materialised. The
+	// compress prompt itself doesn't run plugin transforms (that's by
+	// design — see materializeCompression in internal/stream/consume.go),
+	// but the post-write hook DOES fan out, so embedding / audit-style
+	// plugins observe summaries the same way they observe assistant turns.
+	compactPipeline, _ := s.resolvePipelineForConversation(ctx, conv)
+
 	runID, err := s.supervisor.Start(ctx, stream.StartParams{
 		ConversationID:  conv.ID,
 		ContextID:       activeCtx.ID,
@@ -1826,6 +1848,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 		CompressionMode: mode,
 		SendFunc:        compactSendFunc,
 		Provider:        stateless,
+		Pipeline:        compactPipeline,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start compression stream: %w", err))

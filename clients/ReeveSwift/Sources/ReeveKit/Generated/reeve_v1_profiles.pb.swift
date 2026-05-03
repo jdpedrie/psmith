@@ -487,6 +487,15 @@ public struct Reeve_V1_PluginCapabilities: Sendable {
 
   public var toolProvider: Bool = false
 
+  /// Mirrors OutgoingUserTransformer for the assistant side: rewrites
+  /// assistant content at materialization time, persisted on the row.
+  public var assistantContentTransformer: Bool = false
+
+  /// Fires after each message persist (user, assistant, compression
+  /// summary) in a detached goroutine. Use cases: embedding generation,
+  /// webhooks, auto-tagging, audit logs.
+  public var messageLifecycleHook: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1436,7 +1445,7 @@ extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginCapabilities"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1451,6 +1460,8 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 5: try { try decoder.decodeSingularBoolField(value: &self.chunkTransformer) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.displayTransformer) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.toolProvider) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.assistantContentTransformer) }()
+      case 9: try { try decoder.decodeSingularBoolField(value: &self.messageLifecycleHook) }()
       default: break
       }
     }
@@ -1478,6 +1489,12 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if self.toolProvider != false {
       try visitor.visitSingularBoolField(value: self.toolProvider, fieldNumber: 7)
     }
+    if self.assistantContentTransformer != false {
+      try visitor.visitSingularBoolField(value: self.assistantContentTransformer, fieldNumber: 8)
+    }
+    if self.messageLifecycleHook != false {
+      try visitor.visitSingularBoolField(value: self.messageLifecycleHook, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1489,6 +1506,8 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.chunkTransformer != rhs.chunkTransformer {return false}
     if lhs.displayTransformer != rhs.displayTransformer {return false}
     if lhs.toolProvider != rhs.toolProvider {return false}
+    if lhs.assistantContentTransformer != rhs.assistantContentTransformer {return false}
+    if lhs.messageLifecycleHook != rhs.messageLifecycleHook {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

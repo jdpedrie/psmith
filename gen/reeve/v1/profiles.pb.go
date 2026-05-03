@@ -790,8 +790,15 @@ type PluginCapabilities struct {
 	ChunkTransformer        bool                   `protobuf:"varint,5,opt,name=chunk_transformer,json=chunkTransformer,proto3" json:"chunk_transformer,omitempty"`
 	DisplayTransformer      bool                   `protobuf:"varint,6,opt,name=display_transformer,json=displayTransformer,proto3" json:"display_transformer,omitempty"`
 	ToolProvider            bool                   `protobuf:"varint,7,opt,name=tool_provider,json=toolProvider,proto3" json:"tool_provider,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Mirrors OutgoingUserTransformer for the assistant side: rewrites
+	// assistant content at materialization time, persisted on the row.
+	AssistantContentTransformer bool `protobuf:"varint,8,opt,name=assistant_content_transformer,json=assistantContentTransformer,proto3" json:"assistant_content_transformer,omitempty"`
+	// Fires after each message persist (user, assistant, compression
+	// summary) in a detached goroutine. Use cases: embedding generation,
+	// webhooks, auto-tagging, audit logs.
+	MessageLifecycleHook bool `protobuf:"varint,9,opt,name=message_lifecycle_hook,json=messageLifecycleHook,proto3" json:"message_lifecycle_hook,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PluginCapabilities) Reset() {
@@ -869,6 +876,20 @@ func (x *PluginCapabilities) GetDisplayTransformer() bool {
 func (x *PluginCapabilities) GetToolProvider() bool {
 	if x != nil {
 		return x.ToolProvider
+	}
+	return false
+}
+
+func (x *PluginCapabilities) GetAssistantContentTransformer() bool {
+	if x != nil {
+		return x.AssistantContentTransformer
+	}
+	return false
+}
+
+func (x *PluginCapabilities) GetMessageLifecycleHook() bool {
+	if x != nil {
+		return x.MessageLifecycleHook
 	}
 	return false
 }
@@ -1862,7 +1883,7 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\"&\n" +
 	"\x14DeleteProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15DeleteProfileResponse\"\xd1\x02\n" +
+	"\x15DeleteProfileResponse\"\xcb\x03\n" +
 	"\x12PluginCapabilities\x12\"\n" +
 	"\fconfigurable\x18\x01 \x01(\bR\fconfigurable\x12'\n" +
 	"\x0fsystem_prompter\x18\x02 \x01(\bR\x0esystemPrompter\x12:\n" +
@@ -1870,7 +1891,9 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x13history_transformer\x18\x04 \x01(\bR\x12historyTransformer\x12+\n" +
 	"\x11chunk_transformer\x18\x05 \x01(\bR\x10chunkTransformer\x12/\n" +
 	"\x13display_transformer\x18\x06 \x01(\bR\x12displayTransformer\x12#\n" +
-	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\"\xe3\x01\n" +
+	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\x12B\n" +
+	"\x1dassistant_content_transformer\x18\b \x01(\bR\x1bassistantContentTransformer\x124\n" +
+	"\x16message_lifecycle_hook\x18\t \x01(\bR\x14messageLifecycleHook\"\xe3\x01\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/jdpedrie/reeve/internal/providers"
@@ -171,6 +172,53 @@ type DisplayTransformer interface {
 	TransformForDisplay(content string) string
 }
 
+// AssistantContentTransformer rewrites the assistant's just-finalised
+// text BEFORE the message row is inserted. Mirror of
+// OutgoingUserTransformer for the assistant side: the persisted bytes
+// are the post-transform output, so subsequent history builds and
+// display reads see the rewritten content forever.
+//
+// Use cases: strip ANSI/control chars from coding-tool output, watermark
+// turns with provider/model metadata, sanitize tool-call cruft. NOT for
+// rewrites that need to evolve over time — those live on
+// DisplayTransformer (read-time, non-persistent).
+type AssistantContentTransformer interface {
+	TransformAssistantContent(content string) string
+}
+
+// MessageLifecycleHook fires after a message row is persisted —
+// independently of the role. Runs in a detached goroutine; the
+// supervisor / SendMessage handler does NOT await its completion or
+// observe its return value, so a slow or panicking hook can't stall a
+// user-facing operation.
+//
+// Fires on: user-message inserts (in SendMessage after the TX commits);
+// assistant materialization (in materializeAssistant); compression
+// summaries (in materializeCompression). Edits and deletes are
+// deliberately NOT fired in v1 — those events warrant their own hook
+// shape if a use case needs them.
+//
+// Common uses: embedding generation, webhook notifications, auto-
+// tagging via a small classifier, external audit logs. Pairs naturally
+// with a future PreSendContextInjector hook to form the building
+// blocks for a memory plugin.
+type MessageLifecycleHook interface {
+	OnMessagePersisted(ctx context.Context, m PersistedMessage)
+}
+
+// PersistedMessage is the snapshot a MessageLifecycleHook receives.
+// Intentionally minimal — hooks needing more (usage, thinking, tool
+// calls) can fetch the full row by ID. Keeping the snapshot small
+// makes the hook contract stable as the messages schema evolves.
+type PersistedMessage struct {
+	ID         string
+	ContextID  string
+	Role       string // "system" | "context" | "user" | "assistant" | "compression_summary"
+	Content    string
+	ProviderID string // empty for non-assistant rows
+	ModelID    string // empty for non-assistant rows
+}
+
 // ToolProvider declares callable tools and executes them. The runtime
 // collects Tools() across active plugins to build the wire tools array;
 // when the model emits a tool_use, the runtime dispatches ExecuteTool to
@@ -318,6 +366,51 @@ func (p Pipeline) TransformForDisplay(content string) string {
 	return content
 }
 
+// TransformAssistantContent walks the pipeline, applying every
+// AssistantContentTransformer in order to content. Plugins that don't
+// implement the interface are skipped. Called from
+// stream.materializeAssistant before the message row is inserted, so
+// the persisted bytes match the returned string.
+func (p Pipeline) TransformAssistantContent(content string) string {
+	for _, pl := range p {
+		if t, ok := pl.(AssistantContentTransformer); ok {
+			content = t.TransformAssistantContent(content)
+		}
+	}
+	return content
+}
+
+// FireMessagePersisted dispatches each MessageLifecycleHook in the
+// pipeline in a detached goroutine. Returns immediately. A panic in
+// any single hook is recovered + logged via the optional logger; one
+// misbehaving plugin can't bring down the others or the caller.
+//
+// The hook contract is fire-and-forget: callers don't await
+// completion, don't observe errors, and don't ordering-guarantee
+// against subsequent operations. Hooks needing back-pressure semantics
+// belong on a different interface.
+func (p Pipeline) FireMessagePersisted(ctx context.Context, m PersistedMessage, logger *slog.Logger) {
+	for _, pl := range p {
+		h, ok := pl.(MessageLifecycleHook)
+		if !ok {
+			continue
+		}
+		hook := h
+		pluginName := pl.Name()
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && logger != nil {
+					logger.Error("plugin OnMessagePersisted panicked",
+						"plugin", pluginName,
+						"message_id", m.ID,
+						"panic", fmt.Sprintf("%v", r))
+				}
+			}()
+			hook.OnMessagePersisted(ctx, m)
+		}()
+	}
+}
+
 // joinNonEmpty joins the slice with sep, treating an empty slice as "".
 func joinNonEmpty(parts []string, sep string) string {
 	switch len(parts) {
@@ -375,13 +468,15 @@ var ErrUnknownPlugin = errors.New("plugins: unknown plugin")
 // UIs to decide which config knobs to expose, and by the server to skip
 // phases a plugin doesn't participate in.
 type Capabilities struct {
-	Configurable            bool
-	SystemPrompter          bool
-	OutgoingUserTransformer bool
-	HistoryTransformer      bool
-	ChunkTransformer        bool
-	DisplayTransformer      bool
-	ToolProvider            bool
+	Configurable                bool
+	SystemPrompter              bool
+	OutgoingUserTransformer     bool
+	HistoryTransformer          bool
+	ChunkTransformer            bool
+	DisplayTransformer          bool
+	ToolProvider                bool
+	AssistantContentTransformer bool
+	MessageLifecycleHook        bool
 }
 
 // TypeDescriptor is the introspectable metadata for one registered plugin.
@@ -428,6 +523,12 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if _, ok := inst.(ToolProvider); ok {
 		desc.Capabilities.ToolProvider = true
+	}
+	if _, ok := inst.(AssistantContentTransformer); ok {
+		desc.Capabilities.AssistantContentTransformer = true
+	}
+	if _, ok := inst.(MessageLifecycleHook); ok {
+		desc.Capabilities.MessageLifecycleHook = true
 	}
 	return desc, nil
 }

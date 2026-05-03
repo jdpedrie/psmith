@@ -32,6 +32,7 @@ import (
 
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/plugins"
 )
 
 // StreamPurpose distinguishes assistant-response runs from compression runs.
@@ -150,6 +151,14 @@ type StartParams struct {
 	// but no cache was attached (most commonly: prefix below the
 	// per-model minimum).
 	ExplicitCacheAttached *bool
+
+	// Pipeline is the resolved chat-plugin pipeline for this run.
+	// Threaded into the supervisor so materialization can apply
+	// AssistantContentTransformer (rewrite content before insert) and
+	// fire MessageLifecycleHook (post-insert, in detached goroutines).
+	// Optional: nil pipeline = no plugin transforms / no lifecycle
+	// hooks fired.
+	Pipeline plugins.Pipeline
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't

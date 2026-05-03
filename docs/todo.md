@@ -149,28 +149,14 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 
 ### Worth designing now
 
-- **`AssistantContentTransformer`** — symmetric to `OutgoingUserTransformer`. Mutates assistant content **at materialization time, persisted on the row** (vs `DisplayTransformer`, which only modifies rendering). Runs once in `materializeAssistant` before the `messages` insert. Use cases: strip ANSI/control chars from coding-tool output; auto-link bare URLs; watermark assistant turns with provider/model metadata; sanitize tool-call cruft. Without this, "rewrite once and forever" semantics are only available on the user side.
-  ```go
-  type AssistantContentTransformer interface {
-      TransformAssistantContent(content string) string
-  }
-  ```
+- ~~**`AssistantContentTransformer`**~~ ✅ **Done.** See `plugins/plugins.go::AssistantContentTransformer` + `Pipeline.TransformAssistantContent`. Wired in `internal/stream/consume.go::materializeAssistant`. Capability flag bridged to proto + Swift; UI capability chip "Assistant" on the profile-form plugin card.
+- ~~**`MessageLifecycleHook`**~~ ✅ **Done.** See `plugins/plugins.go::MessageLifecycleHook` + `Pipeline.FireMessagePersisted`. Fires on user-message inserts (in `SendMessage` after the TX commits), assistant materialization (in `materializeAssistant`), and compression summaries (in `materializeCompression`). Detached goroutines per hook with panic-recovery so one bad plugin can't take down siblings. Capability flag bridged + UI chip "Lifecycle".
 
 - **`PreSendContextInjector`** — non-persisted, per-turn injection of synthetic wire messages BEFORE the user turn. Distinct from `SystemPrompter` (static, persisted across turns) and `OutgoingUserTransformer` (mutates the user row that gets persisted). Returns zero or more `providers.WireMessage` values that splice into the wire prefix only for this turn. Unblocks the RAG/memory family: vector-search prior conversations and inject top-K snippets; pull recent calendar/email; inject project-scoped docs; auto-search on trigger keywords. Without this, RAG plugins either pollute the persisted user message (bust the prefix cache every turn — `basic_grounding`'s reason for being) or jam everything into the system slot (useless when relevant docs change per-turn).
   ```go
   type PreSendContextInjector interface {
       // Empty slice = no contribution this turn.
       InjectPreSend(userContent string) []providers.WireMessage
-  }
-  ```
-
-- **`MessageLifecycleHook`** — fire-and-forget post-write callback. Runs in a detached goroutine after the `messages` insert (same place `onAssistantMaterialized` already fires for titling). No back-pressure on the supervisor; no return value. Use cases: embedding generation (so future `PreSendContextInjector` calls can retrieve them); webhooks; auto-tagging via a small classifier; external audit logs. Pairs naturally with `PreSendContextInjector` to form the building blocks for a memory plugin.
-  ```go
-  type MessageLifecycleHook interface {
-      OnMessagePersisted(ctx context.Context, m PersistedMessage)
-  }
-  type PersistedMessage struct {
-      ID, ContextID, Role, Content, ProviderID, ModelID string
   }
   ```
 
