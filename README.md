@@ -69,7 +69,7 @@ Stack:
 
 ```
 cmd/reeved/               # server entrypoint
-cmd/seeduser/             # admin user bootstrap utility
+cmd/reeve/                # operator CLI — useradd today, more later
 proto/reeve/v1/           # ConnectRPC service definitions
 gen/                      # generated Go bindings (buf)
 db/migrations/            # goose-format SQL migrations
