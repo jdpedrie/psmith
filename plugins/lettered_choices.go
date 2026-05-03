@@ -1,9 +1,11 @@
 package plugins
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"text/template"
 
 	"github.com/jdpedrie/reeve/internal/providers"
 )
@@ -18,6 +20,20 @@ const (
 	defaultLCOpenTag  = "<choices>"
 	defaultLCCloseTag = "</choices>"
 )
+
+// defaultLCSystemTemplate is the system instruction the plugin appends when
+// no override is configured. Same Go-template shape as a user-supplied
+// override — sharing the rendering path keeps the two consistent and lets
+// us add new template variables without two divergent code branches.
+const defaultLCSystemTemplate = `Always offer the user 3-5 lettered choices wrapped in the literal delimiters {{.OpenTag}} and {{.CloseTag}}. Choices may be one word up to a short sentence. Use the following format:
+
+{{.OpenTag}}
+### Choices
+A. Attack
+B. Flee
+C. Negotiate
+D. Stop and think a while
+{{.CloseTag}}`
 
 // letteredChoices implements SystemPrompter, HistoryTransformer,
 // DisplayTransformer, and Configurable. Bundling them in one plugin is the
@@ -83,6 +99,17 @@ func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 			return nil, fmt.Errorf("lettered_choices: keep_last_n must be >= 0")
 		}
 	}
+	// Eager template validation — surface a malformed override at
+	// config-save time rather than silently falling through to literal
+	// text on every send. The default template is parsed for free here
+	// so an init-time edit that breaks it is caught the same way.
+	src := defaultLCSystemTemplate
+	if cfg.SystemInstructionOverride != "" {
+		src = cfg.SystemInstructionOverride
+	}
+	if _, err := template.New("system").Parse(src); err != nil {
+		return nil, fmt.Errorf("lettered_choices: parse system_instruction_override template: %w", err)
+	}
 	return &letteredChoices{cfg: cfg}, nil
 }
 
@@ -125,10 +152,15 @@ func (p *letteredChoices) ConfigFields() []ConfigField {
 			Default:     defaultLCCloseTag,
 		},
 		{
-			Name:        "system_instruction_override",
-			Display:     "System instruction override",
-			Description: "If set, replaces the default system-message instruction.",
-			Type:        ConfigFieldTextarea,
+			Name:    "system_instruction_override",
+			Display: "System instruction override",
+			Description: "If set, replaces the default system-message instruction. " +
+				"Rendered as a Go text/template (https://pkg.go.dev/text/template) so the open/close tags stay in sync with the other settings. " +
+				"Available variables: " +
+				"{{.OpenTag}} (the configured Open tag), " +
+				"{{.CloseTag}} (the configured Close tag). " +
+				"Save fails if the template doesn't parse.",
+			Type: ConfigFieldTextarea,
 		},
 	}
 }
@@ -138,20 +170,36 @@ func (p *letteredChoices) ConfigFields() []ConfigField {
 func (p *letteredChoices) PrependSystemMessage() string { return "" }
 
 func (p *letteredChoices) AppendSystemMessage() string {
+	src := defaultLCSystemTemplate
 	if p.cfg.SystemInstructionOverride != "" {
-		return p.cfg.SystemInstructionOverride
+		src = p.cfg.SystemInstructionOverride
 	}
-	return fmt.Sprintf(`Always offer the user 3-5 lettered choices as lettered choices wrapped in the literal delimiters %s and %s. Choices may be one word up to a short sentence. Use the following format:
-	
-%s
-### Choices
-A. Attack
-B. Flee
-C. Negotiate
-D. Stop and think a while
-%s`,
-		p.cfg.OpenTag, p.cfg.CloseTag, p.cfg.OpenTag, p.cfg.CloseTag,
-	)
+	// Re-parse on every call. Cheap (templates are small + simple)
+	// and lets future hot-reload of plugin config Just Work without
+	// a separate cache. Errors here would have been caught at
+	// constructor time; if somehow they slip through, fall back to
+	// the literal source rather than emitting an empty system slot.
+	tmpl, err := template.New("system").Parse(src)
+	if err != nil {
+		return src
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, lcTemplateVars{
+		OpenTag:  p.cfg.OpenTag,
+		CloseTag: p.cfg.CloseTag,
+	}); err != nil {
+		return src
+	}
+	return buf.String()
+}
+
+// lcTemplateVars is the data passed to the system-instruction template.
+// Field names are the variables the user references with {{.Name}};
+// keep in sync with the description on the system_instruction_override
+// ConfigField.
+type lcTemplateVars struct {
+	OpenTag  string
+	CloseTag string
 }
 
 // --- HistoryTransformer ---

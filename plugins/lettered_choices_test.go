@@ -84,6 +84,45 @@ func TestLetteredChoices_AppendSystemMessageOverride(t *testing.T) {
 	}
 }
 
+func TestLetteredChoices_AppendSystemMessageOverrideTemplateInterpolation(t *testing.T) {
+	t.Parallel()
+	cfg := `{
+		"open_tag": "[opts]",
+		"close_tag": "[/opts]",
+		"system_instruction_override": "Wrap choices with {{.OpenTag}} and {{.CloseTag}} please."
+	}`
+	lc := buildLetteredChoices(t, cfg)
+	got := lc.AppendSystemMessage()
+	want := "Wrap choices with [opts] and [/opts] please."
+	if got != want {
+		t.Errorf("template not interpolated:\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestLetteredChoices_AppendSystemMessageDefaultUsesTemplate(t *testing.T) {
+	t.Parallel()
+	// Custom tags must propagate through the default template.
+	cfg := `{"open_tag": "<<", "close_tag": ">>"}`
+	lc := buildLetteredChoices(t, cfg)
+	got := lc.AppendSystemMessage()
+	if !strings.Contains(got, "<<") || !strings.Contains(got, ">>") {
+		t.Errorf("custom delimiters didn't reach the default template; got %q", got)
+	}
+	// And the original {{.OpenTag}} placeholder should NOT appear
+	// literally — that'd mean the template wasn't executed.
+	if strings.Contains(got, "{{.OpenTag}}") {
+		t.Errorf("template not executed; got literal placeholder: %q", got)
+	}
+}
+
+func TestLetteredChoices_MalformedOverrideRejectedAtConstruction(t *testing.T) {
+	t.Parallel()
+	bad := `{"system_instruction_override": "{{ .NotClosed "}`
+	if _, err := newLetteredChoices([]byte(bad)); err == nil {
+		t.Error("malformed Go template in override should be rejected at constructor time")
+	}
+}
+
 func TestLetteredChoices_PrependSystemMessageEmpty(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, "")
