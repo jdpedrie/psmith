@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
@@ -20,21 +22,29 @@ import (
 //
 // One plugin instance = one MCP server. Users attach this plugin to a
 // profile once per MCP server they want available; each instance carries
-// its own command/args/env. Tool calls the model emits get dispatched
-// to the right server via the conversations-side tool loop's
-// owner-by-name map (so two MCP plugins can coexist as long as their
-// tool names don't collide — see ToolPrefix config below).
+// its own command/args/env (stdio) or url/headers (http). Tool calls
+// the model emits get dispatched to the right server via the
+// conversations-side tool loop's owner-by-name map (so two MCP plugins
+// can coexist as long as their tool names don't collide — see
+// ToolPrefix config below).
 const MCPName = "mcp"
+
+// MCP transport selector values.
+const (
+	mcpTransportStdio = "stdio"
+	mcpTransportHTTP  = "http"
+)
 
 // MCP protocol version this client speaks. Servers negotiate down via
 // the initialize handshake; we accept whatever they reply with as long
 // as the connection succeeds.
 const mcpProtocolVersion = "2024-11-05"
 
-// Idle window after which an unused MCP subprocess is reaped from the
-// pool. Re-spawned automatically on the next call. Generous enough
-// that a few minutes between turns doesn't cost a cold start; tight
-// enough that long-idle servers (a profile not used for hours) don't
+// Idle window after which an unused MCP connection is reaped from the
+// pool. For stdio that means killing the subprocess; for http that
+// means dropping the cached session id (server-side resources free up
+// on their own). Generous enough that a few minutes between turns
+// don't cost a cold start; tight enough that long-idle servers don't
 // hold subprocess + memory.
 const mcpIdleReap = 5 * time.Minute
 
@@ -43,6 +53,12 @@ const mcpIdleReap = 5 * time.Minute
 // seconds. 60s gives slow tools room while still preventing infinite
 // hangs.
 const mcpCallTimeout = 60 * time.Second
+
+// HTTP-transport per-request timeout. Cheaper than mcpCallTimeout
+// because most tools/list and tools/call HTTP exchanges should be
+// fast — initialise can be slower (server warming up) but is itself
+// timeout-bounded by ensureStarted's call timeout.
+const mcpHTTPTimeout = 30 * time.Second
 
 // ---------------------------------------------------------------------------
 // Plugin
@@ -54,6 +70,15 @@ type mcpPlugin struct {
 }
 
 type mcpConfig struct {
+	// Transport picks how reeved talks to the MCP server. One of
+	// "stdio" (subprocess + JSON-RPC over stdin/stdout) or "http"
+	// (Streamable HTTP — POST JSON-RPC to a URL, response is either
+	// a single JSON body or an SSE stream we read the first event
+	// from). Empty defaults to "stdio" so existing configs keep
+	// working without migration.
+	Transport string `json:"transport"`
+
+	// --- stdio transport ---
 	// Command is the executable to spawn. Plain path or PATH-resolved
 	// name (e.g. "npx", "/usr/local/bin/uvx", "python3"). No shell
 	// parsing — the value is exec'd directly.
@@ -66,6 +91,17 @@ type mcpConfig struct {
 	// included — only what's listed here reaches the subprocess. (For
 	// servers that need PATH or HOME, declare them explicitly.)
 	Env string `json:"env"`
+
+	// --- http transport ---
+	// URL is the full HTTP(S) endpoint that accepts JSON-RPC POSTs.
+	// Required when Transport=="http".
+	URL string `json:"url"`
+	// Headers is "KEY: VALUE" per line of HTTP headers attached to
+	// every request — most often `Authorization: Bearer …`. Empty
+	// value lines are skipped.
+	Headers string `json:"headers"`
+
+	// --- shared ---
 	// ToolPrefix is prepended to each tool name reported by the server,
 	// joined with an underscore. Empty = no prefix. Use this when two
 	// MCP plugin instances expose tools with the same name (the
@@ -81,17 +117,30 @@ func newMCP(configBytes json.RawMessage) (Plugin, error) {
 			return nil, fmt.Errorf("mcp: parse config: %w", err)
 		}
 	}
+	cfg.Transport = strings.TrimSpace(cfg.Transport)
+	if cfg.Transport == "" {
+		cfg.Transport = mcpTransportStdio
+	}
 	cfg.Command = strings.TrimSpace(cfg.Command)
-	if cfg.Command == "" {
-		// nil-config Build (used by Describe) is OK — we just register
-		// an unconfigured plugin. The constructor's downstream Tools()
-		// call would no-op + log; the UI surfaces the missing-required
-		// field via the descriptor.
+	cfg.URL = strings.TrimSpace(cfg.URL)
+	switch cfg.Transport {
+	case mcpTransportStdio, mcpTransportHTTP:
+		// nil-config Build (used by Describe) is OK — we register
+		// an unconfigured plugin. The descriptor's Required hint
+		// surfaces the missing transport-specific field; downstream
+		// Tools() / ExecuteTool calls no-op + log when fields are
+		// missing.
+	default:
+		return nil, fmt.Errorf("mcp: unknown transport %q (want %q or %q)",
+			cfg.Transport, mcpTransportStdio, mcpTransportHTTP)
 	}
 	spec := mcpServerSpec{
-		Command: cfg.Command,
-		Args:    splitLines(cfg.Args),
-		Env:     splitLines(cfg.Env),
+		Transport: cfg.Transport,
+		Command:   cfg.Command,
+		Args:      splitLines(cfg.Args),
+		Env:       splitLines(cfg.Env),
+		URL:       cfg.URL,
+		Headers:   splitLines(cfg.Headers),
 	}
 	return &mcpPlugin{cfg: cfg, spec: spec}, nil
 }
@@ -105,8 +154,10 @@ func (p *mcpPlugin) DisplayName() string { return "MCP Server" }
 
 func (p *mcpPlugin) Description() string {
 	return "Bridges any Model Context Protocol (MCP) server's tools into Reeve's tool surface. " +
-		"Spawns the configured command as a subprocess, exchanges JSON-RPC over stdio, and " +
-		"exposes each server-declared tool to the model. One plugin instance per server."
+		"Two transports: stdio (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) " +
+		"and http (POST JSON-RPC to a remote URL — Streamable HTTP transport). Each server-declared " +
+		"tool is exposed to the model; tool calls dispatch back to the right server. " +
+		"One plugin instance per server."
 }
 
 // --- Configurable ---
@@ -114,22 +165,44 @@ func (p *mcpPlugin) Description() string {
 func (p *mcpPlugin) ConfigFields() []ConfigField {
 	return []ConfigField{
 		{
+			Name:        "transport",
+			Display:     "Transport",
+			Description: "stdio spawns a local subprocess; http POSTs JSON-RPC to a remote URL (Streamable HTTP). Each transport uses a different subset of the fields below.",
+			Type:        ConfigFieldSelect,
+			Default:     mcpTransportStdio,
+			Options: []ConfigOption{
+				{Value: mcpTransportStdio, Label: "Stdio (subprocess)"},
+				{Value: mcpTransportHTTP, Label: "HTTP (remote URL)"},
+			},
+		},
+		{
 			Name:        "command",
-			Display:     "Command",
-			Description: "Executable to spawn (resolved against PATH). e.g. npx, uvx, python3, /usr/local/bin/your-mcp-server.",
+			Display:     "Command (stdio)",
+			Description: "Executable to spawn for stdio transport. Resolved against PATH. e.g. npx, uvx, python3, /usr/local/bin/your-mcp-server. Ignored for http transport.",
 			Type:        ConfigFieldText,
-			Required:    true,
 		},
 		{
 			Name:        "args",
-			Display:     "Arguments",
-			Description: "One CLI arg per line. Whitespace preserved within an arg; empty lines skipped. e.g. -y\\n@modelcontextprotocol/server-filesystem\\n/Users/me/Documents.",
+			Display:     "Arguments (stdio)",
+			Description: "One CLI arg per line for stdio transport. Whitespace preserved within an arg; empty lines skipped. e.g. -y\\n@modelcontextprotocol/server-filesystem\\n/Users/me/Documents.",
 			Type:        ConfigFieldTextarea,
 		},
 		{
 			Name:        "env",
-			Display:     "Environment variables",
-			Description: "KEY=VALUE per line. The subprocess inherits NOTHING from reeved's environment — declare what the server needs (PATH, HOME, API keys, etc.) explicitly here.",
+			Display:     "Environment variables (stdio)",
+			Description: "KEY=VALUE per line for stdio transport. The subprocess inherits NOTHING from reeved's environment — declare what the server needs (PATH, HOME, API keys, etc.) explicitly here.",
+			Type:        ConfigFieldTextarea,
+		},
+		{
+			Name:        "url",
+			Display:     "URL (http)",
+			Description: "Full HTTP(S) endpoint that accepts JSON-RPC POSTs (Streamable HTTP transport). Ignored for stdio transport.",
+			Type:        ConfigFieldText,
+		},
+		{
+			Name:        "headers",
+			Display:     "HTTP headers (http)",
+			Description: "KEY: VALUE per line, attached to every HTTP request. Most often Authorization: Bearer YOUR_TOKEN. Ignored for stdio transport.",
 			Type:        ConfigFieldTextarea,
 		},
 		{
@@ -141,10 +214,24 @@ func (p *mcpPlugin) ConfigFields() []ConfigField {
 	}
 }
 
+// configValid returns true when the active transport's required
+// fields are populated. Used by Tools() / ExecuteTool to no-op
+// gracefully on a half-configured plugin (the UI surfaces the missing
+// field separately via the descriptor + form validation).
+func (p *mcpPlugin) configValid() bool {
+	switch p.cfg.Transport {
+	case mcpTransportStdio:
+		return p.cfg.Command != ""
+	case mcpTransportHTTP:
+		return p.cfg.URL != ""
+	}
+	return false
+}
+
 // --- ToolProvider ---
 
 func (p *mcpPlugin) Tools() []ToolDef {
-	if p.cfg.Command == "" {
+	if !p.configValid() {
 		return nil
 	}
 	srv, err := mcpPool.get(context.Background(), p.spec)
@@ -167,8 +254,8 @@ func (p *mcpPlugin) Tools() []ToolDef {
 }
 
 func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-	if p.cfg.Command == "" {
-		return nil, errors.New("mcp: command not configured")
+	if !p.configValid() {
+		return nil, errors.New("mcp: plugin not fully configured")
 	}
 	realName := name
 	if p.cfg.ToolPrefix != "" {
@@ -188,12 +275,20 @@ func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.Raw
 // ---------------------------------------------------------------------------
 
 // mcpServerSpec is the keying tuple for a server in the pool. Two
-// plugin instances with identical Command/Args/Env share one
-// subprocess.
+// plugin instances with identical Transport + transport-specific
+// fields share one connection. Transport is part of the hash so a
+// stdio + http variant of the "same" spec are correctly distinct.
 type mcpServerSpec struct {
+	Transport string
+
+	// stdio
 	Command string
 	Args    []string
 	Env     []string
+
+	// http
+	URL     string
+	Headers []string
 }
 
 func (s mcpServerSpec) hash() string {
@@ -203,7 +298,7 @@ func (s mcpServerSpec) hash() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// mcpServerPool caches live MCP subprocesses keyed by spec. Entries
+// mcpServerPool caches live MCP connections keyed by spec. Entries
 // stay alive across SendMessage calls; the reaper goroutine kills
 // idle entries after mcpIdleReap.
 type mcpServerPool struct {
@@ -214,10 +309,6 @@ type mcpServerPool struct {
 
 var mcpPool = &mcpServerPool{servers: map[string]*mcpServer{}}
 
-// get returns a live server for the spec, spawning if necessary.
-// Multiple concurrent get() calls for the same spec coalesce on the
-// first spawn; the per-server `start` mutex blocks the others until
-// the handshake completes.
 func (p *mcpServerPool) get(ctx context.Context, spec mcpServerSpec) (*mcpServer, error) {
 	p.once.Do(p.startReaper)
 
@@ -230,8 +321,9 @@ func (p *mcpServerPool) get(ctx context.Context, spec mcpServerSpec) (*mcpServer
 	p.mu.Unlock()
 
 	if err := srv.ensureStarted(ctx); err != nil {
-		// Spawn failed — drop the cached entry so the next call
-		// retries from scratch instead of being stuck on a dead one.
+		// Spawn / handshake failed — drop the cached entry so the
+		// next call retries from scratch instead of being stuck on
+		// a dead one.
 		p.mu.Lock()
 		delete(p.servers, spec.hash())
 		p.mu.Unlock()
@@ -268,24 +360,15 @@ func (p *mcpServerPool) reapIdle() {
 }
 
 // ---------------------------------------------------------------------------
-// One MCP server (subprocess + JSON-RPC)
+// One MCP server (transport + handshake + tools cache)
 // ---------------------------------------------------------------------------
 
 type mcpServer struct {
 	spec mcpServerSpec
 
-	startMu sync.Mutex // serializes spawn + handshake
-	started bool
-
-	// Per-call mutex: this v1 client is single-flight. tools/call
-	// requests serialize on this mutex. Plenty for the typical "one
-	// call per tool round" pattern; can grow to async dispatch when a
-	// real workload demands it.
-	callMu sync.Mutex
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	nextID atomic.Int64
+	startMu   sync.Mutex // serializes spawn + handshake
+	started   bool
+	transport mcpTransport
 
 	toolsMu sync.RWMutex
 	tools   []ToolDef
@@ -300,44 +383,22 @@ func (s *mcpServer) ensureStarted(ctx context.Context) error {
 	if s.started {
 		return nil
 	}
-	if err := s.spawn(ctx); err != nil {
-		return fmt.Errorf("mcp spawn %q: %w", s.spec.Command, err)
+	t, err := newTransport(ctx, s.spec)
+	if err != nil {
+		return err
 	}
+	s.transport = t
 	if err := s.handshake(ctx); err != nil {
-		s.shutdown()
+		s.transport.close()
+		s.transport = nil
 		return fmt.Errorf("mcp handshake: %w", err)
 	}
 	if err := s.loadTools(ctx); err != nil {
-		s.shutdown()
+		s.transport.close()
+		s.transport = nil
 		return fmt.Errorf("mcp tools/list: %w", err)
 	}
 	s.started = true
-	return nil
-}
-
-func (s *mcpServer) spawn(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, s.spec.Command, s.spec.Args...)
-	cmd.Env = s.spec.Env
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	// Stderr deliberately discarded — MCP servers vary wildly in how
-	// chatty they are. A future enhancement could surface stderr in
-	// the plugin's "diagnostics" UI; not in v1.
-	cmd.Stderr = io.Discard
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	s.cmd = cmd
-	s.stdin = stdin
-	s.stdout = bufio.NewReader(stdout)
 	return nil
 }
 
@@ -349,7 +410,7 @@ func (s *mcpServer) handshake(ctx context.Context) error {
 			Version string `json:"version"`
 		} `json:"serverInfo"`
 	}
-	if err := s.call(ctx, "initialize", map[string]any{
+	if err := s.transport.call(ctx, "initialize", map[string]any{
 		"protocolVersion": mcpProtocolVersion,
 		"capabilities":    map[string]any{},
 		"clientInfo": map[string]any{
@@ -360,8 +421,9 @@ func (s *mcpServer) handshake(ctx context.Context) error {
 		return err
 	}
 	// MCP spec wants a notifications/initialized after the response.
-	// No reply expected; fire-and-forget.
-	return s.notify("notifications/initialized", nil)
+	// Fire-and-forget; failure shouldn't gate the server going live.
+	_ = s.transport.notify("notifications/initialized", nil)
+	return nil
 }
 
 func (s *mcpServer) loadTools(ctx context.Context) error {
@@ -372,7 +434,7 @@ func (s *mcpServer) loadTools(ctx context.Context) error {
 			InputSchema json.RawMessage `json:"inputSchema"`
 		} `json:"tools"`
 	}
-	if err := s.call(ctx, "tools/list", nil, &resp); err != nil {
+	if err := s.transport.call(ctx, "tools/list", nil, &resp); err != nil {
 		return err
 	}
 	tools := make([]ToolDef, 0, len(resp.Tools))
@@ -410,7 +472,7 @@ func (s *mcpServer) callTool(ctx context.Context, name string, input json.RawMes
 		} `json:"content"`
 		IsError bool `json:"isError"`
 	}
-	if err := s.call(ctx, "tools/call", map[string]any{
+	if err := s.transport.call(ctx, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": args,
 	}, &resp); err != nil {
@@ -444,18 +506,351 @@ func (s *mcpServer) touch() {
 }
 
 func (s *mcpServer) shutdown() {
-	if s.stdin != nil {
-		_ = s.stdin.Close()
-	}
-	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
-		_, _ = s.cmd.Process.Wait()
+	if s.transport != nil {
+		s.transport.close()
+		s.transport = nil
 	}
 	s.started = false
 }
 
 // ---------------------------------------------------------------------------
-// JSON-RPC over stdio
+// Transport interface + implementations
+// ---------------------------------------------------------------------------
+
+// mcpTransport is the small interface every MCP transport exposes to
+// the server type. Each transport handles JSON-RPC framing, request
+// IDs, response correlation, and notification skipping internally.
+type mcpTransport interface {
+	call(ctx context.Context, method string, params any, into any) error
+	notify(method string, params any) error
+	close()
+}
+
+func newTransport(ctx context.Context, spec mcpServerSpec) (mcpTransport, error) {
+	switch spec.Transport {
+	case mcpTransportStdio:
+		return newStdioTransport(ctx, spec)
+	case mcpTransportHTTP:
+		return newHTTPTransport(ctx, spec)
+	default:
+		return nil, fmt.Errorf("mcp: unknown transport %q", spec.Transport)
+	}
+}
+
+// --- stdio transport -------------------------------------------------------
+
+type stdioTransport struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Reader
+
+	callMu sync.Mutex // single-flight; tools/call requests serialize
+	nextID atomic.Int64
+}
+
+func newStdioTransport(ctx context.Context, spec mcpServerSpec) (*stdioTransport, error) {
+	cmd := exec.CommandContext(ctx, spec.Command, spec.Args...)
+	cmd.Env = spec.Env
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	// Stderr deliberately discarded — MCP servers vary wildly in how
+	// chatty they are. A future enhancement could surface stderr in
+	// the plugin's "diagnostics" UI; not in v1.
+	cmd.Stderr = io.Discard
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("mcp stdio spawn %q: %w", spec.Command, err)
+	}
+	return &stdioTransport{
+		cmd:    cmd,
+		stdin:  stdin,
+		stdout: bufio.NewReader(stdout),
+	}, nil
+}
+
+func (t *stdioTransport) call(ctx context.Context, method string, params any, into any) error {
+	t.callMu.Lock()
+	defer t.callMu.Unlock()
+
+	id := t.nextID.Add(1)
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+	if _, err := t.stdin.Write(append(body, '\n')); err != nil {
+		return fmt.Errorf("write rpc: %w", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		line, err := t.stdout.ReadBytes('\n')
+		if err != nil {
+			return fmt.Errorf("read rpc: %w", err)
+		}
+		var resp rpcResponse
+		if err := json.Unmarshal(line, &resp); err != nil {
+			// Malformed line — skip rather than abort. MCP servers
+			// occasionally emit progress messages that don't match
+			// the JSON-RPC schema strictly.
+			continue
+		}
+		if resp.Method != "" && resp.ID == 0 {
+			// Server-initiated notification — ignore in v1.
+			continue
+		}
+		if resp.ID != id {
+			continue
+		}
+		if resp.Error != nil {
+			return resp.Error
+		}
+		if into != nil {
+			return json.Unmarshal(resp.Result, into)
+		}
+		return nil
+	}
+}
+
+func (t *stdioTransport) notify(method string, params any) error {
+	t.callMu.Lock()
+	defer t.callMu.Unlock()
+	body, err := json.Marshal(struct {
+		JSONRPC string `json:"jsonrpc"`
+		Method  string `json:"method"`
+		Params  any    `json:"params,omitempty"`
+	}{JSONRPC: "2.0", Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+	_, err = t.stdin.Write(append(body, '\n'))
+	return err
+}
+
+func (t *stdioTransport) close() {
+	if t.stdin != nil {
+		_ = t.stdin.Close()
+	}
+	if t.cmd != nil && t.cmd.Process != nil {
+		_ = t.cmd.Process.Kill()
+		_, _ = t.cmd.Process.Wait()
+	}
+}
+
+// --- http transport (Streamable HTTP) --------------------------------------
+
+// httpTransport speaks JSON-RPC over a single HTTP endpoint per the
+// Streamable HTTP transport spec. Per-request: POST the JSON-RPC body;
+// the response is either application/json (single message) or
+// text/event-stream (SSE — for streaming responses + interleaved
+// notifications). v1 expects only request/reply for tools/list and
+// tools/call so we read the first SSE event when the server replies
+// in stream mode and ignore the rest.
+//
+// Session handling: the server may return a Mcp-Session-Id header on
+// initialize; we capture and echo it on every subsequent request so
+// stateful servers (the common case for remote MCP) keep the session
+// alive.
+type httpTransport struct {
+	url    string
+	hdrs   http.Header
+	client *http.Client
+
+	callMu    sync.Mutex // single-flight, same as stdio
+	nextID    atomic.Int64
+	sessionID string
+}
+
+func newHTTPTransport(_ context.Context, spec mcpServerSpec) (*httpTransport, error) {
+	if spec.URL == "" {
+		return nil, errors.New("mcp http: url is required")
+	}
+	hdrs := http.Header{}
+	for _, line := range spec.Headers {
+		k, v, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		hdrs.Set(strings.TrimSpace(k), strings.TrimSpace(v))
+	}
+	return &httpTransport{
+		url:    spec.URL,
+		hdrs:   hdrs,
+		client: &http.Client{Timeout: mcpHTTPTimeout},
+	}, nil
+}
+
+func (t *httpTransport) call(ctx context.Context, method string, params any, into any) error {
+	t.callMu.Lock()
+	defer t.callMu.Unlock()
+
+	id := t.nextID.Add(1)
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+
+	resp, err := t.do(ctx, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Capture session id on whichever response surfaces it (typically
+	// the initialize response). Per the spec the header is
+	// Mcp-Session-Id; case-insensitive via http.Header.
+	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" && t.sessionID == "" {
+		t.sessionID = sid
+	}
+
+	rpcResp, err := readRPCResponse(resp, id)
+	if err != nil {
+		return err
+	}
+	if rpcResp.Error != nil {
+		return rpcResp.Error
+	}
+	if into != nil {
+		return json.Unmarshal(rpcResp.Result, into)
+	}
+	return nil
+}
+
+func (t *httpTransport) notify(method string, params any) error {
+	body, err := json.Marshal(struct {
+		JSONRPC string `json:"jsonrpc"`
+		Method  string `json:"method"`
+		Params  any    `json:"params,omitempty"`
+	}{JSONRPC: "2.0", Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+	// Notifications have no id and (per spec) the server replies with
+	// 202 Accepted and no body. Failures are non-fatal — best-effort.
+	resp, err := t.do(context.Background(), body)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+func (t *httpTransport) close() {
+	// HTTP transport keeps no persistent connection of its own; the
+	// underlying http.Client's Transport pool drains naturally on
+	// idle. Nothing to tear down explicitly.
+}
+
+func (t *httpTransport) do(ctx context.Context, body []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	for k, vs := range t.hdrs {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	if t.sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", t.sessionID)
+	}
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("mcp http POST: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		buf, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("mcp http %d: %s", resp.StatusCode, string(buf))
+	}
+	return resp, nil
+}
+
+// readRPCResponse decodes a server response, handling both
+// application/json (single body) and text/event-stream (SSE — read
+// the first JSON-RPC frame matching `wantID` and ignore the rest).
+func readRPCResponse(resp *http.Response, wantID int64) (*rpcResponse, error) {
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "text/event-stream") {
+		return readSSEResponse(resp.Body, wantID)
+	}
+	// Plain JSON response. Notifications-only acknowledgements (202
+	// Accepted, empty body) are handled by the caller via 0-length
+	// reads; we treat an empty body as "no result" without erroring.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("mcp http read: %w", err)
+	}
+	if len(body) == 0 {
+		return &rpcResponse{ID: wantID}, nil
+	}
+	var rr rpcResponse
+	if err := json.Unmarshal(body, &rr); err != nil {
+		return nil, fmt.Errorf("mcp http decode: %w (body: %s)", err, string(body))
+	}
+	return &rr, nil
+}
+
+// readSSEResponse parses a `text/event-stream` body until it finds a
+// JSON-RPC response matching `wantID`. Notifications and unrelated
+// events get skipped. Returns an error when the stream closes
+// without producing a matching response.
+func readSSEResponse(body io.Reader, wantID int64) (*rpcResponse, error) {
+	scanner := bufio.NewScanner(body)
+	// Allow long single events — MCP responses can be large.
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var dataAccum bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			// Event boundary — try to parse what we've accumulated.
+			payload := dataAccum.Bytes()
+			dataAccum.Reset()
+			if len(payload) == 0 {
+				continue
+			}
+			var rr rpcResponse
+			if err := json.Unmarshal(payload, &rr); err != nil {
+				continue
+			}
+			if rr.Method != "" && rr.ID == 0 {
+				continue // server notification
+			}
+			if rr.ID != wantID {
+				continue
+			}
+			return &rr, nil
+		}
+		if strings.HasPrefix(line, "data:") {
+			payload := strings.TrimPrefix(line, "data:")
+			payload = strings.TrimPrefix(payload, " ")
+			if dataAccum.Len() > 0 {
+				dataAccum.WriteByte('\n')
+			}
+			dataAccum.WriteString(payload)
+		}
+		// Other SSE fields (event:, id:, retry:) are ignored.
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("mcp sse read: %w", err)
+	}
+	return nil, fmt.Errorf("mcp sse: stream ended without response for id %d", wantID)
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC types (shared across transports)
 // ---------------------------------------------------------------------------
 
 type rpcRequest struct {
@@ -488,88 +883,12 @@ func (e *rpcError) Error() string {
 	return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message)
 }
 
-// call writes a JSON-RPC request and reads responses until it sees one
-// matching the request id (skipping notifications). Single-flight via
-// the per-server callMu.
-func (s *mcpServer) call(ctx context.Context, method string, params any, into any) error {
-	s.callMu.Lock()
-	defer s.callMu.Unlock()
-
-	id := s.nextID.Add(1)
-	req := rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params}
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	if _, err := s.stdin.Write(append(body, '\n')); err != nil {
-		return fmt.Errorf("write rpc: %w", err)
-	}
-
-	// Read responses until we see one matching `id`. Notifications
-	// (Method != "" + ID == 0) get logged-and-skipped; real responses
-	// for OTHER ids would be a protocol bug since we're single-flight,
-	// but we tolerate them defensively.
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		line, err := s.stdout.ReadBytes('\n')
-		if err != nil {
-			return fmt.Errorf("read rpc: %w", err)
-		}
-		var resp rpcResponse
-		if err := json.Unmarshal(line, &resp); err != nil {
-			// Malformed line — skip rather than abort. MCP servers
-			// occasionally emit progress messages that don't match
-			// the JSON-RPC schema strictly.
-			continue
-		}
-		if resp.Method != "" && resp.ID == 0 {
-			// Server-initiated notification (logging, progress,
-			// resource list updates, etc). Ignore in v1.
-			continue
-		}
-		if resp.ID != id {
-			// Stale response from a prior call. Shouldn't happen
-			// given single-flight callMu, but skip defensively.
-			continue
-		}
-		if resp.Error != nil {
-			return resp.Error
-		}
-		if into != nil {
-			return json.Unmarshal(resp.Result, into)
-		}
-		return nil
-	}
-}
-
-// notify sends a notification (no id, no response expected).
-func (s *mcpServer) notify(method string, params any) error {
-	s.callMu.Lock()
-	defer s.callMu.Unlock()
-	body, err := json.Marshal(struct {
-		JSONRPC string `json:"jsonrpc"`
-		Method  string `json:"method"`
-		Params  any    `json:"params,omitempty"`
-	}{JSONRPC: "2.0", Method: method, Params: params})
-	if err != nil {
-		return err
-	}
-	if _, err := s.stdin.Write(append(body, '\n')); err != nil {
-		return fmt.Errorf("write notify: %w", err)
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 // splitLines splits a textarea value into a list of trimmed non-empty
-// entries. Used for both args and env config fields.
+// entries. Used for args, env, and headers config fields.
 func splitLines(s string) []string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {

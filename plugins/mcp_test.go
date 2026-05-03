@@ -3,10 +3,15 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -284,15 +289,20 @@ func TestMCP_DescribeReportsCapabilities(t *testing.T) {
 	if desc.DisplayName == "" {
 		t.Error("DisplayName must be non-empty")
 	}
-	// Required field on `command`.
-	var foundRequiredCommand bool
-	for _, f := range desc.ConfigFields {
-		if f.Name == "command" && f.Required {
-			foundRequiredCommand = true
-		}
+	// Both transport-specific fields (command, url) and the
+	// transport selector itself are present. The framework's
+	// per-field Required flag can't express "required when
+	// transport=stdio" / "required when transport=http", so the
+	// constructor validates conditionally instead.
+	wantNames := map[string]bool{
+		"transport": true, "command": true, "args": true, "env": true,
+		"url": true, "headers": true, "tool_prefix": true,
 	}
-	if !foundRequiredCommand {
-		t.Error("expected `command` ConfigField marked Required")
+	for _, f := range desc.ConfigFields {
+		delete(wantNames, f.Name)
+	}
+	if len(wantNames) > 0 {
+		t.Errorf("missing config fields: %v", wantNames)
 	}
 }
 
@@ -331,6 +341,186 @@ func TestMCP_PoolReapsIdleServers(t *testing.T) {
 	mcpPool.mu.Unlock()
 	if count != 0 {
 		t.Errorf("expected reaper to drain idle servers, %d remaining", count)
+	}
+}
+
+// --- HTTP transport --------------------------------------------------------
+
+// fakeHTTPMCPServer is an httptest.Server that pretends to be an MCP
+// HTTP endpoint. It speaks just enough of the Streamable HTTP transport
+// to satisfy initialize → tools/list → tools/call. Captures every
+// request body so tests can assert on session-id echoing, custom
+// headers, etc.
+type fakeHTTPMCPServer struct {
+	srv         *httptest.Server
+	mu          sync.Mutex
+	gotHeaders  []http.Header
+	sessionID   string  // sent on initialize, expected on subsequent
+	useSSE      bool    // when true, respond with text/event-stream
+}
+
+func newFakeHTTPMCP(useSSE bool) *fakeHTTPMCPServer {
+	f := &fakeHTTPMCPServer{
+		sessionID: "session-abc123",
+		useSSE:    useSSE,
+	}
+	f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
+	return f
+}
+
+func (f *fakeHTTPMCPServer) close() { f.srv.Close() }
+
+func (f *fakeHTTPMCPServer) handle(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	f.gotHeaders = append(f.gotHeaders, r.Header.Clone())
+	f.mu.Unlock()
+
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	var req rpcRequest
+	_ = json.Unmarshal(body, &req)
+
+	// Build the response payload per method.
+	var payload map[string]any
+	switch req.Method {
+	case "initialize":
+		w.Header().Set("Mcp-Session-Id", f.sessionID)
+		payload = map[string]any{
+			"jsonrpc": "2.0", "id": req.ID,
+			"result": map[string]any{
+				"protocolVersion": "2024-11-05",
+				"serverInfo":      map[string]any{"name": "fake-http", "version": "0.1"},
+			},
+		}
+	case "notifications/initialized":
+		w.WriteHeader(http.StatusAccepted)
+		return
+	case "tools/list":
+		payload = map[string]any{
+			"jsonrpc": "2.0", "id": req.ID,
+			"result": map[string]any{
+				"tools": []map[string]any{{
+					"name": "ping", "description": "returns pong",
+					"inputSchema": map[string]any{"type": "object"},
+				}},
+			},
+		}
+	case "tools/call":
+		payload = map[string]any{
+			"jsonrpc": "2.0", "id": req.ID,
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "pong"}},
+			},
+		}
+	default:
+		payload = map[string]any{
+			"jsonrpc": "2.0", "id": req.ID,
+			"error": map[string]any{"code": -32601, "message": "method not found"},
+		}
+	}
+	if f.useSSE {
+		w.Header().Set("Content-Type", "text/event-stream")
+		body, _ := json.Marshal(payload)
+		fmt.Fprintf(w, "data: %s\n\n", body)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func TestMCP_HTTPTransport_JSON(t *testing.T) {
+	// serial — touches the package-level pool
+	resetMCPPool()
+	srv := newFakeHTTPMCP(false)
+	defer srv.close()
+
+	cfg, _ := json.Marshal(mcpConfig{
+		Transport: mcpTransportHTTP,
+		URL:       srv.srv.URL,
+		Headers:   "Authorization: Bearer secret\nX-Custom: value",
+	})
+	pl, err := newMCP(cfg)
+	if err != nil {
+		t.Fatalf("newMCP: %v", err)
+	}
+	tp := pl.(ToolProvider)
+
+	tools := tp.Tools()
+	if len(tools) != 1 || tools[0].Name != "ping" {
+		t.Fatalf("expected ping tool, got %+v", tools)
+	}
+
+	out, err := tp.ExecuteTool(context.Background(), "ping", nil)
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	var got map[string]any
+	_ = json.Unmarshal(out, &got)
+	if got["text"] != "pong" {
+		t.Errorf("expected pong, got %+v", got)
+	}
+
+	// Verify custom headers + session-id echo on the second+ requests.
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.gotHeaders) < 3 {
+		t.Fatalf("expected at least 3 server-side requests (initialize, notify, tools/list), got %d", len(srv.gotHeaders))
+	}
+	// The first request (initialize) shouldn't have the session-id
+	// (we don't have it yet); subsequent requests should.
+	if srv.gotHeaders[0].Get("Authorization") != "Bearer secret" {
+		t.Error("Authorization header missing on initialize")
+	}
+	if srv.gotHeaders[0].Get("X-Custom") != "value" {
+		t.Error("X-Custom header missing on initialize")
+	}
+	if srv.gotHeaders[0].Get("Mcp-Session-Id") != "" {
+		t.Error("session-id should not be set on initialize request")
+	}
+	if srv.gotHeaders[2].Get("Mcp-Session-Id") != srv.sessionID {
+		t.Errorf("session-id not echoed on tools/list request, got %q", srv.gotHeaders[2].Get("Mcp-Session-Id"))
+	}
+}
+
+func TestMCP_HTTPTransport_SSE(t *testing.T) {
+	// serial — touches the package-level pool
+	resetMCPPool()
+	srv := newFakeHTTPMCP(true)
+	defer srv.close()
+
+	cfg, _ := json.Marshal(mcpConfig{
+		Transport: mcpTransportHTTP,
+		URL:       srv.srv.URL,
+	})
+	pl, err := newMCP(cfg)
+	if err != nil {
+		t.Fatalf("newMCP: %v", err)
+	}
+	tp := pl.(ToolProvider)
+
+	tools := tp.Tools()
+	if len(tools) != 1 || tools[0].Name != "ping" {
+		t.Fatalf("SSE: expected ping tool, got %+v", tools)
+	}
+	out, err := tp.ExecuteTool(context.Background(), "ping", nil)
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if !strings.Contains(string(out), "pong") {
+		t.Errorf("expected pong in SSE response, got %s", out)
+	}
+}
+
+func TestMCP_HTTPTransport_BadURL(t *testing.T) {
+	resetMCPPool()
+	cfg, _ := json.Marshal(mcpConfig{
+		Transport: mcpTransportHTTP,
+		URL:       "http://127.0.0.1:1/", // unroutable port
+	})
+	pl, _ := newMCP(cfg)
+	tp := pl.(ToolProvider)
+	if got := tp.Tools(); len(got) != 0 {
+		t.Errorf("unreachable URL should yield no tools, got %v", got)
 	}
 }
 

@@ -17,7 +17,7 @@ Four concrete plugins live alongside this README:
 | `lettered_choices` | Asks the model to wrap interactive choices in delimiters; strips them from older history; renders them clean for display | `Configurable`, `SystemPrompter`, `HistoryTransformer`, `DisplayTransformer` |
 | `brave_search` | Exposes `web_search` as a model-callable tool backed by the Brave API | `Configurable`, `ToolProvider` |
 | `basic_grounding` | Prepends grounding facts (current time, …) to outgoing user messages and hides them on display | `Configurable`, `OutgoingUserTransformer`, `DisplayTransformer` |
-| `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Reeve. Spawns the configured command as a subprocess, exchanges JSON-RPC over stdio, and surfaces each server-declared tool to the model. Process pool keeps subprocesses alive across sends; idle servers reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
+| `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Reeve. Two transports: **stdio** (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) and **http** (POST JSON-RPC to a remote URL — Streamable HTTP transport, both `application/json` and `text/event-stream` responses; honours `Mcp-Session-Id`). Pool keeps connections alive across sends; idle entries reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
 
 Read those for working examples before / while building a new one.
 
