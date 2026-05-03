@@ -10,13 +10,14 @@ This README is the orientation guide. The canonical design lives in `docs/archit
 
 A plugin is a Go type implementing the small required `Plugin` interface plus zero or more **opt-in capability interfaces**. The runtime detects each capability via type assertion at the call sites that care; you implement only what you need.
 
-Three concrete plugins live alongside this README:
+Four concrete plugins live alongside this README:
 
 | Plugin | What it does | Capabilities used |
 |---|---|---|
 | `lettered_choices` | Asks the model to wrap interactive choices in delimiters; strips them from older history; renders them clean for display | `Configurable`, `SystemPrompter`, `HistoryTransformer`, `DisplayTransformer` |
 | `brave_search` | Exposes `web_search` as a model-callable tool backed by the Brave API | `Configurable`, `ToolProvider` |
 | `basic_grounding` | Prepends grounding facts (current time, …) to outgoing user messages and hides them on display | `Configurable`, `OutgoingUserTransformer`, `DisplayTransformer` |
+| `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Reeve. Spawns the configured command as a subprocess, exchanges JSON-RPC over stdio, and surfaces each server-declared tool to the model. Process pool keeps subprocesses alive across sends; idle servers reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
 
 Read those for working examples before / while building a new one.
 
