@@ -153,25 +153,38 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case profiles
     case plugins
     case appearance
-    case general
+    case notifications
 
     var label: String {
         switch self {
-        case .providers:  return "Providers"
-        case .profiles:   return "Profiles"
-        case .plugins:    return "Plugins"
-        case .appearance: return "Appearance"
-        case .general:    return "General"
+        case .providers:     return "Providers"
+        case .profiles:      return "Profiles"
+        case .plugins:       return "Plugins"
+        case .appearance:    return "Appearance"
+        case .notifications: return "Notifications"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .providers:  return "cpu"
-        case .profiles:   return "person.crop.rectangle"
-        case .plugins:    return "puzzlepiece.extension"
-        case .appearance: return "paintpalette"
-        case .general:    return "gearshape"
+        case .providers:     return "cpu"
+        case .profiles:      return "person.crop.rectangle"
+        case .plugins:       return "puzzlepiece.extension"
+        case .appearance:    return "paintpalette"
+        case .notifications: return "bell"
+        }
+    }
+
+    /// Ordering categories into top-level "data" entries (the user's
+    /// configured providers / profiles / plugins they actually USE) vs
+    /// app-level "settings" entries (preferences about the app itself).
+    /// The sidebar renders the data ones first, then a SETTINGS header,
+    /// then the settings ones — gives the visual hierarchy without
+    /// needing a tree-style sidebar widget.
+    var isAppSettings: Bool {
+        switch self {
+        case .appearance, .notifications: return true
+        default: return false
         }
     }
 

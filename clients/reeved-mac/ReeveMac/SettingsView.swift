@@ -84,9 +84,19 @@ struct SettingsView: View {
     /// SwiftUI's `.tint()`. Manual rows let the active row honor the active
     /// theme's accent.
     private var categoriesColumn: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(SettingsCategory.allCases) { c in
+        let topLevel = SettingsCategory.allCases.filter { !$0.isAppSettings }
+        let appSettings = SettingsCategory.allCases.filter { $0.isAppSettings }
+        return VStack(alignment: .leading, spacing: 2) {
+            ForEach(topLevel) { c in
                 categoryRow(c)
+            }
+            // Visual hierarchy: a SETTINGS section header gathers the
+            // app-level preference panes (Appearance / Notifications)
+            // beneath it, so they read as "configuration of the app
+            // itself" distinct from the data categories above.
+            settingsSectionHeader
+            ForEach(appSettings) { c in
+                categoryRow(c, indented: true)
             }
             Spacer(minLength: 0)
         }
@@ -95,8 +105,18 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var settingsSectionHeader: some View {
+        Text("Settings")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .textCase(.uppercase)
+            .padding(.horizontal, 12)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+    }
+
     @ViewBuilder
-    private func categoryRow(_ c: SettingsCategory) -> some View {
+    private func categoryRow(_ c: SettingsCategory, indented: Bool = false) -> some View {
         let active = (category == c)
         Button {
             category = c
@@ -107,6 +127,7 @@ struct SettingsView: View {
                 .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
+                .padding(.leading, indented ? 12 : 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
@@ -130,8 +151,8 @@ struct SettingsView: View {
             PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
         case .appearance:
             AppearanceMiddleColumn(onBack: onBack)
-        case .general:
-            GeneralMiddleColumn(onBack: onBack)
+        case .notifications:
+            NotificationsMiddleColumn(onBack: onBack)
         }
     }
 
@@ -148,25 +169,26 @@ struct SettingsView: View {
             PluginSettingsDetail(model: profilesModel)
         case .appearance:
             AppearanceSettingsView()
-        case .general:
-            GeneralSettingsView()
+        case .notifications:
+            NotificationsSettingsView()
         }
     }
 }
 
-// MARK: - General middle column
+// MARK: - Notifications middle column
 
-/// Skinny placeholder column for the General category — same shape as
-/// AppearanceMiddleColumn (no list to browse, just the back button +
-/// section label). The actual content lives in the detail column.
-private struct GeneralMiddleColumn: View {
+/// Skinny placeholder column for the Notifications category — same
+/// shape as AppearanceMiddleColumn (no list to browse, just the back
+/// button + section label). The actual content lives in the detail
+/// column.
+private struct NotificationsMiddleColumn: View {
     let onBack: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text("General")
+                Text("Notifications")
                     .font(.headline)
                 Spacer()
             }
