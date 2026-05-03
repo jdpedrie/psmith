@@ -232,6 +232,71 @@ End-to-end "iOS app exists and chats work" lands roughly at Phase 5 (~3 weeks fr
 
 ---
 
+## Steady-state: how much does the architecture actually share?
+
+Once both apps are shipping, the interesting question isn't "how much code is shared" — it's **"when I make a change, how much do I have to change in N places."** That's the cost the architecture is paying every day.
+
+Categorised by change type, with rough share percentages (by where the work lives, not by line count):
+
+| Change type | Lives where | Share % | Why |
+|---|---|---|---|
+| **Backend-only** (new RPC, new chunk type, new DB schema, new provider driver, new plugin) | Go + proto | **~100%** | Both apps consume regenerated proto + Swift Domain wrappers. Days of Mac-only work today translate 1:1 to iOS. The plugin work we just shipped (basic_grounding, MCP, lifecycle hooks) is a perfect example — zero per-platform Swift changes needed once the proto bridges. |
+| **Domain type additions** (new field on a message, new ConfigField flag) | Proto → ReeveKit Domain | **~95%** | Auto-generated Swift bindings + ~3 lines per field on the Domain wrapper. Per-platform work only if the field needs distinct UI presentation. |
+| **ViewModel logic** (new state machine, new async flow, new computed view-state) | ReeveKit ViewModels | **~100%** | The whole reason ViewModels are in ReeveKit. iOS and Mac both bind the same `@Observable` instance; behaviour is identical. The MessageLifecycleHook → embedding plugin path, when we build it, is one ReeveKit method consumed by both apps for free. |
+| **Atomic UI components** (chip, pill, card, disclosure) | ReeveUI/Atomic | **~95%** | Once `ThinkingDisclosure` / `ToolCallDisclosure` / `PluginConfigForm` etc. land in ReeveUI (Phase 0 of the iOS work), every future addition is one file used twice. Occasional `#if os(macOS)` for hover affordances is fine. |
+| **Composite UI components** (rows, form sections, nested pickers) | ReeveUI/Composite | **~80%** | Row layouts mostly share, but row INTERACTIONS often diverge (hover-trash on Mac vs swipe-to-delete on iOS). Pattern: shared row body + per-platform interaction modifier wrapper. |
+| **Screen-level layouts** (conversation pane, settings shell, providers split) | Per-platform (ReeveMac / ReeveiOS) | **~40%** | The chrome diverges hard — `HSplitView` vs `NavigationSplitView`/`TabView` are not the same animal. The atomic + composite *contents* are shared (~95% of the visible pixels), but the scene composition is per-platform. Screen-level files end up 30–80 lines per platform composing 200+ lines of shared inner views. |
+| **Navigation flows** (how you get from A to B) | Per-platform | **~30%** | iOS push vs Mac page-replaces-pane vs Mac sheet. The DESTINATION view is shared; the navigation glue isn't. Pattern: shared "what to show" + per-platform "how to show it." |
+| **Platform-glue features** (clipboard, file picker, URL opener, notifications) | Protocol in ReeveKit, impl per platform | **~75%** | One interface, two implementations, one set of call sites. New protocols cost 1 interface + N impls + caller integration; thereafter every use site is shared. |
+| **Per-platform-specific gestures + input** (hover, scroll, drag, dictation activation) | Per-platform | **~20%** | Touch vs mouse + keyboard are different mental models. Sometimes a feature has both forms (Mac swipe + iOS swipe both work via SwiftUI), more often divergence is intentional. |
+| **Window / scene plumbing** (multi-window on Mac, scene phase on iOS, menu bar) | Per-platform | **0%** | Fully different. Mac has windows + menus + dock; iOS has scenes + tabs + no menus. Each app owns its own root scene definition. |
+| **Bug fixes** | Wherever the bug is | **Variable** | Logic bugs (RPC, ViewModel, Domain) → one fix, both apps benefit. View layout bugs → usually per-platform (SwiftUI's layout engine resolves the same code differently on Mac vs iOS). Crash fixes → almost always per-platform (the runtime quirks differ). |
+| **Tests** | ReeveKitTests shared, snapshot tests per platform | **~70%** | Layer-1 integration tests (against local reeved) run identically. Layer-2 snapshot tests get an iPhone + iPad set alongside the Mac set; the test fixtures are shared but the snapshots themselves are per-platform-per-size. |
+
+### Forward-looking: how do upcoming features fit?
+
+Concrete share estimates for what's already in `todo.md` / sibling plans:
+
+| Upcoming feature | Backend share | Swift share | Total share |
+|---|---|---|---|
+| **Multi-modal Phase 0** (local TTS + STT) | N/A — no backend | ~70% | iOS-side recording UI differs (no menu bar; mic button placement); APIs (AVSpeechSynthesizer, SFSpeechRecognizer) work on both. |
+| **Multi-modal Phase 1** (file storage + image input) | ~100% | ~75% | Storage interface shared. Composer drop-target uses SwiftUI `.onDrop` on both (mostly portable). Image lightbox per-platform (iOS Quick Look, Mac NSWorkspace). |
+| **Multi-modal Phase 3** (image-gen tool plugin) | ~100% | ~95% | Plugin is server-side. Image attachment renderer was already shipped via the multi-modal Phase 1 attachment work — used here for free. |
+| **Harness support** (Claude Code, Codex, pi.dev) | ~100% | ~80% | Layer-1 + Layer-2 are pure Go. Working-dir picker uses the protocol-wrapped DirectoryPicker (shared). Disabled-affordance hiding (Compact/Edit/Reload buttons) is shared — both platforms apply the same conditional. |
+| **AssistantContentTransformer / MessageLifecycleHook** plugins | ~100% | ~100% | Already shipped; both hooks live entirely in `plugins/`. Future plugins using either are pure Go. |
+| **ContentRenderer (SDUI)** | ~100% | ~85% | Server-driven UI fragments — proto schema shared. Each component (`card_list`, `choice_list`, etc.) is one SwiftUI view in ReeveUI/PluginRenderers/, used by both apps. |
+| **PreSendContextInjector** + memory plugin | ~100% | ~100% | Pure-Go pipeline addition. The "memory recalled" indicator (when we build it) is one ReeveUI chip. |
+| **Watch companion** | ~100% | ~30% | Reeves onto the same Repository layer. The watch app is its own scene tree but the data flow is shared. |
+| **Share Extension** | ~100% | ~50% | Bundles the Repository for "create a conversation, send this text." Extension shell is iOS-only; the action is shared. |
+
+### Where the "shared by default" discipline pays back the most
+
+- **Anything plugin-shaped.** The whole plugin system is server-side; UI cost per new plugin is one ConfigField form (already auto-rendered) + zero per-platform work. Adding a 5th, 10th, 20th plugin is the same effort.
+- **Anything chunk-vocabulary-shaped.** Tool calling, thinking, citations, future content types — the chunk vocabulary is shared, the supervisor's aggregation is shared, the row-rendering is one ReeveUI view family.
+- **Anything that reduces to a new RPC.** New conversation operations (search, tag, archive) cost: backend + Domain + Repository + ViewModel = all shared; one shared screen + per-platform navigation hookup.
+
+### Where divergence is healthy (NOT a bug)
+
+- **iOS gets voice-first affordances** (always-visible mic, "tap to stop" for an active stream) that don't make sense on Mac.
+- **Mac gets keyboard-power-user affordances** (cmd-shift-N for new conversation, cmd-/ for search) that iOS doesn't need.
+- **iPhone collapses multi-pane to single-stack**; iPad and Mac both render the split.
+- **Notifications**: iOS has a richer model (Live Activities, Dynamic Island, push) the Mac app may never need.
+
+When divergence happens, it should land as **per-platform composition over shared state**, never as per-platform branching inside a shared file. The smell to watch for: `#if os(iOS)` accumulating inside ReeveKit / ReeveUI files. That's a sign the abstraction needs to grow another protocol or another atomic view, not another conditional.
+
+### What this means for ongoing maintenance
+
+For a typical change after both apps exist:
+
+- **Adding a feature that's mostly logic + reusing existing UI primitives**: ~1× work for both platforms (the per-platform compose-into-screen step is hours).
+- **Adding a feature that's a whole new screen**: ~1.5× work for both platforms (shared inner views + per-platform scene composition + per-platform navigation hookup).
+- **Pure UI tweak on an existing shared screen**: ~1.0× — change once, snapshot-test on both.
+- **Per-platform divergent feature** (e.g. iOS voice mode, Mac keyboard shortcuts): ~1× per platform on the divergent side, zero on the other.
+
+The architecture's value is that the **first** and **third** rows are by far the most common change shape in Reeve's day-to-day — and those are the ones we get for cheap. The expensive cases (new screens, divergent features) are also the ones that should be expensive: they ARE genuinely more work to build well.
+
+---
+
 ## How to use this doc
 
 This is the architecture skeleton. The next plan (post-Phase-0/1) walks through every Mac screen with a side-by-side iOS treatment — what lives in shared `ReeveUI`, what's per-platform, what's a deliberate divergence. That doc will reference this one for the protocol shapes + module boundaries; this doc captures the durable architecture decisions that don't change per-screen.
