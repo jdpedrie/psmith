@@ -85,6 +85,13 @@ func run() error {
 		return fmt.Errorf("recover interrupted streams: %w", err)
 	}
 
+	// Background pruner — keeps stream_chunks from accumulating
+	// indefinitely. Default 1h retention covers late mobile reconnects;
+	// see internal/stream/cleanup.go for tuning notes. Cancel runs at
+	// graceful shutdown so the goroutine exits before main returns.
+	stopChunkCleanup := stream.StartChunkCleanup(ctx, queries, stream.CleanupConfig{}, slog.Default())
+	defer stopChunkCleanup()
+
 	authSvc := auth.NewService(queries)
 	authInterceptor := auth.NewInterceptor(queries,
 		reevev1connect.AuthServiceLoginProcedure,

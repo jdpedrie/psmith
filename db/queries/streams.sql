@@ -83,3 +83,23 @@ SET prefix_hashes              = $2,
     cache_stable_prefix_length = $4,
     cache_trailing_depth       = $5
 WHERE id = $1;
+
+-- name: PruneFinalizedStreamChunks :execrows
+-- Deletes stream_chunks belonging to stream_runs that finalized more
+-- than $1 ago. Stream chunks are transient — they exist only to feed
+-- mid-stream subscribers (and to let late reconnects within the
+-- retention window catch up). Once a run is finalized, the assistant
+-- message row carries the persisted aggregate; the per-chunk rows
+-- become dead weight.
+--
+-- Uses a CTE rather than a JOIN so the planner picks the indexed
+-- (ended_at) scan on stream_runs as the driver. Returns the number of
+-- chunk rows pruned so the caller can log a trickle of housekeeping
+-- activity (or skip the log entirely on zero-row runs).
+WITH eligible AS (
+    SELECT id FROM stream_runs
+    WHERE ended_at IS NOT NULL
+      AND ended_at < NOW() - sqlc.arg(retention)::INTERVAL
+)
+DELETE FROM stream_chunks
+WHERE stream_run_id IN (SELECT id FROM eligible);

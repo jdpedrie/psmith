@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createStreamRun = `-- name: CreateStreamRun :one
@@ -333,6 +334,35 @@ func (q *Queries) MaxStreamChunkSequence(ctx context.Context, streamRunID uuid.U
 	var max_sequence int64
 	err := row.Scan(&max_sequence)
 	return max_sequence, err
+}
+
+const pruneFinalizedStreamChunks = `-- name: PruneFinalizedStreamChunks :execrows
+WITH eligible AS (
+    SELECT id FROM stream_runs
+    WHERE ended_at IS NOT NULL
+      AND ended_at < NOW() - $1::INTERVAL
+)
+DELETE FROM stream_chunks
+WHERE stream_run_id IN (SELECT id FROM eligible)
+`
+
+// Deletes stream_chunks belonging to stream_runs that finalized more
+// than $1 ago. Stream chunks are transient — they exist only to feed
+// mid-stream subscribers (and to let late reconnects within the
+// retention window catch up). Once a run is finalized, the assistant
+// message row carries the persisted aggregate; the per-chunk rows
+// become dead weight.
+//
+// Uses a CTE rather than a JOIN so the planner picks the indexed
+// (ended_at) scan on stream_runs as the driver. Returns the number of
+// chunk rows pruned so the caller can log a trickle of housekeeping
+// activity (or skip the log entirely on zero-row runs).
+func (q *Queries) PruneFinalizedStreamChunks(ctx context.Context, retention pgtype.Interval) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneFinalizedStreamChunks, retention)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setStreamRunPrefixHashes = `-- name: SetStreamRunPrefixHashes :exec

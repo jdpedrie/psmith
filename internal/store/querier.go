@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -154,6 +155,18 @@ type Querier interface {
 	MarkRunningAsInterrupted(ctx context.Context) error
 	// Returns the highest persisted sequence for a run, or NULL if none persisted.
 	MaxStreamChunkSequence(ctx context.Context, streamRunID uuid.UUID) (int64, error)
+	// Deletes stream_chunks belonging to stream_runs that finalized more
+	// than $1 ago. Stream chunks are transient — they exist only to feed
+	// mid-stream subscribers (and to let late reconnects within the
+	// retention window catch up). Once a run is finalized, the assistant
+	// message row carries the persisted aggregate; the per-chunk rows
+	// become dead weight.
+	//
+	// Uses a CTE rather than a JOIN so the planner picks the indexed
+	// (ended_at) scan on stream_runs as the driver. Returns the number of
+	// chunk rows pruned so the caller can log a trickle of housekeeping
+	// activity (or skip the log entirely on zero-row runs).
+	PruneFinalizedStreamChunks(ctx context.Context, retention pgtype.Interval) (int64, error)
 	// Promotes every direct child of $1 to point at $2 (which may be NULL — that
 	// makes them roots in the context). Used by DeleteMessage(cascade=false) just
 	// before the DELETE, so the FK's ON DELETE CASCADE has nothing to find.
