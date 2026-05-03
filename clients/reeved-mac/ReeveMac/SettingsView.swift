@@ -130,6 +130,8 @@ struct SettingsView: View {
             PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
         case .appearance:
             AppearanceMiddleColumn(onBack: onBack)
+        case .general:
+            GeneralMiddleColumn(onBack: onBack)
         }
     }
 
@@ -146,6 +148,32 @@ struct SettingsView: View {
             PluginSettingsDetail(model: profilesModel)
         case .appearance:
             AppearanceSettingsView()
+        case .general:
+            GeneralSettingsView()
+        }
+    }
+}
+
+// MARK: - General middle column
+
+/// Skinny placeholder column for the General category — same shape as
+/// AppearanceMiddleColumn (no list to browse, just the back button +
+/// section label). The actual content lives in the detail column.
+private struct GeneralMiddleColumn: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
+                Text("General")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: paneHeaderHeight)
+            Divider()
+            Spacer()
         }
     }
 }

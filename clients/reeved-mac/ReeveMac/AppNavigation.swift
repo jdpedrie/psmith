@@ -22,6 +22,12 @@ final class Navigator {
     /// reads it to keep the request idempotent.
     var pendingProfileSelection: String?
 
+    /// One-shot signal: when set, HomeView should switch to chats mode
+    /// and select the named conversation. Set by MacNotifier when the
+    /// user clicks a "reply ready" notification. Cleared by HomeView
+    /// after consumption.
+    var pendingConversationSelection: String?
+
     /// Called by ProfileCard's gear button. Switches mode to settings and
     /// stashes the profile ID for SettingsView to consume on appear.
     func openProfileSettings(id: String) {
@@ -147,7 +153,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case profiles
     case plugins
     case appearance
-    // future: case account, general, ...
+    case general
 
     var label: String {
         switch self {
@@ -155,6 +161,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .profiles:   return "Profiles"
         case .plugins:    return "Plugins"
         case .appearance: return "Appearance"
+        case .general:    return "General"
         }
     }
 
@@ -164,6 +171,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .profiles:   return "person.crop.rectangle"
         case .plugins:    return "puzzlepiece.extension"
         case .appearance: return "paintpalette"
+        case .general:    return "gearshape"
         }
     }
 

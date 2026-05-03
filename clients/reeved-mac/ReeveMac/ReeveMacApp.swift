@@ -202,6 +202,11 @@ struct ReeveMacApp: App {
     /// having to thread the env through AppKit.
     private var themeStore: ThemeStore { sharedThemeStore }
 
+    /// App-wide preferences (font scale, notification toggle, …). The
+    /// shared singleton lives in AppPreferences.swift so module-scope
+    /// helpers (sharedNotifier construction in particular) can reach it.
+    private var prefs: AppPreferences { sharedAppPreferences }
+
     init() {
         // SwiftPM-built executables aren't a proper .app bundle on their own;
         // when the host hasn't promoted us to a regular dock-bearing app,
@@ -217,13 +222,28 @@ struct ReeveMacApp: App {
                 .environment(sharedWindowState)
                 .environment(sharedNavigator)
                 .environment(themeStore)
+                .environment(prefs)
                 .environment(\.theme, themeStore.current)
                 .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
                 .background(themeStore.current.chrome.ignoresSafeArea())
                 .background(WindowChrome())
                 .navigationTitle("")
-                .task { await appModel.bootstrap() }
+                // App-wide font scale: maps the General-pane slider into
+                // SwiftUI's dynamic-type axis. Every semantic font
+                // (.body, .callout, .caption2 …) downstream rescales
+                // automatically. Fonts created with .system(size: N)
+                // don't (by SwiftUI design) — but the bulk of Reeve's
+                // typography uses semantic styles.
+                .dynamicTypeSize(prefs.dynamicTypeSize)
+                .task {
+                    await appModel.bootstrap()
+                    // Touch sharedNotifier so its UNUserNotificationCenter
+                    // delegate registration runs once at app startup. The
+                    // lazy init wires the click-handler before any
+                    // notification could possibly arrive.
+                    _ = sharedNotifier
+                }
                 // Refresh NSWindow.backgroundColor whenever the active theme
                 // flips. AppDelegate.configure pulls from sharedThemeStore,
                 // but it isn't called on a SwiftUI env change — without this

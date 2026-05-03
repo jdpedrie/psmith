@@ -10,6 +10,19 @@ public final class ConversationViewModel {
     public let conversation: ReeveConversation
     private let client: ReeveClient
     private let onTerminal: @MainActor () async -> Void
+    /// Fires after a successful assistant turn lands in `messages`. The
+    /// app uses it to drive side effects that depend on completed turns
+    /// (Mac notification when window isn't focused, future iOS push
+    /// registration etc). Skipped on errored / cancelled runs — those
+    /// already surface inline as failed-message rows. Optional so test
+    /// fixtures can omit it.
+    public typealias AssistantTurnCompleteHandler = @MainActor (
+        _ conversationID: String,
+        _ conversationTitle: String?,
+        _ assistantMessageID: String,
+        _ preview: String
+    ) -> Void
+    private let onAssistantTurnComplete: AssistantTurnCompleteHandler?
     /// Optional client-side title generator. When the conversation's profile
     /// resolves to `title_provider_kind == "apple_foundation"`, the server
     /// skips its cloud title call and this generator runs locally instead.
@@ -223,11 +236,13 @@ public final class ConversationViewModel {
         conversation: ReeveConversation,
         client: ReeveClient,
         onTerminal: @MainActor @escaping () async -> Void,
+        onAssistantTurnComplete: AssistantTurnCompleteHandler? = nil,
         localTitler: LocalTitler? = nil
     ) {
         self.conversation = conversation
         self.client = client
         self.onTerminal = onTerminal
+        self.onAssistantTurnComplete = onAssistantTurnComplete
         self.localTitler = localTitler
     }
 
@@ -484,6 +499,11 @@ public final class ConversationViewModel {
                         // stream survives the StreamingRow → MessageRow
                         // swap.
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                        // App-level "assistant turn complete" hook —
+                        // drives Mac local notifications, etc. Skipped
+                        // for errored / cancelled runs (those land in
+                        // .failed below).
+                        fireAssistantTurnComplete()
                         // First assistant turn just landed — give the local
                         // titler a chance. Idempotent: bails immediately if
                         // already attempted, profile isn't apple_foundation,
@@ -1001,6 +1021,27 @@ public final class ConversationViewModel {
     /// or there are no assistant turns (a freshly-failed first send).
     public var latestAssistantMessageID: String? {
         messages.last(where: { $0.role == .assistant })?.id
+    }
+
+    /// Calls onAssistantTurnComplete with a short content preview when
+    /// the most recent assistant message is non-empty. No-op when no
+    /// assistant message landed (early-error runs) or no handler is
+    /// wired. Preview is the first ~140 chars of plain content with
+    /// markdown left intact (the notification UI can flatten further
+    /// if needed).
+    private func fireAssistantTurnComplete() {
+        guard let handler = onAssistantTurnComplete,
+              let id = latestAssistantMessageID,
+              let msg = messages.last(where: { $0.id == id })
+        else { return }
+        let body = msg.displayContent ?? msg.content
+        let preview: String
+        if body.count > 140 {
+            preview = body.prefix(140).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+        } else {
+            preview = body
+        }
+        handler(conversation.id, conversation.title, id, preview)
     }
 
     // MARK: - Branch / fork navigation

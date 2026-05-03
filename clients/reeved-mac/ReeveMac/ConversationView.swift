@@ -30,6 +30,14 @@ struct ConversationView: View {
                 conversation: conversation,
                 client: app.client,
                 onTerminal: { [weak convos] in await convos?.refresh() },
+                onAssistantTurnComplete: { convID, title, msgID, preview in
+                    sharedNotifier.generationCompleted(
+                        conversationID: convID,
+                        conversationTitle: title,
+                        messageID: msgID,
+                        preview: preview
+                    )
+                },
                 localTitler: AppleFoundationTitler()
             )
             self.model = m
