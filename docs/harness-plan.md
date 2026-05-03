@@ -16,10 +16,9 @@ Reads as a sibling to `architecture.md`, `multimodal-plan.md`, and `todo.md`. Th
 ## Non-goals (v1)
 
 - **Persistent harness daemons.** v1 spawns one subprocess per turn (`-p` mode). Persistent sockets / RPC daemons can come later if turn-startup latency becomes a real problem; for now the simplicity wins.
-- **Forking inside a harness conversation.** Most harnesses don't expose programmatic session-fork; deferred until at least one does.
 - **Cross-harness session migration.** Resuming a Claude Code session inside Codex isn't a thing the underlying tools support.
-- **Compression on harness conversations.** The harness owns its own history compaction internally; Reeve's compaction UI hides for harness conversations.
 - **Multi-modal attachments through the harness layer.** Lands when `multimodal-plan.md` Phase 1 lands; the harness layer's wire shape will get attachments at the same time.
+- **Reeve-side features that depend on owning the conversation transcript** — see "Features unavailable inside a harness conversation" below for the full list. Each is hidden / disabled in the UI rather than presented and silently broken.
 
 ---
 
@@ -277,7 +276,7 @@ For stateful providers, the flow forks at step 3:
 2. Insert user message in TX — same
 3. **If StatefulProvider:**
    a. Look up session id from `conversation_harness_sessions`
-   b. Resolve working_dir for this conversation (from conversation row)
+   b. Resolve working_dir from the profile chain (`profiles.Resolve(...).DefaultSettings.HarnessWorkingDir`). Reject with `FailedPrecondition` if empty / missing-on-disk / not-a-directory.
    c. Construct StatefulSendRequest{SessionID, Prompt: userMsgRow.Content, WorkingDir, Model}
    d. SendFunc closes over both:
        ```go
@@ -308,14 +307,17 @@ The supervisor doesn't change. The session-id persist runs in the goroutine that
 
 ## Data model
 
-### `conversations` — additions
+### `profiles.default_settings.harness_working_dir` — new
 
-```sql
-ALTER TABLE conversations
-    ADD COLUMN harness_working_dir TEXT;
-```
+The working directory lives on the **profile**, not the conversation. Reeve already treats profiles as "this is configured to do X for a project" (system message + default model + plugins + compression knobs); a project's working dir is a natural sibling of those settings, and it inherits through the profile parent chain via the existing resolver.
 
-Set when the user creates a conversation against a harness provider (or first sends with one). NULL for non-harness conversations. Could later be moved into `conversation_harness_sessions` if we ever support per-(provider) working dirs in one conversation; v1 keeps it simple as a conversation-level field.
+Stored inside the existing `profiles.default_settings` JSONB blob (no new SQL column) under the new `ProfileDefaults.harness_working_dir` proto field. `profiles.Resolve` walks the parent chain to surface a non-empty value the same way it already does for `default_provider_id` / `default_model_id`.
+
+Implications:
+- One profile per project the user wants to harness against.
+- Editing a profile's working dir affects every conversation under it (and child profiles that inherit). The harness MAY handle a mid-session cwd switch gracefully, but in practice most users will create a new profile when starting work in a new repo.
+- A profile with `harness_working_dir` set is still usable with non-harness models — the field is silently ignored when the active provider isn't a `StatefulProvider`.
+- A profile without `harness_working_dir` (and no parent providing one) cannot be used with a harness provider — the conversations service rejects with `FailedPrecondition` and the message "set the working directory on the profile to use a harness model".
 
 ### `conversation_harness_sessions` — new
 
@@ -330,7 +332,9 @@ CREATE TABLE conversation_harness_sessions (
 );
 ```
 
-One session per (conversation, harness-provider) pair. A conversation can have multiple rows if the user switches between harness providers mid-conversation (uncommon but valid — e.g. starting with Claude Code, switching to Codex on the next turn). Each turn's send uses the row matching the active provider.
+One session per (conversation, harness-provider) pair. A conversation can have multiple rows if the user toggles between harness providers mid-conversation (uncommon but valid — e.g. starting with Claude Code, switching to Codex). Each turn's send uses the row matching the active provider.
+
+Working dir does NOT live here — it's resolved fresh from the profile chain on every send. If a user moves their project after starting a conversation, editing the profile is enough; no per-conversation row to update.
 
 ### `user_model_providers.config` — shape for harness types
 
@@ -348,34 +352,84 @@ Same env-vars-explicit pattern as the MCP plugin — subprocess inherits NOTHING
 
 ## Working directory handling
 
-A harness conversation has ONE working directory across its lifetime. UX:
+A profile carries the working directory; every conversation under that profile uses it. UX:
 
-- **New conversation form** (`NewConversationView.swift`): when the selected profile / model resolves to a harness provider, the form gains a "Working directory" field — directory picker (`NSOpenPanel` with `.canChooseDirectories=true, .canChooseFiles=false`). Required to send.
-- **Stored** in `conversations.harness_working_dir`.
-- **Locked** for the conversation's lifetime: changing requires a new conversation. Surface this in the UI (gear → "this conversation runs in `~/projects/foo`").
-- **Validation:** the conversations service rejects sends where `harness_working_dir` doesn't exist or isn't a directory at send time.
+- **Profile form** (`ProfilesView.swift::ProfileForm`): when the resolved default model is a harness provider (or any harness provider is enabled for the user), the form surfaces a "Working directory" field — directory picker (`NSOpenPanel` with `.canChooseDirectories=true, .canChooseFiles=false`). Stored in `default_settings.harness_working_dir`. Inherits from the parent profile when blank.
+- **No conversation-level UI.** A conversation has whatever wd its profile resolves to.
+- **Validation** at send time: the conversations service rejects with `FailedPrecondition` when (a) the active provider is a harness AND (b) the resolved profile chain produces no `harness_working_dir`, or the dir doesn't exist on disk, or it isn't a directory.
+- **Conversation-list rows** under a harness profile show the dir as a small caption ("Coding · ~/projects/foo") so the user can see at a glance which conversations write to which directory.
 
-Switching the conversation to a non-harness provider mid-session is allowed — `harness_working_dir` just stops being consulted. Switching back to the harness uses the same directory and the same persisted session.
+Switching the conversation's per-turn model to a non-harness provider is allowed — the working dir just stops being consulted. Switching back uses the same dir + the same persisted session row.
+
+Editing the profile's wd while conversations are active under it: future sends use the new value. Most harnesses tolerate a mid-session cwd switch (`--resume` reads from the new dir); if a user wants strict isolation they make a new profile. Profile-as-the-unit-of-project-binding aligns with how Reeve already groups configuration.
 
 ---
 
-## Plugin compatibility
+## Features unavailable inside a harness conversation
 
-Plugin capabilities and how they interact with harness sends:
+The harness owns its session — Reeve doesn't see the transcript, doesn't dispatch tools, doesn't control history. Several Reeve features depend on owning the conversation transcript and have to be hidden / disabled when the active provider is a `StatefulProvider`. Listed here so the UI work has a single reference.
+
+### Compaction (Compact button)
+
+Compaction takes the Reeve-side wire history, asks an LLM to summarise it, and inserts the summary as the new context root. For harness sends Reeve doesn't send wire history at all — each turn just ships the latest user prompt to a session-resumed harness — so there's nothing meaningful to summarise on Reeve's side. The harness's own session storage manages long-conversation pressure internally (Claude Code, Codex both compact behind the scenes).
+
+**UI effect:** Compact button hidden in `ConversationView`'s toolbar when the active provider is a harness; Contexts page hides the "promote pending compaction" affordance. The button's keyboard shortcut also no-ops.
+
+### Edit user message ("Edit" / "Save and resend")
+
+Editing a user message in a native conversation re-anchors the wire history at that point — the old bytes get replaced and the next send rebuilds the prefix. For harness sends the prior turn already reached the harness's session storage; an edit on Reeve's side doesn't propagate. Worse, "Save and resend" would push the EDITED text as a brand new turn into the session, leaving the harness with both the old and the new in its internal history — silently confusing.
+
+**UI effect:** edit affordance hidden on user messages in harness conversations. `MessageRow.contextMenuItems` checks the conversation's active provider and elides the Edit item.
+
+### Reload from message ("Reload from here")
+
+Same root cause. The native flow forks a new assistant turn from the chosen ancestor by rebuilding wire history from that point. The harness session is monolithic — there's no protocol message for "redo from turn N." Replaying every prior turn through the harness is also wrong (it would compose the harness's old responses with Reeve's idea of history, drifting badly).
+
+**UI effect:** Reload affordance hidden on every message in harness conversations. Where users want a do-over: cancel the in-flight stream and ask again.
+
+### Forking (branching from a non-leaf message)
+
+Same monolithic-session reason. A fork would need the harness to support session-clone (Claude Code does have a session-fork on disk; Codex doesn't). Even where supported, plumbing a per-fork session-id through Reeve's branch machinery is its own sub-feature. Defer until at least one harness exposes it cleanly.
+
+**UI effect:** sibling-count indicators don't appear on harness-conversation messages; the right-click "Reload from here" path that would create a sibling assistant turn is hidden as above.
+
+### Plugin pipeline (mixed)
+
+Plugins compose with harness sends, but only the capabilities that don't depend on owning history apply.
 
 | Capability | Behaviour on harness sends |
 |---|---|
 | `Configurable` | N/A — applies to plugin config UI, unrelated |
-| `SystemPrompter` | **No-op.** The harness owns its system prompt. Contributions are silently dropped. Document on the plugin card. |
-| `OutgoingUserTransformer` | **Applies.** The latest user message goes through the pipeline before being passed to the harness. (`basic_grounding`'s timestamp prepend works correctly.) |
-| `HistoryTransformer` | **No-op.** Harness owns its history. |
-| `ChunkTransformer` | **Applies.** Harness output chunks flow through the same pipeline as native-driver chunks. |
+| `SystemPrompter` | **No-op.** The harness owns its system prompt. Contributions silently dropped. |
+| `OutgoingUserTransformer` | **Applies.** The latest user message runs through the pipeline before being passed to the harness. (`basic_grounding`'s timestamp prepend works correctly.) |
+| `HistoryTransformer` | **No-op.** Harness owns its history; Reeve doesn't render a wire prefix to transform. |
+| `ChunkTransformer` | **Applies.** Harness output chunks flow through the pipeline the same way native-driver chunks do. |
 | `DisplayTransformer` | **Applies.** Final assistant content gets display-transformed the same way. |
-| `ToolProvider` | **No-op.** The harness has its own tools; Reeve doesn't dispatch on tool_use chunks emitted by harness output (those are informational). |
+| `ToolProvider` | **No-op.** The harness has its own tools; tool_use chunks coming back from the harness are informational only. Reeve doesn't dispatch. |
 | `AssistantContentTransformer` | **Applies.** Same as native drivers. |
 | `MessageLifecycleHook` | **Applies.** Fires for every message persist regardless of provider type. |
 
-The pipeline runs as today; capabilities that don't apply just have nothing to do. UI: the profile-form plugin cards could grey out incompatible capability chips when a harness provider is the conversation's active model — defer until the no-ops cause real confusion.
+**UI effect:** the profile-form plugin cards grey the no-op capability chips when the profile's resolved default model is a harness — surfaces the "this part of the plugin won't run here" signal in the editor where attachments are decided. The pipeline runs as today; no-op capabilities just have nothing to do.
+
+### Per-turn model switch (allowed but warns on the way OUT)
+
+Per-turn provider/model overrides still work in harness conversations:
+- Harness → another harness: creates a new `conversation_harness_sessions` row for the second harness; both sessions stay independent.
+- Harness → native API: the next turn ships only the LATEST user message to the API (Reeve's wire history for the harness conversation is mostly empty — every turn looks like one user + one assistant, with all the harness's internal context invisible to Reeve). Switching to a native API mid-conversation effectively starts a fresh chat with no context. **UI effect:** show an inline warning when the user picks a native model for a turn under a harness profile: "this model won't see the harness's prior context — only your latest message".
+
+### Message-level branching cursor (current_leaf)
+
+Still used — every send still advances the cursor to the just-materialised assistant message. The cursor mostly does nothing interesting in a harness conversation since the tree is linear (no forks), but the bookkeeping costs nothing and keeps the data shape uniform.
+
+### What still works
+
+- Streaming text + thinking deltas
+- Tool-call rendering (informational, via the existing tool-call UI we built)
+- Cancellation mid-stream
+- Cost + token reporting on each assistant message (sourced from the harness's `result.total_cost_usd` / equivalent)
+- `MessageLifecycleHook` plugins (embedding generation, audit logs, etc.)
+- DisplayTransformer + AssistantContentTransformer plugins
+- Conversation delete (cascades through `conversation_harness_sessions` — the harness's own session storage is orphaned, which is fine; users can `claude /resume` or equivalent to recover if needed)
 
 ---
 
@@ -435,7 +489,7 @@ The supervisor's existing Cancel path triggers context cancellation on the SendF
 |---|---|---|
 | **0 — Infrastructure** | `internal/harnesses/harness.go` (interface + registry), `internal/providers/StatefulProvider`, `internal/providers/harness/Driver`, conversations.Service.SendMessage stateful branch, `conversation_harness_sessions` table + queries, `conversations.harness_working_dir` column. No actual harness yet — all wiring with a fake harness used in tests. | ~1 week |
 | **1 — Claude Code** | `internal/harnesses/claude/` — fully working against the real `claude` CLI. Stream parser, model catalog, session-id capture, cancellation. | ~1 week |
-| **2 — Mac UI** | New-conversation form: working-directory picker when a harness provider is selected. Provider-config form: harness-specific binary + env fields. Conversation header / settings: surface working dir + session id (read-only). | ~1 week |
+| **2 — Mac UI** | Profile form: working-directory picker on `default_settings.harness_working_dir` (only required-feeling when the resolved default model is a harness). Provider-config form: harness-specific binary + env fields. Conversation header / settings: surface resolved working dir + session id (read-only). Hide the disabled affordances per the "Features unavailable" matrix (Compact, Edit, Reload, Fork). Inline warning on per-turn switch from harness → native API. Conversation list rows under harness profiles caption the working dir. | ~1 week |
 | **3 — Codex CLI** | `internal/harnesses/codex/` — second harness. The fact that this is a clean addition (one new package + one provider type registration) is the test of the abstraction. | ~3-5 days |
 | **4 — pi.dev** | `internal/harnesses/pi/` — third harness, finalises the cheat sheet, finalises the abstraction. | ~3-5 days |
 | **5 — Polish** | Capability chip greying for harness sends, working-dir validation hardening, missing-binary diagnostics, surface harness stderr in a "diagnostics" popover. | ~1 week |
@@ -453,6 +507,7 @@ Phase 0 + 1 ship the first usable end-to-end. 3 / 4 are independent and parallel
 - **Sandboxing.** Harnesses run arbitrary code on the user's machine. Reeve already trusts the user (it's self-hosted). When the multi-tenant story lands, harness sends will need to grow a "sandbox profile" — at minimum, a chrooted working dir with no network. Out of scope here.
 - **Provider Files API caching for harness output.** Mostly N/A — harnesses output text + tool events directly, not files. Re-evaluate if any harness grows server-side file caching.
 - **Cost attribution accuracy.** Different harnesses report cost in different ways and units. Trust the harness's `total_cost_usd` for v1; surface it on the message-cost popover with a "as reported by the harness" disclaimer.
+- **Per-conversation working-dir override.** Profile-level is the right default — a user with one project per profile is the common shape. If real users start wanting "same profile, different dir per conversation" (e.g. several worktrees of one repo), add an optional `conversations.harness_working_dir_override` that, when set, supersedes the profile's value at send time. Defer until requested.
 
 ---
 
