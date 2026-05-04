@@ -1,4 +1,4 @@
-.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run
+.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png
 
 GOOSE_DRIVER ?= postgres
 GOOSE_DBSTRING ?= postgres://clark:clark@localhost:5433/clark?sslmode=disable
@@ -95,15 +95,23 @@ mac-app: mac-build clients/reeved-mac/AppBundle/AppIcon.icns
 	cp clients/reeved-mac/AppBundle/Info.plist clients/reeved-mac/.build/ReeveMac.app/Contents/Info.plist
 	cp clients/reeved-mac/AppBundle/AppIcon.icns clients/reeved-mac/.build/ReeveMac.app/Contents/Resources/AppIcon.icns
 	cp clients/reeved-mac/.build/debug/ReeveMac clients/reeved-mac/.build/ReeveMac.app/Contents/MacOS/ReeveMac
-	# SwiftPM resource bundle (ReeveMac/Logos/*.svg). The auto-generated
-	# Bundle.module accessor expects it next to the .app — `Bundle.main.bundleURL
-	# .appendingPathComponent("reeved-mac_ReeveMac.bundle")` — not inside
-	# Contents/Resources/. The if-guard makes mac-app idempotent for
-	# pre-resource-era builds where the bundle doesn't exist.
-	if [ -e clients/reeved-mac/.build/debug/reeved-mac_ReeveMac.bundle ]; then \
-		cp -R clients/reeved-mac/.build/debug/reeved-mac_ReeveMac.bundle \
-			clients/reeved-mac/.build/ReeveMac.app/reeved-mac_ReeveMac.bundle; \
+	# SwiftPM resource bundles. The provider-logo SVGs moved to
+	# ReeveUI/Resources/Logos/ as part of the iOS-share refactor —
+	# the bundle is now ReeveSwift_ReeveUI.bundle (auto-named by SPM
+	# from <package>_<target>). Goes inside Contents/Resources/ so the
+	# .app stays a proper sealable bundle (unsealed root content
+	# breaks codesign).
+	if [ -e clients/reeved-mac/.build/debug/ReeveSwift_ReeveUI.bundle ]; then \
+		cp -R clients/reeved-mac/.build/debug/ReeveSwift_ReeveUI.bundle \
+			clients/reeved-mac/.build/ReeveMac.app/Contents/Resources/ReeveSwift_ReeveUI.bundle; \
 	fi
+	# Ad-hoc re-sign with the Info.plist's bundle ID. The default SwiftPM
+	# signature uses an auto-generated identifier ("ReeveMac-<hash>") which
+	# doesn't match CFBundleIdentifier — the mismatch silently breaks
+	# UNUserNotificationCenter (system has no idea which app the
+	# permission grant belongs to). Re-signing with --identifier fixes it.
+	codesign --force --deep --sign - --identifier dev.jdpedrie.ReeveMac \
+		clients/reeved-mac/.build/ReeveMac.app
 
 mac-app-run: mac-app
 	-pkill -x ReeveMac
@@ -113,3 +121,45 @@ mac-app-run: mac-app
 	# built bundle here. Running the executable inside the freshly built
 	# bundle wins regardless of LS state.
 	clients/reeved-mac/.build/ReeveMac.app/Contents/MacOS/ReeveMac &
+
+# --- iOS ---
+
+# Pinned simulator for the build/run loop. iPhone 17 Pro is the default
+# device the iOS plan's snapshot harness will record against; switching
+# requires touching one variable here.
+IOS_SIMULATOR ?= iPhone 17 Pro
+IOS_BUNDLE_ID := dev.jdpedrie.ReeveiOS
+IOS_DERIVED_APP := clients/reeved-ios/.build/Build/Products/Debug-iphonesimulator/ReeveiOS.app
+
+# Regenerate the Xcode project from project.yml. xcodegen is the
+# git-friendly source of truth — never hand-edit project.pbxproj.
+ios-project:
+	cd clients/reeved-ios && xcodegen generate
+
+# Convert provider-logo SVGs into matching PNGs so iOS — which can't
+# decode raw SVG bytes from arbitrary file URLs — can render them via
+# UIImage(named:in:with:). Mac keeps using the SVGs via NSImage. Idempotent.
+logos-png:
+	scripts/convert-svgs-to-pngs.sh
+
+# Build the iOS app for the simulator. Pinned to a project-local
+# DerivedData path so `make ios-app-run` can find the bundle without
+# parsing xcodebuild's per-machine hash.
+ios-build: ios-project logos-png
+	xcodebuild \
+		-project clients/reeved-ios/ReeveiOS.xcodeproj \
+		-scheme ReeveiOS \
+		-configuration Debug \
+		-destination 'platform=iOS Simulator,name=$(IOS_SIMULATOR),OS=latest' \
+		-derivedDataPath clients/reeved-ios/.build \
+		build
+
+# Build, boot the simulator, install the freshly-built bundle, and
+# launch. The simulator stays open across runs so subsequent installs
+# replace the existing bundle in place — the launched PID is the new
+# binary every time.
+ios-app-run: ios-build
+	xcrun simctl boot '$(IOS_SIMULATOR)' 2>/dev/null || true
+	open -a Simulator
+	xcrun simctl install booted $(IOS_DERIVED_APP)
+	xcrun simctl launch booted $(IOS_BUNDLE_ID)
