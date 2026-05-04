@@ -184,6 +184,7 @@ private struct ProviderDetailView: View {
     @State private var editing: Bool = false
     @State private var modelSettingsTarget: ReeveUserModel?
     @State private var testResultMessage: String?
+    @State private var disableCandidate: ReeveUserModel?
 
     var body: some View {
         @Bindable var providers = app.providers
@@ -259,6 +260,22 @@ private struct ProviderDetailView: View {
         } message: { msg in
             Text(msg)
         }
+        .alert(
+            "Disable model?",
+            isPresented: Binding(
+                get: { disableCandidate != nil },
+                set: { if !$0 { disableCandidate = nil } }
+            ),
+            presenting: disableCandidate
+        ) { m in
+            Button("Disable", role: .destructive) {
+                Task { await app.providers.disableModel(m.modelID) }
+                disableCandidate = nil
+            }
+            Button("Cancel", role: .cancel) { disableCandidate = nil }
+        } message: { m in
+            Text("\"\(m.displayName)\" will be removed from this provider's enabled list. Conversations using it won't be able to send until you re-enable it from Discover.")
+        }
         .task {
             providers.selectedID = provider.id
             await providers.selectProvider(provider.id)
@@ -290,6 +307,11 @@ private struct ProviderDetailView: View {
         }
         .padding(.vertical, 2)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                disableCandidate = m
+            } label: {
+                Label("Disable", systemImage: "minus.circle")
+            }
             Button {
                 modelSettingsTarget = m
             } label: {
@@ -318,6 +340,11 @@ private struct ProviderDetailView: View {
                 Task { await runModelTest(modelID: m.modelID) }
             } label: {
                 Label("Test", systemImage: "checkmark.seal")
+            }
+            Button(role: .destructive) {
+                disableCandidate = m
+            } label: {
+                Label("Disable", systemImage: "minus.circle")
             }
         }
     }
