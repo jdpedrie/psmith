@@ -250,6 +250,17 @@ public final class ProvidersViewModel {
         }
     }
 
+    /// Partial-update variant: pass `nil` for `config` to leave the
+    /// stored credentials blob alone (used by the iOS edit form
+    /// which pre-fills `base_url` but doesn't expose the existing
+    /// `api_key`; the user explicitly opts in to replacing the key).
+    public func updateProviderPartial(id: String, label: String?, config: Data?) async throws {
+        let updated = try await client.modelProviders.update(id: id, label: label, config: config)
+        if let idx = providers.firstIndex(where: { $0.id == id }) {
+            providers[idx] = updated
+        }
+    }
+
     /// Replaces the provider-level default CallSettings via UpdateUserModelProvider
     /// (only the `default_settings` field is sent — label/config left alone).
     /// Updates the in-memory provider list on success so subsequent reads reflect

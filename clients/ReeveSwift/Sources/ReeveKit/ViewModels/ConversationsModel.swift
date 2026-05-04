@@ -109,5 +109,18 @@ public final class ConversationsModel {
         }
     }
 
+    /// Sets a new title and updates the in-memory list so callers see
+    /// the rename without waiting for a refresh round-trip.
+    public func rename(id: String, title: String) async {
+        do {
+            let updated = try await client.conversations.updateTitle(id: id, title: title)
+            if let idx = conversations.firstIndex(where: { $0.id == id }) {
+                conversations[idx] = updated
+            }
+        } catch {
+            self.loadError = error.localizedDescription
+        }
+    }
+
     public var clientRef: ReeveClient { client }
 }

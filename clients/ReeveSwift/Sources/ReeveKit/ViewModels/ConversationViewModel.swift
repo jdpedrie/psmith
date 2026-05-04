@@ -56,6 +56,17 @@ public final class ConversationViewModel {
     public var streamingText: String = ""
     public var streamRunID: String?
     private var streamTask: Task<Void, Never>?
+
+    /// Sequence number of the most recent chunk seen on the active
+    /// stream. Used by `resumeStreamIfPaused()` to re-subscribe with
+    /// `fromSequence = lastStreamChunkSequence + 1` after a ScenePhase
+    /// background dropped the live SSE connection.
+    ///
+    /// Reset to 0 in `clearStreamingState()` and on each new `send()`
+    /// so a stale sequence from a previous run doesn't leak into the
+    /// next one. Mac never reads it (Mac apps don't suspend the same
+    /// way) but the per-chunk write costs nothing.
+    private var lastStreamChunkSequence: Int64 = 0
     /// Optimistic user message text shown before the RPC returns.
     public var pendingUserText: String?
 
@@ -541,6 +552,57 @@ public final class ConversationViewModel {
         Task { try? await client.streams.cancel(streamRunID: id) }
     }
 
+    // MARK: - ScenePhase suspend / resume (iOS)
+    //
+    // iOS aggressively suspends backgrounded apps; the SSE socket the
+    // streamTask holds dies on the way out. The supervisor on the
+    // server side keeps streaming regardless and persists chunks to
+    // `stream_chunks` — the existing replay path. These two methods
+    // wire that path to the iOS ScenePhase observer in `ReeveiOSApp`.
+    //
+    // Mac doesn't need them (NSApp doesn't suspend connections the
+    // same way) but the API is harmless to call there too — Mac wires
+    // up `suspendActiveStream()` from a window-occluded notification
+    // would get the same behavior.
+
+    /// Cancels the local subscription Task without telling the server
+    /// to cancel the run. The streamRunID + lastStreamChunkSequence
+    /// stay in place so `resumeStreamIfPaused()` can re-subscribe
+    /// where we left off. No-op when no stream is active.
+    public func suspendActiveStream() {
+        guard streamRunID != nil else { return }
+        streamTask?.cancel()
+        streamTask = nil
+    }
+
+    /// Re-subscribes to the active stream from `lastStreamChunkSequence + 1`
+    /// if a stream was running and got suspended. No-op when there's
+    /// no stream OR when a streamTask is already running (e.g. the
+    /// user foregrounded faster than the cancel-then-resubscribe
+    /// race could complete).
+    public func resumeStreamIfPaused() {
+        guard let runID = streamRunID, streamTask == nil else { return }
+        let resumeFrom = lastStreamChunkSequence + 1
+        streamTask = Task { @MainActor in
+            for await event in client.streams.subscribe(streamRunID: runID, fromSequence: resumeFrom) {
+                switch event {
+                case .chunk(let c):
+                    applyStreamChunk(c)
+                case .terminal:
+                    await load()
+                    await onTerminal()
+                    clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                    fireAssistantTurnComplete()
+                    await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
+                case .failed:
+                    await load()
+                    await onTerminal()
+                    clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+                }
+            }
+        }
+    }
+
     // MARK: Compact
 
     /// Pre-populates `compactPromptDraft` / `compactProviderID` /
@@ -939,6 +1001,11 @@ public final class ConversationViewModel {
     /// for X.Ys" because reasoning is over even though the run hasn't
     /// terminated. Other chunk types are ignored at this layer.
     func applyStreamChunk(_ c: ReeveChunk) {
+        // Track the highest sequence seen so resumeStreamIfPaused can
+        // re-subscribe from `c.sequence + 1` after a ScenePhase drop.
+        // Use max() defensively: chunks should arrive in order but
+        // recording the highest is safe under any ordering quirk.
+        lastStreamChunkSequence = max(lastStreamChunkSequence, c.sequence)
         switch c.type {
         case .textDelta:
             if let s = c.textIfDelta {
@@ -1012,6 +1079,7 @@ public final class ConversationViewModel {
         streamingThinkingExpanded = false
         streamingToolCalls = []
         streamRunID = nil
+        lastStreamChunkSequence = 0
     }
 
     /// Returns the most recently-created assistant message in the loaded

@@ -428,6 +428,11 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
     /// producing this message, in invocation order. Empty when the model
     /// didn't request any tools.
     public let toolCalls: [ReeveToolCall]
+    /// Wall-clock the server materialised this row. Used by clients
+    /// for the in-bubble timestamp line; required for ordering only at
+    /// the server (clients trust list order). May be `Date(0)` for
+    /// rows from before the column existed.
+    public let createdAt: Date
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -460,7 +465,8 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
         errorText: String? = nil,
         thinkingRenderedText: String? = nil,
         thinkingDurationMs: Int32? = nil,
-        toolCalls: [ReeveToolCall] = []
+        toolCalls: [ReeveToolCall] = [],
+        createdAt: Date = Date(timeIntervalSince1970: 0)
     ) {
         self.id = id
         self.contextID = contextID
@@ -477,6 +483,7 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable {
         self.thinkingRenderedText = thinkingRenderedText
         self.thinkingDurationMs = thinkingDurationMs
         self.toolCalls = toolCalls
+        self.createdAt = createdAt
     }
 }
 
@@ -499,7 +506,8 @@ extension ReeveMessage {
                 ? p.thinkingRenderedText
                 : nil,
             thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil,
-            toolCalls: p.toolCalls.map(ReeveToolCall.init(from:))
+            toolCalls: p.toolCalls.map(ReeveToolCall.init(from:)),
+            createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
         )
     }
 }
