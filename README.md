@@ -29,12 +29,13 @@ Working today, exercised daily by the author:
 - **Anthropic prompt caching** (auto `cache_control` placement at the stable-prefix boundary), **OpenAI `prompt_cache_key`** routing, **Google implicit caching** + explicit `cachedContents` API support (Go-only; no UI yet).
 - Auto-titling via a small cheap model (or Apple Foundation Models on-device on macOS).
 - Per-conversation overrides for `temperature`, `max_output_tokens`, thinking budget, etc., with 4-layer resolution (conversation → profile → model → provider).
-- macOS client (SwiftUI, Liquid Glass).
+- **macOS** client (SwiftUI, Liquid Glass) and **iOS** client (SwiftUI, iOS 26) sharing repositories, view models, domain types, and most views via the `ReeveSwift` package. The iOS app handles ScenePhase backgrounding by reattaching to in-flight server streams from the last received chunk on resume.
 
 Deferred:
 
 - Tool use (the plugin interface is settled; the wire-translation work is tracked in `docs/todo.md`).
-- iOS / web clients.
+- Web client.
+- APNs push notifications on iOS — local UNUserNotifications fire while the app is in memory; full background pushes need a paid Apple Developer account.
 - Stateful subprocess providers (Claude Code, Codex) — interface is sketched.
 - Multi-user sharing — `provider`/`profile`/`conversation` are per-user only.
 - Encryption-at-rest beyond host-level disk encryption (sketched in `docs/architecture.md`).
@@ -62,7 +63,7 @@ Stack:
 
 - **Server** — Go, single binary (`reeved`), Postgres for storage, ConnectRPC for transport (HTTP/2, server-streaming RPCs, first-class Go/TS/Swift codegen).
 - **Model metadata** — in-process `LiveCatalog` (no DB cache, no periodic refresh goroutine). On first lookup the server fetches [models.dev](https://models.dev) once into memory; subsequent reads are instant. Snapshot the result onto each `user_models` row at provider-add time so per-message cost calc is local and deterministic.
-- **macOS client** — SwiftUI on macOS 26 (Liquid Glass). Shared `ReeveKit` Swift package for repositories/view models so future iOS reuses the non-UI layer.
+- **macOS + iOS clients** — SwiftUI on macOS 26 / iOS 26. The shared `ReeveSwift` package ships two products: `ReeveKit` (repositories, view models, domain types, ConnectRPC client) and `ReeveUI` (cross-platform SwiftUI views — chat bubbles, model picker, settings forms, theme system, provider logos). Per-platform shells (`reeved-mac`, `reeved-ios`) supply OS-native bindings (clipboard, notifications) via thin SwiftUI environment-injected protocols defined in `ReeveKit/Platform/`.
 - **No multi-provider framework** — drivers use each vendor's official SDK directly so provider-specific features (Anthropic `cache_control` + thinking, OpenAI Responses, Google `safetySettings`) survive intact. The OpenAI-compatible driver carries a small `Quirks` overlay for the 11 OAI-compat presets so each provider's deviations (cache headers, extra body fields, custom discovery endpoints) live in one slot per preset rather than forking the driver.
 
 ## Repo layout
@@ -86,13 +87,18 @@ internal/
   stream/                 # supervisor, broker, run lifecycle
 plugins/                  # in-tree chat plugins
 clients/
-  ReeveSwift/             # shared Swift package (ReeveKit + tests)
+  ReeveSwift/             # shared Swift package: ReeveKit + ReeveUI + tests
   reeved-mac/             # macOS app + snapshot tests
+  reeved-ios/             # iOS app (xcodegen-driven; project.yml is canonical)
 docs/
   architecture.md         # design decisions
+  ios-plan.md             # iOS architecture skeleton + phasing
+  ios-screens.md          # per-screen iOS UX treatment
   testing-plan.md         # Swift L1+L2 testing strategy
   todo.md                 # tactical follow-ups
   screenshots/
+scripts/
+  convert-svgs-to-pngs.sh # iOS-side provider-logo PNGs (rsvg-convert)
 ```
 
 ## Running it
@@ -101,7 +107,8 @@ docs/
 
 - Go 1.22+
 - Docker (for the dev Postgres) — or your own Postgres 14+ instance
-- macOS 26 (Liquid Glass) + Xcode 17 if you want the macOS client
+- macOS 26 (Liquid Glass) + Xcode 17 if you want the macOS or iOS client
+- For the iOS client: `xcodegen` (`brew install xcodegen`) to regenerate the Xcode project from `clients/reeved-ios/project.yml`, and `librsvg` (`brew install librsvg`) so `rsvg-convert` can materialise the iOS-side provider-logo PNGs
 - `buf` and `sqlc` if you regenerate code (`brew install bufbuild/buf/buf sqlc`)
 - `goose` for migrations (`go install github.com/pressly/goose/v3/cmd/goose@latest`)
 
@@ -161,6 +168,26 @@ The Providers sidebar lists every built-in preset always — configured ones at 
 …and you're ready to chat. The conversation list groups by profile or sorts by recent activity:
 
 ![Conversation with errored stream](docs/screenshots/conversation.png)
+
+### 5. iOS client
+
+```bash
+make ios-app-run
+```
+
+`make ios-app-run` runs `xcodegen` to materialise the Xcode project from `clients/reeved-ios/project.yml`, converts the provider-logo SVGs into PNGs (iOS can't decode raw SVG bytes from arbitrary file URLs), builds the app for the iPhone simulator, boots the simulator, installs the bundle, and launches it. Defaults to `iPhone 17 Pro`; override via `IOS_SIMULATOR='iPhone 16'` (or any other installed simulator runtime).
+
+First launch: enter the URL of your reeved instance (the simulator can hit `http://localhost:8080` directly), the app probes it to confirm, then asks for credentials. The "Change server" link on the credentials screen lets you bounce back to the URL screen — single-server-at-a-time stays for v1; "log out, change server, log back in" is the multi-server workflow.
+
+<p align="left">
+  <img src="docs/screenshots/ios-chats.png" alt="iOS chats list" width="260">
+  <img src="docs/screenshots/ios-conversation.png" alt="iOS conversation view" width="260">
+  <img src="docs/screenshots/ios-providers.png" alt="iOS providers settings" width="260">
+</p>
+
+The iOS app is at parity with the Mac app for everyday chat: streaming, branching, editing, deleting, manual compression, all settings panes (Providers / Profiles / Plugins / Appearance / Notifications), per-message cost + cache-efficiency dot, in-bubble token usage and timestamp. ScenePhase backgrounding cancels the local SSE subscription and resumes from the last received chunk on return, so a backgrounded stream keeps streaming on the server and rejoins live when the app foregrounds. Local notifications fire when an assistant turn finishes while the app is unfocused (suppressed when `applicationState == .active`).
+
+To run on a physical device: open `clients/reeved-ios/ReeveiOS.xcodeproj` in Xcode after `make ios-project`, pick your device, and let Xcode handle code signing with your free Personal Team. Profiles auto-rotate every 7 days on the free tier.
 
 ## Development
 
