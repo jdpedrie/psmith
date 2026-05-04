@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 struct ConversationListView: View {
     @Environment(ConversationsModel.self) private var convos
@@ -144,7 +145,7 @@ struct ConversationListView: View {
                         .listRowSeparator(.hidden)
                 }
                 ForEach(convos.conversations) { c in
-                    ConversationRow(conversation: c, onDelete: { conversationToDelete = c })
+                    ConversationRowMac(conversation: c, onDelete: { conversationToDelete = c })
                         .tag(c.id)
                 }
             } header: {
@@ -160,7 +161,7 @@ struct ConversationListView: View {
                             .listRowSeparator(.hidden)
                     }
                     ForEach(buckets) { c in
-                        ConversationRow(conversation: c, hideProfileLabel: true, onDelete: { conversationToDelete = c })
+                        ConversationRowMac(conversation: c, hideProfileLabel: true, onDelete: { conversationToDelete = c })
                             .tag(c.id)
                     }
                 } header: {
@@ -179,7 +180,7 @@ struct ConversationListView: View {
                         .listRowSeparator(.hidden)
                 } else {
                     ForEach(convos.conversations) { c in
-                        ConversationRow(conversation: c, onDelete: { conversationToDelete = c })
+                        ConversationRowMac(conversation: c, onDelete: { conversationToDelete = c })
                             .tag(c.id)
                     }
                 }
@@ -247,7 +248,12 @@ struct ConversationListView: View {
     }
 }
 
-struct ConversationRow: View {
+/// Mac wrapper around ReeveUI's shared `ConversationRow`. Adds the
+/// hover-trash chrome — Mac-specific because contextMenu on macOS 26
+/// sidebar rows hits a Liquid Glass capture-path bug (renders as a
+/// window-wide black box). iOS uses `.swipeActions` and doesn't go
+/// through this wrapper.
+struct ConversationRowMac: View {
     let conversation: ReeveConversation
     /// In By-Profile mode the section header already names the profile, so
     /// the subtitle would just repeat it. Hidden in that mode.
@@ -260,23 +266,13 @@ struct ConversationRow: View {
     @Environment(ConversationsModel.self) private var convos
 
     var body: some View {
-        // Right-click context menus are unusable on macOS 26 sidebar
-        // List rows (the menu's backdrop renders as a window-wide black
-        // box, same Liquid Glass capture-path family of bugs we've hit
-        // elsewhere). Hover-revealed trash icon is the workaround:
-        // discoverable, no contextMenu involvement, no Liquid Glass
-        // capture path.
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
-                    .lineLimit(1)
-                if !hideProfileLabel, let profileName = profileName {
-                    Text(profileName)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            ConversationRow(
+                conversation: conversation,
+                profileChainName: hideProfileLabel
+                    ? nil
+                    : profileChainName(for: conversation, profiles: convos.profiles)
+            )
             Spacer(minLength: 0)
             if let onDelete {
                 Button(action: onDelete) {
@@ -302,22 +298,5 @@ struct ConversationRow: View {
             hovering = isOver
         }
         .animation(.easeInOut(duration: 0.12), value: hovering)
-    }
-
-    private var profileName: String? {
-        let id = conversation.profileID
-        guard let p = convos.profiles.first(where: { $0.id == id }) else { return nil }
-        var ancestors: [String] = []
-        var current = p.parentProfileID
-        var seen: Set<String> = [p.id]
-        var depth = 0
-        while let pid = current, !seen.contains(pid), depth < 8 {
-            seen.insert(pid)
-            depth += 1
-            guard let parent = convos.profiles.first(where: { $0.id == pid }) else { break }
-            ancestors.append(parent.name)
-            current = parent.parentProfileID
-        }
-        return ancestors.isEmpty ? p.name : "\(p.name) (\(ancestors.joined(separator: ", ")))"
     }
 }

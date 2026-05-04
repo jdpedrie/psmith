@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Full-pane "Settings" view shown when the user opens the gear button in
 /// the conversation toolbar. Replaces the message scroll inline (no

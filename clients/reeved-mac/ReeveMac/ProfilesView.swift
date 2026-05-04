@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Identifies which of the three profile-form model pickers is
 /// currently expanded for inline selection. Only one is open at a
@@ -531,7 +532,8 @@ private struct ProfileForm: View {
                                 selectedID: $parentID,
                                 includeNoneOption: true,
                                 allowParentOnly: true,
-                                excludeID: editing?.id
+                                excludeID: editing?.id,
+                                onOpenSettings: { id in sharedNavigator.openProfileSettings(id: id) }
                             )
                         }
                         formRow(label: "Parent only",

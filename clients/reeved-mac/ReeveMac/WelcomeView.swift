@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Detail-pane home shown when nothing is selected. Mirrors the layout
 /// shape of `EmptyStateView` (the original placeholder) so it doesn't

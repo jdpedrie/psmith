@@ -1,66 +1,21 @@
 import SwiftUI
-import ReeveUI
 
-/// Detail-column content for `SettingsCategory.appearance`. Renders a grid
-/// of theme cards; clicking a card swaps the active palette immediately and
-/// persists the choice via ThemeStore. Each card carries a mini-bubble
-/// preview so the user can see how the palette feels before committing.
-struct AppearanceSettingsView: View {
-    let section: AppearanceSection
-    @Environment(ThemeStore.self) private var themeStore
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                switch section {
-                case .theme: themePane
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    // MARK: - Theme
-
-    private var themePane: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Theme")
-                    .font(.title2.weight(.semibold))
-                Text("Picks the accent color, message-bubble tint, and selection highlight. Light/dark mode follows your system setting.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 14)],
-                alignment: .leading,
-                spacing: 14
-            ) {
-                ForEach(Theme.allThemes) { theme in
-                    ThemeCard(
-                        theme: theme,
-                        isSelected: themeStore.current.id == theme.id,
-                        onSelect: { themeStore.current = theme }
-                    )
-                }
-            }
-        }
-    }
-
-}
-
-// `ThemeCard` extracted to ReeveUI/Composite/ThemeCard.swift for iOS
-// reuse. The Mac call site uses the same init shape.
-#if false
-private struct ThemeCard_Legacy: View {
+/// Single theme tile. Top: name + blurb + selected check. Middle:
+/// preview row with the two mock chat bubbles tinted in the theme's
+/// accent. Bottom: four colored swatches showing accent / bubble tint
+/// / highlight / chrome so the user can read the palette at a glance.
+public struct ThemeCard: View {
     let theme: Theme
     let isSelected: Bool
     let onSelect: () -> Void
 
-    var body: some View {
+    public init(theme: Theme, isSelected: Bool, onSelect: @escaping () -> Void) {
+        self.theme = theme
+        self.isSelected = isSelected
+        self.onSelect = onSelect
+    }
+
+    public var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 8) {
@@ -155,4 +110,3 @@ private struct ThemeCard_Legacy: View {
         }
     }
 }
-#endif

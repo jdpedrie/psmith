@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Dedicated settings page. Three columns:
 ///   1. Categories sidebar (Providers / Profiles), styled like the chats list.
@@ -13,6 +14,12 @@ struct SettingsView: View {
     let onBack: () -> Void
 
     @State private var category: SettingsCategory = .providers
+    /// Which section of the Appearance pane is selected in the middle
+    /// column. Persists across category switches so coming back to
+    /// Appearance restores the user's last-viewed section.
+    @State private var appearanceSection: AppearanceSection = .theme
+    /// Same for Notifications.
+    @State private var notificationsSection: NotificationsSection = .generationFinished
     @Environment(WindowState.self) private var windowState
     @Environment(Navigator.self) private var navigator
     @Environment(\.theme) private var theme
@@ -150,9 +157,9 @@ struct SettingsView: View {
         case .plugins:
             PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
         case .appearance:
-            AppearanceMiddleColumn(onBack: onBack)
+            AppearanceMiddleColumn(onBack: onBack, selection: $appearanceSection)
         case .notifications:
-            NotificationsMiddleColumn(onBack: onBack)
+            NotificationsMiddleColumn(onBack: onBack, selection: $notificationsSection)
         }
     }
 
@@ -168,21 +175,23 @@ struct SettingsView: View {
         case .plugins:
             PluginSettingsDetail(model: profilesModel)
         case .appearance:
-            AppearanceSettingsView()
+            AppearanceSettingsView(section: appearanceSection)
         case .notifications:
-            NotificationsSettingsView()
+            NotificationsSettingsView(section: notificationsSection)
         }
     }
 }
 
 // MARK: - Notifications middle column
 
-/// Skinny placeholder column for the Notifications category — same
-/// shape as AppearanceMiddleColumn (no list to browse, just the back
-/// button + section label). The actual content lives in the detail
-/// column.
+/// Lists every Notifications sub-section so the middle pane is doing
+/// real work — clicking a row swaps the detail pane to that section's
+/// content. Mirrors the visual shape of ProvidersMiddleColumn /
+/// ProfilesMiddleColumn (header band + selectable rows).
 private struct NotificationsMiddleColumn: View {
     let onBack: () -> Void
+    @Binding var selection: NotificationsSection
+    @Environment(\.theme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -195,49 +204,101 @@ private struct NotificationsMiddleColumn: View {
             .padding(.horizontal, 10)
             .frame(height: paneHeaderHeight)
             Divider()
-            Spacer()
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(NotificationsSection.allCases) { s in
+                    sectionRow(s, selection: $selection, theme: theme)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }
 
+@MainActor
+@ViewBuilder
+private func sectionRow<S: Hashable & Identifiable>(
+    _ section: S,
+    selection: Binding<S>,
+    theme: Theme,
+    label: String,
+    systemImage: String
+) -> some View {
+    let active = (selection.wrappedValue == section)
+    Button {
+        selection.wrappedValue = section
+    } label: {
+        Label(label, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .font(.callout)
+            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(active ? AnyShapeStyle(theme.accent) : AnyShapeStyle(Color.clear))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+    .buttonStyle(.plain)
+}
+
+// Specialised helpers — sectionRow's generic version doesn't know how
+// to pull label+systemImage off a particular enum, so each
+// app-settings enum gets a tiny one-line wrapper.
+
+@MainActor
+private func sectionRow(
+    _ s: AppearanceSection,
+    selection: Binding<AppearanceSection>,
+    theme: Theme
+) -> some View {
+    sectionRow(s, selection: selection, theme: theme, label: s.label, systemImage: s.systemImage)
+}
+
+@MainActor
+private func sectionRow(
+    _ s: NotificationsSection,
+    selection: Binding<NotificationsSection>,
+    theme: Theme
+) -> some View {
+    sectionRow(s, selection: selection, theme: theme, label: s.label, systemImage: s.systemImage)
+}
+
 // MARK: - Appearance middle column
 
-/// Skinny placeholder column for the Appearance category — no item list to
-/// browse, just a back button + section label so the three-column grid still
-/// reads correctly. The detail column carries the actual picker. No create
-/// button in the header (no items to create at this scope), which is why we
-/// hand-roll the header instead of reusing SettingsListHeader.
+/// Lists every Appearance sub-section (Theme, Font size, …). Same shape
+/// as NotificationsMiddleColumn — header band + selectable rows.
 private struct AppearanceMiddleColumn: View {
     let onBack: () -> Void
+    @Binding var selection: AppearanceSection
+    @Environment(\.theme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Appearance")
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text("1 section")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
+                Text("Appearance")
+                    .font(.headline)
                 Spacer()
             }
             .padding(.horizontal, 10)
             .frame(height: paneHeaderHeight)
+            Divider()
 
-            List {
-                Label("Theme", systemImage: "paintpalette")
-                    .listRowBackground(Color.clear)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(AppearanceSection.allCases) { s in
+                    sectionRow(s, selection: $selection, theme: theme)
+                }
+                Spacer(minLength: 0)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }

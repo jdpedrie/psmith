@@ -23,12 +23,42 @@ import ReeveKit
 /// We deliberately avoid SwiftUI's `Menu` for selections — single-item Menus
 /// render with zero-height rows on macOS (see
 /// `feedback_swiftui_menu_macos_bug.md`). Segmented `Picker`s and inline
-/// glass cards are used instead.
-struct CallSettingsForm: View {
+/// glass cards are used instead — except on iOS where iPhone widths
+/// can't hold 3-4 option segmented controls; iOS swaps to `.menu`
+/// which renders correctly there (the macOS Menu bug is single-item
+/// only; 2+ item iPhone Pickers work fine).
+
+private extension View {
+    /// Compact-width-friendly picker style. iOS gets a popup menu so
+    /// the form stays inside the narrow phone width; Mac keeps the
+    /// segmented control.
+    @ViewBuilder
+    func adaptivePickerStyle() -> some View {
+        #if os(iOS)
+        self.pickerStyle(.menu)
+        #else
+        self.pickerStyle(.segmented)
+        #endif
+    }
+}
+
+public struct CallSettingsForm: View {
     @Binding var settings: ReeveCallSettings
     let inheritedSettings: ReeveCallSettings?
     let driverType: String
     let modelCapabilities: ReeveModelCapabilities?
+
+    public init(
+        settings: Binding<ReeveCallSettings>,
+        inheritedSettings: ReeveCallSettings?,
+        driverType: String,
+        modelCapabilities: ReeveModelCapabilities?
+    ) {
+        self._settings = settings
+        self.inheritedSettings = inheritedSettings
+        self.driverType = driverType
+        self.modelCapabilities = modelCapabilities
+    }
 
     private var showsTopK: Bool {
         driverType == "anthropic" || driverType == "google"
@@ -38,7 +68,7 @@ struct CallSettingsForm: View {
         modelCapabilities?.thinking == true
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             commonSection
             if showsTopK { topKRow }
@@ -214,7 +244,7 @@ struct CallSettingsForm: View {
                         Text("On").tag(Bool?.some(true))
                         Text("Off").tag(Bool?.some(false))
                     }
-                    .pickerStyle(.segmented)
+                    .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
                 }
@@ -286,7 +316,7 @@ struct CallSettingsForm: View {
                     Text("On").tag(Bool?.some(true))
                     Text("Off").tag(Bool?.some(false))
                 }
-                .pickerStyle(.segmented)
+                .adaptivePickerStyle()
                 .labelsHidden()
                 .fixedSize()
             }
@@ -311,7 +341,7 @@ struct CallSettingsForm: View {
                     Text("5 min").tag(ReeveCacheTTL?.some(.fiveMinutes))
                     Text("1 hour").tag(ReeveCacheTTL?.some(.oneHour))
                 }
-                .pickerStyle(.segmented)
+                .adaptivePickerStyle()
                 .labelsHidden()
                 .fixedSize()
             }
@@ -430,7 +460,7 @@ struct CallSettingsForm: View {
                         Text("On").tag(Bool?.some(true))
                         Text("Off").tag(Bool?.some(false))
                     }
-                    .pickerStyle(.segmented)
+                    .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
                 }
@@ -453,7 +483,7 @@ struct CallSettingsForm: View {
                         Text("Standard").tag(ReeveServiceTier?.some(.standard))
                         Text("Priority").tag(ReeveServiceTier?.some(.priority))
                     }
-                    .pickerStyle(.segmented)
+                    .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
                 }
@@ -512,7 +542,7 @@ struct CallSettingsForm: View {
                     Text("JSON object").tag(ResponseFormatKind.jsonObject)
                     Text("JSON schema").tag(ResponseFormatKind.jsonSchema)
                 }
-                .pickerStyle(.segmented)
+                .adaptivePickerStyle()
                 .labelsHidden()
                 .fixedSize()
             }
@@ -844,7 +874,7 @@ struct CallSettingsForm: View {
                     Text("Med+").tag(ReeveHarmThreshold?.some(.blockMediumAndAbove))
                     Text("High").tag(ReeveHarmThreshold?.some(.blockOnlyHigh))
                 }
-                .pickerStyle(.segmented)
+                .adaptivePickerStyle()
                 .labelsHidden()
                 .fixedSize()
             }

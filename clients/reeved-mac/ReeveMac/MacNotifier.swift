@@ -4,6 +4,7 @@ import Observation
 import UserNotifications
 
 import ReeveKit
+import ReeveUI
 
 /// Drives macOS local notifications for "your reply is ready" events.
 /// Wired into ConversationViewModel.onAssistantTurnComplete by
@@ -16,7 +17,7 @@ import ReeveKit
 /// so the app's HomeView can pick it up at scene-active time and
 /// switch to the right conversation.
 @MainActor
-final class MacNotifier: NSObject, UNUserNotificationCenterDelegate {
+final class MacNotifier: NSObject, UNUserNotificationCenterDelegate, Notifier {
     private let prefs: AppPreferences
     private let navigator: Navigator
 

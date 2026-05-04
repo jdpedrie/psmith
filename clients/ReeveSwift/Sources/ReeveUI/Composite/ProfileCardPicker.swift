@@ -11,7 +11,7 @@ import ReeveKit
 ///
 /// Used inside `ProfilePickerRow` and (eventually) the new-conversation
 /// page; sized to feel comfortable in a single-row horizontal scroller.
-struct ProfileCard: View {
+public struct ProfileCard: View {
     let profile: ReeveProfile
     /// Pre-resolved `parentChainName(for:)` from ProfilesViewModel.
     let parentChain: String
@@ -22,7 +22,23 @@ struct ProfileCard: View {
 
     @Environment(\.theme) private var theme
 
-    var body: some View {
+    public init(
+        profile: ReeveProfile,
+        parentChain: String,
+        isSelected: Bool,
+        onSelect: @escaping () -> Void,
+        onToggleFavorite: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void
+    ) {
+        self.profile = profile
+        self.parentChain = parentChain
+        self.isSelected = isSelected
+        self.onSelect = onSelect
+        self.onToggleFavorite = onToggleFavorite
+        self.onOpenSettings = onOpenSettings
+    }
+
+    public var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 6) {
                 titleRow
@@ -102,13 +118,18 @@ struct ProfileCard: View {
 // MARK: - "(none)" sentinel card for the parent picker
 
 /// Used by the "Inherits from" picker to represent the no-parent option.
-struct NoneProfileCard: View {
+public struct NoneProfileCard: View {
     let isSelected: Bool
     let onSelect: () -> Void
 
     @Environment(\.theme) private var theme
 
-    var body: some View {
+    public init(isSelected: Bool, onSelect: @escaping () -> Void) {
+        self.isSelected = isSelected
+        self.onSelect = onSelect
+    }
+
+    public var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Standalone")
@@ -140,7 +161,7 @@ struct NoneProfileCard: View {
 /// Horizontal-scroll card picker that replaces the old `Picker` dropdowns
 /// for selecting profiles. Favorites bubble to the front; an optional
 /// filter field appears once the list grows past a small threshold.
-struct ProfilePickerRow: View {
+public struct ProfilePickerRow: View {
     @Bindable var model: ProfilesViewModel
     @Binding var selectedID: String?
 
@@ -158,8 +179,28 @@ struct ProfilePickerRow: View {
     /// the profile being edited so it can't pick itself as a parent).
     var excludeID: String? = nil
 
-    @Environment(Navigator.self) private var navigator
+    /// Caller-provided "open this profile in settings" handler. Mac wires
+    /// this through its `Navigator`; iOS will route via `NavigationStack`
+    /// or a sheet. Either way, the card view doesn't need to know.
+    var onOpenSettings: (String) -> Void
+
     @State private var filterText: String = ""
+
+    public init(
+        model: ProfilesViewModel,
+        selectedID: Binding<String?>,
+        includeNoneOption: Bool = false,
+        allowParentOnly: Bool = false,
+        excludeID: String? = nil,
+        onOpenSettings: @escaping (String) -> Void
+    ) {
+        self.model = model
+        self._selectedID = selectedID
+        self.includeNoneOption = includeNoneOption
+        self.allowParentOnly = allowParentOnly
+        self.excludeID = excludeID
+        self.onOpenSettings = onOpenSettings
+    }
 
     private var filtered: [ReeveProfile] {
         let base = model.sortedForPicker
@@ -182,7 +223,7 @@ struct ProfilePickerRow: View {
         return pickable.count > 4
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if showsFilter {
                 TextField("Filter profiles…", text: $filterText)
@@ -204,7 +245,7 @@ struct ProfilePickerRow: View {
                             isSelected: selectedID == p.id,
                             onSelect: { selectedID = p.id },
                             onToggleFavorite: { Task { await model.toggleFavorite(p.id) } },
-                            onOpenSettings: { navigator.openProfileSettings(id: p.id) }
+                            onOpenSettings: { onOpenSettings(p.id) }
                         )
                     }
                     if filtered.isEmpty && !includeNoneOption {

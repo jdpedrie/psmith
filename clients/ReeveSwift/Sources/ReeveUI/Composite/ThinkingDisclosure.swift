@@ -17,8 +17,8 @@ import SwiftUI
 ///    surfaced as `usage.reasoning_tokens > 0` but no thinking_delta
 ///    chunks). Renders the static "Thought for X.Ys" badge with no chevron
 ///    — clicking is a no-op since there's nothing to show.
-struct ThinkingDisclosure: View {
-    enum Phase: Equatable {
+public struct ThinkingDisclosure: View {
+    public enum Phase: Equatable {
         /// Live ticker. `since` is the wall-clock at which the first
         /// thinking_delta arrived; the view subtracts from `Date()` every
         /// 0.1s to render an elapsed-seconds counter.
@@ -42,7 +42,13 @@ struct ThinkingDisclosure: View {
     /// per-message-id set for historical turns.
     @Binding var isExpanded: Bool
 
-    var body: some View {
+    public init(phase: Phase, renderedText: String, isExpanded: Binding<Bool>) {
+        self.phase = phase
+        self.renderedText = renderedText
+        self._isExpanded = isExpanded
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Button(action: toggle) {
                 header

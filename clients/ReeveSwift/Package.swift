@@ -31,7 +31,12 @@ let package = Package(
                 "ReeveKit",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ],
-            path: "Sources/ReeveUI"
+            path: "Sources/ReeveUI",
+            // Provider logos (LobeHub SVGs) bundled at build time.
+            // Monochrome icons render with currentColor so they tint to
+            // the surrounding foregroundStyle; colored variants
+            // (`*-color.svg`) keep their authored palette.
+            resources: [.process("Resources")]
         ),
         // Test harness — non-test target so multiple test targets can share it.
         // Hosts TestReevedServer (boots a local reeved subprocess against an

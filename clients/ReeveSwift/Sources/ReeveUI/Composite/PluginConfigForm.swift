@@ -13,11 +13,16 @@ import ReeveKit
 /// - `.select`   → Picker(.menu) for >4 options; popover-with-buttons
 ///                 for ≤4 (matches ConversationListView.sortMenu — SwiftUI
 ///                 macOS Menu / 2-item Picker is buggy on macOS 26).
-struct PluginConfigForm: View {
+public struct PluginConfigForm: View {
     let fields: [ReeveConfigField]
     @Binding var config: [String: Any]
 
-    var body: some View {
+    public init(fields: [ReeveConfigField], config: Binding<[String: Any]>) {
+        self.fields = fields
+        self._config = config
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(fields) { field in
                 fieldRow(field)

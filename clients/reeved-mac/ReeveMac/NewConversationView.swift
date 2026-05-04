@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Full-pane "start a new conversation" view that replaces the chats
 /// detail when `Navigator.composingNewConversation == true`. Asks for an
@@ -116,7 +117,8 @@ struct NewConversationView: View {
             sectionLabel("Profile")
             ProfilePickerRow(
                 model: app.profiles,
-                selectedID: $selectedProfileID
+                selectedID: $selectedProfileID,
+                onOpenSettings: { id in sharedNavigator.openProfileSettings(id: id) }
             )
         }
     }

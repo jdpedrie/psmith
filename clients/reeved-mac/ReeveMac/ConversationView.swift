@@ -9,6 +9,7 @@ struct ConversationView: View {
     let profiles: ProfilesViewModel
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
+    @Environment(\.notifier) private var notifier
     @State private var model: ConversationViewModel?
 
     /// Always read the latest snapshot from the sidebar list so auto-generated
@@ -26,12 +27,16 @@ struct ConversationView: View {
             }
         }
         .task(id: conversation.id) {
+            // Capture the env-injected notifier into the closure so the
+            // VM-side firing path doesn't reach into a global. iOS will
+            // bind a different `Notifier` here at app construction time.
+            let liveNotifier = notifier
             let m = ConversationViewModel(
                 conversation: conversation,
                 client: app.client,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
-                    sharedNotifier.generationCompleted(
+                    liveNotifier.generationCompleted(
                         conversationID: convID,
                         conversationTitle: title,
                         messageID: msgID,
@@ -69,6 +74,17 @@ struct ConversationBody: View {
     /// immediately focused." The bool is the focus payload (single-field
     /// scope); flipping false→true re-focuses.
     @FocusState private var composerFocused: Bool
+
+    /// While true, the scroll view auto-pins to the streaming bubble's
+    /// bottom as new tokens arrive. Flipped false the moment the user
+    /// scrolls — no surprise scroll-jacking while they're reading earlier
+    /// turns. Re-enabled when the user submits the next message and when
+    /// a fresh stream begins.
+    @State private var autoFollow = true
+    /// Throttle anchor for the streaming-text scroll. Limits scrollTo to
+    /// ~10Hz so a 200tok/s stream doesn't pile up animation requests and
+    /// produce the jerky stairstep we used to see.
+    @State private var lastAutoScroll: Date = .distantPast
 
     var body: some View {
         VStack(spacing: 0) {
@@ -466,13 +482,45 @@ struct ConversationBody: View {
                     withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .top) }
                 }
                 .onChange(of: model.pendingUserText) { _, text in
-                    if text != nil { withAnimation { proxy.scrollTo("__pending__", anchor: .top) } }
+                    if text != nil {
+                        // User just submitted — they're on the latest turn,
+                        // re-engage auto-follow so their reply scrolls in.
+                        autoFollow = true
+                        withAnimation { proxy.scrollTo("__pending__", anchor: .top) }
+                    }
+                }
+                .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
+                    // Fresh stream → assume the user wants to follow it.
+                    // (User-initiated scroll below flips this back off.)
+                    if !wasStreaming && isStreaming { autoFollow = true }
                 }
                 .onChange(of: model.streamingText) { _, _ in
-                    proxy.scrollTo("__streaming__", anchor: .bottom)
+                    guard autoFollow else { return }
+                    let now = Date()
+                    // 100ms throttle: animations span the gap so the eye
+                    // sees continuous motion instead of stuttered jumps.
+                    if now.timeIntervalSince(lastAutoScroll) >= 0.1 {
+                        lastAutoScroll = now
+                        withAnimation(.linear(duration: 0.12)) {
+                            proxy.scrollTo("__streaming__", anchor: .bottom)
+                        }
+                    }
                 }
                 .onChange(of: model.isCompacting) { _, compacting in
                     if compacting { proxy.scrollTo("__compacting__", anchor: .bottom) }
+                }
+                .onScrollPhaseChange { _, newPhase in
+                    // Any user-initiated motion (drag, wheel, momentum
+                    // fling) cancels follow-mode. Programmatic .animating
+                    // scrolls (our own scrollTo) are intentionally ignored.
+                    switch newPhase {
+                    case .tracking, .interacting, .decelerating:
+                        autoFollow = false
+                    case .idle, .animating:
+                        break
+                    @unknown default:
+                        break
+                    }
                 }
         }
     }
@@ -691,6 +739,7 @@ private struct MessageRow: View {
     let message: ReeveMessage
     let model: ConversationViewModel
     @Environment(\.theme) private var theme
+    @Environment(\.clipboard) private var clipboard
     @State private var showDeleteConfirm = false
     @State private var showUsageDetail = false
     @State private var editDraft: String = ""
@@ -1001,6 +1050,13 @@ private struct MessageRow: View {
             ) {
                 copyToClipboard()
             }
+            hoverButton(
+                systemImage: "trash",
+                help: "Delete — children stitch to this message's parent",
+                tint: .red
+            ) {
+                showDeleteConfirm = true
+            }
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 3)
@@ -1035,6 +1091,7 @@ private struct MessageRow: View {
         systemImage: String,
         help: String,
         disabled: Bool = false,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -1044,7 +1101,11 @@ private struct MessageRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+        .foregroundStyle(
+            disabled
+                ? AnyShapeStyle(.tertiary)
+                : (tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.primary))
+        )
         .disabled(disabled)
         .help(help)
     }
@@ -1430,12 +1491,11 @@ private struct MessageRow: View {
     /// Copy action — used by the hover menu only (intentionally not in the
     /// right-click menu). Falls back to the raw `content` when there's no
     /// displayContent. Surfaces a "Copied" toast briefly above the pill
-    /// so the user gets confirmation that the action fired (Pasteboard
+    /// so the user gets confirmation that the action fired (clipboard
     /// writes succeed silently otherwise).
     private func copyToClipboard() {
         let text = message.displayContent ?? message.content
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        clipboard.write(text)
         withAnimation(.easeOut(duration: 0.15)) { showCopiedToast = true }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)
@@ -1446,266 +1506,12 @@ private struct MessageRow: View {
 
 // MARK: - Pending user row (optimistic, pre-RPC)
 
-private struct PendingUserRow: View {
-    let text: String
-    @Environment(\.theme) private var theme
-    @Environment(\.chatPaneWidth) private var paneWidth
-
-    var body: some View {
-        // Mirrors `MessageRow`'s role-aligned wrap so the optimistic user
-        // bubble is right-aligned + width-capped just like a real one.
-        // Without this the pending row pops out as a full-width strip the
-        // moment between send-click and the RPC return — visually jarring
-        // because every other user row is right-aligned at 85%.
-        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            bubble
-                .frame(maxWidth: cap, alignment: .trailing)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    @ViewBuilder
-    private var bubble: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text("USER")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                ProgressView().controlSize(.mini)
-            }
-            MarkdownText(text)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .background(theme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .opacity(0.7)
-    }
-}
 
 // MARK: - Compression summary card
 
-private struct CompressionSummaryCard: View {
-    let message: ReeveMessage
-    let model: ConversationViewModel
-    @State private var showDeleteConfirm = false
-    @State private var isPromoting = false
-    @State private var showPartialContent = false
-
-    private var isErrored: Bool {
-        message.errorText != nil
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: isErrored
-                      ? "exclamationmark.triangle.fill"
-                      : "wand.and.stars")
-                    .foregroundStyle(.orange)
-                Text(isErrored ? "Compression failed" : "Compression summary")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.orange)
-                Spacer()
-                if !isErrored {
-                    Text("Review and promote or delete")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else if let label = compressionModelLabel {
-                    Text(label)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            if isErrored {
-                erroredBody
-            } else {
-                MarkdownText(message.content)
-                    .font(.callout)
-            }
-
-            HStack(spacing: 8) {
-                if isErrored {
-                    Spacer()
-                    Button("Dismiss") {
-                        Task { await model.deleteMessage(id: message.id) }
-                    }
-                    .buttonStyle(.glassProminent)
-                    .help("Remove this failed compaction from the history. You can retry compaction at any time.")
-                } else {
-                    Button("Edit…") {
-                        model.editingMessage = message
-                    }
-                    .buttonStyle(.borderless)
-
-                    Spacer()
-
-                    Button("Delete") {
-                        showDeleteConfirm = true
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
-                    .confirmationDialog(
-                        "Delete compression summary?",
-                        isPresented: $showDeleteConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Delete summary", role: .destructive) {
-                            Task { await model.deleteMessage(id: message.id) }
-                        }
-                    } message: {
-                        Text("The conversation will resume in the current context as if compaction never happened.")
-                    }
-
-                    Button {
-                        isPromoting = true
-                        Task {
-                            await model.promoteCompaction(messageID: message.id)
-                            isPromoting = false
-                        }
-                    } label: {
-                        if isPromoting {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("Confirm")
-                        }
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(isPromoting)
-                    .help("Confirm the summary, open a fresh context, and continue from there")
-                }
-            }
-        }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    Color.orange.opacity(isErrored ? 0.55 : 0.35),
-                    lineWidth: 1.5
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    /// Body for an errored compression card: error text in red + an optional
-    /// disclosure for any partial summary text streamed before the failure.
-    @ViewBuilder
-    private var erroredBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let errText = message.errorText, !errText.isEmpty {
-                Text(errText)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-            }
-            if !message.content.isEmpty {
-                DisclosureGroup(isExpanded: $showPartialContent) {
-                    MarkdownText(message.content)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                } label: {
-                    Text("Partial summary streamed before failure")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    /// "<Provider Label> <Model Display Name>" with graceful fallbacks.
-    /// Mirrors `MessageRow.modelDisplayLabel` so the failed compression
-    /// summary header reads consistently with assistant message rows.
-    private var compressionModelLabel: String? {
-        guard let mid = message.modelID, !mid.isEmpty else { return nil }
-        let pid = message.providerID
-        let providerLabel = pid.flatMap { model.providerLabels[$0] }
-        let modelDisplay = model.availableModels
-            .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
-            .displayName
-        switch (providerLabel, modelDisplay) {
-        case let (p?, m?): return "\(p) \(m)"
-        case let (p?, nil): return "\(p) \(mid)"
-        case let (nil, m?): return m
-        case (nil, nil): return mid
-        }
-    }
-}
 
 // MARK: - Streaming / compacting / pending rows
 
-private struct StreamingRow: View {
-    let text: String
-    /// Reasoning text accumulated during this stream. Populated by the
-    /// view-model's `.thinkingDelta` chunk handler. Empty for non-reasoning
-    /// turns; non-empty triggers the click-to-expand disclosure.
-    let thinkingText: String
-    /// Wall-clock the first thinking delta arrived. Nil when reasoning
-    /// hasn't started yet (or the model isn't reasoning at all).
-    let thinkingStartedAt: Date?
-    /// Wall-clock the first text delta arrived after thinking. While this
-    /// is nil the badge ticks live; the moment the model flips to producing
-    /// the visible answer we freeze the duration display at "Thought for
-    /// X.Ys" — same UX the user will see on the materialised history row a
-    /// moment later.
-    let thinkingFinishedAt: Date?
-    /// External binding to the disclosure's open/closed state. Lives on
-    /// the ConversationViewModel so the value survives the StreamingRow →
-    /// MessageRow swap at terminal time.
-    @Binding var thinkingExpanded: Bool
-    /// Tool calls captured on the active stream, in start order. Each
-    /// renders as a non-interactive timer pill (`ToolCallLivePill`) — see
-    /// the file header in `ToolCallDisclosure.swift` for crash-safety
-    /// rationale on keeping live pills Button-free.
-    let toolCalls: [LiveToolCall]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("ASSISTANT")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                ProgressView().controlSize(.mini)
-            }
-            if let started = thinkingStartedAt {
-                ThinkingDisclosure(
-                    phase: thinkingFinishedAt.map { f in
-                        .settled(durationSec: f.timeIntervalSince(started))
-                    } ?? .ticking(since: started),
-                    renderedText: thinkingText,
-                    isExpanded: $thinkingExpanded
-                )
-            }
-            ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, call in
-                ToolCallLivePill(call: call)
-            }
-            if text.isEmpty {
-                // Don't render a "…" placeholder while thinking is active or
-                // a tool call is in flight — those pills are the visible
-                // activity indicators.
-                if thinkingStartedAt == nil, toolCalls.isEmpty {
-                    Text("…").foregroundStyle(.secondary)
-                }
-            } else {
-                MarkdownText(text)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-}
 
 private struct CompactingRow: View {
     let text: String
@@ -1901,14 +1707,4 @@ private struct MessageUsagePopover: View {
 /// it. Using GeometryReader → env is the boring-but-reliable alternative
 /// to `.containerRelativeFrame`, which we tried first and which silently
 /// failed to constrain bubble width in this layout.
-private struct ChatPaneWidthKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
-extension EnvironmentValues {
-    var chatPaneWidth: CGFloat {
-        get { self[ChatPaneWidthKey.self] }
-        set { self[ChatPaneWidthKey.self] = newValue }
-    }
-}
 

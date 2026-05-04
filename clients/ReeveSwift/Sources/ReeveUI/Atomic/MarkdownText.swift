@@ -13,18 +13,62 @@ public struct MarkdownText: View {
     }
 
     public var body: some View {
-        Markdown(content)
+        // Convert single `\n` to `  \n` (markdown trailing-space hard
+        // break) outside fenced code blocks, instead of relying on
+        // `markdownSoftBreakMode(.lineBreak)`. The softBreakMode path
+        // has a MarkdownUI bug (2.4.1 confirmed): after a soft break it
+        // sets a "skip next whitespace" flag that the renderer only
+        // clears on the next *text* inline. If the next inline is a
+        // strong/emphasis (e.g. a line that opens with `**Header:**`),
+        // the flag carries past it and strips the leading space on the
+        // text that follows — so `**Header:** value` renders as
+        // `**Header:**value`. Trailing-space hard breaks produce
+        // `.lineBreak` AST nodes directly, which bypass the buggy
+        // soft-break path.
+        Markdown(Self.hardenLineBreaks(content))
             .markdownTheme(.clarkChat)
             .textSelection(.enabled)
     }
+
+    /// Adds two trailing spaces before each newline that should render
+    /// as a visible line break. Skips:
+    ///   - blank-line newlines (those are already paragraph breaks)
+    ///   - lines that already end with two spaces (already a hard break)
+    ///   - lines inside ``` / ~~~ fenced code blocks (visible trailing
+    ///     whitespace would corrupt the displayed code)
+    static func hardenLineBreaks(_ source: String) -> String {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+        var out = ""
+        var inFence = false
+        for (i, line) in lines.enumerated() {
+            out += line
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inFence.toggle()
+            }
+            // Skip the trailing position — `split(omittingEmptySubsequences: false)`
+            // surfaces a phantom empty element after a trailing newline.
+            if i < lines.count - 1 {
+                let next = lines[i + 1]
+                let isBlankBoundary = line.isEmpty || next.isEmpty
+                let alreadyHard = line.hasSuffix("  ")
+                if inFence || isBlankBoundary || alreadyHard {
+                    out += "\n"
+                } else {
+                    out += "  \n"
+                }
+            }
+        }
+        return out
+    }
 }
 
-extension Theme {
+extension MarkdownUI.Theme {
     /// Tighter spacing than the default `.basic` so chat bubbles don't feel
     /// airy. Code blocks get a subtle background tint to read against the
     /// bubble's own background.
     @MainActor
-    static let clarkChat: Theme = Theme()
+    static let clarkChat: MarkdownUI.Theme = MarkdownUI.Theme()
         .text {
             ForegroundColor(.primary)
         }

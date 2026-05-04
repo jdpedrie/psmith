@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Plugin Settings — the user-scoped surface for plugin config fields
 /// the plugin marks `Global=true`. The middle column lists every

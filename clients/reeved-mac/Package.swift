@@ -18,13 +18,10 @@ let package = Package(
                 .product(name: "ReeveKit", package: "ReeveSwift"),
                 .product(name: "ReeveUI", package: "ReeveSwift"),
             ],
-            path: "ReeveMac",
-            // Provider logos bundled at build time. SVGs are LobeHub icons
-            // (https://github.com/lobehub/lobe-icons) — monochrome ones
-            // render with currentColor so they tint to the picker's
-            // foreground style; colored variants (qwen-color) render at
-            // their authored palette.
-            resources: [.copy("Logos")]
+            path: "ReeveMac"
+            // Provider logos moved to ReeveUI/Resources/Logos so the iOS
+            // app can ship the same `ProviderLogo` view without
+            // duplicating the SVG bundle.
         ),
         .executableTarget(
             name: "Verify",

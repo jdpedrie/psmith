@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// Full-pane "Contexts" view shown when the user opens the inbox button in
 /// the conversation toolbar. Replaces the message scroll inline (no
@@ -98,11 +99,12 @@ struct ContextListPane: View {
     }
 }
 
-/// One row per context. Glass-rect background tinted with the accent color
-/// when active, neutral otherwise — mirrors the row treatment in
-/// `NewConversationView.modelRow` so the two pages feel like the same UX
-/// language.
-private struct ContextRow: View {
+// `ContextRow` extracted to ReeveUI/Composite/ContextRow.swift for
+// iOS reuse. The Mac call site above passes the same arguments that
+// the shared init expects.
+
+#if false  // legacy Mac-private definition retired
+private struct ContextRow_Legacy: View {
     let context: ReeveContext
     let number: Int
     let parentLabel: String?
@@ -217,3 +219,4 @@ private struct ContextRow: View {
         d.formatted(date: .abbreviated, time: .shortened)
     }
 }
+#endif

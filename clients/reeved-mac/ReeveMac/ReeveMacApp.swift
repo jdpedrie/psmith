@@ -1,6 +1,13 @@
 import SwiftUI
 import AppKit
 import ReeveKit
+import ReeveUI
+
+/// Mac-side shared ThemeStore. Lives at module scope so AppDelegate (which
+/// is driven by AppKit notifications and can't read SwiftUI environment)
+/// can pull the active chrome color for `NSWindow.backgroundColor`.
+@MainActor
+let sharedThemeStore = ThemeStore()
 
 /// Tracks the main window's display mode so SwiftUI views can apply
 /// "responsive" layouts — e.g. headers need a 28pt top inset only when the
@@ -202,10 +209,10 @@ struct ReeveMacApp: App {
     /// having to thread the env through AppKit.
     private var themeStore: ThemeStore { sharedThemeStore }
 
-    /// App-wide preferences (font scale, notification toggle, …). The
+    /// App-wide preferences (notification toggle, future toggles). The
     /// shared singleton lives in AppPreferences.swift so module-scope
     /// helpers (sharedNotifier construction in particular) can reach it.
-    private var prefs: AppPreferences { sharedAppPreferences }
+    @State private var prefs = sharedAppPreferences
 
     init() {
         // SwiftPM-built executables aren't a proper .app bundle on their own;
@@ -224,18 +231,13 @@ struct ReeveMacApp: App {
                 .environment(themeStore)
                 .environment(prefs)
                 .environment(\.theme, themeStore.current)
+                .environment(\.clipboard, AppKitClipboard())
+                .environment(\.notifier, sharedNotifier)
                 .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
                 .background(themeStore.current.chrome.ignoresSafeArea())
                 .background(WindowChrome())
                 .navigationTitle("")
-                // App-wide font scale: maps the General-pane slider into
-                // SwiftUI's dynamic-type axis. Every semantic font
-                // (.body, .callout, .caption2 …) downstream rescales
-                // automatically. Fonts created with .system(size: N)
-                // don't (by SwiftUI design) — but the bulk of Reeve's
-                // typography uses semantic styles.
-                .dynamicTypeSize(prefs.dynamicTypeSize)
                 .task {
                     await appModel.bootstrap()
                     // Touch sharedNotifier so its UNUserNotificationCenter

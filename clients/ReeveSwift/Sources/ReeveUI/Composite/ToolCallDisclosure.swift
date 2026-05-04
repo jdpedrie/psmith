@@ -26,10 +26,14 @@ import ReeveKit
 ///    bounded ScrollView so a chatty plugin doesn't push the rest of the
 ///    bubble off-screen — same treatment as ThinkingDisclosure.
 
-struct ToolCallLivePill: View {
+public struct ToolCallLivePill: View {
     let call: LiveToolCall
 
-    var body: some View {
+    public init(call: LiveToolCall) {
+        self.call = call
+    }
+
+    public var body: some View {
         switch call.phase {
         case .generating(let since):
             TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
@@ -58,11 +62,16 @@ struct ToolCallLivePill: View {
     }
 }
 
-struct ToolCallSettledDisclosure: View {
+public struct ToolCallSettledDisclosure: View {
     let call: ReeveToolCall
     @Binding var isExpanded: Bool
 
-    var body: some View {
+    public init(call: ReeveToolCall, isExpanded: Binding<Bool>) {
+        self.call = call
+        self._isExpanded = isExpanded
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Button(action: toggle) {
                 ToolPillChip(
