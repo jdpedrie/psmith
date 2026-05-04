@@ -1,6 +1,7 @@
-// reeve is the operator-facing CLI for a running reeved instance. Today
-// it carries one subcommand (useradd); structured for trivial extension
-// to passwd / userdel / etc as those needs arise.
+// reeve is the operator-facing CLI for a running reeved instance.
+// Subcommands today: install (apply schema migrations), useradd (create
+// a user account). Structured for trivial extension to passwd /
+// userdel / etc as those needs arise.
 package main
 
 import (
@@ -15,6 +16,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "install":
+		os.Exit(installCmd(os.Args[2:]))
 	case "useradd":
 		os.Exit(useraddCmd(os.Args[2:]))
 	case "-h", "--help", "help":
@@ -34,6 +37,7 @@ Usage:
   reeve <subcommand> [flags]
 
 Subcommands:
+  install    Apply embedded schema migrations to the database.
   useradd    Create a user account.
 
 Run "reeve <subcommand> -h" for subcommand-specific help.

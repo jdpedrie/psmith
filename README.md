@@ -124,11 +124,15 @@ docker run -d --name clark-postgres \
 
 Override with `PGTESTDB_HOST`, `PGTESTDB_PORT`, `PGTESTDB_USER`, `PGTESTDB_PASSWORD`, `PGTESTDB_DB`, or `GOOSE_DBSTRING` if your setup differs.
 
-### 2. Migrate
+### 2. Apply schema
 
 ```bash
-make migrate-up
+go run ./cmd/reeve install                                # uses local dev DSN
+go run ./cmd/reeve install -db <postgres-url>             # against any reachable DB
+go run ./cmd/reeve install -status                        # what's applied so far
 ```
+
+`reeve install` ships the goose-format migrations baked into the binary (no source tree, no external `goose` install needed) and is the recommended setup path for production deployments. `make migrate-up` stays as the dev-loop tool when iterating on a new migration file.
 
 ### 3. Bootstrap and run the server
 
