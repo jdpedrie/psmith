@@ -147,13 +147,17 @@ These are all additive-or-inert from the Mac side. We don't need to do them all 
 
 ### Server connection
 
-iOS introduces something the Mac app didn't really need: **multi-server config**. Mac defaulted to localhost; iOS users will have a remote VPS, a homelab, maybe both. ServerURLStore already exists in ReeveKit; extend its shape from `ServerURL?` → `[ServerEntry]` with a `selected` field. Mac UI to manage the list lands as part of this — same surface both platforms will use.
+iOS uses the **same single-server-at-a-time** model as the Mac app — no list, no picker. `ServerURLStore` holds one URL; `LoginView` is two-phase (server URL → credentials), with a "Change server" affordance on the credentials screen that lets the user point elsewhere. After logout, you land back on credentials for the same URL with the same escape hatch.
 
-Onboarding flow on iOS:
-1. App launch → no server configured → "Add server" screen → enter URL + skip-cert-verify toggle (for self-signed cases) + label
+If a user wants to bounce between, say, a homelab and a remote VPS, the workflow is "log out, change server, log back in." Friction is acceptable for what's expected to be an infrequent action; multi-server-list UX adds real surface area we don't need yet.
+
+Onboarding flow on iOS reuses the Mac flow exactly:
+1. App launch → no server configured → server-URL screen with skip-cert-verify toggle (for self-signed cases)
 2. Probe via `AuthService.Probe` to confirm the URL points at a reeved
-3. Login screen with the existing flow
+3. Credentials screen
 4. Conversations tab populated
+
+Multi-server config (a list of saved servers, quick-switch picker) gets revisited if user feedback says the log-out-and-switch loop is too painful. Until then, single-URL stays.
 
 ### Backgrounding behaviour
 
@@ -196,7 +200,7 @@ Verify this works for the Mac app's existing rendering before moving on; resourc
 |---|---|---|---|
 | **0 — Migration prep** | Move atomic SwiftUI views from ReeveMac → ReeveUI (per migration table). Verify visually via existing snapshot tests. Keep Mac behaviour unchanged. | ~3 days | Yes — no iOS code yet |
 | **1 — Platform-glue protocols** | Define `Clipboard`, `URLOpener`, `DirectoryPicker`, `FilePicker`, `Notifier` in ReeveKit. Refactor every Mac call site to dispatch through them. AppKit-backed impls land in `ReeveMac/Platform/`. | ~3 days | Yes — Mac-only refactor; preps for iOS |
-| **2 — Server config: multi-server** | Extend ServerURLStore from one URL to a list. Add Mac UI to manage entries. Foundation for iOS onboarding. | ~3 days | Yes |
+| **2 — ~~Server config: multi-server~~** | **Skipped.** Single-URL `ServerURLStore` reused as-is on iOS. Multi-server list deferred until user feedback demands it. | 0 days | — |
 | **3 — iOS scaffolding** | New Xcode project `clients/reeved-ios/`, depend on ReeveSwift, smoke "hello world" wired to AuthService. Establish the snapshot test harness for iPhone + iPad sizes. | ~3 days | Foundation for the rest |
 | **4 — iOS onboarding + auth** | Add-server flow, Probe + Login, KeychainTokenStore (iOS access group). | ~3 days | Phase 3 |
 | **5 — iOS conversations (phone)** | TabView root, NavigationStack-based conversation list + view + composer. Reuses every ReeveUI atomic / composite view from Phase 0. Per-platform glue from Phase 1. | ~1 week | Phase 0/1/3/4 |
@@ -205,9 +209,9 @@ Verify this works for the Mac app's existing rendering before moving on; resourc
 | **8 — Background + reconnect** | ScenePhase-driven re-subscribe; "your reply is ready" UNUserNotification when stream completes while backgrounded. | ~3 days | Phase 5 |
 | **9 — Polish** | Snapshot test coverage, iOS-specific gestures (swipe-to-delete on conversations, etc), keyboard handling on the composer, accessibility audit. | ~1 week | Phase 5+ |
 
-**0 + 1 ship before any iOS scaffolding** — they're pure refactors that pay back as the iOS work progresses. 2 is also a Mac-side win independently. 3 onward is the iOS path proper.
+**0 + 1 ship before any iOS scaffolding** — they're pure refactors that pay back as the iOS work progresses. 3 onward is the iOS path proper.
 
-End-to-end "iOS app exists and chats work" lands roughly at Phase 5 (~3 weeks from starting Phase 0). Polish (6 onward) is incremental.
+End-to-end "iOS app exists and chats work" lands roughly at Phase 5. Polish (6 onward) is incremental.
 
 ---
 
