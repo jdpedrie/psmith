@@ -1,0 +1,52 @@
+name: ReeveiOS
+options:
+  bundleIdPrefix: dev.jdpedrie
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+# The local Swift Package living one directory up. ReeveiOS pulls
+# `ReeveKit` (non-UI) and `ReeveUI` (shared SwiftUI) from it — same
+# package the Mac app consumes. No vendored copies; both apps stay
+# in lockstep on shared types.
+packages:
+  ReeveSwift:
+    path: ../ReeveSwift
+
+# Single iOS app target. Xcode-managed signing on the free Personal
+# Team — provisioning profiles auto-rotate on rebuild (see the 7-day
+# expiration caveat in docs/ios-plan.md).
+targets:
+  ReeveiOS:
+    type: application
+    platform: iOS
+    sources:
+      - ReeveiOS
+    info:
+      path: ReeveiOS/Info.plist
+      properties:
+        CFBundleDisplayName: Reeve
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+        # Connect to a self-hosted reeved over plain HTTP without
+        # tripping ATS in development. Tighten when we have TLS at
+        # the server.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"   # iPhone + iPad
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
+    dependencies:
+      - package: ReeveSwift
+        product: ReeveKit
+      - package: ReeveSwift
+        product: ReeveUI
