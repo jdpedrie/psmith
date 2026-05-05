@@ -1224,8 +1224,12 @@ public final class ConversationViewModel {
                 fullTree: true
             )
         } catch {
+            // The branch switcher is the only consumer of `treeMessages` —
+            // missing it just means the chevrons don't appear. Surfacing
+            // the failure as `loadError` would shadow the cached chain
+            // we just rendered (e.g. while reeved is unreachable). Drop
+            // the error silently and leave the tree empty.
             self.treeMessages = []
-            loadError = ReeveError.display(error)
         }
     }
 }

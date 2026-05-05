@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ReeveProviderType: Sendable, Identifiable, Hashable {
+public struct ReeveProviderType: Sendable, Identifiable, Hashable, Codable {
     public var id: String { name }
     public let name: String          // "anthropic", "openai-compatible"
     public let displayName: String
@@ -15,7 +15,7 @@ extension ReeveProviderType {
     }
 }
 
-public struct ReeveProviderTemplate: Sendable, Identifiable, Hashable {
+public struct ReeveProviderTemplate: Sendable, Identifiable, Hashable, Codable {
     public var id: String { catalogProviderID }
     public let catalogProviderID: String   // "groq", "anthropic"
     public let name: String                // "Groq"
@@ -67,7 +67,7 @@ extension ReeveProviderTemplate {
     }
 }
 
-public struct ReeveUserModelProvider: Sendable, Identifiable, Hashable {
+public struct ReeveUserModelProvider: Sendable, Identifiable, Hashable, Codable {
     public let id: String
     public let type: String       // driver type name
     public let label: String
@@ -135,7 +135,7 @@ extension ReeveUserModelProvider {
     }
 }
 
-public struct ReeveModelPricing: Sendable, Hashable {
+public struct ReeveModelPricing: Sendable, Hashable, Codable {
     public let inputPerMillion: Double?
     public let outputPerMillion: Double?
     public let cacheReadPerMillion: Double?
@@ -163,7 +163,7 @@ extension ReeveModelPricing {
     }
 }
 
-public struct ReeveModelCapabilities: Sendable, Hashable {
+public struct ReeveModelCapabilities: Sendable, Hashable, Codable {
     public let streaming: Bool
     public let thinking: Bool
     public let toolUse: Bool
@@ -195,7 +195,7 @@ extension ReeveModelCapabilities {
     }
 }
 
-public struct ReeveUserModel: Sendable, Identifiable, Hashable {
+public struct ReeveUserModel: Sendable, Identifiable, Hashable, Codable {
     public var id: String { modelID }
     public let providerID: String
     public let modelID: String

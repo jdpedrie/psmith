@@ -3,9 +3,14 @@ import Connect
 
 public final class ModelProvidersRepository: Sendable {
     private let client: Reeve_V1_ModelProvidersServiceClientInterface
+    private let cache: ReeveCache?
 
-    public init(client: Reeve_V1_ModelProvidersServiceClientInterface) {
+    public init(
+        client: Reeve_V1_ModelProvidersServiceClientInterface,
+        cache: ReeveCache? = nil
+    ) {
         self.client = client
+        self.cache = cache
     }
 
     public func listProviderTypes() async throws -> [ReeveProviderType] {
@@ -22,8 +27,18 @@ public final class ModelProvidersRepository: Sendable {
 
     public func list() async throws -> [ReeveUserModelProvider] {
         let resp = await client.listUserModelProviders(request: .init(), headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list providers") }
-        return msg.providers.map(ReeveUserModelProvider.init(from:))
+        if let msg = resp.message {
+            let items = msg.providers.map(ReeveUserModelProvider.init(from:))
+            if let cache {
+                try? await cache.set(items, kind: CacheKind.providers, id: "all", capBytes: CachePreferences.capBytes)
+            }
+            return items
+        }
+        if let cache,
+           let cached: [ReeveUserModelProvider] = await cache.get([ReeveUserModelProvider].self, kind: CacheKind.providers, id: "all") {
+            return cached
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list providers")
     }
 
     public func get(id: String) async throws -> (ReeveUserModelProvider, [ReeveUserModel]) {
@@ -90,8 +105,18 @@ public final class ModelProvidersRepository: Sendable {
         var req = Reeve_V1_ListUserModelsRequest()
         req.userModelProviderID = providerID
         let resp = await client.listUserModels(request: req, headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list models") }
-        return msg.models.map(ReeveUserModel.init(from:))
+        if let msg = resp.message {
+            let items = msg.models.map(ReeveUserModel.init(from:))
+            if let cache {
+                try? await cache.set(items, kind: CacheKind.availableModels, id: providerID, capBytes: CachePreferences.capBytes)
+            }
+            return items
+        }
+        if let cache,
+           let cached: [ReeveUserModel] = await cache.get([ReeveUserModel].self, kind: CacheKind.availableModels, id: providerID) {
+            return cached
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list models")
     }
 
     public func toggleModelFavorite(providerID: String, modelID: String, favorite: Bool) async throws -> ReeveUserModel {

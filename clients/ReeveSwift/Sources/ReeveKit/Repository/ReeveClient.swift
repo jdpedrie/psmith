@@ -47,7 +47,8 @@ public final class ReeveClient: Sendable {
             client: Reeve_V1_StreamsServiceClient(client: protocolClient)
         )
         self.modelProviders = ModelProvidersRepository(
-            client: Reeve_V1_ModelProvidersServiceClient(client: protocolClient)
+            client: Reeve_V1_ModelProvidersServiceClient(client: protocolClient),
+            cache: cache
         )
     }
 }
