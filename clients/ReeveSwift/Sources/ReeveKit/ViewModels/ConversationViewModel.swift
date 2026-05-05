@@ -118,6 +118,15 @@ public final class ConversationViewModel {
     /// per-round id resets cause id collisions.
     public var expandedToolCallKeys: Set<String> = []
 
+    /// Per-message expansion state for system + context message bubbles.
+    /// Default behaviour for those roles is collapsed (the bubble shows
+    /// just a header strip with the role + first line of the content);
+    /// set membership flips it open. Distinct from
+    /// `expandedThinkingMessageIDs` so a user expanding the system
+    /// message doesn't also affect any thinking disclosure on the same
+    /// message — the two states are independent.
+    public var expandedHeaderMessageIDs: Set<String> = []
+
     // Compact state
     public var isCompacting = false
     public var compactError: String?
@@ -149,6 +158,12 @@ public final class ConversationViewModel {
     /// full context-list view (per the "no popups" rule). Toggled from the
     /// title menu's "View contexts…" entry.
     public var showingContextList: Bool = false
+    /// Set by `promoteCompaction` after a successful promote-and-
+    /// activate. The view layer reads this to mint a toast ("Switched
+    /// to new context after compression") and clears it back to nil
+    /// after the toast renders. Pure presentation signal; not
+    /// persisted.
+    public var lastPromotedContextID: String?
 
     // Settings page
     /// When true, the conversation pane swaps the message scroll for the
@@ -779,14 +794,22 @@ public final class ConversationViewModel {
         }
     }
 
+    /// Promotes a compression summary into its own context, refreshes
+    /// the contexts list, and **activates the new context** so the
+    /// user lands inside the freshly-promoted prefix without an
+    /// extra navigation step. Sets `lastPromotedContextID` so the
+    /// caller (iOS conversation view) can surface a toast on the next
+    /// render — the binding is consumed and cleared by the toast view
+    /// modifier.
     public func promoteCompaction(messageID: String) async {
         do {
-            _ = try await client.conversations.promoteCompactionToNewContext(messageID: messageID)
+            let newCtx = try await client.conversations.promoteCompactionToNewContext(messageID: messageID)
             tokenCount = nil
             contextWindow = nil
-            await load()
             await loadContexts()
+            await activateContext(newCtx.id)
             await onTerminal()
+            lastPromotedContextID = newCtx.id
         } catch {
             loadError = ReeveError.display(error)
         }

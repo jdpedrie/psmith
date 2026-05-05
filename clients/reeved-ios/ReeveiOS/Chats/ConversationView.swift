@@ -138,6 +138,13 @@ private struct ConversationBody: View {
         .sheet(isPresented: $model.showingCompactView) {
             CompactView(model: model)
         }
+        .toast(
+            message: Binding(
+                get: { model.lastPromotedContextID == nil ? nil : "Switched to new context" },
+                set: { _ in model.lastPromotedContextID = nil }
+            ),
+            systemImage: "wand.and.stars"
+        )
         // Note: model-picker sheet is presented from the Composer
         // itself. SwiftUI doesn't reliably dispatch multiple
         // `.sheet(isPresented:)` modifiers from the same anchor;
@@ -179,17 +186,26 @@ private struct ConversationBody: View {
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
     }
 
+    /// Active-context cost. Reads `cumulativeCostUsd` off the active
+    /// context proto rather than summing message-level costs — those
+    /// only exist on assistant rows and would miss any cost the
+    /// compression call recorded against the context. Returns nil
+    /// when the active context has no cost yet (fresh context, no
+    /// completed turns) so the chip simply disappears.
     private var totalCostString: String? {
-        let total: Double = model.messages.reduce(into: 0.0) { acc, msg in
-            acc += (msg.totalCostUsd ?? 0)
-        }
-        guard total > 0 else { return nil }
-        return String(format: "$%.4f", total)
+        guard let ctx = model.activeContext, ctx.cumulativeCostUsd > 0 else { return nil }
+        return String(format: "$%.4f", ctx.cumulativeCostUsd)
     }
 
+    /// Header pill label for the active context. Numbering matches the
+    /// Contexts list (chronological by createdAt) so "Context 2" in
+    /// the header points at the same row the user sees in the list.
+    /// Hidden when there's only one context in the conversation —
+    /// the pill carries no signal in that case.
     private var activeContextLabel: String? {
         guard let ctx = model.activeContext, model.contexts.count > 1 else { return nil }
-        let idx = (model.contexts.firstIndex(where: { $0.id == ctx.id }) ?? 0) + 1
+        let chronological = model.contexts.sorted { $0.createdAt < $1.createdAt }
+        let idx = (chronological.firstIndex(where: { $0.id == ctx.id }) ?? 0) + 1
         return "Context \(idx)"
     }
 

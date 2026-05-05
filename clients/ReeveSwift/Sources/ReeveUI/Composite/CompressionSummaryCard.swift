@@ -59,6 +59,13 @@ public struct CompressionSummaryCard: View {
             } else {
                 MarkdownText(message.content)
                     .font(.callout)
+                if let summary = usageSummaryLine {
+                    Text(summary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
 
             HStack(spacing: 8) {
@@ -150,6 +157,33 @@ public struct CompressionSummaryCard: View {
                 }
             }
         }
+    }
+
+    /// One-line token + cost summary for the compaction call. Mirrors
+    /// MessageRow's bubble footer so a compression with usage data
+    /// reads the same way as a regular assistant turn (in/out/cache,
+    /// trailing $cost). Returns nil when the row has no usage payload
+    /// — local-FoundationModels compactions and very old DB rows.
+    private var usageSummaryLine: String? {
+        guard let u = message.usage else { return nil }
+        var parts: [String] = []
+        if let n = u.inputTokens {
+            var inputPart = "in: \(n.formatted())"
+            if let cr = u.cacheReadTokens, cr > 0 {
+                inputPart += " (\(cr.formatted()) cached)"
+            }
+            parts.append(inputPart)
+        }
+        if let cw = u.cacheWriteTokens, cw > 0 {
+            parts.append("cw: \(cw.formatted())")
+        }
+        if let n = u.outputTokens {
+            parts.append("out: \(n.formatted())")
+        }
+        if let c = u.totalCostUsd {
+            parts.append("$\(String(format: "%.4f", c))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// "<Provider Label> <Model Display Name>" with graceful fallbacks.

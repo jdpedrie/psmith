@@ -76,10 +76,13 @@ public struct ContextRow: View {
     }
 
     private var metadataStrip: some View {
-        HStack(spacing: 6) {
-            metadataChip(systemImage: "calendar", text: "Created \(formatted(context.createdAt))")
+        // Wrap with a Layout-based flow so multiple chips can stack
+        // onto extra rows on narrow widths (iPhone). On Mac the strip
+        // typically fits one row; the layout collapses to that case.
+        FlowHStack(spacing: 6, lineSpacing: 4) {
+            metadataChip(systemImage: "calendar", text: "Created \(shortDate(context.createdAt))")
             if let activated = context.activationTime {
-                metadataChip(systemImage: "clock.arrow.circlepath", text: "Updated \(formatted(activated))")
+                metadataChip(systemImage: "clock.arrow.circlepath", text: "Updated \(shortDate(activated))")
             }
             metadataChip(systemImage: "bubble.left", text: "\(context.messageCount) msg\(context.messageCount == 1 ? "" : "s")")
             if context.lastMessageTotalTokens > 0 {
@@ -94,7 +97,6 @@ public struct ContextRow: View {
                     text: context.cumulativeCostUsd.formatted(.currency(code: "USD").precision(.fractionLength(4)))
                 )
             }
-            Spacer(minLength: 0)
         }
         .padding(.leading, 30)
     }
@@ -104,12 +106,22 @@ public struct ContextRow: View {
             Image(systemName: systemImage)
                 .imageScale(.small)
             Text(text)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .glassEffect(.regular, in: .capsule)
+    }
+
+    /// Compact date format for the chips: drops the "at HH:MM" tail
+    /// the system's `.shortened` style appends. The chips already
+    /// communicate "this is a date" via the icon and label prefix;
+    /// the time-of-day adds noise without paying for itself.
+    private func shortDate(_ d: Date) -> String {
+        d.formatted(.dateTime.month(.abbreviated).day().year(.twoDigits))
     }
 
     private var title: String {

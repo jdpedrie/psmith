@@ -41,13 +41,40 @@ struct MessageRow: View {
         }
     }
 
+    /// System + context messages render as a collapsed header strip
+    /// by default — they're framing content the user reads once when
+    /// setting up a profile, not on every scroll-back. Tap the strip
+    /// to expand and inspect.
+    private var isCollapsibleHeaderRole: Bool {
+        switch message.role {
+        case .system, .context: return true
+        default: return false
+        }
+    }
+
+    private var isHeaderExpanded: Bool {
+        model.expandedHeaderMessageIDs.contains(message.id)
+    }
+
+    private func toggleHeaderExpansion() {
+        if isHeaderExpanded {
+            model.expandedHeaderMessageIDs.remove(message.id)
+        } else {
+            model.expandedHeaderMessageIDs.insert(message.id)
+        }
+    }
+
     private var isReloadable: Bool {
         isEditableRole && !model.isStreaming
     }
 
     var body: some View {
         roleAlignedContainer {
-            bubble
+            if isCollapsibleHeaderRole && !isHeaderExpanded && !isEditing {
+                collapsedHeaderBubble
+            } else {
+                bubble
+            }
         }
         .alert(
             "Delete message?",
@@ -145,6 +172,69 @@ struct MessageRow: View {
         } else {
             Spacer(minLength: 0)
         }
+    }
+
+    // MARK: - Collapsed header (system / context)
+
+    /// One-row strip rendered in place of the full bubble for system
+    /// and context messages. Shows the role label, the first line of
+    /// the content as a preview, plus a chevron. Tap to expand into
+    /// the regular bubble. Long-press still surfaces the full
+    /// context menu (edit/delete/copy) so the user can act on the
+    /// message without expanding it.
+    @ViewBuilder
+    private var collapsedHeaderBubble: some View {
+        Button(action: toggleHeaderExpansion) {
+            HStack(spacing: 10) {
+                Image(systemName: message.role == .system ? "gear" : "tray.full")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(roleLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(previewLine)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .contextMenu { contextMenuItems }
+    }
+
+    /// First non-empty line of the message body, used as the
+    /// collapsed-header preview. Strips markdown leaders (`# `, `- `,
+    /// `* `, `> `) so a system message that opens with a heading
+    /// still reads like a sentence in the strip.
+    private var previewLine: String {
+        let raw = message.displayContent ?? message.content
+        guard let first = raw.split(whereSeparator: \.isNewline).first else { return raw }
+        var s = String(first).trimmingCharacters(in: .whitespaces)
+        for leader in ["# ", "## ", "### ", "- ", "* ", "> "] where s.hasPrefix(leader) {
+            s = String(s.dropFirst(leader.count))
+            break
+        }
+        return s.isEmpty ? "(empty)" : s
     }
 
     // MARK: - Bubble body
