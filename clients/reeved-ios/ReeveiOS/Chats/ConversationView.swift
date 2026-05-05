@@ -272,6 +272,22 @@ private struct ConversationBody: View {
                     }
                 }
                 .padding()
+                // Tap-to-dismiss for the composer keyboard.
+                // `scrollDismissesKeyboard(.interactively)` (below)
+                // alone needs actual scroll motion to fire — on a
+                // short chain it never triggers, so the user has no
+                // way to drop focus without sending or hitting a
+                // button. simultaneousGesture lets row taps + bubble
+                // long-presses keep working.
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil, from: nil, for: nil
+                        )
+                    }
+                )
             }
             .onAppear {
                 if let id = model.messages.last?.id {
