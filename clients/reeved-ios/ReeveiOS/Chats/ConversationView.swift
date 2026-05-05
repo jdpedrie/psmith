@@ -180,14 +180,18 @@ private struct ConversationBody: View {
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
     }
 
-    /// Active-context cost. Reads `cumulativeCostUsd` off the active
-    /// context proto rather than summing message-level costs — those
-    /// only exist on assistant rows and would miss any cost the
-    /// compression call recorded against the context. Returns nil
-    /// when the active context has no cost yet (fresh context, no
+    /// Active-context cost. The single-context proto returned by
+    /// GetConversation leaves the cost aggregate at zero (only the
+    /// ListContexts query populates it server-side, see
+    /// internal/conversations/convert.go). So look the active row up
+    /// in `model.contexts` instead of `activeContext` — same id,
+    /// but with the cost field actually filled in. Returns nil when
+    /// the active context has no cost yet (fresh context, no
     /// completed turns) so the chip simply disappears.
     private var totalCostString: String? {
-        guard let ctx = model.activeContext, ctx.cumulativeCostUsd > 0 else { return nil }
+        guard let activeID = model.activeContext?.id,
+              let ctx = model.contexts.first(where: { $0.id == activeID }),
+              ctx.cumulativeCostUsd > 0 else { return nil }
         return String(format: "$%.4f", ctx.cumulativeCostUsd)
     }
 
