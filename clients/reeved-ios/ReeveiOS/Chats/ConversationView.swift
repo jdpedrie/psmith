@@ -109,30 +109,13 @@ private struct ConversationBody: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    NavigationLink {
-                        ContextListView(model: model)
-                    } label: {
-                        Label("Contexts", systemImage: "tray.full")
-                    }
-                    .disabled(model.contexts.isEmpty)
-
-                    Button {
-                        model.showingCompactView = true
-                    } label: {
-                        Label("Compact", systemImage: "wand.and.stars")
-                    }
-                    .disabled(model.isStreaming || model.isCompacting)
-
-                    NavigationLink {
-                        ConversationSettingsView(model: model)
-                    } label: {
-                        Label("Conversation Settings", systemImage: "gearshape")
-                    }
+                Button {
+                    model.showingCompactView = true
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "wand.and.stars")
                 }
-                .accessibilityLabel("More")
+                .disabled(model.isStreaming || model.isCompacting)
+                .accessibilityLabel("Compact")
             }
         }
         .sheet(isPresented: $model.showingCompactView) {
@@ -158,10 +141,21 @@ private struct ConversationBody: View {
     private var statusStrip: some View {
         HStack(spacing: 8) {
             if let cost = totalCostString {
-                chip(text: cost, systemImage: "dollarsign.circle")
+                chipLabel(text: cost, systemImage: "dollarsign.circle")
             }
             if let context = activeContextLabel {
-                chip(text: context, systemImage: "tray.full")
+                NavigationLink {
+                    ContextListView(model: model)
+                } label: {
+                    HStack(spacing: 3) {
+                        chipLabel(text: context, systemImage: "tray.full")
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Open contexts")
             }
             Spacer(minLength: 0)
         }
@@ -171,7 +165,7 @@ private struct ConversationBody: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    private func chip(text: String, systemImage: String) -> some View {
+    private func chipLabel(text: String, systemImage: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
                 .font(.caption2)

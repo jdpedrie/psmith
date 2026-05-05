@@ -25,7 +25,11 @@ struct Composer: View {
                     draftField
                     sendButton
                 }
-                modelChip
+                HStack(spacing: 8) {
+                    modelChip
+                    settingsButton
+                    Spacer(minLength: 0)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -35,6 +39,27 @@ struct Composer: View {
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }
+    }
+
+    // MARK: - Conversation settings button
+
+    /// Pushes the per-conversation settings page (system message,
+    /// thinking flag, default model overrides…). Sits next to the
+    /// model chip so the two related controls live together —
+    /// "what model" and "how it behaves".
+    private var settingsButton: some View {
+        NavigationLink {
+            ConversationSettingsView(model: model)
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.06), in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Conversation settings")
     }
 
     // MARK: - Draft text field
