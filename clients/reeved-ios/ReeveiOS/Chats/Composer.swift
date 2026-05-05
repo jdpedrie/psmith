@@ -40,6 +40,15 @@ struct Composer: View {
             .background(.thinMaterial)
         }
         .onAppear { draftFocused = true }
+        .onChange(of: model.draft) { _, newValue in
+            // Persist on every keystroke. UserDefaults writes are
+            // memory-mapped and cheap; debouncing would cost us
+            // freshness if the user backgrounds the app between
+            // their last keystroke and the would-be debounced
+            // flush. Trimming + empty-check happens inside the
+            // store so an empty draft removes the key cleanly.
+            DraftStore.save(conversationID: model.conversation.id, text: newValue)
+        }
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }

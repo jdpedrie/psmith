@@ -270,6 +270,12 @@ public final class ConversationViewModel {
         self.onTerminal = onTerminal
         self.onAssistantTurnComplete = onAssistantTurnComplete
         self.localTitler = localTitler
+        // Restore any unsent composer text from a previous visit.
+        // Init-time so the field is populated before the first
+        // render frame — no flicker between empty and restored.
+        if let saved = DraftStore.load(conversationID: conversation.id) {
+            self.draft = saved
+        }
     }
 
     // MARK: Load
@@ -490,6 +496,10 @@ public final class ConversationViewModel {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !sending, !isCompacting, !hasPendingCompression else { return }
         draft = ""
+        // Whatever the user had saved as a draft is now in flight —
+        // clear so a successful send doesn't leave a stale draft
+        // ready to greet them on next open.
+        DraftStore.clear(conversationID: conversation.id)
         sending = true
         streamingText = ""
         streamingThinking = ""
@@ -557,6 +567,10 @@ public final class ConversationViewModel {
             // stale optimistic state, and surface the error inline.
             pendingUserText = nil
             if draft.isEmpty { draft = originalDraft }
+            // Re-persist the restored text so it survives a quick
+            // background/relaunch — we cleared the store optimistically
+            // above on the assumption the send would succeed.
+            DraftStore.save(conversationID: conversation.id, text: draft)
             await load()
             loadError = ReeveError.display(error)
         }
