@@ -23,7 +23,7 @@ func attachLetteredChoicesPlugin(t *testing.T, q *store.Queries, profileID uuid.
 		ProfileID:  profileID,
 		Ordinal:    0,
 		PluginName: plugins.LetteredChoicesName,
-		Config:     []byte(`{"keep_last_n": 1}`),
+		ConfigEncrypted:    []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}
@@ -254,17 +254,17 @@ func TestPlugins_PipelineResolverChildOverridesParent(t *testing.T) {
 	}
 	// Parent has 2 lettered_choices entries; child overrides with 1.
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: parentID, Ordinal: 0, PluginName: plugins.LetteredChoicesName, Config: []byte(`{"keep_last_n": 5}`),
+		ProfileID: parentID, Ordinal: 0, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 5}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin parent[0]: %v", err)
 	}
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: parentID, Ordinal: 1, PluginName: plugins.LetteredChoicesName, Config: []byte(`{"keep_last_n": 7}`),
+		ProfileID: parentID, Ordinal: 1, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 7}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin parent[1]: %v", err)
 	}
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: cid, Ordinal: 0, PluginName: plugins.LetteredChoicesName, Config: []byte(`{"keep_last_n": 1}`),
+		ProfileID: cid, Ordinal: 0, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin child: %v", err)
 	}

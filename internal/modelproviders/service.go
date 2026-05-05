@@ -22,6 +22,7 @@ import (
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/providers"
@@ -34,16 +35,66 @@ type Service struct {
 	reevev1connect.UnimplementedModelProvidersServiceHandler
 	queries *store.Queries
 	catalog modelmeta.Catalog
+	cipher  crypto.Cipher
 	logger  *slog.Logger
 }
 
 // NewService constructs a Service. logger may be nil — slog.Default() is used
-// in that case.
-func NewService(queries *store.Queries, catalog modelmeta.Catalog, logger *slog.Logger) *Service {
+// in that case. cipher must be non-nil; pass crypto.Nop{} to opt out of
+// encryption (tests, deployments without REEVE_MASTER_KEY).
+func NewService(queries *store.Queries, catalog modelmeta.Catalog, cipher crypto.Cipher, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{queries: queries, catalog: catalog, logger: logger}
+	if cipher == nil {
+		cipher = crypto.Nop{}
+	}
+	return &Service{queries: queries, catalog: catalog, cipher: cipher, logger: logger}
+}
+
+// resolveProviderConfig returns the plaintext config bytes for a row,
+// preferring the encrypted column (decrypted through s.cipher) and
+// falling back to the plaintext column for rows that haven't been
+// touched since the encryption rollout. Returns []byte("{}") when
+// both columns are unset so callers can unmarshal unconditionally.
+func (s *Service) resolveProviderConfig(row store.UserModelProvider) ([]byte, error) {
+	b, err := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt provider config: %w", err)
+	}
+	if len(b) == 0 {
+		return []byte("{}"), nil
+	}
+	return b, nil
+}
+
+// mergeJSONConfig applies a shallow patch (matching the old SQL-side
+// `config = config || $2` semantics) and returns the merged blob.
+// `loadCurrent` is a thunk so we don't decrypt-and-discard when the
+// patch turns out to be a no-op. Top-level only — nested objects are
+// replaced wholesale, matching Postgres jsonb || behaviour.
+func mergeJSONConfig(patch []byte, loadCurrent func() ([]byte, error)) ([]byte, error) {
+	currentBytes, err := loadCurrent()
+	if err != nil {
+		return nil, err
+	}
+	current := map[string]json.RawMessage{}
+	if len(currentBytes) > 0 {
+		if err := json.Unmarshal(currentBytes, &current); err != nil {
+			// Existing config isn't a JSON object — treat as empty so
+			// the patch wins. The encrypted-rollover migration won't
+			// produce this shape; this branch is just defensive.
+			current = map[string]json.RawMessage{}
+		}
+	}
+	var incoming map[string]json.RawMessage
+	if err := json.Unmarshal(patch, &incoming); err != nil {
+		return nil, fmt.Errorf("patch is not a JSON object: %w", err)
+	}
+	for k, v := range incoming {
+		current[k] = v
+	}
+	return json.Marshal(current)
 }
 
 // --- Driver types & templates ---
@@ -150,21 +201,25 @@ func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Requ
 	} else if !json.Valid(cfg) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config must be valid JSON"))
 	}
+	encryptedCfg, err := s.cipher.Encrypt(cfg)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encrypt provider config: %w", err))
+	}
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	row, err := s.queries.CreateUserModelProvider(ctx, store.CreateUserModelProviderParams{
-		ID:     id,
-		UserID: u.ID,
-		Type:   req.Msg.Type,
-		Label:  req.Msg.Label,
-		Config: cfg,
+		ID:              id,
+		UserID:          u.ID,
+		Type:            req.Msg.Type,
+		Label:           req.Msg.Label,
+		ConfigEncrypted: encryptedCfg,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.CreateUserModelProviderResponse{Provider: storeProviderToProto(row)}), nil
+	return connect.NewResponse(&reevev1.CreateUserModelProviderResponse{Provider: s.storeProviderToProto(row)}), nil
 }
 
 func (s *Service) ListUserModelProviders(ctx context.Context, _ *connect.Request[reevev1.ListUserModelProvidersRequest]) (*connect.Response[reevev1.ListUserModelProvidersResponse], error) {
@@ -175,7 +230,7 @@ func (s *Service) ListUserModelProviders(ctx context.Context, _ *connect.Request
 	}
 	out := make([]*reevev1.UserModelProvider, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, storeProviderToProto(r))
+		out = append(out, s.storeProviderToProto(r))
 	}
 	return connect.NewResponse(&reevev1.ListUserModelProvidersResponse{Providers: out}), nil
 }
@@ -194,7 +249,7 @@ func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request
 		enabled = append(enabled, storeUserModelToProto(m))
 	}
 	return connect.NewResponse(&reevev1.GetUserModelProviderResponse{
-		Provider:      storeProviderToProto(row),
+		Provider:      s.storeProviderToProto(row),
 		EnabledModels: enabled,
 	}), nil
 }
@@ -219,9 +274,24 @@ func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Requ
 		if !json.Valid(req.Msg.Config) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config must be valid JSON"))
 		}
-		if err := s.queries.UpdateUserModelProviderConfig(ctx, store.UpdateUserModelProviderConfigParams{
-			ID:     row.ID,
-			Config: req.Msg.Config,
+		// Shallow-merge semantics preserved: load existing, parse both
+		// blobs as a flat object, copy patch keys over, re-encrypt the
+		// result. The old SQL-side `config = config || $2` did this in
+		// the database; with encrypted storage the merge has to happen
+		// client-side because we can't || sealed bytes.
+		merged, err := mergeJSONConfig(req.Msg.Config, func() ([]byte, error) {
+			return s.resolveProviderConfig(row)
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		encrypted, err := s.cipher.Encrypt(merged)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encrypt provider config: %w", err))
+		}
+		if err := s.queries.UpdateUserModelProviderEncryptedConfig(ctx, store.UpdateUserModelProviderEncryptedConfigParams{
+			ID:              row.ID,
+			ConfigEncrypted: encrypted,
 		}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
@@ -245,7 +315,7 @@ func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.UpdateUserModelProviderResponse{Provider: storeProviderToProto(updated)}), nil
+	return connect.NewResponse(&reevev1.UpdateUserModelProviderResponse{Provider: s.storeProviderToProto(updated)}), nil
 }
 
 func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Request[reevev1.DeleteUserModelProviderRequest]) (*connect.Response[reevev1.DeleteUserModelProviderResponse], error) {
@@ -276,6 +346,11 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reeve
 		enabledSet[m.ModelID] = true
 	}
 
+	cfg, err := s.resolveProviderConfig(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
 	// Prefer the catalog as the source of truth for model discovery whenever
 	// the provider has a `catalog_provider_id` (every Anthropic provider does
 	// implicitly; openai-compatible providers carry it in their config).
@@ -284,7 +359,7 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reeve
 	// entries that have no pricing/context-window data, which is what users
 	// run into. Fall back to live discovery only for providers with no
 	// catalog hint at all (LM Studio, Ollama, custom endpoints).
-	catalogProviderID := configCatalogProviderID(row.Type, row.Config)
+	catalogProviderID := configCatalogProviderID(row.Type, cfg)
 	if catalogProviderID != "" {
 		cms, lookupErr := s.catalog.ListModelsByProvider(ctx, catalogProviderID)
 		if lookupErr != nil {
@@ -297,7 +372,7 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reeve
 		return connect.NewResponse(&reevev1.DiscoverModelsResponse{Models: out}), nil
 	}
 
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
+	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}
@@ -321,7 +396,11 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		return connect.NewResponse(&reevev1.EnableModelsResponse{}), nil
 	}
 
-	catalogProviderID := configCatalogProviderID(row.Type, row.Config)
+	cfg, err := s.resolveProviderConfig(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	catalogProviderID := configCatalogProviderID(row.Type, cfg)
 
 	// Driver discovery is lazy — only build/call once if any model misses the catalog.
 	var (
@@ -332,7 +411,7 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		if driverPopulated {
 			return driverModels, nil
 		}
-		driver, dErr := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
+		driver, dErr := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
 		if dErr != nil {
 			return nil, dErr
 		}
@@ -457,7 +536,7 @@ func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[reev
 			continue
 		}
 		entries = append(entries, &reevev1.UserModelEntry{
-			Provider: storeProviderToProto(p),
+			Provider: s.storeProviderToProto(p),
 			Model:    storeUserModelToProto(m),
 		})
 	}

@@ -15,6 +15,7 @@ import (
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -62,17 +63,28 @@ var validTitleProviderKinds = map[string]struct{}{
 //
 // pool is required for the SetProfilePlugins atomic-replace transaction.
 // Older callers / tests that only exercise CRUD may pass nil.
+//
+// cipher seals plugin config blobs (profile_plugins.config_encrypted,
+// user_plugin_settings.config_encrypted) at write time and unseals
+// them on the read paths that hand bytes to plugin constructors. Pass
+// crypto.Nop{} to opt out of encryption (tests + deployments without
+// REEVE_MASTER_KEY).
 type Service struct {
 	reevev1connect.UnimplementedProfilesServiceHandler
 	queries *store.Queries
 	pool    *pgxpool.Pool
+	cipher  crypto.Cipher
 }
 
 // NewService builds a Service backed by the given query set. pool may be
 // nil for tests that don't exercise SetProfilePlugins; production must
 // pass a real pool so the atomic-replace TX has something to begin from.
-func NewService(queries *store.Queries, pool *pgxpool.Pool) *Service {
-	return &Service{queries: queries, pool: pool}
+// cipher must be non-nil; pass crypto.Nop{} when running unencrypted.
+func NewService(queries *store.Queries, pool *pgxpool.Pool, cipher crypto.Cipher) *Service {
+	if cipher == nil {
+		cipher = crypto.Nop{}
+	}
+	return &Service{queries: queries, pool: pool, cipher: cipher}
 }
 
 // --- CreateProfile ---
@@ -582,19 +594,34 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[re
 	}
 	out := make([]*reevev1.ProfilePlugin, 0, len(req.Msg.Plugins))
 	for i, p := range req.Msg.Plugins {
+		// Encrypt the per-profile plugin config blob before persisting.
+		// Reads in conversations/service.go (plugin pipeline build) go
+		// through resolvePluginConfig, which decrypts via the same
+		// cipher and falls back to the legacy plaintext column for
+		// rows that haven't been re-saved since the rollover.
+		var encrypted []byte
+		if p.Config != nil {
+			encrypted, err = s.cipher.Encrypt(p.Config)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encrypt plugins[%d] config: %w", i, err))
+			}
+		}
 		row, err := qtx.InsertProfilePlugin(ctx, store.InsertProfilePluginParams{
-			ProfileID:  profileID,
-			Ordinal:    int32(i),
-			PluginName: p.PluginName,
-			Config:     p.Config,
+			ProfileID:       profileID,
+			Ordinal:         int32(i),
+			PluginName:      p.PluginName,
+			ConfigEncrypted: encrypted,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("insert plugins[%d]: %w", i, err))
 		}
+		// Echo the plaintext config the caller sent — the proto
+		// response is informational and shouldn't make the client
+		// re-issue a Get to see the current shape.
 		out = append(out, &reevev1.ProfilePlugin{
 			PluginName: row.PluginName,
 			Ordinal:    row.Ordinal,
-			Config:     row.Config,
+			Config:     p.Config,
 		})
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -620,7 +647,13 @@ func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Reques
 	})
 	settings := &reevev1.UserPluginSettings{PluginName: name, Config: []byte("{}")}
 	if err == nil {
-		settings.Config = row.Config
+		cfg, decryptErr := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
+		if decryptErr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugin settings: %w", decryptErr))
+		}
+		if len(cfg) > 0 {
+			settings.Config = cfg
+		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -638,9 +671,13 @@ func (s *Service) ListUserPluginSettings(ctx context.Context, req *connect.Reque
 	}
 	out := make([]*reevev1.UserPluginSettings, 0, len(rows))
 	for _, r := range rows {
+		cfg, decryptErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+		if decryptErr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugin settings %q: %w", r.PluginName, decryptErr))
+		}
 		out = append(out, &reevev1.UserPluginSettings{
 			PluginName: r.PluginName,
-			Config:     r.Config,
+			Config:     cfg,
 		})
 	}
 	return connect.NewResponse(&reevev1.ListUserPluginSettingsResponse{Settings: out}), nil
@@ -664,10 +701,14 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 	if _, err := plugins.Build(name, cfg); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugin %q: %w", name, err))
 	}
+	encrypted, err := s.cipher.Encrypt(cfg)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encrypt plugin settings: %w", err))
+	}
 	row, err := s.queries.UpsertUserPluginSettings(ctx, store.UpsertUserPluginSettingsParams{
-		UserID:     caller.ID,
-		PluginName: name,
-		Config:     cfg,
+		UserID:          caller.ID,
+		PluginName:      name,
+		ConfigEncrypted: encrypted,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -675,7 +716,7 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 	return connect.NewResponse(&reevev1.UpsertUserPluginSettingsResponse{
 		Settings: &reevev1.UserPluginSettings{
 			PluginName: row.PluginName,
-			Config:     row.Config,
+			Config:     cfg, // echo plaintext (row.ConfigEncrypted is opaque bytes)
 		},
 	}), nil
 }

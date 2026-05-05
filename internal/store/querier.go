@@ -29,6 +29,11 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateStreamRun(ctx context.Context, arg CreateStreamRunParams) (StreamRun, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// config_encrypted is the AES-256-GCM-sealed JSONB blob; the legacy
+	// `config` column is left NULL. The service layer's Get/List path
+	// decrypts config_encrypted when present and falls back to plaintext
+	// config for any row that hasn't been touched since the encryption
+	// rollout.
 	CreateUserModelProvider(ctx context.Context, arg CreateUserModelProviderParams) (UserModelProvider, error)
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
@@ -98,6 +103,10 @@ type Querier interface {
 	// in flight (server-side enforcement of the UI's "disabled while streaming"
 	// behavior).
 	HasRunningStreamForConversation(ctx context.Context, conversationID uuid.UUID) (bool, error)
+	// $4 is config_encrypted (nullable BYTEA); the legacy plaintext
+	// config column is left NULL on every new row. The service layer's
+	// read path decrypts config_encrypted and falls back to the plaintext
+	// column for legacy rows still carrying their pre-rollover JSONB.
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
 	// Per-context aggregates (message_count, last_message_total_tokens,
@@ -218,23 +227,31 @@ type Querier interface {
 	// changes notice the update — the row's metadata identity hasn't changed,
 	// but its effective behavior has.
 	UpdateUserModelDefaultSettings(ctx context.Context, arg UpdateUserModelDefaultSettingsParams) error
-	// Shallow-merges the incoming JSONB patch into the existing config. Keys
-	// present in the patch override existing values; absent keys are preserved.
-	// To clear a key, send it explicitly with an empty value.
-	UpdateUserModelProviderConfig(ctx context.Context, arg UpdateUserModelProviderConfigParams) error
 	// Replaces (not merges) the provider-level default_settings blob. NULL clears
 	// it, returning the row to "no provider-level defaults; resolve from above
 	// only." Replace semantics keep the call site simple — the resolver does the
 	// merge with the upper layers, so partial writes here would be a footgun.
 	UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error
+	// Full-replacement update on the encrypted column. The service layer
+	// handles partial-merge semantics in Go (decrypt → JSON merge →
+	// re-encrypt) before calling this — the SQL side stays straightforward
+	// replacement so the encrypted bytes remain a single sealed unit.
+	// Clears any plaintext config that may still be present, finalising
+	// the row's transition to encrypted-only storage.
+	UpdateUserModelProviderEncryptedConfig(ctx context.Context, arg UpdateUserModelProviderEncryptedConfigParams) error
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
 	// Idempotent: insert-or-update. updated_at is bumped to NOW() on every
-	// save. Empty config (`{}`) is a valid stored value — it means "the
-	// user explicitly cleared every global field" and should beat the
-	// absence-is-empty fallback at merge time.
+	// save. Empty config (encrypted form of `{}`) is a valid stored value
+	// — it means "the user explicitly cleared every global field" and
+	// should beat the absence-is-empty fallback at merge time.
+	//
+	// Writes to config_encrypted only and clears any plaintext config left
+	// behind from before the encryption rollout. The service layer
+	// decrypts incoming reads and falls back to plaintext when
+	// config_encrypted is NULL on legacy rows.
 	UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPluginSettingsParams) (UserPluginSetting, error)
 }
 

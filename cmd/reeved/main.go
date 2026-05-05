@@ -20,6 +20,7 @@ import (
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
@@ -92,6 +93,16 @@ func run() error {
 	stopChunkCleanup := stream.StartChunkCleanup(ctx, queries, stream.CleanupConfig{}, slog.Default())
 	defer stopChunkCleanup()
 
+	// Load the master encryption key from REEVE_MASTER_KEY (or mint a
+	// throwaway one when REEVE_DEV_AUTOKEY=1). When neither is set the
+	// server falls back to crypto.Nop{} — config blobs land in the DB
+	// in plaintext, with a loud warning so deployers don't ship that
+	// posture by accident.
+	cipher, err := loadCipher()
+	if err != nil {
+		return fmt.Errorf("load cipher: %w", err)
+	}
+
 	authSvc := auth.NewService(queries)
 	authInterceptor := auth.NewInterceptor(queries,
 		reevev1connect.AuthServiceLoginProcedure,
@@ -99,9 +110,9 @@ func run() error {
 	)
 	opts := connect.WithInterceptors(authInterceptor)
 
-	modelProvidersSvc := modelproviders.NewService(queries, catalog, slog.Default())
-	profilesSvc := profiles.NewService(queries, pool)
-	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, slog.Default())
+	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default())
+	profilesSvc := profiles.NewService(queries, pool, cipher)
+	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, slog.Default())
 	// Wire the auto-title hook so the supervisor pings the conversations
 	// service after every assistant materialization. Profile-opt-in; no-op
 	// when title fields aren't configured.
@@ -147,4 +158,38 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+// loadCipher resolves the at-rest encryption cipher from the
+// environment per crypto.LoadKey's contract:
+//
+//   - REEVE_MASTER_KEY set     → AES-256-GCM with that key.
+//   - REEVE_DEV_AUTOKEY=1       → AES-256-GCM with an ephemeral key
+//                                 (loud warning; data won't survive a
+//                                 restart). Local-dev convenience.
+//   - neither set               → crypto.Nop{} (passthrough). Config
+//                                 blobs land in plaintext; loud
+//                                 warning on boot.
+//
+// Returns a non-nil Cipher so service constructors don't have to
+// special-case nil. Errors only on a malformed REEVE_MASTER_KEY (bad
+// base64, wrong length) — the policy choice "no key, run unencrypted"
+// is intentional and surfaces as a warning, not a failure.
+func loadCipher() (crypto.Cipher, error) {
+	key, ephemeral, err := crypto.LoadKey()
+	if err != nil {
+		return nil, err
+	}
+	if key == nil {
+		slog.Warn("reeved: no encryption key configured; provider config blobs will be stored in plaintext",
+			"hint", "set REEVE_MASTER_KEY to a base64-encoded 32-byte key (use `reeve genkey` to mint one)",
+		)
+		return crypto.Nop{}, nil
+	}
+	if ephemeral {
+		slog.Warn("reeved: REEVE_DEV_AUTOKEY in use — encryption key was minted for this process and lost on restart",
+			"hint", "set REEVE_MASTER_KEY for any data you want to read after a restart",
+		)
+	}
+	return crypto.NewAESGCM(key)
 }

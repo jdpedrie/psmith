@@ -12,24 +12,28 @@ import (
 )
 
 const insertProfilePlugin = `-- name: InsertProfilePlugin :one
-INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config)
+INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config_encrypted)
 VALUES ($1, $2, $3, $4)
-RETURNING profile_id, ordinal, plugin_name, config, created_at, updated_at
+RETURNING profile_id, ordinal, plugin_name, config, created_at, updated_at, config_encrypted
 `
 
 type InsertProfilePluginParams struct {
-	ProfileID  uuid.UUID
-	Ordinal    int32
-	PluginName string
-	Config     []byte
+	ProfileID       uuid.UUID
+	Ordinal         int32
+	PluginName      string
+	ConfigEncrypted []byte
 }
 
+// $4 is config_encrypted (nullable BYTEA); the legacy plaintext
+// config column is left NULL on every new row. The service layer's
+// read path decrypts config_encrypted and falls back to the plaintext
+// column for legacy rows still carrying their pre-rollover JSONB.
 func (q *Queries) InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error) {
 	row := q.db.QueryRow(ctx, insertProfilePlugin,
 		arg.ProfileID,
 		arg.Ordinal,
 		arg.PluginName,
-		arg.Config,
+		arg.ConfigEncrypted,
 	)
 	var i ProfilePlugin
 	err := row.Scan(
@@ -39,12 +43,13 @@ func (q *Queries) InsertProfilePlugin(ctx context.Context, arg InsertProfilePlug
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigEncrypted,
 	)
 	return i, err
 }
 
 const listProfilePlugins = `-- name: ListProfilePlugins :many
-SELECT profile_id, ordinal, plugin_name, config, created_at, updated_at FROM profile_plugins
+SELECT profile_id, ordinal, plugin_name, config, created_at, updated_at, config_encrypted FROM profile_plugins
 WHERE profile_id = $1
 ORDER BY ordinal
 `
@@ -68,6 +73,7 @@ func (q *Queries) ListProfilePlugins(ctx context.Context, profileID uuid.UUID) (
 			&i.Config,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigEncrypted,
 		); err != nil {
 			return nil, err
 		}

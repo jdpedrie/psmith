@@ -159,7 +159,7 @@ func TestCompact_OverrideWinsOverProfile(t *testing.T) {
 		UserID: f.user.ID,
 		Type:   overrideDriver,
 		Label:  "override",
-		Config: []byte("{}"),
+		ConfigEncrypted:    []byte("{}"),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider(override): %v", err)

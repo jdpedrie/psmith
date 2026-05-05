@@ -17,6 +17,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/testutil"
 )
@@ -30,7 +31,7 @@ func newTestService(t *testing.T) (*Service, *store.Queries, *modelmeta.LiveCata
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 	cat := modelmeta.NewLiveCatalog(nil)
-	return NewService(q, cat, nil), q, cat, pool
+	return NewService(q, cat, crypto.Nop{}, nil), q, cat, pool
 }
 
 func mustUser(t *testing.T, q *store.Queries, username string, isAdmin bool) store.User {
@@ -131,11 +132,11 @@ func makeProvider(t *testing.T, q *store.Queries, userID uuid.UUID, typeName, la
 		t.Fatalf("uuid: %v", err)
 	}
 	row, err := q.CreateUserModelProvider(context.Background(), store.CreateUserModelProviderParams{
-		ID:     id,
-		UserID: userID,
-		Type:   typeName,
-		Label:  label,
-		Config: config,
+		ID:              id,
+		UserID:          userID,
+		Type:            typeName,
+		Label:           label,
+		ConfigEncrypted: config,
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)
@@ -311,7 +312,7 @@ func TestCreateUserModelProvider_Success(t *testing.T) {
 	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.CreateUserModelProviderRequest{
 		Type:   typeName,
 		Label:  "main",
-		Config: []byte(`{"api_key":"sk-x"}`),
+		Config:    []byte(`{"api_key":"sk-x"}`),
 	}))
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)
@@ -358,7 +359,7 @@ func TestCreateUserModelProvider_RejectsInvalidConfig(t *testing.T) {
 	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.CreateUserModelProviderRequest{
 		Type:   typeName,
 		Label:  "main",
-		Config: []byte("not-json"),
+		Config:    []byte("not-json"),
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
@@ -556,7 +557,7 @@ func TestUpdateUserModelProvider_InvalidConfig(t *testing.T) {
 
 	_, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&reevev1.UpdateUserModelProviderRequest{
 		Id:     prov.ID.String(),
-		Config: []byte("not-json"),
+		Config:    []byte("not-json"),
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
@@ -1524,7 +1525,7 @@ func TestRefreshModelCatalog_Admin(t *testing.T) {
 	cat := &fakeCatalog{
 		status: modelmeta.Status{ProvidersCount: 7, ModelsCount: 42},
 	}
-	svc := NewService(q, cat, nil)
+	svc := NewService(q, cat, crypto.Nop{}, nil)
 	admin := mustUser(t, q, "admin", true)
 
 	resp, err := svc.RefreshModelCatalog(ctxAs(admin), connect.NewRequest(&reevev1.RefreshModelCatalogRequest{}))
@@ -1544,7 +1545,7 @@ func TestRefreshModelCatalog_NonAdminDenied(t *testing.T) {
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 	cat := &fakeCatalog{}
-	svc := NewService(q, cat, nil)
+	svc := NewService(q, cat, crypto.Nop{}, nil)
 	regular := mustUser(t, q, "alice", false)
 	_, err := svc.RefreshModelCatalog(ctxAs(regular), connect.NewRequest(&reevev1.RefreshModelCatalogRequest{}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -1563,7 +1564,7 @@ func TestGetCatalogStatus_Authenticated(t *testing.T) {
 	cat := &fakeCatalog{
 		status: modelmeta.Status{ProvidersCount: 2, ModelsCount: 5, LastRefreshAt: &now},
 	}
-	svc := NewService(q, cat, nil)
+	svc := NewService(q, cat, crypto.Nop{}, nil)
 	user := mustUser(t, q, "alice", false)
 
 	resp, err := svc.GetCatalogStatus(ctxAs(user), connect.NewRequest(&reevev1.GetCatalogStatusRequest{}))

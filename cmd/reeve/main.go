@@ -20,6 +20,8 @@ func main() {
 		os.Exit(installCmd(os.Args[2:]))
 	case "useradd":
 		os.Exit(useraddCmd(os.Args[2:]))
+	case "genkey":
+		os.Exit(genkeyCmd(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 		os.Exit(0)
@@ -39,6 +41,7 @@ Usage:
 Subcommands:
   install    Apply embedded schema migrations to the database.
   useradd    Create a user account.
+  genkey     Mint a base64 master key for REEVE_MASTER_KEY.
 
 Run "reeve <subcommand> -h" for subcommand-specific help.
 `)

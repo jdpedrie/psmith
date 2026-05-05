@@ -162,7 +162,7 @@ func seedAnthropicSendable(t *testing.T, q *store.Queries, baseURL string) sendF
 	prid, _ := uuid.NewV7()
 	cfg := []byte(fmt.Sprintf(`{"api_key":"x","base_url":%q}`, baseURL))
 	prov, err := q.CreateUserModelProvider(ctx, store.CreateUserModelProviderParams{
-		ID: prid, UserID: user.ID, Type: "anthropic", Label: "test", Config: cfg,
+		ID: prid, UserID: user.ID, Type: "anthropic", Label: "test", ConfigEncrypted: cfg,
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)

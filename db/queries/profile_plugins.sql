@@ -13,6 +13,10 @@ ORDER BY ordinal;
 DELETE FROM profile_plugins WHERE profile_id = $1;
 
 -- name: InsertProfilePlugin :one
-INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config)
+-- $4 is config_encrypted (nullable BYTEA); the legacy plaintext
+-- config column is left NULL on every new row. The service layer's
+-- read path decrypts config_encrypted and falls back to the plaintext
+-- column for legacy rows still carrying their pre-rollover JSONB.
+INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config_encrypted)
 VALUES ($1, $2, $3, $4)
 RETURNING *;

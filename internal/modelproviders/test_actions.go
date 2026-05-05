@@ -47,7 +47,11 @@ func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Reques
 		return nil, err
 	}
 
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
+	cfg, err := s.resolveProviderConfig(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}
@@ -84,7 +88,11 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[reevev
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
 	}
 
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, row.Config)
+	cfg, err := s.resolveProviderConfig(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}

@@ -12,9 +12,9 @@ import (
 )
 
 const createUserModelProvider = `-- name: CreateUserModelProvider :one
-INSERT INTO user_model_providers (id, user_id, type, label, config, default_settings)
+INSERT INTO user_model_providers (id, user_id, type, label, config_encrypted, default_settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, type, label, config, created_at, updated_at, default_settings
+RETURNING id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted
 `
 
 type CreateUserModelProviderParams struct {
@@ -22,17 +22,22 @@ type CreateUserModelProviderParams struct {
 	UserID          uuid.UUID
 	Type            string
 	Label           string
-	Config          []byte
+	ConfigEncrypted []byte
 	DefaultSettings []byte
 }
 
+// config_encrypted is the AES-256-GCM-sealed JSONB blob; the legacy
+// `config` column is left NULL. The service layer's Get/List path
+// decrypts config_encrypted when present and falls back to plaintext
+// config for any row that hasn't been touched since the encryption
+// rollout.
 func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserModelProviderParams) (UserModelProvider, error) {
 	row := q.db.QueryRow(ctx, createUserModelProvider,
 		arg.ID,
 		arg.UserID,
 		arg.Type,
 		arg.Label,
-		arg.Config,
+		arg.ConfigEncrypted,
 		arg.DefaultSettings,
 	)
 	var i UserModelProvider
@@ -45,6 +50,7 @@ func (q *Queries) CreateUserModelProvider(ctx context.Context, arg CreateUserMod
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultSettings,
+		&i.ConfigEncrypted,
 	)
 	return i, err
 }
@@ -59,7 +65,7 @@ func (q *Queries) DeleteUserModelProvider(ctx context.Context, id uuid.UUID) err
 }
 
 const getUserModelProvider = `-- name: GetUserModelProvider :one
-SELECT id, user_id, type, label, config, created_at, updated_at, default_settings FROM user_model_providers WHERE id = $1
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted FROM user_model_providers WHERE id = $1
 `
 
 func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error) {
@@ -74,12 +80,13 @@ func (q *Queries) GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserM
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultSettings,
+		&i.ConfigEncrypted,
 	)
 	return i, err
 }
 
 const listUserModelProvidersByUser = `-- name: ListUserModelProvidersByUser :many
-SELECT id, user_id, type, label, config, created_at, updated_at, default_settings FROM user_model_providers
+SELECT id, user_id, type, label, config, created_at, updated_at, default_settings, config_encrypted FROM user_model_providers
 WHERE user_id = $1
 ORDER BY created_at
 `
@@ -102,6 +109,7 @@ func (q *Queries) ListUserModelProvidersByUser(ctx context.Context, userID uuid.
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DefaultSettings,
+			&i.ConfigEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -111,25 +119,6 @@ func (q *Queries) ListUserModelProvidersByUser(ctx context.Context, userID uuid.
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateUserModelProviderConfig = `-- name: UpdateUserModelProviderConfig :exec
-UPDATE user_model_providers
-SET config = config || $2, updated_at = NOW()
-WHERE id = $1
-`
-
-type UpdateUserModelProviderConfigParams struct {
-	ID     uuid.UUID
-	Config []byte
-}
-
-// Shallow-merges the incoming JSONB patch into the existing config. Keys
-// present in the patch override existing values; absent keys are preserved.
-// To clear a key, send it explicitly with an empty value.
-func (q *Queries) UpdateUserModelProviderConfig(ctx context.Context, arg UpdateUserModelProviderConfigParams) error {
-	_, err := q.db.Exec(ctx, updateUserModelProviderConfig, arg.ID, arg.Config)
-	return err
 }
 
 const updateUserModelProviderDefaultSettings = `-- name: UpdateUserModelProviderDefaultSettings :exec
@@ -149,6 +138,28 @@ type UpdateUserModelProviderDefaultSettingsParams struct {
 // merge with the upper layers, so partial writes here would be a footgun.
 func (q *Queries) UpdateUserModelProviderDefaultSettings(ctx context.Context, arg UpdateUserModelProviderDefaultSettingsParams) error {
 	_, err := q.db.Exec(ctx, updateUserModelProviderDefaultSettings, arg.ID, arg.DefaultSettings)
+	return err
+}
+
+const updateUserModelProviderEncryptedConfig = `-- name: UpdateUserModelProviderEncryptedConfig :exec
+UPDATE user_model_providers
+SET config_encrypted = $2, config = NULL, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateUserModelProviderEncryptedConfigParams struct {
+	ID              uuid.UUID
+	ConfigEncrypted []byte
+}
+
+// Full-replacement update on the encrypted column. The service layer
+// handles partial-merge semantics in Go (decrypt → JSON merge →
+// re-encrypt) before calling this — the SQL side stays straightforward
+// replacement so the encrypted bytes remain a single sealed unit.
+// Clears any plaintext config that may still be present, finalising
+// the row's transition to encrypted-only storage.
+func (q *Queries) UpdateUserModelProviderEncryptedConfig(ctx context.Context, arg UpdateUserModelProviderEncryptedConfigParams) error {
+	_, err := q.db.Exec(ctx, updateUserModelProviderEncryptedConfig, arg.ID, arg.ConfigEncrypted)
 	return err
 }
 

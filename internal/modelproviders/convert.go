@@ -36,13 +36,30 @@ var knownStatefulTypes = map[string]bool{
 	"codex-subprocess":       true,
 }
 
-// storeProviderToProto maps a store row to its proto shape.
-func storeProviderToProto(p store.UserModelProvider) *reevev1.UserModelProvider {
+// storeProviderToProto maps a store row to its proto shape. Method
+// form so it can resolve the dual-column config (encrypted preferred,
+// plaintext fallback for unmigrated rows) through the service's
+// cipher.
+//
+// Decryption failures fall through to nil Config rather than erroring
+// the whole proto — the proto field is informational at the wire
+// layer and a missing config doesn't prevent the row from rendering.
+// The error gets logged so a misconfigured cipher (wrong key) is
+// surfaced.
+func (s *Service) storeProviderToProto(p store.UserModelProvider) *reevev1.UserModelProvider {
+	cfg, err := s.resolveProviderConfig(p)
+	if err != nil {
+		s.logger.Warn("decrypt provider config for proto response failed",
+			"provider_id", p.ID,
+			"error", err,
+		)
+		cfg = nil
+	}
 	out := &reevev1.UserModelProvider{
 		Id:          p.ID.String(),
 		Type:        p.Type,
 		Label:       p.Label,
-		Config:      p.Config,
+		Config:      cfg,
 		OwnerUserId: p.UserID.String(),
 		CreatedAt:   timestamppb.New(p.CreatedAt),
 		UpdatedAt:   timestamppb.New(p.UpdatedAt),

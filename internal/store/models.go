@@ -107,12 +107,13 @@ type Profile struct {
 }
 
 type ProfilePlugin struct {
-	ProfileID  uuid.UUID
-	Ordinal    int32
-	PluginName string
-	Config     []byte
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ProfileID       uuid.UUID
+	Ordinal         int32
+	PluginName      string
+	Config          []byte
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ConfigEncrypted []byte
 }
 
 type Session struct {
@@ -191,12 +192,14 @@ type UserModelProvider struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DefaultSettings []byte
+	ConfigEncrypted []byte
 }
 
 type UserPluginSetting struct {
-	UserID     uuid.UUID
-	PluginName string
-	Config     []byte
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	UserID          uuid.UUID
+	PluginName      string
+	Config          []byte
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ConfigEncrypted []byte
 }

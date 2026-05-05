@@ -1,5 +1,10 @@
 -- name: CreateUserModelProvider :one
-INSERT INTO user_model_providers (id, user_id, type, label, config, default_settings)
+-- config_encrypted is the AES-256-GCM-sealed JSONB blob; the legacy
+-- `config` column is left NULL. The service layer's Get/List path
+-- decrypts config_encrypted when present and falls back to plaintext
+-- config for any row that hasn't been touched since the encryption
+-- rollout.
+INSERT INTO user_model_providers (id, user_id, type, label, config_encrypted, default_settings)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
@@ -16,12 +21,15 @@ UPDATE user_model_providers
 SET label = $2, updated_at = NOW()
 WHERE id = $1;
 
--- name: UpdateUserModelProviderConfig :exec
--- Shallow-merges the incoming JSONB patch into the existing config. Keys
--- present in the patch override existing values; absent keys are preserved.
--- To clear a key, send it explicitly with an empty value.
+-- name: UpdateUserModelProviderEncryptedConfig :exec
+-- Full-replacement update on the encrypted column. The service layer
+-- handles partial-merge semantics in Go (decrypt → JSON merge →
+-- re-encrypt) before calling this — the SQL side stays straightforward
+-- replacement so the encrypted bytes remain a single sealed unit.
+-- Clears any plaintext config that may still be present, finalising
+-- the row's transition to encrypted-only storage.
 UPDATE user_model_providers
-SET config = config || $2, updated_at = NOW()
+SET config_encrypted = $2, config = NULL, updated_at = NOW()
 WHERE id = $1;
 
 -- name: UpdateUserModelProviderDefaultSettings :exec

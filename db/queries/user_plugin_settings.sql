@@ -15,14 +15,20 @@ ORDER BY plugin_name;
 
 -- name: UpsertUserPluginSettings :one
 -- Idempotent: insert-or-update. updated_at is bumped to NOW() on every
--- save. Empty config (`{}`) is a valid stored value — it means "the
--- user explicitly cleared every global field" and should beat the
--- absence-is-empty fallback at merge time.
-INSERT INTO user_plugin_settings (user_id, plugin_name, config)
+-- save. Empty config (encrypted form of `{}`) is a valid stored value
+-- — it means "the user explicitly cleared every global field" and
+-- should beat the absence-is-empty fallback at merge time.
+--
+-- Writes to config_encrypted only and clears any plaintext config left
+-- behind from before the encryption rollout. The service layer
+-- decrypts incoming reads and falls back to plaintext when
+-- config_encrypted is NULL on legacy rows.
+INSERT INTO user_plugin_settings (user_id, plugin_name, config_encrypted)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, plugin_name) DO UPDATE
-    SET config     = EXCLUDED.config,
-        updated_at = NOW()
+    SET config_encrypted = EXCLUDED.config_encrypted,
+        config           = NULL,
+        updated_at       = NOW()
 RETURNING *;
 
 -- name: DeleteUserPluginSettings :exec

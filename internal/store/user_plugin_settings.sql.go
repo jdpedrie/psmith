@@ -27,7 +27,7 @@ func (q *Queries) DeleteUserPluginSettings(ctx context.Context, arg DeleteUserPl
 }
 
 const getUserPluginSettings = `-- name: GetUserPluginSettings :one
-SELECT user_id, plugin_name, config, created_at, updated_at FROM user_plugin_settings
+SELECT user_id, plugin_name, config, created_at, updated_at, config_encrypted FROM user_plugin_settings
 WHERE user_id = $1 AND plugin_name = $2
 `
 
@@ -48,12 +48,13 @@ func (q *Queries) GetUserPluginSettings(ctx context.Context, arg GetUserPluginSe
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigEncrypted,
 	)
 	return i, err
 }
 
 const listUserPluginSettings = `-- name: ListUserPluginSettings :many
-SELECT user_id, plugin_name, config, created_at, updated_at FROM user_plugin_settings
+SELECT user_id, plugin_name, config, created_at, updated_at, config_encrypted FROM user_plugin_settings
 WHERE user_id = $1
 ORDER BY plugin_name
 `
@@ -76,6 +77,7 @@ func (q *Queries) ListUserPluginSettings(ctx context.Context, userID uuid.UUID) 
 			&i.Config,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -88,26 +90,32 @@ func (q *Queries) ListUserPluginSettings(ctx context.Context, userID uuid.UUID) 
 }
 
 const upsertUserPluginSettings = `-- name: UpsertUserPluginSettings :one
-INSERT INTO user_plugin_settings (user_id, plugin_name, config)
+INSERT INTO user_plugin_settings (user_id, plugin_name, config_encrypted)
 VALUES ($1, $2, $3)
 ON CONFLICT (user_id, plugin_name) DO UPDATE
-    SET config     = EXCLUDED.config,
-        updated_at = NOW()
-RETURNING user_id, plugin_name, config, created_at, updated_at
+    SET config_encrypted = EXCLUDED.config_encrypted,
+        config           = NULL,
+        updated_at       = NOW()
+RETURNING user_id, plugin_name, config, created_at, updated_at, config_encrypted
 `
 
 type UpsertUserPluginSettingsParams struct {
-	UserID     uuid.UUID
-	PluginName string
-	Config     []byte
+	UserID          uuid.UUID
+	PluginName      string
+	ConfigEncrypted []byte
 }
 
 // Idempotent: insert-or-update. updated_at is bumped to NOW() on every
-// save. Empty config (`{}`) is a valid stored value — it means "the
-// user explicitly cleared every global field" and should beat the
-// absence-is-empty fallback at merge time.
+// save. Empty config (encrypted form of `{}`) is a valid stored value
+// — it means "the user explicitly cleared every global field" and
+// should beat the absence-is-empty fallback at merge time.
+//
+// Writes to config_encrypted only and clears any plaintext config left
+// behind from before the encryption rollout. The service layer
+// decrypts incoming reads and falls back to plaintext when
+// config_encrypted is NULL on legacy rows.
 func (q *Queries) UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPluginSettingsParams) (UserPluginSetting, error) {
-	row := q.db.QueryRow(ctx, upsertUserPluginSettings, arg.UserID, arg.PluginName, arg.Config)
+	row := q.db.QueryRow(ctx, upsertUserPluginSettings, arg.UserID, arg.PluginName, arg.ConfigEncrypted)
 	var i UserPluginSetting
 	err := row.Scan(
 		&i.UserID,
@@ -115,6 +123,7 @@ func (q *Queries) UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPl
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigEncrypted,
 	)
 	return i, err
 }

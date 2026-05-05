@@ -142,6 +142,7 @@ The server requires `REEVE_DSN`. On first run, if no users exist and `REEVE_BOOT
 export REEVE_DSN='postgres://clark:clark@localhost:5433/clark?sslmode=disable'
 export REEVE_BOOTSTRAP_ADMIN_USERNAME=john
 export REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme
+export REEVE_MASTER_KEY=$(go run ./cmd/reeve genkey)   # AES-256 key for at-rest secrets
 make run
 # reeved listening addr=:8080
 ```
@@ -154,6 +155,8 @@ Other env vars:
 | `REEVE_DSN` | _(required)_ | Postgres connection string |
 | `REEVE_BOOTSTRAP_ADMIN_USERNAME` | — | One-shot admin bootstrap |
 | `REEVE_BOOTSTRAP_ADMIN_PASSWORD` | — | One-shot admin bootstrap |
+| `REEVE_MASTER_KEY` | — | base64-encoded 32-byte AES-256-GCM key. When set, provider API keys + plugin credentials land encrypted in `*.config_encrypted` columns. Mint with `reeve genkey`. Without it the server boots with a loud warning and stores config blobs in plaintext. |
+| `REEVE_DEV_AUTOKEY` | — | Set to `1` to mint a throwaway key per process (dev convenience; data won't survive a restart). Mutually exclusive with `REEVE_MASTER_KEY`. |
 
 ### 4. macOS client
 

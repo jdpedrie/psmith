@@ -13,6 +13,7 @@ import (
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/testutil"
 )
@@ -36,7 +37,7 @@ func newTestSvc(t *testing.T) (*Service, *store.Queries) {
 	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	return NewService(q, nil, nil, nil, nil), q
+	return NewService(q, nil, nil, nil, crypto.Nop{}, nil), q
 }
 
 func mustCreateUser(t *testing.T, q *store.Queries, username string) store.User {

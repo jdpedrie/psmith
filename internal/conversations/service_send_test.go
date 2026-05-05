@@ -19,6 +19,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/testutil"
@@ -112,7 +113,7 @@ func newFullSvcWithPool(t *testing.T) (*Service, *store.Queries, *stream.Supervi
 	q := store.New(pool)
 	cat := modelmeta.NewLiveCatalog(nil)
 	sup := stream.New(q, slog.Default())
-	return NewService(q, pool, cat, sup, slog.Default()), q, sup, pool
+	return NewService(q, pool, cat, sup, crypto.Nop{}, slog.Default()), q, sup, pool
 }
 
 func textChunk(s string) providers.Chunk {
@@ -186,7 +187,7 @@ func seedSendable(t *testing.T, q *store.Queries, driverType string) sendFixture
 
 	prid, _ := uuid.NewV7()
 	prov, err := q.CreateUserModelProvider(ctx, store.CreateUserModelProviderParams{
-		ID: prid, UserID: user.ID, Type: driverType, Label: "test", Config: []byte("{}"),
+		ID: prid, UserID: user.ID, Type: driverType, Label: "test", ConfigEncrypted: []byte("{}"),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)
@@ -352,7 +353,7 @@ func TestSendMessage_ProviderNotOwned(t *testing.T) {
 	})
 	bpid, _ := uuid.NewV7()
 	bobProv, _ := q.CreateUserModelProvider(context.Background(), store.CreateUserModelProviderParams{
-		ID: bpid, UserID: bob.ID, Type: driverType, Label: "bob-prov", Config: []byte("{}"),
+		ID: bpid, UserID: bob.ID, Type: driverType, Label: "bob-prov", ConfigEncrypted: []byte("{}"),
 	})
 	pid := bobProv.ID.String()
 	mid := "anything"
@@ -647,7 +648,7 @@ func TestSendMessage_NoSupervisor_Unimplemented(t *testing.T) {
 	t.Parallel()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	svc := NewService(q, nil, nil, nil, nil) // no pool, no catalog, no supervisor
+	svc := NewService(q, nil, nil, nil, crypto.Nop{}, nil) // no pool, no catalog, no supervisor
 
 	uid, _ := uuid.NewV7()
 	user, _ := q.CreateUser(context.Background(), store.CreateUserParams{

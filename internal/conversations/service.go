@@ -23,6 +23,7 @@ import (
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/history"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
@@ -47,6 +48,7 @@ type Service struct {
 	pool       *pgxpool.Pool
 	catalog    modelmeta.Catalog
 	supervisor *stream.Supervisor
+	cipher     crypto.Cipher
 	logger     *slog.Logger
 }
 
@@ -56,17 +58,41 @@ type Service struct {
 // (resolve-parent → insert-user-message → advance-cursor) so concurrent
 // sends on the same context serialize correctly via SELECT FOR UPDATE on
 // the contexts row.
-func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Catalog, supervisor *stream.Supervisor, logger *slog.Logger) *Service {
+//
+// cipher decrypts provider config blobs (api_key, base_url, etc.) and
+// per-profile / per-user plugin config blobs at the moments those
+// bytes are handed to driver / plugin constructors. Pass crypto.Nop{}
+// to opt out of encryption.
+func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Catalog, supervisor *stream.Supervisor, cipher crypto.Cipher, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if cipher == nil {
+		cipher = crypto.Nop{}
 	}
 	return &Service{
 		queries:    queries,
 		pool:       pool,
 		catalog:    catalog,
 		supervisor: supervisor,
+		cipher:     cipher,
 		logger:     logger,
 	}
+}
+
+// resolveProviderConfig decrypts provRow.ConfigEncrypted (or falls back
+// to plaintext provRow.Config for legacy rows). Mirrors the helper in
+// internal/modelproviders so the conversation send path does the same
+// thing the model-providers admin path does.
+func (s *Service) resolveProviderConfig(row store.UserModelProvider) ([]byte, error) {
+	b, err := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt provider config: %w", err)
+	}
+	if len(b) == 0 {
+		return []byte("{}"), nil
+	}
+	return b, nil
 }
 
 // --- CreateConversation ---
@@ -910,7 +936,11 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 	}
 
 	// Build the driver instance for this provider.
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provRow.Config)
+	provCfg, err := s.resolveProviderConfig(provRow)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}
@@ -1609,7 +1639,11 @@ func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID
 		if len(rows) > 0 {
 			specs := make([]plugins.Spec, 0, len(rows))
 			for _, r := range rows {
-				merged, mErr := s.mergeGlobalIntoProfileConfig(ctx, owner, r.PluginName, r.Config)
+				profileCfg, dErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+				if dErr != nil {
+					return nil, fmt.Errorf("decrypt profile_plugins.%s: %w", r.PluginName, dErr)
+				}
+				merged, mErr := s.mergeGlobalIntoProfileConfig(ctx, owner, r.PluginName, profileCfg)
 				if mErr != nil {
 					return nil, fmt.Errorf("merge globals for %q: %w", r.PluginName, mErr)
 				}
@@ -1641,7 +1675,11 @@ func (s *Service) mergeGlobalIntoProfileConfig(ctx context.Context, userID uuid.
 	if err != nil {
 		return nil, err
 	}
-	if len(row.Config) == 0 || string(row.Config) == "{}" {
+	globalBytes, err := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user_plugin_settings.%s: %w", pluginName, err)
+	}
+	if len(globalBytes) == 0 || string(globalBytes) == "{}" {
 		return profileConfig, nil
 	}
 
@@ -1649,7 +1687,7 @@ func (s *Service) mergeGlobalIntoProfileConfig(ctx context.Context, userID uuid.
 	// JSON objects (the ConfigField shape is flat — no nesting); the
 	// merge is just key-by-key.
 	var globalMap, profileMap map[string]any
-	if err := json.Unmarshal(row.Config, &globalMap); err != nil {
+	if err := json.Unmarshal(globalBytes, &globalMap); err != nil {
 		// Malformed global blob → treat as empty rather than failing the
 		// whole pipeline build. The user's profile sends should not be
 		// gated by a stale-shape global row.
@@ -1810,7 +1848,11 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 	}
 
 	// Build the driver and call Send.
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provRow.Config)
+	provCfg, err := s.resolveProviderConfig(provRow)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build compression driver: %w", err))
 	}
@@ -1943,7 +1985,11 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[r
 	}
 
 	// Build driver, type-assert to TokenCounter.
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provRow.Config)
+	provCfg, err := s.resolveProviderConfig(provRow)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}

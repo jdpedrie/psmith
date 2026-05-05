@@ -123,7 +123,7 @@ func TestCacheObs_LetteredChoicesShiftsTrailingByOne(t *testing.T) {
 		ProfileID:  f.profile.ID,
 		Ordinal:    0,
 		PluginName: plugins.LetteredChoicesName,
-		Config:     []byte(`{"keep_last_n": 1}`),
+		ConfigEncrypted:    []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}

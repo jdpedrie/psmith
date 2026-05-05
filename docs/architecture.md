@@ -441,9 +441,25 @@ Auth is built in from day one to leave room for multi-user later, even though Jo
 ### AuthService surface
 `Login`, `Logout`, `WhoAmI`, `ChangePassword` for everyone. Admin-only (enforced server-side via `user.is_admin`): `CreateUser`, `ListUsers`, `GetUser`, `UpdateUser`, `DeleteUser`, `AdminResetPassword`. See [proto/reeve/v1/auth.proto](../proto/reeve/v1/auth.proto).
 
-## Encryption (deferred)
+## Encryption
 
-**Current posture: no application-level encryption.** Host-level disk encryption (FileVault / dm-crypt / equivalent) covers the realistic threat at self-hosted personal scale — the stolen-disk case. Anything stronger trades off against Reeve's defining capability (server-side stream supervision, plugin pipelines, compression, history-building) and is deferred until the threat model actually changes.
+**Current posture: provider/plugin credentials encrypted at rest; message bodies still plaintext.** The "spendable secrets" subset of Tier A shipped under migration `00023_encrypted_secret_columns.sql` plus `internal/crypto`. Message content remains plaintext per the rationale in "Why true E2E is incompatible" below — encrypting it breaks the server-side intelligence (compression, history-builder, plugin pipelines) that's the whole point.
+
+### What's encrypted today
+
+| Column | Holds | Cipher |
+|---|---|---|
+| `user_model_providers.config_encrypted` | provider api_key + base_url + provider-specific config | AES-256-GCM |
+| `user_plugin_settings.config_encrypted` | per-user plugin globals (e.g. `brave_search.api_key`) | AES-256-GCM |
+| `profile_plugins.config_encrypted` | per-profile plugin overrides | AES-256-GCM |
+
+Master key from env `REEVE_MASTER_KEY` (base64 32 bytes). `reeve genkey` mints one. Without it set the server boots with a loud warning and writes config blobs in plaintext via `crypto.Nop{}` — the dual-column rollover means existing rows keep working.
+
+In-memory protection: `crypto.Secret` type wraps sensitive byte slices and redacts in every `fmt`/JSON path. Drivers receive plaintext config via `resolveProviderConfig` only at the moment they need to construct an SDK client; the official SDKs hold the key as a string regardless, so deeper in-memory sealing buys nothing.
+
+### Still deferred
+
+Host-level disk encryption (FileVault / dm-crypt / equivalent) still covers the broader-scope threat at self-hosted personal scale — the stolen-disk case. The remaining Tier A scope (encrypting `messages.content`, `messages.thinking`, `profiles.system_message`, etc.) is deferred until the threat model actually changes.
 
 ### Why true E2E is incompatible with the architecture
 Reeve's value is server-side intelligence on plaintext: the stream supervisor assembling chunks while iOS is backgrounded, plugin pipelines running before/after the wire, compression invoking another LLM call, history-builder composing prefixes. All require plaintext at the server. Strict client-side E2E (server stores ciphertext only) breaks every one of those. If genuine "no provider sees this" privacy is needed, the answer is to run a local model via the `openai-compatible` driver — Reeve's processing then stays on the user's machine.
@@ -453,7 +469,8 @@ Reeve's value is server-side intelligence on plaintext: the stream supervisor as
 | Tier | Threat | What defends it | Status |
 |---|---|---|---|
 | T1 | Disk / DB backup leaks history | Host-level disk encryption | Covered by OS, no Reeve work |
-| T1+ | Someone with logical DB access but not host filesystem | Column-level encryption at rest (Tier A below) | Deferred |
+| T1+ | Someone with logical DB access reads provider api_keys | AES-256-GCM on `*.config_encrypted` columns | **Shipped** (migration 00023, internal/crypto) |
+| T1++ | Someone with logical DB access reads message bodies | Column-level encryption on messages.* | Deferred (per-tier sketch below) |
 | T3 | Operator (Reeve admin) shouldn't read other users' data | Per-user keys derived from password (Tier B below) | Deferred until multi-user |
 | T4 | Provider (Anthropic, OpenAI) shouldn't see content | Impossible — they process it | Out of scope; use local model |
 | T5 | Server itself never has plaintext | True E2E | Architecturally incompatible; not pursued |

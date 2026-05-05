@@ -52,7 +52,7 @@ func newFixture(t *testing.T) *fixture {
 	provID := mustUUID(t)
 	prov, err := q.CreateUserModelProvider(bg, store.CreateUserModelProviderParams{
 		ID: provID, UserID: user.ID, Type: "openai-compatible",
-		Label: "test", Config: []byte(`{}`),
+		Label: "test", ConfigEncrypted: []byte(`{}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)

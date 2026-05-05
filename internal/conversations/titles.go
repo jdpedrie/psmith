@@ -195,7 +195,11 @@ func (s *Service) callTitleModel(ctx context.Context, providerID uuid.UUID, mode
 		}
 		return "", fmt.Errorf("load title provider: %w", err)
 	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provRow.Config)
+	provCfg, err := s.resolveProviderConfig(provRow)
+	if err != nil {
+		return "", fmt.Errorf("decrypt title provider config: %w", err)
+	}
+	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
 	if err != nil {
 		return "", fmt.Errorf("build title driver: %w", err)
 	}

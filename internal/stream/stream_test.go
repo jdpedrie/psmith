@@ -55,7 +55,7 @@ func newFixture(t *testing.T) *fixture {
 		UserID: user.ID,
 		Type:   "openai-compatible",
 		Label:  "test",
-		Config: []byte(`{}`),
+		ConfigEncrypted:    []byte(`{}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)
