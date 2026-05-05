@@ -94,6 +94,7 @@ private struct ConversationBody: View {
     /// actively scrolls up.
     @State private var autoFollow = true
     @State private var lastAutoScroll: Date = .distantPast
+    @State private var showingMissingCostInfo = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -140,9 +141,7 @@ private struct ConversationBody: View {
     @ViewBuilder
     private var statusStrip: some View {
         HStack(spacing: 8) {
-            if let cost = totalCostString {
-                chipLabel(text: cost, systemImage: "dollarsign.circle")
-            }
+            costChip
             if let context = activeContextLabel {
                 NavigationLink {
                     ContextListView(model: model)
@@ -180,19 +179,81 @@ private struct ConversationBody: View {
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
     }
 
-    /// Active-context cost. The single-context proto returned by
-    /// GetConversation leaves the cost aggregate at zero (only the
-    /// ListContexts query populates it server-side, see
-    /// internal/conversations/convert.go). So look the active row up
-    /// in `model.contexts` instead of `activeContext` — same id,
-    /// but with the cost field actually filled in. Returns nil when
-    /// the active context has no cost yet (fresh context, no
-    /// completed turns) so the chip simply disappears.
-    private var totalCostString: String? {
-        guard let activeID = model.activeContext?.id,
-              let ctx = model.contexts.first(where: { $0.id == activeID }),
-              ctx.cumulativeCostUsd > 0 else { return nil }
-        return String(format: "$%.4f", ctx.cumulativeCostUsd)
+    /// Cost chip with a best-effort total + a (!) tap target when
+    /// any assistant message in the active context has usage data
+    /// but no per-token price (subscription / flat-fee models like
+    /// Z.AI Coding Plan don't populate per-million pricing in
+    /// `user_models`, so the cost rolls up as $0). Tapping the
+    /// warning lists which models contributed cost-less turns so
+    /// the user can decide whether to wire prices in.
+    @ViewBuilder
+    private var costChip: some View {
+        // Show even when the rollup is zero — better than vanishing
+        // silently. The (!) makes the missing-data case legible.
+        let total = accruedCost
+        let label = String(format: "$%.4f", total)
+        HStack(spacing: 6) {
+            chipLabel(text: label, systemImage: "dollarsign.circle")
+            if !modelsMissingCost.isEmpty {
+                Button {
+                    showingMissingCostInfo = true
+                } label: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.orange.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cost data missing")
+            }
+        }
+        .alert(
+            "Cost is approximate",
+            isPresented: $showingMissingCostInfo
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            let names = modelsMissingCost.joined(separator: "\n• ")
+            Text("Some turns ran on models without per-token pricing in your catalog, so they're not included in the running total:\n\n• \(names)")
+        }
+    }
+
+    /// Sum of every assistant message's `totalCostUsd` in the active
+    /// context. Messages with nil cost contribute nothing — those
+    /// are the ones the warning chip surfaces. Computed off
+    /// `model.messages` (the linear chain currently visible) rather
+    /// than the contexts aggregate so the value reflects what's on
+    /// screen even on cold cache hits.
+    private var accruedCost: Double {
+        model.messages.reduce(0) { acc, m in
+            acc + (m.usage?.totalCostUsd ?? 0)
+        }
+    }
+
+    /// Distinct display-name list of models that produced an assistant
+    /// message with usage data (real LLM call) but no totalCostUsd
+    /// (no per-token price). Sorted, deduped.
+    private var modelsMissingCost: [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for m in model.messages {
+            guard m.role == .assistant,
+                  m.usage != nil,
+                  m.usage?.totalCostUsd == nil,
+                  let mid = m.modelID else { continue }
+            // Resolve to display name when we know it; otherwise fall
+            // back to the raw id so the user can still identify it.
+            let pid = m.providerID
+            let display = model.availableModels
+                .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
+                .displayName ?? mid
+            if seen.insert(display).inserted {
+                out.append(display)
+            }
+        }
+        return out.sorted()
     }
 
     /// Header pill label for the active context. Numbering matches the
