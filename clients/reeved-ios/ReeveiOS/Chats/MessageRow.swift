@@ -264,7 +264,12 @@ struct MessageRow: View {
             }
 
             // Body — edit-in-place editor when isEditing, otherwise
-            // markdown / error text.
+            // markdown / error text. Prefer `displayContent` (post-
+            // DisplayTransformer plugin pipeline output, e.g. with
+            // basic_grounding's `<grounding>` block stripped) and fall
+            // back to raw `content` for messages that haven't been
+            // routed through the transformer (e.g. legacy rows).
+            let bodyText = message.displayContent ?? message.content
             if isEditing {
                 editor
             } else if isErrored, let errText = message.errorText, !errText.isEmpty {
@@ -272,13 +277,13 @@ struct MessageRow: View {
                     .font(.callout)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
-                if !message.content.isEmpty {
-                    MarkdownText(message.content)
+                if !bodyText.isEmpty {
+                    MarkdownText(bodyText)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-            } else if !message.content.isEmpty {
-                MarkdownText(message.content)
+            } else if !bodyText.isEmpty {
+                MarkdownText(bodyText)
             }
 
             // Footer — cache-grade dot + token usage summary +

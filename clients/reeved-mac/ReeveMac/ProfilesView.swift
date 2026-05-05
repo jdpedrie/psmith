@@ -823,11 +823,14 @@ private struct ProfileForm: View {
         VStack(alignment: .leading, spacing: 6) {
             titleGeneratorCard(
                 title: "Apple Foundation Models",
-                subtitle: "On-device · free · macOS 26+",
+                subtitle: AppleFoundation.isAvailable
+                    ? "On-device · free · macOS 26+"
+                    : (AppleFoundation.unavailabilityMessage ?? "Not available on this device"),
                 systemImage: "apple.logo",
                 badge: "ON DEVICE",
                 isSelected: isLocal,
-                tint: theme.accent
+                tint: theme.accent,
+                disabled: !AppleFoundation.isAvailable
             ) {
                 titleProviderKind = ReeveTitleProviderKind.appleFoundation
                 titleProviderID = nil
@@ -879,6 +882,7 @@ private struct ProfileForm: View {
         badge: String?,
         isSelected: Bool,
         tint: Color,
+        disabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -925,8 +929,11 @@ private struct ProfileForm: View {
                         lineWidth: isSelected ? 1.5 : 1
                     )
             )
+            .opacity(disabled ? 0.45 : 1.0)
         }
         .buttonStyle(.plain)
+        .disabled(disabled)
+        .help(disabled ? (AppleFoundation.unavailabilityMessage ?? "Not available") : "")
     }
 
     private func modelLabel(provider: String?, model modelID: String?) -> String {

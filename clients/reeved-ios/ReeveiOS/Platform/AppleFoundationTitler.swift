@@ -4,18 +4,16 @@ import ReeveKit
 import FoundationModels
 #endif
 
-/// `LocalTitler` backed by Apple's on-device `FoundationModels` framework
-/// (macOS 26+ Tahoe, requires Apple Intelligence to be enabled). Free, fast
-/// (typically sub-second for a 4-word title), private — the transcript
-/// never leaves the device.
+/// iOS twin of `ReeveMac/AppleFoundationTitler`. Same `LocalTitler`
+/// implementation, same prompt shape, same sanitiser — diverges only
+/// where the framework requires a per-platform `@available` annotation
+/// and where the iOS deployment target enters the picture.
 ///
-/// The whole type is gated on `canImport(FoundationModels)` so the package
-/// still compiles on older SDKs / non-Apple-Intelligence-capable machines.
-/// On those builds `isAvailable` returns false and `generateTitle` throws,
-/// which the trigger logic in `ConversationViewModel` treats as a no-op.
+/// Apple Intelligence on iOS requires an iPhone 15 Pro / iPad with
+/// M-series chip running iOS 26+. On any other device the
+/// `AppleFoundation.availability` check returns `.unavailable` and
+/// the trigger logic in ConversationViewModel skips this titler.
 struct AppleFoundationTitler: LocalTitler {
-    /// Errors specific to the local titler. The trigger path logs and drops
-    /// these silently — we never surface a popup or banner.
     enum LocalTitlerError: Error, CustomStringConvertible {
         case unavailable(reason: String)
         case emptyResult
@@ -28,25 +26,15 @@ struct AppleFoundationTitler: LocalTitler {
         }
     }
 
-    /// Cap on the title we'll persist. Matches the server-side
-    /// `sanitizeTitle` ceiling so the Mac and cloud paths feel identical.
     private static let maxTitleLength = 80
 
-    /// Fired by the view-model trigger to gate the rest of the work.
-    /// Delegates to the shared `AppleFoundation.isAvailable` check in
-    /// ReeveKit so the Mac titler, the iOS titler, and the settings
-    /// pickers in both shells answer this question identically.
     var isAvailable: Bool {
         AppleFoundation.isAvailable
     }
 
-    /// Run the on-device model on a tiny prompt and return a sanitized
-    /// title. The prompt mirrors the server-side title path so the local
-    /// model produces consistent style. Cap output via the session's
-    /// generation options to avoid the model wandering into a paragraph.
     func generateTitle(transcript: String, guide: String?) async throws -> String {
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
             case .available:
                 break
@@ -56,9 +44,6 @@ struct AppleFoundationTitler: LocalTitler {
 
             let instructions = Self.buildInstructions(guide: guide)
             let session = LanguageModelSession(instructions: instructions)
-            // Keep the response short: titles are 2–5 words. Sampling at a
-            // low temperature pushes the model toward the expected shape;
-            // greedy would also be fine here.
             let options = GenerationOptions(temperature: 0.4, maximumResponseTokens: 32)
             let response = try await session.respond(
                 to: Self.buildPrompt(transcript: transcript),
@@ -68,17 +53,13 @@ struct AppleFoundationTitler: LocalTitler {
             guard !trimmed.isEmpty else { throw LocalTitlerError.emptyResult }
             return trimmed
         } else {
-            throw LocalTitlerError.unavailable(reason: "macOS < 26")
+            throw LocalTitlerError.unavailable(reason: "iOS < 26")
         }
         #else
         throw LocalTitlerError.unavailable(reason: "FoundationModels framework not available")
         #endif
     }
 
-    // MARK: - Prompt construction
-
-    /// System-style instruction sent once on session init. Mirrors the
-    /// server's `defaultTitleGuide` plus the optional user-supplied guide.
     private static func buildInstructions(guide: String?) -> String {
         var pieces: [String] = [
             "You write very short titles for chat conversations.",
@@ -94,14 +75,12 @@ struct AppleFoundationTitler: LocalTitler {
         "Write a 2–5 word title for the following exchange:\n\n\(transcript)"
     }
 
-    // MARK: - Sanitization
-
-    /// Trim, strip wrapping quotes, collapse whitespace, cap length. Same
-    /// shape as the server-side `sanitizeTitle` so cloud and on-device
-    /// titles feel identical in the sidebar.
+    /// Trim, strip wrapping quotes, collapse whitespace, cap length —
+    /// matches the Mac twin character-for-character so a title
+    /// generated on iPhone reads identically to one from a Mac
+    /// session with the same transcript.
     static func sanitize(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Strip a single layer of wrapping quotes the model may add.
         if s.count >= 2 {
             let first = s.first
             let last = s.last
@@ -109,12 +88,10 @@ struct AppleFoundationTitler: LocalTitler {
                 s = String(s.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
-        // Collapse internal whitespace runs.
         let collapsed = s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         s = collapsed
         if s.count > maxTitleLength {
             s = String(s.prefix(maxTitleLength))
-            // Trim back to the last space if it lands past the halfway mark.
             if let lastSpace = s.lastIndex(of: " "),
                s.distance(from: s.startIndex, to: lastSpace) > maxTitleLength / 2 {
                 s = String(s[..<lastSpace])

@@ -181,22 +181,52 @@ private struct ProfileViewerScreen: View {
                     if let dp = p.defaultSettings?.defaultProviderID,
                        let dm = p.defaultSettings?.defaultModelID {
                         Section("Default model") {
-                            row("Provider", app.profiles.providerLabels[dp] ?? dp)
-                            let modelDisplay = app.profiles.availableModels
-                                .first(where: { $0.modelID == dm && $0.providerID == dp })?
-                                .displayName
-                            row("Model", modelDisplay ?? dm)
+                            row("Model", modelLabel(provider: dp, model: dm) ?? dm)
                         }
                     }
 
-                    if p.compressionProviderID != nil
-                        || p.titleProviderID != nil
-                        || p.systemMessage != nil
-                        || p.compressionGuide != nil {
-                        Section {
-                            Text("This profile has additional settings (compression model, title model, system message, plugins) that aren't editable on iOS yet — use the Mac client to change them.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    if let cp = p.compressionProviderID,
+                       let cm = p.compressionModelID {
+                        Section("Compression") {
+                            row("Model", modelLabel(provider: cp, model: cm) ?? cm)
+                            if let mode = p.compressionMode {
+                                row("Mode", mode == .replace ? "Replace" : "Append")
+                            }
+                            if let guide = p.compressionGuide, !guide.isEmpty {
+                                row("Guide", guide, multiline: true)
+                            }
+                        }
+                    }
+
+                    if p.titleProviderKind == ReeveTitleProviderKind.appleFoundation {
+                        Section("Auto-titling") {
+                            row("Generator", "Apple Foundation (on-device)")
+                            if let guide = p.titleGuide, !guide.isEmpty {
+                                row("Guide", guide, multiline: true)
+                            }
+                        }
+                    } else if let tp = p.titleProviderID,
+                              let tm = p.titleModelID {
+                        Section("Auto-titling") {
+                            row("Model", modelLabel(provider: tp, model: tm) ?? tm)
+                            if let guide = p.titleGuide, !guide.isEmpty {
+                                row("Guide", guide, multiline: true)
+                            }
+                        }
+                    }
+
+                    if let sys = p.systemMessage, !sys.isEmpty {
+                        Section("System message") {
+                            Text(sys)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    if let dum = p.defaultUserMessage, !dum.isEmpty {
+                        Section("Default user message") {
+                            Text(dum)
+                                .font(.callout)
+                                .textSelection(.enabled)
                         }
                     }
                 }
@@ -208,6 +238,13 @@ private struct ProfileViewerScreen: View {
                             editing = true
                         }
                     }
+                }
+                .task {
+                    // Pull provider labels + model display names so the
+                    // Default / Compression / Title rows can render
+                    // human-readable values instead of raw UUIDs +
+                    // model ids on cold-open.
+                    await app.profiles.loadAvailableModels()
                 }
                 .sheet(isPresented: $editing) {
                     ProfileEditSheet(existingProfileID: p.id)
@@ -234,6 +271,20 @@ private struct ProfileViewerScreen: View {
                 .lineLimit(multiline ? nil : 1)
                 .textSelection(.enabled)
         }
+    }
+
+    /// "<Provider Label> <Model Display Name>" with graceful fallbacks.
+    /// Returns nil when neither id is set; raw provider id + model id
+    /// when the lookup tables are empty (cold-open, network error).
+    /// Mirrors the editor's `modelDisplay` so the viewer and editor
+    /// agree on what a chosen model looks like.
+    private func modelLabel(provider: String?, model: String?) -> String? {
+        guard let pid = provider, let mid = model else { return nil }
+        let providerLabel = app.profiles.providerLabels[pid] ?? pid
+        let modelDisplay = app.profiles.availableModels
+            .first(where: { $0.modelID == mid && $0.providerID == pid })?
+            .displayName ?? mid
+        return "\(providerLabel) · \(modelDisplay)"
     }
 }
 
@@ -319,18 +370,11 @@ private struct ProfileEditSheet: View {
                 }
 
                 Section("Default model") {
-                    Button {
-                        pickingDefaultModel = true
-                    } label: {
-                        HStack {
-                            Text("Model")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text(defaultModelDisplay ?? "Inherit / unset")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    modelPickerRow(
+                        label: "Model",
+                        valueText: defaultModelDisplay ?? "Inherit / unset",
+                        action: { pickingDefaultModel = true }
+                    )
                 }
 
                 Section {
@@ -385,19 +429,12 @@ private struct ProfileEditSheet: View {
                     }
                     .pickerStyle(.menu)
 
-                    Button {
-                        pickingCompressionModel = true
-                    } label: {
-                        HStack {
-                            Text("Model")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text(modelDisplay(provider: compressionProviderID, model: compressionModelID)
-                                 ?? "Inherit / unset")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    modelPickerRow(
+                        label: "Model",
+                        valueText: modelDisplay(provider: compressionProviderID, model: compressionModelID)
+                            ?? "Inherit / unset",
+                        action: { pickingCompressionModel = true }
+                    )
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Guide")
@@ -413,24 +450,33 @@ private struct ProfileEditSheet: View {
                 Section("Auto-titling") {
                     Picker("Generator", selection: $titleProviderKind) {
                         Text("Cloud / Inherit").tag(String?.none)
-                        Text("Apple Foundation (on-device)").tag(String?.some(ReeveTitleProviderKind.appleFoundation))
+                        // Disabled tag entries don't really exist in
+                        // SwiftUI Pickers — render the row but suffix
+                        // the unavailability message so the user
+                        // understands the option exists but can't
+                        // be selected here.
+                        if AppleFoundation.isAvailable {
+                            Text("Apple Foundation (on-device)").tag(String?.some(ReeveTitleProviderKind.appleFoundation))
+                        } else {
+                            Text("Apple Foundation — not available on this device")
+                                .foregroundStyle(.tertiary)
+                                .tag(String?.some(ReeveTitleProviderKind.appleFoundation))
+                        }
                     }
                     .pickerStyle(.menu)
+                    if !AppleFoundation.isAvailable, let msg = AppleFoundation.unavailabilityMessage {
+                        Text("Apple Foundation Models: \(msg)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if titleProviderKind != ReeveTitleProviderKind.appleFoundation {
-                        Button {
-                            pickingTitleModel = true
-                        } label: {
-                            HStack {
-                                Text("Cloud model")
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(modelDisplay(provider: titleProviderID, model: titleModelID)
-                                     ?? "Inherit / unset")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
+                        modelPickerRow(
+                            label: "Cloud model",
+                            valueText: modelDisplay(provider: titleProviderID, model: titleModelID)
+                                ?? "Inherit / unset",
+                            action: { pickingTitleModel = true }
+                        )
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -572,7 +618,15 @@ private struct ProfileEditSheet: View {
                 seedFromExisting()
             }
             .task {
-                await loadPlugins()
+                // Ensure the model lookup tables (providerLabels +
+                // availableModels) are warm so each model-picker row
+                // can render a real "<Provider> · <Model>" label
+                // instead of falling back to raw UUIDs. Cheap when
+                // already loaded — the call is a single ListAllUserModels
+                // RPC that returns from the in-process cache.
+                async let plugins: () = loadPlugins()
+                async let models: () = app.profiles.loadAvailableModels()
+                _ = await (plugins, models)
             }
         }
         .presentationDetents([.large])
@@ -725,7 +779,37 @@ private struct ProfileEditSheet: View {
         let modelDisplay = app.profiles.availableModels
             .first(where: { $0.modelID == mid && $0.providerID == pid })?
             .displayName ?? mid
-        return "\(providerLabel) \(modelDisplay)"
+        return "\(providerLabel) · \(modelDisplay)"
+    }
+
+    /// Settings-Form-shaped row for the three model pickers (default,
+    /// compression, title). Single line, label on the left, value on
+    /// the right with `.lineLimit(1)` + `.truncationMode(.middle)` so
+    /// long display names don't blow out the cell or wrap weirdly.
+    /// The whole row is tappable; opens the supplied picker sheet
+    /// via the `action` callback.
+    @ViewBuilder
+    private func modelPickerRow(
+        label: String,
+        valueText: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(label)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Text(valueText)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Driver type for the default model — drives which extras section

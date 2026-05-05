@@ -149,6 +149,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.input_cost_usd, chain.output_cost_usd, chain.cache_read_cost_usd, chain.cache_write_cost_usd,
        chain.total_cost_usd,
        chain.error_payload,
+       chain.tool_calls,
        chain.created_at,
        chain.edited_at,
        (

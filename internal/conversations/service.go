@@ -820,6 +820,19 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	// Resolve the chat-plugin pipeline up front. Needed before the user-row
+	// INSERT so OutgoingUserTransformer plugins (e.g. basic_grounding's
+	// `<grounding>` block) can rewrite the content that gets persisted —
+	// per the plugin contract, the rewritten text is what lands on the row,
+	// is what history.Build re-emits on every subsequent turn, and is what
+	// keeps the prefix-cache stable. Reused later for history.Build
+	// (SystemPrompter + HistoryTransformer) and for the SendMessage
+	// response's display transform.
+	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
+	}
+
 	// Critical section: resolve parent → insert user message → advance cursor,
 	// all serialized via SELECT FOR UPDATE on the contexts row. Without this,
 	// concurrent SendMessages on the same context race: the second's
@@ -908,12 +921,17 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 			return nil, err
 		}
 
+		// Apply OutgoingUserTransformer plugins (basic_grounding,
+		// future siblings) to the raw user content so the rewritten
+		// text is what we persist. Empty pipeline → identity transform.
+		persistedContent := pipeline.TransformOutgoingUser(req.Msg.Content)
+
 		row, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
 			ID:        userMsgID,
 			ContextID: lockedCtx.ID,
 			ParentID:  parentMessageID,
 			Role:      "user",
-			Content:   req.Msg.Content,
+			Content:   persistedContent,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
@@ -949,13 +967,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("driver %q is not a stateless provider; stateful harness sends are not yet wired", provRow.Type))
 	}
 
-	// Resolve the chat-plugin pipeline once, then thread it into history.Build
-	// (for SystemPrompter + HistoryTransformer) and into the SendMessage
-	// response (for DisplayTransformer on the just-inserted user message).
-	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
-	}
+	// `pipeline` is already resolved above (before the user-row INSERT
+	// so OutgoingUserTransformer plugins could rewrite the persisted
+	// content). Reused here for FireMessagePersisted, history.Build,
+	// and the response's display transform.
 
 	// Fire MessageLifecycleHook plugins on the just-committed user
 	// message (skipped on Regenerate where userMsgRow is the existing

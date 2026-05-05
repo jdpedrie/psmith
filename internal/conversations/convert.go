@@ -345,6 +345,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *reevev1.Message {
 		CacheWriteCostUsd:    r.CacheWriteCostUsd,
 		TotalCostUsd:         r.TotalCostUsd,
 		ErrorPayload:         r.ErrorPayload,
+		ToolCalls:            r.ToolCalls,
 	})
 	out.SiblingCount = r.SiblingCount
 	return out

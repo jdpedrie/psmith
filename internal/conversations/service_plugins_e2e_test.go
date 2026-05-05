@@ -296,6 +296,145 @@ func TestPlugins_PipelineResolverNoPluginsAnywhere(t *testing.T) {
 	}
 }
 
+// TestPlugins_E2E_BasicGroundingRewritesPersistedUser walks the
+// OutgoingUserTransformer path:
+//  1. Attach basic_grounding to the profile.
+//  2. SendMessage with a plain user message.
+//  3. Confirm the persisted user row contains the `<grounding>` block
+//     and the stable wall-clock value (proves the transform ran at
+//     write time, not at history-build time).
+//  4. Confirm the wire body to the LLM contains the `<grounding>` block
+//     (proves the rewritten content propagates onto the wire prefix).
+//  5. Confirm SendMessage response's UserMessage.DisplayContent has the
+//     block stripped (proves the DisplayTransformer fires for the just-
+//     inserted user row).
+//  6. Confirm ListMessages returns the same display-stripped content for
+//     the user row.
+//
+// This guards against the regression where `pipeline.TransformOutgoingUser`
+// was never called, leaving basic_grounding silently inert.
+func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	fake.Enqueue(fakellm.Script{
+		Events: []fakellm.Event{{Type: fakellm.EventText, Text: "ok"}},
+	})
+
+	svc, q, sup := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, fake.URL())
+
+	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
+		ProfileID:       f.profile.ID,
+		Ordinal:         0,
+		PluginName:      plugins.BasicGroundingName,
+		ConfigEncrypted: []byte(`{"include_date_time": true, "time_format": "datetime_iso"}`),
+	}); err != nil {
+		t.Fatalf("InsertProfilePlugin: %v", err)
+	}
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	const original = "what's the weather like?"
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        original,
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	if err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "completed" {
+		t.Fatalf("status=%q want completed; err=%s", final.Status, string(final.ErrorPayload))
+	}
+
+	// (1) The persisted user row carries the grounding block + original text.
+	userMsgID, _ := uuid.Parse(resp.Msg.UserMessage.Id)
+	userRow, err := q.GetMessageByID(context.Background(), userMsgID)
+	if err != nil {
+		t.Fatalf("GetMessageByID(user): %v", err)
+	}
+	if !strings.Contains(userRow.Content, "<grounding>") || !strings.Contains(userRow.Content, "</grounding>") {
+		t.Errorf("persisted user content missing grounding block: %q", userRow.Content)
+	}
+	if !strings.Contains(userRow.Content, "Current time:") {
+		t.Errorf("persisted user content missing 'Current time:' line: %q", userRow.Content)
+	}
+	if !strings.Contains(userRow.Content, original) {
+		t.Errorf("persisted user content lost original text %q: got %q", original, userRow.Content)
+	}
+
+	// (2) The wire body sent to the fake LLM contains the grounding block.
+	reqs := fake.Requests()
+	if len(reqs) != 1 {
+		t.Fatalf("captured %d requests, want 1", len(reqs))
+	}
+	type wireMsg struct {
+		Role    string `json:"role"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	type wireBody struct {
+		Messages []wireMsg `json:"messages"`
+	}
+	var body wireBody
+	if err := json.Unmarshal(reqs[0].Body, &body); err != nil {
+		t.Fatalf("decode body: %v (raw=%s)", err, truncate(string(reqs[0].Body), 400))
+	}
+	var sawWireGrounding bool
+	for _, m := range body.Messages {
+		if m.Role != "user" {
+			continue
+		}
+		for _, blk := range m.Content {
+			if strings.Contains(blk.Text, "<grounding>") && strings.Contains(blk.Text, "Current time:") {
+				sawWireGrounding = true
+			}
+		}
+	}
+	if !sawWireGrounding {
+		t.Errorf("wire body did not include grounding block on a user message; messages=%+v", body.Messages)
+	}
+
+	// (3) The SendMessage response's display content has the block stripped.
+	if strings.Contains(resp.Msg.UserMessage.DisplayContent, "<grounding>") ||
+		strings.Contains(resp.Msg.UserMessage.DisplayContent, "</grounding>") {
+		t.Errorf("response UserMessage.display_content still has grounding tags: %q", resp.Msg.UserMessage.DisplayContent)
+	}
+	if strings.TrimSpace(resp.Msg.UserMessage.DisplayContent) != original {
+		t.Errorf("display_content = %q, want %q", resp.Msg.UserMessage.DisplayContent, original)
+	}
+
+	// (4) ListMessages returns the same display-stripped content.
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
+		ContextId: f.contextID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var sawUserStripped bool
+	for _, m := range listResp.Msg.Messages {
+		if m.Role != reevev1.MessageRole_MESSAGE_ROLE_USER {
+			continue
+		}
+		if strings.Contains(m.DisplayContent, "<grounding>") || strings.Contains(m.DisplayContent, "</grounding>") {
+			t.Errorf("user display_content still has grounding tags: %q", m.DisplayContent)
+		}
+		if !strings.Contains(m.Content, "<grounding>") {
+			t.Errorf("user content lost grounding tags between persist and list: %q", m.Content)
+		}
+		sawUserStripped = true
+	}
+	if !sawUserStripped {
+		t.Error("expected at least one user message in ListMessages")
+	}
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
