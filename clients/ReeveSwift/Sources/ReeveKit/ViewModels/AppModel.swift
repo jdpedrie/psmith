@@ -20,6 +20,11 @@ public final class AppModel {
     public let providers: ProvidersViewModel
     public let profiles: ProfilesViewModel
 
+    /// Tracks reachability of `serverURL`. Composer reads this to
+    /// disable Send when the server is unreachable; banners read it
+    /// to surface a "viewing cached data" notice.
+    public let connectivity: ConnectivityMonitor
+
     public init(host: URL, tokenStore: TokenStore, authState: AuthState = .init()) {
         self.authState = authState
         self.serverURL = host
@@ -27,6 +32,7 @@ public final class AppModel {
         self.client = c
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
+        self.connectivity = ConnectivityMonitor(host: host)
     }
 
     /// Default factory: pulls the URL from `ServerURLStore` (which falls
@@ -47,5 +53,6 @@ public final class AppModel {
 
     public func bootstrap() async {
         _ = await client.auth.restoreSession()
+        connectivity.start()
     }
 }

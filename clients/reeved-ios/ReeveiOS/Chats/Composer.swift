@@ -15,11 +15,15 @@ import ReeveUI
 ///     red Stop circle while `model.isStreaming`.
 struct Composer: View {
     @Bindable var model: ConversationViewModel
+    @Environment(AppModel.self) private var app
     @FocusState private var draftFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+            if app.connectivity.state == .offline {
+                offlineBanner
+            }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom, spacing: 8) {
                     draftField
@@ -39,6 +43,25 @@ struct Composer: View {
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }
+    }
+
+    /// Thin amber strip above the input controls when the server's
+    /// `/healthz` probe is failing. Doesn't grab focus or shift the
+    /// layout much — the disabled Send button already gives the
+    /// strongest signal; this just explains why.
+    private var offlineBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.caption2)
+            Text("Server unreachable — viewing cached data")
+                .font(.caption2)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
     }
 
     // MARK: - Conversation settings button
@@ -181,7 +204,12 @@ struct Composer: View {
 
     private var canSend: Bool {
         let trimmed = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && !model.sending && !model.isCompacting
+        // Block sends when the server is unreachable — the request would
+        // hang on a TCP timeout and leave the user staring at a spinner.
+        // `.unknown` is treated as send-allowed so a fresh launch isn't
+        // gated on the first probe completing.
+        let serverReachable = app.connectivity.state != .offline
+        return !trimmed.isEmpty && !model.sending && !model.isCompacting && serverReachable
     }
 
     private func triggerSend() {

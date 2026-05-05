@@ -125,6 +125,14 @@ func run() error {
 	mux.Handle(reevev1connect.NewProfilesServiceHandler(profilesSvc, opts))
 	mux.Handle(reevev1connect.NewConversationsServiceHandler(conversationsSvc, opts))
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
+	// Plain HTTP probe used by the iOS/Mac shells to flip their
+	// connectivity flag. Cheap on purpose — no auth, no DB hop, just
+	// a constant 200. Failure (TCP refused, TLS handshake fail,
+	// timeout) is what the client treats as "offline".
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
 
 	srv := &http.Server{
 		Addr:    addr,
