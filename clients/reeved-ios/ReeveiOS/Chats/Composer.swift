@@ -39,7 +39,6 @@ struct Composer: View {
             .padding(.vertical, 8)
             .background(.thinMaterial)
         }
-        .onAppear { draftFocused = true }
         .onChange(of: model.draft) { _, newValue in
             // Persist on every keystroke. UserDefaults writes are
             // memory-mapped and cheap; debouncing would cost us
