@@ -124,15 +124,18 @@ public final class AuthRepository: Sendable {
     private let client: Reeve_V1_AuthServiceClientInterface
     private let tokenStore: TokenStore
     private let authState: AuthState
+    private let cache: ReeveCache?
 
     public init(
         client: Reeve_V1_AuthServiceClientInterface,
         tokenStore: TokenStore,
-        authState: AuthState
+        authState: AuthState,
+        cache: ReeveCache? = nil
     ) {
         self.client = client
         self.tokenStore = tokenStore
         self.authState = authState
+        self.cache = cache
     }
 
     /// Calls AuthService.Probe. Returns a typed ReeveProbeResult so the
@@ -185,6 +188,11 @@ public final class AuthRepository: Sendable {
         }
         let user = ReeveUser(from: msg.user)
         await MainActor.run { authState.setAuthenticated(user) }
+        // Persist for offline restore. Best-effort; a cache failure
+        // here doesn't break the live login path.
+        if let cache {
+            try? await cache.set(user, kind: CacheKind.currentUser, id: "me", capBytes: CachePreferences.capBytes)
+        }
         return user
     }
 
@@ -216,6 +224,17 @@ public final class AuthRepository: Sendable {
             if case let ReeveError.rpc(code, _) = error,
                code == .unauthenticated || code == .permissionDenied {
                 try? tokenStore.clear()
+                return nil
+            }
+            // Transport/unavailable: rather than bouncing the user to
+            // Login, fall back to the cached identity if we have one.
+            // The connectivity monitor + composer-disable already
+            // signal "server unreachable" once they get inside; this
+            // just lets them get past the front door.
+            if let cache,
+               let cached: ReeveUser = await cache.get(ReeveUser.self, kind: CacheKind.currentUser, id: "me") {
+                await MainActor.run { authState.setAuthenticated(cached) }
+                return cached
             }
             return nil
         }

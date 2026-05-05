@@ -29,6 +29,11 @@ struct SettingsRoot: View {
 
             Section("Settings") {
                 NavigationLink {
+                    GeneralDetailView()
+                } label: {
+                    categoryRow("General", systemImage: "gearshape")
+                }
+                NavigationLink {
                     AppearanceDetailView()
                 } label: {
                     categoryRow("Appearance", systemImage: "paintpalette")

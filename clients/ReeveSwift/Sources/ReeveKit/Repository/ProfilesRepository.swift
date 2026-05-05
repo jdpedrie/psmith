@@ -3,15 +3,27 @@ import Connect
 
 public final class ProfilesRepository: Sendable {
     private let client: Reeve_V1_ProfilesServiceClientInterface
+    private let cache: ReeveCache?
 
-    public init(client: Reeve_V1_ProfilesServiceClientInterface) {
+    public init(client: Reeve_V1_ProfilesServiceClientInterface, cache: ReeveCache? = nil) {
         self.client = client
+        self.cache = cache
     }
 
     public func list() async throws -> [ReeveProfile] {
         let resp = await client.listProfiles(request: Reeve_V1_ListProfilesRequest(), headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list profiles") }
-        return msg.profiles.map(ReeveProfile.init(from:))
+        if let msg = resp.message {
+            let items = msg.profiles.map(ReeveProfile.init(from:))
+            if let cache {
+                try? await cache.set(items, kind: CacheKind.profiles, id: "all", capBytes: CachePreferences.capBytes)
+            }
+            return items
+        }
+        if let cache,
+           let cached: [ReeveProfile] = await cache.get([ReeveProfile].self, kind: CacheKind.profiles, id: "all") {
+            return cached
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list profiles")
     }
 
     public func get(id: String, resolve: Bool = false) async throws -> (ReeveProfile, ReeveProfile?) {

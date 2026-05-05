@@ -3,9 +3,14 @@ import Connect
 
 public final class ConversationsRepository: Sendable {
     private let client: Reeve_V1_ConversationsServiceClientInterface
+    private let cache: ReeveCache?
 
-    public init(client: Reeve_V1_ConversationsServiceClientInterface) {
+    public init(
+        client: Reeve_V1_ConversationsServiceClientInterface,
+        cache: ReeveCache? = nil
+    ) {
         self.client = client
+        self.cache = cache
     }
 
     public func list(
@@ -23,17 +28,52 @@ public final class ConversationsRepository: Sendable {
         if let profileID { req.profileID = profileID }
 
         let resp = await client.listConversations(request: req, headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list conversations") }
-        let items = msg.conversations.map(ReeveConversation.init(from:))
-        return (items, msg.nextPageToken.isEmpty ? nil : msg.nextPageToken)
+        if let msg = resp.message {
+            let items = msg.conversations.map(ReeveConversation.init(from:))
+            // Cache only the unfiltered first page — that's what
+            // ChatsRoot loads on launch, and it's the version that
+            // actually matters offline. Filtered/paged calls are
+            // cosmetic features that can be skipped offline.
+            if pageToken == nil && titleQuery == nil && profileID == nil,
+               let cache {
+                try? await cache.set(items, kind: CacheKind.conversationsList, id: "all", capBytes: CachePreferences.capBytes)
+            }
+            return (items, msg.nextPageToken.isEmpty ? nil : msg.nextPageToken)
+        }
+        // Server failed. If this is the unfiltered first-page call,
+        // try the cache before re-throwing so the user lands on a
+        // populated list rather than an error screen.
+        if pageToken == nil && titleQuery == nil && profileID == nil,
+           let cache,
+           let cached: [ReeveConversation] = await cache.get([ReeveConversation].self, kind: CacheKind.conversationsList, id: "all") {
+            return (cached, nil)
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list conversations")
     }
 
     public func get(id: String) async throws -> (ReeveConversation, ReeveContext) {
         var req = Reeve_V1_GetConversationRequest()
         req.id = id
         let resp = await client.getConversation(request: req, headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("get conversation") }
-        return (ReeveConversation(from: msg.conversation), ReeveContext(from: msg.activeContext))
+        if let msg = resp.message {
+            let conv = ReeveConversation(from: msg.conversation)
+            let ctx = ReeveContext(from: msg.activeContext)
+            if let cache {
+                // Two entries so the conversation row and the active
+                // context can age independently — opening a different
+                // context shouldn't keep a stale conversation row warm
+                // and vice versa.
+                try? await cache.set(conv, kind: "conversation", id: id, capBytes: CachePreferences.capBytes)
+                try? await cache.set(ctx, kind: "activeContext", id: id, capBytes: CachePreferences.capBytes)
+            }
+            return (conv, ctx)
+        }
+        if let cache,
+           let conv: ReeveConversation = await cache.get(ReeveConversation.self, kind: "conversation", id: id),
+           let ctx: ReeveContext = await cache.get(ReeveContext.self, kind: "activeContext", id: id) {
+            return (conv, ctx)
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("get conversation")
     }
 
     public func create(
@@ -156,8 +196,23 @@ public final class ConversationsRepository: Sendable {
         // the deepest descendant of a chosen fork.
         req.fullTree = fullTree
         let resp = await client.listMessages(request: req, headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list messages") }
-        return msg.messages.map(ReeveMessage.init(from:))
+        if let msg = resp.message {
+            let items = msg.messages.map(ReeveMessage.init(from:))
+            // Cache the linear-chain shape only (fullTree blobs would
+            // double-spend the cap on every conversation with branches).
+            // Per-leaf overrides are skipped too — the client only
+            // requests them when actively branch-switching.
+            if !fullTree && leafMessageID == nil, let cache {
+                try? await cache.set(items, kind: CacheKind.messagesByContext, id: contextID, capBytes: CachePreferences.capBytes)
+            }
+            return items
+        }
+        if !fullTree && leafMessageID == nil,
+           let cache,
+           let cached: [ReeveMessage] = await cache.get([ReeveMessage].self, kind: CacheKind.messagesByContext, id: contextID) {
+            return cached
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list messages")
     }
 
     /// Repositions the per-context leaf cursor to the given message — the
@@ -246,8 +301,18 @@ public final class ConversationsRepository: Sendable {
         var req = Reeve_V1_ListContextsRequest()
         req.conversationID = conversationID
         let resp = await client.listContexts(request: req, headers: [:])
-        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list contexts") }
-        return msg.contexts.map(ReeveContext.init(from:))
+        if let msg = resp.message {
+            let items = msg.contexts.map(ReeveContext.init(from:))
+            if let cache {
+                try? await cache.set(items, kind: CacheKind.contextsByConversation, id: conversationID, capBytes: CachePreferences.capBytes)
+            }
+            return items
+        }
+        if let cache,
+           let cached: [ReeveContext] = await cache.get([ReeveContext].self, kind: CacheKind.contextsByConversation, id: conversationID) {
+            return cached
+        }
+        throw resp.error.map(ReeveError.from) ?? .missingPayload("list contexts")
     }
 
     public func activateContext(contextID: String) async throws -> ReeveContext {

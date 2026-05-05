@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ReeveConversation: Sendable, Hashable, Identifiable {
+public struct ReeveConversation: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let profileID: String
     public let title: String?
@@ -73,7 +73,7 @@ public enum ReeveConversationOrder: Sendable, Hashable {
 /// Per-conversation overrides that shadow the profile's defaults.
 /// Mirrors `Reeve_V1_ConversationSettings` but exposes a Swift-friendly
 /// shape (no proto-generated has-getters / value defaults).
-public struct ReeveConversationSettings: Sendable, Hashable {
+public struct ReeveConversationSettings: Sendable, Hashable, Codable {
     public var defaultProviderID: String?
     public var defaultModelID: String?
     public var includeThinkingInHistory: Bool?
@@ -122,7 +122,7 @@ public struct ReeveConversationSettings: Sendable, Hashable {
     }
 }
 
-public struct ReeveContext: Sendable, Hashable, Identifiable {
+public struct ReeveContext: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let conversationID: String
     public let parentContextID: String?
@@ -187,7 +187,7 @@ extension ReeveContext {
     }
 }
 
-public enum ReeveMessageRole: String, Sendable, Hashable {
+public enum ReeveMessageRole: String, Sendable, Hashable, Codable {
     case system, context, user, assistant, compressionSummary, unknown
 
     init(from p: Reeve_V1_MessageRole) {
@@ -218,7 +218,7 @@ public enum ReeveMessageRole: String, Sendable, Hashable {
 }
 
 /// Full token and cost breakdown for a single assistant message.
-public struct ReeveMessageUsage: Sendable, Hashable {
+public struct ReeveMessageUsage: Sendable, Hashable, Codable {
     public let inputTokens: Int32?
     public let outputTokens: Int32?
     public let cacheReadTokens: Int32?
@@ -287,7 +287,7 @@ extension ReeveMessageUsage {
 /// Decoded from `messages.tool_calls` JSONB via the proto. Renders as a
 /// pill-with-disclosure in the UI; expanded body shows pretty-printed input
 /// and output (or the error string).
-public struct ReeveToolCall: Sendable, Hashable, Identifiable {
+public struct ReeveToolCall: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let name: String
     /// Raw JSON bytes of the model-emitted input. Pretty-printed at render time.
@@ -389,7 +389,7 @@ public struct LiveToolCall: Sendable, Hashable, Identifiable {
     }
 }
 
-public struct ReeveMessage: Sendable, Hashable, Identifiable {
+public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let contextID: String
     public let parentID: String?
@@ -512,13 +512,13 @@ extension ReeveMessage {
     }
 }
 
-public enum ReeveCompressionMode: Sendable, Hashable {
+public enum ReeveCompressionMode: Sendable, Hashable, Codable {
     case unspecified
     case replace
     case append
 }
 
-public struct ReeveProfileDefaults: Sendable, Hashable {
+public struct ReeveProfileDefaults: Sendable, Hashable, Codable {
     public var defaultProviderID: String?
     public var defaultModelID: String?
     public var includeThinkingInHistory: Bool?
@@ -557,7 +557,7 @@ public enum ReeveTitleProviderKind {
     public static let appleFoundation = "apple_foundation"
 }
 
-public struct ReeveProfile: Sendable, Hashable, Identifiable {
+public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let name: String
     public let description: String

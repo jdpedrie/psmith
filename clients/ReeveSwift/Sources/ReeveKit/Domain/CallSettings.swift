@@ -12,7 +12,7 @@ import Foundation
 ///
 /// All fields are nullable / `nil`-defaulted — every layer can leave any
 /// field unset to inherit from the layer below in the resolution chain.
-public struct ReeveCallSettings: Sendable, Hashable {
+public struct ReeveCallSettings: Sendable, Hashable, Codable {
     public var temperature: Double?
     public var topP: Double?
     public var maxOutputTokens: Int32?
@@ -109,7 +109,7 @@ extension ReeveCallSettings {
 
 // MARK: - ThinkingSettings
 
-public struct ReeveThinkingSettings: Sendable, Hashable {
+public struct ReeveThinkingSettings: Sendable, Hashable, Codable {
     public var enabled: Bool?
     public var budgetTokens: Int32?
 
@@ -145,7 +145,7 @@ extension ReeveThinkingSettings {
 ///     a `cache_control` marker on the request.
 ///   * `cacheTTL` — picks the 5-minute (default) vs 1-hour ephemeral
 ///     cache tier.
-public struct ReeveAnthropicExtras: Sendable, Hashable {
+public struct ReeveAnthropicExtras: Sendable, Hashable, Codable {
     public var cacheEnabled: Bool?
     public var cacheTTL: ReeveCacheTTL?
 
@@ -161,7 +161,7 @@ public struct ReeveAnthropicExtras: Sendable, Hashable {
 
 /// Anthropic ephemeral-cache TTL tier. 5-minute is the default; 1-hour
 /// costs more to write but persists across longer idle gaps.
-public enum ReeveCacheTTL: Sendable, Hashable {
+public enum ReeveCacheTTL: Sendable, Hashable, Codable {
     case fiveMinutes
     case oneHour
 
@@ -199,7 +199,7 @@ extension ReeveAnthropicExtras {
 
 // MARK: - OpenAI extras
 
-public enum ReeveServiceTier: Sendable, Hashable {
+public enum ReeveServiceTier: Sendable, Hashable, Codable {
     case auto
     case standard
     case priority
@@ -224,7 +224,7 @@ public enum ReeveServiceTier: Sendable, Hashable {
 
 /// Tagged response-format selector. `text` and `jsonObject` are flags;
 /// `jsonSchema` carries the schema payload.
-public enum ReeveResponseFormat: Sendable, Hashable {
+public enum ReeveResponseFormat: Sendable, Hashable, Codable {
     case text
     case jsonObject
     case jsonSchema(name: String, description: String?, schema: Data, strict: Bool?)
@@ -263,7 +263,7 @@ public enum ReeveResponseFormat: Sendable, Hashable {
     }
 }
 
-public struct ReeveOpenAIExtras: Sendable, Hashable {
+public struct ReeveOpenAIExtras: Sendable, Hashable, Codable {
     public var seed: Int32?
     public var frequencyPenalty: Double?
     public var presencePenalty: Double?
@@ -335,7 +335,7 @@ extension ReeveOpenAIExtras {
 
 // MARK: - Google extras
 
-public enum ReeveHarmThreshold: Sendable, Hashable {
+public enum ReeveHarmThreshold: Sendable, Hashable, Codable {
     case blockNone
     case blockLowAndAbove
     case blockMediumAndAbove
@@ -361,7 +361,7 @@ public enum ReeveHarmThreshold: Sendable, Hashable {
     }
 }
 
-public struct ReeveSafetySettings: Sendable, Hashable {
+public struct ReeveSafetySettings: Sendable, Hashable, Codable {
     public var harassment: ReeveHarmThreshold?
     public var hateSpeech: ReeveHarmThreshold?
     public var sexuallyExplicit: ReeveHarmThreshold?
@@ -405,7 +405,7 @@ extension ReeveSafetySettings {
     }
 }
 
-public struct ReeveGoogleExtras: Sendable, Hashable {
+public struct ReeveGoogleExtras: Sendable, Hashable, Codable {
     public var safetySettings: ReeveSafetySettings?
     public var responseMimeType: String?
     public var responseSchema: Data?

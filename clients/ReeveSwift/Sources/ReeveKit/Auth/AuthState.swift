@@ -34,7 +34,7 @@ public final class AuthState {
 
 /// Plain Swift mirror of reeve.v1.User. Decoupled from generated types so
 /// views don't import SwiftProtobuf.
-public struct ReeveUser: Sendable, Hashable, Identifiable {
+public struct ReeveUser: Sendable, Hashable, Identifiable, Codable {
     public let id: String
     public let username: String
     public let displayName: String?

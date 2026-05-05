@@ -28,7 +28,18 @@ public final class AppModel {
     public init(host: URL, tokenStore: TokenStore, authState: AuthState = .init()) {
         self.authState = authState
         self.serverURL = host
-        let c = ReeveClient(host: host, tokenStore: tokenStore, authState: authState)
+        // Cache is best-effort: if SwiftData can't bring up the
+        // store (corrupt file, sandbox issue), the client falls
+        // back to network-only — no offline reads, but the app
+        // otherwise works. We log so the failure is debuggable.
+        let cache: ReeveCache?
+        do {
+            cache = try ReeveCache()
+        } catch {
+            NSLog("ReeveCache init failed: \(error). Running without on-device cache.")
+            cache = nil
+        }
+        let c = ReeveClient(host: host, tokenStore: tokenStore, authState: authState, cache: cache)
         self.client = c
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
