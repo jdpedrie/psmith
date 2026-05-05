@@ -223,6 +223,9 @@ struct Composer: View {
     private func triggerSend() {
         guard canSend else { return }
         Haptics.impact(.light)
+        // Drop the keyboard so the message bubble + streaming reply
+        // are visible without the user having to tap-to-dismiss.
+        draftFocused = false
         Task { await model.send() }
     }
 }
