@@ -30,6 +30,7 @@ Working today, exercised daily by the author:
 - Auto-titling via a small cheap model (or Apple Foundation Models on-device on macOS).
 - Per-conversation overrides for `temperature`, `max_output_tokens`, thinking budget, etc., with 4-layer resolution (conversation → profile → model → provider).
 - **macOS** client (SwiftUI, Liquid Glass) and **iOS** client (SwiftUI, iOS 26) sharing repositories, view models, domain types, and most views via the `ReeveSwift` package. The iOS app handles ScenePhase backgrounding by reattaching to in-flight server streams from the last received chunk on resume.
+- **Offline-tolerant iOS** — SwiftData read-through cache means recent conversations stay readable when reeved is unreachable. A `/healthz` probe flips a connectivity banner + disables Send. Composer drafts persist per conversation across navigation and app kills. User-tunable cache cap (default 100 MB) under Settings → General.
 
 Deferred:
 
@@ -158,7 +159,39 @@ Other env vars:
 | `REEVE_MASTER_KEY` | — | base64-encoded 32-byte AES-256-GCM key. When set, provider API keys + plugin credentials land encrypted in `*.config_encrypted` columns. Mint with `reeve genkey`. Without it the server boots with a loud warning and stores config blobs in plaintext. |
 | `REEVE_DEV_AUTOKEY` | — | Set to `1` to mint a throwaway key per process (dev convenience; data won't survive a restart). Mutually exclusive with `REEVE_MASTER_KEY`. |
 
-### 4. macOS client
+### 4. Or run in Docker
+
+The repo ships a multi-stage Dockerfile that builds both `reeved` and the `reeve` operator CLI into a single ~45 MB Alpine image. Both binaries land on `PATH` so `docker exec` can run install/useradd/genkey against a running container.
+
+```bash
+docker build -t reeve .
+
+# Apply schema migrations (one-shot)
+docker run --rm \
+  -e REEVE_DSN='postgres://clark:clark@host.docker.internal:5433/clark?sslmode=disable' \
+  --entrypoint reeve reeve install
+
+# Run the server
+docker run -d --name reeved \
+  -p 8080:8080 \
+  -e REEVE_DSN='postgres://clark:clark@host.docker.internal:5433/clark?sslmode=disable' \
+  -e REEVE_MASTER_KEY=$(go run ./cmd/reeve genkey) \
+  -e REEVE_BOOTSTRAP_ADMIN_USERNAME=john \
+  -e REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme \
+  reeve
+
+# Operator commands against the running container
+docker exec -it reeved reeve useradd alice
+docker exec -it reeved reeve install -status
+```
+
+Notes:
+
+- `host.docker.internal` reaches the host's Postgres on macOS / Windows. On Linux pass `--network=host` and use `localhost`, or point the DSN at the container/host bridge IP.
+- The image runs as a non-root `reeve` user. `GET /healthz` returns 200 — handy for container orchestrator liveness probes.
+- Build context is filtered via `.dockerignore` to skip the Swift clients (`clients/`) and editor caches.
+
+### 5. macOS client
 
 ```bash
 make mac-app-run
@@ -176,7 +209,7 @@ The Providers sidebar lists every built-in preset always — configured ones at 
 
 ![Conversation with errored stream](docs/screenshots/conversation.png)
 
-### 5. iOS client
+### 6. iOS client
 
 ```bash
 make ios-app-run
