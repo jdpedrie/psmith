@@ -43,6 +43,7 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 COPY --from=build /out/reeved /usr/local/bin/reeved
 COPY --from=build /out/reeve  /usr/local/bin/reeve
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 USER reeve
 WORKDIR /home/reeve
@@ -51,6 +52,10 @@ WORKDIR /home/reeve
 # from env (no defaults are baked in — see cmd/reeved/main.go).
 EXPOSE 8080
 
-# Default to running the server. Override the entrypoint to use the
-# CLI: `docker run --rm reeve reeve install` etc.
-ENTRYPOINT ["/usr/local/bin/reeved"]
+# Entrypoint wraps reeved with an idempotent `reeve install` so the
+# container is self-bootstrapping on first run against a fresh DB.
+# Override CMD to use the operator CLI: `docker run --rm reeve reeve
+# useradd alice` etc — the entrypoint detects non-reeved commands
+# and skips the install step.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["reeved"]
