@@ -405,19 +405,21 @@ private struct ProfileEditSheet: View {
                         Text("System message")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        TextField("Optional — sent at the top of every conversation",
-                                  text: $systemMessage,
-                                  axis: .vertical)
-                            .lineLimit(3...10)
+                        MultilineEditor(
+                            placeholder: "Optional — sent at the top of every conversation",
+                            text: $systemMessage,
+                            minHeight: 120
+                        )
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Default user message")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        TextField("Optional — pre-fills the first user turn",
-                                  text: $defaultUserMessage,
-                                  axis: .vertical)
-                            .lineLimit(2...8)
+                        MultilineEditor(
+                            placeholder: "Optional — pre-fills the first user turn",
+                            text: $defaultUserMessage,
+                            minHeight: 100
+                        )
                     }
                 }
 
@@ -440,10 +442,11 @@ private struct ProfileEditSheet: View {
                         Text("Guide")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        TextField("Optional extra instruction for the summariser",
-                                  text: $compressionGuide,
-                                  axis: .vertical)
-                            .lineLimit(2...6)
+                        MultilineEditor(
+                            placeholder: "Optional extra instruction for the summariser",
+                            text: $compressionGuide,
+                            minHeight: 80
+                        )
                     }
                 }
 
@@ -483,10 +486,11 @@ private struct ProfileEditSheet: View {
                         Text("Guide")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        TextField("Optional — e.g. \"prefer technical phrasing\"",
-                                  text: $titleGuide,
-                                  axis: .vertical)
-                            .lineLimit(2...4)
+                        MultilineEditor(
+                            placeholder: "Optional — e.g. \"prefer technical phrasing\"",
+                            text: $titleGuide,
+                            minHeight: 70
+                        )
                     }
                 }
 
@@ -1244,5 +1248,43 @@ private struct ParentPickerSheet: View {
         app.profiles.profiles
             .filter { $0.id != excludingID }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+}
+
+/// Multi-line text input that scrolls when content exceeds its
+/// frame. `TextField(axis: .vertical)` grows up to its lineLimit
+/// then stops — content past the cap becomes invisible inside a
+/// Form. TextEditor scrolls internally, which is what we want for
+/// system messages / default user messages / guide fields that
+/// can run long.
+///
+/// Adds a placeholder overlay (TextEditor doesn't support one
+/// natively) and a thin border so the field reads as a control
+/// rather than free-floating text in the row.
+private struct MultilineEditor: View {
+    let placeholder: String
+    @Binding var text: String
+    var minHeight: CGFloat = 100
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 10)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: $text)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
+                .frame(minHeight: minHeight)
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+        )
     }
 }
