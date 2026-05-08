@@ -1,0 +1,25 @@
+# Keep the build context lean — the Mac/iOS shells and their build
+# artefacts dwarf the Go source. Excluding them shaves the context
+# upload from gigabytes to a few megabytes.
+clients/
+.build/
+.git/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Binaries built locally on the host — would shadow the multi-stage
+# build's own outputs if accidentally COPY'd in.
+bin/
+reeved
+reeve
+
+# Test + coverage outputs.
+coverage.out
+coverage.html
+
+# Editor / OS junk.
+.envrc
+.env
+.env.*
