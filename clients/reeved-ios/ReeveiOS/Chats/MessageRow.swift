@@ -32,24 +32,38 @@ struct MessageRow: View {
         model.editingMessage?.id == message.id
     }
 
-    /// User/assistant turns are editable + reloadable. system/context/
-    /// compression-summary are framing devices, not user turns.
+    /// User / assistant turns are editable + reloadable. System and
+    /// context rows are also editable (so the user can fix a typo
+    /// in their system message without re-editing the profile);
+    /// compression-summary stays read-only — its body is owned by
+    /// the compression flow.
     private var isEditableRole: Bool {
         switch message.role {
-        case .user, .assistant: return true
+        case .user, .assistant, .system, .context: return true
         default: return false
         }
     }
 
-    /// System + context messages render as a collapsed header strip
-    /// by default — they're framing content the user reads once when
-    /// setting up a profile, not on every scroll-back. Tap the strip
-    /// to expand and inspect.
+    /// System + context messages, plus the conversation's *initial*
+    /// user turn, render as a collapsed header strip by default —
+    /// framing content the user reads once when setting up a turn,
+    /// not on every scroll-back. Tap the strip to expand; tap the
+    /// expanded bubble's role chip to collapse back.
     private var isCollapsibleHeaderRole: Bool {
         switch message.role {
         case .system, .context: return true
+        case .user: return isInitialUserMessage
         default: return false
         }
+    }
+
+    /// True when this is the first user message in the loaded chain.
+    /// The seed turn often carries a long brief / scenario the user
+    /// pasted in once and rarely wants to see thereafter — same
+    /// "frame once, scroll past" pattern as system + context.
+    private var isInitialUserMessage: Bool {
+        guard message.role == .user else { return false }
+        return model.messages.first(where: { $0.role == .user })?.id == message.id
     }
 
     private var isHeaderExpanded: Bool {
@@ -70,11 +84,30 @@ struct MessageRow: View {
 
     var body: some View {
         roleAlignedContainer {
-            if isCollapsibleHeaderRole && !isHeaderExpanded && !isEditing {
+            if isCollapsibleHeaderRole && !isHeaderExpanded {
                 collapsedHeaderBubble
             } else {
                 bubble
             }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { isEditing },
+                set: { if !$0 { model.editingMessage = nil } }
+            )
+        ) {
+            // Edit happens in a sheet — the bubble in the chat
+            // pane keeps its own collapsed/expanded state, the
+            // editor lives in its own context. Hosting the editor
+            // in a modal also gives us a real keyboard surface
+            // without fighting the message scroll's inset behavior.
+            EditMessageSheet(
+                message: message,
+                model: model,
+                editDraft: $editDraft,
+                editRoleDraft: $editRoleDraft,
+                parentMessageID: parentMessageID
+            )
         }
         .alert(
             "Delete message?",
@@ -263,16 +296,15 @@ struct MessageRow: View {
                 }
             }
 
-            // Body — edit-in-place editor when isEditing, otherwise
-            // markdown / error text. Prefer `displayContent` (post-
+            // Body — markdown / error text. Edit happens in a sheet
+            // (see `.sheet(isPresented: isEditing …)` on the row),
+            // not in-place. Prefer `displayContent` (post-
             // DisplayTransformer plugin pipeline output, e.g. with
-            // basic_grounding's `<grounding>` block stripped) and fall
-            // back to raw `content` for messages that haven't been
-            // routed through the transformer (e.g. legacy rows).
+            // basic_grounding's `<grounding>` block stripped) and
+            // fall back to raw `content` for messages that haven't
+            // been routed through the transformer.
             let bodyText = message.displayContent ?? message.content
-            if isEditing {
-                editor
-            } else if isErrored, let errText = message.errorText, !errText.isEmpty {
+            if isErrored, let errText = message.errorText, !errText.isEmpty {
                 Text(errText)
                     .font(.callout)
                     .foregroundStyle(.red)
@@ -343,10 +375,29 @@ struct MessageRow: View {
                     .foregroundStyle(.orange)
                     .imageScale(.small)
             }
-            Text(roleLabel)
-                .font(.caption2)
-                .foregroundStyle(isErrored ? .orange : .secondary)
-                .fontWeight(isErrored ? .semibold : .regular)
+            // For collapsible-header roles (system / context / first
+            // user), the role label doubles as a collapse affordance
+            // — tap to fold the bubble back into the strip header.
+            if isCollapsibleHeaderRole {
+                Button(action: toggleHeaderExpansion) {
+                    HStack(spacing: 4) {
+                        Text(roleLabel)
+                            .font(.caption2)
+                            .foregroundStyle(isErrored ? .orange : .secondary)
+                            .fontWeight(isErrored ? .semibold : .regular)
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Collapse \(roleLabel.lowercased())")
+            } else {
+                Text(roleLabel)
+                    .font(.caption2)
+                    .foregroundStyle(isErrored ? .orange : .secondary)
+                    .fontWeight(isErrored ? .semibold : .regular)
+            }
             if isErrored {
                 Text("FAILED")
                     .font(.caption2)
@@ -407,93 +458,6 @@ struct MessageRow: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.top, 2)
-        }
-    }
-
-    // MARK: - Edit-in-place editor
-
-    @ViewBuilder
-    private var editor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Role picker — flips the message's role on save. Useful
-            // for fork-from-edit cases where the user wants to rewrite
-            // a turn with a different speaker.
-            HStack(spacing: 8) {
-                Text("Role")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker("Role", selection: $editRoleDraft) {
-                    Text("User").tag(ReeveMessageRole.user)
-                    Text("Assistant").tag(ReeveMessageRole.assistant)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-
-            TextField(
-                "Message",
-                text: $editDraft,
-                axis: .vertical
-            )
-            .lineLimit(2...12)
-            .textFieldStyle(.plain)
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
-            )
-
-            // Two save modes:
-            //   - Save        → editMessage (in-place; role flip
-            //     allowed). For tweaks, typo fixes, role corrections.
-            //   - Save & fork → sendForking (creates a sibling at this
-            //     message's parent + a fresh assistant under it).
-            //     Only offered for user turns since assistant
-            //     regeneration goes through the Reload action instead.
-            HStack(spacing: 8) {
-                Spacer()
-                Button("Cancel", role: .cancel) {
-                    model.editingMessage = nil
-                }
-                .buttonStyle(.bordered)
-
-                if message.role == .user {
-                    Button {
-                        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        Task {
-                            await model.sendForking(content: trimmed, parentMessageID: parentMessageID)
-                            model.editingMessage = nil
-                        }
-                    } label: {
-                        Text("Save & fork")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
-                Button {
-                    let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let roleChanged = editRoleDraft != message.role
-                    Task {
-                        await model.editMessage(
-                            id: message.id,
-                            content: trimmed,
-                            role: roleChanged ? editRoleDraft : nil
-                        )
-                        model.editingMessage = nil
-                    }
-                } label: {
-                    Text("Save")
-                        .fontWeight(.semibold)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .onAppear {
-            editDraft = message.content
-            editRoleDraft = message.role
         }
     }
 
@@ -689,4 +653,137 @@ struct MessageRow: View {
 private struct CacheGrade {
     let color: Color
     let tooltip: String
+}
+
+
+/// Modal editor for a single message. Replaces the inline-bubble
+/// editor that used to swap into the row body. Hosting the input
+/// in a sheet means:
+///   - The chat scroll behind it stays put — no reflow when the
+///     keyboard opens.
+///   - The TextEditor scrolls naturally when content runs long.
+///   - Cancel / Save are never hidden behind the keyboard.
+///
+/// State is bound from the parent `MessageRow` so we can keep the
+/// existing `model.editingMessage` plumbing — the sheet appears
+/// when that property is set, and clearing it (Cancel, Save, or
+/// drag-dismiss) tears the sheet back down.
+private struct EditMessageSheet: View {
+    let message: ReeveMessage
+    let model: ConversationViewModel
+    @Binding var editDraft: String
+    @Binding var editRoleDraft: ReeveMessageRole
+    let parentMessageID: String?
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var editorFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if showsRolePicker {
+                    rolePicker
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                }
+                TextEditor(text: $editDraft)
+                    .focused($editorFocused)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            .navigationTitle(navTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        model.editingMessage = nil
+                    }
+                }
+                if message.role == .user {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button("Save") { saveInPlace() }
+                            Button("Save & fork") { saveAndFork() }
+                        } label: {
+                            Text("Save").bold()
+                        }
+                        .disabled(trimmedEmpty)
+                    }
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            saveInPlace()
+                        } label: {
+                            Text("Save").bold()
+                        }
+                        .disabled(trimmedEmpty)
+                    }
+                }
+            }
+            .onAppear {
+                // Pre-fill from the persisted message every time
+                // the sheet opens — the editDraft @State on the row
+                // would otherwise carry stale text from a previous
+                // edit that was cancelled.
+                editDraft = message.content
+                editRoleDraft = message.role
+                editorFocused = true
+            }
+        }
+    }
+
+    private var navTitle: String {
+        switch message.role {
+        case .user: return "Edit user message"
+        case .assistant: return "Edit assistant message"
+        case .system: return "Edit system message"
+        case .context: return "Edit context message"
+        default: return "Edit message"
+        }
+    }
+
+    /// Role flipping is only meaningful between user and assistant;
+    /// system / context / summary roles aren't interchangeable.
+    private var showsRolePicker: Bool {
+        message.role == .user || message.role == .assistant
+    }
+
+    private var rolePicker: some View {
+        HStack(spacing: 8) {
+            Text("Role")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker("Role", selection: $editRoleDraft) {
+                Text("User").tag(ReeveMessageRole.user)
+                Text("Assistant").tag(ReeveMessageRole.assistant)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+
+    private var trimmedEmpty: Bool {
+        editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func saveInPlace() {
+        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roleChanged = showsRolePicker && editRoleDraft != message.role
+        Task {
+            await model.editMessage(
+                id: message.id,
+                content: trimmed,
+                role: roleChanged ? editRoleDraft : nil
+            )
+            model.editingMessage = nil
+        }
+    }
+
+    private func saveAndFork() {
+        let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            await model.sendForking(content: trimmed, parentMessageID: parentMessageID)
+            model.editingMessage = nil
+        }
+    }
 }
