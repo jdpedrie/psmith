@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -12,9 +11,13 @@ import (
 	"github.com/jdpedrie/reeve/internal/store"
 )
 
-// Bootstrap creates an admin user on first run if none exists.
-// If users already exist, no-op. If no users and the credentials are empty,
-// returns an error so the caller can refuse to start.
+// Bootstrap creates an admin user on first run if none exists. If
+// users already exist, no-op. If no users and no bootstrap creds,
+// log a loud warning and return nil — the server still starts, but
+// every authenticated RPC will reject with Unauthenticated until
+// somebody runs `reeve useradd`. This shape is friendlier to Docker
+// deployments where the operator wants to bring the container up
+// first, then `docker exec … reeve useradd alice`.
 func Bootstrap(ctx context.Context, q *store.Queries, username, password string) error {
 	n, err := q.CountUsers(ctx)
 	if err != nil {
@@ -25,7 +28,8 @@ func Bootstrap(ctx context.Context, q *store.Queries, username, password string)
 	}
 
 	if username == "" || password == "" {
-		return errors.New("no users exist and no bootstrap admin credentials provided")
+		slog.Warn("reeved: no users in database — every RPC will reject until one is created. Run `reeve useradd <name>` (in the container, that's `docker exec <name> reeve useradd <user>`) or set REEVE_BOOTSTRAP_ADMIN_USERNAME + REEVE_BOOTSTRAP_ADMIN_PASSWORD on next start.")
+		return nil
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

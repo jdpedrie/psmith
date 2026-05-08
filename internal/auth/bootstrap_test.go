@@ -29,13 +29,23 @@ func TestBootstrap_NoUsersWithCreds_CreatesAdmin(t *testing.T) {
 	}
 }
 
-func TestBootstrap_NoUsersNoCreds_Errors(t *testing.T) {
+func TestBootstrap_NoUsersNoCreds_AllowsStart(t *testing.T) {
 	t.Parallel()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 
-	if err := auth.Bootstrap(context.Background(), q, "", ""); err == nil {
-		t.Fatal("expected error when no users and no credentials")
+	// Empty creds + empty DB now returns nil (with a logged warning)
+	// so the operator can bring reeved up first and create users via
+	// `reeve useradd`. Verify no admin was silently created.
+	if err := auth.Bootstrap(context.Background(), q, "", ""); err != nil {
+		t.Fatalf("expected nil; got %v", err)
+	}
+	n, err := q.CountUsers(context.Background())
+	if err != nil {
+		t.Fatalf("CountUsers: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("CountUsers = %d; want 0 (Bootstrap should not have created anyone)", n)
 	}
 }
 

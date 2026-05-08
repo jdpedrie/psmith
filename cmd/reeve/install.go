@@ -56,6 +56,9 @@ Flags:
 
 	dbURL := *dsn
 	if dbURL == "" {
+		dbURL = os.Getenv("REEVE_DSN")
+	}
+	if dbURL == "" {
 		dbURL = os.Getenv("DATABASE_URL")
 	}
 	if dbURL == "" {
