@@ -96,6 +96,12 @@ struct Composer: View {
     // MARK: - Draft text field
 
     private var draftField: some View {
+        // Vertical-axis TextField never fires onSubmit — Return always
+        // inserts a newline regardless of the submitLabel — so labelling
+        // the key as "Send" was lying to the user (they tapped ↑
+        // expecting a submit, got a newline). The button on the right
+        // is the only submit path; the keyboard key is the newline key
+        // and now reads as one.
         TextField(
             "Send a message",
             text: $model.draft,
@@ -111,14 +117,7 @@ struct Composer: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .focused($draftFocused)
-        .submitLabel(.send)
-        .onSubmit {
-            // .submitLabel(.send) on a vertical-axis TextField fires
-            // onSubmit when the keyboard's Send key is tapped — Return
-            // still inserts a newline (iOS doesn't have shift modifier
-            // on the on-screen keyboard).
-            triggerSend()
-        }
+        .submitLabel(.return)
     }
 
     // MARK: - Model chip (provider logo + model name + chevron)
@@ -182,7 +181,12 @@ struct Composer: View {
 
     @ViewBuilder
     private var sendButton: some View {
-        if model.isStreaming {
+        // Stop also surfaces during compaction — that path runs its
+        // own stream alongside the conversation chain, and `isStreaming`
+        // is gated false while `isCompacting` is true, so we have to
+        // OR them. cancelStream() targets whichever streamRunID is
+        // currently live, so a single tap kills either.
+        if model.isStreaming || model.isCompacting {
             Button {
                 model.cancelStream()
             } label: {
@@ -193,7 +197,7 @@ struct Composer: View {
                     .background(Color.red, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Stop streaming")
+            .accessibilityLabel(model.isCompacting ? "Stop compaction" : "Stop streaming")
         } else {
             Button {
                 triggerSend()
