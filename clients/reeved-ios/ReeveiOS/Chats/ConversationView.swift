@@ -410,8 +410,15 @@ private struct ConversationBody: View {
                     isFarFromBottom = newValue
                 }
             }
+            // Pill is shown only when the user has actively scrolled away
+            // (autoFollow flips false on touch). Without that gate, the
+            // pill flickers on every chunk while streaming: each chunk
+            // grows the content height, briefly tripping the
+            // distance-from-bottom threshold before the next auto-scroll
+            // catches up. autoFollow == true means "we're driving the
+            // scroll" — the pill would be a lie in that state.
             .overlay(alignment: .top) {
-                if isFarFromBottom {
+                if isFarFromBottom && !autoFollow {
                     Button {
                         Haptics.impact(.light)
                         // Snap to the very bottom so the user lands on the
