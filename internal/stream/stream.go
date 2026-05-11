@@ -351,26 +351,7 @@ func (s *Supervisor) subscribe(ctx context.Context, runID uuid.UUID, fromSequenc
 	if !ok {
 		// Replay then terminal — the broker isn't going to fan anything else
 		// out, so all events will come from DB.
-		rows, err := s.queries.ListStreamChunks(ctx, store.ListStreamChunksParams{
-			StreamRunID: runID,
-			Sequence:    fromSequence,
-		})
-		if err != nil {
-			s.logger.Error("stream replay failed", "run_id", runID, "err", err)
-			safeClose(out)
-			return
-		}
-		for _, row := range rows {
-			ev := SubscribeEvent{Chunk: &Chunk{
-				Sequence: row.Sequence,
-				Type:     providers.ChunkType(row.ChunkType),
-				Payload:  row.Payload,
-			}}
-			if !sendOrCancel(ctx, out, ev) {
-				safeClose(out)
-				return
-			}
-		}
+		s.replayPersistedChunks(ctx, runID, fromSequence, out)
 		s.sendTerminal(ctx, persistedRun, out)
 		return
 	}
@@ -389,6 +370,13 @@ func (s *Supervisor) subscribe(ctx context.Context, runID uuid.UUID, fromSequenc
 			t = *rs.terminal
 		}
 		rs.mu.Unlock()
+		// Replay any chunks the subscriber missed before they
+		// reconnected — without this, a client that dropped mid-stream
+		// and retried just as the run terminated would receive Terminal
+		// with a half-built buffer, and its UI would briefly show
+		// stale-partial content before the chain reload reveals the
+		// full materialised assistant turn.
+		s.replayPersistedChunks(ctx, runID, fromSequence, out)
 		s.sendTerminal(ctx, t, out)
 		return
 	}
@@ -449,6 +437,37 @@ func (s *Supervisor) sendTerminal(ctx context.Context, r store.StreamRun, out ch
 	defer safeClose(out)
 	rcopy := r
 	sendOrCancel(ctx, out, SubscribeEvent{Terminal: &rcopy})
+}
+
+// replayPersistedChunks forwards every persisted chunk with
+// `sequence >= fromSequence` from `stream_chunks` to out. Used by both
+// terminal-from-DB branches of `subscribe` so a re-subscribing client
+// receives whatever it missed before the run terminated, instead of
+// jumping straight to Terminal with a half-built local buffer. A send
+// failure (slow consumer / cancelled ctx) closes out and returns; the
+// caller MUST NOT close out again.
+//
+// Best-effort: a DB read error is logged and treated as "no chunks to
+// replay" so the run still terminates cleanly on the client.
+func (s *Supervisor) replayPersistedChunks(ctx context.Context, runID uuid.UUID, fromSequence int64, out chan SubscribeEvent) {
+	rows, err := s.queries.ListStreamChunks(ctx, store.ListStreamChunksParams{
+		StreamRunID: runID,
+		Sequence:    fromSequence,
+	})
+	if err != nil {
+		s.logger.Error("stream replay failed", "run_id", runID, "err", err)
+		return
+	}
+	for _, row := range rows {
+		ev := SubscribeEvent{Chunk: &Chunk{
+			Sequence: row.Sequence,
+			Type:     providers.ChunkType(row.ChunkType),
+			Payload:  row.Payload,
+		}}
+		if !sendOrCancel(ctx, out, ev) {
+			return
+		}
+	}
 }
 
 // removeSubscriber drops ch from the broker. Idempotent.
