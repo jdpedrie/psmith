@@ -41,6 +41,11 @@ struct ConversationView: View {
             }
         }
         .task(id: conversation.id) {
+            // Drop stale parsed-markdown entries from the previous
+            // conversation so the cache doesn't accumulate forever
+            // across long sessions. Each conversation's entries land
+            // back in the cache as soon as its first load() returns.
+            MarkdownCache.shared.clear()
             // Capture env-injected notifier into the closure so the VM-side
             // firing path doesn't reach into a global. iOS Notifier impl
             // arrives in Phase 8b; for now `\.notifier` resolves to the
@@ -66,6 +71,16 @@ struct ConversationView: View {
             // contexts toolbar item knows the count up-front.
             await m.loadContexts()
             await m.loadAvailableModels()
+            // Pre-warm parsed markdown in a background task so the
+            // first scroll-back through long history doesn't pay the
+            // parse cost on every realization. Cache-aware: on a
+            // subsequent terminal reload, only new messages parse.
+            MarkdownCache.shared.prewarm(
+                m.messages.map {
+                    let stamp = $0.editedAt?.timeIntervalSince1970 ?? 0
+                    return (key: "\($0.id):\(stamp)", source: $0.displayContent ?? $0.content)
+                }
+            )
         }
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -129,6 +144,19 @@ private struct ConversationBody: View {
         }
         .refreshable {
             await model.load()
+        }
+        .onChange(of: model.messages.count) { _, _ in
+            // Pre-warm parsed markdown for any newly-added messages
+            // (terminal reloads, fork switches, manual refresh). Cache
+            // already-present entries skip — only the new assistant
+            // turn(s) pay the parse cost, and that happens off the
+            // main thread.
+            MarkdownCache.shared.prewarm(
+                model.messages.map {
+                    let stamp = $0.editedAt?.timeIntervalSince1970 ?? 0
+                    return (key: "\($0.id):\(stamp)", source: $0.displayContent ?? $0.content)
+                }
+            )
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -341,36 +369,22 @@ private struct ConversationBody: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(model.messages) { msg in
-                        if msg.role == .compressionSummary {
-                            CompressionSummaryCard(message: msg, model: model)
-                                .id(msg.id)
-                        } else {
-                            MessageRow(message: msg, model: model)
-                                .id(msg.id)
-                        }
-                    }
-                    if let pending = model.pendingUserText {
-                        PendingUserRow(text: pending)
-                            .id("__pending__")
-                    }
-                    if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
-                        StreamingRow(
-                            text: model.streamingText,
-                            thinkingText: model.streamingThinking,
-                            thinkingStartedAt: model.streamingThinkingStartedAt,
-                            thinkingFinishedAt: model.streamingThinkingFinishedAt,
-                            thinkingExpanded: $model.streamingThinkingExpanded,
-                            toolCalls: model.streamingToolCalls,
-                            isCompression: model.isCompacting
-                        )
-                        .id("__streaming__")
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { newHeight in
-                            streamingRowHeight = newHeight
-                        }
-                    }
+                    // Settled history is its own subview that observes
+                    // only `model.messages`. Without this split, every
+                    // streaming chunk (which mutates streamingText on the
+                    // shared @Observable model) would re-eval the entire
+                    // LazyVStack content closure — running ForEach over
+                    // N messages and constructing N MessageRow values
+                    // per chunk, even though none of them changed.
+                    ChatHistoryArea(model: model)
+                    // Pending user is its own subview for the same
+                    // reason — observes only pendingUserText, not the
+                    // chunk-rate streaming state.
+                    PendingUserArea(model: model)
+                    StreamingArea(
+                        model: model,
+                        streamingRowHeight: $streamingRowHeight
+                    )
                     // Stable bottom anchor for `proxy.scrollTo("__bottom__")`.
                     // The LazyVStack realises rows lazily, so scrollTo
                     // against the last message id can land short when
@@ -531,4 +545,77 @@ private struct ConversationBody: View {
         }
     }
 
+}
+
+// MARK: - Decoupled scroll-content subviews
+//
+// These exist to keep streaming-chunk-rate state mutations out of the
+// settled-history render path. Each subview reads only the observable
+// properties it actually consumes — so `model.streamingText` updating
+// 20-50× per second does NOT re-eval ChatHistoryArea's body and run
+// ForEach over hundreds of messages.
+
+/// Renders the settled message + compression-summary timeline. Observes
+/// only `model.messages`; immune to streaming state churn.
+private struct ChatHistoryArea: View {
+    @Bindable var model: ConversationViewModel
+
+    var body: some View {
+        ForEach(model.messages) { msg in
+            if msg.role == .compressionSummary {
+                CompressionSummaryCard(message: msg, model: model)
+                    .id(msg.id)
+            } else {
+                MessageRow(message: msg, model: model)
+                    .id(msg.id)
+            }
+        }
+    }
+}
+
+/// Optimistic user message rendered before the SendMessage RPC returns.
+/// Observes only `model.pendingUserText`.
+private struct PendingUserArea: View {
+    @Bindable var model: ConversationViewModel
+
+    var body: some View {
+        if let pending = model.pendingUserText {
+            PendingUserRow(text: pending)
+                .id("__pending__")
+        }
+    }
+}
+
+/// In-flight assistant turn. Observes the streaming-state cluster
+/// (streamingText, isStreaming, isCompacting, …) so chunk mutations
+/// re-render this subview and ONLY this subview.
+private struct StreamingArea: View {
+    @Bindable var model: ConversationViewModel
+    @Binding var streamingRowHeight: CGFloat
+
+    var body: some View {
+        if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
+            StreamingRow(
+                text: model.streamingText,
+                thinkingText: model.streamingThinking,
+                thinkingStartedAt: model.streamingThinkingStartedAt,
+                thinkingFinishedAt: model.streamingThinkingFinishedAt,
+                thinkingExpanded: $model.streamingThinkingExpanded,
+                toolCalls: model.streamingToolCalls,
+                isCompression: model.isCompacting
+            )
+            .id("__streaming__")
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                // Gate writes on actively streaming so an incidental
+                // layout pass on the disappearing row doesn't fire a
+                // state mutation that re-evals paneScrollBody for
+                // nothing.
+                guard model.isStreaming || model.isCompacting else { return }
+                guard newHeight != streamingRowHeight else { return }
+                streamingRowHeight = newHeight
+            }
+        }
+    }
 }

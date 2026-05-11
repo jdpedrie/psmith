@@ -5,36 +5,60 @@ import MarkdownUI
 /// blocks, tables). Used for both finished assistant messages and the live
 /// streaming row — incomplete syntax during streaming is rendered as plain
 /// text by the parser, so half-written code fences look fine until they close.
+///
+/// Performance: parsing markdown is the per-realization bottleneck for
+/// long conversations — every time a row scrolls back into the LazyVStack
+/// window, MarkdownUI re-parses from the source string. Settled message
+/// bodies don't change, so the parsed `MarkdownContent` can be cached
+/// process-wide via `MarkdownCache`. Use the `cacheSource:` initializer
+/// to opt in (the parameter is the message id + an "edited at" stamp so
+/// post-edit content invalidates naturally).
 public struct MarkdownText: View {
-    private let content: String
+    private enum Source {
+        case raw(String)
+        case cached(key: String, source: String)
+    }
+    private let source: Source
 
     public init(_ content: String) {
-        self.content = content
+        self.source = .raw(content)
+    }
+
+    /// Cached variant: parsed `MarkdownContent` is memoised under `key`
+    /// in `MarkdownCache.shared`, so subsequent realizations of this
+    /// view (or any other MarkdownText with the same key) skip the
+    /// parse entirely. Pass an id-style key that includes a freshness
+    /// signal — typically `"\(message.id):\(editedAtTimestamp ?? 0)"`
+    /// — so an edit invalidates the cache automatically.
+    public init(_ content: String, cacheKey: String) {
+        self.source = .cached(key: cacheKey, source: content)
     }
 
     public var body: some View {
-        // Convert single `\n` to `  \n` (markdown trailing-space hard
-        // break) outside fenced code blocks, instead of relying on
-        // `markdownSoftBreakMode(.lineBreak)`. The softBreakMode path
-        // has a MarkdownUI bug (2.4.1 confirmed): after a soft break it
-        // sets a "skip next whitespace" flag that the renderer only
-        // clears on the next *text* inline. If the next inline is a
-        // strong/emphasis (e.g. a line that opens with `**Header:**`),
-        // the flag carries past it and strips the leading space on the
-        // text that follows — so `**Header:** value` renders as
-        // `**Header:**value`. Trailing-space hard breaks produce
-        // `.lineBreak` AST nodes directly, which bypass the buggy
-        // soft-break path.
-        //
-        // NB: a previous version added `.fixedSize(horizontal: false,
-        // vertical: true)` to chase a bullet-truncation glitch
-        // (#129 / mid-stream bullets shortening to "…"). That fix
-        // forced an extra measurement pass on every chunk and turned
-        // long-streaming conversations laggy. Removed; the truncation
-        // case will get a more targeted fix when revisited.
-        Markdown(Self.hardenLineBreaks(content))
+        Markdown(parsedContent)
             .markdownTheme(.clarkChat)
             .textSelection(.enabled)
+    }
+
+    private var parsedContent: MarkdownContent {
+        switch source {
+        case .raw(let s):
+            // Convert single `\n` to `  \n` (markdown trailing-space hard
+            // break) outside fenced code blocks, instead of relying on
+            // `markdownSoftBreakMode(.lineBreak)`. The softBreakMode path
+            // has a MarkdownUI bug (2.4.1 confirmed): after a soft break it
+            // sets a "skip next whitespace" flag that the renderer only
+            // clears on the next *text* inline. If the next inline is a
+            // strong/emphasis (e.g. a line that opens with `**Header:**`),
+            // the flag carries past it and strips the leading space on the
+            // text that follows — so `**Header:** value` renders as
+            // `**Header:**value`. Trailing-space hard breaks produce
+            // `.lineBreak` AST nodes directly, which bypass the buggy
+            // soft-break path.
+            return MarkdownContent(Self.hardenLineBreaks(s))
+        case .cached(let key, let s):
+            return MarkdownCache.shared.parsed(forKey: key, source: s)
+        }
     }
 
     /// Adds two trailing spaces before each newline that should render
@@ -43,7 +67,9 @@ public struct MarkdownText: View {
     ///   - lines that already end with two spaces (already a hard break)
     ///   - lines inside ``` / ~~~ fenced code blocks (visible trailing
     ///     whitespace would corrupt the displayed code)
-    static func hardenLineBreaks(_ source: String) -> String {
+    /// Pure / nonisolated so MarkdownCache.prewarm can call it off the
+    /// main thread.
+    public nonisolated static func hardenLineBreaks(_ source: String) -> String {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
         var out = ""
         var inFence = false
@@ -67,6 +93,67 @@ public struct MarkdownText: View {
             }
         }
         return out
+    }
+}
+
+/// Process-wide cache of parsed `MarkdownContent` keyed by an opaque
+/// caller-supplied string. Cleared on conversation switch via `clear()`
+/// (called from the iOS pane's `.task(id:)`); stays warm otherwise.
+///
+/// Background pre-warm: `prewarm(_:)` parses entries off the main thread
+/// (MarkdownContent is value-type / Sendable) and bulk-inserts on
+/// MainActor. Caller passes (key, source) tuples typically derived from
+/// `(message.id + edited_at, displayContent ?? content)`.
+@MainActor
+public final class MarkdownCache {
+    public static let shared = MarkdownCache()
+
+    private var store: [String: MarkdownContent] = [:]
+
+    private init() {}
+
+    /// Returns the cached parsed content for `key`, or parses + stores
+    /// + returns if absent. Called from MarkdownText's body on the
+    /// cached-source path.
+    public func parsed(forKey key: String, source: String) -> MarkdownContent {
+        if let cached = store[key] { return cached }
+        let content = MarkdownContent(MarkdownText.hardenLineBreaks(source))
+        store[key] = content
+        return content
+    }
+
+    /// Drop a single entry (e.g., after EditMessage commits new content).
+    public func invalidate(_ key: String) {
+        store.removeValue(forKey: key)
+    }
+
+    /// Reset everything. Call on conversation switch so memory doesn't
+    /// accumulate forever across sessions.
+    public func clear() {
+        store.removeAll()
+    }
+
+    /// Pre-parse a batch of (key, source) pairs off the main thread and
+    /// install them. Skips entries that are already cached, so a
+    /// subsequent `load()` after a terminal event only does the new
+    /// assistant turn's parse work. Best-effort — failures are silent
+    /// (the foreground render path will still parse on demand).
+    public func prewarm(_ entries: [(key: String, source: String)]) {
+        // Filter the entries we still need before paying the cost of
+        // shipping them to a background task.
+        let missing = entries.filter { store[$0.key] == nil }
+        if missing.isEmpty { return }
+        Task.detached(priority: .userInitiated) {
+            // MarkdownContent is a Sendable value type; parsing is pure.
+            let parsed = missing.map { entry -> (String, MarkdownContent) in
+                (entry.key, MarkdownContent(MarkdownText.hardenLineBreaks(entry.source)))
+            }
+            await MainActor.run {
+                for (k, c) in parsed where MarkdownCache.shared.store[k] == nil {
+                    MarkdownCache.shared.store[k] = c
+                }
+            }
+        }
     }
 }
 

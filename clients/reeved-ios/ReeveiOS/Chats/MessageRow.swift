@@ -315,12 +315,12 @@ struct MessageRow: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                 if !bodyText.isEmpty {
-                    MarkdownText(bodyText)
+                    MarkdownText(bodyText, cacheKey: markdownCacheKey)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             } else if !bodyText.isEmpty {
-                MarkdownText(bodyText)
+                MarkdownText(bodyText, cacheKey: markdownCacheKey)
             }
 
             // Footer — cache-grade dot + token usage summary +
@@ -564,35 +564,17 @@ struct MessageRow: View {
         }
     }
 
-    /// Cheap "does this message have any direct or indirect children?"
-    /// probe used by the context menu to decide whether the cascade
-    /// affordance is worth surfacing. Exits at the first match — O(n)
-    /// in the worst case but typically a handful of comparisons. Called
-    /// per body re-eval of every MessageRow, so the cheap variant
-    /// matters; the precise count comes from `descendantCount` only
-    /// when the user opens the cascade alert.
+    /// O(1) probe used by the context menu to decide whether the cascade
+    /// affordance is worth surfacing. Backed by the view model's
+    /// pre-computed `descendantCountCache`. The precise number comes
+    /// from `descendantCount` only when the user opens the cascade alert.
     private var hasDescendants: Bool {
-        model.treeMessages.contains(where: { $0.parentID == message.id })
+        model.hasDescendants(message.id)
     }
 
-    /// Number of descendants of this message in the conversation tree.
-    /// Walks `model.treeMessages` (which loadTree populates) breadth-first
-    /// so the cascade-confirm alert can show the user how many rows the
-    /// destructive action will sweep away.
+    /// O(1) descendant count for the cascade-delete confirmation alert.
     private var descendantCount: Int {
-        var count = 0
-        var frontier: [String] = [message.id]
-        while !frontier.isEmpty {
-            var next: [String] = []
-            for id in frontier {
-                for m in model.treeMessages where m.parentID == id {
-                    count += 1
-                    next.append(m.id)
-                }
-            }
-            frontier = next
-        }
-        return count
+        model.descendantCount(of: message.id)
     }
 
     private func startEdit() {
@@ -631,6 +613,15 @@ struct MessageRow: View {
         case let (nil, m?): return m
         case (nil, nil): return mid
         }
+    }
+
+    /// Stable cache key for the message body's parsed MarkdownContent.
+    /// Includes the edited-at timestamp so an in-place edit invalidates
+    /// the cache automatically. Settled messages share this key with
+    /// every realization, so scroll-back skips parsing entirely.
+    private var markdownCacheKey: String {
+        let stamp = message.editedAt?.timeIntervalSince1970 ?? 0
+        return "\(message.id):\(stamp)"
     }
 
     private var hasThinking: Bool {

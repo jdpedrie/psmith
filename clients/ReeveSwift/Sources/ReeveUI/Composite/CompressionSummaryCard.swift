@@ -57,7 +57,7 @@ public struct CompressionSummaryCard: View {
             if isErrored {
                 erroredBody
             } else {
-                MarkdownText(message.content)
+                MarkdownText(message.content, cacheKey: markdownCacheKey)
                     .font(.callout)
                 if let summary = usageSummaryLine {
                     Text(summary)
@@ -146,7 +146,7 @@ public struct CompressionSummaryCard: View {
             }
             if !message.content.isEmpty {
                 DisclosureGroup(isExpanded: $showPartialContent) {
-                    MarkdownText(message.content)
+                    MarkdownText(message.content, cacheKey: markdownCacheKey)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
@@ -189,6 +189,13 @@ public struct CompressionSummaryCard: View {
     /// "<Provider Label> <Model Display Name>" with graceful fallbacks.
     /// Mirrors `MessageRow.modelDisplayLabel` so the failed compression
     /// summary header reads consistently with assistant message rows.
+    /// Stable cache key for the summary's parsed MarkdownContent.
+    /// Includes edited_at so post-edit content is re-parsed.
+    private var markdownCacheKey: String {
+        let stamp = message.editedAt?.timeIntervalSince1970 ?? 0
+        return "\(message.id):\(stamp)"
+    }
+
     private var compressionModelLabel: String? {
         guard let mid = message.modelID, !mid.isEmpty else { return nil }
         let pid = message.providerID

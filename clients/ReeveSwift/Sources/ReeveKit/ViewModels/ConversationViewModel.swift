@@ -1180,35 +1180,86 @@ public final class ConversationViewModel {
     /// sibling IDs and walk down to the deepest leaf when the user picks
     /// a different fork. Empty until `loadTree()` runs (called from
     /// `load()` after the linear chain is populated).
-    public var treeMessages: [ReeveMessage] = []
+    ///
+    /// Mutations rebuild the derived caches (`childrenByParentCache`,
+    /// `branchInfoCache`, `descendantCountCache`) once per change so
+    /// per-row lookups in `MessageRow` are O(1) instead of O(N) walks.
+    /// In long contexts the previous "compute on every access" pattern
+    /// was the dominant per-frame cost — N rows × N tree messages.
+    public var treeMessages: [ReeveMessage] = [] {
+        didSet { rebuildTreeCaches() }
+    }
 
-    /// Children-by-parent map derived from `treeMessages`. Keys are
-    /// parent message ids (or "" for root-level rows whose parent is
-    /// nil). Values are children sorted by created_at — sibling order in
-    /// the switcher matches the order in which forks were spawned.
-    private var childrenByParent: [String: [ReeveMessage]] {
-        var out: [String: [ReeveMessage]] = [:]
+    /// Children indexed by parent id (or `""` for root-level rows whose
+    /// parent is nil). Values sorted by id — UUIDv7s sort by creation,
+    /// so sibling order matches fork-spawn order. Refreshed by
+    /// `rebuildTreeCaches()` on treeMessages mutation.
+    private var childrenByParentCache: [String: [ReeveMessage]] = [:]
+
+    /// Per-message branch-switcher info. nil when the message has no
+    /// siblings — the common case, and the marker the UI uses to elide
+    /// the pill entirely.
+    private var branchInfoCache: [String: (siblingIDs: [String], index: Int)] = [:]
+
+    /// Per-message descendant counts, computed bottom-up via memoised
+    /// DFS in O(N) total. Drives the cascade-delete affordance ("Delete
+    /// all replies… (N)") and `hasDescendants` gating.
+    private var descendantCountCache: [String: Int] = [:]
+
+    private func rebuildTreeCaches() {
+        var children: [String: [ReeveMessage]] = [:]
         for m in treeMessages {
             let key = m.parentID ?? ""
-            out[key, default: []].append(m)
+            children[key, default: []].append(m)
         }
-        for k in out.keys {
-            out[k]?.sort { ($0.id) < ($1.id) }  // UUIDv7 ids sort by creation
+        for k in children.keys {
+            children[k]?.sort { $0.id < $1.id }
         }
-        return out
+        self.childrenByParentCache = children
+
+        var branchInfo: [String: (siblingIDs: [String], index: Int)] = [:]
+        for m in treeMessages {
+            let key = m.parentID ?? ""
+            let siblings = children[key] ?? []
+            guard siblings.count > 1 else { continue }
+            guard let idx = siblings.firstIndex(where: { $0.id == m.id }) else { continue }
+            branchInfo[m.id] = (siblings.map(\.id), idx)
+        }
+        self.branchInfoCache = branchInfo
+
+        var counts: [String: Int] = [:]
+        func dfs(_ id: String) -> Int {
+            if let c = counts[id] { return c }
+            var c = 0
+            for child in children[id] ?? [] {
+                c += 1 + dfs(child.id)
+            }
+            counts[id] = c
+            return c
+        }
+        for m in treeMessages { _ = dfs(m.id) }
+        self.descendantCountCache = counts
     }
 
     /// Sibling info for a given message — its position among messages
     /// sharing the same parent. Returns nil when the message has no
     /// siblings (the common case) so the UI can elide the switcher
-    /// entirely. `index` is 0-based.
+    /// entirely. `index` is 0-based. O(1) — backed by `branchInfoCache`.
     public func branchInfo(for messageID: String) -> (siblingIDs: [String], index: Int)? {
-        guard let m = treeMessages.first(where: { $0.id == messageID }) else { return nil }
-        let key = m.parentID ?? ""
-        let siblings = childrenByParent[key] ?? []
-        guard siblings.count > 1 else { return nil }
-        guard let idx = siblings.firstIndex(where: { $0.id == messageID }) else { return nil }
-        return (siblings.map(\.id), idx)
+        branchInfoCache[messageID]
+    }
+
+    /// O(1) "does this message have any direct or indirect children?"
+    /// query. Used by the context menu to decide whether to surface the
+    /// cascade-delete affordance.
+    public func hasDescendants(_ messageID: String) -> Bool {
+        (descendantCountCache[messageID] ?? 0) > 0
+    }
+
+    /// O(1) count of descendants for the cascade-delete confirmation
+    /// alert. Returns 0 for unknown ids.
+    public func descendantCount(of messageID: String) -> Int {
+        descendantCountCache[messageID] ?? 0
     }
 
     /// Switches the active branch by repositioning the per-context leaf
@@ -1234,7 +1285,7 @@ public final class ConversationViewModel {
     /// the latest activity rather than the parent itself.
     private func deepestDescendantID(of messageID: String) -> String? {
         var cur = messageID
-        let map = childrenByParent
+        let map = childrenByParentCache
         while true {
             let kids = map[cur] ?? []
             switch kids.count {
