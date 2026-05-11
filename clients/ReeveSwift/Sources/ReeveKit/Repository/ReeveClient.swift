@@ -24,8 +24,25 @@ public final class ReeveClient: Sendable {
             codec: ProtoCodec(),
             interceptors: [.init { _ in interceptor }]
         )
+        // URLSession defaults to a 60s `timeoutIntervalForRequest` that
+        // governs "max time between bytes" for any request — including
+        // server-streaming SubscribeStream calls. A reasoning model
+        // that goes silent for ~60s while it thinks would otherwise
+        // race against the server-side idle timeout (also 60s):
+        // sometimes URLSession wins, the iOS subscriber gets a
+        // transport error before the server's Terminal event arrives,
+        // and the materialised row appears in the DB without iOS ever
+        // reloading the chain — the assistant turn "disappears."
+        //
+        // Bump the per-request timeout well above the server's
+        // IdleTimeout so the server's own timer reliably terminates
+        // the stream first and emits a clean Terminal event. The
+        // resource timeout keeps the URLSession default (~7 days), so
+        // a runaway stream can't leak forever.
+        let urlConfig = URLSessionConfiguration.default
+        urlConfig.timeoutIntervalForRequest = 600
         let protocolClient = ProtocolClient(
-            httpClient: URLSessionHTTPClient(),
+            httpClient: URLSessionHTTPClient(configuration: urlConfig),
             config: config
         )
         self.cache = cache
