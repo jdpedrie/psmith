@@ -4,18 +4,21 @@ import SwiftUI
 import ReeveKit
 import SnapshotHarness
 
-/// RootView is the top-level auth gate — it renders LoginView when
-/// `app.authState.isAuthenticated == false` and HomeView when true. These
-/// snapshots verify the gate routes correctly. The downstream visual
-/// differences are covered by `LoginViewSnapshots` and `HomeViewSnapshots`,
-/// so we just need to confirm Root forwards to the right child.
+/// RootView is the top-level auth gate — it renders an interstitial when
+/// the on-disk session is still being validated (`.resolving`), LoginView
+/// when `.signedOut`, and HomeView when `.signedIn`. Snapshots verify the
+/// gate routes to the right child; the downstream visual content is
+/// covered by `LoginViewSnapshots` and `HomeViewSnapshots`.
 @MainActor
 struct RootViewSnapshots {
 
     @Test
     func loggedOut() {
         let env = SnapshotEnvironment.standard()
-        // Default standard env has authState in its initial (logged-out) state.
+        // Standard env starts in `.resolving` (post-launch, pre-bootstrap).
+        // Call clear() to land in `.signedOut` so this snapshot reflects
+        // the LoginView path, not the resolving spinner.
+        env.app.authState.clear()
         let view = ReeveMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState

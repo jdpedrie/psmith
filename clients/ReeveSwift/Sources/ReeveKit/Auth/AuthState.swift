@@ -1,30 +1,59 @@
 import Foundation
 import Observation
 
+/// Three-state authentication posture.
+///   - `.resolving`: app just launched; the on-disk token (if any) is still
+///     being validated against the server via WhoAmI. Views render an
+///     interstitial here — neither LoginView nor the authed shell, since
+///     either would flash on transition.
+///   - `.signedIn`: WhoAmI succeeded (or cached identity was restored under
+///     a transport failure). `currentUser` is non-nil.
+///   - `.signedOut`: bootstrap finished with no usable session. Login is
+///     the right surface. Also reached by explicit Logout and by the
+///     AuthInterceptor's 401-driven `flagNeedsReauth`.
+public enum AuthPhase: Sendable, Hashable {
+    case resolving
+    case signedIn
+    case signedOut
+}
+
 /// Observable wrapper around the current authentication posture.
 ///
-/// `isAuthenticated` flips to true after a successful Login (token saved),
-/// false after Logout or a 401-driven `flagNeedsReauth`. Views observe this
-/// via `@Observable` to route between Login and Main.
+/// Views switch on `phase` to render the right surface. `isAuthenticated`
+/// is preserved as a derived flag for older call sites that just want a
+/// "definitely signed in" check.
 @Observable
 @MainActor
 public final class AuthState {
-    public private(set) var isAuthenticated: Bool
+    public private(set) var phase: AuthPhase
     public private(set) var currentUser: ReeveUser?
 
-    public init(isAuthenticated: Bool = false, currentUser: ReeveUser? = nil) {
-        self.isAuthenticated = isAuthenticated
+    public var isAuthenticated: Bool { phase == .signedIn }
+
+    public init(phase: AuthPhase = .resolving, currentUser: ReeveUser? = nil) {
+        self.phase = phase
         self.currentUser = currentUser
+    }
+
+    /// Test-friendly bool initializer. Maps `true` → `.signedIn`,
+    /// `false` → `.signedOut`. `.resolving` isn't reachable through this
+    /// path — tests that want the interstitial state instantiate with
+    /// `init(phase: .resolving)` directly.
+    public convenience init(isAuthenticated: Bool, currentUser: ReeveUser? = nil) {
+        self.init(
+            phase: isAuthenticated ? .signedIn : .signedOut,
+            currentUser: currentUser
+        )
     }
 
     public func setAuthenticated(_ user: ReeveUser) {
         self.currentUser = user
-        self.isAuthenticated = true
+        self.phase = .signedIn
     }
 
     public func clear() {
         self.currentUser = nil
-        self.isAuthenticated = false
+        self.phase = .signedOut
     }
 
     nonisolated public func flagNeedsReauth() {

@@ -62,77 +62,86 @@ public struct StreamingRow: View {
     }
 
     public var body: some View {
-        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
-        HStack(alignment: .top, spacing: 8) {
-            bubble
-                .frame(maxWidth: isCompression ? .infinity : cap, alignment: .leading)
-            if !isCompression {
-                Spacer(minLength: 0)
-            }
+        if isCompression {
+            compressionBubble
+        } else {
+            // Assistant streams render bare — no bubble chrome — to match
+            // the settled assistant MessageRow. A bubble during the stream
+            // that vanishes on terminal would jolt the layout; bare both
+            // sides means the only visible change at terminal is the
+            // spinner going away.
+            bareAssistantBody
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private var bubble: some View {
+    private var compressionBubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                if isCompression {
-                    Image(systemName: "wand.and.stars")
-                        .foregroundStyle(.orange)
-                    Text("Compression summary")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.orange)
-                } else {
-                    Text("ASSISTANT")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Image(systemName: "wand.and.stars")
+                    .foregroundStyle(.orange)
+                Text("Compression summary")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.orange)
                 ProgressView().controlSize(.mini)
             }
-            if let started = thinkingStartedAt {
-                ThinkingDisclosure(
-                    phase: thinkingFinishedAt.map { f in
-                        .settled(durationSec: f.timeIntervalSince(started))
-                    } ?? .ticking(since: started),
-                    renderedText: thinkingText,
-                    isExpanded: $thinkingExpanded
-                )
-            }
-            ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, call in
-                ToolCallLivePill(call: call)
-            }
-            if text.isEmpty {
-                if thinkingStartedAt == nil, toolCalls.isEmpty {
-                    Text("…").foregroundStyle(.secondary)
-                }
-            } else {
-                MarkdownText(text)
-                    .font(isCompression ? .callout : nil)
-            }
+            innerContent
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(isCompression ? 12 : 10)
-        .background(
-            isCompression
-                ? AnyShapeStyle(.regularMaterial)
-                : AnyShapeStyle(.regularMaterial),
-            in: RoundedRectangle(cornerRadius: 10)
-        )
-        .background(
-            isCompression ? Color.orange.opacity(0.08) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 10)
-        )
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    isCompression
-                        ? Color.orange.opacity(0.35)
-                        : Color.primary.opacity(0.06),
-                    lineWidth: isCompression ? 1.5 : 1
-                )
+                .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Bare assistant streaming body — same shape as the settled
+    /// MessageRow.assistantContent: role label + spinner + optional
+    /// thinking/tool disclosures, then the streamed markdown text.
+    /// No padding beyond what the parent LazyVStack already supplies,
+    /// no background, no clip — so the terminal swap to the settled
+    /// row is invisible.
+    @ViewBuilder
+    private var bareAssistantBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("ASSISTANT")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ProgressView().controlSize(.mini)
+            }
+            innerContent
+        }
+    }
+
+    /// Shared body content under either header: thinking → tool calls →
+    /// streamed text (or "…" placeholder when nothing has arrived yet).
+    @ViewBuilder
+    private var innerContent: some View {
+        if let started = thinkingStartedAt {
+            ThinkingDisclosure(
+                phase: thinkingFinishedAt.map { f in
+                    .settled(durationSec: f.timeIntervalSince(started))
+                } ?? .ticking(since: started),
+                renderedText: thinkingText,
+                isExpanded: $thinkingExpanded
+            )
+        }
+        ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, call in
+            ToolCallLivePill(call: call)
+        }
+        if text.isEmpty {
+            if thinkingStartedAt == nil, toolCalls.isEmpty {
+                Text("…").foregroundStyle(.secondary)
+            }
+        } else {
+            MarkdownText(text)
+                .font(isCompression ? .callout : nil)
+        }
     }
 }

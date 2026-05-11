@@ -107,6 +107,16 @@ private struct ConversationBody: View {
     /// disengages so a long response stops scrolling once the bubble
     /// fills the screen.
     @State private var viewportHeight: CGFloat = 0
+    /// True when the scroll position is more than `scrollToBottomThreshold`
+    /// points away from the bottom of the message list. Drives the
+    /// "Scroll to bottom" pill that slides down from below the status
+    /// strip; tapping it returns the user to the latest message.
+    @State private var isFarFromBottom: Bool = false
+
+    /// Distance (pt) from the bottom that flips the "scroll to bottom"
+    /// affordance on. Roughly one bubble-height of slack so the pill
+    /// doesn't pop the moment the user reads past the last message.
+    private let scrollToBottomThreshold: CGFloat = 200
 
     var body: some View {
         VStack(spacing: 0) {
@@ -344,7 +354,14 @@ private struct ConversationBody: View {
                         PendingUserRow(text: pending)
                             .id("__pending__")
                     }
-                    if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
+                    // `streamTerminalPending` flips true the instant a
+                    // terminal event arrives, before the async load() that
+                    // inserts the new MessageRow runs. Suppressing the
+                    // StreamingRow during that window prevents the brief
+                    // "both rows visible at once" frame that confuses
+                    // scroll-position preservation.
+                    if !model.streamTerminalPending,
+                       !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
                         StreamingRow(
                             text: model.streamingText,
                             thinkingText: model.streamingThinking,
@@ -380,6 +397,49 @@ private struct ConversationBody: View {
                     }
                 )
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                // distance = total content height - bottom edge of viewport.
+                // Negative / near-zero means "at or past the end"; positive
+                // means the user has scrolled up.
+                let bottomEdge = geometry.contentOffset.y + geometry.containerSize.height
+                let distance = geometry.contentSize.height - bottomEdge
+                return distance > scrollToBottomThreshold
+            } action: { _, newValue in
+                guard newValue != isFarFromBottom else { return }
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    isFarFromBottom = newValue
+                }
+            }
+            .overlay(alignment: .top) {
+                if isFarFromBottom {
+                    Button {
+                        Haptics.impact(.light)
+                        // Snap to the very bottom so the user lands on the
+                        // most recent turn rather than the top of it.
+                        if let id = model.messages.last?.id {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                proxy.scrollTo(id, anchor: .bottom)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down")
+                                .font(.caption.weight(.semibold))
+                            Text("Scroll to bottom")
+                                .font(.caption.weight(.medium))
+                        }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.thinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityLabel("Scroll to bottom of conversation")
+                }
+            }
             .onAppear {
                 if let id = model.messages.last?.id {
                     proxy.scrollTo(id, anchor: .top)
@@ -401,10 +461,22 @@ private struct ConversationBody: View {
                 if !wasStreaming && isStreaming {
                     autoFollow = true
                     streamingRowHeight = 0
+                } else if wasStreaming && !isStreaming {
+                    // Terminal edge: reset the bookkeeping so a follow-up
+                    // stream starts from a clean state, and so a stray
+                    // streamingText pulse doesn't try to follow a row
+                    // that no longer exists.
+                    streamingRowHeight = 0
                 }
             }
-            .onChange(of: model.streamingText) { _, _ in
-                guard autoFollow else { return }
+            .onChange(of: model.streamingText) { _, newValue in
+                // Guard against the terminal-clear pulse: when the stream
+                // ends, `clearStreamingState()` zeroes `streamingText` and
+                // the StreamingRow disappears from the LazyVStack. The
+                // resulting onChange would otherwise scrollTo("__streaming__")
+                // *after* the id is gone, parking the viewport on empty
+                // space below the freshly-materialised message.
+                guard autoFollow, !newValue.isEmpty else { return }
                 // Once the streaming bubble fills the visible scroll
                 // area, stop following — per the spec, "scroll smoothly
                 // with the stream until the streaming message hits the

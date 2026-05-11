@@ -11,11 +11,39 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        if app.authState.isAuthenticated, let user = app.authState.currentUser {
-            AppShell(user: user)
-        } else {
+        switch app.authState.phase {
+        case .resolving:
+            // Interstitial while bootstrap() validates the on-disk
+            // token. Showing LoginView here flashes for a beat before
+            // we drop into the authed shell — the spinner reads as
+            // intentional state instead.
+            AuthInterstitialView()
+        case .signedIn:
+            if let user = app.authState.currentUser {
+                AppShell(user: user)
+            } else {
+                // Defensive: phase says signed-in but we don't have a
+                // user object. Fall back to interstitial; bootstrap
+                // will resolve the contradiction shortly.
+                AuthInterstitialView()
+            }
+        case .signedOut:
             LoginView()
         }
+    }
+}
+
+/// Launch interstitial shown while the on-disk session is being
+/// validated. Plain spinner over the system background so it reads as
+/// "app is starting" rather than "stalled login form" — anything more
+/// branded would risk reading as a content swap when the real surface
+/// (LoginView or AppShell) renders a moment later.
+private struct AuthInterstitialView: View {
+    var body: some View {
+        ProgressView()
+            .controlSize(.regular)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(uiColor: .systemBackground))
     }
 }
 

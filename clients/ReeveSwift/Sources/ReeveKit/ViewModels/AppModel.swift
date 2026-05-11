@@ -64,6 +64,14 @@ public final class AppModel {
 
     public func bootstrap() async {
         _ = await client.auth.restoreSession()
+        // `restoreSession()` flips phase to `.signedIn` on success and on
+        // cached-restore under transport failure. The "no token" + "dead
+        // token" paths leave it untouched, so we have to push the
+        // transition to `.signedOut` ourselves — otherwise the
+        // interstitial would persist forever for fresh installs.
+        if authState.phase == .resolving {
+            authState.clear()
+        }
         connectivity.start()
     }
 }

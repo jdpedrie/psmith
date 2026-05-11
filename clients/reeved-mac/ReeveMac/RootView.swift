@@ -13,9 +13,26 @@ struct RootView: View {
     @State private var convos: ConversationsModel?
 
     var body: some View {
-        if app.authState.isAuthenticated, let user = app.authState.currentUser {
-            authed(user: user)
-        } else {
+        switch app.authState.phase {
+        case .resolving:
+            // Interstitial while bootstrap() validates the on-disk
+            // token. Same fix the iOS RootView applies — avoid the
+            // flash of LoginView before we drop into HomeView for a
+            // user with a valid stored session.
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .signedIn:
+            if let user = app.authState.currentUser {
+                authed(user: user)
+            } else {
+                // Defensive: phase reports signed-in without a user
+                // object. Bootstrap will reconcile shortly.
+                ProgressView()
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        case .signedOut:
             LoginView()
         }
     }

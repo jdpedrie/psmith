@@ -25,16 +25,16 @@ public struct MarkdownText: View {
         // `**Header:**value`. Trailing-space hard breaks produce
         // `.lineBreak` AST nodes directly, which bypass the buggy
         // soft-break path.
+        //
+        // NB: a previous version added `.fixedSize(horizontal: false,
+        // vertical: true)` to chase a bullet-truncation glitch
+        // (#129 / mid-stream bullets shortening to "…"). That fix
+        // forced an extra measurement pass on every chunk and turned
+        // long-streaming conversations laggy. Removed; the truncation
+        // case will get a more targeted fix when revisited.
         Markdown(Self.hardenLineBreaks(content))
             .markdownTheme(.clarkChat)
             .textSelection(.enabled)
-            // Without this, MarkdownUI's bullet-list layout inconsistently
-            // truncates long items with an ellipsis on iOS — especially
-            // mid-stream, when the parent's width is briefly resolving.
-            // `.fixedSize(horizontal: false, vertical: true)` pins width
-            // to the parent and lets the text grow vertically, which
-            // matches "wrap, don't truncate" semantics.
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Adds two trailing spaces before each newline that should render
