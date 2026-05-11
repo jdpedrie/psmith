@@ -371,6 +371,15 @@ private struct ConversationBody: View {
                             streamingRowHeight = newHeight
                         }
                     }
+                    // Stable bottom anchor for `proxy.scrollTo("__bottom__")`.
+                    // The LazyVStack realises rows lazily, so scrollTo
+                    // against the last message id can land short when
+                    // that row hasn't been laid out yet. A zero-height
+                    // sentinel that's always present gives the scroller
+                    // a fixed end-of-content target.
+                    Color.clear
+                        .frame(height: 1)
+                        .id("__bottom__")
                 }
                 .padding()
                 // Tap-to-dismiss for the composer keyboard.
@@ -398,47 +407,58 @@ private struct ConversationBody: View {
                 let distance = geometry.contentSize.height - bottomEdge
                 return distance > scrollToBottomThreshold
             } action: { _, newValue in
+                // Skip state churn during auto-follow streaming — distance
+                // briefly trips the threshold between chunk arrival and
+                // the next scrollTo, and toggling the boolean per chunk
+                // forced overlay re-renders + queued transactions that
+                // backed up the main thread.
+                guard !autoFollow else { return }
                 guard newValue != isFarFromBottom else { return }
                 withAnimation(.easeInOut(duration: 0.22)) {
                     isFarFromBottom = newValue
                 }
             }
-            // Pill is shown only when the user has actively scrolled away
-            // (autoFollow flips false on touch). Without that gate, the
-            // pill flickers on every chunk while streaming: each chunk
-            // grows the content height, briefly tripping the
-            // distance-from-bottom threshold before the next auto-scroll
-            // catches up. autoFollow == true means "we're driving the
-            // scroll" — the pill would be a lie in that state.
+            // Pill is always-rendered with opacity, not conditional view
+            // insertion, so SwiftUI doesn't tear down and rebuild the
+            // overlay subtree per state change. Hit testing is gated so
+            // a hidden pill can't intercept taps.
             .overlay(alignment: .top) {
-                if isFarFromBottom && !autoFollow {
-                    Button {
-                        Haptics.impact(.light)
-                        // Snap to the very bottom so the user lands on the
-                        // most recent turn rather than the top of it.
-                        if let id = model.messages.last?.id {
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                proxy.scrollTo(id, anchor: .bottom)
-                            }
+                Button {
+                    Haptics.impact(.light)
+                    // Two-pass scroll: the first scrollTo realises rows
+                    // along the way, the second one nails the exact
+                    // bottom now that the LazyVStack knows where it is.
+                    // Without the second pass, "Scroll to bottom" from
+                    // far up lands close-but-not-at-bottom because the
+                    // last row wasn't realised on the first call.
+                    let targetID = model.messages.last?.id ?? "__bottom__"
+                    proxy.scrollTo("__bottom__", anchor: .bottom)
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 60_000_000)
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(targetID, anchor: .bottom)
                         }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down")
-                                .font(.caption.weight(.semibold))
-                            Text("Scroll to bottom")
-                                .font(.caption.weight(.medium))
-                        }
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.thinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .accessibilityLabel("Scroll to bottom of conversation")
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down")
+                            .font(.caption.weight(.semibold))
+                        Text("Scroll to bottom")
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.thinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+                .opacity(isFarFromBottom && !autoFollow ? 1 : 0)
+                .allowsHitTesting(isFarFromBottom && !autoFollow)
+                .animation(.easeInOut(duration: 0.22), value: isFarFromBottom)
+                .accessibilityLabel("Scroll to bottom of conversation")
+                .accessibilityHidden(!isFarFromBottom)
             }
             .onAppear {
                 if let id = model.messages.last?.id {

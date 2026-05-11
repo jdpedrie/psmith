@@ -551,14 +551,28 @@ struct MessageRow: View {
         // "Delete all replies…" only surfaces when the message has at
         // least one descendant — for a leaf, cascade delete behaves
         // identically to plain Delete and the extra item would just be
-        // noise.
-        if descendantCount > 0 {
+        // noise. Use the cheap `hasDescendants` check here (single pass
+        // / first-match exit) rather than the full `descendantCount`
+        // walk; the count is only needed inside the alert message and
+        // gets computed lazily there.
+        if hasDescendants {
             Button(role: .destructive) {
                 showCascadeDeleteConfirm = true
             } label: {
                 Label("Delete all replies…", systemImage: "trash.slash")
             }
         }
+    }
+
+    /// Cheap "does this message have any direct or indirect children?"
+    /// probe used by the context menu to decide whether the cascade
+    /// affordance is worth surfacing. Exits at the first match — O(n)
+    /// in the worst case but typically a handful of comparisons. Called
+    /// per body re-eval of every MessageRow, so the cheap variant
+    /// matters; the precise count comes from `descendantCount` only
+    /// when the user opens the cascade alert.
+    private var hasDescendants: Bool {
+        model.treeMessages.contains(where: { $0.parentID == message.id })
     }
 
     /// Number of descendants of this message in the conversation tree.
