@@ -295,6 +295,15 @@ type Usage struct {
 	CacheWriteTokens *int            `json:"cache_write_tokens,omitempty"`
 	ReasoningTokens  *int            `json:"reasoning_tokens,omitempty"`
 	ProviderRaw      json.RawMessage `json:"provider_raw,omitempty"`
+	// FinishReason is the verbatim per-provider termination cause.
+	// Anthropic: stop_reason (end_turn / max_tokens / stop_sequence /
+	// tool_use / refusal). OpenAI: finish_reason (stop / length /
+	// content_filter / tool_calls). Google: finishReason (STOP /
+	// MAX_TOKENS / SAFETY / RECITATION / OTHER). Drivers SHOULD set
+	// this on the final Usage chunk; the supervisor stamps it onto the
+	// materialised message so the UI can render unexpected reasons in
+	// the footer.
+	FinishReason *string `json:"finish_reason,omitempty"`
 }
 
 // Model describes one model exposed by a provider during discovery.

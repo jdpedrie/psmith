@@ -64,6 +64,24 @@ func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartP
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
+	// Idle timeout: reset on every chunk. If the upstream goes silent
+	// for IdleTimeout (no chunks at all) after streaming starts, we
+	// cancel the run and finalise as errored. The first-chunk wait is
+	// governed separately by openOnce's PerAttemptTimeout — by the time
+	// we get here, the first chunk has already been delivered (via
+	// reinjectFirstChunk).
+	idleTimer := time.NewTimer(IdleTimeout)
+	defer idleTimer.Stop()
+	resetIdle := func() {
+		if !idleTimer.Stop() {
+			select {
+			case <-idleTimer.C:
+			default:
+			}
+		}
+		idleTimer.Reset(IdleTimeout)
+	}
+
 	// Flush helper. Persists buffered chunks in sequence, then fans them
 	// out to live subscribers. Persistence-then-fanout is the invariant
 	// that lets new subscribers replay-from-DB-then-live-tail without
@@ -178,6 +196,7 @@ loop:
 				sourceClosed = true
 				break
 			}
+			resetIdle()
 			seq := nextSequence
 			nextSequence++
 			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
@@ -192,6 +211,20 @@ loop:
 			}
 		case <-ticker.C:
 			flush()
+		case <-idleTimer.C:
+			// Upstream went silent for IdleTimeout. Mark the run as
+			// errored and cancel the SDK's context so the reinject
+			// goroutine drains and source closes. Loop exits via the
+			// ctx.Done() drain branch on the next iteration.
+			if seenError == nil {
+				msg := fmt.Sprintf("upstream stream idle for %s", IdleTimeout)
+				payload, _ := json.Marshal(map[string]string{"message": msg})
+				seenError = &chunkErrorPayload{
+					Message: msg,
+					Raw:     json.RawMessage(payload),
+				}
+			}
+			rs.cancel()
 		}
 	}
 
@@ -417,6 +450,10 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		content = params.Pipeline.TransformAssistantContent(content)
 	}
 
+	var finishReason *string
+	if usage != nil {
+		finishReason = usage.FinishReason
+	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                   msgID,
 		ContextID:            params.ContextID,
@@ -444,6 +481,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		ErrorPayload:         errPayload,
 		ExplicitCacheAttached: params.ExplicitCacheAttached,
 		ToolCalls:            toolCallsJSON,
+		FinishReason:         finishReason,
 	}); err != nil {
 		// If the context row was deleted out from under us (cascade),
 		// log and skip — the run still gets finalized.
@@ -465,6 +503,13 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger.Error("materialize: advance current_leaf failed", "context_id", params.ContextID, "err", err)
 	}
+
+	// Append to the per-provider cost ledger when the turn actually
+	// cost something. Best-effort: a failed insert is logged and
+	// doesn't block the rest of materialisation. Errored runs still
+	// log if total_cost_usd > 0 — the provider charged for whatever
+	// tokens it produced, regardless of whether the answer was useful.
+	logCostEvent(insertCtx, s.queries, providerID, modelID, &msgID, usageParams.TotalCostUsd, logger)
 
 	// Fire the post-materialization hook (auto-title generation, etc.) in a
 	// detached goroutine so the supervisor's terminal handling is unaffected
@@ -650,6 +695,11 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insert compression_summary: %w", err)
 	}
 
+	// Compression turns count toward the cost ledger too — the user
+	// pays for tokens regardless of whether the turn was Q&A or
+	// summarisation.
+	logCostEvent(insertCtx, s.queries, providerID, modelID, &summaryID, usageParams.TotalCostUsd, logger)
+
 	// Advance the per-context cursor to the just-materialized
 	// compression_summary so ListMessageAncestorChain (the standard list path)
 	// includes it in the rendered conversation. Without this the chain walks
@@ -677,4 +727,28 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 		}, s.logger)
 	}
 	return summaryID, uuid.Nil, nil
+}
+
+// logCostEvent appends a row to the cost_events ledger when the
+// just-materialised turn carried a non-zero total cost. Best-effort —
+// a failure here is logged and doesn't block materialisation, since
+// the message itself (carrying its own cost columns) is the source of
+// truth for per-row accounting and the ledger only exists for the
+// rolled-up settings view.
+func logCostEvent(ctx context.Context, q *store.Queries, providerID uuid.UUID, modelID string, messageID *uuid.UUID, totalCost pgtype.Numeric, logger interface{ Error(string, ...any) }) {
+	if !totalCost.Valid {
+		return
+	}
+	f, err := totalCost.Float64Value()
+	if err != nil || !f.Valid || f.Float64 <= 0 {
+		return
+	}
+	if err := q.InsertCostEvent(ctx, store.InsertCostEventParams{
+		ProviderID: providerID,
+		ModelID:    modelID,
+		AmountUsd:  totalCost,
+		MessageID:  messageID,
+	}); err != nil {
+		logger.Error("cost_events: insert failed", "provider_id", providerID, "err", err)
+	}
 }

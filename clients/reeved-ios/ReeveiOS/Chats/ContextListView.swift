@@ -10,6 +10,7 @@ import ReeveUI
 struct ContextListView: View {
     @Bindable var model: ConversationViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingNewContext = false
 
     var body: some View {
         Group {
@@ -47,6 +48,22 @@ struct ContextListView: View {
         }
         .navigationTitle("Contexts")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingNewContext = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("New context")
+            }
+        }
+        .sheet(isPresented: $showingNewContext) {
+            NewContextSheet(model: model) {
+                showingNewContext = false
+                dismiss()
+            }
+        }
     }
 
     private var sorted: [ReeveContext] {
@@ -69,5 +86,81 @@ struct ContextListView: View {
         else { return nil }
         let title = parent.title?.isEmpty == false ? parent.title! : "Context \(String(parent.id.prefix(8)))"
         return "parent: \(n). \(title)"
+    }
+}
+
+/// Modal for the "+ New context" flow. Two controls:
+///   - A multi-line text input for the seed user message (optional).
+///   - A segmented picker between Replace (no prior framing) and
+///     Append (inherit the prior context's role=context message).
+/// On Create, the new context becomes active and ContextListView's
+/// onCreate closure pops the user back to the conversation.
+private struct NewContextSheet: View {
+    let model: ConversationViewModel
+    let onCreate: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var initialUserMessage: String = ""
+    @State private var mode: ReeveCompressionMode = .replace
+    @State private var creating = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Initial user message") {
+                    ZStack(alignment: .topLeading) {
+                        if initialUserMessage.isEmpty {
+                            Text("Optional. Type a starting prompt for the new context, or leave blank.")
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 8)
+                                .padding(.leading, 4)
+                        }
+                        TextEditor(text: $initialUserMessage)
+                            .frame(minHeight: 120)
+                            .scrollContentBackground(.hidden)
+                    }
+                }
+                Section {
+                    Picker("Prior framing", selection: $mode) {
+                        Text("Replace").tag(ReeveCompressionMode.replace)
+                        Text("Append").tag(ReeveCompressionMode.append)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text(mode == .replace
+                         ? "The new context starts fresh — no prior context message."
+                         : "The new context inherits this conversation's prior context message verbatim.")
+                }
+            }
+            .navigationTitle("New context")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(creating)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await create() }
+                    } label: {
+                        if creating {
+                            ProgressView()
+                        } else {
+                            Text("Create").bold()
+                        }
+                    }
+                    .disabled(creating)
+                }
+            }
+        }
+    }
+
+    private func create() async {
+        creating = true
+        await model.createContextManual(
+            initialUserMessage: initialUserMessage.trimmingCharacters(in: .whitespacesAndNewlines),
+            mode: mode
+        )
+        creating = false
+        onCreate()
     }
 }

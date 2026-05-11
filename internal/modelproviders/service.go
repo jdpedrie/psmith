@@ -832,6 +832,63 @@ func (s *Service) GetCatalogStatus(ctx context.Context, _ *connect.Request[reeve
 	return connect.NewResponse(resp), nil
 }
 
+// ListProviderCosts returns one row per configured provider with the running
+// cost total inside the optional [since, until) window. Providers with no
+// events in the window still appear with 0.0 / 0 — the settings screen renders
+// enabled providers consistently rather than hiding the ones the user hasn't
+// sent through yet.
+func (s *Service) ListProviderCosts(ctx context.Context, req *connect.Request[reevev1.ListProviderCostsRequest]) (*connect.Response[reevev1.ListProviderCostsResponse], error) {
+	u := auth.MustFromContext(ctx)
+	var since, until *time.Time
+	if req.Msg.Since != nil {
+		t := req.Msg.Since.AsTime()
+		since = &t
+	}
+	if req.Msg.Until != nil {
+		t := req.Msg.Until.AsTime()
+		until = &t
+	}
+	rows, err := s.queries.ListProviderCostTotals(ctx, store.ListProviderCostTotalsParams{
+		UserID: u.ID,
+		Since:  since,
+		Until:  until,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*reevev1.ProviderCost, 0, len(rows))
+	var grand float64
+	for _, r := range rows {
+		total := costNumericToFloat(r.TotalCostUsd)
+		grand += total
+		out = append(out, &reevev1.ProviderCost{
+			ProviderId:    r.ProviderID.String(),
+			ProviderLabel: r.ProviderLabel,
+			ProviderType:  r.ProviderType,
+			TotalCostUsd:  total,
+			EventCount:    r.EventCount,
+		})
+	}
+	return connect.NewResponse(&reevev1.ListProviderCostsResponse{
+		Providers:     out,
+		GrandTotalUsd: grand,
+	}), nil
+}
+
+// costNumericToFloat converts a pgtype.Numeric ($USD) to float64, returning
+// 0 when the value is null/invalid. We don't surface NaN/Inf because every
+// path that writes amount_usd validates it first.
+func costNumericToFloat(n pgtype.Numeric) float64 {
+	if !n.Valid {
+		return 0
+	}
+	f, err := n.Float64Value()
+	if err != nil || !f.Valid {
+		return 0
+	}
+	return f.Float64
+}
+
 // --- helpers ---
 
 // loadOwnedProvider parses the id, looks up the provider, and verifies the

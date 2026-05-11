@@ -31,6 +31,15 @@ type Conversation struct {
 	UpdatedAt time.Time
 }
 
+type CostEvent struct {
+	ID         int64
+	ProviderID uuid.UUID
+	ModelID    string
+	AmountUsd  pgtype.Numeric
+	MessageID  *uuid.UUID
+	OccurredAt time.Time
+}
+
 type ExplicitCach struct {
 	ContextID          uuid.UUID
 	ProviderType       string
@@ -81,6 +90,7 @@ type Message struct {
 	ThinkingDurationMs    *int32
 	ExplicitCacheAttached *bool
 	ToolCalls             []byte
+	FinishReason          *string
 }
 
 type Profile struct {

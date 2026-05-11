@@ -90,6 +90,9 @@ const (
 	// ModelProvidersServiceGetCatalogStatusProcedure is the fully-qualified name of the
 	// ModelProvidersService's GetCatalogStatus RPC.
 	ModelProvidersServiceGetCatalogStatusProcedure = "/reeve.v1.ModelProvidersService/GetCatalogStatus"
+	// ModelProvidersServiceListProviderCostsProcedure is the fully-qualified name of the
+	// ModelProvidersService's ListProviderCosts RPC.
+	ModelProvidersServiceListProviderCostsProcedure = "/reeve.v1.ModelProvidersService/ListProviderCosts"
 )
 
 // ModelProvidersServiceClient is a client for the reeve.v1.ModelProvidersService service.
@@ -144,6 +147,11 @@ type ModelProvidersServiceClient interface {
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
 	GetCatalogStatus(context.Context, *connect.Request[v1.GetCatalogStatusRequest]) (*connect.Response[v1.GetCatalogStatusResponse], error)
+	// Per-provider running totals across the cost_events ledger. One row per
+	// configured provider — including providers with zero events to date so
+	// the UI can render "$0.0000" rather than silently hiding them. Drives
+	// the iOS Settings → Cost screen.
+	ListProviderCosts(context.Context, *connect.Request[v1.ListProviderCostsRequest]) (*connect.Response[v1.ListProviderCostsResponse], error)
 }
 
 // NewModelProvidersServiceClient constructs a client for the reeve.v1.ModelProvidersService
@@ -271,6 +279,12 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(modelProvidersServiceMethods.ByName("GetCatalogStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		listProviderCosts: connect.NewClient[v1.ListProviderCostsRequest, v1.ListProviderCostsResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceListProviderCostsProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("ListProviderCosts")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -295,6 +309,7 @@ type modelProvidersServiceClient struct {
 	testUserModel           *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
 	refreshModelCatalog     *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
 	getCatalogStatus        *connect.Client[v1.GetCatalogStatusRequest, v1.GetCatalogStatusResponse]
+	listProviderCosts       *connect.Client[v1.ListProviderCostsRequest, v1.ListProviderCostsResponse]
 }
 
 // ListProviderTypes calls reeve.v1.ModelProvidersService.ListProviderTypes.
@@ -392,6 +407,11 @@ func (c *modelProvidersServiceClient) GetCatalogStatus(ctx context.Context, req 
 	return c.getCatalogStatus.CallUnary(ctx, req)
 }
 
+// ListProviderCosts calls reeve.v1.ModelProvidersService.ListProviderCosts.
+func (c *modelProvidersServiceClient) ListProviderCosts(ctx context.Context, req *connect.Request[v1.ListProviderCostsRequest]) (*connect.Response[v1.ListProviderCostsResponse], error) {
+	return c.listProviderCosts.CallUnary(ctx, req)
+}
+
 // ModelProvidersServiceHandler is an implementation of the reeve.v1.ModelProvidersService service.
 type ModelProvidersServiceHandler interface {
 	// Driver types compiled into this server build.
@@ -444,6 +464,11 @@ type ModelProvidersServiceHandler interface {
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
 	GetCatalogStatus(context.Context, *connect.Request[v1.GetCatalogStatusRequest]) (*connect.Response[v1.GetCatalogStatusResponse], error)
+	// Per-provider running totals across the cost_events ledger. One row per
+	// configured provider — including providers with zero events to date so
+	// the UI can render "$0.0000" rather than silently hiding them. Drives
+	// the iOS Settings → Cost screen.
+	ListProviderCosts(context.Context, *connect.Request[v1.ListProviderCostsRequest]) (*connect.Response[v1.ListProviderCostsResponse], error)
 }
 
 // NewModelProvidersServiceHandler builds an HTTP handler from the service implementation. It
@@ -567,6 +592,12 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 		connect.WithSchema(modelProvidersServiceMethods.ByName("GetCatalogStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelProvidersServiceListProviderCostsHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceListProviderCostsProcedure,
+		svc.ListProviderCosts,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("ListProviderCosts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reeve.v1.ModelProvidersService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ModelProvidersServiceListProviderTypesProcedure:
@@ -607,6 +638,8 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 			modelProvidersServiceRefreshModelCatalogHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceGetCatalogStatusProcedure:
 			modelProvidersServiceGetCatalogStatusHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceListProviderCostsProcedure:
+			modelProvidersServiceListProviderCostsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -690,4 +723,8 @@ func (UnimplementedModelProvidersServiceHandler) RefreshModelCatalog(context.Con
 
 func (UnimplementedModelProvidersServiceHandler) GetCatalogStatus(context.Context, *connect.Request[v1.GetCatalogStatusRequest]) (*connect.Response[v1.GetCatalogStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ModelProvidersService.GetCatalogStatus is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) ListProviderCosts(context.Context, *connect.Request[v1.ListProviderCostsRequest]) (*connect.Response[v1.ListProviderCostsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ModelProvidersService.ListProviderCosts is not implemented"))
 }

@@ -82,6 +82,14 @@ service ModelProvidersService {
 
   // Read-only status snapshot.
   rpc GetCatalogStatus(GetCatalogStatusRequest) returns (GetCatalogStatusResponse);
+
+  // ----- Cost ledger -----
+
+  // Per-provider running totals across the cost_events ledger. One row per
+  // configured provider — including providers with zero events to date so
+  // the UI can render "$0.0000" rather than silently hiding them. Drives
+  // the iOS Settings → Cost screen.
+  rpc ListProviderCosts(ListProviderCostsRequest) returns (ListProviderCostsResponse);
 }
 
 // --- Driver types & templates ---
@@ -293,4 +301,31 @@ message GetCatalogStatusResponse {
   int32 providers_count = 1;
   int32 models_count = 2;
   optional google.protobuf.Timestamp last_refresh_at = 3;
+}
+
+// --- Cost ledger ---
+
+message ListProviderCostsRequest {
+  // Optional half-open window [since, until). Either bound may be omitted
+  // independently — omit both for an all-time rollup. Server treats the
+  // values as INCLUSIVE-since / EXCLUSIVE-until so abutting windows can be
+  // composed without double-counting boundary events.
+  optional google.protobuf.Timestamp since = 1;
+  optional google.protobuf.Timestamp until = 2;
+}
+message ListProviderCostsResponse {
+  repeated ProviderCost providers = 1;
+  // Grand total across every provider (sum of total_cost_usd). Convenience
+  // for the screen header — clients could compute it from the rows, but
+  // having a server-computed value avoids floating-point reconciliation.
+  double grand_total_usd = 2;
+}
+message ProviderCost {
+  string provider_id = 1;
+  string provider_label = 2;
+  string provider_type = 3;
+  double total_cost_usd = 4;
+  // Total number of cost-incurring events recorded for this provider —
+  // surfaces "X messages" in the UI subtitle without a separate roundtrip.
+  int64 event_count = 5;
 }

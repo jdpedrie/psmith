@@ -89,12 +89,24 @@ private struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ReeveConversation
 
-    /// Auto-follow tracking — same machinery the Mac uses, so the
-    /// streaming bubble stays pinned to the bottom unless the user
-    /// actively scrolls up.
+    /// Auto-follow tracking. While streaming, we keep the streaming
+    /// row's bottom in view *until* its height reaches the viewport's
+    /// height — at which point we stop following so the user can read
+    /// the top of a long response without it being scrolled away.
+    /// Touching the scroll surface disengages follow forever (see
+    /// `.onScrollPhaseChange`).
     @State private var autoFollow = true
     @State private var lastAutoScroll: Date = .distantPast
     @State private var showingMissingCostInfo = false
+    /// Live height of the in-flight streaming bubble. Updated via
+    /// `.onGeometryChange` on the StreamingRow. Used to decide when
+    /// to stop auto-follow.
+    @State private var streamingRowHeight: CGFloat = 0
+    /// Viewport height of the message scroll, captured from the
+    /// outer GeometryReader. Used as the cap above which auto-follow
+    /// disengages so a long response stops scrolling once the bubble
+    /// fills the screen.
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,6 +133,12 @@ private struct ConversationBody: View {
         }
         .sheet(isPresented: $model.showingCompactView) {
             CompactView(model: model)
+        }
+        // Single message-edit sheet, bound to the active editingMessage
+        // on the view model. `.sheet(item:)` avoids the per-row computed-
+        // binding loop the inline `.sheet(isPresented:)` was hitting.
+        .sheet(item: $model.editingMessage) { msg in
+            EditMessageSheet(message: msg, model: model)
         }
         .toast(
             message: Binding(
@@ -302,6 +320,8 @@ private struct ConversationBody: View {
             GeometryReader { geo in
                 paneScrollBody
                     .environment(\.chatPaneWidth, geo.size.width)
+                    .onAppear { viewportHeight = geo.size.height }
+                    .onChange(of: geo.size.height) { _, new in viewportHeight = new }
             }
         }
     }
@@ -324,16 +344,22 @@ private struct ConversationBody: View {
                         PendingUserRow(text: pending)
                             .id("__pending__")
                     }
-                    if !model.streamingText.isEmpty || model.isStreaming {
+                    if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
                         StreamingRow(
                             text: model.streamingText,
                             thinkingText: model.streamingThinking,
                             thinkingStartedAt: model.streamingThinkingStartedAt,
                             thinkingFinishedAt: model.streamingThinkingFinishedAt,
                             thinkingExpanded: $model.streamingThinkingExpanded,
-                            toolCalls: model.streamingToolCalls
+                            toolCalls: model.streamingToolCalls,
+                            isCompression: model.isCompacting
                         )
                         .id("__streaming__")
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { newHeight in
+                            streamingRowHeight = newHeight
+                        }
                     }
                 }
                 .padding()
@@ -359,20 +385,38 @@ private struct ConversationBody: View {
                     proxy.scrollTo(id, anchor: .top)
                 }
             }
-            .onChange(of: model.messages.count) { _, _ in
-                withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .top) }
-            }
+            // Intentionally NOT scrolling on `model.messages.count` —
+            // that handler used to fire on stream end (streaming row
+            // → settled assistant message bumps count by 1) and on
+            // deletes, both of which jerked the viewport. Stream end
+            // and delete now hold the user's current scroll position.
             .onChange(of: model.pendingUserText) { _, text in
                 if text != nil {
                     autoFollow = true
+                    streamingRowHeight = 0
                     withAnimation { proxy.scrollTo("__pending__", anchor: .top) }
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
-                if !wasStreaming && isStreaming { autoFollow = true }
+                if !wasStreaming && isStreaming {
+                    autoFollow = true
+                    streamingRowHeight = 0
+                }
             }
             .onChange(of: model.streamingText) { _, _ in
                 guard autoFollow else { return }
+                // Once the streaming bubble fills the visible scroll
+                // area, stop following — per the spec, "scroll smoothly
+                // with the stream until the streaming message hits the
+                // top of the viewport, then stop and hold there." A
+                // small buffer accounts for padding + spacing inside
+                // the LazyVStack so we disengage slightly before the
+                // bubble extends past the top edge.
+                let buffer: CGFloat = 24
+                let usableViewport = max(0, viewportHeight - buffer)
+                if usableViewport > 0, streamingRowHeight >= usableViewport {
+                    return
+                }
                 let now = Date()
                 if now.timeIntervalSince(lastAutoScroll) >= 0.1 {
                     lastAutoScroll = now

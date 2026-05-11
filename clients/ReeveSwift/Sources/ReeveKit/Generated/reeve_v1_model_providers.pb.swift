@@ -920,6 +920,80 @@ public struct Reeve_V1_GetCatalogStatusResponse: Sendable {
   fileprivate var _lastRefreshAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
+public struct Reeve_V1_ListProviderCostsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Optional half-open window [since, until). Either bound may be omitted
+  /// independently — omit both for an all-time rollup. Server treats the
+  /// values as INCLUSIVE-since / EXCLUSIVE-until so abutting windows can be
+  /// composed without double-counting boundary events.
+  public var since: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_since ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_since = newValue}
+  }
+  /// Returns true if `since` has been explicitly set.
+  public var hasSince: Bool {self._since != nil}
+  /// Clears the value of `since`. Subsequent reads from it will return its default value.
+  public mutating func clearSince() {self._since = nil}
+
+  public var until: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_until ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_until = newValue}
+  }
+  /// Returns true if `until` has been explicitly set.
+  public var hasUntil: Bool {self._until != nil}
+  /// Clears the value of `until`. Subsequent reads from it will return its default value.
+  public mutating func clearUntil() {self._until = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _since: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _until: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+public struct Reeve_V1_ListProviderCostsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providers: [Reeve_V1_ProviderCost] = []
+
+  /// Grand total across every provider (sum of total_cost_usd). Convenience
+  /// for the screen header — clients could compute it from the rows, but
+  /// having a server-computed value avoids floating-point reconciliation.
+  public var grandTotalUsd: Double = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_ProviderCost: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var providerLabel: String = String()
+
+  public var providerType: String = String()
+
+  public var totalCostUsd: Double = 0
+
+  /// Total number of cost-incurring events recorded for this provider —
+  /// surfaces "X messages" in the UI subtitle without a separate roundtrip.
+  public var eventCount: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "reeve.v1"
@@ -2528,6 +2602,130 @@ extension Reeve_V1_GetCatalogStatusResponse: SwiftProtobuf.Message, SwiftProtobu
     if lhs.providersCount != rhs.providersCount {return false}
     if lhs.modelsCount != rhs.modelsCount {return false}
     if lhs._lastRefreshAt != rhs._lastRefreshAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ListProviderCostsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListProviderCostsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}since\0\u{1}until\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._since) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._until) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._since {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._until {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListProviderCostsRequest, rhs: Reeve_V1_ListProviderCostsRequest) -> Bool {
+    if lhs._since != rhs._since {return false}
+    if lhs._until != rhs._until {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ListProviderCostsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListProviderCostsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}providers\0\u{3}grand_total_usd\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.providers) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self.grandTotalUsd) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.providers, fieldNumber: 1)
+    }
+    if self.grandTotalUsd.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.grandTotalUsd, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListProviderCostsResponse, rhs: Reeve_V1_ListProviderCostsResponse) -> Bool {
+    if lhs.providers != rhs.providers {return false}
+    if lhs.grandTotalUsd != rhs.grandTotalUsd {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ProviderCost: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProviderCost"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}provider_label\0\u{3}provider_type\0\u{3}total_cost_usd\0\u{3}event_count\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.providerLabel) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.providerType) }()
+      case 4: try { try decoder.decodeSingularDoubleField(value: &self.totalCostUsd) }()
+      case 5: try { try decoder.decodeSingularInt64Field(value: &self.eventCount) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.providerLabel.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerLabel, fieldNumber: 2)
+    }
+    if !self.providerType.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerType, fieldNumber: 3)
+    }
+    if self.totalCostUsd.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.totalCostUsd, fieldNumber: 4)
+    }
+    if self.eventCount != 0 {
+      try visitor.visitSingularInt64Field(value: self.eventCount, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ProviderCost, rhs: Reeve_V1_ProviderCost) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.providerLabel != rhs.providerLabel {return false}
+    if lhs.providerType != rhs.providerType {return false}
+    if lhs.totalCostUsd != rhs.totalCostUsd {return false}
+    if lhs.eventCount != rhs.eventCount {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

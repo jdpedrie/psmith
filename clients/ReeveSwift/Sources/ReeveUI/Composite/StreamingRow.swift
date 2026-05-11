@@ -35,6 +35,12 @@ public struct StreamingRow: View {
     @Binding var thinkingExpanded: Bool
     /// Tool calls captured on the active stream, in start order.
     let toolCalls: [LiveToolCall]
+    /// When true, render with the compression-summary chrome (orange
+    /// accent + "Compression summary" header) instead of the regular
+    /// assistant bubble. Lets the live row match the materialised
+    /// CompressionSummaryCard visually so the user sees the right
+    /// affordance from the first chunk, not just after stream end.
+    let isCompression: Bool
     @Environment(\.chatPaneWidth) private var paneWidth
 
     public init(
@@ -43,7 +49,8 @@ public struct StreamingRow: View {
         thinkingStartedAt: Date?,
         thinkingFinishedAt: Date?,
         thinkingExpanded: Binding<Bool>,
-        toolCalls: [LiveToolCall]
+        toolCalls: [LiveToolCall],
+        isCompression: Bool = false
     ) {
         self.text = text
         self.thinkingText = thinkingText
@@ -51,14 +58,17 @@ public struct StreamingRow: View {
         self.thinkingFinishedAt = thinkingFinishedAt
         self._thinkingExpanded = thinkingExpanded
         self.toolCalls = toolCalls
+        self.isCompression = isCompression
     }
 
     public var body: some View {
         let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
         HStack(alignment: .top, spacing: 8) {
             bubble
-                .frame(maxWidth: cap, alignment: .leading)
-            Spacer(minLength: 0)
+                .frame(maxWidth: isCompression ? .infinity : cap, alignment: .leading)
+            if !isCompression {
+                Spacer(minLength: 0)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -67,9 +77,18 @@ public struct StreamingRow: View {
     private var bubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("ASSISTANT")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if isCompression {
+                    Image(systemName: "wand.and.stars")
+                        .foregroundStyle(.orange)
+                    Text("Compression summary")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("ASSISTANT")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 ProgressView().controlSize(.mini)
             }
             if let started = thinkingStartedAt {
@@ -90,12 +109,30 @@ public struct StreamingRow: View {
                 }
             } else {
                 MarkdownText(text)
+                    .font(isCompression ? .callout : nil)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
+        .padding(isCompression ? 12 : 10)
+        .background(
+            isCompression
+                ? AnyShapeStyle(.regularMaterial)
+                : AnyShapeStyle(.regularMaterial),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .background(
+            isCompression ? Color.orange.opacity(0.08) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    isCompression
+                        ? Color.orange.opacity(0.35)
+                        : Color.primary.opacity(0.06),
+                    lineWidth: isCompression ? 1.5 : 1
+                )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

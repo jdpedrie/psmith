@@ -269,6 +269,25 @@ public final class ConversationsRepository: Sendable {
         return ReeveContext(from: msg.context)
     }
 
+    /// Manually creates a fresh active context in an existing conversation
+    /// without going through compression. Mode selects whether the new
+    /// context inherits the prior context's framing (APPEND) or starts
+    /// fresh (REPLACE / unspecified).
+    public func createContextManual(
+        conversationID: String,
+        initialUserMessage: String,
+        mode: ReeveCompressionMode
+    ) async throws -> (context: ReeveContext, userMessage: ReeveMessage?) {
+        var req = Reeve_V1_CreateContextManualRequest()
+        req.conversationID = conversationID
+        req.initialUserMessage = initialUserMessage
+        req.mode = mode.toProto()
+        let resp = await client.createContextManual(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("create context manual") }
+        let userMsg: ReeveMessage? = msg.hasUserMessage ? ReeveMessage(from: msg.userMessage) : nil
+        return (ReeveContext(from: msg.context), userMsg)
+    }
+
     public func editMessage(
         id: String,
         content: String,

@@ -643,6 +643,59 @@ public struct Reeve_V1_PromoteCompactionToNewContextResponse: Sendable {
   fileprivate var _context: Reeve_V1_Context? = nil
 }
 
+public struct Reeve_V1_CreateContextManualRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: String = String()
+
+  /// The first user-role message to seed in the new context. May be empty,
+  /// in which case no user message is inserted and the user starts typing
+  /// from the composer in a fresh active context.
+  public var initialUserMessage: String = String()
+
+  /// How the new context relates to the prior context's framing.
+  /// UNSPECIFIED is treated as REPLACE.
+  public var mode: Reeve_V1_CompressionMode = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Reeve_V1_CreateContextManualResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var context: Reeve_V1_Context {
+    get {_context ?? Reeve_V1_Context()}
+    set {_context = newValue}
+  }
+  /// Returns true if `context` has been explicitly set.
+  public var hasContext: Bool {self._context != nil}
+  /// Clears the value of `context`. Subsequent reads from it will return its default value.
+  public mutating func clearContext() {self._context = nil}
+
+  /// The seeded user message, when initial_user_message was non-empty.
+  public var userMessage: Reeve_V1_Message {
+    get {_userMessage ?? Reeve_V1_Message()}
+    set {_userMessage = newValue}
+  }
+  /// Returns true if `userMessage` has been explicitly set.
+  public var hasUserMessage: Bool {self._userMessage != nil}
+  /// Clears the value of `userMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearUserMessage() {self._userMessage = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _context: Reeve_V1_Context? = nil
+  fileprivate var _userMessage: Reeve_V1_Message? = nil
+}
+
 public struct Reeve_V1_SendMessageRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1897,6 +1950,85 @@ extension Reeve_V1_PromoteCompactionToNewContextResponse: SwiftProtobuf.Message,
 
   public static func ==(lhs: Reeve_V1_PromoteCompactionToNewContextResponse, rhs: Reeve_V1_PromoteCompactionToNewContextResponse) -> Bool {
     if lhs._context != rhs._context {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_CreateContextManualRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateContextManualRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}initial_user_message\0\u{1}mode\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.initialUserMessage) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.mode) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularStringField(value: self.conversationID, fieldNumber: 1)
+    }
+    if !self.initialUserMessage.isEmpty {
+      try visitor.visitSingularStringField(value: self.initialUserMessage, fieldNumber: 2)
+    }
+    if self.mode != .unspecified {
+      try visitor.visitSingularEnumField(value: self.mode, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_CreateContextManualRequest, rhs: Reeve_V1_CreateContextManualRequest) -> Bool {
+    if lhs.conversationID != rhs.conversationID {return false}
+    if lhs.initialUserMessage != rhs.initialUserMessage {return false}
+    if lhs.mode != rhs.mode {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateContextManualResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{3}user_message\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._context) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._userMessage) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._context {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._userMessage {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_CreateContextManualResponse, rhs: Reeve_V1_CreateContextManualResponse) -> Bool {
+    if lhs._context != rhs._context {return false}
+    if lhs._userMessage != rhs._userMessage {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

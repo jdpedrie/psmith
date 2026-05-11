@@ -175,6 +175,9 @@ func messageToProto(m store.Message) *reevev1.Message {
 	if calls := toolCallsFromJSON(m.ToolCalls); len(calls) > 0 {
 		out.ToolCalls = calls
 	}
+	if m.FinishReason != nil && *m.FinishReason != "" {
+		out.FinishReason = m.FinishReason
+	}
 	return out
 }
 
@@ -346,6 +349,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *reevev1.Message {
 		TotalCostUsd:         r.TotalCostUsd,
 		ErrorPayload:         r.ErrorPayload,
 		ToolCalls:            r.ToolCalls,
+		FinishReason:         r.FinishReason,
 	})
 	out.SiblingCount = r.SiblingCount
 	return out

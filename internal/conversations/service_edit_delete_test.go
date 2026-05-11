@@ -522,6 +522,104 @@ func TestPromote_NotFound(t *testing.T) {
 	assertCode(t, err, connect.CodeNotFound)
 }
 
+// --- CreateContextManual ---------------------------------------------------
+
+func TestCreateContextManual_REPLACE_NoFraming(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "manual-replace", nil, nil)
+	f := seedSendable(t, q, driverType)
+
+	// Seed a role=context in the prior context to confirm REPLACE drops it.
+	parent := f.systemMsgID
+	_ = insertMessage(t, q, f.contextID, &parent, "context", "OLD FRAMING")
+
+	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&reevev1.CreateContextManualRequest{
+		ConversationId:     f.conv.ID.String(),
+		InitialUserMessage: "first turn in the new context",
+		Mode:               reevev1.CompressionMode_COMPRESSION_MODE_REPLACE,
+	}))
+	if err != nil {
+		t.Fatalf("CreateContextManual: %v", err)
+	}
+	newCtxID, _ := uuid.Parse(resp.Msg.Context.Id)
+	active, _ := q.GetActiveContextByConversation(context.Background(), f.conv.ID)
+	if active.ID != newCtxID {
+		t.Errorf("new context should be active; active=%s want %s", active.ID, newCtxID)
+	}
+	msgs, _ := q.ListMessagesByContext(context.Background(), newCtxID)
+	var sysMsg, ctxMsg, userMsg *store.Message
+	for i := range msgs {
+		switch msgs[i].Role {
+		case "system":
+			sysMsg = &msgs[i]
+		case "context":
+			ctxMsg = &msgs[i]
+		case "user":
+			userMsg = &msgs[i]
+		}
+	}
+	if sysMsg == nil {
+		t.Fatal("missing role=system in new context")
+	}
+	if ctxMsg != nil {
+		t.Errorf("REPLACE mode should NOT seed a role=context message; got %q", ctxMsg.Content)
+	}
+	if userMsg == nil || userMsg.Content != "first turn in the new context" {
+		t.Fatalf("missing or wrong user message; got %+v", userMsg)
+	}
+	if userMsg.ParentID == nil || *userMsg.ParentID != sysMsg.ID {
+		t.Errorf("user message should be parented to role=system (no role=context to chain through); got %+v", userMsg.ParentID)
+	}
+	if resp.Msg.UserMessage == nil || resp.Msg.UserMessage.Id != userMsg.ID.String() {
+		t.Errorf("response should echo the seeded user message")
+	}
+}
+
+func TestCreateContextManual_APPEND_InheritsPriorContext(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "manual-append", nil, nil)
+	f := seedSendable(t, q, driverType)
+
+	parent := f.systemMsgID
+	_ = insertMessage(t, q, f.contextID, &parent, "context", "INHERITED FRAMING")
+
+	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&reevev1.CreateContextManualRequest{
+		ConversationId:     f.conv.ID.String(),
+		InitialUserMessage: "",
+		Mode:               reevev1.CompressionMode_COMPRESSION_MODE_APPEND,
+	}))
+	if err != nil {
+		t.Fatalf("CreateContextManual: %v", err)
+	}
+	newCtxID, _ := uuid.Parse(resp.Msg.Context.Id)
+
+	cx, err := q.GetContextRoleMessageInContext(context.Background(), newCtxID)
+	if err != nil {
+		t.Fatalf("expected role=context in APPEND mode; %v", err)
+	}
+	if cx.Content != "INHERITED FRAMING" {
+		t.Errorf("APPEND content = %q, want %q", cx.Content, "INHERITED FRAMING")
+	}
+	// Empty initial_user_message → no user row, no UserMessage in response.
+	if resp.Msg.UserMessage != nil {
+		t.Errorf("expected no user message when initial_user_message is empty; got %+v", resp.Msg.UserMessage)
+	}
+}
+
+func TestCreateContextManual_RejectsUnknownConversation(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	driverType := registerFakeDriver(t, "manual-unknown", nil, nil)
+	f := seedSendable(t, q, driverType)
+	_ = f
+	_, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&reevev1.CreateContextManualRequest{
+		ConversationId: uuid.New().String(),
+	}))
+	assertCode(t, err, connect.CodeNotFound)
+}
+
 // --- Conversation lock ----------------------------------------------------
 
 // TestLock_BlocksMutationsWhileStreamRunning fires a long-lived stream and

@@ -33,6 +33,12 @@ var (
 	// reasoning_summary deltas well under a minute. If we go past 60s
 	// without ANY chunk, the upstream is almost certainly stuck and a
 	// retry has better odds than continuing to wait.
+	//
+	// Critically this only governs the wait for the FIRST chunk.
+	// Once the first chunk arrives, the upstream context is no longer
+	// deadline-bound — long-running responses (large outputs, deep
+	// thinking) are governed by IdleTimeout in `consume.go` instead, so
+	// a slow but still-streaming model isn't cut off mid-response.
 	PerAttemptTimeout = 60 * time.Second
 
 	// InitialBackoff: wait before the second attempt. Doubles each
@@ -40,6 +46,15 @@ var (
 	// waiting between failures, plus up to 60s per attempt — worst
 	// case ~3 minutes for the user-visible errored row to land.
 	InitialBackoff = 1 * time.Second
+
+	// IdleTimeout: maximum gap between two consecutive chunks once the
+	// stream has produced its first chunk. Reset on every chunk in the
+	// consume loop. If it fires, the upstream is presumed wedged and
+	// the run is finalised as errored — see `consume.go`. Picked to
+	// match PerAttemptTimeout so the user-visible "stuck" budget is the
+	// same regardless of whether the stall happens before or after the
+	// first chunk.
+	IdleTimeout = 60 * time.Second
 )
 
 // SendFunc opens an upstream stream. The supervisor calls it (with
@@ -96,17 +111,23 @@ func openStreamWithRetry(parent context.Context, sf SendFunc, logger *slog.Logge
 	return nil, fmt.Errorf("upstream send failed after %d attempts: %w", MaxSendAttempts, lastErr)
 }
 
-// openOnce: one attempt — call SendFunc with a PerAttemptTimeout
-// deadline, wait for the first chunk under that same deadline, and (on
-// success) hand the caller a result that owns the now-deadline-free
-// continuation. Cancel is called for any error path.
+// openOnce: one attempt — call SendFunc with a deadline-free child
+// context, wait up to PerAttemptTimeout for the first chunk via a
+// separate timer, and (on success) hand the caller a result that owns
+// the cancel for the long-lived upstream context. The deadline applies
+// ONLY to the wait for the first chunk — once a chunk arrives the
+// upstream is governed by the consume loop's IdleTimeout, so a slow
+// but still-streaming response isn't truncated at PerAttemptTimeout.
+// Cancel is called for any error path.
 func openOnce(parent context.Context, sf SendFunc) (*sentSourceResult, error) {
-	attemptCtx, cancel := context.WithTimeout(parent, PerAttemptTimeout)
-	ch, err := sf(attemptCtx)
+	streamCtx, cancel := context.WithCancel(parent)
+	ch, err := sf(streamCtx)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
+	timer := time.NewTimer(PerAttemptTimeout)
+	defer timer.Stop()
 	select {
 	case first, ok := <-ch:
 		if !ok {
@@ -128,7 +149,7 @@ func openOnce(parent context.Context, sf SendFunc) (*sentSourceResult, error) {
 		}
 		// Success: caller takes ownership of cancel + remainder.
 		return &sentSourceResult{first: first, stream: ch, cancel: cancel}, nil
-	case <-attemptCtx.Done():
+	case <-timer.C:
 		cancel()
 		// Drain async so the SDK doesn't block on a buffered send.
 		go drainChannel(ch)
@@ -136,6 +157,10 @@ func openOnce(parent context.Context, sf SendFunc) (*sentSourceResult, error) {
 			return nil, parent.Err()
 		}
 		return nil, fmt.Errorf("timeout: no first chunk within %s", PerAttemptTimeout)
+	case <-parent.Done():
+		cancel()
+		go drainChannel(ch)
+		return nil, parent.Err()
 	}
 }
 

@@ -851,6 +851,29 @@ public final class ConversationViewModel {
         }
     }
 
+    /// Manually create a new active context in this conversation, bypassing
+    /// the compress-then-promote flow. The new context becomes active and
+    /// the conversation is reloaded so the seeded user message (if any) is
+    /// visible in the chain.
+    public func createContextManual(
+        initialUserMessage: String,
+        mode: ReeveCompressionMode
+    ) async {
+        do {
+            let result = try await client.conversations.createContextManual(
+                conversationID: conversation.id,
+                initialUserMessage: initialUserMessage,
+                mode: mode
+            )
+            tokenCount = nil
+            contextWindow = nil
+            await loadContexts()
+            await activateContext(result.context.id)
+        } catch {
+            loadError = ReeveError.display(error)
+        }
+    }
+
     // MARK: Message mutations
 
     public func editMessage(id: String, content: String, role: ReeveMessageRole? = nil) async {

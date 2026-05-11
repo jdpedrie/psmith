@@ -30,7 +30,8 @@ INSERT INTO messages (
     total_cost_usd,
     error_payload,
     explicit_cache_attached,
-    tool_calls
+    tool_calls,
+    finish_reason
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -42,7 +43,8 @@ INSERT INTO messages (
     $23,
     $24,
     $25,
-    $26
+    $26,
+    $27
 )
 RETURNING *;
 
@@ -150,6 +152,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.total_cost_usd,
        chain.error_payload,
        chain.tool_calls,
+       chain.finish_reason,
        chain.created_at,
        chain.edited_at,
        (

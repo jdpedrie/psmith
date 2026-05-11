@@ -2724,7 +2724,12 @@ type Message struct {
 	// Tool calls executed by the conversations-side tool loop while
 	// producing this message. One entry per tool invocation, in invocation
 	// order. Empty when the model didn't request any tools.
-	ToolCalls     []*ToolCall `protobuf:"bytes,19,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	ToolCalls []*ToolCall `protobuf:"bytes,19,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	// Verbatim per-provider termination reason captured from the final
+	// upstream chunk: Anthropic `stop_reason`, OpenAI `finish_reason`,
+	// Google `finishReason`. The UI surfaces this only when it's
+	// unexpected (anything other than stop / end_turn / STOP).
+	FinishReason  *string `protobuf:"bytes,20,opt,name=finish_reason,json=finishReason,proto3,oneof" json:"finish_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2890,6 +2895,13 @@ func (x *Message) GetToolCalls() []*ToolCall {
 		return x.ToolCalls
 	}
 	return nil
+}
+
+func (x *Message) GetFinishReason() string {
+	if x != nil && x.FinishReason != nil {
+		return *x.FinishReason
+	}
+	return ""
 }
 
 // One tool call recorded on an assistant message — the model's request
@@ -3665,7 +3677,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\xd6\a\n" +
+	"\x06_title\"\x92\b\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3692,7 +3704,9 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"error_text\x18\x11 \x01(\tH\bR\terrorText\x88\x01\x01\x125\n" +
 	"\x14thinking_duration_ms\x18\x12 \x01(\x05H\tR\x12thinkingDurationMs\x88\x01\x01\x121\n" +
 	"\n" +
-	"tool_calls\x18\x13 \x03(\v2\x12.reeve.v1.ToolCallR\ttoolCallsB\f\n" +
+	"tool_calls\x18\x13 \x03(\v2\x12.reeve.v1.ToolCallR\ttoolCalls\x12(\n" +
+	"\rfinish_reason\x18\x14 \x01(\tH\n" +
+	"R\ffinishReason\x88\x01\x01B\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -3704,7 +3718,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"_edited_atB\r\n" +
 	"\v_error_textB\x17\n" +
-	"\x15_thinking_duration_ms\"\xe2\x01\n" +
+	"\x15_thinking_duration_msB\x10\n" +
+	"\x0e_finish_reason\"\xe2\x01\n" +
 	"\bToolCall\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +

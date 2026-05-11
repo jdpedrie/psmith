@@ -1469,6 +1469,124 @@ func (x *PromoteCompactionToNewContextResponse) GetContext() *Context {
 	return nil
 }
 
+type CreateContextManualRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	// The first user-role message to seed in the new context. May be empty,
+	// in which case no user message is inserted and the user starts typing
+	// from the composer in a fresh active context.
+	InitialUserMessage string `protobuf:"bytes,2,opt,name=initial_user_message,json=initialUserMessage,proto3" json:"initial_user_message,omitempty"`
+	// How the new context relates to the prior context's framing.
+	// UNSPECIFIED is treated as REPLACE.
+	Mode          CompressionMode `protobuf:"varint,3,opt,name=mode,proto3,enum=reeve.v1.CompressionMode" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateContextManualRequest) Reset() {
+	*x = CreateContextManualRequest{}
+	mi := &file_reeve_v1_conversations_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateContextManualRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateContextManualRequest) ProtoMessage() {}
+
+func (x *CreateContextManualRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_conversations_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateContextManualRequest.ProtoReflect.Descriptor instead.
+func (*CreateContextManualRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *CreateContextManualRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *CreateContextManualRequest) GetInitialUserMessage() string {
+	if x != nil {
+		return x.InitialUserMessage
+	}
+	return ""
+}
+
+func (x *CreateContextManualRequest) GetMode() CompressionMode {
+	if x != nil {
+		return x.Mode
+	}
+	return CompressionMode_COMPRESSION_MODE_UNSPECIFIED
+}
+
+type CreateContextManualResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Context *Context               `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	// The seeded user message, when initial_user_message was non-empty.
+	UserMessage   *Message `protobuf:"bytes,2,opt,name=user_message,json=userMessage,proto3,oneof" json:"user_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateContextManualResponse) Reset() {
+	*x = CreateContextManualResponse{}
+	mi := &file_reeve_v1_conversations_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateContextManualResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateContextManualResponse) ProtoMessage() {}
+
+func (x *CreateContextManualResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_conversations_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateContextManualResponse.ProtoReflect.Descriptor instead.
+func (*CreateContextManualResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CreateContextManualResponse) GetContext() *Context {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *CreateContextManualResponse) GetUserMessage() *Message {
+	if x != nil {
+		return x.UserMessage
+	}
+	return nil
+}
+
 type SendMessageRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -1493,7 +1611,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[28]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1505,7 +1623,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[28]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1518,7 +1636,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{28}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *SendMessageRequest) GetConversationId() string {
@@ -1583,7 +1701,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[29]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1713,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[29]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1726,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{29}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SendMessageResponse) GetUserMessage() *Message {
@@ -1641,7 +1759,7 @@ type CompactRequest struct {
 
 func (x *CompactRequest) Reset() {
 	*x = CompactRequest{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[30]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1771,7 @@ func (x *CompactRequest) String() string {
 func (*CompactRequest) ProtoMessage() {}
 
 func (x *CompactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[30]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1784,7 @@ func (x *CompactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactRequest.ProtoReflect.Descriptor instead.
 func (*CompactRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{30}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CompactRequest) GetConversationId() string {
@@ -1706,7 +1824,7 @@ type CompactResponse struct {
 
 func (x *CompactResponse) Reset() {
 	*x = CompactResponse{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[31]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +1836,7 @@ func (x *CompactResponse) String() string {
 func (*CompactResponse) ProtoMessage() {}
 
 func (x *CompactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[31]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +1849,7 @@ func (x *CompactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactResponse.ProtoReflect.Descriptor instead.
 func (*CompactResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{31}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *CompactResponse) GetStreamRun() *StreamRun {
@@ -1753,7 +1871,7 @@ type CountContextTokensRequest struct {
 
 func (x *CountContextTokensRequest) Reset() {
 	*x = CountContextTokensRequest{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[32]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1765,7 +1883,7 @@ func (x *CountContextTokensRequest) String() string {
 func (*CountContextTokensRequest) ProtoMessage() {}
 
 func (x *CountContextTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[32]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1778,7 +1896,7 @@ func (x *CountContextTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountContextTokensRequest.ProtoReflect.Descriptor instead.
 func (*CountContextTokensRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{32}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *CountContextTokensRequest) GetContextId() string {
@@ -1812,7 +1930,7 @@ type CountContextTokensResponse struct {
 
 func (x *CountContextTokensResponse) Reset() {
 	*x = CountContextTokensResponse{}
-	mi := &file_reeve_v1_conversations_proto_msgTypes[33]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1824,7 +1942,7 @@ func (x *CountContextTokensResponse) String() string {
 func (*CountContextTokensResponse) ProtoMessage() {}
 
 func (x *CountContextTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_conversations_proto_msgTypes[33]
+	mi := &file_reeve_v1_conversations_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1837,7 +1955,7 @@ func (x *CountContextTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountContextTokensResponse.ProtoReflect.Descriptor instead.
 func (*CountContextTokensResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{33}
+	return file_reeve_v1_conversations_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CountContextTokensResponse) GetTokenCount() int32 {
@@ -1951,7 +2069,15 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tR\tmessageId\"T\n" +
 	"%PromoteCompactionToNewContextResponse\x12+\n" +
-	"\acontext\x18\x01 \x01(\v2\x11.reeve.v1.ContextR\acontext\"\xf5\x02\n" +
+	"\acontext\x18\x01 \x01(\v2\x11.reeve.v1.ContextR\acontext\"\xa6\x01\n" +
+	"\x1aCreateContextManualRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x120\n" +
+	"\x14initial_user_message\x18\x02 \x01(\tR\x12initialUserMessage\x12-\n" +
+	"\x04mode\x18\x03 \x01(\x0e2\x19.reeve.v1.CompressionModeR\x04mode\"\x96\x01\n" +
+	"\x1bCreateContextManualResponse\x12+\n" +
+	"\acontext\x18\x01 \x01(\v2\x11.reeve.v1.ContextR\acontext\x129\n" +
+	"\fuser_message\x18\x02 \x01(\v2\x11.reeve.v1.MessageH\x00R\vuserMessage\x88\x01\x01B\x0f\n" +
+	"\r_user_message\"\xf5\x02\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -1995,7 +2121,7 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\x11ConversationOrder\x12\"\n" +
 	"\x1eCONVERSATION_ORDER_UNSPECIFIED\x10\x00\x12$\n" +
 	" CONVERSATION_ORDER_RECENTLY_USED\x10\x01\x12'\n" +
-	"#CONVERSATION_ORDER_RECENTLY_CREATED\x10\x022\xe3\v\n" +
+	"#CONVERSATION_ORDER_RECENTLY_CREATED\x10\x022\xc7\f\n" +
 	"\x14ConversationsService\x12_\n" +
 	"\x12CreateConversation\x12#.reeve.v1.CreateConversationRequest\x1a$.reeve.v1.CreateConversationResponse\x12\\\n" +
 	"\x11ListConversations\x12\".reeve.v1.ListConversationsRequest\x1a#.reeve.v1.ListConversationsResponse\x12V\n" +
@@ -2011,7 +2137,8 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"GetMessage\x12\x1b.reeve.v1.GetMessageRequest\x1a\x1c.reeve.v1.GetMessageResponse\x12J\n" +
 	"\vEditMessage\x12\x1c.reeve.v1.EditMessageRequest\x1a\x1d.reeve.v1.EditMessageResponse\x12P\n" +
 	"\rDeleteMessage\x12\x1e.reeve.v1.DeleteMessageRequest\x1a\x1f.reeve.v1.DeleteMessageResponse\x12\x80\x01\n" +
-	"\x1dPromoteCompactionToNewContext\x12..reeve.v1.PromoteCompactionToNewContextRequest\x1a/.reeve.v1.PromoteCompactionToNewContextResponse\x12J\n" +
+	"\x1dPromoteCompactionToNewContext\x12..reeve.v1.PromoteCompactionToNewContextRequest\x1a/.reeve.v1.PromoteCompactionToNewContextResponse\x12b\n" +
+	"\x13CreateContextManual\x12$.reeve.v1.CreateContextManualRequest\x1a%.reeve.v1.CreateContextManualResponse\x12J\n" +
 	"\vSendMessage\x12\x1c.reeve.v1.SendMessageRequest\x1a\x1d.reeve.v1.SendMessageResponse\x12>\n" +
 	"\aCompact\x12\x18.reeve.v1.CompactRequest\x1a\x19.reeve.v1.CompactResponse\x12_\n" +
 	"\x12CountContextTokens\x12#.reeve.v1.CountContextTokensRequest\x1a$.reeve.v1.CountContextTokensResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
@@ -2029,7 +2156,7 @@ func file_reeve_v1_conversations_proto_rawDescGZIP() []byte {
 }
 
 var file_reeve_v1_conversations_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reeve_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_reeve_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_reeve_v1_conversations_proto_goTypes = []any{
 	(ConversationOrder)(0),                        // 0: reeve.v1.ConversationOrder
 	(*CreateConversationRequest)(nil),             // 1: reeve.v1.CreateConversationRequest
@@ -2060,83 +2187,91 @@ var file_reeve_v1_conversations_proto_goTypes = []any{
 	(*DeleteMessageResponse)(nil),                 // 26: reeve.v1.DeleteMessageResponse
 	(*PromoteCompactionToNewContextRequest)(nil),  // 27: reeve.v1.PromoteCompactionToNewContextRequest
 	(*PromoteCompactionToNewContextResponse)(nil), // 28: reeve.v1.PromoteCompactionToNewContextResponse
-	(*SendMessageRequest)(nil),                    // 29: reeve.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),                   // 30: reeve.v1.SendMessageResponse
-	(*CompactRequest)(nil),                        // 31: reeve.v1.CompactRequest
-	(*CompactResponse)(nil),                       // 32: reeve.v1.CompactResponse
-	(*CountContextTokensRequest)(nil),             // 33: reeve.v1.CountContextTokensRequest
-	(*CountContextTokensResponse)(nil),            // 34: reeve.v1.CountContextTokensResponse
-	(*ConversationSettings)(nil),                  // 35: reeve.v1.ConversationSettings
-	(*Conversation)(nil),                          // 36: reeve.v1.Conversation
-	(*Context)(nil),                               // 37: reeve.v1.Context
-	(*Message)(nil),                               // 38: reeve.v1.Message
-	(MessageRole)(0),                              // 39: reeve.v1.MessageRole
-	(*CallSettings)(nil),                          // 40: reeve.v1.CallSettings
-	(*StreamRun)(nil),                             // 41: reeve.v1.StreamRun
+	(*CreateContextManualRequest)(nil),            // 29: reeve.v1.CreateContextManualRequest
+	(*CreateContextManualResponse)(nil),           // 30: reeve.v1.CreateContextManualResponse
+	(*SendMessageRequest)(nil),                    // 31: reeve.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),                   // 32: reeve.v1.SendMessageResponse
+	(*CompactRequest)(nil),                        // 33: reeve.v1.CompactRequest
+	(*CompactResponse)(nil),                       // 34: reeve.v1.CompactResponse
+	(*CountContextTokensRequest)(nil),             // 35: reeve.v1.CountContextTokensRequest
+	(*CountContextTokensResponse)(nil),            // 36: reeve.v1.CountContextTokensResponse
+	(*ConversationSettings)(nil),                  // 37: reeve.v1.ConversationSettings
+	(*Conversation)(nil),                          // 38: reeve.v1.Conversation
+	(*Context)(nil),                               // 39: reeve.v1.Context
+	(*Message)(nil),                               // 40: reeve.v1.Message
+	(MessageRole)(0),                              // 41: reeve.v1.MessageRole
+	(CompressionMode)(0),                          // 42: reeve.v1.CompressionMode
+	(*CallSettings)(nil),                          // 43: reeve.v1.CallSettings
+	(*StreamRun)(nil),                             // 44: reeve.v1.StreamRun
 }
 var file_reeve_v1_conversations_proto_depIdxs = []int32{
-	35, // 0: reeve.v1.CreateConversationRequest.settings:type_name -> reeve.v1.ConversationSettings
-	36, // 1: reeve.v1.CreateConversationResponse.conversation:type_name -> reeve.v1.Conversation
-	37, // 2: reeve.v1.CreateConversationResponse.initial_context:type_name -> reeve.v1.Context
-	38, // 3: reeve.v1.CreateConversationResponse.seed_messages:type_name -> reeve.v1.Message
+	37, // 0: reeve.v1.CreateConversationRequest.settings:type_name -> reeve.v1.ConversationSettings
+	38, // 1: reeve.v1.CreateConversationResponse.conversation:type_name -> reeve.v1.Conversation
+	39, // 2: reeve.v1.CreateConversationResponse.initial_context:type_name -> reeve.v1.Context
+	40, // 3: reeve.v1.CreateConversationResponse.seed_messages:type_name -> reeve.v1.Message
 	0,  // 4: reeve.v1.ListConversationsRequest.order:type_name -> reeve.v1.ConversationOrder
-	36, // 5: reeve.v1.ListConversationsResponse.conversations:type_name -> reeve.v1.Conversation
-	36, // 6: reeve.v1.GetConversationResponse.conversation:type_name -> reeve.v1.Conversation
-	37, // 7: reeve.v1.GetConversationResponse.active_context:type_name -> reeve.v1.Context
-	35, // 8: reeve.v1.UpdateConversationRequest.settings:type_name -> reeve.v1.ConversationSettings
-	36, // 9: reeve.v1.UpdateConversationResponse.conversation:type_name -> reeve.v1.Conversation
-	37, // 10: reeve.v1.ListContextsResponse.contexts:type_name -> reeve.v1.Context
-	37, // 11: reeve.v1.ActivateContextResponse.context:type_name -> reeve.v1.Context
-	37, // 12: reeve.v1.SetCurrentLeafResponse.context:type_name -> reeve.v1.Context
-	37, // 13: reeve.v1.UpdateContextResponse.context:type_name -> reeve.v1.Context
-	38, // 14: reeve.v1.ListMessagesResponse.messages:type_name -> reeve.v1.Message
-	38, // 15: reeve.v1.GetMessageResponse.message:type_name -> reeve.v1.Message
-	39, // 16: reeve.v1.EditMessageRequest.role:type_name -> reeve.v1.MessageRole
-	38, // 17: reeve.v1.EditMessageResponse.message:type_name -> reeve.v1.Message
-	37, // 18: reeve.v1.PromoteCompactionToNewContextResponse.context:type_name -> reeve.v1.Context
-	40, // 19: reeve.v1.SendMessageRequest.call_settings:type_name -> reeve.v1.CallSettings
-	38, // 20: reeve.v1.SendMessageResponse.user_message:type_name -> reeve.v1.Message
-	41, // 21: reeve.v1.SendMessageResponse.stream_run:type_name -> reeve.v1.StreamRun
-	41, // 22: reeve.v1.CompactResponse.stream_run:type_name -> reeve.v1.StreamRun
-	1,  // 23: reeve.v1.ConversationsService.CreateConversation:input_type -> reeve.v1.CreateConversationRequest
-	3,  // 24: reeve.v1.ConversationsService.ListConversations:input_type -> reeve.v1.ListConversationsRequest
-	5,  // 25: reeve.v1.ConversationsService.GetConversation:input_type -> reeve.v1.GetConversationRequest
-	7,  // 26: reeve.v1.ConversationsService.UpdateConversation:input_type -> reeve.v1.UpdateConversationRequest
-	9,  // 27: reeve.v1.ConversationsService.DeleteConversation:input_type -> reeve.v1.DeleteConversationRequest
-	11, // 28: reeve.v1.ConversationsService.ListContexts:input_type -> reeve.v1.ListContextsRequest
-	13, // 29: reeve.v1.ConversationsService.ActivateContext:input_type -> reeve.v1.ActivateContextRequest
-	15, // 30: reeve.v1.ConversationsService.SetCurrentLeaf:input_type -> reeve.v1.SetCurrentLeafRequest
-	17, // 31: reeve.v1.ConversationsService.UpdateContext:input_type -> reeve.v1.UpdateContextRequest
-	19, // 32: reeve.v1.ConversationsService.ListMessages:input_type -> reeve.v1.ListMessagesRequest
-	21, // 33: reeve.v1.ConversationsService.GetMessage:input_type -> reeve.v1.GetMessageRequest
-	23, // 34: reeve.v1.ConversationsService.EditMessage:input_type -> reeve.v1.EditMessageRequest
-	25, // 35: reeve.v1.ConversationsService.DeleteMessage:input_type -> reeve.v1.DeleteMessageRequest
-	27, // 36: reeve.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> reeve.v1.PromoteCompactionToNewContextRequest
-	29, // 37: reeve.v1.ConversationsService.SendMessage:input_type -> reeve.v1.SendMessageRequest
-	31, // 38: reeve.v1.ConversationsService.Compact:input_type -> reeve.v1.CompactRequest
-	33, // 39: reeve.v1.ConversationsService.CountContextTokens:input_type -> reeve.v1.CountContextTokensRequest
-	2,  // 40: reeve.v1.ConversationsService.CreateConversation:output_type -> reeve.v1.CreateConversationResponse
-	4,  // 41: reeve.v1.ConversationsService.ListConversations:output_type -> reeve.v1.ListConversationsResponse
-	6,  // 42: reeve.v1.ConversationsService.GetConversation:output_type -> reeve.v1.GetConversationResponse
-	8,  // 43: reeve.v1.ConversationsService.UpdateConversation:output_type -> reeve.v1.UpdateConversationResponse
-	10, // 44: reeve.v1.ConversationsService.DeleteConversation:output_type -> reeve.v1.DeleteConversationResponse
-	12, // 45: reeve.v1.ConversationsService.ListContexts:output_type -> reeve.v1.ListContextsResponse
-	14, // 46: reeve.v1.ConversationsService.ActivateContext:output_type -> reeve.v1.ActivateContextResponse
-	16, // 47: reeve.v1.ConversationsService.SetCurrentLeaf:output_type -> reeve.v1.SetCurrentLeafResponse
-	18, // 48: reeve.v1.ConversationsService.UpdateContext:output_type -> reeve.v1.UpdateContextResponse
-	20, // 49: reeve.v1.ConversationsService.ListMessages:output_type -> reeve.v1.ListMessagesResponse
-	22, // 50: reeve.v1.ConversationsService.GetMessage:output_type -> reeve.v1.GetMessageResponse
-	24, // 51: reeve.v1.ConversationsService.EditMessage:output_type -> reeve.v1.EditMessageResponse
-	26, // 52: reeve.v1.ConversationsService.DeleteMessage:output_type -> reeve.v1.DeleteMessageResponse
-	28, // 53: reeve.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> reeve.v1.PromoteCompactionToNewContextResponse
-	30, // 54: reeve.v1.ConversationsService.SendMessage:output_type -> reeve.v1.SendMessageResponse
-	32, // 55: reeve.v1.ConversationsService.Compact:output_type -> reeve.v1.CompactResponse
-	34, // 56: reeve.v1.ConversationsService.CountContextTokens:output_type -> reeve.v1.CountContextTokensResponse
-	40, // [40:57] is the sub-list for method output_type
-	23, // [23:40] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	38, // 5: reeve.v1.ListConversationsResponse.conversations:type_name -> reeve.v1.Conversation
+	38, // 6: reeve.v1.GetConversationResponse.conversation:type_name -> reeve.v1.Conversation
+	39, // 7: reeve.v1.GetConversationResponse.active_context:type_name -> reeve.v1.Context
+	37, // 8: reeve.v1.UpdateConversationRequest.settings:type_name -> reeve.v1.ConversationSettings
+	38, // 9: reeve.v1.UpdateConversationResponse.conversation:type_name -> reeve.v1.Conversation
+	39, // 10: reeve.v1.ListContextsResponse.contexts:type_name -> reeve.v1.Context
+	39, // 11: reeve.v1.ActivateContextResponse.context:type_name -> reeve.v1.Context
+	39, // 12: reeve.v1.SetCurrentLeafResponse.context:type_name -> reeve.v1.Context
+	39, // 13: reeve.v1.UpdateContextResponse.context:type_name -> reeve.v1.Context
+	40, // 14: reeve.v1.ListMessagesResponse.messages:type_name -> reeve.v1.Message
+	40, // 15: reeve.v1.GetMessageResponse.message:type_name -> reeve.v1.Message
+	41, // 16: reeve.v1.EditMessageRequest.role:type_name -> reeve.v1.MessageRole
+	40, // 17: reeve.v1.EditMessageResponse.message:type_name -> reeve.v1.Message
+	39, // 18: reeve.v1.PromoteCompactionToNewContextResponse.context:type_name -> reeve.v1.Context
+	42, // 19: reeve.v1.CreateContextManualRequest.mode:type_name -> reeve.v1.CompressionMode
+	39, // 20: reeve.v1.CreateContextManualResponse.context:type_name -> reeve.v1.Context
+	40, // 21: reeve.v1.CreateContextManualResponse.user_message:type_name -> reeve.v1.Message
+	43, // 22: reeve.v1.SendMessageRequest.call_settings:type_name -> reeve.v1.CallSettings
+	40, // 23: reeve.v1.SendMessageResponse.user_message:type_name -> reeve.v1.Message
+	44, // 24: reeve.v1.SendMessageResponse.stream_run:type_name -> reeve.v1.StreamRun
+	44, // 25: reeve.v1.CompactResponse.stream_run:type_name -> reeve.v1.StreamRun
+	1,  // 26: reeve.v1.ConversationsService.CreateConversation:input_type -> reeve.v1.CreateConversationRequest
+	3,  // 27: reeve.v1.ConversationsService.ListConversations:input_type -> reeve.v1.ListConversationsRequest
+	5,  // 28: reeve.v1.ConversationsService.GetConversation:input_type -> reeve.v1.GetConversationRequest
+	7,  // 29: reeve.v1.ConversationsService.UpdateConversation:input_type -> reeve.v1.UpdateConversationRequest
+	9,  // 30: reeve.v1.ConversationsService.DeleteConversation:input_type -> reeve.v1.DeleteConversationRequest
+	11, // 31: reeve.v1.ConversationsService.ListContexts:input_type -> reeve.v1.ListContextsRequest
+	13, // 32: reeve.v1.ConversationsService.ActivateContext:input_type -> reeve.v1.ActivateContextRequest
+	15, // 33: reeve.v1.ConversationsService.SetCurrentLeaf:input_type -> reeve.v1.SetCurrentLeafRequest
+	17, // 34: reeve.v1.ConversationsService.UpdateContext:input_type -> reeve.v1.UpdateContextRequest
+	19, // 35: reeve.v1.ConversationsService.ListMessages:input_type -> reeve.v1.ListMessagesRequest
+	21, // 36: reeve.v1.ConversationsService.GetMessage:input_type -> reeve.v1.GetMessageRequest
+	23, // 37: reeve.v1.ConversationsService.EditMessage:input_type -> reeve.v1.EditMessageRequest
+	25, // 38: reeve.v1.ConversationsService.DeleteMessage:input_type -> reeve.v1.DeleteMessageRequest
+	27, // 39: reeve.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> reeve.v1.PromoteCompactionToNewContextRequest
+	29, // 40: reeve.v1.ConversationsService.CreateContextManual:input_type -> reeve.v1.CreateContextManualRequest
+	31, // 41: reeve.v1.ConversationsService.SendMessage:input_type -> reeve.v1.SendMessageRequest
+	33, // 42: reeve.v1.ConversationsService.Compact:input_type -> reeve.v1.CompactRequest
+	35, // 43: reeve.v1.ConversationsService.CountContextTokens:input_type -> reeve.v1.CountContextTokensRequest
+	2,  // 44: reeve.v1.ConversationsService.CreateConversation:output_type -> reeve.v1.CreateConversationResponse
+	4,  // 45: reeve.v1.ConversationsService.ListConversations:output_type -> reeve.v1.ListConversationsResponse
+	6,  // 46: reeve.v1.ConversationsService.GetConversation:output_type -> reeve.v1.GetConversationResponse
+	8,  // 47: reeve.v1.ConversationsService.UpdateConversation:output_type -> reeve.v1.UpdateConversationResponse
+	10, // 48: reeve.v1.ConversationsService.DeleteConversation:output_type -> reeve.v1.DeleteConversationResponse
+	12, // 49: reeve.v1.ConversationsService.ListContexts:output_type -> reeve.v1.ListContextsResponse
+	14, // 50: reeve.v1.ConversationsService.ActivateContext:output_type -> reeve.v1.ActivateContextResponse
+	16, // 51: reeve.v1.ConversationsService.SetCurrentLeaf:output_type -> reeve.v1.SetCurrentLeafResponse
+	18, // 52: reeve.v1.ConversationsService.UpdateContext:output_type -> reeve.v1.UpdateContextResponse
+	20, // 53: reeve.v1.ConversationsService.ListMessages:output_type -> reeve.v1.ListMessagesResponse
+	22, // 54: reeve.v1.ConversationsService.GetMessage:output_type -> reeve.v1.GetMessageResponse
+	24, // 55: reeve.v1.ConversationsService.EditMessage:output_type -> reeve.v1.EditMessageResponse
+	26, // 56: reeve.v1.ConversationsService.DeleteMessage:output_type -> reeve.v1.DeleteMessageResponse
+	28, // 57: reeve.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> reeve.v1.PromoteCompactionToNewContextResponse
+	30, // 58: reeve.v1.ConversationsService.CreateContextManual:output_type -> reeve.v1.CreateContextManualResponse
+	32, // 59: reeve.v1.ConversationsService.SendMessage:output_type -> reeve.v1.SendMessageResponse
+	34, // 60: reeve.v1.ConversationsService.Compact:output_type -> reeve.v1.CompactResponse
+	36, // 61: reeve.v1.ConversationsService.CountContextTokens:output_type -> reeve.v1.CountContextTokensResponse
+	44, // [44:62] is the sub-list for method output_type
+	26, // [26:44] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_conversations_proto_init() }
@@ -2151,15 +2286,16 @@ func file_reeve_v1_conversations_proto_init() {
 	file_reeve_v1_conversations_proto_msgTypes[16].OneofWrappers = []any{}
 	file_reeve_v1_conversations_proto_msgTypes[18].OneofWrappers = []any{}
 	file_reeve_v1_conversations_proto_msgTypes[22].OneofWrappers = []any{}
-	file_reeve_v1_conversations_proto_msgTypes[28].OneofWrappers = []any{}
+	file_reeve_v1_conversations_proto_msgTypes[29].OneofWrappers = []any{}
 	file_reeve_v1_conversations_proto_msgTypes[30].OneofWrappers = []any{}
+	file_reeve_v1_conversations_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_conversations_proto_rawDesc), len(file_reeve_v1_conversations_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   34,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -300,4 +300,63 @@ public final class ModelProvidersRepository: Sendable {
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("test model") }
         return ReeveModelTestResult(from: msg)
     }
+
+    /// Per-provider running cost totals for the Cost settings screen.
+    /// Returns (rows, grand total). Server-computed grand total sidesteps
+    /// floating-point reconciliation across clients. The optional
+    /// (since, until) window is half-open: events at `since` are
+    /// included; events at `until` are excluded — so consecutive
+    /// non-overlapping windows compose without double-counting.
+    public func listProviderCosts(
+        since: Date? = nil,
+        until: Date? = nil
+    ) async throws -> (providers: [ReeveProviderCost], grandTotal: Double) {
+        var req = Reeve_V1_ListProviderCostsRequest()
+        if let since {
+            req.since = .init(date: since)
+        }
+        if let until {
+            req.until = .init(date: until)
+        }
+        let resp = await client.listProviderCosts(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("list provider costs") }
+        return (msg.providers.map(ReeveProviderCost.init(from:)), msg.grandTotalUsd)
+    }
+}
+
+/// One row in the per-provider cost rollup. `eventCount` doubles as a
+/// "have we sent through this provider yet?" signal — zero means the row
+/// is included for UI completeness, not because anything was billed.
+public struct ReeveProviderCost: Sendable, Hashable, Identifiable, Codable {
+    public let providerID: String
+    public let providerLabel: String
+    public let providerType: String
+    public let totalCostUsd: Double
+    public let eventCount: Int64
+
+    public var id: String { providerID }
+
+    public init(
+        providerID: String,
+        providerLabel: String,
+        providerType: String,
+        totalCostUsd: Double,
+        eventCount: Int64
+    ) {
+        self.providerID = providerID
+        self.providerLabel = providerLabel
+        self.providerType = providerType
+        self.totalCostUsd = totalCostUsd
+        self.eventCount = eventCount
+    }
+
+    init(from p: Reeve_V1_ProviderCost) {
+        self.init(
+            providerID: p.providerID,
+            providerLabel: p.providerLabel,
+            providerType: p.providerType,
+            totalCostUsd: p.totalCostUsd,
+            eventCount: p.eventCount
+        )
+    }
 }

@@ -295,6 +295,155 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 	}), nil
 }
 
+// CreateContextManual creates a fresh active context in an existing
+// conversation without going through compression. Mirrors the
+// "create context + seed framing + commit" half of
+// PromoteCompactionToNewContext, with two differences:
+//   - the framing comes from the prior context (APPEND) or is omitted
+//     entirely (REPLACE / unspecified) — there's no compression_summary
+//     to derive it from
+//   - an optional initial user message is seeded so the user lands in
+//     the new context with a turn already typed
+func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[reevev1.CreateContextManualRequest]) (*connect.Response[reevev1.CreateContextManualResponse], error) {
+	caller := auth.MustFromContext(ctx)
+
+	convID, err := uuid.Parse(req.Msg.ConversationId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+	}
+	conv, err := s.fetchOwnedConversation(ctx, convID, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
+		return nil, err
+	}
+
+	// Source context = currently-active. APPEND inherits its role=context
+	// message verbatim; REPLACE / unspecified leaves the new context
+	// without one (system + user_message only).
+	activeCtx, err := s.queries.GetActiveContextByConversation(ctx, conv.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("conversation has no active context"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load active context: %w", err))
+	}
+
+	prof, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load profile: %w", err))
+	}
+	resolved, err := profiles.Resolve(ctx, s.queries, prof)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
+	}
+
+	var framing string
+	if req.Msg.Mode == reevev1.CompressionMode_COMPRESSION_MODE_APPEND {
+		prior, err := s.queries.GetContextRoleMessageInContext(ctx, activeCtx.ID)
+		if err == nil {
+			framing = prior.Content
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("lookup prior context msg: %w", err))
+		}
+	}
+
+	if s.pool == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("CreateContextManual requires pool dependency"))
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	qtx := s.queries.WithTx(tx)
+
+	newCtxID, err := uuid.NewV7()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	parentID := activeCtx.ID
+	newCtx, err := qtx.CreateContext(ctx, store.CreateContextParams{
+		ID:                    newCtxID,
+		ConversationID:        conv.ID,
+		ParentContextID:       &parentID,
+		ContextActivationTime: nowUTC(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create new context: %w", err))
+	}
+
+	// Seed system message snapshot (mirrors CreateConversation /
+	// PromoteCompactionToNewContext).
+	var leafID *uuid.UUID
+	if resolved.SystemMessage != nil && *resolved.SystemMessage != "" {
+		sysID, err := uuid.NewV7()
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if _, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
+			ID:        sysID,
+			ContextID: newCtx.ID,
+			ParentID:  nil,
+			Role:      roleSystem,
+			Content:   *resolved.SystemMessage,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seed role=system: %w", err))
+		}
+		leafID = &sysID
+	}
+
+	// Optional role=context message (APPEND mode only, and only if the
+	// prior context actually had one).
+	if framing != "" {
+		framingID, err := uuid.NewV7()
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if _, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
+			ID:        framingID,
+			ContextID: newCtx.ID,
+			ParentID:  leafID,
+			Role:      roleContext,
+			Content:   framing,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seed role=context: %w", err))
+		}
+		leafID = &framingID
+	}
+
+	// Optional initial user message.
+	var userMsgProto *reevev1.Message
+	initialUser := req.Msg.InitialUserMessage
+	if initialUser != "" {
+		userID, err := uuid.NewV7()
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		userRow, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
+			ID:        userID,
+			ContextID: newCtx.ID,
+			ParentID:  leafID,
+			Role:      roleUser,
+			Content:   initialUser,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seed role=user: %w", err))
+		}
+		userMsgProto = messageToProto(userRow)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
+	}
+
+	return connect.NewResponse(&reevev1.CreateContextManualResponse{
+		Context:     contextToProto(newCtx),
+		UserMessage: userMsgProto,
+	}), nil
+}
+
 // roleEditable reports whether a stored role can be the source or target of
 // EditMessage's role override (only user and assistant qualify).
 func roleEditable(role string) bool {

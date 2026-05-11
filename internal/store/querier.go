@@ -103,6 +103,11 @@ type Querier interface {
 	// in flight (server-side enforcement of the UI's "disabled while streaming"
 	// behavior).
 	HasRunningStreamForConversation(ctx context.Context, conversationID uuid.UUID) (bool, error)
+	// Records one cost-incurring event. Called from the stream supervisor on
+	// assistant + compression_summary materialisation when total_cost_usd is
+	// non-null and > 0. Errored runs still log if the provider charged
+	// tokens — the user paid even if the response was junk.
+	InsertCostEvent(ctx context.Context, arg InsertCostEventParams) error
 	// $4 is config_encrypted (nullable BYTEA); the legacy plaintext
 	// config column is left NULL on every new row. The service layer's
 	// read path decrypts config_encrypted and falls back to the plaintext
@@ -147,6 +152,14 @@ type Querier interface {
 	// defines its own pipeline).
 	ListProfilePlugins(ctx context.Context, profileID uuid.UUID) ([]ProfilePlugin, error)
 	ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error)
+	// Per-provider running totals across the ledger, optionally bounded by
+	// a [since, until) occurred_at window. Drives the iOS Settings → Cost
+	// screen — one row per configured provider, single dollar amount per
+	// row. Sorted alphabetically by the provider's label so the list reads
+	// stably across reloads. Providers with no events in the window are
+	// still surfaced (LEFT JOIN with the window predicate in the JOIN ON,
+	// not the WHERE — putting it in WHERE would silently drop them).
+	ListProviderCostTotals(ctx context.Context, arg ListProviderCostTotalsParams) ([]ListProviderCostTotalsRow, error)
 	// Returns persisted chunks for a run, in sequence order, starting at the given
 	// sequence cursor. Used to replay missed chunks for late subscribers.
 	ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error)

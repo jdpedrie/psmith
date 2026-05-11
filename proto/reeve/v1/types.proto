@@ -470,6 +470,11 @@ message Message {
   // producing this message. One entry per tool invocation, in invocation
   // order. Empty when the model didn't request any tools.
   repeated ToolCall tool_calls = 19;
+  // Verbatim per-provider termination reason captured from the final
+  // upstream chunk: Anthropic `stop_reason`, OpenAI `finish_reason`,
+  // Google `finishReason`. The UI surfaces this only when it's
+  // unexpected (anything other than stop / end_turn / STOP).
+  optional string finish_reason = 20;
 }
 
 // One tool call recorded on an assistant message — the model's request

@@ -57,6 +57,16 @@ service ConversationsService {
   // the profile's compression_mode. The new context becomes active.
   rpc PromoteCompactionToNewContext(PromoteCompactionToNewContextRequest) returns (PromoteCompactionToNewContextResponse);
 
+  // CreateContextManual creates a fresh active context in an existing
+  // conversation without going through compression. mode selects how the
+  // new context relates to the prior context's framing:
+  //   REPLACE → no role=context message (the new context starts fresh)
+  //   APPEND  → inherits the prior context's role=context message verbatim
+  // The initial_user_message is seeded as a role=user message at the new
+  // context's leaf so the user lands in a turn-ready state. The new context
+  // becomes active. Returns the new context for the client to navigate to.
+  rpc CreateContextManual(CreateContextManualRequest) returns (CreateContextManualResponse);
+
   // Initiate a turn. Synchronously creates the user message and the stream_run,
   // then returns. Client subscribes to the stream via StreamsService.SubscribeStream.
   // Setting parent_message_id to a non-leaf creates a fork.
@@ -226,6 +236,22 @@ message PromoteCompactionToNewContextRequest {
 }
 message PromoteCompactionToNewContextResponse {
   Context context = 1;
+}
+
+message CreateContextManualRequest {
+  string conversation_id = 1;
+  // The first user-role message to seed in the new context. May be empty,
+  // in which case no user message is inserted and the user starts typing
+  // from the composer in a fresh active context.
+  string initial_user_message = 2;
+  // How the new context relates to the prior context's framing.
+  // UNSPECIFIED is treated as REPLACE.
+  CompressionMode mode = 3;
+}
+message CreateContextManualResponse {
+  Context context = 1;
+  // The seeded user message, when initial_user_message was non-empty.
+  optional Message user_message = 2;
 }
 
 // --- Send / Compact / Count ---

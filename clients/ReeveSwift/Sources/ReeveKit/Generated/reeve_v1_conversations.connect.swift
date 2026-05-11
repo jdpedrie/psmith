@@ -82,6 +82,17 @@ public protocol Reeve_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `promoteCompactionToNewContext`(request: Reeve_V1_PromoteCompactionToNewContextRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_PromoteCompactionToNewContextResponse>
 
+    /// CreateContextManual creates a fresh active context in an existing
+    /// conversation without going through compression. mode selects how the
+    /// new context relates to the prior context's framing:
+    ///   REPLACE → no role=context message (the new context starts fresh)
+    ///   APPEND  → inherits the prior context's role=context message verbatim
+    /// The initial_user_message is seeded as a role=user message at the new
+    /// context's leaf so the user lands in a turn-ready state. The new context
+    /// becomes active. Returns the new context for the client to navigate to.
+    @available(iOS 13, *)
+    func `createContextManual`(request: Reeve_V1_CreateContextManualRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_CreateContextManualResponse>
+
     /// Initiate a turn. Synchronously creates the user message and the stream_run,
     /// then returns. Client subscribes to the stream via StreamsService.SubscribeStream.
     /// Setting parent_message_id to a non-leaf creates a fork.
@@ -179,6 +190,11 @@ public final class Reeve_V1_ConversationsServiceClient: Reeve_V1_ConversationsSe
     }
 
     @available(iOS 13, *)
+    public func `createContextManual`(request: Reeve_V1_CreateContextManualRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_CreateContextManualResponse> {
+        return await self.client.unary(path: "/reeve.v1.ConversationsService/CreateContextManual", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `sendMessage`(request: Reeve_V1_SendMessageRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_SendMessageResponse> {
         return await self.client.unary(path: "/reeve.v1.ConversationsService/SendMessage", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -209,6 +225,7 @@ public final class Reeve_V1_ConversationsServiceClient: Reeve_V1_ConversationsSe
             public static let editMessage = Connect.MethodSpec(name: "EditMessage", service: "reeve.v1.ConversationsService", type: .unary)
             public static let deleteMessage = Connect.MethodSpec(name: "DeleteMessage", service: "reeve.v1.ConversationsService", type: .unary)
             public static let promoteCompactionToNewContext = Connect.MethodSpec(name: "PromoteCompactionToNewContext", service: "reeve.v1.ConversationsService", type: .unary)
+            public static let createContextManual = Connect.MethodSpec(name: "CreateContextManual", service: "reeve.v1.ConversationsService", type: .unary)
             public static let sendMessage = Connect.MethodSpec(name: "SendMessage", service: "reeve.v1.ConversationsService", type: .unary)
             public static let compact = Connect.MethodSpec(name: "Compact", service: "reeve.v1.ConversationsService", type: .unary)
             public static let countContextTokens = Connect.MethodSpec(name: "CountContextTokens", service: "reeve.v1.ConversationsService", type: .unary)

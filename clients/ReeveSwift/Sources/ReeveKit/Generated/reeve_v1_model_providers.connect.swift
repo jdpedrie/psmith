@@ -99,6 +99,13 @@ public protocol Reeve_V1_ModelProvidersServiceClientInterface: Sendable {
     /// Read-only status snapshot.
     @available(iOS 13, *)
     func `getCatalogStatus`(request: Reeve_V1_GetCatalogStatusRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_GetCatalogStatusResponse>
+
+    /// Per-provider running totals across the cost_events ledger. One row per
+    /// configured provider — including providers with zero events to date so
+    /// the UI can render "$0.0000" rather than silently hiding them. Drives
+    /// the iOS Settings → Cost screen.
+    @available(iOS 13, *)
+    func `listProviderCosts`(request: Reeve_V1_ListProviderCostsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListProviderCostsResponse>
 }
 
 /// Concrete implementation of `Reeve_V1_ModelProvidersServiceClientInterface`.
@@ -204,6 +211,11 @@ public final class Reeve_V1_ModelProvidersServiceClient: Reeve_V1_ModelProviders
         return await self.client.unary(path: "/reeve.v1.ModelProvidersService/GetCatalogStatus", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listProviderCosts`(request: Reeve_V1_ListProviderCostsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ListProviderCostsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ModelProvidersService/ListProviderCosts", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let listProviderTypes = Connect.MethodSpec(name: "ListProviderTypes", service: "reeve.v1.ModelProvidersService", type: .unary)
@@ -225,6 +237,7 @@ public final class Reeve_V1_ModelProvidersServiceClient: Reeve_V1_ModelProviders
             public static let testUserModel = Connect.MethodSpec(name: "TestUserModel", service: "reeve.v1.ModelProvidersService", type: .unary)
             public static let refreshModelCatalog = Connect.MethodSpec(name: "RefreshModelCatalog", service: "reeve.v1.ModelProvidersService", type: .unary)
             public static let getCatalogStatus = Connect.MethodSpec(name: "GetCatalogStatus", service: "reeve.v1.ModelProvidersService", type: .unary)
+            public static let listProviderCosts = Connect.MethodSpec(name: "ListProviderCosts", service: "reeve.v1.ModelProvidersService", type: .unary)
         }
     }
 }

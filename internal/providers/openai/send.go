@@ -141,6 +141,7 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 	}
 
 	finishSeen := false
+	var finishReason string
 	for stream.Next() {
 		chunk := stream.Current()
 
@@ -154,7 +155,7 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 		// Usage chunk arrives after the finish-reason chunk when
 		// stream_options.include_usage is true; choices is empty on it.
 		if chunk.Usage.TotalTokens > 0 || chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 {
-			emitChatUsage(out, chunk.Usage)
+			emitChatUsage(out, chunk.Usage, finishReason)
 		}
 
 		for _, ch := range chunk.Choices {
@@ -196,6 +197,7 @@ func (d *Driver) pumpChatStream(ctx context.Context, stream chatStreamLike, out 
 			}
 			if ch.FinishReason != "" {
 				finishSeen = true
+				finishReason = string(ch.FinishReason)
 				emitEnds()
 				// Don't emit Done yet — wait for the usage chunk that follows.
 			}
@@ -240,8 +242,11 @@ func extractReasoningDelta(d openai.ChatCompletionChunkChoiceDelta) string {
 	return out
 }
 
-// emitChatUsage normalizes a CompletionUsage into ChunkUsage.
-func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage) {
+// emitChatUsage normalizes a CompletionUsage into ChunkUsage. finishReason
+// (if non-empty) is the verbatim finish_reason captured from the
+// last-seen choice chunk before the usage frame — the UI uses it to
+// surface unexpected terminations like "length" or "content_filter".
+func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage, finishReason string) {
 	prompt, completion := int(u.PromptTokens), int(u.CompletionTokens)
 	usage := providers.Usage{
 		InputTokens:  &prompt,
@@ -257,6 +262,10 @@ func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage) {
 	}
 	if raw, err := json.Marshal(u); err == nil {
 		usage.ProviderRaw = raw
+	}
+	if finishReason != "" {
+		fr := finishReason
+		usage.FinishReason = &fr
 	}
 	payload, err := json.Marshal(usage)
 	if err != nil {
@@ -594,7 +603,11 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 			emit(out, providers.ChunkError, map[string]string{"message": msg})
 
 		case "response.completed":
-			emitResponsesUsage(out, evt.Response.Usage)
+			// Pass IncompleteDetails.Reason when present (e.g.
+			// "max_output_tokens", "content_filter") so the UI can flag
+			// unexpected terminations. A clean completion has an empty
+			// reason — emitResponsesUsage just leaves FinishReason nil.
+			emitResponsesUsage(out, evt.Response.Usage, evt.Response.IncompleteDetails.Reason)
 			emit(out, providers.ChunkDone, map[string]any{})
 			return
 
@@ -618,8 +631,11 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 
 // emitResponsesUsage normalizes a Responses API ResponseUsage into ChunkUsage
 // and pushes it to out. No-op if the input is all-zero (e.g., upstream didn't
-// report usage).
-func emitResponsesUsage(out chan<- providers.Chunk, u responses.ResponseUsage) {
+// report usage). incompleteReason — when non-empty — surfaces an unexpected
+// termination cause from the response.completed event's IncompleteDetails
+// (e.g. "max_output_tokens", "content_filter"). A clean completion leaves
+// it empty so the UI knows the run ended normally.
+func emitResponsesUsage(out chan<- providers.Chunk, u responses.ResponseUsage, incompleteReason string) {
 	if u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 {
 		return
 	}
@@ -638,6 +654,10 @@ func emitResponsesUsage(out chan<- providers.Chunk, u responses.ResponseUsage) {
 	}
 	if raw, err := json.Marshal(u); err == nil {
 		usage.ProviderRaw = raw
+	}
+	if incompleteReason != "" {
+		fr := incompleteReason
+		usage.FinishReason = &fr
 	}
 	payload, err := json.Marshal(usage)
 	if err != nil {

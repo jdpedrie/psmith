@@ -126,6 +126,15 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 			case sdk.MessageDeltaEvent:
 				u := v.Usage
 				captureUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens, u)
+				// stop_reason on the message_delta is Anthropic's
+				// termination signal — end_turn / max_tokens /
+				// stop_sequence / tool_use / refusal. Captured here
+				// (last one wins) so the Usage chunk carries it on
+				// MessageStopEvent.
+				if sr := string(v.Delta.StopReason); sr != "" {
+					srCopy := sr
+					usage.FinishReason = &srCopy
+				}
 			case sdk.MessageStopEvent:
 				if usage.InputTokens != nil || usage.OutputTokens != nil {
 					usage.ProviderRaw = usageRaw

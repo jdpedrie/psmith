@@ -75,6 +75,9 @@ const (
 	// ConversationsServicePromoteCompactionToNewContextProcedure is the fully-qualified name of the
 	// ConversationsService's PromoteCompactionToNewContext RPC.
 	ConversationsServicePromoteCompactionToNewContextProcedure = "/reeve.v1.ConversationsService/PromoteCompactionToNewContext"
+	// ConversationsServiceCreateContextManualProcedure is the fully-qualified name of the
+	// ConversationsService's CreateContextManual RPC.
+	ConversationsServiceCreateContextManualProcedure = "/reeve.v1.ConversationsService/CreateContextManual"
 	// ConversationsServiceSendMessageProcedure is the fully-qualified name of the
 	// ConversationsService's SendMessage RPC.
 	ConversationsServiceSendMessageProcedure = "/reeve.v1.ConversationsService/SendMessage"
@@ -131,6 +134,17 @@ type ConversationsServiceClient interface {
 	// whose content is computed from the (possibly user-edited) summary using
 	// the profile's compression_mode. The new context becomes active.
 	PromoteCompactionToNewContext(context.Context, *connect.Request[v1.PromoteCompactionToNewContextRequest]) (*connect.Response[v1.PromoteCompactionToNewContextResponse], error)
+	// CreateContextManual creates a fresh active context in an existing
+	// conversation without going through compression. mode selects how the
+	// new context relates to the prior context's framing:
+	//
+	//	REPLACE → no role=context message (the new context starts fresh)
+	//	APPEND  → inherits the prior context's role=context message verbatim
+	//
+	// The initial_user_message is seeded as a role=user message at the new
+	// context's leaf so the user lands in a turn-ready state. The new context
+	// becomes active. Returns the new context for the client to navigate to.
+	CreateContextManual(context.Context, *connect.Request[v1.CreateContextManualRequest]) (*connect.Response[v1.CreateContextManualResponse], error)
 	// Initiate a turn. Synchronously creates the user message and the stream_run,
 	// then returns. Client subscribes to the stream via StreamsService.SubscribeStream.
 	// Setting parent_message_id to a non-leaf creates a fork.
@@ -239,6 +253,12 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("PromoteCompactionToNewContext")),
 			connect.WithClientOptions(opts...),
 		),
+		createContextManual: connect.NewClient[v1.CreateContextManualRequest, v1.CreateContextManualResponse](
+			httpClient,
+			baseURL+ConversationsServiceCreateContextManualProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("CreateContextManual")),
+			connect.WithClientOptions(opts...),
+		),
 		sendMessage: connect.NewClient[v1.SendMessageRequest, v1.SendMessageResponse](
 			httpClient,
 			baseURL+ConversationsServiceSendMessageProcedure,
@@ -276,6 +296,7 @@ type conversationsServiceClient struct {
 	editMessage                   *connect.Client[v1.EditMessageRequest, v1.EditMessageResponse]
 	deleteMessage                 *connect.Client[v1.DeleteMessageRequest, v1.DeleteMessageResponse]
 	promoteCompactionToNewContext *connect.Client[v1.PromoteCompactionToNewContextRequest, v1.PromoteCompactionToNewContextResponse]
+	createContextManual           *connect.Client[v1.CreateContextManualRequest, v1.CreateContextManualResponse]
 	sendMessage                   *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
 	compact                       *connect.Client[v1.CompactRequest, v1.CompactResponse]
 	countContextTokens            *connect.Client[v1.CountContextTokensRequest, v1.CountContextTokensResponse]
@@ -351,6 +372,11 @@ func (c *conversationsServiceClient) PromoteCompactionToNewContext(ctx context.C
 	return c.promoteCompactionToNewContext.CallUnary(ctx, req)
 }
 
+// CreateContextManual calls reeve.v1.ConversationsService.CreateContextManual.
+func (c *conversationsServiceClient) CreateContextManual(ctx context.Context, req *connect.Request[v1.CreateContextManualRequest]) (*connect.Response[v1.CreateContextManualResponse], error) {
+	return c.createContextManual.CallUnary(ctx, req)
+}
+
 // SendMessage calls reeve.v1.ConversationsService.SendMessage.
 func (c *conversationsServiceClient) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	return c.sendMessage.CallUnary(ctx, req)
@@ -411,6 +437,17 @@ type ConversationsServiceHandler interface {
 	// whose content is computed from the (possibly user-edited) summary using
 	// the profile's compression_mode. The new context becomes active.
 	PromoteCompactionToNewContext(context.Context, *connect.Request[v1.PromoteCompactionToNewContextRequest]) (*connect.Response[v1.PromoteCompactionToNewContextResponse], error)
+	// CreateContextManual creates a fresh active context in an existing
+	// conversation without going through compression. mode selects how the
+	// new context relates to the prior context's framing:
+	//
+	//	REPLACE → no role=context message (the new context starts fresh)
+	//	APPEND  → inherits the prior context's role=context message verbatim
+	//
+	// The initial_user_message is seeded as a role=user message at the new
+	// context's leaf so the user lands in a turn-ready state. The new context
+	// becomes active. Returns the new context for the client to navigate to.
+	CreateContextManual(context.Context, *connect.Request[v1.CreateContextManualRequest]) (*connect.Response[v1.CreateContextManualResponse], error)
 	// Initiate a turn. Synchronously creates the user message and the stream_run,
 	// then returns. Client subscribes to the stream via StreamsService.SubscribeStream.
 	// Setting parent_message_id to a non-leaf creates a fork.
@@ -515,6 +552,12 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("PromoteCompactionToNewContext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServiceCreateContextManualHandler := connect.NewUnaryHandler(
+		ConversationsServiceCreateContextManualProcedure,
+		svc.CreateContextManual,
+		connect.WithSchema(conversationsServiceMethods.ByName("CreateContextManual")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceSendMessageHandler := connect.NewUnaryHandler(
 		ConversationsServiceSendMessageProcedure,
 		svc.SendMessage,
@@ -563,6 +606,8 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceDeleteMessageHandler.ServeHTTP(w, r)
 		case ConversationsServicePromoteCompactionToNewContextProcedure:
 			conversationsServicePromoteCompactionToNewContextHandler.ServeHTTP(w, r)
+		case ConversationsServiceCreateContextManualProcedure:
+			conversationsServiceCreateContextManualHandler.ServeHTTP(w, r)
 		case ConversationsServiceSendMessageProcedure:
 			conversationsServiceSendMessageHandler.ServeHTTP(w, r)
 		case ConversationsServiceCompactProcedure:
@@ -632,6 +677,10 @@ func (UnimplementedConversationsServiceHandler) DeleteMessage(context.Context, *
 
 func (UnimplementedConversationsServiceHandler) PromoteCompactionToNewContext(context.Context, *connect.Request[v1.PromoteCompactionToNewContextRequest]) (*connect.Response[v1.PromoteCompactionToNewContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.PromoteCompactionToNewContext is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) CreateContextManual(context.Context, *connect.Request[v1.CreateContextManualRequest]) (*connect.Response[v1.CreateContextManualResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.CreateContextManual is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {

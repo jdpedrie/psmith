@@ -2181,6 +2181,195 @@ func (x *GetCatalogStatusResponse) GetLastRefreshAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type ListProviderCostsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional half-open window [since, until). Either bound may be omitted
+	// independently — omit both for an all-time rollup. Server treats the
+	// values as INCLUSIVE-since / EXCLUSIVE-until so abutting windows can be
+	// composed without double-counting boundary events.
+	Since         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=since,proto3,oneof" json:"since,omitempty"`
+	Until         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=until,proto3,oneof" json:"until,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProviderCostsRequest) Reset() {
+	*x = ListProviderCostsRequest{}
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProviderCostsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProviderCostsRequest) ProtoMessage() {}
+
+func (x *ListProviderCostsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProviderCostsRequest.ProtoReflect.Descriptor instead.
+func (*ListProviderCostsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_model_providers_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListProviderCostsRequest) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *ListProviderCostsRequest) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
+	}
+	return nil
+}
+
+type ListProviderCostsResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Providers []*ProviderCost        `protobuf:"bytes,1,rep,name=providers,proto3" json:"providers,omitempty"`
+	// Grand total across every provider (sum of total_cost_usd). Convenience
+	// for the screen header — clients could compute it from the rows, but
+	// having a server-computed value avoids floating-point reconciliation.
+	GrandTotalUsd float64 `protobuf:"fixed64,2,opt,name=grand_total_usd,json=grandTotalUsd,proto3" json:"grand_total_usd,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProviderCostsResponse) Reset() {
+	*x = ListProviderCostsResponse{}
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProviderCostsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProviderCostsResponse) ProtoMessage() {}
+
+func (x *ListProviderCostsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProviderCostsResponse.ProtoReflect.Descriptor instead.
+func (*ListProviderCostsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_model_providers_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ListProviderCostsResponse) GetProviders() []*ProviderCost {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+func (x *ListProviderCostsResponse) GetGrandTotalUsd() float64 {
+	if x != nil {
+		return x.GrandTotalUsd
+	}
+	return 0
+}
+
+type ProviderCost struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	ProviderLabel string                 `protobuf:"bytes,2,opt,name=provider_label,json=providerLabel,proto3" json:"provider_label,omitempty"`
+	ProviderType  string                 `protobuf:"bytes,3,opt,name=provider_type,json=providerType,proto3" json:"provider_type,omitempty"`
+	TotalCostUsd  float64                `protobuf:"fixed64,4,opt,name=total_cost_usd,json=totalCostUsd,proto3" json:"total_cost_usd,omitempty"`
+	// Total number of cost-incurring events recorded for this provider —
+	// surfaces "X messages" in the UI subtitle without a separate roundtrip.
+	EventCount    int64 `protobuf:"varint,5,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProviderCost) Reset() {
+	*x = ProviderCost{}
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderCost) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderCost) ProtoMessage() {}
+
+func (x *ProviderCost) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_model_providers_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderCost.ProtoReflect.Descriptor instead.
+func (*ProviderCost) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_model_providers_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ProviderCost) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ProviderCost) GetProviderLabel() string {
+	if x != nil {
+		return x.ProviderLabel
+	}
+	return ""
+}
+
+func (x *ProviderCost) GetProviderType() string {
+	if x != nil {
+		return x.ProviderType
+	}
+	return ""
+}
+
+func (x *ProviderCost) GetTotalCostUsd() float64 {
+	if x != nil {
+		return x.TotalCostUsd
+	}
+	return 0
+}
+
+func (x *ProviderCost) GetEventCount() int64 {
+	if x != nil {
+		return x.EventCount
+	}
+	return 0
+}
+
 var File_reeve_v1_model_providers_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_model_providers_proto_rawDesc = "" +
@@ -2353,7 +2542,23 @@ const file_reeve_v1_model_providers_proto_rawDesc = "" +
 	"\x0fproviders_count\x18\x01 \x01(\x05R\x0eprovidersCount\x12!\n" +
 	"\fmodels_count\x18\x02 \x01(\x05R\vmodelsCount\x12G\n" +
 	"\x0flast_refresh_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\rlastRefreshAt\x88\x01\x01B\x12\n" +
-	"\x10_last_refresh_at2\xc4\x0e\n" +
+	"\x10_last_refresh_at\"\x9c\x01\n" +
+	"\x18ListProviderCostsRequest\x125\n" +
+	"\x05since\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x05since\x88\x01\x01\x125\n" +
+	"\x05until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x05until\x88\x01\x01B\b\n" +
+	"\x06_sinceB\b\n" +
+	"\x06_until\"y\n" +
+	"\x19ListProviderCostsResponse\x124\n" +
+	"\tproviders\x18\x01 \x03(\v2\x16.reeve.v1.ProviderCostR\tproviders\x12&\n" +
+	"\x0fgrand_total_usd\x18\x02 \x01(\x01R\rgrandTotalUsd\"\xc2\x01\n" +
+	"\fProviderCost\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12%\n" +
+	"\x0eprovider_label\x18\x02 \x01(\tR\rproviderLabel\x12#\n" +
+	"\rprovider_type\x18\x03 \x01(\tR\fproviderType\x12$\n" +
+	"\x0etotal_cost_usd\x18\x04 \x01(\x01R\ftotalCostUsd\x12\x1f\n" +
+	"\vevent_count\x18\x05 \x01(\x03R\n" +
+	"eventCount2\xa2\x0f\n" +
 	"\x15ModelProvidersService\x12\\\n" +
 	"\x11ListProviderTypes\x12\".reeve.v1.ListProviderTypesRequest\x1a#.reeve.v1.ListProviderTypesResponse\x12h\n" +
 	"\x15ListProviderTemplates\x12&.reeve.v1.ListProviderTemplatesRequest\x1a'.reeve.v1.ListProviderTemplatesResponse\x12n\n" +
@@ -2373,7 +2578,8 @@ const file_reeve_v1_model_providers_proto_rawDesc = "" +
 	"\x15TestUserModelProvider\x12&.reeve.v1.TestUserModelProviderRequest\x1a'.reeve.v1.TestUserModelProviderResponse\x12P\n" +
 	"\rTestUserModel\x12\x1e.reeve.v1.TestUserModelRequest\x1a\x1f.reeve.v1.TestUserModelResponse\x12b\n" +
 	"\x13RefreshModelCatalog\x12$.reeve.v1.RefreshModelCatalogRequest\x1a%.reeve.v1.RefreshModelCatalogResponse\x12Y\n" +
-	"\x10GetCatalogStatus\x12!.reeve.v1.GetCatalogStatusRequest\x1a\".reeve.v1.GetCatalogStatusResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"\x10GetCatalogStatus\x12!.reeve.v1.GetCatalogStatusRequest\x1a\".reeve.v1.GetCatalogStatusResponse\x12\\\n" +
+	"\x11ListProviderCosts\x12\".reeve.v1.ListProviderCostsRequest\x1a#.reeve.v1.ListProviderCostsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_model_providers_proto_rawDescOnce sync.Once
@@ -2387,7 +2593,7 @@ func file_reeve_v1_model_providers_proto_rawDescGZIP() []byte {
 	return file_reeve_v1_model_providers_proto_rawDescData
 }
 
-var file_reeve_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_reeve_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_reeve_v1_model_providers_proto_goTypes = []any{
 	(*ListProviderTypesRequest)(nil),        // 0: reeve.v1.ListProviderTypesRequest
 	(*ListProviderTypesResponse)(nil),       // 1: reeve.v1.ListProviderTypesResponse
@@ -2429,88 +2635,96 @@ var file_reeve_v1_model_providers_proto_goTypes = []any{
 	(*RefreshModelCatalogResponse)(nil),     // 37: reeve.v1.RefreshModelCatalogResponse
 	(*GetCatalogStatusRequest)(nil),         // 38: reeve.v1.GetCatalogStatusRequest
 	(*GetCatalogStatusResponse)(nil),        // 39: reeve.v1.GetCatalogStatusResponse
-	(*ProviderType)(nil),                    // 40: reeve.v1.ProviderType
-	(*ProviderTemplate)(nil),                // 41: reeve.v1.ProviderTemplate
-	(*UserModelProvider)(nil),               // 42: reeve.v1.UserModelProvider
-	(*UserModel)(nil),                       // 43: reeve.v1.UserModel
-	(*CallSettings)(nil),                    // 44: reeve.v1.CallSettings
-	(*ModelPricing)(nil),                    // 45: reeve.v1.ModelPricing
-	(*ModelCapabilities)(nil),               // 46: reeve.v1.ModelCapabilities
-	(MetadataSource)(0),                     // 47: reeve.v1.MetadataSource
-	(*timestamppb.Timestamp)(nil),           // 48: google.protobuf.Timestamp
+	(*ListProviderCostsRequest)(nil),        // 40: reeve.v1.ListProviderCostsRequest
+	(*ListProviderCostsResponse)(nil),       // 41: reeve.v1.ListProviderCostsResponse
+	(*ProviderCost)(nil),                    // 42: reeve.v1.ProviderCost
+	(*ProviderType)(nil),                    // 43: reeve.v1.ProviderType
+	(*ProviderTemplate)(nil),                // 44: reeve.v1.ProviderTemplate
+	(*UserModelProvider)(nil),               // 45: reeve.v1.UserModelProvider
+	(*UserModel)(nil),                       // 46: reeve.v1.UserModel
+	(*CallSettings)(nil),                    // 47: reeve.v1.CallSettings
+	(*ModelPricing)(nil),                    // 48: reeve.v1.ModelPricing
+	(*ModelCapabilities)(nil),               // 49: reeve.v1.ModelCapabilities
+	(MetadataSource)(0),                     // 50: reeve.v1.MetadataSource
+	(*timestamppb.Timestamp)(nil),           // 51: google.protobuf.Timestamp
 }
 var file_reeve_v1_model_providers_proto_depIdxs = []int32{
-	40, // 0: reeve.v1.ListProviderTypesResponse.types:type_name -> reeve.v1.ProviderType
-	41, // 1: reeve.v1.ListProviderTemplatesResponse.templates:type_name -> reeve.v1.ProviderTemplate
-	42, // 2: reeve.v1.CreateUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
-	42, // 3: reeve.v1.ListUserModelProvidersResponse.providers:type_name -> reeve.v1.UserModelProvider
-	42, // 4: reeve.v1.GetUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
-	43, // 5: reeve.v1.GetUserModelProviderResponse.enabled_models:type_name -> reeve.v1.UserModel
-	44, // 6: reeve.v1.UpdateUserModelProviderRequest.default_settings:type_name -> reeve.v1.CallSettings
-	42, // 7: reeve.v1.UpdateUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
+	43, // 0: reeve.v1.ListProviderTypesResponse.types:type_name -> reeve.v1.ProviderType
+	44, // 1: reeve.v1.ListProviderTemplatesResponse.templates:type_name -> reeve.v1.ProviderTemplate
+	45, // 2: reeve.v1.CreateUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
+	45, // 3: reeve.v1.ListUserModelProvidersResponse.providers:type_name -> reeve.v1.UserModelProvider
+	45, // 4: reeve.v1.GetUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
+	46, // 5: reeve.v1.GetUserModelProviderResponse.enabled_models:type_name -> reeve.v1.UserModel
+	47, // 6: reeve.v1.UpdateUserModelProviderRequest.default_settings:type_name -> reeve.v1.CallSettings
+	45, // 7: reeve.v1.UpdateUserModelProviderResponse.provider:type_name -> reeve.v1.UserModelProvider
 	16, // 8: reeve.v1.DiscoverModelsResponse.models:type_name -> reeve.v1.DiscoveredModel
-	45, // 9: reeve.v1.DiscoveredModel.pricing:type_name -> reeve.v1.ModelPricing
-	46, // 10: reeve.v1.DiscoveredModel.capabilities:type_name -> reeve.v1.ModelCapabilities
-	47, // 11: reeve.v1.DiscoveredModel.metadata_source:type_name -> reeve.v1.MetadataSource
-	43, // 12: reeve.v1.EnableModelsResponse.enabled:type_name -> reeve.v1.UserModel
-	43, // 13: reeve.v1.ListUserModelsResponse.models:type_name -> reeve.v1.UserModel
-	42, // 14: reeve.v1.UserModelEntry.provider:type_name -> reeve.v1.UserModelProvider
-	43, // 15: reeve.v1.UserModelEntry.model:type_name -> reeve.v1.UserModel
+	48, // 9: reeve.v1.DiscoveredModel.pricing:type_name -> reeve.v1.ModelPricing
+	49, // 10: reeve.v1.DiscoveredModel.capabilities:type_name -> reeve.v1.ModelCapabilities
+	50, // 11: reeve.v1.DiscoveredModel.metadata_source:type_name -> reeve.v1.MetadataSource
+	46, // 12: reeve.v1.EnableModelsResponse.enabled:type_name -> reeve.v1.UserModel
+	46, // 13: reeve.v1.ListUserModelsResponse.models:type_name -> reeve.v1.UserModel
+	45, // 14: reeve.v1.UserModelEntry.provider:type_name -> reeve.v1.UserModelProvider
+	46, // 15: reeve.v1.UserModelEntry.model:type_name -> reeve.v1.UserModel
 	24, // 16: reeve.v1.ListAllUserModelsResponse.entries:type_name -> reeve.v1.UserModelEntry
-	43, // 17: reeve.v1.ToggleUserModelFavoriteResponse.model:type_name -> reeve.v1.UserModel
-	44, // 18: reeve.v1.UpdateUserModelRequest.default_settings:type_name -> reeve.v1.CallSettings
-	45, // 19: reeve.v1.UpdateUserModelRequest.pricing:type_name -> reeve.v1.ModelPricing
-	46, // 20: reeve.v1.UpdateUserModelRequest.capabilities:type_name -> reeve.v1.ModelCapabilities
-	43, // 21: reeve.v1.UpdateUserModelResponse.user_model:type_name -> reeve.v1.UserModel
-	45, // 22: reeve.v1.AddManualModelRequest.pricing:type_name -> reeve.v1.ModelPricing
-	46, // 23: reeve.v1.AddManualModelRequest.capabilities:type_name -> reeve.v1.ModelCapabilities
-	44, // 24: reeve.v1.AddManualModelRequest.default_settings:type_name -> reeve.v1.CallSettings
-	43, // 25: reeve.v1.AddManualModelResponse.user_model:type_name -> reeve.v1.UserModel
-	48, // 26: reeve.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
-	48, // 27: reeve.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
-	0,  // 28: reeve.v1.ModelProvidersService.ListProviderTypes:input_type -> reeve.v1.ListProviderTypesRequest
-	2,  // 29: reeve.v1.ModelProvidersService.ListProviderTemplates:input_type -> reeve.v1.ListProviderTemplatesRequest
-	4,  // 30: reeve.v1.ModelProvidersService.CreateUserModelProvider:input_type -> reeve.v1.CreateUserModelProviderRequest
-	6,  // 31: reeve.v1.ModelProvidersService.ListUserModelProviders:input_type -> reeve.v1.ListUserModelProvidersRequest
-	8,  // 32: reeve.v1.ModelProvidersService.GetUserModelProvider:input_type -> reeve.v1.GetUserModelProviderRequest
-	10, // 33: reeve.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> reeve.v1.UpdateUserModelProviderRequest
-	12, // 34: reeve.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> reeve.v1.DeleteUserModelProviderRequest
-	14, // 35: reeve.v1.ModelProvidersService.DiscoverModels:input_type -> reeve.v1.DiscoverModelsRequest
-	17, // 36: reeve.v1.ModelProvidersService.EnableModels:input_type -> reeve.v1.EnableModelsRequest
-	19, // 37: reeve.v1.ModelProvidersService.DisableModels:input_type -> reeve.v1.DisableModelsRequest
-	21, // 38: reeve.v1.ModelProvidersService.ListUserModels:input_type -> reeve.v1.ListUserModelsRequest
-	23, // 39: reeve.v1.ModelProvidersService.ListAllUserModels:input_type -> reeve.v1.ListAllUserModelsRequest
-	26, // 40: reeve.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> reeve.v1.ToggleUserModelFavoriteRequest
-	28, // 41: reeve.v1.ModelProvidersService.UpdateUserModel:input_type -> reeve.v1.UpdateUserModelRequest
-	30, // 42: reeve.v1.ModelProvidersService.AddManualModel:input_type -> reeve.v1.AddManualModelRequest
-	32, // 43: reeve.v1.ModelProvidersService.TestUserModelProvider:input_type -> reeve.v1.TestUserModelProviderRequest
-	34, // 44: reeve.v1.ModelProvidersService.TestUserModel:input_type -> reeve.v1.TestUserModelRequest
-	36, // 45: reeve.v1.ModelProvidersService.RefreshModelCatalog:input_type -> reeve.v1.RefreshModelCatalogRequest
-	38, // 46: reeve.v1.ModelProvidersService.GetCatalogStatus:input_type -> reeve.v1.GetCatalogStatusRequest
-	1,  // 47: reeve.v1.ModelProvidersService.ListProviderTypes:output_type -> reeve.v1.ListProviderTypesResponse
-	3,  // 48: reeve.v1.ModelProvidersService.ListProviderTemplates:output_type -> reeve.v1.ListProviderTemplatesResponse
-	5,  // 49: reeve.v1.ModelProvidersService.CreateUserModelProvider:output_type -> reeve.v1.CreateUserModelProviderResponse
-	7,  // 50: reeve.v1.ModelProvidersService.ListUserModelProviders:output_type -> reeve.v1.ListUserModelProvidersResponse
-	9,  // 51: reeve.v1.ModelProvidersService.GetUserModelProvider:output_type -> reeve.v1.GetUserModelProviderResponse
-	11, // 52: reeve.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> reeve.v1.UpdateUserModelProviderResponse
-	13, // 53: reeve.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> reeve.v1.DeleteUserModelProviderResponse
-	15, // 54: reeve.v1.ModelProvidersService.DiscoverModels:output_type -> reeve.v1.DiscoverModelsResponse
-	18, // 55: reeve.v1.ModelProvidersService.EnableModels:output_type -> reeve.v1.EnableModelsResponse
-	20, // 56: reeve.v1.ModelProvidersService.DisableModels:output_type -> reeve.v1.DisableModelsResponse
-	22, // 57: reeve.v1.ModelProvidersService.ListUserModels:output_type -> reeve.v1.ListUserModelsResponse
-	25, // 58: reeve.v1.ModelProvidersService.ListAllUserModels:output_type -> reeve.v1.ListAllUserModelsResponse
-	27, // 59: reeve.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> reeve.v1.ToggleUserModelFavoriteResponse
-	29, // 60: reeve.v1.ModelProvidersService.UpdateUserModel:output_type -> reeve.v1.UpdateUserModelResponse
-	31, // 61: reeve.v1.ModelProvidersService.AddManualModel:output_type -> reeve.v1.AddManualModelResponse
-	33, // 62: reeve.v1.ModelProvidersService.TestUserModelProvider:output_type -> reeve.v1.TestUserModelProviderResponse
-	35, // 63: reeve.v1.ModelProvidersService.TestUserModel:output_type -> reeve.v1.TestUserModelResponse
-	37, // 64: reeve.v1.ModelProvidersService.RefreshModelCatalog:output_type -> reeve.v1.RefreshModelCatalogResponse
-	39, // 65: reeve.v1.ModelProvidersService.GetCatalogStatus:output_type -> reeve.v1.GetCatalogStatusResponse
-	47, // [47:66] is the sub-list for method output_type
-	28, // [28:47] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	46, // 17: reeve.v1.ToggleUserModelFavoriteResponse.model:type_name -> reeve.v1.UserModel
+	47, // 18: reeve.v1.UpdateUserModelRequest.default_settings:type_name -> reeve.v1.CallSettings
+	48, // 19: reeve.v1.UpdateUserModelRequest.pricing:type_name -> reeve.v1.ModelPricing
+	49, // 20: reeve.v1.UpdateUserModelRequest.capabilities:type_name -> reeve.v1.ModelCapabilities
+	46, // 21: reeve.v1.UpdateUserModelResponse.user_model:type_name -> reeve.v1.UserModel
+	48, // 22: reeve.v1.AddManualModelRequest.pricing:type_name -> reeve.v1.ModelPricing
+	49, // 23: reeve.v1.AddManualModelRequest.capabilities:type_name -> reeve.v1.ModelCapabilities
+	47, // 24: reeve.v1.AddManualModelRequest.default_settings:type_name -> reeve.v1.CallSettings
+	46, // 25: reeve.v1.AddManualModelResponse.user_model:type_name -> reeve.v1.UserModel
+	51, // 26: reeve.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
+	51, // 27: reeve.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
+	51, // 28: reeve.v1.ListProviderCostsRequest.since:type_name -> google.protobuf.Timestamp
+	51, // 29: reeve.v1.ListProviderCostsRequest.until:type_name -> google.protobuf.Timestamp
+	42, // 30: reeve.v1.ListProviderCostsResponse.providers:type_name -> reeve.v1.ProviderCost
+	0,  // 31: reeve.v1.ModelProvidersService.ListProviderTypes:input_type -> reeve.v1.ListProviderTypesRequest
+	2,  // 32: reeve.v1.ModelProvidersService.ListProviderTemplates:input_type -> reeve.v1.ListProviderTemplatesRequest
+	4,  // 33: reeve.v1.ModelProvidersService.CreateUserModelProvider:input_type -> reeve.v1.CreateUserModelProviderRequest
+	6,  // 34: reeve.v1.ModelProvidersService.ListUserModelProviders:input_type -> reeve.v1.ListUserModelProvidersRequest
+	8,  // 35: reeve.v1.ModelProvidersService.GetUserModelProvider:input_type -> reeve.v1.GetUserModelProviderRequest
+	10, // 36: reeve.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> reeve.v1.UpdateUserModelProviderRequest
+	12, // 37: reeve.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> reeve.v1.DeleteUserModelProviderRequest
+	14, // 38: reeve.v1.ModelProvidersService.DiscoverModels:input_type -> reeve.v1.DiscoverModelsRequest
+	17, // 39: reeve.v1.ModelProvidersService.EnableModels:input_type -> reeve.v1.EnableModelsRequest
+	19, // 40: reeve.v1.ModelProvidersService.DisableModels:input_type -> reeve.v1.DisableModelsRequest
+	21, // 41: reeve.v1.ModelProvidersService.ListUserModels:input_type -> reeve.v1.ListUserModelsRequest
+	23, // 42: reeve.v1.ModelProvidersService.ListAllUserModels:input_type -> reeve.v1.ListAllUserModelsRequest
+	26, // 43: reeve.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> reeve.v1.ToggleUserModelFavoriteRequest
+	28, // 44: reeve.v1.ModelProvidersService.UpdateUserModel:input_type -> reeve.v1.UpdateUserModelRequest
+	30, // 45: reeve.v1.ModelProvidersService.AddManualModel:input_type -> reeve.v1.AddManualModelRequest
+	32, // 46: reeve.v1.ModelProvidersService.TestUserModelProvider:input_type -> reeve.v1.TestUserModelProviderRequest
+	34, // 47: reeve.v1.ModelProvidersService.TestUserModel:input_type -> reeve.v1.TestUserModelRequest
+	36, // 48: reeve.v1.ModelProvidersService.RefreshModelCatalog:input_type -> reeve.v1.RefreshModelCatalogRequest
+	38, // 49: reeve.v1.ModelProvidersService.GetCatalogStatus:input_type -> reeve.v1.GetCatalogStatusRequest
+	40, // 50: reeve.v1.ModelProvidersService.ListProviderCosts:input_type -> reeve.v1.ListProviderCostsRequest
+	1,  // 51: reeve.v1.ModelProvidersService.ListProviderTypes:output_type -> reeve.v1.ListProviderTypesResponse
+	3,  // 52: reeve.v1.ModelProvidersService.ListProviderTemplates:output_type -> reeve.v1.ListProviderTemplatesResponse
+	5,  // 53: reeve.v1.ModelProvidersService.CreateUserModelProvider:output_type -> reeve.v1.CreateUserModelProviderResponse
+	7,  // 54: reeve.v1.ModelProvidersService.ListUserModelProviders:output_type -> reeve.v1.ListUserModelProvidersResponse
+	9,  // 55: reeve.v1.ModelProvidersService.GetUserModelProvider:output_type -> reeve.v1.GetUserModelProviderResponse
+	11, // 56: reeve.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> reeve.v1.UpdateUserModelProviderResponse
+	13, // 57: reeve.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> reeve.v1.DeleteUserModelProviderResponse
+	15, // 58: reeve.v1.ModelProvidersService.DiscoverModels:output_type -> reeve.v1.DiscoverModelsResponse
+	18, // 59: reeve.v1.ModelProvidersService.EnableModels:output_type -> reeve.v1.EnableModelsResponse
+	20, // 60: reeve.v1.ModelProvidersService.DisableModels:output_type -> reeve.v1.DisableModelsResponse
+	22, // 61: reeve.v1.ModelProvidersService.ListUserModels:output_type -> reeve.v1.ListUserModelsResponse
+	25, // 62: reeve.v1.ModelProvidersService.ListAllUserModels:output_type -> reeve.v1.ListAllUserModelsResponse
+	27, // 63: reeve.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> reeve.v1.ToggleUserModelFavoriteResponse
+	29, // 64: reeve.v1.ModelProvidersService.UpdateUserModel:output_type -> reeve.v1.UpdateUserModelResponse
+	31, // 65: reeve.v1.ModelProvidersService.AddManualModel:output_type -> reeve.v1.AddManualModelResponse
+	33, // 66: reeve.v1.ModelProvidersService.TestUserModelProvider:output_type -> reeve.v1.TestUserModelProviderResponse
+	35, // 67: reeve.v1.ModelProvidersService.TestUserModel:output_type -> reeve.v1.TestUserModelResponse
+	37, // 68: reeve.v1.ModelProvidersService.RefreshModelCatalog:output_type -> reeve.v1.RefreshModelCatalogResponse
+	39, // 69: reeve.v1.ModelProvidersService.GetCatalogStatus:output_type -> reeve.v1.GetCatalogStatusResponse
+	41, // 70: reeve.v1.ModelProvidersService.ListProviderCosts:output_type -> reeve.v1.ListProviderCostsResponse
+	51, // [51:71] is the sub-list for method output_type
+	31, // [31:51] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_model_providers_proto_init() }
@@ -2524,13 +2738,14 @@ func file_reeve_v1_model_providers_proto_init() {
 	file_reeve_v1_model_providers_proto_msgTypes[28].OneofWrappers = []any{}
 	file_reeve_v1_model_providers_proto_msgTypes[30].OneofWrappers = []any{}
 	file_reeve_v1_model_providers_proto_msgTypes[39].OneofWrappers = []any{}
+	file_reeve_v1_model_providers_proto_msgTypes[40].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_model_providers_proto_rawDesc), len(file_reeve_v1_model_providers_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   40,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

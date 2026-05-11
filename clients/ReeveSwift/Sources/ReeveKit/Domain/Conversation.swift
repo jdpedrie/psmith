@@ -428,6 +428,11 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
     /// producing this message, in invocation order. Empty when the model
     /// didn't request any tools.
     public let toolCalls: [ReeveToolCall]
+    /// Verbatim per-provider termination reason from the final upstream
+    /// chunk. Anthropic: stop_reason, OpenAI: finish_reason, Google:
+    /// finishReason. The UI surfaces it only when unexpected — i.e.
+    /// anything other than `stop` / `end_turn` / `STOP` / nil.
+    public let finishReason: String?
     /// Wall-clock the server materialised this row. Used by clients
     /// for the in-bubble timestamp line; required for ordering only at
     /// the server (clients trust list order). May be `Date(0)` for
@@ -466,6 +471,7 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         thinkingRenderedText: String? = nil,
         thinkingDurationMs: Int32? = nil,
         toolCalls: [ReeveToolCall] = [],
+        finishReason: String? = nil,
         createdAt: Date = Date(timeIntervalSince1970: 0)
     ) {
         self.id = id
@@ -483,6 +489,7 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         self.thinkingRenderedText = thinkingRenderedText
         self.thinkingDurationMs = thinkingDurationMs
         self.toolCalls = toolCalls
+        self.finishReason = finishReason
         self.createdAt = createdAt
     }
 }
@@ -507,6 +514,7 @@ extension ReeveMessage {
                 : nil,
             thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil,
             toolCalls: p.toolCalls.map(ReeveToolCall.init(from:)),
+            finishReason: p.hasFinishReason && !p.finishReason.isEmpty ? p.finishReason : nil,
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
         )
     }
@@ -516,6 +524,14 @@ public enum ReeveCompressionMode: Sendable, Hashable, Codable {
     case unspecified
     case replace
     case append
+
+    func toProto() -> Reeve_V1_CompressionMode {
+        switch self {
+        case .unspecified: return .unspecified
+        case .replace:     return .replace
+        case .append:      return .append
+        }
+    }
 }
 
 public struct ReeveProfileDefaults: Sendable, Hashable, Codable {

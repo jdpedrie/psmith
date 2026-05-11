@@ -43,6 +43,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Notifications", systemImage: "bell")
                 }
+                NavigationLink {
+                    CostDetailView()
+                } label: {
+                    categoryRow("Cost", systemImage: "dollarsign.circle")
+                }
             }
         }
         .navigationTitle("Settings")

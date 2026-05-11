@@ -21,9 +21,8 @@ struct MessageRow: View {
     @Environment(\.chatPaneWidth) private var paneWidth
     @Environment(\.clipboard) private var clipboard
 
-    @State private var editDraft: String = ""
-    @State private var editRoleDraft: ReeveMessageRole = .user
     @State private var showDeleteConfirm: Bool = false
+    @State private var showCascadeDeleteConfirm: Bool = false
     @State private var showUsageSheet: Bool = false
 
     private var isErrored: Bool { message.errorText != nil }
@@ -44,26 +43,15 @@ struct MessageRow: View {
         }
     }
 
-    /// System + context messages, plus the conversation's *initial*
-    /// user turn, render as a collapsed header strip by default —
-    /// framing content the user reads once when setting up a turn,
-    /// not on every scroll-back. Tap the strip to expand; tap the
-    /// expanded bubble's role chip to collapse back.
+    /// System + context messages render as a collapsed header strip
+    /// by default — framing content the user reads once when setting
+    /// up a turn, not on every scroll-back. Tap the strip to expand;
+    /// tap the expanded bubble's role chip to collapse back.
     private var isCollapsibleHeaderRole: Bool {
         switch message.role {
         case .system, .context: return true
-        case .user: return isInitialUserMessage
         default: return false
         }
-    }
-
-    /// True when this is the first user message in the loaded chain.
-    /// The seed turn often carries a long brief / scenario the user
-    /// pasted in once and rarely wants to see thereafter — same
-    /// "frame once, scroll past" pattern as system + context.
-    private var isInitialUserMessage: Bool {
-        guard message.role == .user else { return false }
-        return model.messages.first(where: { $0.role == .user })?.id == message.id
     }
 
     private var isHeaderExpanded: Bool {
@@ -86,29 +74,20 @@ struct MessageRow: View {
         roleAlignedContainer {
             if isCollapsibleHeaderRole && !isHeaderExpanded {
                 collapsedHeaderBubble
+            } else if message.role == .assistant && !isErrored && !isEditing {
+                // Assistant turns drop the bubble — markdown content
+                // reads as page content, full-width. Errored / editing
+                // states keep the bubble for visual prominence.
+                assistantContent
             } else {
                 bubble
             }
         }
-        .sheet(
-            isPresented: Binding(
-                get: { isEditing },
-                set: { if !$0 { model.editingMessage = nil } }
-            )
-        ) {
-            // Edit happens in a sheet — the bubble in the chat
-            // pane keeps its own collapsed/expanded state, the
-            // editor lives in its own context. Hosting the editor
-            // in a modal also gives us a real keyboard surface
-            // without fighting the message scroll's inset behavior.
-            EditMessageSheet(
-                message: message,
-                model: model,
-                editDraft: $editDraft,
-                editRoleDraft: $editRoleDraft,
-                parentMessageID: parentMessageID
-            )
-        }
+        // Edit sheet is hoisted to ConversationView via
+        // `.sheet(item: $model.editingMessage)` so a single sheet
+        // owns the lifecycle. Per-row `.sheet(isPresented:)` with a
+        // computed binding raced with @Observable updates and
+        // produced an open/close loop on dismiss.
         .alert(
             "Delete message?",
             isPresented: $showDeleteConfirm
@@ -120,6 +99,19 @@ struct MessageRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This message will be removed. Children stitch to its parent.")
+        }
+        .alert(
+            "Delete this message and all replies?",
+            isPresented: $showCascadeDeleteConfirm
+        ) {
+            Button("Delete all", role: .destructive) {
+                Haptics.notify(.warning)
+                Task { await model.deleteMessage(id: message.id, cascade: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let count = descendantCount
+            Text("This deletes the message and \(count) repl\(count == 1 ? "y" : "ies") underneath it.")
         }
         .sheet(isPresented: $showUsageSheet) {
             NavigationStack {
@@ -137,7 +129,7 @@ struct MessageRow: View {
         }
     }
 
-    // MARK: - Role alignment + branch switcher
+    // MARK: - Role alignment + fork-switcher pill
 
     @ViewBuilder
     private func roleAlignedContainer<Content: View>(
@@ -146,29 +138,41 @@ struct MessageRow: View {
         let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
         switch message.role {
         case .user:
-            HStack(alignment: .top, spacing: 8) {
-                branchSwitcher
+            // Right-aligned bubble. Fork pill bumps out of the top-right
+            // corner — applied OUTSIDE the bubble's clipShape so the
+            // pill isn't trimmed to the rounded rect.
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
                 content()
                     .frame(maxWidth: cap, alignment: .trailing)
+                    .overlay(alignment: .topTrailing) {
+                        forkPill.offset(x: -6, y: -10)
+                    }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
-            HStack(alignment: .top, spacing: 8) {
+            // Full-width, no bubble. Fork pill floats above the role
+            // label in the top-right corner of the message region —
+            // gives the same affordance as the user bump-out without
+            // a chrome boundary to anchor against.
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    forkPill
+                }
                 content()
-                    .frame(maxWidth: cap, alignment: .leading)
-                branchSwitcher
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         default:
             content()
         }
     }
 
-    /// Branch switcher chevrons. Always visible (no hover on iOS) but
-    /// low-contrast so they don't compete with the bubble. Collapses to
-    /// a flexible Spacer when the message has no siblings.
+    /// Fork-switcher pill — chevron-left / "N/M" / chevron-right in a
+    /// capsule. Always visible when the message has siblings; nil view
+    /// otherwise (no Spacer reservation, since we now position via
+    /// overlay rather than HStack).
     @ViewBuilder
-    private var branchSwitcher: some View {
+    private var forkPill: some View {
         if let info = model.branchInfo(for: message.id) {
             HStack(spacing: 4) {
                 Button {
@@ -200,10 +204,8 @@ struct MessageRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Capsule().fill(Color.primary.opacity(0.05)))
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-        } else {
-            Spacer(minLength: 0)
+            .background(Capsule().fill(.regularMaterial))
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
         }
     }
 
@@ -272,8 +274,11 @@ struct MessageRow: View {
 
     // MARK: - Bubble body
 
+    /// Inner content shared by the bubble (user/errored/editing) and
+    /// the bare assistant rendering. Header + thinking + tool calls +
+    /// body + footer, no chrome.
     @ViewBuilder
-    private var bubble: some View {
+    private var bubbleInner: some View {
         VStack(alignment: .leading, spacing: 4) {
             headerRow
 
@@ -297,12 +302,12 @@ struct MessageRow: View {
             }
 
             // Body — markdown / error text. Edit happens in a sheet
-            // (see `.sheet(isPresented: isEditing …)` on the row),
-            // not in-place. Prefer `displayContent` (post-
-            // DisplayTransformer plugin pipeline output, e.g. with
-            // basic_grounding's `<grounding>` block stripped) and
-            // fall back to raw `content` for messages that haven't
-            // been routed through the transformer.
+            // (see ConversationView's hoisted `.sheet(item:)`), not
+            // in-place. Prefer `displayContent` (post-DisplayTransformer
+            // plugin pipeline output, e.g. with basic_grounding's
+            // `<grounding>` block stripped) and fall back to raw
+            // `content` for messages that haven't been routed through
+            // the transformer.
             let bodyText = message.displayContent ?? message.content
             if isErrored, let errText = message.errorText, !errText.isEmpty {
                 Text(errText)
@@ -325,22 +330,40 @@ struct MessageRow: View {
             // carry no usage data.
             footer
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background { bubbleBackground }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    isErrored
-                        ? AnyShapeStyle(Color.orange.opacity(0.55))
-                        : (isEditing
-                           ? AnyShapeStyle(theme.accent.opacity(0.6))
-                           : AnyShapeStyle(Color.primary.opacity(0.06))),
-                    lineWidth: isErrored || isEditing ? 1.5 : 1
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .contextMenu { contextMenuItems }
+    }
+
+    @ViewBuilder
+    private var bubble: some View {
+        bubbleInner
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background { bubbleBackground }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(
+                        isErrored
+                            ? AnyShapeStyle(Color.orange.opacity(0.55))
+                            : (isEditing
+                               ? AnyShapeStyle(theme.accent.opacity(0.6))
+                               : AnyShapeStyle(Color.primary.opacity(0.06))),
+                        lineWidth: isErrored || isEditing ? 1.5 : 1
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contextMenu { contextMenuItems }
+    }
+
+    /// Bare assistant rendering — no bubble chrome, full-width markdown.
+    /// The role-aligned container handles outer alignment and the fork
+    /// pill; this view just supplies the content with light vertical
+    /// padding so successive turns don't crowd each other.
+    @ViewBuilder
+    private var assistantContent: some View {
+        bubbleInner
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .contextMenu { contextMenuItems }
     }
 
     @ViewBuilder
@@ -375,9 +398,9 @@ struct MessageRow: View {
                     .foregroundStyle(.orange)
                     .imageScale(.small)
             }
-            // For collapsible-header roles (system / context / first
-            // user), the role label doubles as a collapse affordance
-            // — tap to fold the bubble back into the strip header.
+            // For collapsible-header roles (system / context), the role
+            // label doubles as a collapse affordance — tap to fold the
+            // bubble back into the strip header.
             if isCollapsibleHeaderRole {
                 Button(action: toggleHeaderExpansion) {
                     HStack(spacing: 4) {
@@ -423,33 +446,42 @@ struct MessageRow: View {
         if isEditing {
             EmptyView()
         } else if message.role == .assistant, let usage = message.usage {
-            Button {
-                showUsageSheet = true
-            } label: {
-                HStack(spacing: 5) {
-                    if let grade = cacheEfficiencyGrade(usage) {
-                        Circle()
-                            .fill(grade.color)
-                            .frame(width: 7, height: 7)
-                            .accessibilityLabel(grade.tooltip)
-                    }
-                    Text(usageSummary(usage))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    if let stamp = formattedTimestamp {
-                        Text(stamp)
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    showUsageSheet = true
+                } label: {
+                    HStack(spacing: 5) {
+                        if let grade = cacheEfficiencyGrade(usage) {
+                            Circle()
+                                .fill(grade.color)
+                                .frame(width: 7, height: 7)
+                                .accessibilityLabel(grade.tooltip)
+                        }
+                        Text(usageSummary(usage))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        if let stamp = formattedTimestamp {
+                            Text(stamp)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show usage details")
+
+                if let label = unexpectedFinishReasonLabel {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                }
             }
-            .buttonStyle(.plain)
             .padding(.top, 2)
-            .accessibilityLabel("Show usage details")
         } else if let stamp = formattedTimestamp {
             HStack {
                 Spacer(minLength: 0)
@@ -461,10 +493,25 @@ struct MessageRow: View {
         }
     }
 
-    private var parentMessageID: String? {
-        // Fork from this message's parent (or nil if this is a root
-        // message — fork from the conversation's root).
-        message.parentID
+    /// Returns a human-friendly label for the message's finish_reason
+    /// when it's NOT one of the "normal" terminations — clean stops
+    /// (`stop`, `end_turn`, `STOP`, empty/nil) return nil so the line
+    /// stays invisible on the overwhelming majority of turns.
+    /// Examples surfaced: "Stopped: max tokens", "Stopped: length",
+    /// "Stopped: content_filter", "Stopped: SAFETY".
+    private var unexpectedFinishReasonLabel: String? {
+        guard let raw = message.finishReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+        let normalized = raw.lowercased()
+        switch normalized {
+        case "stop", "end_turn", "tool_use", "tool_calls":
+            return nil
+        default:
+            let pretty = raw
+                .replacingOccurrences(of: "_", with: " ")
+                .lowercased()
+            return "Stopped: \(pretty)"
+        }
     }
 
     // MARK: - Context menu items
@@ -500,10 +547,41 @@ struct MessageRow: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
+
+        // "Delete all replies…" only surfaces when the message has at
+        // least one descendant — for a leaf, cascade delete behaves
+        // identically to plain Delete and the extra item would just be
+        // noise.
+        if descendantCount > 0 {
+            Button(role: .destructive) {
+                showCascadeDeleteConfirm = true
+            } label: {
+                Label("Delete all replies…", systemImage: "trash.slash")
+            }
+        }
+    }
+
+    /// Number of descendants of this message in the conversation tree.
+    /// Walks `model.treeMessages` (which loadTree populates) breadth-first
+    /// so the cascade-confirm alert can show the user how many rows the
+    /// destructive action will sweep away.
+    private var descendantCount: Int {
+        var count = 0
+        var frontier: [String] = [message.id]
+        while !frontier.isEmpty {
+            var next: [String] = []
+            for id in frontier {
+                for m in model.treeMessages where m.parentID == id {
+                    count += 1
+                    next.append(m.id)
+                }
+            }
+            frontier = next
+        }
+        return count
     }
 
     private func startEdit() {
-        editDraft = message.content
         model.editingMessage = message
     }
 
@@ -664,18 +742,26 @@ private struct CacheGrade {
 ///   - The TextEditor scrolls naturally when content runs long.
 ///   - Cancel / Save are never hidden behind the keyboard.
 ///
-/// State is bound from the parent `MessageRow` so we can keep the
-/// existing `model.editingMessage` plumbing — the sheet appears
-/// when that property is set, and clearing it (Cancel, Save, or
-/// drag-dismiss) tears the sheet back down.
-private struct EditMessageSheet: View {
+/// Presented from `ConversationView` via `.sheet(item: $model.editingMessage)`
+/// so a single sheet owns the lifecycle — the per-row computed-binding
+/// approach raced with @Observable updates and produced an open/close
+/// loop on dismiss. Drafts live in @State here (initialized from the
+/// message) and `.sheet(item:)` instantiates a fresh struct each time
+/// the message changes.
+struct EditMessageSheet: View {
     let message: ReeveMessage
     let model: ConversationViewModel
-    @Binding var editDraft: String
-    @Binding var editRoleDraft: ReeveMessageRole
-    let parentMessageID: String?
+    @State private var editDraft: String
+    @State private var editRoleDraft: ReeveMessageRole
     @Environment(\.dismiss) private var dismiss
     @FocusState private var editorFocused: Bool
+
+    init(message: ReeveMessage, model: ConversationViewModel) {
+        self.message = message
+        self.model = model
+        _editDraft = State(initialValue: message.content)
+        _editRoleDraft = State(initialValue: message.role)
+    }
 
     var body: some View {
         NavigationStack {
@@ -721,12 +807,9 @@ private struct EditMessageSheet: View {
                 }
             }
             .onAppear {
-                // Pre-fill from the persisted message every time
-                // the sheet opens — the editDraft @State on the row
-                // would otherwise carry stale text from a previous
-                // edit that was cancelled.
-                editDraft = message.content
-                editRoleDraft = message.role
+                // `.sheet(item:)` instantiates this view fresh each
+                // time the bound message changes, so editDraft is
+                // already correct from init — just grab focus.
                 editorFocused = true
             }
         }
@@ -781,8 +864,9 @@ private struct EditMessageSheet: View {
 
     private func saveAndFork() {
         let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parentID = message.parentID
         Task {
-            await model.sendForking(content: trimmed, parentMessageID: parentMessageID)
+            await model.sendForking(content: trimmed, parentMessageID: parentID)
             model.editingMessage = nil
         }
     }

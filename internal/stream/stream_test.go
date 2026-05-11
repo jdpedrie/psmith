@@ -846,3 +846,101 @@ func TestStart_Compression_MaterializesSummaryOnly(t *testing.T) {
 		t.Errorf("expected 1 persisted chunk, got %d", len(rows))
 	}
 }
+
+// TestIdleTimeout_FinalizesAsErrored: once the upstream has produced
+// at least one chunk, going silent for IdleTimeout should cancel the
+// run and finalize as errored — NOT cancelled (a wedged provider isn't
+// the same thing as a user-pressed-Stop). The error_payload should
+// contain a recognisable "idle" message so the UI can render it.
+func TestIdleTimeout_FinalizesAsErrored(t *testing.T) {
+	t.Parallel()
+	prevIdle := IdleTimeout
+	IdleTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { IdleTimeout = prevIdle })
+
+	f := newFixture(t)
+	src := newFakeSource(4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Push one chunk so we're past the first-chunk wait, then go silent.
+	src.push(textChunk("partial"))
+
+	// Wait for idle timeout to fire and finalize as errored. Allow a
+	// generous window so this isn't flaky on slow CI.
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusErrored
+	}, 2*time.Second, "run errored from idle timeout")
+
+	r, err := f.sup.Get(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if r.Status != statusErrored {
+		t.Fatalf("status = %q, want %q", r.Status, statusErrored)
+	}
+	if len(r.ErrorPayload) == 0 {
+		t.Fatal("expected non-empty error payload")
+	}
+	// Materialised assistant row should carry the partial content + error.
+	if r.ResultMessageID == nil {
+		t.Fatal("expected materialized assistant message")
+	}
+	msg, err := f.q.GetMessageByID(context.Background(), *r.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if msg.Content != "partial" {
+		t.Errorf("partial content not preserved: %q", msg.Content)
+	}
+
+	// Drain source so the test cleanup doesn't leak.
+	go src.close()
+}
+
+// TestIdleTimeout_ResetsOnEachChunk: as long as chunks keep arriving
+// faster than IdleTimeout, the run should NOT trip the timeout, even
+// over a window longer than the timeout itself.
+func TestIdleTimeout_ResetsOnEachChunk(t *testing.T) {
+	t.Parallel()
+	prevIdle := IdleTimeout
+	IdleTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { IdleTimeout = prevIdle })
+
+	f := newFixture(t)
+	src := newFakeSource(4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Push 5 chunks at 50ms intervals (half the idle timeout). Total
+	// 250ms — comfortably longer than IdleTimeout. If we're resetting on
+	// each chunk, the run survives; if we were applying a wall-clock
+	// budget the run would error mid-stream.
+	go func() {
+		for i := 0; i < 5; i++ {
+			src.push(textChunk("x"))
+			time.Sleep(50 * time.Millisecond)
+		}
+		src.close()
+	}()
+
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 3*time.Second, "run completed without idle trip")
+
+	r, err := f.sup.Get(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if r.Status != statusCompleted {
+		t.Fatalf("status = %q, want %q (idle timeout fired during a healthy stream)", r.Status, statusCompleted)
+	}
+}

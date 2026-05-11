@@ -281,6 +281,9 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	// last-seen values and emit one ChunkUsage right before ChunkDone.
 	var lastUsage *usageMetadata
 	var lastUsageRaw json.RawMessage
+	// FinishReason on the candidate also typically appears on the last
+	// event but isn't guaranteed — last-write wins.
+	var lastFinishReason string
 
 	scanner := bufio.NewScanner(body)
 	// Allow large SSE events — Gemini frames can include long thought blocks.
@@ -316,6 +319,9 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 			})
 		}
 		for _, c := range env.Candidates {
+			if c.FinishReason != "" {
+				lastFinishReason = c.FinishReason
+			}
 			for _, p := range c.Content.Parts {
 				if p.FunctionCall != nil {
 					emitGeminiToolCall(out, p.FunctionCall, p.ThoughtSignature, &fcSeq)
@@ -388,7 +394,7 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	}
 
 	if lastUsage != nil {
-		emitUsage(out, *lastUsage, lastUsageRaw)
+		emitUsage(out, *lastUsage, lastUsageRaw, lastFinishReason)
 	}
 	emit(out, providers.ChunkDone, map[string]any{})
 }
@@ -425,7 +431,7 @@ func emitGeminiToolCall(out chan<- providers.Chunk, fc *geminiFunctionCall, thou
 // the per-modality CacheTokensDetails breakdown when the summary is
 // absent (some Gemini models / API versions emit one but not both).
 // ThoughtsTokenCount maps to reasoning_tokens.
-func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage) {
+func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage, finishReason string) {
 	in := u.PromptTokenCount
 	outTok := u.CandidatesTokenCount
 	usage := providers.Usage{}
@@ -448,6 +454,10 @@ func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage)
 		return
 	}
 	usage.ProviderRaw = raw
+	if finishReason != "" {
+		fr := finishReason
+		usage.FinishReason = &fr
+	}
 	payload, err := json.Marshal(usage)
 	if err != nil {
 		return

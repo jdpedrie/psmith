@@ -2116,6 +2116,19 @@ public struct Reeve_V1_Message: @unchecked Sendable {
     set {_uniqueStorage()._toolCalls = newValue}
   }
 
+  /// Verbatim per-provider termination reason captured from the final
+  /// upstream chunk: Anthropic `stop_reason`, OpenAI `finish_reason`,
+  /// Google `finishReason`. The UI surfaces this only when it's
+  /// unexpected (anything other than stop / end_turn / STOP).
+  public var finishReason: String {
+    get {_storage._finishReason ?? String()}
+    set {_uniqueStorage()._finishReason = newValue}
+  }
+  /// Returns true if `finishReason` has been explicitly set.
+  public var hasFinishReason: Bool {_storage._finishReason != nil}
+  /// Clears the value of `finishReason`. Subsequent reads from it will return its default value.
+  public mutating func clearFinishReason() {_uniqueStorage()._finishReason = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -4145,7 +4158,7 @@ extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4167,6 +4180,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _errorText: String? = nil
     var _thinkingDurationMs: Int32? = nil
     var _toolCalls: [Reeve_V1_ToolCall] = []
+    var _finishReason: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4196,6 +4210,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _errorText = source._errorText
       _thinkingDurationMs = source._thinkingDurationMs
       _toolCalls = source._toolCalls
+      _finishReason = source._finishReason
     }
   }
 
@@ -4233,6 +4248,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._errorText) }()
         case 18: try { try decoder.decodeSingularInt32Field(value: &_storage._thinkingDurationMs) }()
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._toolCalls) }()
+        case 20: try { try decoder.decodeSingularStringField(value: &_storage._finishReason) }()
         default: break
         }
       }
@@ -4302,6 +4318,9 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       if !_storage._toolCalls.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._toolCalls, fieldNumber: 19)
       }
+      try { if let v = _storage._finishReason {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 20)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4330,6 +4349,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._errorText != rhs_storage._errorText {return false}
         if _storage._thinkingDurationMs != rhs_storage._thinkingDurationMs {return false}
         if _storage._toolCalls != rhs_storage._toolCalls {return false}
+        if _storage._finishReason != rhs_storage._finishReason {return false}
         return true
       }
       if !storagesAreEqual {return false}

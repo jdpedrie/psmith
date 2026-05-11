@@ -28,6 +28,13 @@ public struct MarkdownText: View {
         Markdown(Self.hardenLineBreaks(content))
             .markdownTheme(.clarkChat)
             .textSelection(.enabled)
+            // Without this, MarkdownUI's bullet-list layout inconsistently
+            // truncates long items with an ellipsis on iOS — especially
+            // mid-stream, when the parent's width is briefly resolving.
+            // `.fixedSize(horizontal: false, vertical: true)` pins width
+            // to the parent and lets the text grow vertically, which
+            // matches "wrap, don't truncate" semantics.
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Adds two trailing spaces before each newline that should render
