@@ -354,14 +354,7 @@ private struct ConversationBody: View {
                         PendingUserRow(text: pending)
                             .id("__pending__")
                     }
-                    // `streamTerminalPending` flips true the instant a
-                    // terminal event arrives, before the async load() that
-                    // inserts the new MessageRow runs. Suppressing the
-                    // StreamingRow during that window prevents the brief
-                    // "both rows visible at once" frame that confuses
-                    // scroll-position preservation.
-                    if !model.streamTerminalPending,
-                       !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
+                    if !model.streamingText.isEmpty || model.isStreaming || model.isCompacting {
                         StreamingRow(
                             text: model.streamingText,
                             thinkingText: model.streamingThinking,

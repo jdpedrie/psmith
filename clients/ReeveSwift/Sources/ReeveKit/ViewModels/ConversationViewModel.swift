@@ -57,16 +57,6 @@ public final class ConversationViewModel {
     public var streamRunID: String?
     private var streamTask: Task<Void, Never>?
 
-    /// True from the moment a stream terminal event arrives until the
-    /// chain reload completes and the materialised assistant row takes
-    /// the StreamingRow's slot. The UI checks this to suppress the
-    /// StreamingRow during that window — otherwise the new MessageRow
-    /// (inserted by `load()`) and the StreamingRow (still backed by
-    /// non-empty `streamingText`) would coexist in the LazyVStack for
-    /// the duration of the network round-trip, doubling the latest
-    /// turn's height and causing SwiftUI's scroll-position preservation
-    /// to re-anchor mid-stream against the wrong content offset.
-    public var streamTerminalPending: Bool = false
 
     /// Sequence number of the most recent chunk seen on the active
     /// stream. Used by `resumeStreamIfPaused()` to re-subscribe with
@@ -539,10 +529,6 @@ public final class ConversationViewModel {
                     case .chunk(let c):
                         applyStreamChunk(c)
                     case .terminal:
-                        // Set BEFORE load() so the StreamingRow hides in
-                        // the same render that the new MessageRow appears
-                        // in. clearStreamingState() resets this flag.
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         // Hand off any open disclosure to the materialised
@@ -567,7 +553,6 @@ public final class ConversationViewModel {
                         // the message list and let MessageRow render the
                         // failure inline. No banner — the errored message
                         // is now first-class history.
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
@@ -634,14 +619,12 @@ public final class ConversationViewModel {
                 case .chunk(let c):
                     applyStreamChunk(c)
                 case .terminal:
-                    streamTerminalPending = true
                     await load()
                     await onTerminal()
                     clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
                     fireAssistantTurnComplete()
                     await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
                 case .failed:
-                    streamTerminalPending = true
                     await load()
                     await onTerminal()
                     clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
@@ -982,13 +965,11 @@ public final class ConversationViewModel {
                     case .chunk(let c):
                         applyStreamChunk(c)
                     case .terminal:
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
                         await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
                     case .failed:
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
@@ -1044,13 +1025,11 @@ public final class ConversationViewModel {
                     case .chunk(let c):
                         applyStreamChunk(c)
                     case .terminal:
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
                         await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
                     case .failed:
-                        streamTerminalPending = true
                         await load()
                         await onTerminal()
                         clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
@@ -1162,7 +1141,6 @@ public final class ConversationViewModel {
         streamingToolCalls = []
         streamRunID = nil
         lastStreamChunkSequence = 0
-        streamTerminalPending = false
     }
 
     /// Returns the most recently-created assistant message in the loaded
