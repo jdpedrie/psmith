@@ -229,53 +229,126 @@ func toolCallsFromJSON(payload []byte) []*reevev1.ToolCall {
 //  2. Provider envelope: `{"error": {"message": "...", ...}}` — every
 //     OpenAI-compatible upstream uses this when our wrapper somehow loses
 //     the .message extraction; same shape as Anthropic and Google.
-//  3. A bare top-level JSON string: `"upstream blew up"`.
-//  4. Fallback: the raw payload bytes verbatim. Better to show the user
-//     "{some unparseable blob}" than to silently drop the error and let
-//     them think the turn succeeded.
+//  3. Bare-string error: `{"error": "..."}` — providers that send the
+//     message as a string instead of an object.
+//  4. GitHub / GraphQL-style: `{"errors": [{"message": "..."}, ...]}`.
+//  5. FastAPI / DRF: `{"detail": "..."}` (or `[{"msg":"..."}]`).
+//  6. OAuth-style: `{"error_description": "..."}`.
+//  7. A bare top-level JSON string: `"upstream blew up"`.
+//  8. Plaintext (not JSON): the payload verbatim, whitespace-normalised.
+//  9. JSON we can't parse for a message: a generic placeholder. We
+//     deliberately do NOT dump raw braces — the UI should never show
+//     `{"status": 500, "code": "x"}` style blobs.
 //
-// Returns "" only when the payload was empty to begin with — every
-// other path produces something the UI can render.
+// Returns "" only when the payload was empty to begin with.
 func errorTextFromPayload(payload []byte) string {
 	if len(payload) == 0 {
 		return ""
 	}
-	// Shape 1: normalised wrapper.
+	raw := strings.TrimSpace(string(payload))
+	if raw == "" {
+		return ""
+	}
+
+	// Try JSON-shape extraction first. The helper handles every known
+	// envelope and returns "" if it can't find a usable string.
+	if msg := extractMessageFromJSON(payload); msg != "" {
+		return msg
+	}
+
+	// If the payload LOOKS like JSON (starts with { or [ or "), and we
+	// got nothing usable above, return a generic placeholder rather
+	// than dumping the raw structure to the user.
+	if len(raw) > 0 && (raw[0] == '{' || raw[0] == '[' || raw[0] == '"') {
+		return "Upstream returned an error."
+	}
+
+	// Plaintext — keep as-is but normalise whitespace + cap length so
+	// stack traces / HTML responses don't blow out a banner.
+	out := strings.Join(strings.Fields(raw), " ")
+	const cap = 512
+	if len(out) > cap {
+		out = out[:cap] + "…"
+	}
+	return out
+}
+
+// extractMessageFromJSON tries every known JSON shape against a payload
+// and returns the first usable message. Returns "" on no match — the
+// caller decides what to do with that.
+func extractMessageFromJSON(payload []byte) string {
+	// Shape 1: normalised wrapper `{"message":"..."}` (also matches
+	// our internal chunkErrorPayload, which carries `.raw` too).
 	var wrap struct {
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(payload, &wrap); err == nil && wrap.Message != "" {
 		return wrap.Message
 	}
-	// Shape 2: provider envelope — works for OpenAI, Anthropic, Google.
+	// Shape 2: provider envelope `{"error": {"message": "..."}}` —
+	// OpenAI, Anthropic, Google.
 	var envelope struct {
 		Error struct {
 			Message string `json:"message"`
-			Type    string `json:"type"`
-			Code    any    `json:"code"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(payload, &envelope); err == nil && envelope.Error.Message != "" {
 		return envelope.Error.Message
 	}
-	// Shape 3: a bare JSON string.
-	var s string
-	if err := json.Unmarshal(payload, &s); err == nil && s != "" {
-		return s
+	// Shape 3: `{"error": "string"}`. Decode again as raw map to handle
+	// the case where error is a string rather than an object.
+	var rawObj map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &rawObj); err == nil {
+		if v, ok := rawObj["error"]; ok {
+			var s string
+			if json.Unmarshal(v, &s) == nil && s != "" {
+				return s
+			}
+		}
+		// Shape 4: GitHub / GraphQL `{"errors": [{"message": "..."}]}`.
+		if v, ok := rawObj["errors"]; ok {
+			var arr []struct {
+				Message string `json:"message"`
+			}
+			if json.Unmarshal(v, &arr) == nil && len(arr) > 0 && arr[0].Message != "" {
+				return arr[0].Message
+			}
+		}
+		// Shape 5a: `{"detail": "..."}`.
+		if v, ok := rawObj["detail"]; ok {
+			var s string
+			if json.Unmarshal(v, &s) == nil && s != "" {
+				return s
+			}
+			// Shape 5b: `{"detail": [{"msg": "..."}, ...]}` — FastAPI
+			// validation errors.
+			var arr []struct {
+				Msg     string `json:"msg"`
+				Message string `json:"message"`
+			}
+			if json.Unmarshal(v, &arr) == nil && len(arr) > 0 {
+				if arr[0].Msg != "" {
+					return arr[0].Msg
+				}
+				if arr[0].Message != "" {
+					return arr[0].Message
+				}
+			}
+		}
+		// Shape 6: OAuth `{"error_description": "..."}`.
+		if v, ok := rawObj["error_description"]; ok {
+			var s string
+			if json.Unmarshal(v, &s) == nil && s != "" {
+				return s
+			}
+		}
 	}
-	// Fallback: raw bytes. Trim outer whitespace; collapse internal
-	// whitespace runs to single spaces so a multi-line payload reads as
-	// a single banner line.
-	raw := strings.TrimSpace(string(payload))
-	if raw == "" {
-		return ""
+	// Shape 7: a bare top-level JSON string.
+	var bare string
+	if err := json.Unmarshal(payload, &bare); err == nil && bare != "" {
+		return bare
 	}
-	raw = strings.Join(strings.Fields(raw), " ")
-	const cap = 512
-	if len(raw) > cap {
-		raw = raw[:cap] + "…"
-	}
-	return raw
+	return ""
 }
 
 // messageUsageToProto returns a MessageUsage proto if any usage/cost column

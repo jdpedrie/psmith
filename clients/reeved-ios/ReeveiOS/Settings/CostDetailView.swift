@@ -152,7 +152,7 @@ struct CostDetailView: View {
             grandTotal = result.grandTotal
             errorText = nil
         } catch {
-            errorText = String(describing: error)
+            errorText = ReeveError.display(error)
         }
     }
 

@@ -73,7 +73,7 @@ public final class ConversationsModel {
                 selectedID = nil
             }
         } catch {
-            self.loadError = error.localizedDescription
+            self.loadError = ReeveError.display(error)
         }
     }
 
@@ -94,7 +94,7 @@ public final class ConversationsModel {
             self.selectedID = c.id
             return c
         } catch {
-            self.loadError = error.localizedDescription
+            self.loadError = ReeveError.display(error)
             return nil
         }
     }
@@ -105,7 +105,7 @@ public final class ConversationsModel {
             self.conversations.removeAll { $0.id == id }
             if selectedID == id { selectedID = conversations.first?.id }
         } catch {
-            self.loadError = error.localizedDescription
+            self.loadError = ReeveError.display(error)
         }
     }
 
@@ -118,7 +118,7 @@ public final class ConversationsModel {
                 conversations[idx] = updated
             }
         } catch {
-            self.loadError = error.localizedDescription
+            self.loadError = ReeveError.display(error)
         }
     }
 

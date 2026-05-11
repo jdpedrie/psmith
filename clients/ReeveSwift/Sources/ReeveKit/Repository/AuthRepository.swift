@@ -16,9 +16,9 @@ public enum ReeveError: Error, LocalizedError {
             // via the Error itself; this is just the display path.
             return ReeveError.humanise(rpcCode: code, message: message)
         case let .missingPayload(field):
-            return "missing payload field: \(field)"
+            return "Missing field in server response: \(field)"
         case let .localStorage(err):
-            return "local storage error: \(err.localizedDescription)"
+            return "Couldn't read local storage: \(ReeveError.display(err))"
         }
     }
 
@@ -28,13 +28,17 @@ public enum ReeveError: Error, LocalizedError {
     /// system can produce. Never returns the empty string for a non-nil
     /// error: at minimum returns a placeholder so the UI doesn't render a
     /// silent failure.
+    ///
+    /// Code calling sites SHOULD route every catch-block error through
+    /// here — `String(describing: error)` and bare `localizedDescription`
+    /// both leak raw JSON / Swift type names into user-facing strings.
     public static func display(_ error: Error) -> String {
         if let ce = error as? ReeveError, let s = ce.errorDescription, !s.isEmpty {
             return s
         }
         let ld = error.localizedDescription
         if !ld.isEmpty { return normaliseEmbeddedJSON(ld) }
-        return "(unknown error: \(String(describing: type(of: error))))"
+        return "Something went wrong."
     }
 
     /// Best-effort human-friendly rendering of an RPC failure. The
@@ -43,47 +47,140 @@ public enum ReeveError: Error, LocalizedError {
     /// whole envelope as a banner.
     private static func humanise(rpcCode: Code, message: String) -> String {
         let cleaned = normaliseEmbeddedJSON(message)
-        if cleaned.isEmpty { return "RPC \(rpcCode)" }
-        return "RPC \(rpcCode): \(cleaned)"
+        let label = friendlyRPCLabel(for: rpcCode)
+        if cleaned.isEmpty { return label }
+        // Avoid the redundant "Server error: server error" pattern when
+        // the cleaned message already starts with the same phrase.
+        if cleaned.lowercased().hasPrefix(label.lowercased()) {
+            return cleaned
+        }
+        return "\(label): \(cleaned)"
     }
 
-    /// If `s` looks like JSON containing a `.error.message` (or top-level
-    /// `.message`) field, return that. Otherwise return `s` trimmed.
-    /// Resilient to malformed input — never throws, always returns a
-    /// string fit for display.
+    /// Maps Connect's lower-case RPC codes ("internal", "unavailable",
+    /// "deadline_exceeded", …) to short user-facing labels. The codes
+    /// themselves are mechanical and unhelpful in a banner; mapping them
+    /// keeps the surface vocabulary stable.
+    private static func friendlyRPCLabel(for code: Code) -> String {
+        switch code {
+        case .canceled:           return "Cancelled"
+        case .unknown:            return "Server error"
+        case .invalidArgument:    return "Invalid request"
+        case .deadlineExceeded:   return "Request timed out"
+        case .notFound:           return "Not found"
+        case .alreadyExists:      return "Already exists"
+        case .permissionDenied:   return "Permission denied"
+        case .resourceExhausted:  return "Rate limit"
+        case .failedPrecondition: return "Couldn't complete"
+        case .aborted:            return "Aborted"
+        case .outOfRange:         return "Out of range"
+        case .unimplemented:      return "Not implemented"
+        case .internalError:      return "Server error"
+        case .unavailable:        return "Server unreachable"
+        case .dataLoss:           return "Server error"
+        case .unauthenticated:    return "Not signed in"
+        default:                  return "Error"
+        }
+    }
+
+    /// Walk a JSON tree and return the first plausible human-readable
+    /// message field. Resilient to malformed input — never throws,
+    /// always returns a string fit for display.
+    ///
+    /// Shapes recognised, in priority order:
+    ///   - `{"error": {"message": "..."}}`           — OpenAI / Anthropic / Google envelope.
+    ///   - `{"error": "..."}`                         — providers that send the message as a bare string.
+    ///   - `{"message": "..."}`                       — our normalised wrapper.
+    ///   - `{"errors": [{"message": "..."}]}`         — GitHub / GraphQL-style arrays.
+    ///   - `{"detail": "..."}`                        — FastAPI / DRF default.
+    ///   - `{"error_description": "..."}`             — OAuth-style.
+    ///   - `"PREFIX: {json…}"` wrapped strings — server wrap-and-rethrow patterns.
+    ///
+    /// If none of those match but the trimmed input is itself non-empty
+    /// non-JSON, return it. If it IS JSON but no message field surfaces,
+    /// return a generic "Server error" rather than dumping raw braces.
     private static func normaliseEmbeddedJSON(_ s: String) -> String {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8) else { return trimmed }
-        // Try `{"error":{"message":"…"}}` first — the OpenAI / Anthropic /
-        // Google envelope shape that 99% of provider 4xx/5xx use.
-        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let inner = obj["error"] as? [String: Any],
-               let m = inner["message"] as? String, !m.isEmpty {
-                return m
-            }
-            if let m = obj["message"] as? String, !m.isEmpty {
-                return m
-            }
+        if trimmed.isEmpty { return trimmed }
+
+        // 1. Direct JSON parse over the whole string.
+        if let extracted = extractMessageFromJSONString(trimmed) {
+            return extracted
         }
-        // The string might also be a "PREFIX: {json…}" form — server
-        // wrap-and-rethrow patterns. Look for an embedded `{...}` and
-        // try to pull a message out of it.
+
+        // 2. Look for an embedded `{...}` inside a wrapped string (server
+        //    "prefix: {payload}" patterns) and try again on the inner JSON.
         if let braceStart = trimmed.firstIndex(of: "{"),
            let braceEnd = trimmed.lastIndex(of: "}"),
            braceStart < braceEnd {
             let inner = String(trimmed[braceStart...braceEnd])
-            if let data = inner.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let env = obj["error"] as? [String: Any],
-                   let m = env["message"] as? String, !m.isEmpty {
-                    return m
+            if let extracted = extractMessageFromJSONString(inner) {
+                // Preserve any prefix text — it sometimes contains
+                // useful context that the JSON alone strips.
+                let prefix = trimmed[..<braceStart]
+                    .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.init(charactersIn: ":-,")))
+                if !prefix.isEmpty {
+                    return "\(prefix): \(extracted)"
                 }
-                if let m = obj["message"] as? String, !m.isEmpty {
-                    return m
-                }
+                return extracted
             }
+            // The string looked like JSON but had no message field. Don't
+            // dump the raw braces; produce a friendly fallback.
+            return "Server error"
         }
+
+        // 3. Not JSON. Return as-is.
         return trimmed
+    }
+
+    /// Tries every known shape against a candidate JSON string. Returns
+    /// nil when the candidate isn't JSON or has no extractable message.
+    private static func extractMessageFromJSONString(_ s: String) -> String? {
+        guard let data = s.data(using: .utf8),
+              let any = try? JSONSerialization.jsonObject(with: data)
+        else { return nil }
+
+        // Bare JSON string (`"upstream blew up"`) → use it directly.
+        if let str = any as? String, !str.isEmpty {
+            return str
+        }
+
+        guard let obj = any as? [String: Any] else { return nil }
+
+        // `{"error": {"message": "..."}}`
+        if let inner = obj["error"] as? [String: Any],
+           let m = inner["message"] as? String, !m.isEmpty {
+            return m
+        }
+        // `{"error": "..."}` — providers that send the bare string.
+        if let m = obj["error"] as? String, !m.isEmpty {
+            return m
+        }
+        // Our normalised wrapper.
+        if let m = obj["message"] as? String, !m.isEmpty {
+            return m
+        }
+        // GitHub / GraphQL: `{"errors": [{"message": "..."}, ...]}`.
+        if let arr = obj["errors"] as? [[String: Any]],
+           let first = arr.first,
+           let m = first["message"] as? String, !m.isEmpty {
+            return m
+        }
+        // FastAPI / DRF: `{"detail": "..."}`. detail can also be a list
+        // of objects (validation errors); take the first.
+        if let m = obj["detail"] as? String, !m.isEmpty {
+            return m
+        }
+        if let arr = obj["detail"] as? [[String: Any]],
+           let first = arr.first {
+            if let m = first["msg"] as? String, !m.isEmpty { return m }
+            if let m = first["message"] as? String, !m.isEmpty { return m }
+        }
+        // OAuth-style.
+        if let m = obj["error_description"] as? String, !m.isEmpty {
+            return m
+        }
+        return nil
     }
 }
 

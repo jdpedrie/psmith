@@ -111,7 +111,7 @@ public final class ProvidersViewModel {
                 await selectProvider(first.id)
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
         // Templates power both the Add flow AND the sidebar's
         // "available providers" section. Fetch eagerly on first load
@@ -168,7 +168,7 @@ public final class ProvidersViewModel {
             enabledModels = models.sorted { $0.displayName < $1.displayName }
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -184,7 +184,7 @@ public final class ProvidersViewModel {
             detailMode = .viewing
             if let first = providers.first { await selectProvider(first.id) }
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -194,7 +194,7 @@ public final class ProvidersViewModel {
             try await client.modelProviders.disableModels(providerID: providerID, modelIDs: [modelID])
             enabledModels.removeAll { $0.modelID == modelID }
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -223,7 +223,7 @@ public final class ProvidersViewModel {
             _ = try await client.modelProviders.toggleModelFavorite(providerID: providerID, modelID: modelID, favorite: newValue)
         } catch {
             enabledModels[idx] = original
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -233,7 +233,7 @@ public final class ProvidersViewModel {
             templates = try await client.modelProviders.listTemplates()
             templatesLoaded = true
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -387,7 +387,7 @@ public final class ProvidersViewModel {
             let result = try await client.modelProviders.testProvider(providerID: providerID)
             providerTestStatus[providerID] = .success(result)
         } catch {
-            providerTestStatus[providerID] = .failure(error.localizedDescription)
+            providerTestStatus[providerID] = .failure(ReeveError.display(error))
         }
     }
 
@@ -400,7 +400,7 @@ public final class ProvidersViewModel {
             let result = try await client.modelProviders.testModel(providerID: providerID, modelID: modelID)
             modelTestStatus[key] = .success(result)
         } catch {
-            modelTestStatus[key] = .failure(error.localizedDescription)
+            modelTestStatus[key] = .failure(ReeveError.display(error))
         }
     }
 }

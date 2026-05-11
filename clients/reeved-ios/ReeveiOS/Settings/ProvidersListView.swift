@@ -441,7 +441,7 @@ private struct ProviderDefaultSettingsScreen: View {
                 settings: draft
             )
         } catch let err {
-            error = String(describing: err)
+            error = ReeveError.display(err)
         }
     }
 }
@@ -535,7 +535,7 @@ private struct ModelDefaultSettingsSheet: View {
             )
             dismiss()
         } catch let err {
-            error = String(describing: err)
+            error = ReeveError.display(err)
         }
     }
 }
@@ -720,7 +720,7 @@ private struct EditProviderSheet: View {
             await app.providers.load()
             dismiss()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ReeveError.display(error)
         }
     }
 }
@@ -805,7 +805,7 @@ private struct DiscoverModelsScreen: View {
         do {
             discovered = try await app.providers.discoverModels(providerID: provider.id)
         } catch let err {
-            error = String(describing: err)
+            error = ReeveError.display(err)
         }
     }
 
@@ -822,7 +822,7 @@ private struct DiscoverModelsScreen: View {
             // checkmark updates without needing a manual refresh.
             await app.providers.selectProvider(provider.id)
         } catch {
-            self.error = String(describing: error)
+            self.error = ReeveError.display(error)
         }
     }
 }
@@ -982,7 +982,7 @@ private struct AddProviderSheet: View {
             await app.providers.load()
             dismiss()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ReeveError.display(error)
         }
     }
 }

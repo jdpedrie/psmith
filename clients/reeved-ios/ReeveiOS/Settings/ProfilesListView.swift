@@ -953,7 +953,7 @@ private struct ProfileEditSheet: View {
             await app.profiles.load()
             dismiss()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ReeveError.display(error)
         }
     }
 }

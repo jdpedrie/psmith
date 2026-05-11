@@ -56,7 +56,7 @@ public final class ProfilesViewModel {
                 selectedID = first.id
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -122,7 +122,7 @@ public final class ProfilesViewModel {
             _ = try await client.modelProviders.toggleModelFavorite(providerID: providerID, modelID: modelID, favorite: newValue)
         } catch {
             availableModels[idx] = original
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -217,7 +217,7 @@ public final class ProfilesViewModel {
             _ = try await client.profiles.update(id: id, patch: patch)
         } catch {
             profiles[idx] = original
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -237,7 +237,7 @@ public final class ProfilesViewModel {
                 lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -259,7 +259,7 @@ public final class ProfilesViewModel {
             for row in rows { map[row.pluginName] = row }
             userPluginSettings = map
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -280,7 +280,7 @@ public final class ProfilesViewModel {
         do {
             profilePlugins[id] = try await client.profiles.getProfilePlugins(profileID: id)
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 
@@ -301,7 +301,7 @@ public final class ProfilesViewModel {
             selectedID = profiles.first?.id
             detailMode = .viewing
         } catch {
-            self.error = error.localizedDescription
+            self.error = ReeveError.display(error)
         }
     }
 }

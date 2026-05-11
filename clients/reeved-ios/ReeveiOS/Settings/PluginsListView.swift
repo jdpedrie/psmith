@@ -206,7 +206,7 @@ private struct PluginSettingsScreen: View {
             let data = try JSONSerialization.data(withJSONObject: draft, options: [.sortedKeys])
             try await app.profiles.upsertUserPluginSettings(pluginName: plugin.name, config: data)
         } catch {
-            saveError = String(describing: error)
+            saveError = ReeveError.display(error)
         }
     }
 }
