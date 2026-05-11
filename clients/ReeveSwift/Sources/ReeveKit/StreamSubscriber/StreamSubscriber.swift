@@ -169,57 +169,119 @@ public final class StreamSubscriber: Sendable {
 
     /// Subscribe to a stream_run starting at fromSequence (inclusive). Returns
     /// an `AsyncStream<StreamEvent>` that yields chunks, then exactly one
-    /// terminal event, then finishes. Transient stream drops aren't handled
-    /// yet — see Open Threads in clients/architecture.md (StreamSubscriber
-    /// resilience). For now the consumer must restart the subscription if it
-    /// ends without a terminal event.
+    /// terminal event, then finishes.
+    ///
+    /// Transparently retries on transport drop (URLSession timeout, network
+    /// blip, app suspend/resume): if the underlying gRPC stream ends without
+    /// having delivered a Terminal event, we re-subscribe from `lastSeen + 1`
+    /// up to `maxRetries` times with exponential backoff. The server's
+    /// Subscribe handler replays persisted chunks + the terminal event from
+    /// DB, so the resume is correct-by-construction. Without this, a
+    /// long-thinking turn could materialise server-side but never appear in
+    /// iOS — the row sat in the DB until the next app launch / chain reload.
     public func subscribe(streamRunID: String, fromSequence: Int64 = 0) -> AsyncStream<StreamEvent> {
         AsyncStream { continuation in
-            let stream = client.subscribeStream(headers: [:])
             let task = Task {
-                do {
-                    var req = Reeve_V1_SubscribeStreamRequest()
-                    req.streamRunID = streamRunID
-                    req.fromSequence = fromSequence
-                    try stream.send(req)
-                } catch {
-                    continuation.yield(.failed(.rpc(code: .internalError, message: "send: \(error.localizedDescription)")))
-                    continuation.finish()
-                    return
-                }
+                let maxRetries = 5
+                var attempt = 0
+                var nextSequence = fromSequence
+                var sawTerminal = false
 
-                for await result in stream.results() {
-                    switch result {
-                    case .headers:
+                while !Task.isCancelled, !sawTerminal {
+                    let stream = self.client.subscribeStream(headers: [:])
+                    do {
+                        var req = Reeve_V1_SubscribeStreamRequest()
+                        req.streamRunID = streamRunID
+                        req.fromSequence = nextSequence
+                        try stream.send(req)
+                    } catch {
+                        if attempt >= maxRetries {
+                            continuation.yield(.failed(.rpc(code: .internalError, message: "send: \(error.localizedDescription)")))
+                            continuation.finish()
+                            return
+                        }
+                        await Self.backoff(attempt: attempt)
+                        attempt += 1
                         continue
-                    case .message(let resp):
-                        switch resp.event {
-                        case .chunk(let c):
-                            continuation.yield(.chunk(ReeveChunk(from: c)))
-                        case .terminal(let run):
-                            continuation.yield(.terminal(ReeveStreamRun(from: run)))
-                        case .none:
+                    }
+
+                    var endedNormally = false
+                    for await result in stream.results() {
+                        switch result {
+                        case .headers:
                             continue
+                        case .message(let resp):
+                            switch resp.event {
+                            case .chunk(let c):
+                                let chunk = ReeveChunk(from: c)
+                                if chunk.sequence >= nextSequence {
+                                    nextSequence = chunk.sequence + 1
+                                }
+                                continuation.yield(.chunk(chunk))
+                            case .terminal(let run):
+                                sawTerminal = true
+                                continuation.yield(.terminal(ReeveStreamRun(from: run)))
+                            case .none:
+                                continue
+                            }
+                        case .complete(let code, let error, _):
+                            // OK with no Terminal seen → server cleanly
+                            // closed without saying done. Treat as transport
+                            // drop and retry from the next sequence.
+                            // Non-OK is also a transport drop — retry.
+                            if code == .ok {
+                                endedNormally = true
+                            } else if attempt >= maxRetries {
+                                continuation.yield(.failed(.rpc(
+                                    code: code,
+                                    message: (error as? ConnectError)?.message ?? code.name
+                                )))
+                                continuation.finish()
+                                return
+                            }
+                            // Bail out of the inner for-await; the outer
+                            // while reconnects (or exits if sawTerminal).
+                            break
                         }
-                    case .complete(let code, let error, _):
-                        if code != .ok {
-                            continuation.yield(.failed(.rpc(
-                                code: code,
-                                message: (error as? ConnectError)?.message ?? code.name
-                            )))
-                        }
+                        // After a Terminal yield we want to exit the
+                        // results loop so the outer while sees sawTerminal.
+                        if sawTerminal { break }
+                    }
+
+                    stream.cancel()
+
+                    if sawTerminal { break }
+                    // Re-subscribe (transport drop or clean-close-without-
+                    // terminal). Backoff scales with attempt count.
+                    await Self.backoff(attempt: attempt)
+                    attempt += 1
+                    if attempt > maxRetries {
+                        continuation.yield(.failed(.rpc(
+                            code: .deadlineExceeded,
+                            message: "stream subscription exhausted retries without terminal event"
+                        )))
                         continuation.finish()
                         return
                     }
+                    _ = endedNormally
                 }
                 continuation.finish()
             }
 
             continuation.onTermination = { _ in
                 task.cancel()
-                stream.cancel()
             }
         }
+    }
+
+    /// Exponential backoff between resubscribes. 250ms, 500ms, 1s, 2s, 4s.
+    /// Capped so the user-visible retry latency stays under ~8s before the
+    /// final failure surfaces.
+    private static func backoff(attempt: Int) async {
+        let baseMs: UInt64 = 250
+        let factor: UInt64 = 1 << UInt64(min(attempt, 4))
+        let waitMs = baseMs * factor
+        try? await Task.sleep(nanoseconds: waitMs * 1_000_000)
     }
 
     public func cancel(streamRunID: String) async throws {
