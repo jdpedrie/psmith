@@ -31,6 +31,10 @@ Reads as a sibling to `architecture.md` (long-lived design) and `todo.md` (in-fl
 
 5. **Cache observability hashes attachments.** The prefix-cache stability calculation (currently text-only) extends to include each user-message attachment's SHA-256 in the hash chain. Without this, the cache observability dot lies on multimodal turns. The `stream_runs` cache observability columns already cover this conceptually; only the implementation in `internal/conversations/cache_observability.go` needs the attachment fold-in.
 
+6. **Client-side preprocessing before upload.** The client converts HEIC→JPEG (quality 90), downsizes so the longest edge is ≤ 2048 px, and strips EXIF before computing the SHA-256 and uploading. Three motivations: (a) most providers reject HEIC outright; (b) per-tile / per-pixel pricing on vision models makes 4000×3000 phone photos uneconomical when 2048×1536 carries the same semantic content; (c) EXIF GPS / device metadata is data exfiltration the user didn't sign up for. The original file is never sent — the SHA-256 (and dedup) is over the preprocessed bytes.
+
+7. **Compression converts attachments to file refs + recall tool.** On context compression, attachments in the compressed prefix are replaced with a textual reference of the form `[image: kitchen_sink.jpg #f0a3]` (where `f0a3` is a short prefix of the `file_id` — full UUID would clutter the summary). A built-in `recall_attachment(file_id)` system plugin (auto-available whenever the conversation has any attachments) lets the model fetch the inline bytes back on demand. Side benefits: the compressor model doesn't need vision capability (it sees text refs), and the user pays inline-image cost only on turns where the model actually needs the image. Retention bookkeeping: when compression converts attachments to refs, the `compression_summary` message gets `message_attachments` rows with `role_hint='compressed_reference'` so the FK-based GC keeps the underlying file alive.
+
 ---
 
 ## Data model
@@ -67,11 +71,11 @@ CREATE TABLE message_attachments (
     -- the file's mime_type for fast-path routing in drivers and UI
     -- (avoids a join + parse on every history build).
     kind       TEXT NOT NULL,
-    -- "user_supplied" | "tool_result" | "model_generated". Lets the
-    -- UI distinguish "the user sent this image" from "the model
-    -- emitted this image" from "the brave_search tool returned this
-    -- screenshot" — same rendering, different provenance for audit
-    -- and for export filters.
+    -- "user_supplied" | "tool_result" | "model_generated" | "compressed_reference".
+    -- Lets the UI distinguish "user sent it" from "model emitted it"
+    -- from "tool returned it" from "compression kept a reference so
+    -- the recall plugin can fetch it back" — same rendering, different
+    -- provenance for audit, export filters, and GC retention.
     role_hint  TEXT NOT NULL DEFAULT 'user_supplied',
     PRIMARY KEY (message_id, ordinal)
 );
@@ -138,15 +142,15 @@ type Attachment struct {
 
 ### Per-provider translation
 
-| Provider | Image | Audio | PDF/Doc | Video |
-|---|---|---|---|---|
-| **Anthropic** | `image` content block (inline base64 or URL) | not supported (drop with log) | `document` content block (PDF only, base64) | not supported |
-| **Google Gemini** | `inline_data` part (base64) or `file_data` (Files API URI) | `inline_data` audio/wav (multimodal models) | `inline_data` PDF | `inline_data` video/* (Gemini-only) |
-| **OpenAI Chat** | `image_url` content part | not supported on Chat | not supported on Chat | not supported |
-| **OpenAI Responses** | `input_image` content part | `input_audio` (gpt-4o-audio family) | `input_file` via Files API | not supported |
-| **OpenAI-compatible (OpenRouter etc.)** | passes through `image_url` per Chat path | per-gateway support | per-gateway support | per-gateway support |
+| Provider | Image | Audio | PDF/Doc | Video | Attachments in tool_result |
+|---|---|---|---|---|---|
+| **Anthropic** | `image` content block (inline base64 or URL) | not supported (drop with log) | `document` content block (PDF only, base64) | not supported | yes — `image` block inside `tool_result.content` |
+| **Google Gemini** | `inline_data` part (base64) or `file_data` (Files API URI) | `inline_data` audio/wav (multimodal models) | `inline_data` PDF | `inline_data` video/* (Gemini-only) | yes — `inline_data` part inside `function_response` |
+| **OpenAI Chat** | `image_url` content part | not supported on Chat | not supported on Chat | not supported | no — `tool` message content is text-only |
+| **OpenAI Responses** | `input_image` content part | `input_audio` (gpt-4o-audio family) | `input_file` via Files API | not supported | yes — `function_call_output.output` accepts content parts |
+| **OpenAI-compatible (OpenRouter etc.)** | passes through `image_url` per Chat path | per-gateway support | per-gateway support | per-gateway support | gateway-dependent; default no |
 
-A new `Provider.Capabilities()` method (or a static capability table per driver) advertises supported kinds; the UI uses this to grey out attachment buttons for the active model and to silently strip unsupported attachments from history (with a stamped warning) when a multi-provider conversation switches into a model that can't render older attachments.
+A new `Provider.Capabilities()` method (or a static capability table per driver) advertises supported kinds; the UI uses this to grey out attachment buttons for the active model and to silently strip unsupported attachments from history (with a stamped warning) when a multi-provider conversation switches into a model that can't render older attachments. The `acceptsAttachmentsInToolResults` axis specifically gates whether the `recall_attachment` system plugin returns inline bytes (yes) or a text fallback ("file is not viewable on this model — switch to a vision-capable model to inspect it") (no).
 
 ---
 
@@ -202,23 +206,47 @@ The signed-URL endpoint lives outside the Connect-RPC path — straight HTTP `GE
 
 ### File uploads + image input (Phase 1 — the keystone)
 
-Composer changes:
-- Drag-drop target on the entire composer area (`NSDraggingDestination` via SwiftUI's `onDrop`)
-- "+" / paperclip button opens `NSOpenPanel`
+Composer changes (Mac + iOS, designed in parallel):
+
+**Mac:**
+- Drag-drop target on the entire composer area (SwiftUI `onDrop`)
+- Paperclip button opens `NSOpenPanel` filtered by the active model's supported MIME types
+- Paste-image: cmd-V on the composer reads `NSPasteboard.general` for `NSImage` / file-URL types and uploads as if dragged
+
+**iOS:**
+- Paperclip menu offers: "Photo Library" (`PhotosPicker(matching: .images, ...)`), "Take Photo" (`UIImagePickerController(.camera)`), "Choose Files" (`.fileImporter`), "Scan Document" (`VNDocumentCameraView` → PDF)
+- Paste-image: long-press the composer → standard system Paste action uploads the clipboard image when present
+- Drag-drop via `.dropDestination` on iPad (and iPhone in split mode, where it works)
+
+**Shared:**
 - Inline thumbnail/chip strip above the text field showing pending attachments (with remove button per chip)
-- Capability gating: when active model lacks image support, the paperclip dims with a "switch model" tooltip; drag-drop target shows a "this model doesn't accept images" overlay
+- Capability gating: when the active model lacks image support, the paperclip dims with a "switch model" tooltip / popover; drag-drop target shows a "this model doesn't accept images" overlay
+- Pre-upload preprocessing pipeline (see locked-in decision #6): on Mac via `CoreGraphics` / `ImageIO`, on iOS the same APIs are available — shared Swift code in `ReeveKit` so both platforms run identical preprocessing. EXIF strip is the same `CGImageDestination` re-encode that does the format conversion.
 
 Upload flow:
-1. Client computes SHA-256 of the file's bytes locally
-2. Calls `UploadFile(user_id_implied, sha256, mime, size, original_filename, bytes)` RPC (server-streaming for the bytes — `RepeatedField bytes_chunk` over a Connect server stream, NOT the chunk stream supervisor; this is its own short-lived RPC)
-3. Server: `Storage.Put` → insert `files` row → return `file_id`
-4. Client adds the `file_id` to the pending attachments on the composer
+1. Client runs the preprocessing pipeline (HEIC→JPEG, downsize to ≤2048 px longest edge, strip EXIF) and computes the SHA-256 of the resulting bytes locally
+2. Calls `UploadFile(sha256, mime, size, original_filename, bytes_chunks)` RPC (client-streaming for the bytes — chunked send over a Connect client stream so a 50 MB upload doesn't sit in one giant message; user_id is implicit from the auth interceptor)
+3. Server: `Storage.Put` → insert `files` row (idempotent on `(user_id, sha256)` — a re-upload of the same content returns the existing `file_id`) → return `file_id`
+4. Client adds the `file_id` to the pending attachments on the composer (with an inline thumbnail rendered from the local preprocessed bytes — no signed-URL round-trip needed for the preview)
 5. On `SendMessage`, the request includes a `repeated string attachment_file_ids` field; the server resolves each into a `message_attachments` row when persisting the user message
 
 Message rendering:
 - Image attachments render as a thumbnail (loaded via signed URL) with click-to-expand inline lightbox
 - Document attachments render as a download chip: filename · size · "Open in Quick Look" / "Open in Finder"
 - Audio attachments (when phase 5 lands) render as a play-button chip with waveform preview
+
+### `recall_attachment` system plugin (Phase 1 — ships with compression-as-file-refs)
+
+A built-in plugin (no user configuration; auto-registered for every conversation that has any attachments) exposing one tool:
+
+```
+recall_attachment(file_id: string, reason?: string) -> attachment
+```
+
+- Server-side: looks up `files` by id, asserts `files.user_id == ctx.user_id` (404 to the model otherwise — no info leak), reads bytes via `Storage.Get`, returns them as a tool_result attachment.
+- Provider-side: the tool-result attachment is wired through the per-provider translation table's "Attachments in tool_result" axis. Providers without that capability (OpenAI Chat, most OpenAI-compatible gateways) get a text response of the form `"recall_attachment: file is not viewable on the current model. Switch to a vision-capable model to inspect it."` — the model then knows to either bail or ask the user to switch.
+- Discoverability: the tool's description includes "Use this when a compressed summary mentions `[image: name #abc]` and you need to actually see the image to answer the user." The compressed-summary text-ref format intentionally embeds the short file_id so the model has the argument it needs.
+- Cost story: the recall round-trip is the explicit price the model pays to see an image. Cheaper than always-inlining since most turns don't need the image. The `reason?` arg lets us telemeter why models reach for the tool.
 
 ### Image generation (Phases 3 + 4)
 
@@ -230,13 +258,15 @@ Plugin config: API key (Global), default size, default style. Required-field val
 
 ### Speech-to-text (Phases 0 + 5)
 
-**Phase 0 — local-only, send-as-text.** Mac client uses `SFSpeechRecognizer` (or its replacement `SpeechAnalyzer` on macOS 26+) for live dictation. Mic button in the composer; press-and-hold to record, release to stop, transcribed text appears in the composer's text field; user reviews and sends as plain text. No backend changes. Free, fast, private.
+Phase 0 ships as the **default** (it's free, fast, and works against every model). Phase 5 is an opt-in per-profile setting for users who specifically want the multimodal model to hear pronunciation / tone rather than transcribed text.
 
-**Phase 5 — audio attachment, model transcribes.** Mic button switches to "send audio" mode (toggle). Recording produces an `audio/wav` (or `audio/m4a`) attachment, sent through the Phase 1 attachment path to a multimodal model. Provider drivers that don't support audio degrade gracefully via the capability table. Optionally: have the model's response include a transcript surfaced in the message UI (a dedicated content type or a convention on the first paragraph).
+**Phase 0 — local-only, send-as-text.** Both clients use `SFSpeechRecognizer` (or `SpeechAnalyzer` on macOS 26 / iOS 26+) for live dictation. Mic button in the composer; press-and-hold to record, release to stop, transcribed text appears in the composer's text field; user reviews and sends as plain text. No backend changes. Free, fast, private.
+
+**Phase 5 — audio attachment, model transcribes.** Per-profile setting "Send audio to model" flips the mic button from Phase 0's transcribe-locally mode to recording an `audio/wav` (or `audio/m4a`) attachment that flows through the Phase 1 attachment path to a multimodal model. Provider drivers that don't support audio degrade gracefully via the capability table. Optionally: have the model's response include a transcript surfaced in the message UI (a dedicated content type or a convention on the first paragraph).
 
 ### Text-to-speech (Phases 0 + 6)
 
-**Phase 0 — local AVSpeechSynthesizer.** Speaker icon on each assistant message; tap to start speaking, tap to stop. Per-profile auto-speak toggle. Queue-aware (clicking a different message stops the prior). Voice quality is meh but acceptable; works offline; free; no backend.
+**Phase 0 — local AVSpeechSynthesizer.** Mac + iOS. Speaker icon on each assistant message; tap to start speaking, tap to stop. Per-profile auto-speak toggle. Queue-aware (clicking a different message stops the prior). Voice quality is meh but acceptable; works offline; free; no backend.
 
 **Phase 6 — cloud TTS plugin.** `cloud_tts` plugin with provider config (OpenAI / ElevenLabs / Google). API key + voice + speed in the config; auto-speak selector on profiles selects which TTS plugin (or "local") to use for that profile. Streaming TTS (sentence-by-sentence playback) for low latency on long responses; falls back to whole-response synthesis when the provider doesn't stream.
 
@@ -246,7 +276,7 @@ Plugin config: API key (Global), default size, default style. Required-field val
 
 | Phase | Scope | Estimate | Blocks |
 |---|---|---|---|
-| **0 — Local TTS + STT** | AVSpeechSynthesizer playback + SFSpeechRecognizer dictation | ~1 week, Mac-only | Independent — can land first |
+| **0 — Local TTS + STT** | AVSpeechSynthesizer playback + SFSpeechRecognizer dictation, Mac + iOS | ~1 week | Independent — can land first |
 | **1 — File storage + image input** | `Storage` interface + filesystem impl, signed URLs, files + message_attachments tables, WireMessage.Attachments, Anthropic + Google + OpenAI Responses + OpenAI Chat image translation, capability table, composer drag-drop, image attachment renderer, cache observability hashing | ~3-4 weeks | Foundation — blocks all later phases |
 | **2 — Document attachments** | PDFs (Anthropic + Gemini), generic docs (OpenAI Files API for OpenAI Responses), document chip renderer | ~1 week | Phase 1 |
 | **3 — Image generation tool plugin** | `image_gen` plugin wrapping OpenAI Images / Stability / Imagen, tool-result → message_attachments wiring | ~1 week | Phase 1 |
@@ -261,10 +291,9 @@ Phase 0 can start immediately. Phase 1 is the long pole. After that, 2/3/5/6 are
 ## Open threads (revisit when their phase lands)
 
 - **Multi-tenant storage isolation.** If Reeve ever grows beyond a single self-hosted user, the per-user filesystem layout naturally extends; the signed-URL HMAC needs a key-rotation story; S3-side bucket policies need ACL alignment. Not a v1 concern but the interface boundary is what makes it tractable.
-- **Vision history compaction.** Compression today summarises text. Multi-modal turns need a story for "what does the summary do with attached images?" — drop them, transcribe-into-text, or surface a reference list. Decide as part of Phase 1.
-- **Attachment retention.** When a message is deleted, its `message_attachments` rows cascade — but the underlying `files` row stays around (might be referenced by another message in the same context, or kept for an "uploaded files" sidebar). A periodic GC sweep against `files` with no `message_attachments` referrer (and older than N days) cleans up; sketch but defer until disk pressure is real.
+- **Attachment retention / GC.** When a message is deleted, its `message_attachments` rows cascade — but the underlying `files` row stays around (might be referenced by another message in the same context, by a compression_summary's `compressed_reference` row, or kept for an "uploaded files" sidebar). A periodic GC sweep against `files` with no `message_attachments` referrer (and older than N days) cleans up; sketch but defer until disk pressure is real.
 - **Live audio sessions.** OpenAI Realtime / Gemini Live / OpenAI gpt-4o-realtime are full-duplex socket sessions, not request-response with attachments. They warrant their own design pass; the file/attachment infrastructure here is necessary but not sufficient for them.
-- **iOS / web clients.** All of this targets the Mac client. The wire shape is client-agnostic; the Mac-specific bits are dictation (`SFSpeechRecognizer`), TTS (`AVSpeechSynthesizer`), drag-drop (`NSDraggingDestination`), and Quick Look. Each has an iOS analogue; the backend is shared.
+- **Web client.** Mac + iOS are first-class implementation targets from Phase 1. A future web client would inherit the wire shape unchanged — only the composer affordances (drag-drop, paste, file picker) are platform-specific, and the preprocessing pipeline would re-implement against `Canvas` / `WebCodecs` rather than `ImageIO`.
 
 ---
 
