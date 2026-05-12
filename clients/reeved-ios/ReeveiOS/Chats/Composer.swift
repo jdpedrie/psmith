@@ -31,6 +31,9 @@ struct Composer: View {
             if app.connectivity.state == .offline {
                 offlineBanner
             }
+            if let micErr = transcriberErrorMessage {
+                micErrorBanner(micErr)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom, spacing: 8) {
                     draftField
@@ -71,6 +74,41 @@ struct Composer: View {
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }
+    }
+
+    /// Latest error string from the dictation engine, or nil when
+    /// idle / recording / authorized. Surfaced as a small banner so
+    /// "tapped mic but nothing happened" turns into actionable text
+    /// (permission denied, mic unavailable, …).
+    private var transcriberErrorMessage: String? {
+        switch transcriber.state {
+        case .unauthorized(let reason): return reason
+        case .failed(let message): return message
+        default: return nil
+        }
+    }
+
+    private func micErrorBanner(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.slash")
+                .font(.caption2)
+            Text(message)
+                .font(.caption2)
+                .lineLimit(3)
+            Spacer(minLength: 0)
+            Button {
+                transcriber.reset()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
     }
 
     /// Thin amber strip above the input controls when the server's

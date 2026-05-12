@@ -114,12 +114,27 @@ public final class Transcriber: NSObject, @unchecked Sendable {
 
         #if os(iOS)
         // On iOS the audio session needs to be configured for record
-        // before tapping the input node. Mac's AVAudioEngine doesn't
-        // need this dance.
+        // before tapping the input node. `.default` mode (not
+        // `.measurement`) avoids the simulator's stricter buffer
+        // alignment requirements that fire a precondition failure
+        // when the recognizer hands us an unexpected format.
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+        try audioSession.setCategory(.record, mode: .default)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
+
+        // Probe the input node's reported format BEFORE creating the
+        // request. On the iOS Simulator without a host-Mac mic the
+        // node reports 0-channel / 0-Hz, and `installTap` then crashes
+        // with a precondition failure rather than throwing. Surface
+        // the misconfiguration as a soft error instead.
+        let inputNode = audioEngine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        guard format.channelCount > 0, format.sampleRate > 0 else {
+            throw NSError(domain: "Transcriber", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Audio input isn't configured (no mic device available). On the iOS Simulator, ensure the host Mac's microphone access is granted in System Settings → Privacy & Security → Microphone."
+            ])
+        }
 
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
@@ -128,8 +143,6 @@ public final class Transcriber: NSObject, @unchecked Sendable {
         }
         self.request = req
 
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
         // 1024-frame buffer is the standard sweet spot — small enough
         // for ~20ms latency, large enough to keep CPU low.
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak req] buffer, _ in
