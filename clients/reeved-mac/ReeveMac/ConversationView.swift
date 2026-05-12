@@ -751,7 +751,6 @@ private struct MessageRow: View {
     let model: ConversationViewModel
     @Environment(\.theme) private var theme
     @Environment(\.clipboard) private var clipboard
-    @Environment(\.speaker) private var speaker
     @State private var showDeleteConfirm = false
     @State private var showUsageDetail = false
     @State private var editDraft: String = ""
@@ -1056,20 +1055,6 @@ private struct MessageRow: View {
                     Task { await model.reloadFromMessage(id: message.id) }
                 }
             }
-            // Read aloud — local TTS via AVSpeechSynthesizer. Hidden
-            // on errored / empty-body rows since there's nothing useful
-            // to speak. Icon flips to stop.circle while this row is
-            // the active utterance.
-            if let body = speakableBody {
-                let speaking = speaker.speakingMessageID == message.id
-                hoverButton(
-                    systemImage: speaking ? "stop.circle" : "speaker.wave.2",
-                    help: speaking ? "Stop reading aloud" : "Read aloud",
-                    tint: speaking ? theme.accent : nil
-                ) {
-                    speaker.toggle(messageID: message.id, text: body)
-                }
-            }
             hoverButton(
                 systemImage: showCopiedToast ? "checkmark" : "doc.on.doc",
                 help: "Copy to clipboard"
@@ -1142,16 +1127,6 @@ private struct MessageRow: View {
     /// ~4 lines by default with an inline expand affordance.
     private var isCollapsibleRole: Bool {
         message.role == .system || message.role == .context
-    }
-
-    /// Body text to read aloud for the TTS button, or nil when there's
-    /// nothing usable. Skips errored rows and rows whose content is
-    /// purely tool calls / structural markers.
-    private var speakableBody: String? {
-        guard !isErrored else { return nil }
-        let text = (message.displayContent ?? message.content)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : text
     }
 
     /// Approx height for ~4 lines of body text. Body uses .font(.body)

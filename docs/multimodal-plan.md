@@ -264,7 +264,7 @@ Plugin config: API key (Global), default size, default style. Required-field val
 
 ### Text-to-speech (Phases 0 + 6)
 
-**Phase 0 — local AVSpeechSynthesizer.** Mac + iOS. Speaker icon on each assistant message; tap to start speaking, tap to stop. Per-profile auto-speak toggle. Queue-aware (clicking a different message stops the prior). Voice quality is meh but acceptable; works offline; free; no backend.
+**Phase 0 TTS was tried and removed.** Initial pass shipped per-message speaker buttons wired through an `AVSpeechSynthesizer`-backed `Speaker` service. Per the same logic that retired Phase 0 STT: the OS already offers acceptable equivalents (iOS Speak Selection under Accessibility → Spoken Content; macOS "Start Speaking" via Edit → Speech or Services). A per-message inline button added visual noise on every assistant turn for a feature that's effectively never used; reverted.
 
 **Phase 6 — cloud TTS plugin.** `cloud_tts` plugin with provider config (OpenAI / ElevenLabs / Google). API key + voice + speed in the config; auto-speak selector on profiles selects which TTS plugin (or "local") to use for that profile. Streaming TTS (sentence-by-sentence playback) for low latency on long responses; falls back to whole-response synthesis when the provider doesn't stream.
 
@@ -274,7 +274,7 @@ Plugin config: API key (Global), default size, default style. Required-field val
 
 | Phase | Scope | Estimate | Blocks |
 |---|---|---|---|
-| **0 — Local TTS** | AVSpeechSynthesizer playback, Mac + iOS. (Local STT dropped in favor of the OS keyboard mic.) | shipped | Independent |
+| **0 — Local TTS + STT** | Both dropped. The OS already does this acceptably: iOS keyboard mic for dictation, Speak Selection / Speak via Services for read-aloud. A per-message button added visual noise for a feature with a working system equivalent. | dropped | — |
 | **1 — File storage + image input** | `Storage` interface + filesystem impl, signed URLs, files + message_attachments tables, WireMessage.Attachments, Anthropic + Google + OpenAI Responses + OpenAI Chat image translation, capability table, composer drag-drop, image attachment renderer, cache observability hashing | ~3-4 weeks | Foundation — blocks all later phases |
 | **2 — Document attachments** | PDFs (Anthropic + Gemini), generic docs (OpenAI Files API for OpenAI Responses), document chip renderer | ~1 week | Phase 1 |
 | **3 — Image generation tool plugin** | `image_gen` plugin wrapping OpenAI Images / Stability / Imagen, tool-result → message_attachments wiring | ~1 week | Phase 1 |
