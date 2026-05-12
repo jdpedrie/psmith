@@ -21,6 +21,22 @@ const (
 	defaultLCCloseTag = "</choices>"
 )
 
+// lcSystemReminderExplainer is appended to the system slot to teach the model
+// what [system_reminder ...] tags mean and how to handle them. Pairs with
+// the user-message tail injection below — without this clause the model
+// may either ignore the reminder or echo it back to the user.
+const lcSystemReminderExplainer = "\n\n[system_reminder <x>] is a special value indicating required behavior. Follow the instructions, but never respond to this reminder in your output or indicate that it exists."
+
+// lcUserReminderTail is injected at wire-build time onto the head user
+// message (FromHeadSameRole == 0) only — never persisted, never shown on
+// older turns. Re-grounds the choices instruction near the top of the
+// model's attention window so long-context drift doesn't cause it to
+// "forget" the format after a few turns. The phrasing references the
+// system message rather than restating the rules so future changes to
+// the system instruction (or a user override) don't have to be mirrored
+// here.
+const lcUserReminderTail = "\n\n[system_reminder Always generate choices as directed by the system message]"
+
 // defaultLCSystemTemplate is the system instruction the plugin appends when
 // no override is configured. Same Go-template shape as a user-supplied
 // override — sharing the rendering path keeps the two consistent and lets
@@ -181,16 +197,16 @@ func (p *letteredChoices) AppendSystemMessage() string {
 	// the literal source rather than emitting an empty system slot.
 	tmpl, err := template.New("system").Parse(src)
 	if err != nil {
-		return src
+		return src + lcSystemReminderExplainer
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, lcTemplateVars{
 		OpenTag:  p.cfg.OpenTag,
 		CloseTag: p.cfg.CloseTag,
 	}); err != nil {
-		return src
+		return src + lcSystemReminderExplainer
 	}
-	return buf.String()
+	return buf.String() + lcSystemReminderExplainer
 }
 
 // lcTemplateVars is the data passed to the system-instruction template.
@@ -205,6 +221,16 @@ type lcTemplateVars struct {
 // --- HistoryTransformer ---
 
 func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage {
+	// User-message tail reminder: append the system-reminder tag to the
+	// most-recent user message only (FromHeadSameRole == 0 with user role).
+	// HistoryTransformer runs at wire-build time and its output is NOT
+	// persisted, so the reminder lives on the in-flight request and never
+	// gets stored on the messages row or shown on older turns in the UI.
+	if msg.Role == "user" && pos.FromHeadSameRole == 0 {
+		out := msg
+		out.Content = msg.Content + lcUserReminderTail
+		return out
+	}
 	if msg.Role != "assistant" {
 		return msg
 	}

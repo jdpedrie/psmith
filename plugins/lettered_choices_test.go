@@ -79,8 +79,11 @@ func TestLetteredChoices_AppendSystemMessageOverride(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"system_instruction_override": "use ONLY uppercase letters"}`)
 	got := lc.AppendSystemMessage()
-	if got != "use ONLY uppercase letters" {
+	if !strings.HasPrefix(got, "use ONLY uppercase letters") {
 		t.Errorf("override not honored: got %q", got)
+	}
+	if !strings.Contains(got, "[system_reminder") {
+		t.Errorf("system_reminder explainer missing: got %q", got)
 	}
 }
 
@@ -93,9 +96,9 @@ func TestLetteredChoices_AppendSystemMessageOverrideTemplateInterpolation(t *tes
 	}`
 	lc := buildLetteredChoices(t, cfg)
 	got := lc.AppendSystemMessage()
-	want := "Wrap choices with [opts] and [/opts] please."
-	if got != want {
-		t.Errorf("template not interpolated:\n  got:  %q\n  want: %q", got, want)
+	wantPrefix := "Wrap choices with [opts] and [/opts] please."
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("template not interpolated:\n  got:  %q\n  want prefix: %q", got, wantPrefix)
 	}
 }
 
@@ -185,16 +188,42 @@ func TestLetteredChoices_HistoryTransformer_KeepLastN_2KeepsTwo(t *testing.T) {
 	}
 }
 
-func TestLetteredChoices_HistoryTransformer_NonAssistantUntouched(t *testing.T) {
+func TestLetteredChoices_HistoryTransformer_OlderUserUntouched(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"keep_last_n": 0}`)
 	msg := providers.WireMessage{
 		Role:    "user",
 		Content: "<choices>NOT MINE</choices>",
 	}
+	// User at FromHeadSameRole=5 is NOT the head user; choices-strip
+	// logic only touches assistants, and the system-reminder tail only
+	// goes on the head user — so older users are pass-through.
 	got := lc.TransformHistoryMessage(msg, HistoryPos{FromHead: 5, FromHeadSameRole: 5})
 	if got.Content != msg.Content {
-		t.Errorf("user message should be untouched; got %q", got.Content)
+		t.Errorf("older user message should be untouched; got %q", got.Content)
+	}
+}
+
+func TestLetteredChoices_HistoryTransformer_HeadUserGetsReminder(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, ``)
+	msg := providers.WireMessage{Role: "user", Content: "what should I do?"}
+	got := lc.TransformHistoryMessage(msg, HistoryPos{FromHead: 0, FromHeadSameRole: 0})
+	if !strings.HasPrefix(got.Content, "what should I do?") {
+		t.Errorf("original content must be preserved as the prefix; got %q", got.Content)
+	}
+	if !strings.Contains(got.Content, "[system_reminder Always generate choices") {
+		t.Errorf("reminder tail missing on head user; got %q", got.Content)
+	}
+}
+
+func TestLetteredChoices_HistoryTransformer_SecondUserNoReminder(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, ``)
+	msg := providers.WireMessage{Role: "user", Content: "earlier turn"}
+	got := lc.TransformHistoryMessage(msg, HistoryPos{FromHead: 2, FromHeadSameRole: 1})
+	if got.Content != msg.Content {
+		t.Errorf("non-head user must not receive the reminder; got %q", got.Content)
 	}
 }
 
