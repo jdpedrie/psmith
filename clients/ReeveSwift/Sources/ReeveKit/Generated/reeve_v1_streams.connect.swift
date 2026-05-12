@@ -25,6 +25,16 @@ public protocol Reeve_V1_StreamsServiceClientInterface: Sendable {
     /// Status snapshot for a stream run.
     @available(iOS 13, *)
     func `getStreamRun`(request: Reeve_V1_GetStreamRunRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_GetStreamRunResponse>
+
+    /// Returns currently-running stream_runs the caller owns. Used by the
+    /// iOS StreamHub to discover in-flight turns on app launch /
+    /// conversations-list refresh and on conversation entry — so a user
+    /// who left mid-generation and came back sees the live state
+    /// immediately, instead of an empty chain that fills in on the next
+    /// refresh. Optional `conversation_id` filter scopes to one
+    /// conversation; omitted returns every active run for the user.
+    @available(iOS 13, *)
+    func `listActiveRuns`(request: Reeve_V1_ListActiveRunsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListActiveRunsResponse>
 }
 
 /// Concrete implementation of `Reeve_V1_StreamsServiceClientInterface`.
@@ -50,11 +60,17 @@ public final class Reeve_V1_StreamsServiceClient: Reeve_V1_StreamsServiceClientI
         return await self.client.unary(path: "/reeve.v1.StreamsService/GetStreamRun", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listActiveRuns`(request: Reeve_V1_ListActiveRunsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ListActiveRunsResponse> {
+        return await self.client.unary(path: "/reeve.v1.StreamsService/ListActiveRuns", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let subscribeStream = Connect.MethodSpec(name: "SubscribeStream", service: "reeve.v1.StreamsService", type: .serverStream)
             public static let cancelStream = Connect.MethodSpec(name: "CancelStream", service: "reeve.v1.StreamsService", type: .unary)
             public static let getStreamRun = Connect.MethodSpec(name: "GetStreamRun", service: "reeve.v1.StreamsService", type: .unary)
+            public static let listActiveRuns = Connect.MethodSpec(name: "ListActiveRuns", service: "reeve.v1.StreamsService", type: .unary)
         }
     }
 }

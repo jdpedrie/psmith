@@ -13,6 +13,7 @@ import (
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
+	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
@@ -21,11 +22,12 @@ import (
 // Service satisfies reevev1connect.StreamsServiceHandler.
 type Service struct {
 	reevev1connect.UnimplementedStreamsServiceHandler
+	queries    *store.Queries
 	supervisor *stream.Supervisor
 }
 
-func NewService(supervisor *stream.Supervisor) *Service {
-	return &Service{supervisor: supervisor}
+func NewService(queries *store.Queries, supervisor *stream.Supervisor) *Service {
+	return &Service{queries: queries, supervisor: supervisor}
 }
 
 // SubscribeStream forwards events from supervisor.Subscribe to the Connect
@@ -102,6 +104,42 @@ func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[reevev1
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.GetStreamRunResponse{StreamRun: streamRunToProto(row)}), nil
+}
+
+// ListActiveRuns returns every `status='running'` stream_run the caller
+// owns, optionally filtered to a single conversation. iOS StreamHub
+// calls this on app launch and on conversation entry to adopt in-flight
+// turns the previous view didn't finish receiving.
+func (s *Service) ListActiveRuns(ctx context.Context, req *connect.Request[reevev1.ListActiveRunsRequest]) (*connect.Response[reevev1.ListActiveRunsResponse], error) {
+	caller := auth.MustFromContext(ctx)
+
+	var rows []store.StreamRun
+	if req.Msg.ConversationId != nil && *req.Msg.ConversationId != "" {
+		convID, err := uuid.Parse(*req.Msg.ConversationId)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+		}
+		got, err := s.queries.ListActiveStreamRunsByConversation(ctx, store.ListActiveStreamRunsByConversationParams{
+			UserID:         caller.ID,
+			ConversationID: convID,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		rows = got
+	} else {
+		got, err := s.queries.ListActiveStreamRunsByUser(ctx, caller.ID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		rows = got
+	}
+
+	out := make([]*reevev1.StreamRun, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, streamRunToProto(r))
+	}
+	return connect.NewResponse(&reevev1.ListActiveRunsResponse{Runs: out}), nil
 }
 
 // --- conversions ---

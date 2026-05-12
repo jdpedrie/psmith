@@ -224,6 +224,111 @@ func (q *Queries) InsertStreamChunk(ctx context.Context, arg InsertStreamChunkPa
 	return err
 }
 
+const listActiveStreamRunsByConversation = `-- name: ListActiveStreamRunsByConversation :many
+SELECT sr.id, sr.conversation_id, sr.context_id, sr.parent_message_id, sr.provider_id, sr.model_id, sr.status, sr.purpose, sr.started_at, sr.ended_at, sr.error_payload, sr.result_message_id, sr.result_context_id, sr.prefix_hashes, sr.prefix_length, sr.cache_stable_prefix_length, sr.cache_trailing_depth
+FROM stream_runs sr
+JOIN conversations c ON c.id = sr.conversation_id
+WHERE c.user_id = $1 AND sr.conversation_id = $2 AND sr.status = 'running'
+ORDER BY sr.started_at DESC
+`
+
+type ListActiveStreamRunsByConversationParams struct {
+	UserID         uuid.UUID
+	ConversationID uuid.UUID
+}
+
+// Live runs for a specific conversation. Used by ConversationViewModel
+// on view entry to detect "there's an in-flight assistant turn the
+// previous view didn't finish receiving" — typically zero rows, at
+// most one or two (a turn + a parallel compaction).
+func (q *Queries) ListActiveStreamRunsByConversation(ctx context.Context, arg ListActiveStreamRunsByConversationParams) ([]StreamRun, error) {
+	rows, err := q.db.Query(ctx, listActiveStreamRunsByConversation, arg.UserID, arg.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StreamRun
+	for rows.Next() {
+		var i StreamRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.ContextID,
+			&i.ParentMessageID,
+			&i.ProviderID,
+			&i.ModelID,
+			&i.Status,
+			&i.Purpose,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.ErrorPayload,
+			&i.ResultMessageID,
+			&i.ResultContextID,
+			&i.PrefixHashes,
+			&i.PrefixLength,
+			&i.CacheStablePrefixLength,
+			&i.CacheTrailingDepth,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveStreamRunsByUser = `-- name: ListActiveStreamRunsByUser :many
+SELECT sr.id, sr.conversation_id, sr.context_id, sr.parent_message_id, sr.provider_id, sr.model_id, sr.status, sr.purpose, sr.started_at, sr.ended_at, sr.error_payload, sr.result_message_id, sr.result_context_id, sr.prefix_hashes, sr.prefix_length, sr.cache_stable_prefix_length, sr.cache_trailing_depth
+FROM stream_runs sr
+JOIN conversations c ON c.id = sr.conversation_id
+WHERE c.user_id = $1 AND sr.status = 'running'
+ORDER BY sr.started_at DESC
+`
+
+// Live runs for every conversation the user owns. Powers the iOS
+// StreamHub's "what's running right now" sweep on app launch /
+// conversations-list refresh: each run gets adopted, so a cold launch
+// into a mid-generation conversation shows live content.
+func (q *Queries) ListActiveStreamRunsByUser(ctx context.Context, userID uuid.UUID) ([]StreamRun, error) {
+	rows, err := q.db.Query(ctx, listActiveStreamRunsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StreamRun
+	for rows.Next() {
+		var i StreamRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.ContextID,
+			&i.ParentMessageID,
+			&i.ProviderID,
+			&i.ModelID,
+			&i.Status,
+			&i.Purpose,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.ErrorPayload,
+			&i.ResultMessageID,
+			&i.ResultContextID,
+			&i.PrefixHashes,
+			&i.PrefixLength,
+			&i.CacheStablePrefixLength,
+			&i.CacheTrailingDepth,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStreamChunks = `-- name: ListStreamChunks :many
 SELECT stream_run_id, sequence, chunk_type, payload, created_at
 FROM stream_chunks

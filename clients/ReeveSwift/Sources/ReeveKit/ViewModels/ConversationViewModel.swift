@@ -9,6 +9,10 @@ import Observation
 public final class ConversationViewModel {
     public let conversation: ReeveConversation
     private let client: ReeveClient
+    /// App-lifetime owner of active stream subscriptions. Passed in so
+    /// the view model can register newly-started runs + observe state
+    /// without owning the subscriber task itself.
+    private let hub: StreamHub
     private let onTerminal: @MainActor () async -> Void
     /// Fires after a successful assistant turn lands in `messages`. The
     /// app uses it to drive side effects that depend on completed turns
@@ -53,43 +57,34 @@ public final class ConversationViewModel {
     // Send state
     public var draft: String = ""
     public var sending = false
-    public var streamingText: String = ""
-    public var streamRunID: String?
-    private var streamTask: Task<Void, Never>?
 
-
-    /// Sequence number of the most recent chunk seen on the active
-    /// stream. Used by `resumeStreamIfPaused()` to re-subscribe with
-    /// `fromSequence = lastStreamChunkSequence + 1` after a ScenePhase
-    /// background dropped the live SSE connection.
-    ///
-    /// Reset to 0 in `clearStreamingState()` and on each new `send()`
-    /// so a stale sequence from a previous run doesn't leak into the
-    /// next one. Mac never reads it (Mac apps don't suspend the same
-    /// way) but the per-chunk write costs nothing.
-    private var lastStreamChunkSequence: Int64 = 0
     /// Optimistic user message text shown before the RPC returns.
     public var pendingUserText: String?
 
-    /// Accumulated thinking text streamed for the active run. Reset to ""
-    /// on stream start; appended on each `.thinkingDelta` chunk; cleared on
-    /// terminal once the assistant message is materialised (the rendered
-    /// text moves to `messages[i].thinkingRenderedText` for historical
-    /// display). Empty string + non-nil `streamingThinkingStartedAt` is the
-    /// "reasoning started, no text yet" marker the UI shows as
-    /// "Thinking… (0.0s)".
-    public var streamingThinking: String = ""
-    /// Wall-clock at which the first thinking delta arrived for the active
-    /// run. Drives the live "Thinking… (X.Ys)" timer client-side: the view
-    /// polls `Date()` and subtracts. Nil before any thinking arrives, and
-    /// reset to nil on terminal.
-    public var streamingThinkingStartedAt: Date?
-    /// True once the assistant has produced its first `.textDelta`. Once
-    /// true, the live "Thinking…" badge in the UI flips to "Thought for
-    /// X.Ys" — reasoning is over for this turn even though the run hasn't
-    /// terminated yet, and we want the badge to read accurately the moment
-    /// the user can see the answer being typed out.
-    public var streamingThinkingFinishedAt: Date?
+    // MARK: - Streaming state (read-through to `StreamHub`)
+    //
+    // The active stream's accumulated text / thinking / tool calls /
+    // sequence cursor live on `AppModel.streamHub` so they survive the
+    // view-model being torn down (user leaves the chat, comes back).
+    // These computed properties forward reads — SwiftUI's `@Observable`
+    // tracks the nested access into `hub.streams[conversation.id]`, so
+    // chunk-driven updates propagate to the View tree automatically.
+
+    public var streamingText: String {
+        hub.streams[conversation.id]?.streamingText ?? ""
+    }
+    public var streamRunID: String? {
+        hub.streams[conversation.id]?.runID
+    }
+    public var streamingThinking: String {
+        hub.streams[conversation.id]?.streamingThinking ?? ""
+    }
+    public var streamingThinkingStartedAt: Date? {
+        hub.streams[conversation.id]?.streamingThinkingStartedAt
+    }
+    public var streamingThinkingFinishedAt: Date? {
+        hub.streams[conversation.id]?.streamingThinkingFinishedAt
+    }
 
     /// Open/closed state for the live streaming row's thinking disclosure.
     /// Owned by the view-model (rather than @State inside the disclosure)
@@ -106,12 +101,10 @@ public final class ConversationViewModel {
     public var expandedThinkingMessageIDs: Set<String> = []
 
     /// Tool calls captured on the active stream, ordered by start time.
-    /// Built up from `tool_use_start` / `tool_use_delta` / `tool_use_end` /
-    /// `tool_result` chunks. Each entry's computed `phase` flips through
-    /// generating → executing → done as more chunks arrive. Wiped on
-    /// terminal — historical tool calls live on the materialised
-    /// message row's `toolCalls` instead.
-    public var streamingToolCalls: [LiveToolCall] = []
+    /// Mirrored from `hub.streams[conversation.id]?.streamingToolCalls`.
+    public var streamingToolCalls: [LiveToolCall] {
+        hub.streams[conversation.id]?.streamingToolCalls ?? []
+    }
 
     /// Open/closed state for tool-call disclosures on historical messages,
     /// keyed by `"\(messageID):\(toolCallIndex)"` to disambiguate when a
@@ -128,8 +121,11 @@ public final class ConversationViewModel {
     /// message — the two states are independent.
     public var expandedHeaderMessageIDs: Set<String> = []
 
-    // Compact state
-    public var isCompacting = false
+    // Compact state — `isCompacting` is computed from the hub so an
+    // active compression stream survives the view-model's lifecycle.
+    public var isCompacting: Bool {
+        hub.streams[conversation.id]?.purpose == .compression
+    }
     public var compactError: String?
     /// When true, the conversation pane swaps the message scroll for a
     /// full Compact page (per the "no popups" rule). The page lets the
@@ -246,7 +242,9 @@ public final class ConversationViewModel {
         messages.contains { $0.role == .compressionSummary && $0.errorText == nil }
     }
 
-    public var isStreaming: Bool { streamRunID != nil && !isCompacting }
+    public var isStreaming: Bool {
+        hub.streams[conversation.id]?.purpose == .assistantResponse
+    }
 
     /// Provider + model from the most recent assistant message — used for
     /// CountContextTokens. Nil when no assistant message exists yet.
@@ -262,12 +260,14 @@ public final class ConversationViewModel {
     public init(
         conversation: ReeveConversation,
         client: ReeveClient,
+        hub: StreamHub,
         onTerminal: @MainActor @escaping () async -> Void,
         onAssistantTurnComplete: AssistantTurnCompleteHandler? = nil,
         localTitler: LocalTitler? = nil
     ) {
         self.conversation = conversation
         self.client = client
+        self.hub = hub
         self.onTerminal = onTerminal
         self.onAssistantTurnComplete = onAssistantTurnComplete
         self.localTitler = localTitler
@@ -276,6 +276,14 @@ public final class ConversationViewModel {
         // render frame — no flicker between empty and restored.
         if let saved = DraftStore.load(conversationID: conversation.id) {
             self.draft = saved
+        }
+        // Register this view as the terminal listener for our
+        // conversation. Replaces any earlier registration (e.g. if the
+        // user thrashes between the same conversation rapidly). Hub
+        // already-active streams remain subscribing; on terminal the
+        // hub fires this callback.
+        hub.attach(conversationID: conversation.id) { [weak self] run in
+            await self?.handleStreamTerminal(run)
         }
     }
 
@@ -495,18 +503,13 @@ public final class ConversationViewModel {
     public func send() async {
         let originalDraft = draft
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending, !isCompacting, !hasPendingCompression else { return }
+        guard !text.isEmpty, !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
         draft = ""
         // Whatever the user had saved as a draft is now in flight —
         // clear so a successful send doesn't leave a stale draft
         // ready to greet them on next open.
         DraftStore.clear(conversationID: conversation.id)
         sending = true
-        streamingText = ""
-        streamingThinking = ""
-        streamingThinkingStartedAt = nil
-        streamingThinkingFinishedAt = nil
-        streamingToolCalls = []
         // Show message optimistically before the RPC round-trip completes.
         pendingUserText = text
         defer { sending = false }
@@ -520,45 +523,16 @@ public final class ConversationViewModel {
             )
             pendingUserText = nil
             messages.append(userMsg)
-            streamRunID = run.id
-
-            streamTask?.cancel()
-            streamTask = Task { @MainActor in
-                for await event in client.streams.subscribe(streamRunID: run.id) {
-                    switch event {
-                    case .chunk(let c):
-                        applyStreamChunk(c)
-                    case .terminal:
-                        await load()
-                        await onTerminal()
-                        // Hand off any open disclosure to the materialised
-                        // assistant turn so the user's click during the
-                        // stream survives the StreamingRow → MessageRow
-                        // swap.
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                        // App-level "assistant turn complete" hook —
-                        // drives Mac local notifications, etc. Skipped
-                        // for errored / cancelled runs (those land in
-                        // .failed below).
-                        fireAssistantTurnComplete()
-                        // First assistant turn just landed — give the local
-                        // titler a chance. Idempotent: bails immediately if
-                        // already attempted, profile isn't apple_foundation,
-                        // or another path beat us to setting the title.
-                        await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
-                    case .failed:
-                        // The supervisor materializes a real assistant
-                        // message row (with content + error_payload) on
-                        // errored runs, so the right thing to do is reload
-                        // the message list and let MessageRow render the
-                        // failure inline. No banner — the errored message
-                        // is now first-class history.
-                        await load()
-                        await onTerminal()
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                    }
-                }
-            }
+            // Hand the run to the hub — it owns the subscriber task
+            // and accumulates streaming state. Terminal arrives via
+            // the callback registered in init(), regardless of
+            // whether this view model is still mounted at the time.
+            hub.register(
+                runID: run.id,
+                conversationID: conversation.id,
+                contextID: run.contextID,
+                purpose: .assistantResponse
+            )
         } catch {
             // Pre-stream RPC failure (validation, network before the
             // server even spawned a run): no message row exists. Restore
@@ -578,60 +552,22 @@ public final class ConversationViewModel {
     }
 
     public func cancelStream() {
-        guard let id = streamRunID else { return }
-        Task { try? await client.streams.cancel(streamRunID: id) }
+        Task { await hub.cancel(conversationID: conversation.id) }
     }
 
     // MARK: - ScenePhase suspend / resume (iOS)
     //
-    // iOS aggressively suspends backgrounded apps; the SSE socket the
-    // streamTask holds dies on the way out. The supervisor on the
-    // server side keeps streaming regardless and persists chunks to
-    // `stream_chunks` — the existing replay path. These two methods
-    // wire that path to the iOS ScenePhase observer in `ReeveiOSApp`.
-    //
-    // Mac doesn't need them (NSApp doesn't suspend connections the
-    // same way) but the API is harmless to call there too — Mac wires
-    // up `suspendActiveStream()` from a window-occluded notification
-    // would get the same behavior.
-
-    /// Cancels the local subscription Task without telling the server
-    /// to cancel the run. The streamRunID + lastStreamChunkSequence
-    /// stay in place so `resumeStreamIfPaused()` can re-subscribe
-    /// where we left off. No-op when no stream is active.
-    public func suspendActiveStream() {
-        guard streamRunID != nil else { return }
-        streamTask?.cancel()
-        streamTask = nil
-    }
-
-    /// Re-subscribes to the active stream from `lastStreamChunkSequence + 1`
-    /// if a stream was running and got suspended. No-op when there's
-    /// no stream OR when a streamTask is already running (e.g. the
-    /// user foregrounded faster than the cancel-then-resubscribe
-    /// race could complete).
-    public func resumeStreamIfPaused() {
-        guard let runID = streamRunID, streamTask == nil else { return }
-        let resumeFrom = lastStreamChunkSequence + 1
-        streamTask = Task { @MainActor in
-            for await event in client.streams.subscribe(streamRunID: runID, fromSequence: resumeFrom) {
-                switch event {
-                case .chunk(let c):
-                    applyStreamChunk(c)
-                case .terminal:
-                    await load()
-                    await onTerminal()
-                    clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                    fireAssistantTurnComplete()
-                    await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
-                case .failed:
-                    await load()
-                    await onTerminal()
-                    clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                }
-            }
-        }
-    }
+    // No-ops now — `StreamHub` owns the subscriber Task and keeps it
+    // running across view-model dismissal. iOS's app-level suspend
+    // (~30s grace, then process freeze) is handled inside the
+    // subscriber's transparent-retry loop (see StreamSubscriber): on
+    // foreground the underlying URLSession reconnects from the last
+    // seen sequence. Kept as kept-open-stubs so existing scenePhase
+    // wiring in `ConversationView` still compiles; if you want to
+    // forcibly drop the active subscription on backgrounding (battery
+    // savings), call `hub.cancel(conversationID:)` instead.
+    public func suspendActiveStream() {}
+    public func resumeStreamIfPaused() {}
 
     // MARK: Compact
 
@@ -750,8 +686,7 @@ public final class ConversationViewModel {
         providerID: String? = nil,
         modelID: String? = nil
     ) async {
-        guard !isCompacting, !sending else { return }
-        isCompacting = true
+        guard !isCompacting, !sending, !isStreaming else { return }
         compactError = nil
         do {
             let run = try await client.conversations.compact(
@@ -760,50 +695,21 @@ public final class ConversationViewModel {
                 providerID: providerID,
                 modelID: modelID
             )
-            streamRunID = run.id
-            streamingText = ""
-            streamingThinking = ""
-            streamingThinkingStartedAt = nil
-            streamingThinkingFinishedAt = nil
-            streamingToolCalls = []
-            streamTask?.cancel()
-            streamTask = Task { @MainActor in
-                for await event in client.streams.subscribe(streamRunID: run.id) {
-                    switch event {
-                    case .chunk(let c):
-                        // Render compression chunks the same way send() does so
-                        // the user sees the summary build in real time, instead
-                        // of staring at a "Summarizing…" placeholder. The
-                        // running text gets cleared when the terminal `load()`
-                        // pulls in the materialized compression_summary message.
-                        applyStreamChunk(c)
-                    case .terminal:
-                        isCompacting = false
-                        clearStreamingState()
-                        await load()
-                        await onTerminal()
-                    case .failed:
-                        // Errored compaction now materializes a real
-                        // compression_summary row in the source context
-                        // (with empty/partial content + the error
-                        // captured inline). Reload so the user sees the
-                        // failure as a first-class card in the
-                        // conversation, with the error text + a Dismiss
-                        // affordance — instead of bouncing them back
-                        // into the Compact page under a banner.
-                        isCompacting = false
-                        clearStreamingState()
-                        await load()
-                        await onTerminal()
-                    }
-                }
-            }
+            // Hub takes ownership; isCompacting flips true via the
+            // computed property (hub.streams[conv.id]?.purpose == .compression).
+            hub.register(
+                runID: run.id,
+                conversationID: conversation.id,
+                contextID: run.contextID,
+                purpose: .compression
+            )
         } catch {
             // Pre-stream RPC failure — no run was created so there's no
             // errored summary to render. Surface the error inline on the
             // Compact page so the user can adjust the prompt or model
-            // picker and try again.
-            isCompacting = false
+            // picker and try again. isCompacting is hub-derived now —
+            // since `hub.register` was never called on this path, it's
+            // already false.
             compactError = ReeveError.display(error)
             showingCompactView = true
         }
@@ -940,13 +846,8 @@ public final class ConversationViewModel {
     /// Mirrors `sendForking`'s setup/teardown machinery so chunk
     /// routing, terminal hand-off, and error resilience are identical.
     public func regenerateAssistant(parentMessageID: String) async {
-        guard !sending, !isCompacting, !hasPendingCompression else { return }
+        guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
         sending = true
-        streamingText = ""
-        streamingThinking = ""
-        streamingThinkingStartedAt = nil
-        streamingThinkingFinishedAt = nil
-        streamingToolCalls = []
         defer { sending = false }
 
         do {
@@ -957,25 +858,12 @@ public final class ConversationViewModel {
                 modelID: selectedModelID
             )
             await load()
-            streamRunID = run.id
-            streamTask?.cancel()
-            streamTask = Task { @MainActor in
-                for await event in client.streams.subscribe(streamRunID: run.id) {
-                    switch event {
-                    case .chunk(let c):
-                        applyStreamChunk(c)
-                    case .terminal:
-                        await load()
-                        await onTerminal()
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                        await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
-                    case .failed:
-                        await load()
-                        await onTerminal()
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                    }
-                }
-            }
+            hub.register(
+                runID: run.id,
+                conversationID: conversation.id,
+                contextID: run.contextID,
+                purpose: .assistantResponse
+            )
         } catch {
             await load()
             loadError = ReeveError.display(error)
@@ -989,13 +877,8 @@ public final class ConversationViewModel {
     /// error resilience. Empty content short-circuits silently.
     public func sendForking(content: String, parentMessageID: String?) async {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending, !isCompacting, !hasPendingCompression else { return }
+        guard !text.isEmpty, !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
         sending = true
-        streamingText = ""
-        streamingThinking = ""
-        streamingThinkingStartedAt = nil
-        streamingThinkingFinishedAt = nil
-        streamingToolCalls = []
         pendingUserText = text
         defer { sending = false }
 
@@ -1017,25 +900,12 @@ public final class ConversationViewModel {
             if !messages.contains(where: { $0.id == userMsg.id }) {
                 messages.append(userMsg)
             }
-            streamRunID = run.id
-            streamTask?.cancel()
-            streamTask = Task { @MainActor in
-                for await event in client.streams.subscribe(streamRunID: run.id) {
-                    switch event {
-                    case .chunk(let c):
-                        applyStreamChunk(c)
-                    case .terminal:
-                        await load()
-                        await onTerminal()
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                        await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
-                    case .failed:
-                        await load()
-                        await onTerminal()
-                        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
-                    }
-                }
-            }
+            hub.register(
+                runID: run.id,
+                conversationID: conversation.id,
+                contextID: run.contextID,
+                purpose: .assistantResponse
+            )
         } catch {
             pendingUserText = nil
             await load()
@@ -1052,95 +922,44 @@ public final class ConversationViewModel {
         }
     }
 
-    // MARK: - Streaming chunk routing
+    // MARK: - Stream terminal handling
+    //
+    // `StreamHub` owns chunk routing and accumulation now (see
+    // StreamHub.applyChunk). When the hub sees a terminal event for
+    // this conversation it invokes the closure registered in init() —
+    // which lands in `handleStreamTerminal` below.
 
-    /// Routes one chunk from the live stream into the relevant accumulator
-    /// (text → `streamingText`, thinking → `streamingThinking`). Also stamps
-    /// `streamingThinkingStartedAt` on the first thinking delta and
-    /// `streamingThinkingFinishedAt` on the first text delta after thinking
-    /// — that's the moment the live "Thinking…" badge flips to "Thought
-    /// for X.Ys" because reasoning is over even though the run hasn't
-    /// terminated. Other chunk types are ignored at this layer.
-    func applyStreamChunk(_ c: ReeveChunk) {
-        // Track the highest sequence seen so resumeStreamIfPaused can
-        // re-subscribe from `c.sequence + 1` after a ScenePhase drop.
-        // Use max() defensively: chunks should arrive in order but
-        // recording the highest is safe under any ordering quirk.
-        lastStreamChunkSequence = max(lastStreamChunkSequence, c.sequence)
-        switch c.type {
-        case .textDelta:
-            if let s = c.textIfDelta {
-                if streamingThinkingStartedAt != nil, streamingThinkingFinishedAt == nil {
-                    streamingThinkingFinishedAt = Date()
-                }
-                streamingText += s
-            }
-        case .thinkingDelta:
-            if let s = c.textIfDelta {
-                if streamingThinkingStartedAt == nil {
-                    streamingThinkingStartedAt = Date()
-                }
-                streamingThinking += s
-            }
-        case .toolUseStart:
-            if let info = c.toolUseStartInfo {
-                streamingToolCalls.append(LiveToolCall(id: info.id, name: info.name, startedAt: Date()))
-            }
-        case .toolUseDelta:
-            if let partial = c.toolUseDeltaPartialJSON,
-               let last = streamingToolCalls.indices.last {
-                streamingToolCalls[last].input.append(partial)
-            }
-        case .toolUseEnd:
-            // Match against the most-recent live call without an
-            // `argsCompletedAt` — the loop dispatches serially, so this
-            // is invariant-safe even when Gemini reuses synthetic ids.
-            if let idx = streamingToolCalls.lastIndex(where: { $0.argsCompletedAt == nil }) {
-                streamingToolCalls[idx].argsCompletedAt = Date()
-            }
-        case .toolResult:
-            guard let info = c.toolResultInfo else { break }
-            // Same "last unresolved" lookup as above; falls back to id
-            // match when somehow ahead of the args-end chunk (defensive).
-            let idx = streamingToolCalls.lastIndex(where: { $0.resultArrivedAt == nil })
-                ?? streamingToolCalls.lastIndex(where: { $0.id == info.toolUseID })
-            if let idx {
-                streamingToolCalls[idx].output = info.output
-                streamingToolCalls[idx].error = info.error
-                streamingToolCalls[idx].elapsedMs = info.elapsedMs
-                streamingToolCalls[idx].resultArrivedAt = Date()
-                // Defensive: if we got the result before the End chunk
-                // (shouldn't happen, but the wire is non-deterministic),
-                // synthesise the args-done timestamp so phase doesn't
-                // get stuck in `.generating`.
-                if streamingToolCalls[idx].argsCompletedAt == nil {
-                    streamingToolCalls[idx].argsCompletedAt = streamingToolCalls[idx].resultArrivedAt
-                }
-            }
-        default:
-            break
+    /// Fired by `StreamHub` when the conversation's active run reaches
+    /// terminal. Hub-owned streaming state is already cleared by the
+    /// time this runs, so `streamingText` etc. read empty and the
+    /// streaming bubble disappears. We reload the chain so the
+    /// materialised assistant turn appears, run app-level hooks, and
+    /// hand off the live disclosure's expanded flag to the new row.
+    @MainActor
+    private func handleStreamTerminal(_ run: ReeveStreamRun) async {
+        let purpose = run.purpose
+        await load()
+        await onTerminal()
+        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
+        if purpose == .assistantResponse {
+            fireAssistantTurnComplete()
+            await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
         }
     }
 
-    /// Wipes all per-stream live state. Called from terminal/failed branches
-    /// of every subscribe loop so the next send starts from a clean slate.
-    /// `handOffExpandedTo`, when non-nil, transfers the live disclosure's
-    /// expanded state to the historical-message expanded set under that id
-    /// — so a stream that finished with the disclosure open lands a
+    /// Resets VM-local presentation state attached to the just-ended
+    /// stream. The hub already cleared its own streaming-state entry
+    /// before invoking the terminal callback. `handOffExpandedTo`,
+    /// when non-nil, transfers the live disclosure's expanded state
+    /// to the historical-message expanded set under that id — so a
+    /// stream that finished with the disclosure open lands a
     /// MessageRow with its disclosure also open, no snap-shut on the
     /// view-tree swap.
     func clearStreamingState(handOffExpandedTo materialisedMessageID: String? = nil) {
         if streamingThinkingExpanded, let id = materialisedMessageID {
             expandedThinkingMessageIDs.insert(id)
         }
-        streamingText = ""
-        streamingThinking = ""
-        streamingThinkingStartedAt = nil
-        streamingThinkingFinishedAt = nil
         streamingThinkingExpanded = false
-        streamingToolCalls = []
-        streamRunID = nil
-        lastStreamChunkSequence = 0
     }
 
     /// Returns the most recently-created assistant message in the loaded

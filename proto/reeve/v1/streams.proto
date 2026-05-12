@@ -18,6 +18,15 @@ service StreamsService {
 
   // Status snapshot for a stream run.
   rpc GetStreamRun(GetStreamRunRequest) returns (GetStreamRunResponse);
+
+  // Returns currently-running stream_runs the caller owns. Used by the
+  // iOS StreamHub to discover in-flight turns on app launch /
+  // conversations-list refresh and on conversation entry — so a user
+  // who left mid-generation and came back sees the live state
+  // immediately, instead of an empty chain that fills in on the next
+  // refresh. Optional `conversation_id` filter scopes to one
+  // conversation; omitted returns every active run for the user.
+  rpc ListActiveRuns(ListActiveRunsRequest) returns (ListActiveRunsResponse);
 }
 
 message SubscribeStreamRequest {
@@ -44,4 +53,13 @@ message GetStreamRunRequest {
 }
 message GetStreamRunResponse {
   StreamRun stream_run = 1;
+}
+
+message ListActiveRunsRequest {
+  // When set, filter results to this conversation. When omitted, every
+  // active run the caller owns is returned.
+  optional string conversation_id = 1;
+}
+message ListActiveRunsResponse {
+  repeated StreamRun runs = 1;
 }

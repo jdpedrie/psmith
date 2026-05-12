@@ -114,6 +114,16 @@ type Querier interface {
 	// column for legacy rows still carrying their pre-rollover JSONB.
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
+	// Live runs for a specific conversation. Used by ConversationViewModel
+	// on view entry to detect "there's an in-flight assistant turn the
+	// previous view didn't finish receiving" — typically zero rows, at
+	// most one or two (a turn + a parallel compaction).
+	ListActiveStreamRunsByConversation(ctx context.Context, arg ListActiveStreamRunsByConversationParams) ([]StreamRun, error)
+	// Live runs for every conversation the user owns. Powers the iOS
+	// StreamHub's "what's running right now" sweep on app launch /
+	// conversations-list refresh: each run gets adopted, so a cold launch
+	// into a mid-generation conversation shows live content.
+	ListActiveStreamRunsByUser(ctx context.Context, userID uuid.UUID) ([]StreamRun, error)
 	// Per-context aggregates (message_count, last_message_total_tokens,
 	// cumulative_cost_usd) are computed in a single query so the client can
 	// render context-list rows without N+1 round trips.

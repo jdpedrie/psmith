@@ -92,7 +92,7 @@ struct IntegrationFlowTests {
         #expect(conversationsModel.selectedID == conv.id)
 
         // Send a message + expect assistant turn
-        let convVM = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let convVM = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await convVM.load()
         await sendAndAwait(convVM, text: "hello")
         let asst = convVM.messages.first(where: { $0.role == .assistant })
@@ -154,7 +154,7 @@ struct IntegrationFlowTests {
 
         // Send a message — successful turn proves the resolution chain
         // composed without rejecting the layered settings.
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
         await sendAndAwait(vm, text: "hi")
         // The wire-side merge happens server-side; full numerical proof
@@ -196,7 +196,7 @@ struct IntegrationFlowTests {
         )
         let conv = try await client.conversations.create(profileID: seeded.profile.id)
 
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
 
         // First turn — assistant emits a <choices> block that's now in history.
@@ -240,7 +240,7 @@ struct IntegrationFlowTests {
             compressionMode: .replace
         )
         let conv = try await client.conversations.create(profileID: seeded.profile.id)
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
 
         for i in 1...5 {
@@ -272,7 +272,7 @@ struct IntegrationFlowTests {
             compressionMode: .append
         )
         let conv = try await client.conversations.create(profileID: seeded.profile.id)
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
         await sendAndAwait(vm, text: "turn-1")
         await vm.load()
@@ -314,7 +314,7 @@ struct IntegrationFlowTests {
             return
         }
         model.selectedID = found.id
-        let vm = ConversationViewModel(conversation: found, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: found, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
         #expect(vm.activeContext != nil)
         #expect(vm.loadError == nil)
@@ -373,7 +373,7 @@ struct IntegrationFlowTests {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "if-branch")
         let seeded = try await Fixtures.seedReadyToChat(client: client, replyText: "reply")
         let conv = try await client.conversations.create(profileID: seeded.profile.id)
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
 
         // Send the original turn.
@@ -417,7 +417,7 @@ struct IntegrationFlowTests {
             compressionMode: .replace
         )
         let conv = try await client.conversations.create(profileID: seeded.profile.id)
-        let vm = ConversationViewModel(conversation: conv, client: client, onTerminal: { }, localTitler: nil)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
         await vm.load()
         await sendAndAwait(vm, text: "stuff")
         await vm.load()

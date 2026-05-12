@@ -117,7 +117,7 @@ func run() error {
 	// service after every assistant materialization. Profile-opt-in; no-op
 	// when title fields aren't configured.
 	supervisor.SetOnAssistantMaterialized(conversationsSvc.MaybeGenerateTitle)
-	streamsSvc := streamsvc.NewService(supervisor)
+	streamsSvc := streamsvc.NewService(queries, supervisor)
 
 	mux := http.NewServeMux()
 	mux.Handle(reevev1connect.NewAuthServiceHandler(authSvc, opts))

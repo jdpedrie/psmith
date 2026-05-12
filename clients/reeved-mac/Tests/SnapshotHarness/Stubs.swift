@@ -96,9 +96,11 @@ public enum SnapshotStubs {
         loadError: String? = nil
     ) -> ConversationViewModel {
         let c = client ?? makeClient()
+        let hub = StreamHub(subscriber: c.streams)
         let vm = ConversationViewModel(
             conversation: conversation,
             client: c,
+            hub: hub,
             onTerminal: { /* no-op for snapshots */ }
         )
         vm.messages = messages

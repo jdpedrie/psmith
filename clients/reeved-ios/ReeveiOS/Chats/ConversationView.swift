@@ -54,6 +54,7 @@ struct ConversationView: View {
             let m = ConversationViewModel(
                 conversation: conversation,
                 client: app.client,
+                hub: app.streamHub,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
                     liveNotifier.generationCompleted(

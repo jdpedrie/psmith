@@ -16,6 +16,28 @@ SELECT * FROM stream_runs
 WHERE conversation_id = $1
 ORDER BY started_at DESC;
 
+-- name: ListActiveStreamRunsByUser :many
+-- Live runs for every conversation the user owns. Powers the iOS
+-- StreamHub's "what's running right now" sweep on app launch /
+-- conversations-list refresh: each run gets adopted, so a cold launch
+-- into a mid-generation conversation shows live content.
+SELECT sr.*
+FROM stream_runs sr
+JOIN conversations c ON c.id = sr.conversation_id
+WHERE c.user_id = $1 AND sr.status = 'running'
+ORDER BY sr.started_at DESC;
+
+-- name: ListActiveStreamRunsByConversation :many
+-- Live runs for a specific conversation. Used by ConversationViewModel
+-- on view entry to detect "there's an in-flight assistant turn the
+-- previous view didn't finish receiving" — typically zero rows, at
+-- most one or two (a turn + a parallel compaction).
+SELECT sr.*
+FROM stream_runs sr
+JOIN conversations c ON c.id = sr.conversation_id
+WHERE c.user_id = $1 AND sr.conversation_id = $2 AND sr.status = 'running'
+ORDER BY sr.started_at DESC;
+
 -- name: FinalizeStreamRun :one
 -- Sets a terminal status, ended_at, optional result_message_id /
 -- result_context_id (compression sets the latter) / error_payload.

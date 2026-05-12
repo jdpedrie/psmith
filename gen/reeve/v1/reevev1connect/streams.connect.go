@@ -42,6 +42,9 @@ const (
 	// StreamsServiceGetStreamRunProcedure is the fully-qualified name of the StreamsService's
 	// GetStreamRun RPC.
 	StreamsServiceGetStreamRunProcedure = "/reeve.v1.StreamsService/GetStreamRun"
+	// StreamsServiceListActiveRunsProcedure is the fully-qualified name of the StreamsService's
+	// ListActiveRuns RPC.
+	StreamsServiceListActiveRunsProcedure = "/reeve.v1.StreamsService/ListActiveRuns"
 )
 
 // StreamsServiceClient is a client for the reeve.v1.StreamsService service.
@@ -55,6 +58,14 @@ type StreamsServiceClient interface {
 	CancelStream(context.Context, *connect.Request[v1.CancelStreamRequest]) (*connect.Response[v1.CancelStreamResponse], error)
 	// Status snapshot for a stream run.
 	GetStreamRun(context.Context, *connect.Request[v1.GetStreamRunRequest]) (*connect.Response[v1.GetStreamRunResponse], error)
+	// Returns currently-running stream_runs the caller owns. Used by the
+	// iOS StreamHub to discover in-flight turns on app launch /
+	// conversations-list refresh and on conversation entry — so a user
+	// who left mid-generation and came back sees the live state
+	// immediately, instead of an empty chain that fills in on the next
+	// refresh. Optional `conversation_id` filter scopes to one
+	// conversation; omitted returns every active run for the user.
+	ListActiveRuns(context.Context, *connect.Request[v1.ListActiveRunsRequest]) (*connect.Response[v1.ListActiveRunsResponse], error)
 }
 
 // NewStreamsServiceClient constructs a client for the reeve.v1.StreamsService service. By default,
@@ -86,6 +97,12 @@ func NewStreamsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(streamsServiceMethods.ByName("GetStreamRun")),
 			connect.WithClientOptions(opts...),
 		),
+		listActiveRuns: connect.NewClient[v1.ListActiveRunsRequest, v1.ListActiveRunsResponse](
+			httpClient,
+			baseURL+StreamsServiceListActiveRunsProcedure,
+			connect.WithSchema(streamsServiceMethods.ByName("ListActiveRuns")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -94,6 +111,7 @@ type streamsServiceClient struct {
 	subscribeStream *connect.Client[v1.SubscribeStreamRequest, v1.SubscribeStreamResponse]
 	cancelStream    *connect.Client[v1.CancelStreamRequest, v1.CancelStreamResponse]
 	getStreamRun    *connect.Client[v1.GetStreamRunRequest, v1.GetStreamRunResponse]
+	listActiveRuns  *connect.Client[v1.ListActiveRunsRequest, v1.ListActiveRunsResponse]
 }
 
 // SubscribeStream calls reeve.v1.StreamsService.SubscribeStream.
@@ -111,6 +129,11 @@ func (c *streamsServiceClient) GetStreamRun(ctx context.Context, req *connect.Re
 	return c.getStreamRun.CallUnary(ctx, req)
 }
 
+// ListActiveRuns calls reeve.v1.StreamsService.ListActiveRuns.
+func (c *streamsServiceClient) ListActiveRuns(ctx context.Context, req *connect.Request[v1.ListActiveRunsRequest]) (*connect.Response[v1.ListActiveRunsResponse], error) {
+	return c.listActiveRuns.CallUnary(ctx, req)
+}
+
 // StreamsServiceHandler is an implementation of the reeve.v1.StreamsService service.
 type StreamsServiceHandler interface {
 	// Server-streaming subscription. The server replays persisted chunks from
@@ -122,6 +145,14 @@ type StreamsServiceHandler interface {
 	CancelStream(context.Context, *connect.Request[v1.CancelStreamRequest]) (*connect.Response[v1.CancelStreamResponse], error)
 	// Status snapshot for a stream run.
 	GetStreamRun(context.Context, *connect.Request[v1.GetStreamRunRequest]) (*connect.Response[v1.GetStreamRunResponse], error)
+	// Returns currently-running stream_runs the caller owns. Used by the
+	// iOS StreamHub to discover in-flight turns on app launch /
+	// conversations-list refresh and on conversation entry — so a user
+	// who left mid-generation and came back sees the live state
+	// immediately, instead of an empty chain that fills in on the next
+	// refresh. Optional `conversation_id` filter scopes to one
+	// conversation; omitted returns every active run for the user.
+	ListActiveRuns(context.Context, *connect.Request[v1.ListActiveRunsRequest]) (*connect.Response[v1.ListActiveRunsResponse], error)
 }
 
 // NewStreamsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -149,6 +180,12 @@ func NewStreamsServiceHandler(svc StreamsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(streamsServiceMethods.ByName("GetStreamRun")),
 		connect.WithHandlerOptions(opts...),
 	)
+	streamsServiceListActiveRunsHandler := connect.NewUnaryHandler(
+		StreamsServiceListActiveRunsProcedure,
+		svc.ListActiveRuns,
+		connect.WithSchema(streamsServiceMethods.ByName("ListActiveRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reeve.v1.StreamsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StreamsServiceSubscribeStreamProcedure:
@@ -157,6 +194,8 @@ func NewStreamsServiceHandler(svc StreamsServiceHandler, opts ...connect.Handler
 			streamsServiceCancelStreamHandler.ServeHTTP(w, r)
 		case StreamsServiceGetStreamRunProcedure:
 			streamsServiceGetStreamRunHandler.ServeHTTP(w, r)
+		case StreamsServiceListActiveRunsProcedure:
+			streamsServiceListActiveRunsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -176,4 +215,8 @@ func (UnimplementedStreamsServiceHandler) CancelStream(context.Context, *connect
 
 func (UnimplementedStreamsServiceHandler) GetStreamRun(context.Context, *connect.Request[v1.GetStreamRunRequest]) (*connect.Response[v1.GetStreamRunResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.StreamsService.GetStreamRun is not implemented"))
+}
+
+func (UnimplementedStreamsServiceHandler) ListActiveRuns(context.Context, *connect.Request[v1.ListActiveRunsRequest]) (*connect.Response[v1.ListActiveRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.StreamsService.ListActiveRuns is not implemented"))
 }

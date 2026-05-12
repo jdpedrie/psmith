@@ -49,6 +49,7 @@ struct ConversationViewModelTests {
         let vm = ConversationViewModel(
             conversation: conv,
             client: client,
+            hub: StreamHub(subscriber: client.streams),
             onTerminal: { },
             localTitler: nil
         )
@@ -588,6 +589,7 @@ struct ConversationViewModelTests {
         let vm2 = ConversationViewModel(
             conversation: r.conversation,
             client: r.client,
+            hub: StreamHub(subscriber: r.client.streams),
             onTerminal: { },
             localTitler: nil
         )

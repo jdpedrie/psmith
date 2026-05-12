@@ -132,13 +132,46 @@ public enum ReeveStreamStatus: Sendable, Hashable {
     }
 }
 
+public enum ReeveStreamPurpose: Sendable, Hashable {
+    case unspecified
+    case assistantResponse
+    case compression
+
+    init(from p: Reeve_V1_StreamRunPurpose) {
+        switch p {
+        case .assistantResponse: self = .assistantResponse
+        case .compression:       self = .compression
+        default:                 self = .unspecified
+        }
+    }
+}
+
 public struct ReeveStreamRun: Sendable, Hashable, Identifiable {
     public let id: String
     public let conversationID: String
     public let contextID: String
     public let status: ReeveStreamStatus
+    public let purpose: ReeveStreamPurpose
     public let resultMessageID: String?
     public let resultContextID: String?
+
+    public init(
+        id: String,
+        conversationID: String,
+        contextID: String,
+        status: ReeveStreamStatus,
+        purpose: ReeveStreamPurpose = .unspecified,
+        resultMessageID: String? = nil,
+        resultContextID: String? = nil
+    ) {
+        self.id = id
+        self.conversationID = conversationID
+        self.contextID = contextID
+        self.status = status
+        self.purpose = purpose
+        self.resultMessageID = resultMessageID
+        self.resultContextID = resultContextID
+    }
 }
 
 extension ReeveChunk {
@@ -154,6 +187,7 @@ extension ReeveStreamRun {
             conversationID: p.conversationID,
             contextID: p.contextID,
             status: ReeveStreamStatus(from: p.status),
+            purpose: ReeveStreamPurpose(from: p.purpose),
             resultMessageID: p.hasResultMessageID ? p.resultMessageID : nil,
             resultContextID: p.hasResultContextID ? p.resultContextID : nil
         )
@@ -289,5 +323,22 @@ public final class StreamSubscriber: Sendable {
         req.streamRunID = streamRunID
         let resp = await client.cancelStream(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw ReeveError.from(err) }
+    }
+
+    /// Returns every currently-running stream_run the caller owns.
+    /// Optional `conversationID` filter scopes to one conversation;
+    /// nil returns every active run for the caller. Used by the
+    /// iOS `StreamHub` to discover and adopt in-flight runs on app
+    /// launch / conversations-list refresh / conversation entry.
+    public func listActiveRuns(conversationID: String? = nil) async throws -> [ReeveStreamRun] {
+        var req = Reeve_V1_ListActiveRunsRequest()
+        if let conversationID, !conversationID.isEmpty {
+            req.conversationID = conversationID
+        }
+        let resp = await client.listActiveRuns(request: req, headers: [:])
+        guard let msg = resp.message else {
+            throw resp.error.map(ReeveError.from) ?? ReeveError.missingPayload("list active runs")
+        }
+        return msg.runs.map(ReeveStreamRun.init(from:))
     }
 }

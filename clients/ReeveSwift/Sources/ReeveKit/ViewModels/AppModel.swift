@@ -25,6 +25,13 @@ public final class AppModel {
     /// to surface a "viewing cached data" notice.
     public let connectivity: ConnectivityMonitor
 
+    /// App-lifetime owner of every active stream subscription, so
+    /// leaving a chat mid-generation and re-entering picks up where
+    /// the stream left off without a refresh round-trip. View models
+    /// register their runs here and read streaming state from
+    /// `hub.streams[conversationID]` instead of owning it directly.
+    public let streamHub: StreamHub
+
     public init(host: URL, tokenStore: TokenStore, authState: AuthState = .init()) {
         self.authState = authState
         self.serverURL = host
@@ -44,6 +51,7 @@ public final class AppModel {
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
         self.connectivity = ConnectivityMonitor(host: host)
+        self.streamHub = StreamHub(subscriber: c.streams)
     }
 
     /// Default factory: pulls the URL from `ServerURLStore` (which falls
@@ -73,5 +81,27 @@ public final class AppModel {
             authState.clear()
         }
         connectivity.start()
+        // After successful auth, sweep the server for runs that were
+        // still going when the app last quit. Each one gets adopted
+        // by the hub — cold-launching into a mid-stream conversation
+        // sees live content instead of a stale chain.
+        if authState.phase == .signedIn {
+            await adoptActiveRunsFromServer()
+        }
+    }
+
+    /// Queries the server for currently-running stream_runs the caller
+    /// owns and asks `StreamHub` to adopt each one. Best-effort: a
+    /// failure here just leaves the hub empty and the user's next
+    /// conversation entry does the regular load.
+    public func adoptActiveRunsFromServer() async {
+        do {
+            let runs = try await client.streams.listActiveRuns()
+            for run in runs {
+                streamHub.adopt(run)
+            }
+        } catch {
+            // Don't surface — caller continues with a cold hub.
+        }
     }
 }

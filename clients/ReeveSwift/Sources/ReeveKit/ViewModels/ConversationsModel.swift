@@ -16,6 +16,11 @@ public enum ConversationListMode: Sendable, Hashable {
 @MainActor
 public final class ConversationsModel {
     private let client: ReeveClient
+    /// Optional. When present, `refresh()` sweeps currently-running
+    /// stream_runs for the user and asks the hub to adopt them — so a
+    /// cold launch into the conversations list immediately re-attaches
+    /// to any mid-generation conversation.
+    private let hub: StreamHub?
 
     public var conversations: [ReeveConversation] = []
     public var profiles: [ReeveProfile] = []
@@ -36,8 +41,9 @@ public final class ConversationsModel {
     /// queries to a flat list with no filter.
     public var searchQuery: String = ""
 
-    public init(client: ReeveClient) {
+    public init(client: ReeveClient, hub: StreamHub? = nil) {
         self.client = client
+        self.hub = hub
     }
 
     public func refresh() async {
@@ -65,6 +71,13 @@ public final class ConversationsModel {
             self.conversations = cs.items
             self.profiles = ps
             self.loadError = nil
+            // Sweep for stream_runs the user left running. Adopting
+            // them in the hub means the list / conversation entry
+            // shows live content immediately, instead of catching up
+            // on the next refresh. Best-effort.
+            if let hub {
+                await adoptActiveRuns(into: hub)
+            }
             // Don't auto-select on refresh. Selection is user-driven; an
             // auto-select hops the detail pane away from the welcome page.
             // Drop a stale selection if its conversation is no longer in
@@ -123,4 +136,14 @@ public final class ConversationsModel {
     }
 
     public var clientRef: ReeveClient { client }
+
+    private func adoptActiveRuns(into hub: StreamHub) async {
+        do {
+            let runs = try await client.streams.listActiveRuns()
+            for run in runs { hub.adopt(run) }
+        } catch {
+            // Silent — hub stays empty, view models will fall back to
+            // a per-conversation server query on entry.
+        }
+    }
 }

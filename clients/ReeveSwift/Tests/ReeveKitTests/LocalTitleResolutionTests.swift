@@ -37,6 +37,7 @@ struct LocalTitleResolutionTests {
         return ConversationViewModel(
             conversation: conv,
             client: client,
+            hub: StreamHub(subscriber: client.streams),
             onTerminal: { },
             localTitler: nil
         )

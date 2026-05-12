@@ -325,6 +325,96 @@ func (x *GetStreamRunResponse) GetStreamRun() *StreamRun {
 	return nil
 }
 
+type ListActiveRunsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When set, filter results to this conversation. When omitted, every
+	// active run the caller owns is returned.
+	ConversationId *string `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3,oneof" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListActiveRunsRequest) Reset() {
+	*x = ListActiveRunsRequest{}
+	mi := &file_reeve_v1_streams_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActiveRunsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActiveRunsRequest) ProtoMessage() {}
+
+func (x *ListActiveRunsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_streams_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActiveRunsRequest.ProtoReflect.Descriptor instead.
+func (*ListActiveRunsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_streams_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListActiveRunsRequest) GetConversationId() string {
+	if x != nil && x.ConversationId != nil {
+		return *x.ConversationId
+	}
+	return ""
+}
+
+type ListActiveRunsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runs          []*StreamRun           `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListActiveRunsResponse) Reset() {
+	*x = ListActiveRunsResponse{}
+	mi := &file_reeve_v1_streams_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActiveRunsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActiveRunsResponse) ProtoMessage() {}
+
+func (x *ListActiveRunsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_streams_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActiveRunsResponse.ProtoReflect.Descriptor instead.
+func (*ListActiveRunsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_streams_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListActiveRunsResponse) GetRuns() []*StreamRun {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
 var File_reeve_v1_streams_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_streams_proto_rawDesc = "" +
@@ -344,11 +434,17 @@ const file_reeve_v1_streams_proto_rawDesc = "" +
 	"\rstream_run_id\x18\x01 \x01(\tR\vstreamRunId\"J\n" +
 	"\x14GetStreamRunResponse\x122\n" +
 	"\n" +
-	"stream_run\x18\x01 \x01(\v2\x13.reeve.v1.StreamRunR\tstreamRun2\x88\x02\n" +
+	"stream_run\x18\x01 \x01(\v2\x13.reeve.v1.StreamRunR\tstreamRun\"Y\n" +
+	"\x15ListActiveRunsRequest\x12,\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tH\x00R\x0econversationId\x88\x01\x01B\x12\n" +
+	"\x10_conversation_id\"A\n" +
+	"\x16ListActiveRunsResponse\x12'\n" +
+	"\x04runs\x18\x01 \x03(\v2\x13.reeve.v1.StreamRunR\x04runs2\xdd\x02\n" +
 	"\x0eStreamsService\x12X\n" +
 	"\x0fSubscribeStream\x12 .reeve.v1.SubscribeStreamRequest\x1a!.reeve.v1.SubscribeStreamResponse0\x01\x12M\n" +
 	"\fCancelStream\x12\x1d.reeve.v1.CancelStreamRequest\x1a\x1e.reeve.v1.CancelStreamResponse\x12M\n" +
-	"\fGetStreamRun\x12\x1d.reeve.v1.GetStreamRunRequest\x1a\x1e.reeve.v1.GetStreamRunResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"\fGetStreamRun\x12\x1d.reeve.v1.GetStreamRunRequest\x1a\x1e.reeve.v1.GetStreamRunResponse\x12S\n" +
+	"\x0eListActiveRuns\x12\x1f.reeve.v1.ListActiveRunsRequest\x1a .reeve.v1.ListActiveRunsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_streams_proto_rawDescOnce sync.Once
@@ -362,7 +458,7 @@ func file_reeve_v1_streams_proto_rawDescGZIP() []byte {
 	return file_reeve_v1_streams_proto_rawDescData
 }
 
-var file_reeve_v1_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_reeve_v1_streams_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_reeve_v1_streams_proto_goTypes = []any{
 	(*SubscribeStreamRequest)(nil),  // 0: reeve.v1.SubscribeStreamRequest
 	(*SubscribeStreamResponse)(nil), // 1: reeve.v1.SubscribeStreamResponse
@@ -370,24 +466,29 @@ var file_reeve_v1_streams_proto_goTypes = []any{
 	(*CancelStreamResponse)(nil),    // 3: reeve.v1.CancelStreamResponse
 	(*GetStreamRunRequest)(nil),     // 4: reeve.v1.GetStreamRunRequest
 	(*GetStreamRunResponse)(nil),    // 5: reeve.v1.GetStreamRunResponse
-	(*Chunk)(nil),                   // 6: reeve.v1.Chunk
-	(*StreamRun)(nil),               // 7: reeve.v1.StreamRun
+	(*ListActiveRunsRequest)(nil),   // 6: reeve.v1.ListActiveRunsRequest
+	(*ListActiveRunsResponse)(nil),  // 7: reeve.v1.ListActiveRunsResponse
+	(*Chunk)(nil),                   // 8: reeve.v1.Chunk
+	(*StreamRun)(nil),               // 9: reeve.v1.StreamRun
 }
 var file_reeve_v1_streams_proto_depIdxs = []int32{
-	6, // 0: reeve.v1.SubscribeStreamResponse.chunk:type_name -> reeve.v1.Chunk
-	7, // 1: reeve.v1.SubscribeStreamResponse.terminal:type_name -> reeve.v1.StreamRun
-	7, // 2: reeve.v1.GetStreamRunResponse.stream_run:type_name -> reeve.v1.StreamRun
-	0, // 3: reeve.v1.StreamsService.SubscribeStream:input_type -> reeve.v1.SubscribeStreamRequest
-	2, // 4: reeve.v1.StreamsService.CancelStream:input_type -> reeve.v1.CancelStreamRequest
-	4, // 5: reeve.v1.StreamsService.GetStreamRun:input_type -> reeve.v1.GetStreamRunRequest
-	1, // 6: reeve.v1.StreamsService.SubscribeStream:output_type -> reeve.v1.SubscribeStreamResponse
-	3, // 7: reeve.v1.StreamsService.CancelStream:output_type -> reeve.v1.CancelStreamResponse
-	5, // 8: reeve.v1.StreamsService.GetStreamRun:output_type -> reeve.v1.GetStreamRunResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	8, // 0: reeve.v1.SubscribeStreamResponse.chunk:type_name -> reeve.v1.Chunk
+	9, // 1: reeve.v1.SubscribeStreamResponse.terminal:type_name -> reeve.v1.StreamRun
+	9, // 2: reeve.v1.GetStreamRunResponse.stream_run:type_name -> reeve.v1.StreamRun
+	9, // 3: reeve.v1.ListActiveRunsResponse.runs:type_name -> reeve.v1.StreamRun
+	0, // 4: reeve.v1.StreamsService.SubscribeStream:input_type -> reeve.v1.SubscribeStreamRequest
+	2, // 5: reeve.v1.StreamsService.CancelStream:input_type -> reeve.v1.CancelStreamRequest
+	4, // 6: reeve.v1.StreamsService.GetStreamRun:input_type -> reeve.v1.GetStreamRunRequest
+	6, // 7: reeve.v1.StreamsService.ListActiveRuns:input_type -> reeve.v1.ListActiveRunsRequest
+	1, // 8: reeve.v1.StreamsService.SubscribeStream:output_type -> reeve.v1.SubscribeStreamResponse
+	3, // 9: reeve.v1.StreamsService.CancelStream:output_type -> reeve.v1.CancelStreamResponse
+	5, // 10: reeve.v1.StreamsService.GetStreamRun:output_type -> reeve.v1.GetStreamRunResponse
+	7, // 11: reeve.v1.StreamsService.ListActiveRuns:output_type -> reeve.v1.ListActiveRunsResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_streams_proto_init() }
@@ -400,13 +501,14 @@ func file_reeve_v1_streams_proto_init() {
 		(*SubscribeStreamResponse_Chunk)(nil),
 		(*SubscribeStreamResponse_Terminal)(nil),
 	}
+	file_reeve_v1_streams_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_streams_proto_rawDesc), len(file_reeve_v1_streams_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

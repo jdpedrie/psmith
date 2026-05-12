@@ -73,7 +73,7 @@ private struct AppShell: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .task {
-                        let m = ConversationsModel(client: app.client)
+                        let m = ConversationsModel(client: app.client, hub: app.streamHub)
                         await m.refresh()
                         convos = m
                     }

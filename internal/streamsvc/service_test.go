@@ -16,6 +16,7 @@ import (
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
+	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
@@ -86,7 +87,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	mux := http.NewServeMux()
-	svc := NewService(sup)
+	svc := NewService(q, sup)
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(svc))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -618,6 +619,136 @@ func TestStreamRunToProto_OptionalFieldsRoundTrip(t *testing.T) {
 		t.Errorf("ErrorPayload=%q want %q", got.ErrorPayload, `{"err":"x"}`)
 	}
 }
+
+// --- ListActiveRuns --------------------------------------------------------
+
+// ListActiveRuns is called directly (not through the HTTP client) so we
+// can attach a user via `auth.ContextWithUser` — the test mux has no
+// auth interceptor, so anything reaching the handler via the HTTP client
+// would panic on `auth.MustFromContext`. Directly-invoked still uses
+// the real Service struct, real queries, real supervisor.
+func TestListActiveRuns_FiltersByConversationAndStatus(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	svc := NewService(f.q, f.sup)
+	ctx := authContextForUser(f.user)
+
+	// Conversation A: one running run.
+	srcA := newFakeSource(0)
+	runA, err := f.sup.Start(context.Background(), f.startParams(srcA.recv(), stream.PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start A: %v", err)
+	}
+
+	// Conversation B (separate convo, same user): one running run.
+	convBID := mustUUID(t)
+	convB, err := f.q.CreateConversation(context.Background(), store.CreateConversationParams{
+		ID: convBID, UserID: f.user.ID, ProfileID: f.conv.ProfileID,
+	})
+	if err != nil {
+		t.Fatalf("CreateConversation B: %v", err)
+	}
+	cctxBID := mustUUID(t)
+	cctxB, err := f.q.CreateContext(context.Background(), store.CreateContextParams{
+		ID: cctxBID, ConversationID: convB.ID, ContextActivationTime: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("CreateContext B: %v", err)
+	}
+	parentBID := mustUUID(t)
+	if _, err := f.q.CreateMessage(context.Background(), store.CreateMessageParams{
+		ID: parentBID, ContextID: cctxB.ID, Role: "user", Content: "hi b",
+	}); err != nil {
+		t.Fatalf("CreateMessage B: %v", err)
+	}
+	srcB := newFakeSource(0)
+	runB, err := f.sup.Start(context.Background(), stream.StartParams{
+		ConversationID: convB.ID, ContextID: cctxB.ID, ParentMessageID: &parentBID,
+		ProviderID: f.prov.ID, ModelID: "gpt-test",
+		Purpose: stream.PurposeAssistantResponse, Source: srcB.recv(),
+	})
+	if err != nil {
+		t.Fatalf("Start B: %v", err)
+	}
+
+	// All-active: caller sees both A and B.
+	resp, err := svc.ListActiveRuns(ctx, connect.NewRequest(&reevev1.ListActiveRunsRequest{}))
+	if err != nil {
+		t.Fatalf("ListActiveRuns(all): %v", err)
+	}
+	if len(resp.Msg.Runs) != 2 {
+		t.Errorf("all-active count = %d, want 2", len(resp.Msg.Runs))
+	}
+
+	// Filtered to conversation A: just runA.
+	convAID := f.conv.ID.String()
+	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&reevev1.ListActiveRunsRequest{
+		ConversationId: &convAID,
+	}))
+	if err != nil {
+		t.Fatalf("ListActiveRuns(A): %v", err)
+	}
+	if len(resp.Msg.Runs) != 1 || resp.Msg.Runs[0].Id != runA.String() {
+		t.Errorf("convo-A filtered = %+v, want only %s", resp.Msg.Runs, runA)
+	}
+
+	// Terminate A: it should disappear from the all-active list.
+	srcA.close()
+	_ = waitTerminal(t, f.sup, runA, 2*time.Second)
+	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&reevev1.ListActiveRunsRequest{}))
+	if err != nil {
+		t.Fatalf("ListActiveRuns(post-terminal): %v", err)
+	}
+	if len(resp.Msg.Runs) != 1 || resp.Msg.Runs[0].Id != runB.String() {
+		t.Errorf("post-terminal = %+v, want only %s", resp.Msg.Runs, runB)
+	}
+	srcB.close()
+	_ = waitTerminal(t, f.sup, runB, 2*time.Second)
+}
+
+func TestListActiveRuns_ScopedByCaller(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	svc := NewService(f.q, f.sup)
+
+	// Start a run owned by f.user.
+	srcA := newFakeSource(0)
+	if _, err := f.sup.Start(context.Background(), f.startParams(srcA.recv(), stream.PurposeAssistantResponse)); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer srcA.close()
+
+	// Different user must NOT see the run.
+	other := mustCreateUser(t, f.q, "u-"+mustUUID(t).String())
+	otherCtx := authContextForUser(other)
+	resp, err := svc.ListActiveRuns(otherCtx, connect.NewRequest(&reevev1.ListActiveRunsRequest{}))
+	if err != nil {
+		t.Fatalf("ListActiveRuns(other): %v", err)
+	}
+	if len(resp.Msg.Runs) != 0 {
+		t.Errorf("other user saw %d runs, want 0", len(resp.Msg.Runs))
+	}
+}
+
+func authContextForUser(u store.User) context.Context {
+	return auth.ContextWithUser(context.Background(), auth.User{
+		ID: u.ID, Username: u.Username, IsAdmin: u.IsAdmin,
+		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
+	})
+}
+
+// fakeSource emits canned chunks on demand for the active-runs tests.
+// Independent from the rest of the file's HTTP-client driven tests so we
+// don't accidentally introduce a panic-on-no-auth fixture.
+type fakeSource struct {
+	ch chan providers.Chunk
+}
+
+func newFakeSource(buffer int) *fakeSource {
+	return &fakeSource{ch: make(chan providers.Chunk, buffer)}
+}
+func (f *fakeSource) close()                          { close(f.ch) }
+func (f *fakeSource) recv() <-chan providers.Chunk    { return f.ch }
 
 // --- helpers ---------------------------------------------------------------
 
