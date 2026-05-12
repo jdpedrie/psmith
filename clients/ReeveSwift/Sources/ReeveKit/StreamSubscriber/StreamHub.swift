@@ -49,6 +49,15 @@ public final class StreamHub {
     /// Public for view-model reads. Mutations stay inside the hub.
     public private(set) var streams: [String: ActiveStream] = [:]
 
+    /// Conversations with an active stream right now. Mutated only on
+    /// register / adopt / clear / terminal — NOT on every chunk —
+    /// so list-row indicators that read this don't re-render at chunk
+    /// rate. (`streams` itself mutates on every chunk and would invalidate
+    /// every observer of either property, which previously dragged the
+    /// kept-alive conversations list under a streaming conversation
+    /// into 20-50Hz body re-evals.)
+    public private(set) var activeConversationIDs: Set<String> = []
+
     private var tasks: [String /* runID */: Task<Void, Never>] = [:]
     private var terminalHandlers: [String /* conversationID */: (ReeveStreamRun) async -> Void] = [:]
 
@@ -100,6 +109,7 @@ public final class StreamHub {
             contextID: contextID,
             purpose: purpose
         )
+        activeConversationIDs.insert(conversationID)
         startSubscriber(runID: runID, conversationID: conversationID, fromSequence: 0)
     }
 
@@ -119,6 +129,7 @@ public final class StreamHub {
             contextID: run.contextID,
             purpose: run.purpose
         )
+        activeConversationIDs.insert(run.conversationID)
         startSubscriber(runID: run.id, conversationID: run.conversationID, fromSequence: 0)
     }
 
@@ -135,6 +146,7 @@ public final class StreamHub {
     public func clear(conversationID: String) {
         cancelLocalSubscription(forConversation: conversationID)
         streams.removeValue(forKey: conversationID)
+        activeConversationIDs.remove(conversationID)
     }
 
     /// Stop every subscription and clear all state. Logout path.
@@ -142,14 +154,8 @@ public final class StreamHub {
         for (_, task) in tasks { task.cancel() }
         tasks.removeAll()
         streams.removeAll()
+        activeConversationIDs.removeAll()
         terminalHandlers.removeAll()
-    }
-
-    /// The set of conversations with an active stream right now.
-    /// Powers the conversations list "generating…" indicator in
-    /// Phase 3.
-    public var activeConversationIDs: Set<String> {
-        Set(streams.keys)
     }
 
     // MARK: - Private machinery
@@ -175,6 +181,7 @@ public final class StreamHub {
                     // as terminal with no run; clear local state so
                     // the next `load()` reconciles via the chain.
                     self.streams.removeValue(forKey: conversationID)
+                    self.activeConversationIDs.remove(conversationID)
                     self.tasks.removeValue(forKey: runID)
                     return
                 }
@@ -247,5 +254,6 @@ public final class StreamHub {
             await handler(run)
         }
         streams.removeValue(forKey: conversationID)
+        activeConversationIDs.remove(conversationID)
     }
 }
