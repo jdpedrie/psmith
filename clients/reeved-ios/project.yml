@@ -37,11 +37,6 @@ targets:
         # the server.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-        # Press-and-hold mic in the composer (multimodal phase 0).
-        # Both strings are mandatory — iOS hard-aborts the process
-        # on the first permission request without them.
-        NSMicrophoneUsageDescription: "Reeve uses the microphone for press-and-hold voice dictation, transcribed locally on-device before being inserted into your message draft."
-        NSSpeechRecognitionUsageDescription: "Reeve uses on-device speech recognition to transcribe your voice dictation into the message draft. Audio is not sent to any server."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS

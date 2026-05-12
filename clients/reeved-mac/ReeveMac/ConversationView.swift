@@ -78,7 +78,6 @@ struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ReeveConversation
     @Environment(AppModel.self) private var app
-    @Environment(\.transcriber) private var transcriber
     /// Drives keyboard focus into the composer the moment the conversation
     /// pane mounts (and again when the conversation switches). Without
     /// this the user has to click into the field after every navigation —
@@ -97,10 +96,6 @@ struct ConversationBody: View {
     /// ~10Hz so a 200tok/s stream doesn't pile up animation requests and
     /// produce the jerky stairstep we used to see.
     @State private var lastAutoScroll: Date = .distantPast
-    /// Pre-recording draft snapshot — dictation text is appended after
-    /// it so the user's typed-so-far content isn't clobbered when they
-    /// press-and-hold mid-message.
-    @State private var preDictationDraft: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -591,7 +586,6 @@ struct ConversationBody: View {
 
                     HStack(spacing: 8) {
                         modelPickerChip
-                        micButton
                         Spacer()
                         sendOrStopButton
                     }
@@ -603,18 +597,6 @@ struct ConversationBody: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        .onChange(of: transcriber.transcript) { _, partial in
-            // Pipe interim transcription into the draft so the user
-            // can watch the recognizer keep up. Only active while
-            // we're in .recording — once stopped the final text
-            // already sits in model.draft and we stop overwriting.
-            guard case .recording = transcriber.state else { return }
-            if preDictationDraft.isEmpty {
-                model.draft = partial
-            } else {
-                model.draft = preDictationDraft + " " + partial
-            }
-        }
     }
 
     /// True when the trailing message in the loaded list is a user turn
@@ -625,37 +607,6 @@ struct ConversationBody: View {
     private var canReload: Bool {
         guard model.draft.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         return model.messages.last?.role == .user
-    }
-
-    /// Press-and-hold dictation. While held, on-device speech
-    /// recognition streams partial results into `model.draft`,
-    /// appended after whatever the user had typed at press-down.
-    /// Release stops the recognizer; the final text stays in the
-    /// draft for the user to review and send. Locale comes from the
-    /// system; on-device when the OS supports it (current Apple
-    /// Silicon, recent iPhones — both ship the model).
-    private var micButton: some View {
-        let recording: Bool = {
-            if case .recording = transcriber.state { return true }
-            return false
-        }()
-        return Button { } label: {
-            Image(systemName: recording ? "waveform.circle.fill" : "mic.fill")
-                .font(.callout)
-                .foregroundStyle(recording ? Color.red : .secondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(recording ? "Stop dictation" : "Hold to dictate")
-        .onLongPressGesture(minimumDuration: 0, perform: {}) { pressing in
-            if pressing {
-                preDictationDraft = model.draft
-                Task { await transcriber.start() }
-            } else {
-                transcriber.stop()
-            }
-        }
     }
 
     @ViewBuilder

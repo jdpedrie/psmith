@@ -256,13 +256,11 @@ Plugin config: API key (Global), default size, default style. Required-field val
 
 **Phase 4 — native inline image emission.** Drivers that emit images as part of their normal response stream (Gemini imagen, OpenAI Responses + gpt-image-1) detect image content blocks and emit `ChunkAttachmentStart/Data/End`. Supervisor aggregator persists. UI rendering is identical to Phase 3.
 
-### Speech-to-text (Phases 0 + 5)
+### Speech-to-text (Phase 5 only)
 
-Phase 0 ships as the **default** (it's free, fast, and works against every model). Phase 5 is an opt-in per-profile setting for users who specifically want the multimodal model to hear pronunciation / tone rather than transcribed text.
+**Phase 0 STT was tried and removed.** Initial pass shipped an `SFSpeechRecognizer`-backed press-and-hold mic button in both composers. It was worse than the OS keyboard's built-in dictation along every axis that matters — no punctuation commands, no auto-language switching, extra permission prompts, additional crash surface, redundant inline control. iOS users tap the keyboard mic; Mac users use the system dictation shortcut (Fn-Fn by default). No reason for a custom path.
 
-**Phase 0 — local-only, send-as-text.** Both clients use `SFSpeechRecognizer` (or `SpeechAnalyzer` on macOS 26 / iOS 26+) for live dictation. Mic button in the composer; press-and-hold to record, release to stop, transcribed text appears in the composer's text field; user reviews and sends as plain text. No backend changes. Free, fast, private.
-
-**Phase 5 — audio attachment, model transcribes.** Per-profile setting "Send audio to model" flips the mic button from Phase 0's transcribe-locally mode to recording an `audio/wav` (or `audio/m4a`) attachment that flows through the Phase 1 attachment path to a multimodal model. Provider drivers that don't support audio degrade gracefully via the capability table. Optionally: have the model's response include a transcript surfaced in the message UI (a dedicated content type or a convention on the first paragraph).
+**Phase 5 — audio attachment, model transcribes.** Still relevant: a per-profile setting that records an `audio/wav` (or `audio/m4a`) attachment and flows it through the Phase 1 attachment path to a multimodal model that hears the audio directly. This is fundamentally different from Phase 0 — the model gets raw audio (pronunciation, tone, non-verbal cues), not transcribed text. Provider drivers without audio support degrade gracefully via the capability table. The implementation is a new mic-records-attachment surface, not a revival of the removed Transcriber — that abstraction (text out) is the wrong shape for audio-in.
 
 ### Text-to-speech (Phases 0 + 6)
 
@@ -276,7 +274,7 @@ Phase 0 ships as the **default** (it's free, fast, and works against every model
 
 | Phase | Scope | Estimate | Blocks |
 |---|---|---|---|
-| **0 — Local TTS + STT** | AVSpeechSynthesizer playback + SFSpeechRecognizer dictation, Mac + iOS | ~1 week | Independent — can land first |
+| **0 — Local TTS** | AVSpeechSynthesizer playback, Mac + iOS. (Local STT dropped in favor of the OS keyboard mic.) | shipped | Independent |
 | **1 — File storage + image input** | `Storage` interface + filesystem impl, signed URLs, files + message_attachments tables, WireMessage.Attachments, Anthropic + Google + OpenAI Responses + OpenAI Chat image translation, capability table, composer drag-drop, image attachment renderer, cache observability hashing | ~3-4 weeks | Foundation — blocks all later phases |
 | **2 — Document attachments** | PDFs (Anthropic + Gemini), generic docs (OpenAI Files API for OpenAI Responses), document chip renderer | ~1 week | Phase 1 |
 | **3 — Image generation tool plugin** | `image_gen` plugin wrapping OpenAI Images / Stability / Imagen, tool-result → message_attachments wiring | ~1 week | Phase 1 |

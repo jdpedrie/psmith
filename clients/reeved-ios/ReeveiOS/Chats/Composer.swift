@@ -16,23 +16,13 @@ import ReeveUI
 struct Composer: View {
     @Bindable var model: ConversationViewModel
     @Environment(AppModel.self) private var app
-    @Environment(\.transcriber) private var transcriber
     @FocusState private var draftFocused: Bool
-
-    /// Snapshot of `model.draft` taken when the user starts holding
-    /// the mic button. Live transcript text is concatenated after
-    /// this snapshot so dictation appends to (rather than replaces)
-    /// any text the user already typed.
-    @State private var preDictationDraft: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             if app.connectivity.state == .offline {
                 offlineBanner
-            }
-            if let micErr = transcriberErrorMessage {
-                micErrorBanner(micErr)
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom, spacing: 8) {
@@ -42,7 +32,6 @@ struct Composer: View {
                 HStack(spacing: 8) {
                     modelChip
                     settingsButton
-                    micButton
                     Spacer(minLength: 0)
                 }
             }
@@ -59,56 +48,9 @@ struct Composer: View {
             // store so an empty draft removes the key cleanly.
             DraftStore.save(conversationID: model.conversation.id, text: newValue)
         }
-        .onChange(of: transcriber.transcript) { _, partial in
-            // Pipe interim transcription into the draft so the user
-            // can see what's being heard as they speak. Only active
-            // while we're recording — once stop fires the final
-            // text is already in the draft and stays.
-            guard case .recording = transcriber.state else { return }
-            if preDictationDraft.isEmpty {
-                model.draft = partial
-            } else {
-                model.draft = preDictationDraft + " " + partial
-            }
-        }
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }
-    }
-
-    /// Latest error string from the dictation engine, or nil when
-    /// idle / recording / authorized. Surfaced as a small banner so
-    /// "tapped mic but nothing happened" turns into actionable text
-    /// (permission denied, mic unavailable, …).
-    private var transcriberErrorMessage: String? {
-        switch transcriber.state {
-        case .unauthorized(let reason): return reason
-        case .failed(let message): return message
-        default: return nil
-        }
-    }
-
-    private func micErrorBanner(_ message: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "mic.slash")
-                .font(.caption2)
-            Text(message)
-                .font(.caption2)
-                .lineLimit(3)
-            Spacer(minLength: 0)
-            Button {
-                transcriber.reset()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.tertiary)
-            }
-            .buttonStyle(.plain)
-        }
-        .foregroundStyle(.orange)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.10))
     }
 
     /// Thin amber strip above the input controls when the server's
@@ -128,52 +70,6 @@ struct Composer: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.10))
-    }
-
-    // MARK: - Mic button (press-and-hold dictation)
-
-    /// Press-and-hold mic. Holding starts on-device recognition and
-    /// streams partial results into the draft; releasing stops the
-    /// recognizer and leaves the final transcript in place for the
-    /// user to review and send.
-    private var micButton: some View {
-        let recording: Bool = {
-            if case .recording = transcriber.state { return true }
-            return false
-        }()
-        return Button { } label: {
-            Image(systemName: recording ? "waveform.circle.fill" : "mic.fill")
-                .font(.callout)
-                .foregroundStyle(recording ? Color.red : .secondary)
-                .frame(width: 32, height: 32)
-                .background(
-                    recording
-                        ? Color.red.opacity(0.15)
-                        : Color.primary.opacity(0.06),
-                    in: Circle()
-                )
-                .overlay(Circle().strokeBorder(
-                    (recording ? Color.red : Color.primary).opacity(0.18),
-                    lineWidth: 0.5
-                ))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(recording ? "Stop dictation" : "Hold to dictate")
-        // onLongPressGesture(minimumDuration: 0) fires its
-        // onPressingChanged callback on touch-down and touch-up,
-        // which is the press-and-hold contract we want. The
-        // `perform: {}` arg is required but no-op — the work
-        // happens entirely in the press transitions.
-        .onLongPressGesture(minimumDuration: 0, perform: { }) { pressing in
-            if pressing {
-                Haptics.impact(.light)
-                preDictationDraft = model.draft
-                Task { await transcriber.start() }
-            } else {
-                transcriber.stop()
-                Haptics.impact(.soft)
-            }
-        }
     }
 
     // MARK: - Conversation settings button
