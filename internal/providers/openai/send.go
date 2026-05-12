@@ -247,14 +247,24 @@ func extractReasoningDelta(d openai.ChatCompletionChunkChoiceDelta) string {
 // last-seen choice chunk before the usage frame — the UI uses it to
 // surface unexpected terminations like "length" or "content_filter".
 func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage, finishReason string) {
-	prompt, completion := int(u.PromptTokens), int(u.CompletionTokens)
+	// OpenAI reports `prompt_tokens` as the GROSS prompt count (includes
+	// the cached portion) and `prompt_tokens_details.cached_tokens` as
+	// the cached subset. The supervisor's cost calc charges
+	// `InputTokens × input_price + CacheReadTokens × cache_read_price`
+	// — so if we forwarded the gross prompt count as `InputTokens`, the
+	// cached portion would be billed at BOTH the full input rate AND
+	// the cache-read rate. Subtract here so `InputTokens` is the
+	// "fresh" (non-cached) portion and the math works out.
+	cached := int(u.PromptTokensDetails.CachedTokens)
+	prompt := int(u.PromptTokens) - cached
+	if prompt < 0 { prompt = 0 } // defensive — upstream invariant says cached <= prompt
+	completion := int(u.CompletionTokens)
 	usage := providers.Usage{
 		InputTokens:  &prompt,
 		OutputTokens: &completion,
 	}
-	if u.PromptTokensDetails.CachedTokens > 0 {
-		v := int(u.PromptTokensDetails.CachedTokens)
-		usage.CacheReadTokens = &v
+	if cached > 0 {
+		usage.CacheReadTokens = &cached
 	}
 	if u.CompletionTokensDetails.ReasoningTokens > 0 {
 		v := int(u.CompletionTokensDetails.ReasoningTokens)
@@ -639,14 +649,20 @@ func emitResponsesUsage(out chan<- providers.Chunk, u responses.ResponseUsage, i
 	if u.InputTokens == 0 && u.OutputTokens == 0 && u.TotalTokens == 0 {
 		return
 	}
-	in, outTok := int(u.InputTokens), int(u.OutputTokens)
+	// Same gross-vs-cached separation as emitChatUsage — Responses API
+	// reports `input_tokens` as the total (including cached) and
+	// `input_tokens_details.cached_tokens` as the subset. Subtract so
+	// the cost calc doesn't double-charge the cached portion.
+	cached := int(u.InputTokensDetails.CachedTokens)
+	in := int(u.InputTokens) - cached
+	if in < 0 { in = 0 }
+	outTok := int(u.OutputTokens)
 	usage := providers.Usage{
 		InputTokens:  &in,
 		OutputTokens: &outTok,
 	}
-	if u.InputTokensDetails.CachedTokens > 0 {
-		v := int(u.InputTokensDetails.CachedTokens)
-		usage.CacheReadTokens = &v
+	if cached > 0 {
+		usage.CacheReadTokens = &cached
 	}
 	if u.OutputTokensDetails.ReasoningTokens > 0 {
 		v := int(u.OutputTokensDetails.ReasoningTokens)

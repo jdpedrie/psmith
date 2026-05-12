@@ -432,7 +432,14 @@ func emitGeminiToolCall(out chan<- providers.Chunk, fc *geminiFunctionCall, thou
 // absent (some Gemini models / API versions emit one but not both).
 // ThoughtsTokenCount maps to reasoning_tokens.
 func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage, finishReason string) {
-	in := u.PromptTokenCount
+	// Gemini reports `promptTokenCount` as the GROSS prompt count
+	// (including cached) and `cachedContentTokenCount` (or the
+	// per-modality breakdown) as the cached subset. Subtract here so
+	// the supervisor's cost calc doesn't bill the cached portion at
+	// both the fresh-input and cache-read rates.
+	cached := u.effectiveCacheReadTokens()
+	in := u.PromptTokenCount - cached
+	if in < 0 { in = 0 }
 	outTok := u.CandidatesTokenCount
 	usage := providers.Usage{}
 	if in > 0 {
@@ -441,8 +448,8 @@ func emitUsage(out chan<- providers.Chunk, u usageMetadata, raw json.RawMessage,
 	if outTok > 0 {
 		usage.OutputTokens = &outTok
 	}
-	if cr := u.effectiveCacheReadTokens(); cr > 0 {
-		v := cr
+	if cached > 0 {
+		v := cached
 		usage.CacheReadTokens = &v
 	}
 	if u.ThoughtsTokenCount > 0 {

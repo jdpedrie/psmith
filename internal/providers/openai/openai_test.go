@@ -567,8 +567,11 @@ func TestSend_ChatCompletions_Streams(t *testing.T) {
 	if usage == nil {
 		t.Fatal("expected ChunkUsage to be emitted")
 	}
-	if usage.InputTokens == nil || *usage.InputTokens != 12 {
-		t.Errorf("input_tokens=%v want 12", usage.InputTokens)
+	// `prompt_tokens=12, cached_tokens=4` ⇒ 8 fresh tokens + 4 cached.
+	// `input_tokens` is the FRESH portion only — anything else
+	// double-charges the cached tokens in the supervisor's cost calc.
+	if usage.InputTokens == nil || *usage.InputTokens != 8 {
+		t.Errorf("input_tokens=%v want 8 (12 prompt − 4 cached)", usage.InputTokens)
 	}
 	if usage.OutputTokens == nil || *usage.OutputTokens != 3 {
 		t.Errorf("output_tokens=%v want 3", usage.OutputTokens)

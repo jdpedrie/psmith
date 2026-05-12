@@ -231,6 +231,13 @@ func TestSend_CachedContentTokensAsCacheRead(t *testing.T) {
 	if usage.CacheReadTokens == nil || *usage.CacheReadTokens != 75 {
 		t.Errorf("cache_read_tokens=%v want 75", usage.CacheReadTokens)
 	}
+	// PromptTokenCount=100 includes the 75 cached tokens. The driver
+	// must subtract so InputTokens is the FRESH portion only —
+	// otherwise the supervisor's cost calc bills the cached portion
+	// at both the input and cache-read rates.
+	if usage.InputTokens == nil || *usage.InputTokens != 25 {
+		t.Errorf("input_tokens=%v want 25 (100 prompt − 75 cached)", usage.InputTokens)
+	}
 	if usage.ReasoningTokens == nil || *usage.ReasoningTokens != 4 {
 		t.Errorf("reasoning_tokens=%v want 4", usage.ReasoningTokens)
 	}
@@ -269,6 +276,10 @@ func TestSend_CacheTokensDetailsFallback(t *testing.T) {
 	}
 	if usage.CacheReadTokens == nil || *usage.CacheReadTokens != 75 {
 		t.Errorf("cache_read_tokens=%v want 75 (sum of modality breakdown 60+15)", usage.CacheReadTokens)
+	}
+	// Same fresh-portion subtraction as the summary-cached test.
+	if usage.InputTokens == nil || *usage.InputTokens != 25 {
+		t.Errorf("input_tokens=%v want 25 (100 prompt − 75 cached)", usage.InputTokens)
 	}
 }
 
