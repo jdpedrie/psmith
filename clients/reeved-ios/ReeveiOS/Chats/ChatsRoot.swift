@@ -252,7 +252,8 @@ struct ChatsRoot: View {
                 conversation: c,
                 profileChainName: hideProfile
                     ? nil
-                    : profileChainName(for: c, profiles: convos.profiles)
+                    : profileChainName(for: c, profiles: convos.profiles),
+                isGenerating: app.streamHub.activeConversationIDs.contains(c.id)
             )
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

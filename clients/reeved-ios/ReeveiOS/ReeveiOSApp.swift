@@ -17,6 +17,11 @@ struct ReeveiOSApp: App {
     @State private var themeStore = ThemeStore()
     @State private var prefs = sharedAppPreferences
     @State private var navigator = sharedIOSNavigator
+    /// Extends background execution while StreamHub has at least one
+    /// active run. See `BackgroundTaskKeeper` for the iOS contract +
+    /// the explicit limits (this buys ~30s, not unlimited).
+    @State private var bgKeeper = BackgroundTaskKeeper()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -36,6 +41,28 @@ struct ReeveiOSApp: App {
                     appModel = AppModel()
                     Task { await appModel.bootstrap() }
                 }
+                .onChange(of: scenePhase) { _, newPhase in
+                    handleScenePhase(newPhase)
+                }
+                // If every stream finishes while we're backgrounded,
+                // release the token early so iOS reclaims the grace
+                // for itself.
+                .onChange(of: appModel.streamHub.activeConversationIDs.isEmpty) { _, isEmpty in
+                    if isEmpty { bgKeeper.end() }
+                }
+        }
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .background, .inactive:
+            if !appModel.streamHub.activeConversationIDs.isEmpty {
+                bgKeeper.extend()
+            }
+        case .active:
+            bgKeeper.end()
+        @unknown default:
+            break
         }
     }
 }

@@ -264,6 +264,7 @@ struct ConversationRowMac: View {
     var onDelete: (() -> Void)? = nil
     @State private var hovering = false
     @Environment(ConversationsModel.self) private var convos
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         HStack(spacing: 8) {
@@ -271,7 +272,8 @@ struct ConversationRowMac: View {
                 conversation: conversation,
                 profileChainName: hideProfileLabel
                     ? nil
-                    : profileChainName(for: conversation, profiles: convos.profiles)
+                    : profileChainName(for: conversation, profiles: convos.profiles),
+                isGenerating: app.streamHub.activeConversationIDs.contains(conversation.id)
             )
             Spacer(minLength: 0)
             if let onDelete {

@@ -15,18 +15,40 @@ import ReeveKit
 public struct ConversationRow: View {
     let conversation: ReeveConversation
     let profileChainName: String?
+    /// When true the row renders a small spinner + "generating" caption,
+    /// signalling that the conversation has an active stream the user
+    /// can tap into to watch live. Driven by
+    /// `StreamHub.activeConversationIDs` at the call site.
+    let isGenerating: Bool
 
-    public init(conversation: ReeveConversation, profileChainName: String? = nil) {
+    public init(
+        conversation: ReeveConversation,
+        profileChainName: String? = nil,
+        isGenerating: Bool = false
+    ) {
         self.conversation = conversation
         self.profileChainName = profileChainName
+        self.isGenerating = isGenerating
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(displayTitle)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Text(displayTitle)
+                    .lineLimit(1)
+                if isGenerating {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityLabel("Generating")
+                }
+            }
             if let profileChainName, !profileChainName.isEmpty {
                 Text(profileChainName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else if isGenerating {
+                Text("Generating…")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
