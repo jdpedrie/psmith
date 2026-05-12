@@ -217,6 +217,8 @@ struct ReeveMacApp: App {
     /// tapping a different message row's speaker button stops the
     /// prior playback without each view owning its own synth.
     @State private var speaker = Speaker()
+    /// Shared dictation engine — one instance app-wide.
+    @State private var transcriber = Transcriber()
 
     init() {
         // SwiftPM-built executables aren't a proper .app bundle on their own;
@@ -238,6 +240,7 @@ struct ReeveMacApp: App {
                 .environment(\.clipboard, AppKitClipboard())
                 .environment(\.notifier, sharedNotifier)
                 .environment(\.speaker, speaker)
+                .environment(\.transcriber, transcriber)
                 .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
                 .background(themeStore.current.chrome.ignoresSafeArea())

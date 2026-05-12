@@ -25,6 +25,10 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Reeve uses the microphone for press-and-hold voice dictation, transcribed locally on-device before being inserted into your message draft.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Reeve uses on-device speech recognition to transcribe your voice dictation into the message draft. Audio is not sent to any server.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

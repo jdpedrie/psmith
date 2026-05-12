@@ -21,6 +21,10 @@ struct ReeveiOSApp: App {
     /// "tap row B while A is speaking → A stops" works without each
     /// view owning its own synth.
     @State private var speaker = Speaker()
+    /// Shared dictation engine. One instance app-wide so press-and-hold
+    /// inside one conversation doesn't compete with another conversation
+    /// already recording (impossible today but trivial guarantee).
+    @State private var transcriber = Transcriber()
     /// Extends background execution while StreamHub has at least one
     /// active run. See `BackgroundTaskKeeper` for the iOS contract +
     /// the explicit limits (this buys ~30s, not unlimited).
@@ -38,6 +42,7 @@ struct ReeveiOSApp: App {
                 .environment(\.clipboard, UIKitClipboard())
                 .environment(\.notifier, sharedIOSNotifier)
                 .environment(\.speaker, speaker)
+                .environment(\.transcriber, transcriber)
                 .tint(themeStore.current.accent)
                 .task {
                     await appModel.bootstrap()
