@@ -213,6 +213,10 @@ struct ReeveMacApp: App {
     /// shared singleton lives in AppPreferences.swift so module-scope
     /// helpers (sharedNotifier construction in particular) can reach it.
     @State private var prefs = sharedAppPreferences
+    /// Shared TTS player — one instance for the app's lifetime so
+    /// tapping a different message row's speaker button stops the
+    /// prior playback without each view owning its own synth.
+    @State private var speaker = Speaker()
 
     init() {
         // SwiftPM-built executables aren't a proper .app bundle on their own;
@@ -233,6 +237,7 @@ struct ReeveMacApp: App {
                 .environment(\.theme, themeStore.current)
                 .environment(\.clipboard, AppKitClipboard())
                 .environment(\.notifier, sharedNotifier)
+                .environment(\.speaker, speaker)
                 .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
                 .background(themeStore.current.chrome.ignoresSafeArea())

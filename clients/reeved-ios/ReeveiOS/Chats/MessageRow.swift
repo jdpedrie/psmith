@@ -20,6 +20,7 @@ struct MessageRow: View {
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
     @Environment(\.clipboard) private var clipboard
+    @Environment(\.speaker) private var speaker
 
     @State private var showDeleteConfirm: Bool = false
     @State private var showCascadeDeleteConfirm: Bool = false
@@ -438,6 +439,32 @@ struct MessageRow: View {
         }
     }
 
+    /// Read-aloud affordance — speaker glyph that toggles between
+    /// "play" and "stop" depending on whether this row's content is
+    /// currently being spoken. Backed by the shared `Speaker`, so
+    /// tapping a different row's button stops the prior playback
+    /// automatically. Hidden for errored / empty-body turns since
+    /// there's nothing useful to read aloud.
+    @ViewBuilder
+    private var speakButton: some View {
+        let body = (message.displayContent ?? message.content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !isErrored, !body.isEmpty {
+            let speaking = speaker.speakingMessageID == message.id
+            Button {
+                speaker.toggle(messageID: message.id, text: body)
+            } label: {
+                Image(systemName: speaking ? "stop.circle" : "speaker.wave.2")
+                    .font(.caption)
+                    .foregroundStyle(speaking ? theme.accent : .secondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(speaking ? "Stop reading aloud" : "Read aloud")
+        }
+    }
+
     /// In-bubble footer — assistant turns get cache dot + token
     /// summary + timestamp (whole footer is the tap target for the
     /// usage sheet); user/system/context get just the timestamp.
@@ -447,32 +474,35 @@ struct MessageRow: View {
             EmptyView()
         } else if message.role == .assistant, let usage = message.usage {
             VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    showUsageSheet = true
-                } label: {
-                    HStack(spacing: 5) {
-                        if let grade = cacheEfficiencyGrade(usage) {
-                            Circle()
-                                .fill(grade.color)
-                                .frame(width: 7, height: 7)
-                                .accessibilityLabel(grade.tooltip)
-                        }
-                        Text(usageSummary(usage))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        if let stamp = formattedTimestamp {
-                            Text(stamp)
+                HStack(spacing: 8) {
+                    speakButton
+                    Button {
+                        showUsageSheet = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            if let grade = cacheEfficiencyGrade(usage) {
+                                Circle()
+                                    .fill(grade.color)
+                                    .frame(width: 7, height: 7)
+                                    .accessibilityLabel(grade.tooltip)
+                            }
+                            Text(usageSummary(usage))
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            if let stamp = formattedTimestamp {
+                                Text(stamp)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show usage details")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Show usage details")
 
                 if let label = unexpectedFinishReasonLabel {
                     Text(label)

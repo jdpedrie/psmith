@@ -17,6 +17,10 @@ struct ReeveiOSApp: App {
     @State private var themeStore = ThemeStore()
     @State private var prefs = sharedAppPreferences
     @State private var navigator = sharedIOSNavigator
+    /// Shared TTS player — one instance for the app's lifetime so
+    /// "tap row B while A is speaking → A stops" works without each
+    /// view owning its own synth.
+    @State private var speaker = Speaker()
     /// Extends background execution while StreamHub has at least one
     /// active run. See `BackgroundTaskKeeper` for the iOS contract +
     /// the explicit limits (this buys ~30s, not unlimited).
@@ -33,6 +37,7 @@ struct ReeveiOSApp: App {
                 .environment(\.theme, themeStore.current)
                 .environment(\.clipboard, UIKitClipboard())
                 .environment(\.notifier, sharedIOSNotifier)
+                .environment(\.speaker, speaker)
                 .tint(themeStore.current.accent)
                 .task {
                     await appModel.bootstrap()
