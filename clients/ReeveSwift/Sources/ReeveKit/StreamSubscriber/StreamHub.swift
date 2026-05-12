@@ -58,13 +58,48 @@ public final class StreamHub {
     /// into 20-50Hz body re-evals.)
     public private(set) var activeConversationIDs: Set<String> = []
 
+    /// Conversations the user currently has open on screen. Driven by
+    /// `ConversationView`'s `.onAppear` / `.onDisappear` (set on both
+    /// Mac and iOS). A set rather than a single id because the macOS
+    /// sidebar + detail can technically swap selection between two
+    /// open conversations under selection-change animations — Set
+    /// semantics keep the "is the user looking at this?" answer
+    /// stable across the brief overlap window.
+    public private(set) var viewingConversationIDs: Set<String> = []
+
+    /// Conversations whose most-recent assistant run terminated while
+    /// the user wasn't viewing them. Drives the list-row "new message"
+    /// dot. Cleared per-conversation on next `markViewing` (the user
+    /// opening the conversation is the canonical "I've seen it"). Set
+    /// to a fresh value through `markUnseen` only.
+    ///
+    /// Persisted to UserDefaults under `unseenStorageKey` so the dot
+    /// survives app relaunches — if the assistant message landed while
+    /// the app was backgrounded / killed, the indicator still draws
+    /// the user's attention back to the right conversation.
+    public private(set) var unseenConversationIDs: Set<String> = []
+
     private var tasks: [String /* runID */: Task<Void, Never>] = [:]
     private var terminalHandlers: [String /* conversationID */: (ReeveStreamRun) async -> Void] = [:]
 
     private let subscriber: StreamSubscriber
 
-    public init(subscriber: StreamSubscriber) {
+    /// Backing store for `unseenConversationIDs`. Production passes
+    /// `.standard`; tests pass an isolated suite so a parallel run
+    /// can't poison another test's expectations.
+    private let defaults: UserDefaults
+
+    /// UserDefaults key used to persist `unseenConversationIDs`. Versioned
+    /// so future migration paths can leave the old set alone if the shape
+    /// changes (e.g. per-conversation timestamps).
+    private static let unseenStorageKey = "reeve.streamHub.unseenConversationIDs.v1"
+
+    public init(subscriber: StreamSubscriber, defaults: UserDefaults = .standard) {
         self.subscriber = subscriber
+        self.defaults = defaults
+        if let stored = defaults.array(forKey: Self.unseenStorageKey) as? [String] {
+            self.unseenConversationIDs = Set(stored)
+        }
     }
 
     // MARK: - Public surface
@@ -91,6 +126,42 @@ public final class StreamHub {
     /// torn down so a deferred terminal doesn't fire into a stale VM.
     public func detach(conversationID: String) {
         terminalHandlers.removeValue(forKey: conversationID)
+    }
+
+    /// Marks the conversation as currently on screen (user has the
+    /// conversation view open). Called from `ConversationView`'s
+    /// `.onAppear`. Doubles as "user has seen it" — opening clears any
+    /// pending unseen flag in the same step.
+    public func markViewing(conversationID: String) {
+        viewingConversationIDs.insert(conversationID)
+        if unseenConversationIDs.remove(conversationID) != nil {
+            persistUnseen()
+        }
+    }
+
+    /// Marks the conversation as no longer on screen. Doesn't touch
+    /// unseen — leaving the chat without new content arriving is not
+    /// the same as missing a message.
+    public func markStoppedViewing(conversationID: String) {
+        viewingConversationIDs.remove(conversationID)
+    }
+
+    /// Clear an unseen flag without changing viewing state. Used from
+    /// paths that imply the user is aware of the new content but not
+    /// through opening the conversation (e.g. they tapped a
+    /// notification linking to a different surface). The common
+    /// "opened the chat" path goes through `markViewing` instead.
+    public func markSeen(conversationID: String) {
+        if unseenConversationIDs.remove(conversationID) != nil {
+            persistUnseen()
+        }
+    }
+
+    private func persistUnseen() {
+        defaults.set(
+            Array(unseenConversationIDs),
+            forKey: Self.unseenStorageKey
+        )
     }
 
     /// Start tracking + subscribing to a freshly-started run. Called
@@ -155,7 +226,10 @@ public final class StreamHub {
         tasks.removeAll()
         streams.removeAll()
         activeConversationIDs.removeAll()
+        viewingConversationIDs.removeAll()
+        unseenConversationIDs.removeAll()
         terminalHandlers.removeAll()
+        persistUnseen()
     }
 
     // MARK: - Private machinery
@@ -252,6 +326,18 @@ public final class StreamHub {
         // no settled row) for the duration of the network round-trip.
         if let handler {
             await handler(run)
+        }
+        // If this was an assistant turn (not a compaction) and the
+        // user wasn't viewing the conversation as it landed, raise
+        // the unseen flag. Compaction terminals don't qualify — the
+        // user kicked them off intentionally and either watched the
+        // Compact page or got a separate failure inline. Status is
+        // intentionally not gated: even an errored / cancelled
+        // assistant turn produces a new row the user should notice.
+        if run.purpose == .assistantResponse,
+           !viewingConversationIDs.contains(conversationID),
+           unseenConversationIDs.insert(conversationID).inserted {
+            persistUnseen()
         }
         streams.removeValue(forKey: conversationID)
         activeConversationIDs.remove(conversationID)

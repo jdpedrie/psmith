@@ -26,6 +26,16 @@ struct ConversationView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .onAppear {
+            // Mirror iOS: while this conversation is on screen, suppress
+            // the sidebar's "new message" dot for it and clear any
+            // pending unseen flag — selecting it is the user's "I've
+            // seen it" gesture.
+            app.streamHub.markViewing(conversationID: conversation.id)
+        }
+        .onDisappear {
+            app.streamHub.markStoppedViewing(conversationID: conversation.id)
+        }
         .task(id: conversation.id) {
             // Capture the env-injected notifier into the closure so the
             // VM-side firing path doesn't reach into a global. iOS will
@@ -34,6 +44,7 @@ struct ConversationView: View {
             let m = ConversationViewModel(
                 conversation: conversation,
                 client: app.client,
+                hub: app.streamHub,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
                     liveNotifier.generationCompleted(

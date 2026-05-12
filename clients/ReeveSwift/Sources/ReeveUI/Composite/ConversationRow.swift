@@ -20,15 +20,22 @@ public struct ConversationRow: View {
     /// can tap into to watch live. Driven by
     /// `StreamHub.activeConversationIDs` at the call site.
     let isGenerating: Bool
+    /// When true (and not generating) the row renders a small accent
+    /// dot — the assistant's last run terminated while the user wasn't
+    /// looking. Driven by `StreamHub.unseenConversationIDs`. Hidden
+    /// while generating because the spinner already pulls attention.
+    let isUnseen: Bool
 
     public init(
         conversation: ReeveConversation,
         profileChainName: String? = nil,
-        isGenerating: Bool = false
+        isGenerating: Bool = false,
+        isUnseen: Bool = false
     ) {
         self.conversation = conversation
         self.profileChainName = profileChainName
         self.isGenerating = isGenerating
+        self.isUnseen = isUnseen
     }
 
     public var body: some View {
@@ -40,6 +47,11 @@ public struct ConversationRow: View {
                     ProgressView()
                         .controlSize(.mini)
                         .accessibilityLabel("Generating")
+                } else if isUnseen {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 8, height: 8)
+                        .accessibilityLabel("New message")
                 }
             }
             if let profileChainName, !profileChainName.isEmpty {

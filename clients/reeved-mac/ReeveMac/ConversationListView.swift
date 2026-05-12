@@ -273,7 +273,8 @@ struct ConversationRowMac: View {
                 profileChainName: hideProfileLabel
                     ? nil
                     : profileChainName(for: conversation, profiles: convos.profiles),
-                isGenerating: app.streamHub.activeConversationIDs.contains(conversation.id)
+                isGenerating: app.streamHub.activeConversationIDs.contains(conversation.id),
+                isUnseen: app.streamHub.unseenConversationIDs.contains(conversation.id)
             )
             Spacer(minLength: 0)
             if let onDelete {

@@ -24,6 +24,17 @@ struct ConversationView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .onAppear {
+            // Mark this conversation as on-screen so a terminal arriving
+            // while the user is looking at it doesn't raise the "new
+            // message" dot on its sidebar row. markViewing also clears
+            // any pending unseen flag — opening the chat is the user's
+            // implicit "I've seen it."
+            app.streamHub.markViewing(conversationID: conversation.id)
+        }
+        .onDisappear {
+            app.streamHub.markStoppedViewing(conversationID: conversation.id)
+        }
         .onChange(of: scenePhase) { _, newPhase in
             // Per `docs/ios-screens.md` §1.8 + §4.1: cancel the live
             // SSE on background, re-subscribe from the last seen
