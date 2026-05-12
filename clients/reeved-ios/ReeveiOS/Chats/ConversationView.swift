@@ -124,6 +124,16 @@ private struct ConversationBody: View {
     /// `.onScrollPhaseChange`).
     @State private var autoFollow = true
     @State private var lastAutoScroll: Date = .distantPast
+    /// Real-geometry scroll position. Driving the bottom-pin scroll
+    /// through `ScrollPosition.scrollTo(edge: .bottom)` (iOS 18+)
+    /// uses the actual ScrollView content size rather than LazyVStack's
+    /// row-offset estimates — the latter over-inflate in long chats
+    /// (especially for unrealised rows above the viewport with
+    /// variable-height markdown) and cause the auto-follow to land
+    /// past the actual content end. Symptom: viewport jerks down to
+    /// blank space mid-stream, then snaps back at terminal when the
+    /// scroll-view clamps the out-of-bounds offset.
+    @State private var scrollPosition = ScrollPosition()
     @State private var showingMissingCostInfo = false
     /// Live height of the in-flight streaming bubble. Updated via
     /// `.onGeometryChange` on the StreamingRow. Used to decide when
@@ -397,15 +407,6 @@ private struct ConversationBody: View {
                         model: model,
                         streamingRowHeight: $streamingRowHeight
                     )
-                    // Stable bottom anchor for `proxy.scrollTo("__bottom__")`.
-                    // The LazyVStack realises rows lazily, so scrollTo
-                    // against the last message id can land short when
-                    // that row hasn't been laid out yet. A zero-height
-                    // sentinel that's always present gives the scroller
-                    // a fixed end-of-content target.
-                    Color.clear
-                        .frame(height: 1)
-                        .id("__bottom__")
                 }
                 .padding()
                 // Tap-to-dismiss for the composer keyboard.
@@ -425,6 +426,7 @@ private struct ConversationBody: View {
                     }
                 )
             }
+            .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 // distance = total content height - bottom edge of viewport.
                 // Negative / near-zero means "at or past the end"; positive
@@ -451,19 +453,9 @@ private struct ConversationBody: View {
             .overlay(alignment: .top) {
                 Button {
                     Haptics.impact(.light)
-                    // Two-pass scroll: the first scrollTo realises rows
-                    // along the way, the second one nails the exact
-                    // bottom now that the LazyVStack knows where it is.
-                    // Without the second pass, "Scroll to bottom" from
-                    // far up lands close-but-not-at-bottom because the
-                    // last row wasn't realised on the first call.
-                    let targetID = model.messages.last?.id ?? "__bottom__"
-                    proxy.scrollTo("__bottom__", anchor: .bottom)
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 60_000_000)
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            proxy.scrollTo(targetID, anchor: .bottom)
-                        }
+                    autoFollow = true
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        scrollPosition.scrollTo(edge: .bottom)
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -487,9 +479,12 @@ private struct ConversationBody: View {
                 .accessibilityHidden(!isFarFromBottom)
             }
             .onAppear {
-                if let id = model.messages.last?.id {
-                    proxy.scrollTo(id, anchor: .top)
-                }
+                // Initial position: pin to the actual content bottom
+                // via real geometry. The previous "scrollTo(lastID,
+                // anchor: .top)" used LazyVStack estimates that
+                // mis-land on first appear when not every row is
+                // realised yet.
+                scrollPosition.scrollTo(edge: .bottom)
             }
             // Intentionally NOT scrolling on `model.messages.count` —
             // that handler used to fire on stream end (streaming row
@@ -513,50 +508,71 @@ private struct ConversationBody: View {
                     // streamingText pulse doesn't try to follow a row
                     // that no longer exists.
                     streamingRowHeight = 0
+                    // If we were still following at end of stream, fire
+                    // one final scroll-to-bottom so the settled
+                    // MessageRow replacing the StreamingRow lands cleanly
+                    // at the viewport bottom. Without this, a settled
+                    // row that's slightly shorter than the streaming row
+                    // (typical: live thinking disclosure collapses to a
+                    // "Thought for Xs" pill) leaves the viewport past
+                    // new content end and iOS auto-clamps with a visible
+                    // bounce — the "jerks back to bottom of message"
+                    // the user saw. autoFollow being true here means
+                    // neither the user-scrolled nor the top-hit-top
+                    // disengage fired, so we're naturally completing
+                    // the follow per spec.
+                    if autoFollow {
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            scrollPosition.scrollTo(edge: .bottom)
+                        }
+                    }
                 }
             }
-            .onChange(of: model.streamingText) { _, newValue in
-                // Guard against the terminal-clear pulse: when the stream
-                // ends, `clearStreamingState()` zeroes `streamingText` and
-                // the StreamingRow disappears from the LazyVStack. The
-                // resulting onChange would otherwise scroll *after* the
-                // bubble is gone, parking the viewport on empty space
-                // below the freshly-materialised message.
-                guard autoFollow, !newValue.isEmpty else { return }
-                // Once the streaming bubble fills the visible scroll
-                // area, stop following — per the spec, "scroll smoothly
-                // with the stream until the streaming message hits the
-                // top of the viewport, then stop and hold there." A
-                // small buffer accounts for padding + spacing inside
-                // the LazyVStack so we disengage slightly before the
-                // bubble extends past the top edge.
+            .onChange(of: streamingRowHeight) { _, newHeight in
+                // Watch the streaming AREA's height (not streamingText) so
+                // we follow during the thinking phase too — the thinking
+                // disclosure can grow tall before the first content chunk
+                // ever lands. Triggering only on streamingText left the
+                // viewport static while the bubble grew off-screen, then
+                // jerked DOWN past actual content on the first text chunk
+                // because the LazyVStack estimate for the now-grown row
+                // had inflated.
+                guard autoFollow, model.isStreaming, newHeight > 0 else { return }
+                // Disengage once the streaming bubble reaches viewport
+                // height — top of the message is at the top of the
+                // viewport, per the spec. Setting autoFollow=false (not
+                // just an early-return) implements the "do nothing else,
+                // ever" half of the contract.
                 let buffer: CGFloat = 24
                 let usableViewport = max(0, viewportHeight - buffer)
-                if usableViewport > 0, streamingRowHeight >= usableViewport {
+                if usableViewport > 0, newHeight >= usableViewport {
+                    autoFollow = false
                     return
                 }
                 let now = Date()
-                if now.timeIntervalSince(lastAutoScroll) >= 0.1 {
-                    lastAutoScroll = now
-                    // Anchor to the fixed `__bottom__` sentinel rather
-                    // than the growing streaming row. proxy.scrollTo
-                    // with a mid-list id uses cumulative row offsets,
-                    // which are only as accurate as LazyVStack's
-                    // estimates for unrealised + recently-resized rows
-                    // (collapsed system / context headers being the
-                    // worst offender — they get re-measured small but
-                    // the cached "expanded" offset can linger,
-                    // over-scrolling past actual content). The 1pt
-                    // sentinel at end-of-content is always at the
-                    // actual end, so anchoring on it pins to where
-                    // content actually stops.
-                    //
-                    // No withAnimation here: chunks arrive every ~50ms
-                    // and the throttle lets a scroll fire every ~100ms,
-                    // so successive 120ms animations were interpolating
-                    // against stale targets as the geometry kept moving
-                    // underneath them. Snap is jitter-free.
-                    proxy.scrollTo("__bottom__", anchor: .bottom)
+                guard now.timeIntervalSince(lastAutoScroll) >= 0.05 else { return }
+                lastAutoScroll = now
+                // ScrollPosition.scrollTo(edge: .bottom) scrolls against
+                // the actual ScrollView content geometry — independent
+                // of LazyVStack's row-offset estimates. The old
+                // proxy.scrollTo("__bottom__", anchor: .bottom) target
+                // was computed as (sum of estimated row heights above
+                // the sentinel) - viewport, and over-inflated estimates
+                // for unrealised rows pushed the target past actual
+                // content end. Symptom: viewport jerks down to blank
+                // mid-stream, then snaps back at terminal when the
+                // scroll-view clamps the out-of-bounds offset.
+                //
+                // Animation disabled because height-change throttling
+                // produces ~10 scrolls/sec and overlapping animations
+                // interpolate against stale targets, yielding the
+                // jitter we used to see.
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) {
+                    scrollPosition.scrollTo(edge: .bottom)
                 }
             }
             .onScrollPhaseChange { _, newPhase in
