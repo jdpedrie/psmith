@@ -508,9 +508,9 @@ private struct ConversationBody: View {
                 // Guard against the terminal-clear pulse: when the stream
                 // ends, `clearStreamingState()` zeroes `streamingText` and
                 // the StreamingRow disappears from the LazyVStack. The
-                // resulting onChange would otherwise scrollTo("__streaming__")
-                // *after* the id is gone, parking the viewport on empty
-                // space below the freshly-materialised message.
+                // resulting onChange would otherwise scroll *after* the
+                // bubble is gone, parking the viewport on empty space
+                // below the freshly-materialised message.
                 guard autoFollow, !newValue.isEmpty else { return }
                 // Once the streaming bubble fills the visible scroll
                 // area, stop following — per the spec, "scroll smoothly
@@ -527,9 +527,25 @@ private struct ConversationBody: View {
                 let now = Date()
                 if now.timeIntervalSince(lastAutoScroll) >= 0.1 {
                     lastAutoScroll = now
-                    withAnimation(.linear(duration: 0.12)) {
-                        proxy.scrollTo("__streaming__", anchor: .bottom)
-                    }
+                    // Anchor to the fixed `__bottom__` sentinel rather
+                    // than the growing streaming row. proxy.scrollTo
+                    // with a mid-list id uses cumulative row offsets,
+                    // which are only as accurate as LazyVStack's
+                    // estimates for unrealised + recently-resized rows
+                    // (collapsed system / context headers being the
+                    // worst offender — they get re-measured small but
+                    // the cached "expanded" offset can linger,
+                    // over-scrolling past actual content). The 1pt
+                    // sentinel at end-of-content is always at the
+                    // actual end, so anchoring on it pins to where
+                    // content actually stops.
+                    //
+                    // No withAnimation here: chunks arrive every ~50ms
+                    // and the throttle lets a scroll fire every ~100ms,
+                    // so successive 120ms animations were interpolating
+                    // against stale targets as the geometry kept moving
+                    // underneath them. Snap is jitter-free.
+                    proxy.scrollTo("__bottom__", anchor: .bottom)
                 }
             }
             .onScrollPhaseChange { _, newPhase in
