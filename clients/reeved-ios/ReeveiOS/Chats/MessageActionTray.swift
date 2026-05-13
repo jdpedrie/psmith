@@ -120,7 +120,7 @@ struct MessageActionTray: ViewModifier {
                 close(then: onDelete)
             }
             if let onDeleteAllReplies {
-                chip(icon: "trash.slash", label: "Delete all", tint: .red) {
+                chip(icon: "trash.slash", label: "Delete from here", tint: .red) {
                     close(then: onDeleteAllReplies)
                 }
             }
@@ -139,7 +139,8 @@ struct MessageActionTray: ViewModifier {
                     .font(.callout.weight(.semibold))
                 Text(label)
                     .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.75)
             }
             .foregroundStyle(.white)

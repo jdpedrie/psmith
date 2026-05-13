@@ -101,10 +101,10 @@ struct MessageRow: View {
             Text("This message will be removed. Children stitch to its parent.")
         }
         .alert(
-            "Delete this message and all replies?",
+            "Delete from here?",
             isPresented: $showCascadeDeleteConfirm
         ) {
-            Button("Delete all", role: .destructive) {
+            Button("Delete from here", role: .destructive) {
                 Haptics.notify(.warning)
                 Task { await model.deleteMessage(id: message.id, cascade: true) }
             }
@@ -642,7 +642,7 @@ struct MessageRow: View {
             Button(role: .destructive) {
                 showCascadeDeleteConfirm = true
             } label: {
-                Label("Delete all replies…", systemImage: "trash.slash")
+                Label("Delete from here…", systemImage: "trash.slash")
             }
         }
     }
