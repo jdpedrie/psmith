@@ -454,18 +454,27 @@ private struct ConversationBody: View {
                     }
                 }
 
-                // Auto-follow: only scroll DOWN, and only by the
-                // delta needed to align the content bottom with the
-                // viewport bottom. Never "jump" — the previous
-                // scrollTo(edge: .bottom) was firing on every height
-                // change and overshooting on submit because the
-                // streaming row's geometry hadn't settled when the
-                // first call fired, parking the viewport past actual
-                // content. scrollTo(point:) with a target computed
-                // from this geometry tick is exact.
-                guard autoFollow, model.isStreaming else { return }
+                // Auto-follow: pin the viewport bottom to the
+                // content bottom whenever follow is engaged. We
+                // correct in BOTH directions, not just downward:
+                // the keyboard-dismissal-on-submit case parks the
+                // viewport past the content bottom (scrollTo(.bottom)
+                // lands at the keyboard-up bottom, then the keyboard
+                // dismisses and the viewport grows — leaving
+                // m.offset > targetY and an empty band below the
+                // last message). A "down only" guard would leave
+                // that wedge in place forever; correcting upward
+                // when autoFollow is true closes it.
+                //
+                // It's safe to correct upward because
+                // onScrollPhaseChange disables autoFollow the
+                // moment the user actually drags — so this only
+                // ever fires when we're in pin-mode and the
+                // viewport / content geometry has drifted out of
+                // alignment on its own.
+                guard autoFollow else { return }
                 let targetY = max(0, m.contentHeight - m.viewportHeight)
-                guard m.offset < targetY - 0.5 else { return }
+                guard abs(m.offset - targetY) > 0.5 else { return }
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) {
