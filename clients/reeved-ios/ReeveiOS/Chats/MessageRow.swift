@@ -24,12 +24,6 @@ struct MessageRow: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var showCascadeDeleteConfirm: Bool = false
     @State private var showUsageSheet: Bool = false
-    /// "More" overflow from the swipe-action tray. Long-press still
-    /// surfaces the same items via `.contextMenu`; this dialog is
-    /// the swipe-tray equivalent for the 2nd-tier actions (Reload,
-    /// Delete, Delete-all-replies) that don't fit in the tray's
-    /// three primary chips.
-    @State private var showingMoreActions: Bool = false
 
     private var isErrored: Bool { message.errorText != nil }
 
@@ -132,26 +126,6 @@ struct MessageRow: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-        }
-        .confirmationDialog(
-            "Message actions",
-            isPresented: $showingMoreActions,
-            titleVisibility: .hidden
-        ) {
-            if message.role != .user, isReloadable {
-                Button("Reload") {
-                    Task { await model.reloadFromMessage(id: message.id) }
-                }
-            }
-            Button("Delete", role: .destructive) {
-                showDeleteConfirm = true
-            }
-            if hasDescendants {
-                Button("Delete all replies…", role: .destructive) {
-                    showCascadeDeleteConfirm = true
-                }
-            }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -284,7 +258,11 @@ struct MessageRow: View {
         .messageActionTray(
             onCopy: { copyToClipboard() },
             onEdit: isEditableRole ? { startEdit() } : nil,
-            onMore: { showingMoreActions = true }
+            onReload: (message.role != .user && isReloadable)
+                ? { Task { await model.reloadFromMessage(id: message.id) } }
+                : nil,
+            onDelete: { showDeleteConfirm = true },
+            onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
         )
     }
 
@@ -398,7 +376,11 @@ struct MessageRow: View {
             .messageActionTray(
                 onCopy: { copyToClipboard() },
                 onEdit: isEditableRole ? { startEdit() } : nil,
-                onMore: { showingMoreActions = true }
+                onReload: (message.role != .user && isReloadable)
+                    ? { Task { await model.reloadFromMessage(id: message.id) } }
+                    : nil,
+                onDelete: { showDeleteConfirm = true },
+                onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
             )
     }
 
@@ -459,7 +441,11 @@ struct MessageRow: View {
             .messageActionTray(
                 onCopy: { copyToClipboard() },
                 onEdit: isEditableRole ? { startEdit() } : nil,
-                onMore: { showingMoreActions = true }
+                onReload: (message.role != .user && isReloadable)
+                    ? { Task { await model.reloadFromMessage(id: message.id) } }
+                    : nil,
+                onDelete: { showDeleteConfirm = true },
+                onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
             )
     }
 

@@ -2,10 +2,16 @@ import SwiftUI
 
 /// Mail-style swipe-left action tray for a chat message bubble.
 ///
-/// Pull the bubble left to reveal Copy / Edit / More chips on the
-/// right; release past the snap threshold to commit the open
+/// Pull the bubble left to reveal the applicable action chips on
+/// the right; release past the snap threshold to commit the open
 /// position. Tap a chip to fire its action and close. Tap the
 /// bubble or swipe right to dismiss without acting.
+///
+/// The tray sizes itself to the number of applicable actions —
+/// nil callbacks omit their chip. Today's full set is 5 (Copy,
+/// Edit, Reload, Delete, Delete-all-replies); most messages show
+/// 3–4. There is no overflow surface — every action the user can
+/// take on this message is visible in one place.
 ///
 /// Designed not to fight the parent ScrollView's vertical pan:
 ///   • A 12pt minimum distance keeps small finger jitter from
@@ -18,58 +24,60 @@ import SwiftUI
 ///     ignores everything until the user lifts.
 ///   • A right-swipe-from-rest is treated as vertical (no
 ///     accidental backwards drag).
-///
-/// The tray is laid out behind the bubble in a ZStack, right-
-/// aligned. As the bubble's `.offset` shifts left, the tray
-/// becomes visible. Past the open position the bubble rubber-
-/// bands at 0.4× to bound the visual travel.
 struct MessageActionTray: ViewModifier {
     var onCopy: () -> Void
-    /// `nil` when the message isn't editable (assistant turn,
-    /// frozen role, etc.). Hides the Edit chip — keeps Copy + More.
     var onEdit: (() -> Void)?
-    var onMore: () -> Void
+    var onReload: (() -> Void)?
+    var onDelete: () -> Void
+    var onDeleteAllReplies: (() -> Void)?
 
-    /// Total uncovered tray width. Sized so three 56pt chips with
-    /// 6pt spacing + 4pt trailing inset land cleanly on the right.
-    private let trayWidth: CGFloat = 188
-    /// Open snap threshold. ~half the tray; below this an end-
-    /// of-drag bounces back closed.
+    /// Chip footprint. Smaller than the previous 56pt design to
+    /// keep the tray width manageable when 5 chips are present —
+    /// at 50pt the worst-case 5-chip tray is ~270pt, which still
+    /// leaves ~120pt of bubble visible on the smallest iPhone.
+    private let chipW: CGFloat = 50
+    private let chipH: CGFloat = 56
+    private let chipSpacing: CGFloat = 4
+    private let trailingInset: CGFloat = 4
+
+    /// Open snap threshold. Constant regardless of tray width, so
+    /// the user learns one feel — pull past ~96pt to commit no
+    /// matter how many chips a given message has.
     private let snapOpenAt: CGFloat = 96
     /// Velocity above which a flick commits regardless of distance.
-    /// Mail uses ~600pt/s; we go a bit higher so a sideways nudge
-    /// during scrolling doesn't fly the tray open.
     private let flickVelocity: CGFloat = 850
     /// First-sample distance the drag must travel before the
-    /// direction-lock decision is made. Same as iMessage's
-    /// swipe-for-timestamp feel.
+    /// direction-lock decision is made.
     private let lockSampleAt: CGFloat = 18
-    /// Horizontal-vs-vertical ratio at first sample for the lock
-    /// to land on `.horizontal`. >1 biases toward vertical (lets
-    /// the scroll view win diagonals); 1.4 is a comfortable middle.
+    /// Horizontal-vs-vertical ratio for the lock to land on
+    /// `.horizontal`. >1 biases toward vertical.
     private let horizontalBias: CGFloat = 1.4
 
-    /// Live offset (positive = bubble shifted left). Source of
-    /// truth for both rendering and gesture math; resting position
-    /// is 0 (closed) or `trayWidth` (open), with in-between values
-    /// only existing while a finger is on the bubble.
     @State private var openOffset: CGFloat = 0
-    /// Snapshot of `openOffset` at gesture start, so per-drag
-    /// translation can be applied relative to wherever the tray
-    /// was resting.
     @State private var dragBaseOffset: CGFloat = 0
-    /// Per-gesture lock state — `engaged` follows the finger,
-    /// `ignored` lets the rest of the drag pass through to other
-    /// recognizers (typically the parent ScrollView).
     @State private var lock: Lock = .undecided
 
     private enum Lock { case undecided, engaged, ignored }
+
+    private var chipCount: Int {
+        var n = 2  // Copy + Delete are always present
+        if onEdit != nil { n += 1 }
+        if onReload != nil { n += 1 }
+        if onDeleteAllReplies != nil { n += 1 }
+        return n
+    }
+
+    private var trayWidth: CGFloat {
+        CGFloat(chipCount) * chipW
+            + CGFloat(max(0, chipCount - 1)) * chipSpacing
+            + trailingInset
+    }
 
     func body(content: Content) -> some View {
         ZStack(alignment: .trailing) {
             tray
                 .opacity(trayOpacity)
-                .padding(.trailing, 4)
+                .padding(.trailing, trailingInset)
                 .allowsHitTesting(openOffset > snapOpenAt * 0.5)
             content
                 .offset(x: -openOffset)
@@ -78,10 +86,9 @@ struct MessageActionTray: ViewModifier {
         }
     }
 
-    /// Tap-to-close, but only when the tray is open. Wired as a
-    /// simultaneous gesture so it doesn't suppress the bubble's
-    /// own taps (markdown links, attachment chips, etc.) when the
-    /// tray is closed.
+    /// Tap-to-close, gated on tray-open so the bubble's own taps
+    /// (markdown links, attachment chips, footer chips, etc.)
+    /// keep working when the tray is closed.
     private var closeOnTap: some Gesture {
         TapGesture().onEnded {
             guard openOffset > 0 else { return }
@@ -91,13 +98,11 @@ struct MessageActionTray: ViewModifier {
 
     private var trayOpacity: Double {
         let pct = min(1, max(0, Double(openOffset / trayWidth)))
-        // Ramp opacity faster than position so the chips are
-        // legible by the time the user is past the snap threshold.
         return min(1, pct * 1.5)
     }
 
     private var tray: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: chipSpacing) {
             chip(icon: "doc.on.doc", label: "Copy", tint: .blue) {
                 close(then: onCopy)
             }
@@ -106,8 +111,18 @@ struct MessageActionTray: ViewModifier {
                     close(then: onEdit)
                 }
             }
-            chip(icon: "ellipsis", label: "More", tint: Color(.systemGray)) {
-                close(then: onMore)
+            if let onReload {
+                chip(icon: "arrow.clockwise", label: "Reload", tint: .green) {
+                    close(then: onReload)
+                }
+            }
+            chip(icon: "trash", label: "Delete", tint: .red) {
+                close(then: onDelete)
+            }
+            if let onDeleteAllReplies {
+                chip(icon: "trash.slash", label: "Delete all", tint: .red) {
+                    close(then: onDeleteAllReplies)
+                }
             }
         }
     }
@@ -123,19 +138,18 @@ struct MessageActionTray: ViewModifier {
                 Image(systemName: icon)
                     .font(.callout.weight(.semibold))
                 Text(label)
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .foregroundStyle(.white)
-            .frame(width: 56, height: 56)
+            .frame(width: chipW, height: chipH)
             .background(tint, in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
 
-    /// Snap closed, then fire the supplied action one frame later
-    /// so the close animation visibly starts before any modal
-    /// (edit sheet, delete confirm, etc.) takes over the screen.
     private func close(then action: (() -> Void)?) {
         Haptics.impact(.light)
         withAnimation(.spring(response: 0.30, dampingFraction: 0.85)) {
@@ -156,9 +170,6 @@ struct MessageActionTray: ViewModifier {
                     let dy = abs(v.translation.height)
                     if dx + dy < lockSampleAt { return }
                     let leadsHorizontal = dx > dy * horizontalBias
-                    // Right-pull from a closed tray is a vertical-
-                    // intent fake-out (e.g., the user starts to scroll
-                    // and brushes sideways). Only left-pull engages.
                     if leadsHorizontal && !(openOffset == 0 && v.translation.width > 0) {
                         lock = .engaged
                         dragBaseOffset = openOffset
@@ -182,13 +193,10 @@ struct MessageActionTray: ViewModifier {
                 let velocityLeft = -(v.predictedEndTranslation.width - v.translation.width)
                 let target: CGFloat
                 if dragBaseOffset > 0 {
-                    // Started open. Close if user pulled right past
-                    // half the tray, or flicked right hard enough.
                     let closing = openOffset < trayWidth - snapOpenAt
                         || velocityLeft < -flickVelocity
                     target = closing ? 0 : trayWidth
                 } else {
-                    // Started closed. Open if past snap or flicked left.
                     let opening = openOffset > snapOpenAt
                         || velocityLeft > flickVelocity
                     target = opening ? trayWidth : 0
@@ -204,14 +212,22 @@ struct MessageActionTray: ViewModifier {
 }
 
 extension View {
-    /// Apply the swipe-left action tray to a message bubble.
-    /// Pass `onEdit: nil` to hide the Edit chip for non-editable
-    /// roles (e.g., assistant turns).
+    /// Apply the swipe-left action tray. Pass `nil` for any action
+    /// that doesn't apply to this message — the corresponding chip
+    /// is omitted and the tray sizes itself to the visible chips.
     func messageActionTray(
         onCopy: @escaping () -> Void,
         onEdit: (() -> Void)? = nil,
-        onMore: @escaping () -> Void
+        onReload: (() -> Void)? = nil,
+        onDelete: @escaping () -> Void,
+        onDeleteAllReplies: (() -> Void)? = nil
     ) -> some View {
-        modifier(MessageActionTray(onCopy: onCopy, onEdit: onEdit, onMore: onMore))
+        modifier(MessageActionTray(
+            onCopy: onCopy,
+            onEdit: onEdit,
+            onReload: onReload,
+            onDelete: onDelete,
+            onDeleteAllReplies: onDeleteAllReplies
+        ))
     }
 }
