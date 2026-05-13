@@ -113,7 +113,7 @@ func newFullSvcWithPool(t *testing.T) (*Service, *store.Queries, *stream.Supervi
 	q := store.New(pool)
 	cat := modelmeta.NewLiveCatalog(nil)
 	sup := stream.New(q, slog.Default())
-	return NewService(q, pool, cat, sup, crypto.Nop{}, slog.Default()), q, sup, pool
+	return NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default()), q, sup, pool
 }
 
 func textChunk(s string) providers.Chunk {
@@ -648,7 +648,7 @@ func TestSendMessage_NoSupervisor_Unimplemented(t *testing.T) {
 	t.Parallel()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	svc := NewService(q, nil, nil, nil, crypto.Nop{}, nil) // no pool, no catalog, no supervisor
+	svc := NewService(q, nil, nil, nil, crypto.Nop{}, nil, nil) // no pool, no catalog, no supervisor
 
 	uid, _ := uuid.NewV7()
 	user, _ := q.CreateUser(context.Background(), store.CreateUserParams{

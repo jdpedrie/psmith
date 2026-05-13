@@ -37,7 +37,7 @@ func newTestSvc(t *testing.T) (*Service, *store.Queries) {
 	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	return NewService(q, nil, nil, nil, crypto.Nop{}, nil), q
+	return NewService(q, nil, nil, nil, crypto.Nop{}, nil, nil), q
 }
 
 func mustCreateUser(t *testing.T, q *store.Queries, username string) store.User {

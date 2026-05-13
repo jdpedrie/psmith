@@ -51,6 +51,16 @@ type ExplicitCach struct {
 	ExpiresAt          time.Time
 }
 
+type File struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	Sha256           string
+	MimeType         string
+	SizeBytes        int64
+	OriginalFilename *string
+	CreatedAt        time.Time
+}
+
 type HarnessSession struct {
 	ID                uuid.UUID
 	ConversationID    uuid.UUID
@@ -91,6 +101,14 @@ type Message struct {
 	ExplicitCacheAttached *bool
 	ToolCalls             []byte
 	FinishReason          *string
+}
+
+type MessageAttachment struct {
+	MessageID uuid.UUID
+	Ordinal   int32
+	FileID    uuid.UUID
+	Kind      string
+	RoleHint  string
 }
 
 type Profile struct {

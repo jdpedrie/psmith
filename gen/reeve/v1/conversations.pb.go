@@ -1604,9 +1604,16 @@ type SendMessageRequest struct {
 	// "regenerate" affordance in the UI — produces a sibling assistant
 	// turn under the SAME user message, no duplicate user. `content` is
 	// ignored when this flag is set.
-	Regenerate    bool `protobuf:"varint,7,opt,name=regenerate,proto3" json:"regenerate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Regenerate bool `protobuf:"varint,7,opt,name=regenerate,proto3" json:"regenerate,omitempty"`
+	// File ids of attachments to bind to the newly-created user message.
+	// Each id must reference an existing `files` row owned by the same
+	// user; the server resolves each into a `message_attachments` row
+	// (kind derived from mime_type, role_hint = 'user_supplied') when
+	// persisting the user turn. Ordinal matches list order. Ignored
+	// when `regenerate` is true (the parent already has its attachments).
+	AttachmentFileIds []string `protobuf:"bytes,8,rep,name=attachment_file_ids,json=attachmentFileIds,proto3" json:"attachment_file_ids,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SendMessageRequest) Reset() {
@@ -1686,6 +1693,13 @@ func (x *SendMessageRequest) GetRegenerate() bool {
 		return x.Regenerate
 	}
 	return false
+}
+
+func (x *SendMessageRequest) GetAttachmentFileIds() []string {
+	if x != nil {
+		return x.AttachmentFileIds
+	}
+	return nil
 }
 
 type SendMessageResponse struct {
@@ -2077,7 +2091,7 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\x1bCreateContextManualResponse\x12+\n" +
 	"\acontext\x18\x01 \x01(\v2\x11.reeve.v1.ContextR\acontext\x129\n" +
 	"\fuser_message\x18\x02 \x01(\v2\x11.reeve.v1.MessageH\x00R\vuserMessage\x88\x01\x01B\x0f\n" +
-	"\r_user_message\"\xf5\x02\n" +
+	"\r_user_message\"\xa5\x03\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -2088,7 +2102,8 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\rcall_settings\x18\x06 \x01(\v2\x16.reeve.v1.CallSettingsH\x03R\fcallSettings\x88\x01\x01\x12\x1e\n" +
 	"\n" +
 	"regenerate\x18\a \x01(\bR\n" +
-	"regenerateB\x14\n" +
+	"regenerate\x12.\n" +
+	"\x13attachment_file_ids\x18\b \x03(\tR\x11attachmentFileIdsB\x14\n" +
 	"\x12_parent_message_idB\x0e\n" +
 	"\f_provider_idB\v\n" +
 	"\t_model_idB\x10\n" +

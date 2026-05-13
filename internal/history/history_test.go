@@ -560,3 +560,11 @@ func (f *fakeQueries) ListMessagesByContext(_ context.Context, _ uuid.UUID) ([]s
 	}
 	return f.messages, nil
 }
+
+func (f *fakeQueries) ListAttachmentsForMessages(_ context.Context, _ []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error) {
+	// History tests don't exercise attachments — empty result keeps
+	// the chain build wire-compatible. The dedicated attachment-flow
+	// tests live in service_send_test.go alongside the rest of the
+	// SendMessage integration coverage.
+	return nil, nil
+}

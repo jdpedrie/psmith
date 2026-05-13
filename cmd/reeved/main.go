@@ -21,9 +21,11 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/crypto"
+	"github.com/jdpedrie/reeve/internal/files"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
+	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/streamsvc"
@@ -110,14 +112,40 @@ func run() error {
 	)
 	opts := connect.WithInterceptors(authInterceptor)
 
+	// Filesystem-backed file storage. $REEVE_DATA_DIR is the operator's
+	// chosen root; defaults to ./reeved-data so dev "just works." On
+	// first boot the `files/` subdirectory is created at 0700.
+	dataDir := os.Getenv("REEVE_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "reeved-data"
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	fileStorage, err := storage.NewFS(dataDir)
+	if err != nil {
+		return fmt.Errorf("init storage: %w", err)
+	}
+
+	// HMAC key for signed `/files/{id}` URLs, derived off the master
+	// crypto key so URL-signature secret material rotates with the
+	// rest of the at-rest secret.
+	masterKey, _, err := crypto.LoadKey()
+	if err != nil {
+		return fmt.Errorf("load master key for url signing: %w", err)
+	}
+	urlSigningKey := files.DeriveSigningKey(masterKey)
+	baseURL := os.Getenv("REEVE_PUBLIC_BASE_URL") // empty → clients prepend
+
 	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default())
 	profilesSvc := profiles.NewService(queries, pool, cipher)
-	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, slog.Default())
+	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, fileStorage, slog.Default())
 	// Wire the auto-title hook so the supervisor pings the conversations
 	// service after every assistant materialization. Profile-opt-in; no-op
 	// when title fields aren't configured.
 	supervisor.SetOnAssistantMaterialized(conversationsSvc.MaybeGenerateTitle)
 	streamsSvc := streamsvc.NewService(queries, supervisor)
+	filesSvc := files.NewService(queries, fileStorage, urlSigningKey, baseURL)
 
 	mux := http.NewServeMux()
 	mux.Handle(reevev1connect.NewAuthServiceHandler(authSvc, opts))
@@ -125,6 +153,11 @@ func run() error {
 	mux.Handle(reevev1connect.NewProfilesServiceHandler(profilesSvc, opts))
 	mux.Handle(reevev1connect.NewConversationsServiceHandler(conversationsSvc, opts))
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
+	mux.Handle(reevev1connect.NewFilesServiceHandler(filesSvc, opts))
+	// Raw-bytes endpoint for signed file URLs. Bypasses Connect framing
+	// so a system image loader can fetch the bytes directly.
+	mux.HandleFunc("GET /files/{id}", filesSvc.BytesHandler())
+	mux.HandleFunc("HEAD /files/{id}", filesSvc.BytesHandler())
 	// Plain HTTP probe used by the iOS/Mac shells to flip their
 	// connectivity flag. Cheap on purpose — no auth, no DB hop, just
 	// a constant 200. Failure (TCP refused, TLS handshake fail,

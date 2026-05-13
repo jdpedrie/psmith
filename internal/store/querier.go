@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	AttachFileToMessage(ctx context.Context, arg AttachFileToMessageParams) (MessageAttachment, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// Used by the stream supervisor at materialization. Allows the assistant turn
 	// (or the compression_summary record) to be inserted with usage + cost
@@ -24,6 +25,12 @@ type Querier interface {
 	CreateAssistantMessageWithUsage(ctx context.Context, arg CreateAssistantMessageWithUsageParams) (Message, error)
 	CreateContext(ctx context.Context, arg CreateContextParams) (Context, error)
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (Conversation, error)
+	// Idempotent on (user_id, sha256) — re-uploading the same content by
+	// the same user returns the existing row instead of inserting a
+	// duplicate. The DO UPDATE no-op pattern is the standard way to make
+	// ON CONFLICT path RETURN the existing row (a plain DO NOTHING would
+	// return no rows).
+	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
@@ -38,6 +45,9 @@ type Querier interface {
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExplicitCache(ctx context.Context, arg DeleteExplicitCacheParams) error
+	// Caller's responsibility to ensure no message_attachments still reference
+	// the file (or accept the ON DELETE CASCADE on message_attachments).
+	DeleteFile(ctx context.Context, id uuid.UUID) error
 	// The cascade=true path. With ON DELETE CASCADE on parent_id (migration 00006),
 	// this single DELETE removes the descendant subtree too.
 	DeleteMessageByID(ctx context.Context, id uuid.UUID) error
@@ -74,6 +84,8 @@ type Querier interface {
 	GetContextRoleMessageInContext(ctx context.Context, contextID uuid.UUID) (Message, error)
 	GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error)
 	GetExplicitCache(ctx context.Context, arg GetExplicitCacheParams) (ExplicitCach, error)
+	GetFile(ctx context.Context, id uuid.UUID) (File, error)
+	GetFileByUserAndSHA(ctx context.Context, arg GetFileByUserAndSHAParams) (File, error)
 	// Returns the most recent stream_run for a context that recorded prefix
 	// hashes (skipping turns that errored before the prefix was assembled).
 	// Used by the next SendMessage to compute cache-stable prefix length.
@@ -124,6 +136,9 @@ type Querier interface {
 	// conversations-list refresh: each run gets adopted, so a cold launch
 	// into a mid-generation conversation shows live content.
 	ListActiveStreamRunsByUser(ctx context.Context, userID uuid.UUID) ([]StreamRun, error)
+	ListAttachmentsForMessage(ctx context.Context, messageID uuid.UUID) ([]ListAttachmentsForMessageRow, error)
+	// Bulk variant for history builder: one query per chain instead of N.
+	ListAttachmentsForMessages(ctx context.Context, dollar_1 []uuid.UUID) ([]ListAttachmentsForMessagesRow, error)
 	// Per-context aggregates (message_count, last_message_total_tokens,
 	// cumulative_cost_usd) are computed in a single query so the client can
 	// render context-list rows without N+1 round trips.
@@ -151,6 +166,7 @@ type Querier interface {
 	// skips the filter; conversations with no title are excluded when set);
 	// profile_id (NULL skips the filter).
 	ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error)
+	ListFilesForUser(ctx context.Context, arg ListFilesForUserParams) ([]File, error)
 	// Walks parent_id from the leaf back to the root, returning rows root-first.
 	// sibling_count: number of OTHER messages sharing this row's parent — i.e.
 	// branches forking off the same parent. The UI uses it to render fork

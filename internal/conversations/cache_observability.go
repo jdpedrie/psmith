@@ -34,6 +34,15 @@ func hashWireMessages(msgs []providers.WireMessage) []string {
 		h.Write(lenBuf[:])
 		h.Write([]byte(m.Role))
 		h.Write([]byte(m.Content))
+		// Fold attachment SHA-256s into the hash so an image swap on
+		// a turn breaks prefix-cache stability — otherwise the cache
+		// observability dot would lie on multimodal turns ("100% hit"
+		// while the bytes the model sees changed). SHA-256 ordering
+		// follows the stored ordinal, which matches the wire order.
+		for _, a := range m.Attachments {
+			h.Write([]byte{0}) // explicit field separator
+			h.Write([]byte(a.SHA256))
+		}
 		out[i] = hex.EncodeToString(h.Sum(nil))
 	}
 	return out

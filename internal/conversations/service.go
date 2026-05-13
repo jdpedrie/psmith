@@ -28,6 +28,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/plugins"
@@ -49,6 +50,7 @@ type Service struct {
 	catalog    modelmeta.Catalog
 	supervisor *stream.Supervisor
 	cipher     crypto.Cipher
+	storage    storage.Storage
 	logger     *slog.Logger
 }
 
@@ -63,7 +65,7 @@ type Service struct {
 // per-profile / per-user plugin config blobs at the moments those
 // bytes are handed to driver / plugin constructors. Pass crypto.Nop{}
 // to opt out of encryption.
-func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Catalog, supervisor *stream.Supervisor, cipher crypto.Cipher, logger *slog.Logger) *Service {
+func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Catalog, supervisor *stream.Supervisor, cipher crypto.Cipher, st storage.Storage, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -76,6 +78,7 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 		catalog:    catalog,
 		supervisor: supervisor,
 		cipher:     cipher,
+		storage:    st,
 		logger:     logger,
 	}
 }
@@ -948,6 +951,38 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
 		}
 
+		// Bind attachments before commit. Each attachment_file_id must
+		// reference a files row owned by the same user — anything else
+		// is a permissions violation we surface as InvalidArgument so a
+		// misbehaving client gets a clean error rather than a silently-
+		// dropped attachment.
+		for i, idStr := range req.Msg.AttachmentFileIds {
+			fileID, perr := uuid.Parse(idStr)
+			if perr != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("invalid attachment_file_id[%d]: %w", i, perr))
+			}
+			fileRow, ferr := qtx.GetFile(ctx, fileID)
+			if ferr != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("attachment_file_id[%d] not found", i))
+			}
+			if fileRow.UserID != user.ID {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("attachment_file_id[%d] not owned by caller", i))
+			}
+			if _, aerr := qtx.AttachFileToMessage(ctx, store.AttachFileToMessageParams{
+				MessageID: userMsgRow.ID,
+				Ordinal:   int32(i),
+				FileID:    fileID,
+				Kind:      attachmentKindFromMime(fileRow.MimeType),
+				RoleHint:  "user_supplied",
+			}); aerr != nil {
+				return nil, connect.NewError(connect.CodeInternal,
+					fmt.Errorf("bind attachment: %w", aerr))
+			}
+		}
+
 		if err := tx.Commit(ctx); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 		}
@@ -993,6 +1028,8 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		DestProviderType: provRow.Type,
 		IncludeThinking:  includeThinking,
 		Plugins:          pipeline,
+		UserID:           user.ID,
+		Attachments:      s.storage,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
@@ -2020,6 +2057,8 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[r
 		LeafMessageID:    leafID,
 		DestProviderType: provRow.Type,
 		IncludeThinking:  includeThinking,
+		UserID:           user.ID,
+		Attachments:      s.storage,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))

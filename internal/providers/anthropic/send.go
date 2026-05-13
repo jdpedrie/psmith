@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -360,8 +361,14 @@ func translateMessages(in []providers.WireMessage) ([]sdk.TextBlockParam, []sdk.
 }
 
 // userBlocks builds content for a user-role message. Tool results
-// emit native `tool_result` blocks; the message's text content (if any)
-// follows.
+// emit native `tool_result` blocks; image attachments emit `image`
+// blocks (base64-inline in v1 — provider Files API caching is a
+// phase-4 escape hatch); the message's text content (if any) follows.
+//
+// Attachment ordering: image blocks precede the text body so the
+// model "sees" the image before the prompt that references it.
+// Mirrors Anthropic's own multimodal examples and is the documented
+// recommendation for image-grounded Q&A.
 func userBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, error) {
 	var blocks []sdk.ContentBlockParamUnion
 	for _, tr := range m.ToolResults {
@@ -372,6 +379,30 @@ func userBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, error) {
 			isError = true
 		}
 		blocks = append(blocks, sdk.NewToolResultBlock(tr.ToolUseID, body, isError))
+	}
+	for _, att := range m.Attachments {
+		switch att.Kind {
+		case providers.AttachmentImage:
+			if len(att.Data) == 0 {
+				// Phase-1 driver path is inline-only. URL / ProviderFileID
+				// modes are reserved for phase 4 (provider Files API
+				// caching). An attachment that arrived without inline
+				// bytes is a history-builder bug, not a user-facing
+				// failure — drop it rather than crash the turn.
+				continue
+			}
+			blocks = append(blocks, sdk.NewImageBlockBase64(
+				att.MimeType,
+				base64.StdEncoding.EncodeToString(att.Data),
+			))
+		default:
+			// Audio / document / video translation lands in later
+			// slices (Phase 2 docs, Phase 5 audio). Drop silently
+			// for now — the capability table on the client gates
+			// these out before they reach the driver, so a drop
+			// here is a defense-in-depth rather than an expected
+			// path.
+		}
 	}
 	if m.Content != "" {
 		blocks = append(blocks, sdk.NewTextBlock(m.Content))

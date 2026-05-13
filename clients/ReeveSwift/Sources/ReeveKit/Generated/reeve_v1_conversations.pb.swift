@@ -752,6 +752,14 @@ public struct Reeve_V1_SendMessageRequest: Sendable {
   /// ignored when this flag is set.
   public var regenerate: Bool = false
 
+  /// File ids of attachments to bind to the newly-created user message.
+  /// Each id must reference an existing `files` row owned by the same
+  /// user; the server resolves each into a `message_attachments` row
+  /// (kind derived from mime_type, role_hint = 'user_supplied') when
+  /// persisting the user turn. Ordinal matches list order. Ignored
+  /// when `regenerate` is true (the parent already has its attachments).
+  public var attachmentFileIds: [String] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2036,7 +2044,7 @@ extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProt
 
 extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2051,6 +2059,7 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 5: try { try decoder.decodeSingularStringField(value: &self._modelID) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.regenerate) }()
+      case 8: try { try decoder.decodeRepeatedStringField(value: &self.attachmentFileIds) }()
       default: break
       }
     }
@@ -2082,6 +2091,9 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if self.regenerate != false {
       try visitor.visitSingularBoolField(value: self.regenerate, fieldNumber: 7)
     }
+    if !self.attachmentFileIds.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.attachmentFileIds, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2093,6 +2105,7 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs._modelID != rhs._modelID {return false}
     if lhs._callSettings != rhs._callSettings {return false}
     if lhs.regenerate != rhs.regenerate {return false}
+    if lhs.attachmentFileIds != rhs.attachmentFileIds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

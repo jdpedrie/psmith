@@ -273,6 +273,13 @@ message SendMessageRequest {
   // turn under the SAME user message, no duplicate user. `content` is
   // ignored when this flag is set.
   bool regenerate = 7;
+  // File ids of attachments to bind to the newly-created user message.
+  // Each id must reference an existing `files` row owned by the same
+  // user; the server resolves each into a `message_attachments` row
+  // (kind derived from mime_type, role_hint = 'user_supplied') when
+  // persisting the user turn. Ordinal matches list order. Ignored
+  // when `regenerate` is true (the parent already has its attachments).
+  repeated string attachment_file_ids = 8;
 }
 message SendMessageResponse {
   // Echo of the user message that anchors this turn. When `regenerate`

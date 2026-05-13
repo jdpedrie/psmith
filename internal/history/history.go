@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/google/uuid"
 
@@ -72,6 +73,15 @@ var (
 type queries interface {
 	GetActiveContextByConversation(ctx context.Context, conversationID uuid.UUID) (store.Context, error)
 	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]store.Message, error)
+	ListAttachmentsForMessages(ctx context.Context, messageIDs []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error)
+}
+
+// AttachmentReader is the minimal Storage interface used during
+// history build to inline attachment bytes. Matches storage.Storage's
+// Get method without dragging the whole interface in — keeps the
+// dependency surface narrow for tests.
+type AttachmentReader interface {
+	Get(ctx context.Context, userID uuid.UUID, sha256 string) (io.ReadCloser, error)
 }
 
 // Params carries the inputs to Build. See package doc for the contract.
@@ -102,6 +112,19 @@ type Params struct {
 	// the pipeline. See "Chat plugins → Where each capability runs" in
 	// docs/architecture.md.
 	Plugins plugins.Pipeline
+
+	// UserID owns the conversation. Used to scope attachment reads
+	// (storage is partitioned per-user). Required when the chain
+	// has any message_attachments rows; the lookup happens via the
+	// caller's storage backend.
+	UserID uuid.UUID
+
+	// Attachments inlines blob bytes from the Storage backend onto
+	// each WireMessage that carries an attachment. Nil disables
+	// attachment inlining — the chain still walks but provider
+	// drivers will see empty Attachment lists. Tests that don't
+	// exercise attachments leave this nil.
+	Attachments AttachmentReader
 }
 
 // Build returns the wire-shaped message list for the prefix that ends at the
@@ -152,6 +175,43 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		return nil, err
 	}
 
+	// Load attachments for every message in the chain in one round
+	// trip, then bucket by message_id for per-row lookup. Nil
+	// Attachments reader → skip the load entirely; callers that
+	// don't care about attachments (most tests) don't pay the cost.
+	attachmentsByMessage := map[uuid.UUID][]providers.Attachment{}
+	if params.Attachments != nil {
+		ids := make([]uuid.UUID, 0, len(chain))
+		for _, m := range chain {
+			ids = append(ids, m.ID)
+		}
+		rows, lerr := q.ListAttachmentsForMessages(ctx, ids)
+		if lerr != nil {
+			return nil, fmt.Errorf("history: list attachments: %w", lerr)
+		}
+		for _, r := range rows {
+			rc, gerr := params.Attachments.Get(ctx, params.UserID, r.Sha256)
+			if gerr != nil {
+				return nil, fmt.Errorf("history: read attachment %s: %w", r.FileID, gerr)
+			}
+			data, rerr := io.ReadAll(rc)
+			_ = rc.Close()
+			if rerr != nil {
+				return nil, fmt.Errorf("history: drain attachment %s: %w", r.FileID, rerr)
+			}
+			att := providers.Attachment{
+				Kind:     providers.AttachmentKind(r.Kind),
+				MimeType: r.MimeType,
+				Data:     data,
+				SHA256:   r.Sha256,
+			}
+			if r.OriginalFilename != nil {
+				att.Filename = *r.OriginalFilename
+			}
+			attachmentsByMessage[r.MessageID] = append(attachmentsByMessage[r.MessageID], att)
+		}
+	}
+
 	// Assemble messages alongside their stored role so plugin transforms can
 	// distinguish original user/assistant turns from system/context-derived
 	// rows (which the architecture says transforms must skip).
@@ -187,6 +247,13 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		wm, err := toWireMessage(m, params.DestProviderType, params.IncludeThinking)
 		if err != nil {
 			return nil, err
+		}
+		// Attach pre-loaded inline bytes for this message, if any.
+		// Attachments are kept on the WireMessage rather than spliced
+		// into Content so each driver can decide whether to translate
+		// them (image block, file_data, image_url) or drop them.
+		if atts := attachmentsByMessage[m.ID]; len(atts) > 0 {
+			wm.Attachments = atts
 		}
 		// If the assistant turn had tool calls, splice the model's tool_use
 		// blocks back onto the assistant message and append a synthetic

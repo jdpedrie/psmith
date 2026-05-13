@@ -96,6 +96,47 @@ type WireMessage struct {
 	// ToolResults is set on user messages that carry tool results coming
 	// back to the model after a previous tool_use turn.
 	ToolResults []ToolResultBlock
+	// Attachments carry binary payloads (images, documents, audio) that
+	// accompany the message. Drivers translate the subset their model
+	// can render into native content blocks (Anthropic `image`,
+	// Gemini `inline_data`, OpenAI `image_url` / `input_image`) and
+	// silently drop the rest — gated by the per-driver capability
+	// table so the UI can warn the user up-front.
+	Attachments []Attachment
+}
+
+// AttachmentKind groups attachments into the four broad categories
+// drivers care about. Matches the CHECK constraint on
+// message_attachments.kind.
+type AttachmentKind string
+
+const (
+	AttachmentImage    AttachmentKind = "image"
+	AttachmentAudio    AttachmentKind = "audio"
+	AttachmentDocument AttachmentKind = "document"
+	AttachmentVideo    AttachmentKind = "video"
+)
+
+// Attachment is a single binary payload riding on a WireMessage.
+// Exactly one of Data / URL / ProviderFileID is populated:
+//   - Data: inline bytes, the v1 path (history builder reads from
+//     Storage and inlines them on every send).
+//   - URL: a stable URL the provider can fetch — rare in v1, used
+//     when the provider supports it and we have a cacheable URL.
+//   - ProviderFileID: a phase-4 cached upload (provider-side Files
+//     API) resolved against the active provider; preferred over
+//     Data when available to dodge re-inlining.
+type Attachment struct {
+	Kind           AttachmentKind
+	MimeType       string // e.g. "image/png", "application/pdf"
+	Filename       string // original filename, rendered for docs
+	Data           []byte
+	URL            string
+	ProviderFileID string
+	// SHA256 lets the cache-observability hash see attachment
+	// content without re-hashing megabytes per turn. Set by the
+	// history builder from `files.sha256`.
+	SHA256 string
 }
 
 // ToolUseBlock is one tool invocation captured from an assistant turn.
