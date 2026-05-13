@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 import ReeveKit
 import ReeveUI
 
@@ -31,6 +32,9 @@ struct Composer: View {
     /// inline `PhotosPicker { Label }` initializer renders as
     /// zero-width inside a tight HStack.
     @State private var showingPhotosPicker = false
+    /// Whether the system file importer is presented (for PDFs,
+    /// audio, video — anything not in the Photos library).
+    @State private var showingFileImporter = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -90,6 +94,24 @@ struct Composer: View {
             matching: .images,
             preferredItemEncoding: .compatible
         )
+        .fileImporter(
+            isPresented: $showingFileImporter,
+            allowedContentTypes: fileImporterTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    Task { @MainActor in
+                        await model.attachFile(from: url)
+                    }
+                }
+            case .failure:
+                // System picker handles its own error UI; nothing to
+                // surface in-app for cancel-or-failure paths.
+                break
+            }
+        }
     }
 
     /// Thin amber strip above the input controls when the server's
@@ -113,30 +135,68 @@ struct Composer: View {
 
     // MARK: - Paperclip + attachment chip strip
 
-    /// Paperclip button → PhotosPicker (via `.photosPicker`
-    /// presentation modifier — see `showingPhotosPicker`).
-    /// Multi-select on so the user can attach a few images at once;
-    /// preprocessing + upload happen per-item, in parallel-ish
-    /// (each via its own Task). Capability gate is driven by the
-    /// active model's image support — drivers that don't accept
-    /// images dim the button rather than letting the user upload
-    /// and discover the failure at send time.
+    /// Paperclip menu. The system file picker doesn't show
+    /// camera-roll images (those go through Photos), and
+    /// PhotosPicker doesn't show files; users need both. Menu
+    /// items are gated by the active provider's per-kind capability
+    /// — Anthropic gets Photos + Files (PDFs); Google gets all
+    /// of Photos + Files (PDFs, audio, video); OpenAI gets Photos
+    /// only.
     @ViewBuilder
     private var paperclipButton: some View {
-        let accepts = activeModelAcceptsImages
-        Button {
-            showingPhotosPicker = true
+        let imageOK = activeModelAccepts(.image)
+        let docOK   = activeModelAccepts(.document)
+        let avOK    = activeModelAccepts(.audioVideo)
+        let anyOK   = imageOK || docOK || avOK
+        Menu {
+            if imageOK {
+                Button {
+                    showingPhotosPicker = true
+                } label: {
+                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+            }
+            if docOK || avOK {
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    Label(filePickerLabel(docOK: docOK, avOK: avOK), systemImage: "folder")
+                }
+            }
         } label: {
             Image(systemName: "paperclip")
                 .font(.callout)
-                .foregroundStyle(accepts ? .secondary : .tertiary)
+                .foregroundStyle(anyOK ? .secondary : .tertiary)
                 .frame(width: 32, height: 32)
                 .background(Color.primary.opacity(0.06), in: Circle())
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
         }
+        .menuStyle(.button)
         .buttonStyle(.plain)
-        .disabled(!accepts)
-        .accessibilityLabel(accepts ? "Attach an image" : "Attachments not supported by this model")
+        .disabled(!anyOK)
+        .accessibilityLabel(anyOK ? "Attach a file" : "Attachments not supported by this model")
+    }
+
+    private func filePickerLabel(docOK: Bool, avOK: Bool) -> String {
+        switch (docOK, avOK) {
+        case (true, true):  return "Choose Files"   // PDFs, audio, video
+        case (true, false): return "Choose PDF"
+        case (false, true): return "Choose Audio / Video"
+        default:            return "Choose File"
+        }
+    }
+
+    /// UTTypes the file importer accepts for the active provider.
+    /// Built lazily so menu invocation reflects the current model.
+    private var fileImporterTypes: [UTType] {
+        var types: [UTType] = []
+        if activeModelAccepts(.document) {
+            types.append(.pdf)
+        }
+        if activeModelAccepts(.audioVideo) {
+            types.append(contentsOf: [.audio, .movie])
+        }
+        return types
     }
 
     /// Pending-attachment strip — horizontal-scrolling thumbnails
@@ -159,22 +219,23 @@ struct Composer: View {
     }
 
     private func pendingChip(_ att: PendingAttachment) -> some View {
-        // UIImage(data:) is cheap on the preprocessed thumbnail-
-        // sized JPEG bytes the VM already holds; no need to dance
-        // through AsyncImage / signed-URL fetches for content we
-        // have in-memory.
-        let image: Image? = UIImage(data: att.previewData).map(Image.init(uiImage:))
-        return ZStack(alignment: .topTrailing) {
-            Group {
-                if let image {
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    Color.gray.opacity(0.2)
-                }
+        // Image attachments use the in-memory preprocessed thumbnail
+        // bytes; everything else (PDF / audio / video) renders an
+        // icon + filename chip — no remote fetch needed since the
+        // file's already uploaded and the user just needs to see
+        // what's about to be sent.
+        ZStack(alignment: .topTrailing) {
+            if att.mimeType.hasPrefix("image/"),
+               let uiImage = UIImage(data: att.previewData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+            } else {
+                filePendingChip(att)
             }
-            .frame(width: 60, height: 60)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
 
             Button {
                 Haptics.impact(.light)
@@ -191,6 +252,48 @@ struct Composer: View {
         }
     }
 
+    /// Non-image pending-attachment chip. Bigger than the image
+    /// thumbnail (filename needs room), but capped so a long PDF
+    /// title doesn't push the send button off screen.
+    private func filePendingChip(_ att: PendingAttachment) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName(for: att.mimeType))
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(att.originalFilename ?? defaultLabel(for: att.mimeType))
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(att.mimeType)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 180, alignment: .leading)
+        .frame(height: 60)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+    }
+
+    private func iconName(for mime: String) -> String {
+        if mime == "application/pdf" { return "doc.richtext" }
+        if mime.hasPrefix("audio/") { return "waveform" }
+        if mime.hasPrefix("video/") { return "film" }
+        if mime.hasPrefix("image/") { return "photo" }
+        return "doc"
+    }
+
+    private func defaultLabel(for mime: String) -> String {
+        if mime == "application/pdf" { return "PDF" }
+        if mime.hasPrefix("audio/") { return "Audio" }
+        if mime.hasPrefix("video/") { return "Video" }
+        return "File"
+    }
+
     private var uploadingChip: some View {
         RoundedRectangle(cornerRadius: 8)
             .fill(Color.primary.opacity(0.08))
@@ -205,21 +308,37 @@ struct Composer: View {
             .accessibilityLabel("Uploading attachment")
     }
 
-    /// Whether the currently-selected model accepts image attachments.
-    /// All three native drivers translate image attachments now
-    /// (Anthropic `image` block, Google `inline_data`, OpenAI Chat
-    /// `image_url` / Responses `input_image`). The
-    /// openai-compatible bucket also covers third-party gateways
-    /// (xAI, OpenRouter, etc) — most accept the Chat-Completions
-    /// image_url shape, but coverage varies per gateway. Until the
-    /// catalog grows a per-model `accepts_images` capability flag,
-    /// allow images on every driver and let the UI surface any
-    /// upstream rejection inline rather than gating optimistically.
-    private var activeModelAcceptsImages: Bool {
+    /// Per-provider attachment capabilities. The composer's paperclip
+    /// menu shows / hides options based on the active provider:
+    ///
+    ///   anthropic         → image + document (PDF)
+    ///   google            → image + document + audio + video
+    ///   openai-compatible → image only (Files API path for docs
+    ///                       hasn't been wired; audio/video are
+    ///                       routed through the (separate) realtime
+    ///                       API and not supported here)
+    ///
+    /// Capabilities here mirror what the Go drivers actually
+    /// translate in `internal/providers/{anthropic,google,openai}/send.go`.
+    /// If the catalog grows a per-model `accepts_*` flag this can
+    /// move to a per-model lookup; for v1 the provider-level
+    /// granularity matches the driver-side reality.
+    enum AttachmentKind {
+        case image, document, audioVideo
+    }
+
+    private func activeModelAccepts(_ kind: AttachmentKind) -> Bool {
         guard let pid = model.selectedProviderID else { return false }
-        switch model.providerTypes[pid] {
-        case "anthropic", "google", "openai-compatible": return true
-        default: return false
+        switch (model.providerTypes[pid], kind) {
+        case ("anthropic", .image),
+             ("anthropic", .document),
+             ("google", .image),
+             ("google", .document),
+             ("google", .audioVideo),
+             ("openai-compatible", .image):
+            return true
+        default:
+            return false
         }
     }
 

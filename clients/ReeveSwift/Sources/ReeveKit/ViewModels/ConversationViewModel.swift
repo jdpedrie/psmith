@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
 
 /// Per-conversation orchestration: messages, send + stream, compaction,
 /// context switching, message edits, model selection.
@@ -608,6 +611,76 @@ public final class ConversationViewModel {
             }
         } catch {
             loadError = ReeveError.display(error)
+        }
+    }
+
+    /// Upload an arbitrary file (PDF / audio / video) from a
+    /// file-importer URL and add it to `pendingAttachments`. Unlike
+    /// `attachImage`, no preprocessing pipeline — the bytes go up
+    /// verbatim. URL must be security-scoped (the iOS file importer
+    /// returns scoped URLs); caller doesn't have to worry about
+    /// `startAccessingSecurityScopedResource` because this method
+    /// handles it.
+    public func attachFile(from url: URL) async {
+        attachmentUploadCount += 1
+        defer { attachmentUploadCount -= 1 }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let mime = mimeType(forFileURL: url)
+            let filename = url.lastPathComponent
+            let file = try await client.files.upload(
+                data: data,
+                mimeType: mime,
+                originalFilename: filename
+            )
+            if !pendingAttachments.contains(where: { $0.fileID == file.id }) {
+                pendingAttachments.append(PendingAttachment(
+                    fileID: file.id,
+                    mimeType: file.mimeType,
+                    originalFilename: file.originalFilename,
+                    // Non-image kinds have no thumbnail bytes — keep
+                    // empty so the chip strip's `mimeType.hasPrefix
+                    // ("image/")` branch falls through to the icon
+                    // renderer.
+                    previewData: Data(),
+                    width: 0,
+                    height: 0
+                ))
+            }
+        } catch {
+            loadError = ReeveError.display(error)
+        }
+    }
+
+    /// Best-effort mime type from a file URL — uses
+    /// UniformTypeIdentifiers preferredMIMEType when available; falls
+    /// back to a small extension lookup table for the kinds the
+    /// composer offers (PDF / audio / video) so we don't ship
+    /// `application/octet-stream` to a driver that needs a real type.
+    private func mimeType(forFileURL url: URL) -> String {
+        #if canImport(UniformTypeIdentifiers)
+        if let type = UTType(filenameExtension: url.pathExtension),
+           let mime = type.preferredMIMEType {
+            return mime
+        }
+        #endif
+        switch url.pathExtension.lowercased() {
+        case "pdf": return "application/pdf"
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+        case "m4a": return "audio/mp4"
+        case "aac": return "audio/aac"
+        case "ogg": return "audio/ogg"
+        case "flac": return "audio/flac"
+        case "mp4": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "m4v": return "video/x-m4v"
+        case "webm": return "video/webm"
+        default: return "application/octet-stream"
         }
     }
 

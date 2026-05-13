@@ -381,27 +381,37 @@ func userBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, error) {
 		blocks = append(blocks, sdk.NewToolResultBlock(tr.ToolUseID, body, isError))
 	}
 	for _, att := range m.Attachments {
+		if len(att.Data) == 0 {
+			// Phase-1 driver path is inline-only. URL / ProviderFileID
+			// modes are reserved for phase 4 (provider Files API
+			// caching). An attachment that arrived without inline
+			// bytes is a history-builder bug, not a user-facing
+			// failure — drop it rather than crash the turn.
+			continue
+		}
 		switch att.Kind {
 		case providers.AttachmentImage:
-			if len(att.Data) == 0 {
-				// Phase-1 driver path is inline-only. URL / ProviderFileID
-				// modes are reserved for phase 4 (provider Files API
-				// caching). An attachment that arrived without inline
-				// bytes is a history-builder bug, not a user-facing
-				// failure — drop it rather than crash the turn.
-				continue
-			}
 			blocks = append(blocks, sdk.NewImageBlockBase64(
 				att.MimeType,
 				base64.StdEncoding.EncodeToString(att.Data),
 			))
+		case providers.AttachmentDocument:
+			// Anthropic's `document` block accepts PDFs natively.
+			// Other document MIME types (DOCX, plaintext, …) would
+			// need a different source variant (PlainTextSourceParam,
+			// for instance); reject anything that isn't application/pdf
+			// for v1.
+			if att.MimeType != "application/pdf" {
+				continue
+			}
+			blocks = append(blocks, sdk.NewDocumentBlock(sdk.Base64PDFSourceParam{
+				Data: base64.StdEncoding.EncodeToString(att.Data),
+			}))
 		default:
-			// Audio / document / video translation lands in later
-			// slices (Phase 2 docs, Phase 5 audio). Drop silently
-			// for now — the capability table on the client gates
-			// these out before they reach the driver, so a drop
-			// here is a defense-in-depth rather than an expected
-			// path.
+			// Audio + video aren't supported by Anthropic at all —
+			// drop. Capability table on the client gates these out
+			// before they reach the driver, so a drop here is
+			// defense-in-depth rather than an expected path.
 		}
 	}
 	if m.Content != "" {

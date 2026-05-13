@@ -13,6 +13,7 @@ struct MessageAttachmentImage: View {
 
     @State private var url: URL?
     @State private var failed = false
+    @State private var showingLightbox = false
 
     /// Square thumbnail size — matches the composer's pending-chip
     /// dimensions so a sent message visually echoes the chip the
@@ -48,6 +49,20 @@ struct MessageAttachmentImage: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Only present the lightbox when we actually have a URL
+            // — tapping during the loading / failed states would
+            // either show a spinner or an error glyph at full
+            // screen, neither of which is useful.
+            guard url != nil, !failed else { return }
+            showingLightbox = true
+        }
+        .fullScreenCover(isPresented: $showingLightbox) {
+            if let url {
+                MessageAttachmentLightbox(url: url)
+            }
+        }
         .task(id: attachment.fileID) {
             // Signed URLs have a 30s TTL. The view re-mints if the
             // user lingers on a long scroll-back page and the URL

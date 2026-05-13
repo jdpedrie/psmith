@@ -12,6 +12,90 @@ import (
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
+// TestSend_AllAttachmentKinds_TranslateToInlineData verifies that
+// every attachment kind Gemini supports — image, document, audio,
+// video — emits a single `inlineData` part with the file's
+// mime_type passed through verbatim. Gemini dispatches model-side
+// based on the mime_type, so the driver doesn't need to vary the
+// part shape per kind.
+func TestSend_AllAttachmentKinds_TranslateToInlineData(t *testing.T) {
+	t.Parallel()
+
+	kinds := []struct {
+		name string
+		kind providers.AttachmentKind
+		mime string
+		data []byte
+	}{
+		{"image", providers.AttachmentImage, "image/png", []byte{0x89, 0x50}},
+		{"document", providers.AttachmentDocument, "application/pdf", []byte("%PDF-")},
+		{"audio", providers.AttachmentAudio, "audio/mp3", []byte{0xff, 0xfb}},
+		{"video", providers.AttachmentVideo, "video/mp4", []byte{0x00, 0x00, 0x00, 0x18}},
+	}
+
+	for _, tc := range kinds {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var capturedBody []byte
+			mux := http.NewServeMux()
+			mux.HandleFunc("/v1beta/models/gemini-test:streamGenerateContent", func(w http.ResponseWriter, r *http.Request) {
+				capturedBody, _ = io.ReadAll(r.Body)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}]}\n\n"))
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+			ch, err := d.Send(context.Background(), providers.SendRequest{
+				ModelID: "gemini-test",
+				Messages: []providers.WireMessage{
+					{
+						Role:    "user",
+						Content: "what's this?",
+						Attachments: []providers.Attachment{
+							{Kind: tc.kind, MimeType: tc.mime, Data: tc.data},
+						},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+
+			var body struct {
+				Contents []struct {
+					Parts []struct {
+						InlineData *struct {
+							MimeType string `json:"mimeType"`
+							Data     string `json:"data"`
+						} `json:"inlineData,omitempty"`
+						Text string `json:"text,omitempty"`
+					} `json:"parts"`
+				} `json:"contents"`
+			}
+			if err := json.Unmarshal(capturedBody, &body); err != nil {
+				t.Fatalf("unmarshal: %v\n%s", err, capturedBody)
+			}
+			if len(body.Contents) != 1 || len(body.Contents[0].Parts) != 2 {
+				t.Fatalf("expected 1 user content with 2 parts (inlineData + text); body=%s", capturedBody)
+			}
+			inline := body.Contents[0].Parts[0].InlineData
+			if inline == nil {
+				t.Fatalf("first part is not inlineData; body=%s", capturedBody)
+			}
+			if inline.MimeType != tc.mime {
+				t.Errorf("mimeType=%q want %q", inline.MimeType, tc.mime)
+			}
+			if inline.Data != base64.StdEncoding.EncodeToString(tc.data) {
+				t.Errorf("data wrong")
+			}
+		})
+	}
+}
+
 // TestSend_ImageAttachment_TranslatesToInlineData verifies the
 // Gemini driver wires an image attachment as an `inlineData` part
 // with the right mimeType + base64-encoded data, alongside the text

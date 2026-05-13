@@ -627,20 +627,27 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 			},
 		})
 	}
-	// Image attachments → inlineData parts. v1 inlines bytes;
-	// the Files API path is phase 4. Other attachment kinds drop
-	// silently — capability table on the client gates them out
-	// before they reach the driver.
+	// Attachments → inlineData parts. Gemini supports all four
+	// kinds (image, document, audio, video) via the same
+	// inline_data shape — the model dispatches on mime_type.
+	// v1 inlines bytes; the Files API path is phase 4. Empty-
+	// data attachments are a history-builder bug; drop silently.
 	for _, att := range m.Attachments {
-		if att.Kind != providers.AttachmentImage || len(att.Data) == 0 {
+		if len(att.Data) == 0 || att.MimeType == "" {
 			continue
 		}
-		parts = append(parts, geminiPart{
-			InlineData: &geminiInlineData{
-				MimeType: att.MimeType,
-				Data:     base64.StdEncoding.EncodeToString(att.Data),
-			},
-		})
+		switch att.Kind {
+		case providers.AttachmentImage,
+			providers.AttachmentDocument,
+			providers.AttachmentAudio,
+			providers.AttachmentVideo:
+			parts = append(parts, geminiPart{
+				InlineData: &geminiInlineData{
+					MimeType: att.MimeType,
+					Data:     base64.StdEncoding.EncodeToString(att.Data),
+				},
+			})
+		}
 	}
 	if m.Content != "" {
 		parts = append(parts, geminiPart{Text: m.Content})

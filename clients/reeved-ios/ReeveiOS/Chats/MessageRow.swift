@@ -303,11 +303,15 @@ struct MessageRow: View {
 
             // Image attachments — show above the text content (matches
             // the wire order drivers emit: image-block-then-text per
-            // Anthropic's multimodal grounding guidance). Documents +
-            // audio land in later phases; render those silently as
-            // nothing here.
+            // Anthropic's multimodal grounding guidance). Non-image
+            // kinds (PDF / audio / video) render as compact chips
+            // below the image strip — same horizontal layout so a
+            // message with mixed kinds reads coherently.
             if !imageAttachments.isEmpty {
                 attachmentStrip
+            }
+            if !nonImageAttachments.isEmpty {
+                nonImageAttachmentStrip
             }
 
             // Body — markdown / error text. Edit happens in a sheet
@@ -362,11 +366,16 @@ struct MessageRow: View {
             .contextMenu { contextMenuItems }
     }
 
-    /// Image-kind attachments only — the only kind v1 renders inline.
-    /// Documents / audio / video fall through; future slices add chip
-    /// renderers for them.
+    /// Image-kind attachments only — rendered as inline thumbnails.
     private var imageAttachments: [ReeveMessageAttachment] {
         message.attachments.filter { $0.kind == "image" }
+    }
+
+    /// Everything that isn't an image — documents, audio, video.
+    /// Rendered as icon-and-filename chips since there's nothing
+    /// thumbnailable.
+    private var nonImageAttachments: [ReeveMessageAttachment] {
+        message.attachments.filter { $0.kind != "image" }
     }
 
     /// Horizontal scroll of attachment thumbnails. Tap to expand
@@ -378,6 +387,22 @@ struct MessageRow: View {
             HStack(spacing: 6) {
                 ForEach(imageAttachments) { att in
                     MessageAttachmentImage(attachment: att)
+                }
+            }
+        }
+        .padding(.bottom, 2)
+    }
+
+    /// Horizontal scroll of icon chips for non-image attachments
+    /// (PDF / audio / video). No tap action wired yet — for now the
+    /// chip is informational so the user knows what was sent /
+    /// what the model saw.
+    @ViewBuilder
+    private var nonImageAttachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(nonImageAttachments) { att in
+                    MessageAttachmentChip(attachment: att)
                 }
             }
         }

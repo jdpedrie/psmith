@@ -173,3 +173,76 @@ func TestSend_Responses_ImageAttachment_TranslatesToInputImage(t *testing.T) {
 		t.Errorf("image_url should be a base64 data URL, got %q", imagePart.ImageURL)
 	}
 }
+
+// TestSend_Chat_NonImageAttachment_DroppedSilently confirms that
+// PDF / audio / video attachments don't flip the user content
+// into the multi-part array form on the Chat path — the OpenAI
+// Chat-Completions API doesn't accept inlined documents or
+// audio/video, and the capability gate on the client is supposed
+// to keep them off this driver. A defensive silent drop here
+// means a misbehaving client gets a graceful turn (model sees
+// the text) instead of a 4xx that bubbles to the user as a
+// confusing error.
+func TestSend_Chat_NonImageAttachment_DroppedSilently(t *testing.T) {
+	t.Parallel()
+
+	var capturedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	d := newOpenAIDriverForTest(t, Config{APIKey: "k", BaseURL: srv.URL + "/v1"})
+
+	kinds := []providers.Attachment{
+		{Kind: providers.AttachmentDocument, MimeType: "application/pdf", Data: []byte("%PDF-")},
+		{Kind: providers.AttachmentAudio, MimeType: "audio/mp3", Data: []byte{0xff, 0xfb}},
+		{Kind: providers.AttachmentVideo, MimeType: "video/mp4", Data: []byte{0x00, 0x00, 0x00, 0x18}},
+	}
+	for _, att := range kinds {
+		t.Run(string(att.Kind), func(t *testing.T) {
+			capturedBody = nil
+			ch, err := d.Send(context.Background(), providers.SendRequest{
+				ModelID: "gpt-4o-mini",
+				Messages: []providers.WireMessage{
+					{
+						Role:        "user",
+						Content:     "summarise this",
+						Attachments: []providers.Attachment{att},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+
+			// Without an image attachment the driver leaves the
+			// user message's content as a plain string; the
+			// non-image attachment is dropped silently. Unmarshal
+			// the content as a string and confirm.
+			var body struct {
+				Messages []struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				} `json:"messages"`
+			}
+			if err := json.Unmarshal(capturedBody, &body); err != nil {
+				t.Fatalf("unmarshal: %v\n%s", err, capturedBody)
+			}
+			if len(body.Messages) != 1 || body.Messages[0].Role != "user" {
+				t.Fatalf("expected one user message, got %+v", body.Messages)
+			}
+			var asString string
+			if err := json.Unmarshal(body.Messages[0].Content, &asString); err != nil {
+				t.Fatalf("content should be a plain string when only non-image attachments are present, got: %s", body.Messages[0].Content)
+			}
+			if asString != "summarise this" {
+				t.Errorf("text content=%q want %q", asString, "summarise this")
+			}
+		})
+	}
+}

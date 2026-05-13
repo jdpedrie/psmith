@@ -17,6 +17,10 @@
 # macOS
 .DS_Store
 
+# Per-user Claude Code state — user-level settings + scheduled-task locks
+# don't belong in the repo.
+.claude/
+
 clients/ReeveSwift/.build
 clients/ReeveSwift/.swiftpm
 clients/reeved-mac/.build

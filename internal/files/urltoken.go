@@ -12,11 +12,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// SignedURLTTL is the lifetime of a freshly-minted signed URL. 30s is
-// enough to wedge a `<img src>` into the loader plus a small jitter
-// for slow networks; clients that need a longer-lived URL re-mint
-// via GetFileURL each time.
-const SignedURLTTL = 30 * time.Second
+// SignedURLTTL is the lifetime of a freshly-minted signed URL.
+// 5 minutes is the working compromise: long enough that scrolling
+// away from a conversation and back doesn't leave the cached URL
+// expired (URLSession's image cache is content-keyed by the full
+// URL, so the previously-fetched bytes stop hitting cache once the
+// URL changes), short enough that a leaked URL stops working
+// quickly. 30s — the original value — was too short: any
+// re-render >30s after the first mint produced a 404 from the
+// `/files/{id}` handler and the user saw a broken-image glyph.
+const SignedURLTTL = 5 * time.Minute
 
 // signedTokenSeparator separates the payload fields inside a token.
 // Pipe is fine — UUID strings don't contain it, and we base64-encode
