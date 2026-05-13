@@ -58,6 +58,18 @@ public final class ConversationViewModel {
     public var draft: String = ""
     public var sending = false
 
+    /// Pending image attachments — already uploaded to the server,
+    /// not yet bound to a message. Cleared on successful send (the
+    /// ids ride on the SendMessage RPC and turn into
+    /// message_attachments rows server-side) and on conversation
+    /// switch / unmount. View layer shows these as a chip strip
+    /// above the composer with an inline thumbnail per chip.
+    public var pendingAttachments: [PendingAttachment] = []
+    /// True while a picker has handed us bytes and we're running
+    /// the preprocessing + UploadFile RPC. The composer can render
+    /// a spinner / disable Send while this is non-empty.
+    public var attachmentUploadCount: Int = 0
+
     /// Optimistic user message text shown before the RPC returns.
     public var pendingUserText: String?
 
@@ -503,7 +515,12 @@ public final class ConversationViewModel {
     public func send() async {
         let originalDraft = draft
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
+        // Allow attachment-only sends: empty text + ≥1 pending attachment
+        // is a valid "look at this" turn (user might point at an image
+        // and follow up in a subsequent message).
+        guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
+        guard !text.isEmpty || !pendingAttachments.isEmpty else { return }
+        let attachmentIDs = pendingAttachments.map(\.fileID)
         draft = ""
         // Whatever the user had saved as a draft is now in flight —
         // clear so a successful send doesn't leave a stale draft
@@ -512,6 +529,11 @@ public final class ConversationViewModel {
         sending = true
         // Show message optimistically before the RPC round-trip completes.
         pendingUserText = text
+        // Snapshot the pending attachments so we can restore them on
+        // failure; clear the live list immediately so the chips
+        // disappear as part of the optimistic state.
+        let attachmentSnapshot = pendingAttachments
+        pendingAttachments = []
         defer { sending = false }
 
         do {
@@ -519,7 +541,8 @@ public final class ConversationViewModel {
                 conversationID: conversation.id,
                 content: text,
                 providerID: selectedProviderID,
-                modelID: selectedModelID
+                modelID: selectedModelID,
+                attachmentFileIDs: attachmentIDs
             )
             pendingUserText = nil
             messages.append(userMsg)
@@ -536,12 +559,12 @@ public final class ConversationViewModel {
         } catch {
             // Pre-stream RPC failure (validation, network before the
             // server even spawned a run): no message row exists. Restore
-            // the user's typed text into the composer so they can retry
-            // without losing what they wrote — losing the draft on a
-            // network blip is worst-case UX. Then reload to clear any
-            // stale optimistic state, and surface the error inline.
+            // the user's typed text + the attachment chips so they can
+            // retry without re-picking the images — losing the draft on
+            // a network blip is worst-case UX.
             pendingUserText = nil
             if draft.isEmpty { draft = originalDraft }
+            pendingAttachments = attachmentSnapshot
             // Re-persist the restored text so it survives a quick
             // background/relaunch — we cleared the store optimistically
             // above on the assumption the send would succeed.
@@ -549,6 +572,51 @@ public final class ConversationViewModel {
             await load()
             loadError = ReeveError.display(error)
         }
+    }
+
+    /// Upload `data` as an image attachment and add the resulting
+    /// file to `pendingAttachments`. Runs preprocessing
+    /// (HEIC→JPEG / downsize / strip EXIF) before computing the
+    /// SHA-256 + uploading. Idempotent on identical content for
+    /// the same user — the server's UNIQUE (user_id, sha256)
+    /// dedup means re-attaching the same image is essentially
+    /// free.
+    public func attachImage(data: Data, originalFilename: String?) async {
+        attachmentUploadCount += 1
+        defer { attachmentUploadCount -= 1 }
+        do {
+            let processed = try ImagePreprocess.process(data)
+            let file = try await client.files.upload(
+                data: processed.data,
+                mimeType: processed.mimeType,
+                originalFilename: originalFilename
+            )
+            // Avoid duplicates within the SAME pending set —
+            // the server dedups across uploads but the user
+            // picking the same file twice produces the same
+            // file_id, and rendering two identical chips is
+            // confusing.
+            if !pendingAttachments.contains(where: { $0.fileID == file.id }) {
+                pendingAttachments.append(PendingAttachment(
+                    fileID: file.id,
+                    mimeType: file.mimeType,
+                    originalFilename: file.originalFilename,
+                    previewData: processed.data,
+                    width: processed.width,
+                    height: processed.height
+                ))
+            }
+        } catch {
+            loadError = ReeveError.display(error)
+        }
+    }
+
+    /// Remove a pending attachment by id. Called from the chip
+    /// strip's per-chip remove button. The server-side `files` row
+    /// stays put — orphaned files get GC'd by the (deferred)
+    /// retention sweep.
+    public func removePendingAttachment(fileID: String) {
+        pendingAttachments.removeAll { $0.fileID == fileID }
     }
 
     public func cancelStream() {

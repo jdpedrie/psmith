@@ -475,6 +475,39 @@ message Message {
   // Google `finishReason`. The UI surfaces this only when it's
   // unexpected (anything other than stop / end_turn / STOP).
   optional string finish_reason = 20;
+  // Files attached to this message, ordered by storage ordinal. The
+  // bytes aren't inlined — clients fetch them via the FilesService
+  // signed URL endpoint. Empty for text-only turns.
+  repeated MessageAttachment attachments = 21;
+}
+
+// MessageAttachment is the client-side projection of a
+// `message_attachments` row joined to its `files` row. The bytes
+// themselves are NOT carried on the wire — fetch via
+// FilesService.GetFileURL.
+message MessageAttachment {
+  // file_id from the `files` table; pass to GetFileURL to mint a
+  // signed bytes URL.
+  string file_id = 1;
+  // image | audio | document | video — denormalised from
+  // files.mime_type for client-side dispatch without re-parsing
+  // mime on every render.
+  string kind = 2;
+  // Full MIME type (e.g. "image/jpeg", "application/pdf").
+  string mime_type = 3;
+  // SHA-256 of the stored bytes, hex-encoded. Useful as a stable
+  // cache key for clients that cache fetched bytes locally —
+  // content addressed, immutable, content_id-stable across
+  // re-uploads.
+  string sha256 = 4;
+  // Original filename when the user uploaded it. Surfaced on
+  // document chips; ignored for inline image renders.
+  optional string original_filename = 5;
+  // user_supplied | tool_result | model_generated |
+  // compressed_reference — see message_attachments.role_hint
+  // CHECK constraint.
+  string role_hint = 6;
+  int64 size_bytes = 7;
 }
 
 // One tool call recorded on an assistant message — the model's request

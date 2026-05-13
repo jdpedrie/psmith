@@ -2129,11 +2129,71 @@ public struct Reeve_V1_Message: @unchecked Sendable {
   /// Clears the value of `finishReason`. Subsequent reads from it will return its default value.
   public mutating func clearFinishReason() {_uniqueStorage()._finishReason = nil}
 
+  /// Files attached to this message, ordered by storage ordinal. The
+  /// bytes aren't inlined — clients fetch them via the FilesService
+  /// signed URL endpoint. Empty for text-only turns.
+  public var attachments: [Reeve_V1_MessageAttachment] {
+    get {_storage._attachments}
+    set {_uniqueStorage()._attachments = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// MessageAttachment is the client-side projection of a
+/// `message_attachments` row joined to its `files` row. The bytes
+/// themselves are NOT carried on the wire — fetch via
+/// FilesService.GetFileURL.
+public struct Reeve_V1_MessageAttachment: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// file_id from the `files` table; pass to GetFileURL to mint a
+  /// signed bytes URL.
+  public var fileID: String = String()
+
+  /// image | audio | document | video — denormalised from
+  /// files.mime_type for client-side dispatch without re-parsing
+  /// mime on every render.
+  public var kind: String = String()
+
+  /// Full MIME type (e.g. "image/jpeg", "application/pdf").
+  public var mimeType: String = String()
+
+  /// SHA-256 of the stored bytes, hex-encoded. Useful as a stable
+  /// cache key for clients that cache fetched bytes locally —
+  /// content addressed, immutable, content_id-stable across
+  /// re-uploads.
+  public var sha256: String = String()
+
+  /// Original filename when the user uploaded it. Surfaced on
+  /// document chips; ignored for inline image renders.
+  public var originalFilename: String {
+    get {_originalFilename ?? String()}
+    set {_originalFilename = newValue}
+  }
+  /// Returns true if `originalFilename` has been explicitly set.
+  public var hasOriginalFilename: Bool {self._originalFilename != nil}
+  /// Clears the value of `originalFilename`. Subsequent reads from it will return its default value.
+  public mutating func clearOriginalFilename() {self._originalFilename = nil}
+
+  /// user_supplied | tool_result | model_generated |
+  /// compressed_reference — see message_attachments.role_hint
+  /// CHECK constraint.
+  public var roleHint: String = String()
+
+  public var sizeBytes: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _originalFilename: String? = nil
 }
 
 /// One tool call recorded on an assistant message — the model's request
@@ -4158,7 +4218,7 @@ extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4181,6 +4241,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _thinkingDurationMs: Int32? = nil
     var _toolCalls: [Reeve_V1_ToolCall] = []
     var _finishReason: String? = nil
+    var _attachments: [Reeve_V1_MessageAttachment] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4211,6 +4272,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _thinkingDurationMs = source._thinkingDurationMs
       _toolCalls = source._toolCalls
       _finishReason = source._finishReason
+      _attachments = source._attachments
     }
   }
 
@@ -4249,6 +4311,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 18: try { try decoder.decodeSingularInt32Field(value: &_storage._thinkingDurationMs) }()
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._toolCalls) }()
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._finishReason) }()
+        case 21: try { try decoder.decodeRepeatedMessageField(value: &_storage._attachments) }()
         default: break
         }
       }
@@ -4321,6 +4384,9 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._finishReason {
         try visitor.visitSingularStringField(value: v, fieldNumber: 20)
       } }()
+      if !_storage._attachments.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._attachments, fieldNumber: 21)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4350,10 +4416,75 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._thinkingDurationMs != rhs_storage._thinkingDurationMs {return false}
         if _storage._toolCalls != rhs_storage._toolCalls {return false}
         if _storage._finishReason != rhs_storage._finishReason {return false}
+        if _storage._attachments != rhs_storage._attachments {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_MessageAttachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MessageAttachment"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}file_id\0\u{1}kind\0\u{3}mime_type\0\u{1}sha256\0\u{3}original_filename\0\u{3}role_hint\0\u{3}size_bytes\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.fileID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.mimeType) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.sha256) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._originalFilename) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.roleHint) }()
+      case 7: try { try decoder.decodeSingularInt64Field(value: &self.sizeBytes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.fileID.isEmpty {
+      try visitor.visitSingularStringField(value: self.fileID, fieldNumber: 1)
+    }
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 2)
+    }
+    if !self.mimeType.isEmpty {
+      try visitor.visitSingularStringField(value: self.mimeType, fieldNumber: 3)
+    }
+    if !self.sha256.isEmpty {
+      try visitor.visitSingularStringField(value: self.sha256, fieldNumber: 4)
+    }
+    try { if let v = self._originalFilename {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
+    if !self.roleHint.isEmpty {
+      try visitor.visitSingularStringField(value: self.roleHint, fieldNumber: 6)
+    }
+    if self.sizeBytes != 0 {
+      try visitor.visitSingularInt64Field(value: self.sizeBytes, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_MessageAttachment, rhs: Reeve_V1_MessageAttachment) -> Bool {
+    if lhs.fileID != rhs.fileID {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.mimeType != rhs.mimeType {return false}
+    if lhs.sha256 != rhs.sha256 {return false}
+    if lhs._originalFilename != rhs._originalFilename {return false}
+    if lhs.roleHint != rhs.roleHint {return false}
+    if lhs.sizeBytes != rhs.sizeBytes {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

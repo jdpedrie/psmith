@@ -2729,7 +2729,11 @@ type Message struct {
 	// upstream chunk: Anthropic `stop_reason`, OpenAI `finish_reason`,
 	// Google `finishReason`. The UI surfaces this only when it's
 	// unexpected (anything other than stop / end_turn / STOP).
-	FinishReason  *string `protobuf:"bytes,20,opt,name=finish_reason,json=finishReason,proto3,oneof" json:"finish_reason,omitempty"`
+	FinishReason *string `protobuf:"bytes,20,opt,name=finish_reason,json=finishReason,proto3,oneof" json:"finish_reason,omitempty"`
+	// Files attached to this message, ordered by storage ordinal. The
+	// bytes aren't inlined — clients fetch them via the FilesService
+	// signed URL endpoint. Empty for text-only turns.
+	Attachments   []*MessageAttachment `protobuf:"bytes,21,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2904,6 +2908,124 @@ func (x *Message) GetFinishReason() string {
 	return ""
 }
 
+func (x *Message) GetAttachments() []*MessageAttachment {
+	if x != nil {
+		return x.Attachments
+	}
+	return nil
+}
+
+// MessageAttachment is the client-side projection of a
+// `message_attachments` row joined to its `files` row. The bytes
+// themselves are NOT carried on the wire — fetch via
+// FilesService.GetFileURL.
+type MessageAttachment struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// file_id from the `files` table; pass to GetFileURL to mint a
+	// signed bytes URL.
+	FileId string `protobuf:"bytes,1,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
+	// image | audio | document | video — denormalised from
+	// files.mime_type for client-side dispatch without re-parsing
+	// mime on every render.
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Full MIME type (e.g. "image/jpeg", "application/pdf").
+	MimeType string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	// SHA-256 of the stored bytes, hex-encoded. Useful as a stable
+	// cache key for clients that cache fetched bytes locally —
+	// content addressed, immutable, content_id-stable across
+	// re-uploads.
+	Sha256 string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// Original filename when the user uploaded it. Surfaced on
+	// document chips; ignored for inline image renders.
+	OriginalFilename *string `protobuf:"bytes,5,opt,name=original_filename,json=originalFilename,proto3,oneof" json:"original_filename,omitempty"`
+	// user_supplied | tool_result | model_generated |
+	// compressed_reference — see message_attachments.role_hint
+	// CHECK constraint.
+	RoleHint      string `protobuf:"bytes,6,opt,name=role_hint,json=roleHint,proto3" json:"role_hint,omitempty"`
+	SizeBytes     int64  `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageAttachment) Reset() {
+	*x = MessageAttachment{}
+	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageAttachment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageAttachment) ProtoMessage() {}
+
+func (x *MessageAttachment) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageAttachment.ProtoReflect.Descriptor instead.
+func (*MessageAttachment) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *MessageAttachment) GetFileId() string {
+	if x != nil {
+		return x.FileId
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetOriginalFilename() string {
+	if x != nil && x.OriginalFilename != nil {
+		return *x.OriginalFilename
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetRoleHint() string {
+	if x != nil {
+		return x.RoleHint
+	}
+	return ""
+}
+
+func (x *MessageAttachment) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
 // One tool call recorded on an assistant message — the model's request
 // (id, name, input) plus the loop's execution result (output OR error,
 // elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
@@ -2923,7 +3045,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	mi := &file_reeve_v1_types_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2935,7 +3057,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[23]
+	mi := &file_reeve_v1_types_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2948,7 +3070,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{23}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ToolCall) GetId() string {
@@ -3030,7 +3152,7 @@ type MessageUsage struct {
 
 func (x *MessageUsage) Reset() {
 	*x = MessageUsage{}
-	mi := &file_reeve_v1_types_proto_msgTypes[24]
+	mi := &file_reeve_v1_types_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3042,7 +3164,7 @@ func (x *MessageUsage) String() string {
 func (*MessageUsage) ProtoMessage() {}
 
 func (x *MessageUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[24]
+	mi := &file_reeve_v1_types_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3055,7 +3177,7 @@ func (x *MessageUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageUsage.ProtoReflect.Descriptor instead.
 func (*MessageUsage) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{24}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *MessageUsage) GetInputTokens() int32 {
@@ -3171,7 +3293,7 @@ type StreamRun struct {
 
 func (x *StreamRun) Reset() {
 	*x = StreamRun{}
-	mi := &file_reeve_v1_types_proto_msgTypes[25]
+	mi := &file_reeve_v1_types_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3183,7 +3305,7 @@ func (x *StreamRun) String() string {
 func (*StreamRun) ProtoMessage() {}
 
 func (x *StreamRun) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[25]
+	mi := &file_reeve_v1_types_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3196,7 +3318,7 @@ func (x *StreamRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRun.ProtoReflect.Descriptor instead.
 func (*StreamRun) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{25}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *StreamRun) GetId() string {
@@ -3322,7 +3444,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_reeve_v1_types_proto_msgTypes[26]
+	mi := &file_reeve_v1_types_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3334,7 +3456,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_types_proto_msgTypes[26]
+	mi := &file_reeve_v1_types_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3347,7 +3469,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_types_proto_rawDescGZIP(), []int{26}
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Chunk) GetSequence() int64 {
@@ -3677,7 +3799,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\x92\b\n" +
+	"\x06_title\"\xd1\b\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3706,7 +3828,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"tool_calls\x18\x13 \x03(\v2\x12.reeve.v1.ToolCallR\ttoolCalls\x12(\n" +
 	"\rfinish_reason\x18\x14 \x01(\tH\n" +
-	"R\ffinishReason\x88\x01\x01B\f\n" +
+	"R\ffinishReason\x88\x01\x01\x12=\n" +
+	"\vattachments\x18\x15 \x03(\v2\x1b.reeve.v1.MessageAttachmentR\vattachmentsB\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -3719,7 +3842,17 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"_edited_atB\r\n" +
 	"\v_error_textB\x17\n" +
 	"\x15_thinking_duration_msB\x10\n" +
-	"\x0e_finish_reason\"\xe2\x01\n" +
+	"\x0e_finish_reason\"\xf9\x01\n" +
+	"\x11MessageAttachment\x12\x17\n" +
+	"\afile_id\x18\x01 \x01(\tR\x06fileId\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1b\n" +
+	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\x120\n" +
+	"\x11original_filename\x18\x05 \x01(\tH\x00R\x10originalFilename\x88\x01\x01\x12\x1b\n" +
+	"\trole_hint\x18\x06 \x01(\tR\broleHint\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\a \x01(\x03R\tsizeBytesB\x14\n" +
+	"\x12_original_filename\"\xe2\x01\n" +
 	"\bToolCall\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -3857,7 +3990,7 @@ func file_reeve_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_reeve_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_reeve_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: reeve.v1.MetadataSource
 	(CacheTTL)(0),                 // 1: reeve.v1.CacheTTL
@@ -3891,29 +4024,30 @@ var file_reeve_v1_types_proto_goTypes = []any{
 	(*Conversation)(nil),          // 29: reeve.v1.Conversation
 	(*Context)(nil),               // 30: reeve.v1.Context
 	(*Message)(nil),               // 31: reeve.v1.Message
-	(*ToolCall)(nil),              // 32: reeve.v1.ToolCall
-	(*MessageUsage)(nil),          // 33: reeve.v1.MessageUsage
-	(*StreamRun)(nil),             // 34: reeve.v1.StreamRun
-	(*Chunk)(nil),                 // 35: reeve.v1.Chunk
-	nil,                           // 36: reeve.v1.OpenAIExtras.LogitBiasEntry
-	(*timestamppb.Timestamp)(nil), // 37: google.protobuf.Timestamp
+	(*MessageAttachment)(nil),     // 32: reeve.v1.MessageAttachment
+	(*ToolCall)(nil),              // 33: reeve.v1.ToolCall
+	(*MessageUsage)(nil),          // 34: reeve.v1.MessageUsage
+	(*StreamRun)(nil),             // 35: reeve.v1.StreamRun
+	(*Chunk)(nil),                 // 36: reeve.v1.Chunk
+	nil,                           // 37: reeve.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 38: google.protobuf.Timestamp
 }
 var file_reeve_v1_types_proto_depIdxs = []int32{
-	37, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	37, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	37, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	38, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	38, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 4: reeve.v1.UserModelProvider.default_settings:type_name -> reeve.v1.CallSettings
-	37, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	38, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
 	14, // 6: reeve.v1.CatalogModel.pricing:type_name -> reeve.v1.ModelPricing
 	13, // 7: reeve.v1.CatalogModel.capabilities:type_name -> reeve.v1.ModelCapabilities
-	37, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	38, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
 	14, // 9: reeve.v1.UserModel.pricing:type_name -> reeve.v1.ModelPricing
 	13, // 10: reeve.v1.UserModel.capabilities:type_name -> reeve.v1.ModelCapabilities
 	18, // 11: reeve.v1.UserModel.default_settings:type_name -> reeve.v1.CallSettings
 	0,  // 12: reeve.v1.UserModel.metadata_source:type_name -> reeve.v1.MetadataSource
-	37, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	37, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	38, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	38, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
 	19, // 15: reeve.v1.CallSettings.thinking:type_name -> reeve.v1.ThinkingSettings
 	20, // 16: reeve.v1.CallSettings.anthropic:type_name -> reeve.v1.AnthropicExtras
 	21, // 17: reeve.v1.CallSettings.openai:type_name -> reeve.v1.OpenAIExtras
@@ -3921,7 +4055,7 @@ var file_reeve_v1_types_proto_depIdxs = []int32{
 	1,  // 19: reeve.v1.AnthropicExtras.cache_ttl:type_name -> reeve.v1.CacheTTL
 	2,  // 20: reeve.v1.OpenAIExtras.service_tier:type_name -> reeve.v1.ServiceTier
 	22, // 21: reeve.v1.OpenAIExtras.response_format:type_name -> reeve.v1.ResponseFormat
-	36, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
+	37, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
 	23, // 23: reeve.v1.ResponseFormat.json_schema:type_name -> reeve.v1.JsonSchema
 	25, // 24: reeve.v1.GoogleExtras.safety_settings:type_name -> reeve.v1.SafetySettings
 	3,  // 25: reeve.v1.SafetySettings.harassment:type_name -> reeve.v1.HarmThreshold
@@ -3931,30 +4065,31 @@ var file_reeve_v1_types_proto_depIdxs = []int32{
 	18, // 29: reeve.v1.ProfileDefaults.call_settings:type_name -> reeve.v1.CallSettings
 	4,  // 30: reeve.v1.Profile.compression_mode:type_name -> reeve.v1.CompressionMode
 	26, // 31: reeve.v1.Profile.default_settings:type_name -> reeve.v1.ProfileDefaults
-	37, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	37, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	38, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 34: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
 	28, // 35: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
-	37, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	37, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	37, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	37, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	38, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	38, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	38, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	38, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
 	5,  // 41: reeve.v1.Message.role:type_name -> reeve.v1.MessageRole
-	37, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	33, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
-	37, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	32, // 45: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
-	6,  // 46: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
-	7,  // 47: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
-	37, // 48: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	37, // 49: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 50: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
-	51, // [51:51] is the sub-list for method output_type
-	51, // [51:51] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	38, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	34, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
+	38, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	33, // 45: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
+	32, // 46: reeve.v1.Message.attachments:type_name -> reeve.v1.MessageAttachment
+	6,  // 47: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
+	7,  // 48: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
+	38, // 49: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	38, // 50: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 51: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
+	52, // [52:52] is the sub-list for method output_type
+	52, // [52:52] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_types_proto_init() }
@@ -3990,13 +4125,14 @@ func file_reeve_v1_types_proto_init() {
 	file_reeve_v1_types_proto_msgTypes[23].OneofWrappers = []any{}
 	file_reeve_v1_types_proto_msgTypes[24].OneofWrappers = []any{}
 	file_reeve_v1_types_proto_msgTypes[25].OneofWrappers = []any{}
+	file_reeve_v1_types_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_types_proto_rawDesc), len(file_reeve_v1_types_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

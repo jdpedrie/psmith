@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import ReeveKit
 import ReeveUI
 
@@ -18,11 +19,21 @@ struct Composer: View {
     @Environment(AppModel.self) private var app
     @FocusState private var draftFocused: Bool
 
+    /// PhotosPicker binding. We rotate the selection back to empty
+    /// after each pick so re-tapping the paperclip + choosing the
+    /// same photo still triggers an upload (SwiftUI's
+    /// PhotosPickerItem identity is stable per asset, so without
+    /// the reset re-selecting wouldn't fire onChange).
+    @State private var pickedItems: [PhotosPickerItem] = []
+
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             if app.connectivity.state == .offline {
                 offlineBanner
+            }
+            if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
+                attachmentChips
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom, spacing: 8) {
@@ -30,6 +41,7 @@ struct Composer: View {
                     sendButton
                 }
                 HStack(spacing: 8) {
+                    paperclipButton
                     modelChip
                     settingsButton
                     Spacer(minLength: 0)
@@ -47,6 +59,20 @@ struct Composer: View {
             // flush. Trimming + empty-check happens inside the
             // store so an empty draft removes the key cleanly.
             DraftStore.save(conversationID: model.conversation.id, text: newValue)
+        }
+        .onChange(of: pickedItems) { _, items in
+            guard !items.isEmpty else { return }
+            // Snapshot + clear so re-picking the same asset still
+            // triggers a new round.
+            let snapshot = items
+            pickedItems = []
+            for item in snapshot {
+                Task { @MainActor in
+                    guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                    let filename = item.itemIdentifier // best-available label
+                    await model.attachImage(data: data, originalFilename: filename)
+                }
+            }
         }
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
@@ -70,6 +96,116 @@ struct Composer: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.10))
+    }
+
+    // MARK: - Paperclip + attachment chip strip
+
+    /// Paperclip button → PhotosPicker. Multi-select on so the user
+    /// can attach a few images at once; preprocessing + upload
+    /// happen per-item, in parallel-ish (each via its own Task).
+    /// Capability gate is driven by the active model's image
+    /// support — drivers that don't accept images dim the button
+    /// rather than letting the user upload and discover the failure
+    /// at send time.
+    @ViewBuilder
+    private var paperclipButton: some View {
+        let accepts = activeModelAcceptsImages
+        PhotosPicker(
+            selection: $pickedItems,
+            maxSelectionCount: 6,
+            matching: .images,
+            preferredItemEncoding: .compatible
+        ) {
+            Image(systemName: "paperclip")
+                .font(.callout)
+                .foregroundStyle(accepts ? .secondary : .tertiary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.06), in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .disabled(!accepts)
+        .accessibilityLabel(accepts ? "Attach an image" : "Attachments not supported by this model")
+    }
+
+    /// Pending-attachment strip — horizontal-scrolling thumbnails
+    /// above the composer. Each chip has an inline X button to
+    /// remove that one attachment before sending.
+    private var attachmentChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(model.pendingAttachments) { att in
+                    pendingChip(att)
+                }
+                if model.attachmentUploadCount > 0 {
+                    uploadingChip
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+        .background(.thinMaterial)
+    }
+
+    private func pendingChip(_ att: PendingAttachment) -> some View {
+        // UIImage(data:) is cheap on the preprocessed thumbnail-
+        // sized JPEG bytes the VM already holds; no need to dance
+        // through AsyncImage / signed-URL fetches for content we
+        // have in-memory.
+        let image: Image? = UIImage(data: att.previewData).map(Image.init(uiImage:))
+        return ZStack(alignment: .topTrailing) {
+            Group {
+                if let image {
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Color.gray.opacity(0.2)
+                }
+            }
+            .frame(width: 60, height: 60)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+
+            Button {
+                Haptics.impact(.light)
+                model.removePendingAttachment(fileID: att.fileID)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .font(.system(size: 16))
+            }
+            .buttonStyle(.plain)
+            .padding(2)
+            .accessibilityLabel("Remove attachment")
+        }
+    }
+
+    private var uploadingChip: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.primary.opacity(0.08))
+            .frame(width: 60, height: 60)
+            .overlay(
+                ProgressView().controlSize(.small)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            )
+            .accessibilityLabel("Uploading attachment")
+    }
+
+    /// Whether the currently-selected model accepts image attachments.
+    /// Capability table is hardcoded for now (Phase 1 ships
+    /// Anthropic-only image translation; other drivers will slot
+    /// in as their slices land). Driver type is the simplest
+    /// discriminator we have until the catalog grows a
+    /// `accepts_images` column.
+    private var activeModelAcceptsImages: Bool {
+        guard let pid = model.selectedProviderID else { return false }
+        switch model.providerTypes[pid] {
+        case "anthropic": return true
+        default: return false
+        }
     }
 
     // MARK: - Conversation settings button
@@ -216,12 +352,17 @@ struct Composer: View {
 
     private var canSend: Bool {
         let trimmed = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasContent = !trimmed.isEmpty || !model.pendingAttachments.isEmpty
         // Block sends when the server is unreachable — the request would
         // hang on a TCP timeout and leave the user staring at a spinner.
         // `.unknown` is treated as send-allowed so a fresh launch isn't
         // gated on the first probe completing.
         let serverReachable = app.connectivity.state != .offline
-        return !trimmed.isEmpty && !model.sending && !model.isCompacting && serverReachable
+        // Block sends while an upload is still in flight: the chip
+        // is showing a spinner and sending without it would drop
+        // the user's intent on the floor.
+        let noUploadInFlight = model.attachmentUploadCount == 0
+        return hasContent && !model.sending && !model.isCompacting && serverReachable && noUploadInFlight
     }
 
     private func triggerSend() {

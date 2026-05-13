@@ -608,9 +608,18 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[reevev1
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
+		ids := make([]uuid.UUID, 0, len(all))
+		for _, m := range all {
+			ids = append(ids, m.ID)
+		}
+		attBy, err := loadAttachmentsByMessage(ctx, s.queries, ids)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 		out := make([]*reevev1.Message, 0, len(all))
 		for _, m := range all {
 			proto := messageToProto(m)
+			proto.Attachments = attBy[proto.Id]
 			applyDisplay(proto, pipeline)
 			out = append(out, proto)
 		}
@@ -661,9 +670,18 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[reevev1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	attBy, err := loadAttachmentsByMessage(ctx, s.queries, ids)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 	out := make([]*reevev1.Message, 0, len(rows))
 	for _, r := range rows {
 		proto := chainRowToProto(r)
+		proto.Attachments = attBy[proto.Id]
 		applyDisplay(proto, pipeline)
 		out = append(out, proto)
 	}
@@ -1165,6 +1183,13 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 	}
 
 	userProto := messageToProto(userMsgRow)
+	// Bind attachments to the response so the client's optimistic
+	// update sees the just-attached chips on the new user row.
+	// `loadAttachmentsByMessage` returns nil for empty input, which
+	// is fine for the regenerate path (existing parent row).
+	if attBy, aerr := loadAttachmentsByMessage(ctx, s.queries, []uuid.UUID{userMsgRow.ID}); aerr == nil {
+		userProto.Attachments = attBy[userProto.Id]
+	}
 	applyDisplay(userProto, pipeline)
 	return connect.NewResponse(&reevev1.SendMessageResponse{
 		UserMessage: userProto,

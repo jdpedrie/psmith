@@ -438,6 +438,9 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
     /// the server (clients trust list order). May be `Date(0)` for
     /// rows from before the column existed.
     public let createdAt: Date
+    /// Files attached to this message in storage order. Bytes aren't
+    /// inline — clients render via FilesRepository.signedURL.
+    public let attachments: [ReeveMessageAttachment]
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -472,7 +475,8 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         thinkingDurationMs: Int32? = nil,
         toolCalls: [ReeveToolCall] = [],
         finishReason: String? = nil,
-        createdAt: Date = Date(timeIntervalSince1970: 0)
+        createdAt: Date = Date(timeIntervalSince1970: 0),
+        attachments: [ReeveMessageAttachment] = []
     ) {
         self.id = id
         self.contextID = contextID
@@ -491,6 +495,58 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         self.toolCalls = toolCalls
         self.finishReason = finishReason
         self.createdAt = createdAt
+        self.attachments = attachments
+    }
+}
+
+/// Client-side projection of one `message_attachments` row. The bytes
+/// themselves aren't carried — clients fetch via
+/// `FilesRepository.signedURL(fileID:)` and feed the resulting URL
+/// to an image loader.
+public struct ReeveMessageAttachment: Sendable, Hashable, Codable, Identifiable {
+    public let fileID: String
+    /// "image" | "audio" | "document" | "video".
+    public let kind: String
+    public let mimeType: String
+    public let sha256: String
+    public let originalFilename: String?
+    /// "user_supplied" | "tool_result" | "model_generated" |
+    /// "compressed_reference".
+    public let roleHint: String
+    public let sizeBytes: Int64
+
+    public var id: String { fileID }
+
+    public init(
+        fileID: String,
+        kind: String,
+        mimeType: String,
+        sha256: String,
+        originalFilename: String?,
+        roleHint: String,
+        sizeBytes: Int64
+    ) {
+        self.fileID = fileID
+        self.kind = kind
+        self.mimeType = mimeType
+        self.sha256 = sha256
+        self.originalFilename = originalFilename
+        self.roleHint = roleHint
+        self.sizeBytes = sizeBytes
+    }
+}
+
+extension ReeveMessageAttachment {
+    init(from p: Reeve_V1_MessageAttachment) {
+        self.init(
+            fileID: p.fileID,
+            kind: p.kind,
+            mimeType: p.mimeType,
+            sha256: p.sha256,
+            originalFilename: p.hasOriginalFilename ? p.originalFilename : nil,
+            roleHint: p.roleHint,
+            sizeBytes: p.sizeBytes
+        )
     }
 }
 
@@ -515,7 +571,8 @@ extension ReeveMessage {
             thinkingDurationMs: p.hasThinkingDurationMs ? p.thinkingDurationMs : nil,
             toolCalls: p.toolCalls.map(ReeveToolCall.init(from:)),
             finishReason: p.hasFinishReason && !p.finishReason.isEmpty ? p.finishReason : nil,
-            createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0)
+            createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
+            attachments: p.attachments.map(ReeveMessageAttachment.init(from:))
         )
     }
 }

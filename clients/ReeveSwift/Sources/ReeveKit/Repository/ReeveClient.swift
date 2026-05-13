@@ -9,6 +9,7 @@ public final class ReeveClient: Sendable {
     public let profiles: ProfilesRepository
     public let streams: StreamSubscriber
     public let modelProviders: ModelProvidersRepository
+    public let files: FilesRepository
 
     /// Optional on-device read-through cache. When non-nil,
     /// repositories write successful fetches into it and fall back
@@ -66,6 +67,9 @@ public final class ReeveClient: Sendable {
         self.modelProviders = ModelProvidersRepository(
             client: Reeve_V1_ModelProvidersServiceClient(client: protocolClient),
             cache: cache
+        )
+        self.files = FilesRepository(
+            client: Reeve_V1_FilesServiceClient(client: protocolClient)
         )
     }
 }

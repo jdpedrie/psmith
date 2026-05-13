@@ -301,6 +301,15 @@ struct MessageRow: View {
                 }
             }
 
+            // Image attachments — show above the text content (matches
+            // the wire order drivers emit: image-block-then-text per
+            // Anthropic's multimodal grounding guidance). Documents +
+            // audio land in later phases; render those silently as
+            // nothing here.
+            if !imageAttachments.isEmpty {
+                attachmentStrip
+            }
+
             // Body — markdown / error text. Edit happens in a sheet
             // (see ConversationView's hoisted `.sheet(item:)`), not
             // in-place. Prefer `displayContent` (post-DisplayTransformer
@@ -351,6 +360,28 @@ struct MessageRow: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contextMenu { contextMenuItems }
+    }
+
+    /// Image-kind attachments only — the only kind v1 renders inline.
+    /// Documents / audio / video fall through; future slices add chip
+    /// renderers for them.
+    private var imageAttachments: [ReeveMessageAttachment] {
+        message.attachments.filter { $0.kind == "image" }
+    }
+
+    /// Horizontal scroll of attachment thumbnails. Tap to expand
+    /// into a lightbox view (Phase-1 polish; deferred until users
+    /// ask for it — for now the thumbnail itself is the affordance).
+    @ViewBuilder
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(imageAttachments) { att in
+                    MessageAttachmentImage(attachment: att)
+                }
+            }
+        }
+        .padding(.bottom, 2)
     }
 
     /// Bare assistant rendering — no bubble chrome, full-width markdown.

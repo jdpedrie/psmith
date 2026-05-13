@@ -1,11 +1,13 @@
 package conversations
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -14,6 +16,49 @@ import (
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
+
+// attachmentRowToProto projects a single message_attachments JOIN
+// files row into its wire shape. The bytes themselves are not
+// included — clients fetch via FilesService.GetFileURL.
+func attachmentRowToProto(r store.ListAttachmentsForMessagesRow) *reevev1.MessageAttachment {
+	out := &reevev1.MessageAttachment{
+		FileId:    r.FileID.String(),
+		Kind:      r.Kind,
+		MimeType:  r.MimeType,
+		Sha256:    r.Sha256,
+		RoleHint:  r.RoleHint,
+		SizeBytes: r.SizeBytes,
+	}
+	if r.OriginalFilename != nil && *r.OriginalFilename != "" {
+		s := *r.OriginalFilename
+		out.OriginalFilename = &s
+	}
+	return out
+}
+
+// attachmentsLoader bulk-loads attachment rows for a list of messages
+// and returns a map keyed by message_id. Used by handlers that emit
+// message lists (ListMessages chain + full-tree, SendMessage user
+// echo) so each path makes ONE query rather than N.
+type attachmentsLoader interface {
+	ListAttachmentsForMessages(ctx context.Context, messageIDs []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error)
+}
+
+func loadAttachmentsByMessage(ctx context.Context, q attachmentsLoader, ids []uuid.UUID) (map[string][]*reevev1.MessageAttachment, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := q.ListAttachmentsForMessages(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]*reevev1.MessageAttachment, len(rows))
+	for _, r := range rows {
+		key := r.MessageID.String()
+		out[key] = append(out[key], attachmentRowToProto(r))
+	}
+	return out, nil
+}
 
 // Message-role wire/storage constants. The DB CHECK constraint enforces these
 // literal strings; the proto enum carries them on the wire.
