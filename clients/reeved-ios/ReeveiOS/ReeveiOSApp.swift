@@ -44,11 +44,25 @@ struct ReeveiOSApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhase(newPhase)
                 }
-                // If every stream finishes while we're backgrounded,
-                // release the token early so iOS reclaims the grace
-                // for itself.
+                // Two-way bg-keeper bookkeeping driven by stream
+                // start/end events while the scene is non-active:
+                //
+                //   - streams empty → release the token (whether
+                //     we're foregrounded or not — `end()` is a no-op
+                //     when no token is held).
+                //   - streams become non-empty while backgrounded →
+                //     extend NOW. This is the case the old code
+                //     missed: kicking off compaction (or any new run
+                //     via background adopt) while the app was already
+                //     suspended produced no scene-phase transition,
+                //     so the bgKeeper was never extended and iOS
+                //     froze the supervisor mid-stream.
                 .onChange(of: appModel.streamHub.activeConversationIDs.isEmpty) { _, isEmpty in
-                    if isEmpty { bgKeeper.end() }
+                    if isEmpty {
+                        bgKeeper.end()
+                    } else if scenePhase != .active {
+                        bgKeeper.extend()
+                    }
                 }
         }
     }

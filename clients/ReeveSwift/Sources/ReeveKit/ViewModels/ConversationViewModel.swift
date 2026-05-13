@@ -935,38 +935,35 @@ public final class ConversationViewModel {
     /// streaming bubble disappears. We reload the chain so the
     /// materialised assistant turn appears, run app-level hooks, and
     /// hand off the live disclosure's expanded flag to the new row.
+    ///
+    /// Order matters: the expanded-state hand-off must happen BEFORE
+    /// `load()`. The terminal event carries `resultMessageID`, which
+    /// is the id of the just-materialised assistant turn (the same id
+    /// `load()` will pull in). If we deferred the hand-off until after
+    /// `load()`, SwiftUI would re-render the new MessageRow with the
+    /// disclosure collapsed (the id isn't in `expandedThinkingMessageIDs`
+    /// yet), then a second pass would expand it once the hand-off
+    /// landed — the visible "thinking collapses then expands" hiccup
+    /// at terminal. Pre-inserting means the MessageRow's first render
+    /// already sees the expanded state.
     @MainActor
     private func handleStreamTerminal(_ run: ReeveStreamRun) async {
         let purpose = run.purpose
+        if streamingThinkingExpanded, let resultID = run.resultMessageID, !resultID.isEmpty {
+            expandedThinkingMessageIDs.insert(resultID)
+        }
+        streamingThinkingExpanded = false
         await load()
         await onTerminal()
-        clearStreamingState(handOffExpandedTo: latestAssistantMessageID)
         if purpose == .assistantResponse {
             fireAssistantTurnComplete()
             await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
         }
     }
 
-    /// Resets VM-local presentation state attached to the just-ended
-    /// stream. The hub already cleared its own streaming-state entry
-    /// before invoking the terminal callback. `handOffExpandedTo`,
-    /// when non-nil, transfers the live disclosure's expanded state
-    /// to the historical-message expanded set under that id — so a
-    /// stream that finished with the disclosure open lands a
-    /// MessageRow with its disclosure also open, no snap-shut on the
-    /// view-tree swap.
-    func clearStreamingState(handOffExpandedTo materialisedMessageID: String? = nil) {
-        if streamingThinkingExpanded, let id = materialisedMessageID {
-            expandedThinkingMessageIDs.insert(id)
-        }
-        streamingThinkingExpanded = false
-    }
-
     /// Returns the most recently-created assistant message in the loaded
-    /// list. Used at terminal time to find the just-materialised row so
-    /// `clearStreamingState` can transfer the disclosure-expanded flag
-    /// onto its id. Returns nil when the message list hasn't loaded yet
-    /// or there are no assistant turns (a freshly-failed first send).
+    /// list. Returns nil when the message list hasn't loaded yet or
+    /// there are no assistant turns (a freshly-failed first send).
     public var latestAssistantMessageID: String? {
         messages.last(where: { $0.role == .assistant })?.id
     }

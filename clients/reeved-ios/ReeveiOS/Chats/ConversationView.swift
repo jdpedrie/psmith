@@ -521,7 +521,20 @@ private struct ConversationBody: View {
                 if text != nil {
                     autoFollow = true
                     streamingRowHeight = 0
-                    withAnimation { proxy.scrollTo("__pending__", anchor: .top) }
+                    // Scroll the just-sent message to the BOTTOM of the
+                    // viewport, not the top. The old "anchor: .top"
+                    // approach landed the pending row at the scroll
+                    // view's top edge, which sits under the inline
+                    // nav bar + status strip — making the user's
+                    // message invisible until they scrolled. Pinning
+                    // to bottom keeps it visible regardless of where
+                    // the header overlay actually lands, and once
+                    // streaming begins, auto-follow takes over
+                    // naturally (the spec's "scroll down with
+                    // generation" rule covers the rest).
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in

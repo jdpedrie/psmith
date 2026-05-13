@@ -1876,12 +1876,38 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("driver %q is not a stateless provider; stateful compression not yet wired", provRow.Type))
 	}
 
+	// Compression-specific call settings. We deliberately do NOT inherit
+	// the conversation's resolved CallSettings — the compressor is a
+	// different job than the conversation model and the inherited
+	// settings tend to make compression fail:
+	//
+	//   - max_tokens defaults to 4096 in Anthropic without an explicit
+	//     value. A long conversation's summary easily exceeds that and
+	//     the model terminates mid-summary (the "compression stops
+	//     before finished" bug). Set a generous explicit cap.
+	//   - thinking, if enabled on the conversation's profile, would
+	//     eat from the same output-token budget on Anthropic and crowd
+	//     out the actual summary. Compression produces a structural
+	//     document, not a reasoned answer — force-disable thinking.
+	//   - temperature stays unset (driver default) — compression's
+	//     determinism doesn't need explicit lowering and forcing 0
+	//     can degrade output quality on some models.
+	const compressionMaxOutputTokens = 8192
+	maxOut := compressionMaxOutputTokens
+	thinkingDisabled := false
+	compressionSettings := providers.CallSettings{
+		MaxOutputTokens: &maxOut,
+		Thinking: &providers.ThinkingSettings{
+			Enabled: &thinkingDisabled,
+		},
+	}
 	compactSendReq := providers.SendRequest{
 		ModelID: *modelID,
 		Messages: []providers.WireMessage{
 			{Role: "system", Content: *guide},
 			{Role: "user", Content: "Here is the conversation to compress.\n\n" + transcript + "\n\nProduce the summary."},
 		},
+		Settings: compressionSettings,
 	}
 	compactSendFunc := func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 		return stateless.Send(driverCtx, compactSendReq)
