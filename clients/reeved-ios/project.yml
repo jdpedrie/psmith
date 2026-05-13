@@ -37,6 +37,10 @@ targets:
         # the server.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Camera attachment via the composer paperclip menu's
+        # "Take Photo" action; iOS requires a usage-description
+        # string before showing the camera permission prompt.
+        NSCameraUsageDescription: "Take a photo to attach to your conversation."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS

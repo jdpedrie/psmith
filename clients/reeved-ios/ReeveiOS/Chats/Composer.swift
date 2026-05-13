@@ -18,7 +18,17 @@ import ReeveUI
 struct Composer: View {
     @Bindable var model: ConversationViewModel
     @Environment(AppModel.self) private var app
-    @FocusState private var draftFocused: Bool
+    /// Bridge state for the UIKit-backed input: the wrapper writes
+    /// its first-responder status here and reads it back when the
+    /// composer wants to programmatically focus / blur (e.g.
+    /// dropping the keyboard after `triggerSend`). Replaces the
+    /// SwiftUI `@FocusState` we had on the old `TextField` —
+    /// `@FocusState` doesn't bind to a `UIViewRepresentable`.
+    @State private var draftFocused: Bool = false
+    /// Live-measured height of the text input. Lets the input
+    /// auto-grow from one line up to the cap (set in `draftField`)
+    /// the same way the previous SwiftUI `.lineLimit(1...8)` did.
+    @State private var draftFieldHeight: CGFloat = 36
 
     /// PhotosPicker binding. We rotate the selection back to empty
     /// after each pick so re-tapping the paperclip + choosing the
@@ -35,6 +45,11 @@ struct Composer: View {
     /// Whether the system file importer is presented (for PDFs,
     /// audio, video — anything not in the Photos library).
     @State private var showingFileImporter = false
+    /// Whether the camera-capture sheet is presented. Separate
+    /// from the photos picker because they're distinct UX:
+    /// camera = "take a new photo right now", PhotosPicker =
+    /// "pick from history".
+    @State private var showingCamera = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -112,6 +127,18 @@ struct Composer: View {
                 break
             }
         }
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker(
+                onCapture: { data in
+                    showingCamera = false
+                    Task { @MainActor in
+                        await model.attachImage(data: data, originalFilename: nil)
+                    }
+                },
+                onCancel: { showingCamera = false }
+            )
+            .ignoresSafeArea()
+        }
     }
 
     /// Thin amber strip above the input controls when the server's
@@ -147,6 +174,7 @@ struct Composer: View {
         let imageOK = activeModelAccepts(.image)
         let docOK   = activeModelAccepts(.document)
         let avOK    = activeModelAccepts(.audioVideo)
+        let cameraOK = imageOK && UIImagePickerController.isSourceTypeAvailable(.camera)
         let anyOK   = imageOK || docOK || avOK
         Menu {
             if imageOK {
@@ -154,6 +182,13 @@ struct Composer: View {
                     showingPhotosPicker = true
                 } label: {
                     Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+            }
+            if cameraOK {
+                Button {
+                    showingCamera = true
+                } label: {
+                    Label("Take Photo", systemImage: "camera")
                 }
             }
             if docOK || avOK {
@@ -366,19 +401,38 @@ struct Composer: View {
     // MARK: - Draft text field
 
     private var draftField: some View {
-        // Vertical-axis TextField never fires onSubmit — Return always
-        // inserts a newline regardless of the submitLabel — so labelling
-        // the key as "Send" was lying to the user (they tapped ↑
-        // expecting a submit, got a newline). The button on the right
-        // is the only submit path; the keyboard key is the newline key
-        // and now reads as one.
-        TextField(
-            "Send a message",
-            text: $model.draft,
-            axis: .vertical
-        )
-        .lineLimit(1...8)
-        .textFieldStyle(.plain)
+        // UITextView wrapper instead of SwiftUI TextField so we
+        // can override `paste(_:)` and route image-pasteboard
+        // content to `attachImage` instead of letting iOS try to
+        // stringify the image and stuff a file URL into the text.
+        // Auto-sizes between minHeight and maxHeight, then enables
+        // internal scrolling — same behavior as the old
+        // `.lineLimit(1...8)` modifier on the vertical TextField.
+        let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
+        let verticalInset: CGFloat = 16   // 8pt top + 8pt bottom
+        let minHeight = lineHeight + verticalInset
+        let maxHeight = lineHeight * 8 + verticalInset
+        return ZStack(alignment: .topLeading) {
+            PasteAwareTextField(
+                text: $model.draft,
+                measuredHeight: $draftFieldHeight,
+                isFocused: $draftFocused,
+                minHeight: minHeight,
+                maxHeight: maxHeight,
+                onImagePaste: { data in
+                    Task { @MainActor in
+                        await model.attachImage(data: data, originalFilename: nil)
+                    }
+                }
+            )
+            .frame(height: draftFieldHeight)
+
+            if model.draft.isEmpty {
+                Text("Send a message")
+                    .foregroundStyle(.tertiary)
+                    .allowsHitTesting(false)
+            }
+        }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))
@@ -386,8 +440,6 @@ struct Composer: View {
             RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
-        .focused($draftFocused)
-        .submitLabel(.return)
     }
 
     // MARK: - Model chip (provider logo + model name + chevron)
