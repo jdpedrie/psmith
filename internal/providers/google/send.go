@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,18 @@ type geminiPart struct {
 	ThoughtSignature string              `json:"thoughtSignature,omitempty"`
 	FunctionCall     *geminiFunctionCall `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResp `json:"functionResponse,omitempty"`
+	// InlineData carries an attached binary payload — image, audio,
+	// document — directly in the request. Gemini accepts up to a
+	// few MB inline; larger uploads should go through the (deferred)
+	// File API. Mutually exclusive with the other part fields.
+	InlineData *geminiInlineData `json:"inlineData,omitempty"`
+}
+
+// geminiInlineData is Gemini's wire shape for an inline binary
+// part (`{"inlineData":{"mimeType":...,"data":<base64>}}`).
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
 }
 
 // geminiFunctionCall is what Gemini emits when the model invokes a
@@ -611,6 +624,21 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 			FunctionResponse: &geminiFunctionResp{
 				Name:     name,
 				Response: responseObj,
+			},
+		})
+	}
+	// Image attachments → inlineData parts. v1 inlines bytes;
+	// the Files API path is phase 4. Other attachment kinds drop
+	// silently — capability table on the client gates them out
+	// before they reach the driver.
+	for _, att := range m.Attachments {
+		if att.Kind != providers.AttachmentImage || len(att.Data) == 0 {
+			continue
+		}
+		parts = append(parts, geminiPart{
+			InlineData: &geminiInlineData{
+				MimeType: att.MimeType,
+				Data:     base64.StdEncoding.EncodeToString(att.Data),
 			},
 		})
 	}

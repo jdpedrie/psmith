@@ -323,6 +323,36 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 				}
 				continue
 			}
+			// Image attachments → multi-part content. The `image_url`
+			// part accepts either a URL or a base64 data URL; we use
+			// the latter since v1 inlines bytes (the provider Files
+			// API caching is phase 4). Other attachment kinds drop
+			// silently — the capability table on the client gates
+			// them out before they reach the driver.
+			if hasInlineImageAttachment(m.Attachments) {
+				parts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(m.Attachments)+1)
+				for _, att := range m.Attachments {
+					if att.Kind != providers.AttachmentImage || len(att.Data) == 0 {
+						continue
+					}
+					parts = append(parts, openai.ImageContentPart(
+						openai.ChatCompletionContentPartImageImageURLParam{
+							URL: dataURL(att.MimeType, att.Data),
+						},
+					))
+				}
+				if m.Content != "" {
+					parts = append(parts, openai.TextContentPart(m.Content))
+				}
+				params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
+					OfUser: &openai.ChatCompletionUserMessageParam{
+						Content: openai.ChatCompletionUserMessageParamContentUnion{
+							OfArrayOfContentParts: parts,
+						},
+					},
+				})
+				continue
+			}
 			params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{
 				OfUser: &openai.ChatCompletionUserMessageParam{
 					Content: openai.ChatCompletionUserMessageParamContentUnion{
@@ -725,6 +755,35 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 				),
 			)
 		case "user":
+			// Image attachments → multi-part Content array. The
+			// `input_image` part carries either a URL or a base64
+			// data URL — we use the latter (v1 inlines bytes;
+			// provider Files API caching is phase 4). Other
+			// attachment kinds drop silently — capability table
+			// gates them out before they reach the driver.
+			if hasInlineImageAttachment(m.Attachments) {
+				content := make(responses.ResponseInputMessageContentListParam, 0, len(m.Attachments)+1)
+				for _, att := range m.Attachments {
+					if att.Kind != providers.AttachmentImage || len(att.Data) == 0 {
+						continue
+					}
+					content = append(content, responses.ResponseInputContentUnionParam{
+						OfInputImage: &responses.ResponseInputImageParam{
+							Detail:   "auto",
+							ImageURL: param.NewOpt(dataURL(att.MimeType, att.Data)),
+						},
+					})
+				}
+				if m.Content != "" {
+					content = append(content,
+						responses.ResponseInputContentParamOfInputText(m.Content),
+					)
+				}
+				inputs = append(inputs,
+					responses.ResponseInputItemParamOfInputMessage(content, "user"),
+				)
+				continue
+			}
 			inputs = append(inputs,
 				responses.ResponseInputItemParamOfMessage(
 					m.Content,

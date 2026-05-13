@@ -206,15 +206,19 @@ struct Composer: View {
     }
 
     /// Whether the currently-selected model accepts image attachments.
-    /// Capability table is hardcoded for now (Phase 1 ships
-    /// Anthropic-only image translation; other drivers will slot
-    /// in as their slices land). Driver type is the simplest
-    /// discriminator we have until the catalog grows a
-    /// `accepts_images` column.
+    /// All three native drivers translate image attachments now
+    /// (Anthropic `image` block, Google `inline_data`, OpenAI Chat
+    /// `image_url` / Responses `input_image`). The
+    /// openai-compatible bucket also covers third-party gateways
+    /// (xAI, OpenRouter, etc) — most accept the Chat-Completions
+    /// image_url shape, but coverage varies per gateway. Until the
+    /// catalog grows a per-model `accepts_images` capability flag,
+    /// allow images on every driver and let the UI surface any
+    /// upstream rejection inline rather than gating optimistically.
     private var activeModelAcceptsImages: Bool {
         guard let pid = model.selectedProviderID else { return false }
         switch model.providerTypes[pid] {
-        case "anthropic": return true
+        case "anthropic", "google", "openai-compatible": return true
         default: return false
         }
     }
