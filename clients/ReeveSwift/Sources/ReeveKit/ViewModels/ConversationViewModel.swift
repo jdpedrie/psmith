@@ -1021,6 +1021,30 @@ public final class ConversationViewModel {
             expandedThinkingMessageIDs.insert(resultID)
         }
         streamingThinkingExpanded = false
+
+        // ---- Atomic streamed-to-settled swap ----
+        //
+        // The user-visible goal at terminal is: the StreamingRow vanishes
+        // in the same render frame the new settled MessageRow appears. If
+        // we wait for the full `load()` (which does GetConversation,
+        // CountContextTokens, and the tree fetch in addition to
+        // ListMessages), the new MessageRow lands during the first await
+        // and StreamingRow doesn't hide until everything else finishes —
+        // the duplicate-bubble the user sees during long terminal
+        // handlers.
+        //
+        // So: fetch JUST the chain here, assign it, and immediately call
+        // hub.clear. Both mutations land between the same two awaits and
+        // SwiftUI batches them into one render. After that we fall back
+        // to the full `load()` for the slower bookkeeping (token count,
+        // tree, settings refresh) — visually a no-op since messages
+        // already reflect the new turn.
+        if let ctx = activeContext,
+           let chain = try? await client.conversations.listMessages(contextID: ctx.id) {
+            self.messages = chain
+        }
+        hub.clear(conversationID: conversation.id)
+
         await load()
         await onTerminal()
         if purpose == .assistantResponse {

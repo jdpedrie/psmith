@@ -25,6 +25,12 @@ struct Composer: View {
     /// PhotosPickerItem identity is stable per asset, so without
     /// the reset re-selecting wouldn't fire onChange).
     @State private var pickedItems: [PhotosPickerItem] = []
+    /// Whether the system photos picker is presented. Separating
+    /// the trigger button from the picker via `.photosPicker(
+    /// isPresented:)` works around an iOS 26 quirk where the
+    /// inline `PhotosPicker { Label }` initializer renders as
+    /// zero-width inside a tight HStack.
+    @State private var showingPhotosPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,6 +83,13 @@ struct Composer: View {
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
         }
+        .photosPicker(
+            isPresented: $showingPhotosPicker,
+            selection: $pickedItems,
+            maxSelectionCount: 6,
+            matching: .images,
+            preferredItemEncoding: .compatible
+        )
     }
 
     /// Thin amber strip above the input controls when the server's
@@ -100,22 +113,20 @@ struct Composer: View {
 
     // MARK: - Paperclip + attachment chip strip
 
-    /// Paperclip button → PhotosPicker. Multi-select on so the user
-    /// can attach a few images at once; preprocessing + upload
-    /// happen per-item, in parallel-ish (each via its own Task).
-    /// Capability gate is driven by the active model's image
-    /// support — drivers that don't accept images dim the button
-    /// rather than letting the user upload and discover the failure
-    /// at send time.
+    /// Paperclip button → PhotosPicker (via `.photosPicker`
+    /// presentation modifier — see `showingPhotosPicker`).
+    /// Multi-select on so the user can attach a few images at once;
+    /// preprocessing + upload happen per-item, in parallel-ish
+    /// (each via its own Task). Capability gate is driven by the
+    /// active model's image support — drivers that don't accept
+    /// images dim the button rather than letting the user upload
+    /// and discover the failure at send time.
     @ViewBuilder
     private var paperclipButton: some View {
         let accepts = activeModelAcceptsImages
-        PhotosPicker(
-            selection: $pickedItems,
-            maxSelectionCount: 6,
-            matching: .images,
-            preferredItemEncoding: .compatible
-        ) {
+        Button {
+            showingPhotosPicker = true
+        } label: {
             Image(systemName: "paperclip")
                 .font(.callout)
                 .foregroundStyle(accepts ? .secondary : .tertiary)

@@ -316,29 +316,43 @@ public final class StreamHub {
     private func handleTerminal(run: ReeveStreamRun, conversationID: String) async {
         let handler = terminalHandlers[conversationID]
         tasks.removeValue(forKey: run.id)
-        // Run the handler FIRST (load + clearStreamingState etc.) so
-        // by the time we clear the hub entry, the view model has
-        // already mirrored the materialised assistant row into
-        // `messages`. The UI briefly shows StreamingRow + new
-        // MessageRow simultaneously — the double-render is content-
-        // similar and reads as a smooth swap; clearing the hub entry
-        // first would instead leave a brief BLANK gap (no streaming,
-        // no settled row) for the duration of the network round-trip.
-        if let handler {
-            await handler(run)
-        }
-        // If this was an assistant turn (not a compaction) and the
-        // user wasn't viewing the conversation as it landed, raise
-        // the unseen flag. Compaction terminals don't qualify — the
-        // user kicked them off intentionally and either watched the
-        // Compact page or got a separate failure inline. Status is
-        // intentionally not gated: even an errored / cancelled
-        // assistant turn produces a new row the user should notice.
+
+        // Mark the "new message arrived while user wasn't looking"
+        // state BEFORE invoking the handler. Used to be after, but
+        // the VM's terminal handler now clears the hub streams
+        // entry as soon as the materialised assistant row is in
+        // `messages` (to make the StreamingRow → MessageRow swap
+        // atomic). That early clear flips
+        // `vm.streamRunID == nil` while the post-handler code path
+        // is still pending — any caller polling on streamRunID
+        // would race the unseen mark. Moving the mark up front
+        // sidesteps the race entirely; the handler doesn't
+        // influence whether the user "saw" the message, only the
+        // viewing flag does.
+        //
+        // Status is intentionally not gated: even an errored /
+        // cancelled assistant turn produces a new row the user
+        // should notice. Compaction terminals don't qualify — the
+        // user kicked them off intentionally.
         if run.purpose == .assistantResponse,
            !viewingConversationIDs.contains(conversationID),
            unseenConversationIDs.insert(conversationID).inserted {
             persistUnseen()
         }
+
+        // Run the handler. The VM typically calls `hub.clear` from
+        // inside this handler once the materialised message is in
+        // `messages`, hiding the StreamingRow in the same render
+        // frame the settled MessageRow appears. Without that,
+        // both render together for the duration of any downstream
+        // network work (sidebar refresh, title generation, …).
+        if let handler {
+            await handler(run)
+        }
+        // Idempotent — the handler's hub.clear already removed
+        // these, but cleaning up here too means a handler that
+        // didn't call clear (legacy / tests without a VM) still
+        // results in a settled state.
         streams.removeValue(forKey: conversationID)
         activeConversationIDs.remove(conversationID)
     }

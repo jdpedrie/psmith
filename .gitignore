@@ -4,6 +4,11 @@
 .env
 .env.local
 
+# `go build ./cmd/reeved` output + the file storage root that
+# defaults to ./reeved-data when REEVE_DATA_DIR is unset.
+/reeved
+/reeved-data/
+
 # IDE
 .idea/
 .vscode/

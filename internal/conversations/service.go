@@ -781,9 +781,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 	// Regenerate-mode skips the user-message-create step entirely; the
 	// stream parents off an existing user row. Content is meaningless in
 	// that mode (the user row already carries it). Non-regen requires
-	// non-empty content as before.
-	if !req.Msg.Regenerate && req.Msg.Content == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content is required"))
+	// EITHER non-empty content OR ≥1 attachment — an "image-only" turn
+	// ("look at this") is a valid first message.
+	if !req.Msg.Regenerate && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content or attachment is required"))
 	}
 	if req.Msg.Regenerate && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id"))

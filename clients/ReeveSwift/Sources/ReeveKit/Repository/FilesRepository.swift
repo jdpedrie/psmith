@@ -34,6 +34,13 @@ public struct ReeveFile: Sendable, Hashable, Identifiable {
 /// in friendly async APIs.
 public final class FilesRepository: Sendable {
     private let client: Reeve_V1_FilesServiceClientInterface
+    /// reeved host used to resolve relative signed URLs. When the
+    /// server doesn't have REEVE_PUBLIC_BASE_URL set, GetFileURL
+    /// returns a path-only URL like `/files/{id}?token=…` and we
+    /// have to graft the host on at the client. Stored at init so
+    /// every signedURL call uses the same base the rest of the
+    /// repositories talk to.
+    private let host: URL
 
     /// Bytes-per-chunk on the upload stream. 64KB is a round
     /// number that fits comfortably in one TCP packet's worth of
@@ -41,8 +48,9 @@ public final class FilesRepository: Sendable {
     /// wire, and matches Connect-swift's framing sweet spot.
     public static let chunkSize = 64 * 1024
 
-    public init(client: Reeve_V1_FilesServiceClientInterface) {
+    public init(client: Reeve_V1_FilesServiceClientInterface, host: URL) {
         self.client = client
+        self.host = host
     }
 
     /// Upload `data` as one file. Returns the server-assigned
@@ -133,7 +141,11 @@ public final class FilesRepository: Sendable {
         )
     }
 
-    /// Mint a short-lived signed URL for the given file_id.
+    /// Mint a short-lived signed URL for the given file_id. The
+    /// returned URL is always absolute — when the server returns a
+    /// relative path (the default when REEVE_PUBLIC_BASE_URL isn't
+    /// set), we resolve it against the configured reeved host so
+    /// the caller can hand it straight to AsyncImage.
     public func signedURL(fileID: String) async throws -> URL {
         var req = Reeve_V1_GetFileURLRequest()
         req.fileID = fileID
@@ -141,10 +153,16 @@ public final class FilesRepository: Sendable {
         guard let msg = resp.message else {
             throw resp.error.map(ReeveError.from) ?? .missingPayload("get file url")
         }
-        guard let url = URL(string: msg.url) else {
-            throw ReeveError.missingPayload("server returned an invalid file url")
+        // Parse the raw string. If the server gave us an absolute
+        // URL (production / REEVE_PUBLIC_BASE_URL set), use it as-
+        // is; if it gave us a relative path, resolve against host.
+        if let abs = URL(string: msg.url), abs.scheme != nil, abs.host != nil {
+            return abs
         }
-        return url
+        if let rel = URL(string: msg.url, relativeTo: host)?.absoluteURL {
+            return rel
+        }
+        throw ReeveError.missingPayload("server returned an invalid file url")
     }
 
     /// List the caller's recent files. `limit` defaults to the

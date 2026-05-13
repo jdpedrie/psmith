@@ -69,7 +69,8 @@ public final class ReeveClient: Sendable {
             cache: cache
         )
         self.files = FilesRepository(
-            client: Reeve_V1_FilesServiceClient(client: protocolClient)
+            client: Reeve_V1_FilesServiceClient(client: protocolClient),
+            host: host
         )
     }
 }
