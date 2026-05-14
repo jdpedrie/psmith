@@ -539,13 +539,21 @@ public final class ConversationViewModel {
         pendingAttachments = []
         defer { sending = false }
 
+        // Gather the cheap, no-permission facts (locale, timezone,
+        // platform) so server-side fact-aware plugins like
+        // basic_grounding can render them in the outgoing user
+        // message. Plugins that don't request a fact ignore it,
+        // so over-supplying is safe.
+        let deviceFacts = DeviceFactsProvider().gather()
+
         do {
             let (userMsg, run) = try await client.conversations.sendMessage(
                 conversationID: conversation.id,
                 content: text,
                 providerID: selectedProviderID,
                 modelID: selectedModelID,
-                attachmentFileIDs: attachmentIDs
+                attachmentFileIDs: attachmentIDs,
+                deviceFacts: deviceFacts
             )
             pendingUserText = nil
             messages.append(userMsg)
@@ -1023,13 +1031,16 @@ public final class ConversationViewModel {
         pendingUserText = text
         defer { sending = false }
 
+        let deviceFacts = DeviceFactsProvider().gather()
+
         do {
             let (userMsg, run) = try await client.conversations.sendMessage(
                 conversationID: conversation.id,
                 content: text,
                 parentMessageID: parentMessageID,
                 providerID: selectedProviderID,
-                modelID: selectedModelID
+                modelID: selectedModelID,
+                deviceFacts: deviceFacts
             )
             pendingUserText = nil
             // Reload so the new sibling appears alongside the old branch

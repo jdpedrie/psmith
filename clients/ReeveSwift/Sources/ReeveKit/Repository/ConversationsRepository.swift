@@ -137,7 +137,8 @@ public final class ConversationsRepository: Sendable {
         parentMessageID: String? = nil,
         providerID: String? = nil,
         modelID: String? = nil,
-        attachmentFileIDs: [String] = []
+        attachmentFileIDs: [String] = [],
+        deviceFacts: [ReeveDeviceFact] = []
     ) async throws -> (userMessage: ReeveMessage, streamRun: ReeveStreamRun) {
         var req = Reeve_V1_SendMessageRequest()
         req.conversationID = conversationID
@@ -146,6 +147,7 @@ public final class ConversationsRepository: Sendable {
         if let providerID { req.providerID = providerID }
         if let modelID { req.modelID = modelID }
         if !attachmentFileIDs.isEmpty { req.attachmentFileIds = attachmentFileIDs }
+        if !deviceFacts.isEmpty { req.deviceFacts = deviceFacts.map { $0.proto } }
         let resp = await client.sendMessage(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("send message") }
         return (ReeveMessage(from: msg.userMessage), ReeveStreamRun(from: msg.streamRun))
