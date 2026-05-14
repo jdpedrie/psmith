@@ -251,10 +251,19 @@ func (p *basicGrounding) factLines(facts map[string]string) []string {
 		}
 	}
 	if p.cfg.IncludeLocation {
-		if v := facts[DeviceFactKeyLocationCity]; v != "" {
-			lines = append(lines, "Location: "+v)
-		} else if v := facts[DeviceFactKeyLocationCoords]; v != "" {
-			lines = append(lines, "Location (coords): "+v)
+		city := facts[DeviceFactKeyLocationCity]
+		coords := facts[DeviceFactKeyLocationCoords]
+		switch {
+		case city != "" && coords != "":
+			// Pair city + coords on one line — the city anchors
+			// the human-readable answer, the coords give the
+			// model precise enough geography to disambiguate
+			// neighborhoods or do distance math.
+			lines = append(lines, "Location: "+city+" ("+coords+")")
+		case city != "":
+			lines = append(lines, "Location: "+city)
+		case coords != "":
+			lines = append(lines, "Location (coords): "+coords)
 		}
 	}
 	return lines

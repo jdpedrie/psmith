@@ -172,7 +172,9 @@ func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
 		"Current time: 2026-05-02T14:45:00Z",
 		"Locale: en-US",
 		"Platform: iOS 26.5 / iPhone 17 Pro",
-		"Location: Brooklyn, NY",
+		// City + coords on one line: city is the anchor, coords
+		// give the model precision for distance / neighborhood math.
+		"Location: Brooklyn, NY (40.6782,-73.9442)",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
@@ -180,7 +182,23 @@ func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
 		}
 	}
 	if strings.Contains(out, "Location (coords)") {
-		t.Errorf("city should suppress coords line; full: %q", out)
+		t.Errorf("with city present, the coords-only fallback line should not appear; full: %q", out)
+	}
+}
+
+func TestBasicGrounding_LocationCityOnly(t *testing.T) {
+	t.Parallel()
+	// City present but no coords (e.g. before reverse-geocode finished
+	// or in a region where the gateway suppresses coords).
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":true,"include_date_time":false}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyLocationCity: "Brooklyn, NY",
+	})
+	if !strings.Contains(out, "Location: Brooklyn, NY\n") && !strings.HasSuffix(out, "Location: Brooklyn, NY") {
+		t.Errorf("expected city-only line, got %q", out)
+	}
+	if strings.Contains(out, "(") {
+		t.Errorf("city-only line should not include coords parens, got %q", out)
 	}
 }
 
