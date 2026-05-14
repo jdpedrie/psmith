@@ -946,7 +946,13 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// Apply OutgoingUserTransformer plugins (basic_grounding,
 		// future siblings) to the raw user content so the rewritten
 		// text is what we persist. Empty pipeline → identity transform.
-		persistedContent := pipeline.TransformOutgoingUser(req.Msg.Content)
+		// Device-fact envelope from the request is translated from the
+		// proto enum to the plugin-side string keys; plugins ignore
+		// keys they don't recognize.
+		persistedContent := pipeline.TransformOutgoingUser(
+			req.Msg.Content,
+			deviceFactsFromProto(req.Msg.DeviceFacts),
+		)
 
 		row, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
 			ID:        userMsgID,

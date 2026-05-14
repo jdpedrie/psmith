@@ -55,6 +55,9 @@ func TestBasicGrounding_DefaultsAndDescriptor(t *testing.T) {
 		"include_date_time": true,
 		"time_format":       true,
 		"timezone":          true,
+		"include_locale":    true,
+		"include_platform":  true,
+		"include_location":  true,
 	}
 	for _, f := range fields {
 		if !expectedNames[f.Name] {
@@ -66,7 +69,7 @@ func TestBasicGrounding_DefaultsAndDescriptor(t *testing.T) {
 func TestBasicGrounding_PrependsGroundingBlock(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
-	out := bg.TransformOutgoingUserMessage("what's the weather like?")
+	out := bg.TransformOutgoingUserMessage("what's the weather like?", nil)
 	if !strings.HasPrefix(out, "<grounding>\n") {
 		t.Errorf("expected grounding block at start, got %q", out)
 	}
@@ -88,7 +91,7 @@ func TestBasicGrounding_RoundTripStripsForDisplay(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, ``)
 	original := "what's the weather like?"
-	transformed := bg.TransformOutgoingUserMessage(original)
+	transformed := bg.TransformOutgoingUserMessage(original, nil)
 	displayed := bg.TransformForDisplay(transformed)
 	if displayed != original {
 		t.Errorf("round-trip mismatch:\n  in:  %q\n  out: %q", original, displayed)
@@ -109,7 +112,7 @@ func TestBasicGrounding_DisplayLeavesUserGroundingTextAlone(t *testing.T) {
 func TestBasicGrounding_DisableSkipsBlock(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"include_date_time":false}`)
-	out := bg.TransformOutgoingUserMessage("hi")
+	out := bg.TransformOutgoingUserMessage("hi", nil)
 	if out != "hi" {
 		t.Errorf("with all facts disabled, content must pass through unchanged; got %q", out)
 	}
@@ -141,7 +144,7 @@ func TestBasicGrounding_TimeFormats(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bg := newFixedClockGrounding(t, tc.config)
-			out := bg.TransformOutgoingUserMessage("hi")
+			out := bg.TransformOutgoingUserMessage("hi", nil)
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("output missing %q\nfull: %q", tc.want, out)
 			}
@@ -156,6 +159,92 @@ func TestBasicGrounding_BadTimezoneRejected(t *testing.T) {
 	}
 }
 
+func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
+	t.Parallel()
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_locale":true,"include_platform":true,"include_location":true}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyLocale:         "en-US",
+		DeviceFactKeyPlatform:       "iOS 26.5 / iPhone 17 Pro",
+		DeviceFactKeyLocationCity:   "Brooklyn, NY",
+		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
+	})
+	wants := []string{
+		"Current time: 2026-05-02T14:45:00Z",
+		"Locale: en-US",
+		"Platform: iOS 26.5 / iPhone 17 Pro",
+		"Location: Brooklyn, NY",
+	}
+	for _, want := range wants {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\nfull: %q", want, out)
+		}
+	}
+	if strings.Contains(out, "Location (coords)") {
+		t.Errorf("city should suppress coords line; full: %q", out)
+	}
+}
+
+func TestBasicGrounding_LocationFallsBackToCoords(t *testing.T) {
+	t.Parallel()
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":true,"include_date_time":false}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
+	})
+	if !strings.Contains(out, "Location (coords): 40.6782,-73.9442") {
+		t.Errorf("expected coords-only fallback line, got %q", out)
+	}
+}
+
+func TestBasicGrounding_FactsMissing_NoLine(t *testing.T) {
+	t.Parallel()
+	// Locale + Platform requested via config but the client didn't
+	// supply them — the lines should be silently omitted, not
+	// rendered as "Locale: ".
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_locale":true,"include_platform":true}`)
+	out := bg.TransformOutgoingUserMessage("hi", nil)
+	if strings.Contains(out, "Locale:") || strings.Contains(out, "Platform:") {
+		t.Errorf("missing facts must skip their lines, got %q", out)
+	}
+	if !strings.Contains(out, "Current time:") {
+		t.Errorf("time line should still render when device facts are absent, got %q", out)
+	}
+}
+
+func TestBasicGrounding_RequestedFactsReflectsConfig(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		config string
+		want   []string
+	}{
+		{name: "all_off", config: `{"include_locale":false,"include_platform":false,"include_location":false}`, want: nil},
+		{name: "locale_only", config: `{"include_locale":true,"include_platform":false,"include_location":false}`, want: []string{DeviceFactKeyLocale}},
+		{name: "all_on", config: `{"include_locale":true,"include_platform":true,"include_location":true}`,
+			want: []string{DeviceFactKeyLocale, DeviceFactKeyPlatform, DeviceFactKeyLocationCity, DeviceFactKeyLocationCoords}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pl, err := newBasicGrounding(json.RawMessage(tc.config))
+			if err != nil {
+				t.Fatalf("construct: %v", err)
+			}
+			r, ok := pl.(DeviceFactRequester)
+			if !ok {
+				t.Fatal("basic_grounding should implement DeviceFactRequester")
+			}
+			got := r.RequestedDeviceFacts()
+			if len(got) != len(tc.want) {
+				t.Fatalf("want %v got %v", tc.want, got)
+			}
+			for i, k := range tc.want {
+				if got[i] != k {
+					t.Errorf("[%d] want %q got %q", i, k, got[i])
+				}
+			}
+		})
+	}
+}
+
 func TestBasicGrounding_PrependedContentSurvivesAcrossTurns(t *testing.T) {
 	t.Parallel()
 	// The whole point of the design: if we re-rendered the wire prefix
@@ -164,7 +253,7 @@ func TestBasicGrounding_PrependedContentSurvivesAcrossTurns(t *testing.T) {
 	// the persisted content. This test simulates the round-trip the
 	// supervisor actually performs.
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
-	stored := bg.TransformOutgoingUserMessage("hi")
+	stored := bg.TransformOutgoingUserMessage("hi", nil)
 	// Frozen text — what subsequent turns see in the wire prefix.
 	if !strings.HasPrefix(stored, "<grounding>") {
 		t.Fatalf("stored content should have prefix, got %q", stored)

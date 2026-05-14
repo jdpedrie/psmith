@@ -496,6 +496,12 @@ public struct Reeve_V1_PluginCapabilities: Sendable {
   /// webhooks, auto-tagging, audit logs.
   public var messageLifecycleHook: Bool = false
 
+  /// Plugin opts into device-supplied facts (location, locale,
+  /// platform, etc.) on every outgoing user turn. The actual list
+  /// of requested fact keys is on `PluginType.requested_device_facts`
+  /// — this flag is the cheap "should the client even look?" gate.
+  public var deviceFactRequester: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -528,6 +534,13 @@ public struct Reeve_V1_PluginType: Sendable {
   /// The `name` field above is the stable machine identifier used as the
   /// plugin's primary key.
   public var displayName: String = String()
+
+  /// Device facts the plugin wants on every outgoing user turn.
+  /// Empty unless `capabilities.device_fact_requester` is true. The
+  /// client unions this list across enabled plugins on the active
+  /// profile; values it can gather (with permission as needed) ride
+  /// back on `SendMessageRequest.device_facts`.
+  public var requestedDeviceFacts: [Reeve_V1_DeviceFactKey] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1445,7 +1458,7 @@ extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginCapabilities"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1462,6 +1475,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 7: try { try decoder.decodeSingularBoolField(value: &self.toolProvider) }()
       case 8: try { try decoder.decodeSingularBoolField(value: &self.assistantContentTransformer) }()
       case 9: try { try decoder.decodeSingularBoolField(value: &self.messageLifecycleHook) }()
+      case 10: try { try decoder.decodeSingularBoolField(value: &self.deviceFactRequester) }()
       default: break
       }
     }
@@ -1495,6 +1509,9 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if self.messageLifecycleHook != false {
       try visitor.visitSingularBoolField(value: self.messageLifecycleHook, fieldNumber: 9)
     }
+    if self.deviceFactRequester != false {
+      try visitor.visitSingularBoolField(value: self.deviceFactRequester, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1508,6 +1525,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.toolProvider != rhs.toolProvider {return false}
     if lhs.assistantContentTransformer != rhs.assistantContentTransformer {return false}
     if lhs.messageLifecycleHook != rhs.messageLifecycleHook {return false}
+    if lhs.deviceFactRequester != rhs.deviceFactRequester {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1515,7 +1533,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1528,6 +1546,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.configFields) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 6: try { try decoder.decodeRepeatedEnumField(value: &self.requestedDeviceFacts) }()
       default: break
       }
     }
@@ -1553,6 +1572,9 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if !self.displayName.isEmpty {
       try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 5)
     }
+    if !self.requestedDeviceFacts.isEmpty {
+      try visitor.visitPackedEnumField(value: self.requestedDeviceFacts, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1562,6 +1584,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.configFields != rhs.configFields {return false}
     if lhs._capabilities != rhs._capabilities {return false}
     if lhs.displayName != rhs.displayName {return false}
+    if lhs.requestedDeviceFacts != rhs.requestedDeviceFacts {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

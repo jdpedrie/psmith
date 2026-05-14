@@ -50,9 +50,9 @@ type basicGrounding struct {
 // basicGroundingConfig is the per-instance config blob. Every field is
 // optional with sensible defaults.
 type basicGroundingConfig struct {
-	// IncludeDateTime toggles the time fact (currently the only fact
-	// shipped). When more facts arrive the toggle pattern repeats per
-	// fact so the user can opt in/out individually.
+	// IncludeDateTime toggles the time fact. Default on — the
+	// model losing track of "today" was the original reason this
+	// plugin exists, so it's the most useful single fact.
 	IncludeDateTime bool `json:"include_date_time"`
 
 	// TimeFormat picks the wall-clock format. One of
@@ -62,12 +62,35 @@ type basicGroundingConfig struct {
 	// Timezone is the IANA zone the timestamp renders in (e.g.
 	// "America/New_York"). Empty = the host's local timezone.
 	Timezone string `json:"timezone"`
+
+	// IncludeLocale renders "Locale: en-US" from the client-
+	// supplied DeviceFactKeyLocale. Default on — zero permission
+	// cost, lets the model pick units / date formats / language
+	// without asking.
+	IncludeLocale bool `json:"include_locale"`
+
+	// IncludePlatform renders "Platform: iOS 26.5 / iPhone 17 Pro"
+	// from the client-supplied DeviceFactKeyPlatform. Default on —
+	// also zero permission cost; useful for tech-support framing
+	// where the answer is OS/device-specific.
+	IncludePlatform bool `json:"include_platform"`
+
+	// IncludeLocation renders "Location: Brooklyn, NY" (and/or
+	// the raw coords as a fallback) from the client-supplied
+	// DeviceFactKeyLocationCity / DeviceFactKeyLocationCoords.
+	// Default OFF — opt-in because it triggers an OS-level
+	// location-permission prompt on the client.
+	IncludeLocation bool `json:"include_location"`
 }
 
 func newBasicGrounding(configBytes json.RawMessage) (Plugin, error) {
 	cfg := basicGroundingConfig{
 		IncludeDateTime: true,
 		TimeFormat:      "datetime_iso",
+		IncludeLocale:   true,
+		IncludePlatform: true,
+		// IncludeLocation deliberately defaults off — permission
+		// gate on the client.
 	}
 	if len(configBytes) > 0 {
 		if err := json.Unmarshal(configBytes, &cfg); err != nil {
@@ -128,13 +151,50 @@ func (p *basicGrounding) ConfigFields() []ConfigField {
 			Description: "Optional IANA zone for the timestamp (e.g. America/New_York). Empty = host's local zone.",
 			Type:        ConfigFieldText,
 		},
+		{
+			Name:        "include_locale",
+			Display:     "Include locale",
+			Description: "Send the user's locale (e.g. en-US) so the model can pick units, date formats, and language without asking. No OS permission required.",
+			Type:        ConfigFieldBoolean,
+			Default:     true,
+		},
+		{
+			Name:        "include_platform",
+			Display:     "Include platform",
+			Description: "Send the OS + device (e.g. \"iOS 26.5 / iPhone 17 Pro\"). Useful for tech-support framing. No OS permission required.",
+			Type:        ConfigFieldBoolean,
+			Default:     true,
+		},
+		{
+			Name:        "include_location",
+			Display:     "Include current location",
+			Description: "Send the user's current location (city/region; coordinates as fallback). Triggers an OS-level location-permission prompt on the device.",
+			Type:        ConfigFieldBoolean,
+			Default:     false,
+		},
 	}
+}
+
+// --- DeviceFactRequester ---
+
+func (p *basicGrounding) RequestedDeviceFacts() []string {
+	var keys []string
+	if p.cfg.IncludeLocale {
+		keys = append(keys, DeviceFactKeyLocale)
+	}
+	if p.cfg.IncludePlatform {
+		keys = append(keys, DeviceFactKeyPlatform)
+	}
+	if p.cfg.IncludeLocation {
+		keys = append(keys, DeviceFactKeyLocationCity, DeviceFactKeyLocationCoords)
+	}
+	return keys
 }
 
 // --- OutgoingUserTransformer ---
 
-func (p *basicGrounding) TransformOutgoingUserMessage(content string) string {
-	lines := p.factLines()
+func (p *basicGrounding) TransformOutgoingUserMessage(content string, facts map[string]string) string {
+	lines := p.factLines(facts)
 	if len(lines) == 0 {
 		return content
 	}
@@ -170,12 +230,32 @@ func (p *basicGrounding) TransformForDisplay(content string) string {
 // --- Internal ---
 
 // factLines returns one rendered "Key: value" line per enabled fact, in
-// stable order. Empty slice when every fact is disabled — caller skips
-// the wrapping block entirely.
-func (p *basicGrounding) factLines() []string {
+// stable order. `facts` is the device-supplied envelope from the
+// SendMessage request (may be nil); per-fact rendering tolerates
+// missing keys and just skips the corresponding line. Empty slice
+// when every enabled fact has nothing to render — caller skips the
+// wrapping block entirely.
+func (p *basicGrounding) factLines(facts map[string]string) []string {
 	var lines []string
 	if p.cfg.IncludeDateTime {
 		lines = append(lines, "Current time: "+p.formatNow())
+	}
+	if p.cfg.IncludeLocale {
+		if v := facts[DeviceFactKeyLocale]; v != "" {
+			lines = append(lines, "Locale: "+v)
+		}
+	}
+	if p.cfg.IncludePlatform {
+		if v := facts[DeviceFactKeyPlatform]; v != "" {
+			lines = append(lines, "Platform: "+v)
+		}
+	}
+	if p.cfg.IncludeLocation {
+		if v := facts[DeviceFactKeyLocationCity]; v != "" {
+			lines = append(lines, "Location: "+v)
+		} else if v := facts[DeviceFactKeyLocationCoords]; v != "" {
+			lines = append(lines, "Location (coords): "+v)
+		}
 	}
 	return lines
 }

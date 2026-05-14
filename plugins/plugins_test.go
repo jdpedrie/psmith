@@ -115,7 +115,7 @@ type fakeOutgoingTransformer struct {
 	prefix string
 }
 
-func (f *fakeOutgoingTransformer) TransformOutgoingUserMessage(content string) string {
+func (f *fakeOutgoingTransformer) TransformOutgoingUserMessage(content string, _ map[string]string) string {
 	return f.prefix + content
 }
 
@@ -129,7 +129,7 @@ func TestPipeline_Empty(t *testing.T) {
 	if prep != "" || app != "" {
 		t.Errorf("empty SystemPrompts should be (\"\", \"\"); got (%q, %q)", prep, app)
 	}
-	if got := p.TransformOutgoingUser("x"); got != "x" {
+	if got := p.TransformOutgoingUser("x", nil); got != "x" {
 		t.Errorf("empty TransformOutgoingUser should be no-op; got %q", got)
 	}
 	if got := p.TransformForDisplay("x"); got != "x" {
@@ -163,7 +163,7 @@ func TestPipeline_TransformOutgoingUser_AppliesInOrder(t *testing.T) {
 		&fakeOutgoingTransformer{dummyPlugin{name: "a"}, "[A]"},
 		&fakeOutgoingTransformer{dummyPlugin{name: "b"}, "[B]"},
 	}
-	got := p.TransformOutgoingUser("hi")
+	got := p.TransformOutgoingUser("hi", nil)
 	if got != "[B][A]hi" {
 		t.Errorf("got %q want %q", got, "[B][A]hi")
 	}
@@ -213,7 +213,7 @@ func TestPipeline_PluginsWithoutCapabilityAreSkipped(t *testing.T) {
 		t.Errorf("got (%q, %q) want (PRE, POST)", pre, post)
 	}
 	// And TransformOutgoingUser is a no-op since neither plugin implements it.
-	if got := p.TransformOutgoingUser("x"); got != "x" {
+	if got := p.TransformOutgoingUser("x", nil); got != "x" {
 		t.Errorf("got %q want %q", got, "x")
 	}
 }

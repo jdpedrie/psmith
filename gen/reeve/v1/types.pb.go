@@ -528,6 +528,78 @@ func (ChunkType) EnumDescriptor() ([]byte, []int) {
 	return file_reeve_v1_types_proto_rawDescGZIP(), []int{8}
 }
 
+// DeviceFactKey is the closed enum of context bits a fact-aware
+// plugin can ask the device to gather and ship alongside the
+// outgoing user message. Adding a new fact requires a new enum
+// value AND client-side gathering code, which are coordinated —
+// closed-enum keeps that gate explicit instead of a free-form
+// string map drifting between implementations.
+type DeviceFactKey int32
+
+const (
+	DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED DeviceFactKey = 0
+	// BCP-47 tag, e.g. "en-US". Zero permission cost.
+	DeviceFactKey_DEVICE_FACT_KEY_LOCALE DeviceFactKey = 1
+	// IANA timezone, e.g. "America/New_York".
+	DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE DeviceFactKey = 2
+	// Free-form OS + device, e.g. "iOS 26.5 / iPhone 17 Pro".
+	DeviceFactKey_DEVICE_FACT_KEY_PLATFORM DeviceFactKey = 3
+	// Reverse-geocoded place name, e.g. "Brooklyn, NY". Requires
+	// location permission on the client.
+	DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY DeviceFactKey = 4
+	// Raw "lat,lng" string, e.g. "40.6782,-73.9442". Requires
+	// location permission. Acts as a fallback when reverse-geocoding
+	// wasn't possible.
+	DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS DeviceFactKey = 5
+)
+
+// Enum value maps for DeviceFactKey.
+var (
+	DeviceFactKey_name = map[int32]string{
+		0: "DEVICE_FACT_KEY_UNSPECIFIED",
+		1: "DEVICE_FACT_KEY_LOCALE",
+		2: "DEVICE_FACT_KEY_TIMEZONE",
+		3: "DEVICE_FACT_KEY_PLATFORM",
+		4: "DEVICE_FACT_KEY_LOCATION_CITY",
+		5: "DEVICE_FACT_KEY_LOCATION_COORDS",
+	}
+	DeviceFactKey_value = map[string]int32{
+		"DEVICE_FACT_KEY_UNSPECIFIED":     0,
+		"DEVICE_FACT_KEY_LOCALE":          1,
+		"DEVICE_FACT_KEY_TIMEZONE":        2,
+		"DEVICE_FACT_KEY_PLATFORM":        3,
+		"DEVICE_FACT_KEY_LOCATION_CITY":   4,
+		"DEVICE_FACT_KEY_LOCATION_COORDS": 5,
+	}
+)
+
+func (x DeviceFactKey) Enum() *DeviceFactKey {
+	p := new(DeviceFactKey)
+	*p = x
+	return p
+}
+
+func (x DeviceFactKey) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeviceFactKey) Descriptor() protoreflect.EnumDescriptor {
+	return file_reeve_v1_types_proto_enumTypes[9].Descriptor()
+}
+
+func (DeviceFactKey) Type() protoreflect.EnumType {
+	return &file_reeve_v1_types_proto_enumTypes[9]
+}
+
+func (x DeviceFactKey) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeviceFactKey.Descriptor instead.
+func (DeviceFactKey) EnumDescriptor() ([]byte, []int) {
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{9}
+}
+
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -3493,6 +3565,61 @@ func (x *Chunk) GetPayload() []byte {
 	return nil
 }
 
+// One device-supplied fact. `value` is intentionally untyped — the
+// shape varies per key (locale tags, ISO timestamps, free-form
+// strings) and the consumers (plugins) parse per-key.
+type DeviceFact struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           DeviceFactKey          `protobuf:"varint,1,opt,name=key,proto3,enum=reeve.v1.DeviceFactKey" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceFact) Reset() {
+	*x = DeviceFact{}
+	mi := &file_reeve_v1_types_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceFact) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceFact) ProtoMessage() {}
+
+func (x *DeviceFact) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_types_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceFact.ProtoReflect.Descriptor instead.
+func (*DeviceFact) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_types_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *DeviceFact) GetKey() DeviceFactKey {
+	if x != nil {
+		return x.Key
+	}
+	return DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
+}
+
+func (x *DeviceFact) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 var File_reeve_v1_types_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_types_proto_rawDesc = "" +
@@ -3920,7 +4047,11 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x05Chunk\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x03R\bsequence\x12'\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x13.reeve.v1.ChunkTypeR\x04type\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload*\x86\x01\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\"M\n" +
+	"\n" +
+	"DeviceFact\x12)\n" +
+	"\x03key\x18\x01 \x01(\x0e2\x17.reeve.v1.DeviceFactKeyR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value*\x86\x01\n" +
 	"\x0eMetadataSource\x12\x1f\n" +
 	"\x1bMETADATA_SOURCE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17METADATA_SOURCE_CATALOG\x10\x01\x12\x1a\n" +
@@ -3975,7 +4106,14 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x10CHUNK_TYPE_USAGE\x10\b\x12\x1a\n" +
 	"\x16CHUNK_TYPE_TOOL_RESULT\x10\t\x12!\n" +
 	"\x1dCHUNK_TYPE_THINKING_SIGNATURE\x10\n" +
-	"B0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"*\xd0\x01\n" +
+	"\rDeviceFactKey\x12\x1f\n" +
+	"\x1bDEVICE_FACT_KEY_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16DEVICE_FACT_KEY_LOCALE\x10\x01\x12\x1c\n" +
+	"\x18DEVICE_FACT_KEY_TIMEZONE\x10\x02\x12\x1c\n" +
+	"\x18DEVICE_FACT_KEY_PLATFORM\x10\x03\x12!\n" +
+	"\x1dDEVICE_FACT_KEY_LOCATION_CITY\x10\x04\x12#\n" +
+	"\x1fDEVICE_FACT_KEY_LOCATION_COORDS\x10\x05B0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_types_proto_rawDescOnce sync.Once
@@ -3989,8 +4127,8 @@ func file_reeve_v1_types_proto_rawDescGZIP() []byte {
 	return file_reeve_v1_types_proto_rawDescData
 }
 
-var file_reeve_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_reeve_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_reeve_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_reeve_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: reeve.v1.MetadataSource
 	(CacheTTL)(0),                 // 1: reeve.v1.CacheTTL
@@ -4001,95 +4139,98 @@ var file_reeve_v1_types_proto_goTypes = []any{
 	(StreamRunStatus)(0),          // 6: reeve.v1.StreamRunStatus
 	(StreamRunPurpose)(0),         // 7: reeve.v1.StreamRunPurpose
 	(ChunkType)(0),                // 8: reeve.v1.ChunkType
-	(*User)(nil),                  // 9: reeve.v1.User
-	(*ProviderType)(nil),          // 10: reeve.v1.ProviderType
-	(*UserModelProvider)(nil),     // 11: reeve.v1.UserModelProvider
-	(*ProviderTemplate)(nil),      // 12: reeve.v1.ProviderTemplate
-	(*ModelCapabilities)(nil),     // 13: reeve.v1.ModelCapabilities
-	(*ModelPricing)(nil),          // 14: reeve.v1.ModelPricing
-	(*CatalogModelProvider)(nil),  // 15: reeve.v1.CatalogModelProvider
-	(*CatalogModel)(nil),          // 16: reeve.v1.CatalogModel
-	(*UserModel)(nil),             // 17: reeve.v1.UserModel
-	(*CallSettings)(nil),          // 18: reeve.v1.CallSettings
-	(*ThinkingSettings)(nil),      // 19: reeve.v1.ThinkingSettings
-	(*AnthropicExtras)(nil),       // 20: reeve.v1.AnthropicExtras
-	(*OpenAIExtras)(nil),          // 21: reeve.v1.OpenAIExtras
-	(*ResponseFormat)(nil),        // 22: reeve.v1.ResponseFormat
-	(*JsonSchema)(nil),            // 23: reeve.v1.JsonSchema
-	(*GoogleExtras)(nil),          // 24: reeve.v1.GoogleExtras
-	(*SafetySettings)(nil),        // 25: reeve.v1.SafetySettings
-	(*ProfileDefaults)(nil),       // 26: reeve.v1.ProfileDefaults
-	(*Profile)(nil),               // 27: reeve.v1.Profile
-	(*ConversationSettings)(nil),  // 28: reeve.v1.ConversationSettings
-	(*Conversation)(nil),          // 29: reeve.v1.Conversation
-	(*Context)(nil),               // 30: reeve.v1.Context
-	(*Message)(nil),               // 31: reeve.v1.Message
-	(*MessageAttachment)(nil),     // 32: reeve.v1.MessageAttachment
-	(*ToolCall)(nil),              // 33: reeve.v1.ToolCall
-	(*MessageUsage)(nil),          // 34: reeve.v1.MessageUsage
-	(*StreamRun)(nil),             // 35: reeve.v1.StreamRun
-	(*Chunk)(nil),                 // 36: reeve.v1.Chunk
-	nil,                           // 37: reeve.v1.OpenAIExtras.LogitBiasEntry
-	(*timestamppb.Timestamp)(nil), // 38: google.protobuf.Timestamp
+	(DeviceFactKey)(0),            // 9: reeve.v1.DeviceFactKey
+	(*User)(nil),                  // 10: reeve.v1.User
+	(*ProviderType)(nil),          // 11: reeve.v1.ProviderType
+	(*UserModelProvider)(nil),     // 12: reeve.v1.UserModelProvider
+	(*ProviderTemplate)(nil),      // 13: reeve.v1.ProviderTemplate
+	(*ModelCapabilities)(nil),     // 14: reeve.v1.ModelCapabilities
+	(*ModelPricing)(nil),          // 15: reeve.v1.ModelPricing
+	(*CatalogModelProvider)(nil),  // 16: reeve.v1.CatalogModelProvider
+	(*CatalogModel)(nil),          // 17: reeve.v1.CatalogModel
+	(*UserModel)(nil),             // 18: reeve.v1.UserModel
+	(*CallSettings)(nil),          // 19: reeve.v1.CallSettings
+	(*ThinkingSettings)(nil),      // 20: reeve.v1.ThinkingSettings
+	(*AnthropicExtras)(nil),       // 21: reeve.v1.AnthropicExtras
+	(*OpenAIExtras)(nil),          // 22: reeve.v1.OpenAIExtras
+	(*ResponseFormat)(nil),        // 23: reeve.v1.ResponseFormat
+	(*JsonSchema)(nil),            // 24: reeve.v1.JsonSchema
+	(*GoogleExtras)(nil),          // 25: reeve.v1.GoogleExtras
+	(*SafetySettings)(nil),        // 26: reeve.v1.SafetySettings
+	(*ProfileDefaults)(nil),       // 27: reeve.v1.ProfileDefaults
+	(*Profile)(nil),               // 28: reeve.v1.Profile
+	(*ConversationSettings)(nil),  // 29: reeve.v1.ConversationSettings
+	(*Conversation)(nil),          // 30: reeve.v1.Conversation
+	(*Context)(nil),               // 31: reeve.v1.Context
+	(*Message)(nil),               // 32: reeve.v1.Message
+	(*MessageAttachment)(nil),     // 33: reeve.v1.MessageAttachment
+	(*ToolCall)(nil),              // 34: reeve.v1.ToolCall
+	(*MessageUsage)(nil),          // 35: reeve.v1.MessageUsage
+	(*StreamRun)(nil),             // 36: reeve.v1.StreamRun
+	(*Chunk)(nil),                 // 37: reeve.v1.Chunk
+	(*DeviceFact)(nil),            // 38: reeve.v1.DeviceFact
+	nil,                           // 39: reeve.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 40: google.protobuf.Timestamp
 }
 var file_reeve_v1_types_proto_depIdxs = []int32{
-	38, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	38, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	38, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 4: reeve.v1.UserModelProvider.default_settings:type_name -> reeve.v1.CallSettings
-	38, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
-	14, // 6: reeve.v1.CatalogModel.pricing:type_name -> reeve.v1.ModelPricing
-	13, // 7: reeve.v1.CatalogModel.capabilities:type_name -> reeve.v1.ModelCapabilities
-	38, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
-	14, // 9: reeve.v1.UserModel.pricing:type_name -> reeve.v1.ModelPricing
-	13, // 10: reeve.v1.UserModel.capabilities:type_name -> reeve.v1.ModelCapabilities
-	18, // 11: reeve.v1.UserModel.default_settings:type_name -> reeve.v1.CallSettings
+	40, // 0: reeve.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	40, // 1: reeve.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	40, // 2: reeve.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	40, // 3: reeve.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 4: reeve.v1.UserModelProvider.default_settings:type_name -> reeve.v1.CallSettings
+	40, // 5: reeve.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	15, // 6: reeve.v1.CatalogModel.pricing:type_name -> reeve.v1.ModelPricing
+	14, // 7: reeve.v1.CatalogModel.capabilities:type_name -> reeve.v1.ModelCapabilities
+	40, // 8: reeve.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	15, // 9: reeve.v1.UserModel.pricing:type_name -> reeve.v1.ModelPricing
+	14, // 10: reeve.v1.UserModel.capabilities:type_name -> reeve.v1.ModelCapabilities
+	19, // 11: reeve.v1.UserModel.default_settings:type_name -> reeve.v1.CallSettings
 	0,  // 12: reeve.v1.UserModel.metadata_source:type_name -> reeve.v1.MetadataSource
-	38, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	38, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
-	19, // 15: reeve.v1.CallSettings.thinking:type_name -> reeve.v1.ThinkingSettings
-	20, // 16: reeve.v1.CallSettings.anthropic:type_name -> reeve.v1.AnthropicExtras
-	21, // 17: reeve.v1.CallSettings.openai:type_name -> reeve.v1.OpenAIExtras
-	24, // 18: reeve.v1.CallSettings.google:type_name -> reeve.v1.GoogleExtras
+	40, // 13: reeve.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	40, // 14: reeve.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	20, // 15: reeve.v1.CallSettings.thinking:type_name -> reeve.v1.ThinkingSettings
+	21, // 16: reeve.v1.CallSettings.anthropic:type_name -> reeve.v1.AnthropicExtras
+	22, // 17: reeve.v1.CallSettings.openai:type_name -> reeve.v1.OpenAIExtras
+	25, // 18: reeve.v1.CallSettings.google:type_name -> reeve.v1.GoogleExtras
 	1,  // 19: reeve.v1.AnthropicExtras.cache_ttl:type_name -> reeve.v1.CacheTTL
 	2,  // 20: reeve.v1.OpenAIExtras.service_tier:type_name -> reeve.v1.ServiceTier
-	22, // 21: reeve.v1.OpenAIExtras.response_format:type_name -> reeve.v1.ResponseFormat
-	37, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
-	23, // 23: reeve.v1.ResponseFormat.json_schema:type_name -> reeve.v1.JsonSchema
-	25, // 24: reeve.v1.GoogleExtras.safety_settings:type_name -> reeve.v1.SafetySettings
+	23, // 21: reeve.v1.OpenAIExtras.response_format:type_name -> reeve.v1.ResponseFormat
+	39, // 22: reeve.v1.OpenAIExtras.logit_bias:type_name -> reeve.v1.OpenAIExtras.LogitBiasEntry
+	24, // 23: reeve.v1.ResponseFormat.json_schema:type_name -> reeve.v1.JsonSchema
+	26, // 24: reeve.v1.GoogleExtras.safety_settings:type_name -> reeve.v1.SafetySettings
 	3,  // 25: reeve.v1.SafetySettings.harassment:type_name -> reeve.v1.HarmThreshold
 	3,  // 26: reeve.v1.SafetySettings.hate_speech:type_name -> reeve.v1.HarmThreshold
 	3,  // 27: reeve.v1.SafetySettings.sexually_explicit:type_name -> reeve.v1.HarmThreshold
 	3,  // 28: reeve.v1.SafetySettings.dangerous_content:type_name -> reeve.v1.HarmThreshold
-	18, // 29: reeve.v1.ProfileDefaults.call_settings:type_name -> reeve.v1.CallSettings
+	19, // 29: reeve.v1.ProfileDefaults.call_settings:type_name -> reeve.v1.CallSettings
 	4,  // 30: reeve.v1.Profile.compression_mode:type_name -> reeve.v1.CompressionMode
-	26, // 31: reeve.v1.Profile.default_settings:type_name -> reeve.v1.ProfileDefaults
-	38, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	38, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 34: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
-	28, // 35: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
-	38, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	38, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	38, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	38, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	27, // 31: reeve.v1.Profile.default_settings:type_name -> reeve.v1.ProfileDefaults
+	40, // 32: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	40, // 33: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 34: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
+	29, // 35: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
+	40, // 36: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	40, // 37: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	40, // 38: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	40, // 39: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	40, // 40: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
 	5,  // 41: reeve.v1.Message.role:type_name -> reeve.v1.MessageRole
-	38, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	34, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
-	38, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	33, // 45: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
-	32, // 46: reeve.v1.Message.attachments:type_name -> reeve.v1.MessageAttachment
+	40, // 42: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	35, // 43: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
+	40, // 44: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	34, // 45: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
+	33, // 46: reeve.v1.Message.attachments:type_name -> reeve.v1.MessageAttachment
 	6,  // 47: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
 	7,  // 48: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
-	38, // 49: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	38, // 50: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	40, // 49: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	40, // 50: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
 	8,  // 51: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
-	52, // [52:52] is the sub-list for method output_type
-	52, // [52:52] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	9,  // 52: reeve.v1.DeviceFact.key:type_name -> reeve.v1.DeviceFactKey
+	53, // [53:53] is the sub-list for method output_type
+	53, // [53:53] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_types_proto_init() }
@@ -4131,8 +4272,8 @@ func file_reeve_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_types_proto_rawDesc), len(file_reeve_v1_types_proto_rawDesc)),
-			NumEnums:      9,
-			NumMessages:   29,
+			NumEnums:      10,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

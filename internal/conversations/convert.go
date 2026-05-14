@@ -487,6 +487,76 @@ func applyDisplay(m *reevev1.Message, pipeline plugins.Pipeline) {
 	m.DisplayContent = pipeline.TransformForDisplay(m.Content)
 }
 
+// deviceFactsFromProto translates the wire `[]*reevev1.DeviceFact`
+// into the plugin-side `map[string]string` that
+// `OutgoingUserTransformer` consumes. Unknown / unspecified enum
+// values are dropped — keeps a misbehaving client from sneaking
+// arbitrary fact keys into the pipeline. Empty slice → nil map
+// (every plugin tolerates a nil facts map).
+func deviceFactsFromProto(in []*reevev1.DeviceFact) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for _, df := range in {
+		if df == nil {
+			continue
+		}
+		key := deviceFactKeyToString(df.Key)
+		if key == "" {
+			continue
+		}
+		out[key] = df.Value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// deviceFactKeyToString maps the proto enum to the plugin-side
+// string constants in the plugins package. Single source of truth
+// for the wire ↔ runtime correspondence — adding a new
+// DeviceFactKey requires updating the enum, the plugins.DeviceFactKey*
+// constant, AND this switch (compiler enforces nothing here, so
+// the test in plugins/device_facts_test.go pins the round-trip).
+func deviceFactKeyToString(k reevev1.DeviceFactKey) string {
+	switch k {
+	case reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE:
+		return plugins.DeviceFactKeyLocale
+	case reevev1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE:
+		return plugins.DeviceFactKeyTimezone
+	case reevev1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM:
+		return plugins.DeviceFactKeyPlatform
+	case reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY:
+		return plugins.DeviceFactKeyLocationCity
+	case reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS:
+		return plugins.DeviceFactKeyLocationCoords
+	default:
+		return ""
+	}
+}
+
+// deviceFactKeyFromString is the inverse of `deviceFactKeyToString`.
+// Used by the plugin descriptor RPC to convert each plugin's
+// requested-facts list back into proto enums for the wire.
+func deviceFactKeyFromString(k string) reevev1.DeviceFactKey {
+	switch k {
+	case plugins.DeviceFactKeyLocale:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
+	case plugins.DeviceFactKeyTimezone:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
+	case plugins.DeviceFactKeyPlatform:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
+	case plugins.DeviceFactKeyLocationCity:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
+	case plugins.DeviceFactKeyLocationCoords:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
+	default:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
+	}
+}
+
 func roleStringToEnum(s string) reevev1.MessageRole {
 	switch s {
 	case roleSystem:

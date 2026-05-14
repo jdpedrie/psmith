@@ -625,3 +625,38 @@ message Chunk {
   ChunkType type = 2;
   bytes payload = 3;
 }
+
+// ---------------------------------------------------------------------------
+// Device facts (basic_grounding & friends)
+// ---------------------------------------------------------------------------
+
+// DeviceFactKey is the closed enum of context bits a fact-aware
+// plugin can ask the device to gather and ship alongside the
+// outgoing user message. Adding a new fact requires a new enum
+// value AND client-side gathering code, which are coordinated —
+// closed-enum keeps that gate explicit instead of a free-form
+// string map drifting between implementations.
+enum DeviceFactKey {
+  DEVICE_FACT_KEY_UNSPECIFIED = 0;
+  // BCP-47 tag, e.g. "en-US". Zero permission cost.
+  DEVICE_FACT_KEY_LOCALE = 1;
+  // IANA timezone, e.g. "America/New_York".
+  DEVICE_FACT_KEY_TIMEZONE = 2;
+  // Free-form OS + device, e.g. "iOS 26.5 / iPhone 17 Pro".
+  DEVICE_FACT_KEY_PLATFORM = 3;
+  // Reverse-geocoded place name, e.g. "Brooklyn, NY". Requires
+  // location permission on the client.
+  DEVICE_FACT_KEY_LOCATION_CITY = 4;
+  // Raw "lat,lng" string, e.g. "40.6782,-73.9442". Requires
+  // location permission. Acts as a fallback when reverse-geocoding
+  // wasn't possible.
+  DEVICE_FACT_KEY_LOCATION_COORDS = 5;
+}
+
+// One device-supplied fact. `value` is intentionally untyped — the
+// shape varies per key (locale tags, ISO timestamps, free-form
+// strings) and the consumers (plugins) parse per-key.
+message DeviceFact {
+  DeviceFactKey key = 1;
+  string value = 2;
+}

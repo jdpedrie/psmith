@@ -124,9 +124,48 @@ type SystemPrompter interface {
 // OutgoingUserTransformer rewrites the user's outgoing content in
 // SendMessage before the row is persisted, so future renders + history
 // builds see the transformed form.
+//
+// The `facts` argument carries device-side context the plugin
+// requested via `DeviceFactRequester` (e.g. user locale, current
+// location, platform version). Keys are the same strings the
+// plugin returned from `RequestedDeviceFacts`. Map may be nil if
+// the client didn't supply any — plugins should treat missing
+// keys as "not available" rather than failing.
 type OutgoingUserTransformer interface {
-	TransformOutgoingUserMessage(content string) string
+	TransformOutgoingUserMessage(content string, facts map[string]string) string
 }
+
+// DeviceFactRequester is the opt-in interface for plugins that
+// want device-supplied facts (location, locale, platform, etc.)
+// passed alongside the outgoing user content. The returned slice
+// is the canonical list of fact keys the plugin understands —
+// the client uses it to know what to gather and when to trigger
+// OS-level permission prompts.
+//
+// Standard fact keys (defined in DeviceFactKey* constants):
+//   - "locale"          — BCP-47 language tag (e.g. "en-US")
+//   - "timezone"        — IANA tz (e.g. "America/New_York")
+//   - "platform"        — free-form OS+device (e.g. "iOS 26.5 / iPhone 17 Pro")
+//   - "location_city"   — reverse-geocoded human-readable place
+//   - "location_coords" — "lat,lng" (e.g. "40.6782,-73.9442")
+//
+// Plugins may declare new keys ad-hoc; clients ignore keys they
+// don't know how to gather. Keep the list short — every key
+// translates to potential permission friction or stale-data risk.
+type DeviceFactRequester interface {
+	RequestedDeviceFacts() []string
+}
+
+// Standard device-fact keys understood by basic_grounding and
+// any future fact-aware plugins. Keep names stable across
+// releases — clients pin to these literal strings.
+const (
+	DeviceFactKeyLocale         = "locale"
+	DeviceFactKeyTimezone       = "timezone"
+	DeviceFactKeyPlatform       = "platform"
+	DeviceFactKeyLocationCity   = "location_city"
+	DeviceFactKeyLocationCoords = "location_coords"
+)
 
 // HistoryPos tells a HistoryTransformer where the message sits relative to
 // the head of the prefix being built. Both ranks are 0-indexed from the head.
@@ -332,12 +371,14 @@ func (p Pipeline) SystemPrompts() (prepend, appendStr string) {
 }
 
 // TransformOutgoingUser walks the pipeline, applying every
-// OutgoingUserTransformer in order. Plugins that don't implement the
-// interface are skipped.
-func (p Pipeline) TransformOutgoingUser(content string) string {
+// OutgoingUserTransformer in order. `facts` is the device-fact
+// envelope (may be nil) — passed verbatim to each transformer so
+// plugins requesting facts can read them. Plugins that don't
+// implement the interface are skipped.
+func (p Pipeline) TransformOutgoingUser(content string, facts map[string]string) string {
 	for _, pl := range p {
 		if t, ok := pl.(OutgoingUserTransformer); ok {
-			content = t.TransformOutgoingUserMessage(content)
+			content = t.TransformOutgoingUserMessage(content, facts)
 		}
 	}
 	return content
@@ -477,6 +518,7 @@ type Capabilities struct {
 	ToolProvider                bool
 	AssistantContentTransformer bool
 	MessageLifecycleHook        bool
+	DeviceFactRequester         bool
 }
 
 // TypeDescriptor is the introspectable metadata for one registered plugin.
@@ -487,6 +529,11 @@ type TypeDescriptor struct {
 	Description  string
 	ConfigFields []ConfigField // empty unless the plugin implements Configurable
 	Capabilities Capabilities
+	// Empty unless the plugin implements DeviceFactRequester. The
+	// client uses this to know which on-device facts to gather
+	// before each SendMessage; absent keys mean "no need to ask
+	// the OS for permission for this fact".
+	RequestedDeviceFacts []string
 }
 
 // Describe instantiates the plugin with a nil config (the Constructor
@@ -529,6 +576,10 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if _, ok := inst.(MessageLifecycleHook); ok {
 		desc.Capabilities.MessageLifecycleHook = true
+	}
+	if r, ok := inst.(DeviceFactRequester); ok {
+		desc.Capabilities.DeviceFactRequester = true
+		desc.RequestedDeviceFacts = r.RequestedDeviceFacts()
 	}
 	return desc, nil
 }

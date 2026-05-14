@@ -458,6 +458,75 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
+/// DeviceFactKey is the closed enum of context bits a fact-aware
+/// plugin can ask the device to gather and ship alongside the
+/// outgoing user message. Adding a new fact requires a new enum
+/// value AND client-side gathering code, which are coordinated —
+/// closed-enum keeps that gate explicit instead of a free-form
+/// string map drifting between implementations.
+public enum Reeve_V1_DeviceFactKey: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// BCP-47 tag, e.g. "en-US". Zero permission cost.
+  case locale // = 1
+
+  /// IANA timezone, e.g. "America/New_York".
+  case timezone // = 2
+
+  /// Free-form OS + device, e.g. "iOS 26.5 / iPhone 17 Pro".
+  case platform // = 3
+
+  /// Reverse-geocoded place name, e.g. "Brooklyn, NY". Requires
+  /// location permission on the client.
+  case locationCity // = 4
+
+  /// Raw "lat,lng" string, e.g. "40.6782,-73.9442". Requires
+  /// location permission. Acts as a fallback when reverse-geocoding
+  /// wasn't possible.
+  case locationCoords // = 5
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .locale
+    case 2: self = .timezone
+    case 3: self = .platform
+    case 4: self = .locationCity
+    case 5: self = .locationCoords
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .locale: return 1
+    case .timezone: return 2
+    case .platform: return 3
+    case .locationCity: return 4
+    case .locationCoords: return 5
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Reeve_V1_DeviceFactKey] = [
+    .unspecified,
+    .locale,
+    .timezone,
+    .platform,
+    .locationCity,
+    .locationCoords,
+  ]
+
+}
+
 public struct Reeve_V1_User: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -2522,6 +2591,23 @@ public struct Reeve_V1_Chunk: Sendable {
   public init() {}
 }
 
+/// One device-supplied fact. `value` is intentionally untyped — the
+/// shape varies per key (locale tags, ISO timestamps, free-form
+/// strings) and the consumers (plugins) parse per-key.
+public struct Reeve_V1_DeviceFact: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var key: Reeve_V1_DeviceFactKey = .unspecified
+
+  public var value: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "reeve.v1"
@@ -2560,6 +2646,10 @@ extension Reeve_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProviding {
 
 extension Reeve_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0")
+}
+
+extension Reeve_V1_DeviceFactKey: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DEVICE_FACT_KEY_UNSPECIFIED\0\u{1}DEVICE_FACT_KEY_LOCALE\0\u{1}DEVICE_FACT_KEY_TIMEZONE\0\u{1}DEVICE_FACT_KEY_PLATFORM\0\u{1}DEVICE_FACT_KEY_LOCATION_CITY\0\u{1}DEVICE_FACT_KEY_LOCATION_COORDS\0")
 }
 
 extension Reeve_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -4848,6 +4938,41 @@ extension Reeve_V1_Chunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
     if lhs.sequence != rhs.sequence {return false}
     if lhs.type != rhs.type {return false}
     if lhs.payload != rhs.payload {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_DeviceFact: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeviceFact"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}value\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.key != .unspecified {
+      try visitor.visitSingularEnumField(value: self.key, fieldNumber: 1)
+    }
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_DeviceFact, rhs: Reeve_V1_DeviceFact) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.value != rhs.value {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

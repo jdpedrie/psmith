@@ -760,6 +760,15 @@ public struct Reeve_V1_SendMessageRequest: Sendable {
   /// when `regenerate` is true (the parent already has its attachments).
   public var attachmentFileIds: [String] = []
 
+  /// Per-turn device facts that fact-aware plugins requested via
+  /// their `requested_device_facts` capability. Keys are
+  /// `DeviceFactKey` enum values; values are free-form per-key
+  /// strings the device gathered. Plugins skip keys they don't
+  /// recognize. Ignored when `regenerate` is true — re-runs reuse
+  /// the original user message, whose grounding block was frozen
+  /// at first send.
+  public var deviceFacts: [Reeve_V1_DeviceFact] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2044,7 +2053,7 @@ extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProt
 
 extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2060,6 +2069,7 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 6: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.regenerate) }()
       case 8: try { try decoder.decodeRepeatedStringField(value: &self.attachmentFileIds) }()
+      case 9: try { try decoder.decodeRepeatedMessageField(value: &self.deviceFacts) }()
       default: break
       }
     }
@@ -2094,6 +2104,9 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if !self.attachmentFileIds.isEmpty {
       try visitor.visitRepeatedStringField(value: self.attachmentFileIds, fieldNumber: 8)
     }
+    if !self.deviceFacts.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.deviceFacts, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2106,6 +2119,7 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs._callSettings != rhs._callSettings {return false}
     if lhs.regenerate != rhs.regenerate {return false}
     if lhs.attachmentFileIds != rhs.attachmentFileIds {return false}
+    if lhs.deviceFacts != rhs.deviceFacts {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

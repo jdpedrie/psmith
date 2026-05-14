@@ -797,8 +797,13 @@ type PluginCapabilities struct {
 	// summary) in a detached goroutine. Use cases: embedding generation,
 	// webhooks, auto-tagging, audit logs.
 	MessageLifecycleHook bool `protobuf:"varint,9,opt,name=message_lifecycle_hook,json=messageLifecycleHook,proto3" json:"message_lifecycle_hook,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Plugin opts into device-supplied facts (location, locale,
+	// platform, etc.) on every outgoing user turn. The actual list
+	// of requested fact keys is on `PluginType.requested_device_facts`
+	// — this flag is the cheap "should the client even look?" gate.
+	DeviceFactRequester bool `protobuf:"varint,10,opt,name=device_fact_requester,json=deviceFactRequester,proto3" json:"device_fact_requester,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PluginCapabilities) Reset() {
@@ -894,6 +899,13 @@ func (x *PluginCapabilities) GetMessageLifecycleHook() bool {
 	return false
 }
 
+func (x *PluginCapabilities) GetDeviceFactRequester() bool {
+	if x != nil {
+		return x.DeviceFactRequester
+	}
+	return false
+}
+
 // PluginType is one entry in the server's compiled-in plugin registry.
 type PluginType struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -906,9 +918,15 @@ type PluginType struct {
 	// Human-friendly label shown everywhere in the UI (e.g. "Brave Search").
 	// The `name` field above is the stable machine identifier used as the
 	// plugin's primary key.
-	DisplayName   string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisplayName string `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Device facts the plugin wants on every outgoing user turn.
+	// Empty unless `capabilities.device_fact_requester` is true. The
+	// client unions this list across enabled plugins on the active
+	// profile; values it can gather (with permission as needed) ride
+	// back on `SendMessageRequest.device_facts`.
+	RequestedDeviceFacts []DeviceFactKey `protobuf:"varint,6,rep,packed,name=requested_device_facts,json=requestedDeviceFacts,proto3,enum=reeve.v1.DeviceFactKey" json:"requested_device_facts,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PluginType) Reset() {
@@ -974,6 +992,13 @@ func (x *PluginType) GetDisplayName() string {
 		return x.DisplayName
 	}
 	return ""
+}
+
+func (x *PluginType) GetRequestedDeviceFacts() []DeviceFactKey {
+	if x != nil {
+		return x.RequestedDeviceFacts
+	}
+	return nil
 }
 
 // ConfigField is one entry in a plugin's per-instance config descriptor.
@@ -1883,7 +1908,7 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\"&\n" +
 	"\x14DeleteProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15DeleteProfileResponse\"\xcb\x03\n" +
+	"\x15DeleteProfileResponse\"\xff\x03\n" +
 	"\x12PluginCapabilities\x12\"\n" +
 	"\fconfigurable\x18\x01 \x01(\bR\fconfigurable\x12'\n" +
 	"\x0fsystem_prompter\x18\x02 \x01(\bR\x0esystemPrompter\x12:\n" +
@@ -1893,14 +1918,17 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x13display_transformer\x18\x06 \x01(\bR\x12displayTransformer\x12#\n" +
 	"\rtool_provider\x18\a \x01(\bR\ftoolProvider\x12B\n" +
 	"\x1dassistant_content_transformer\x18\b \x01(\bR\x1bassistantContentTransformer\x124\n" +
-	"\x16message_lifecycle_hook\x18\t \x01(\bR\x14messageLifecycleHook\"\xe3\x01\n" +
+	"\x16message_lifecycle_hook\x18\t \x01(\bR\x14messageLifecycleHook\x122\n" +
+	"\x15device_fact_requester\x18\n" +
+	" \x01(\bR\x13deviceFactRequester\"\xb2\x02\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\rconfig_fields\x18\x03 \x03(\v2\x15.reeve.v1.ConfigFieldR\fconfigFields\x12@\n" +
 	"\fcapabilities\x18\x04 \x01(\v2\x1c.reeve.v1.PluginCapabilitiesR\fcapabilities\x12!\n" +
-	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\"\xf1\x02\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12M\n" +
+	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x17.reeve.v1.DeviceFactKeyR\x14requestedDeviceFacts\"\xf1\x02\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
@@ -2020,6 +2048,7 @@ var file_reeve_v1_profiles_proto_goTypes = []any{
 	(CompressionMode)(0),                     // 29: reeve.v1.CompressionMode
 	(*ProfileDefaults)(nil),                  // 30: reeve.v1.ProfileDefaults
 	(*Profile)(nil),                          // 31: reeve.v1.Profile
+	(DeviceFactKey)(0),                       // 32: reeve.v1.DeviceFactKey
 }
 var file_reeve_v1_profiles_proto_depIdxs = []int32{
 	29, // 0: reeve.v1.CreateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
@@ -2033,42 +2062,43 @@ var file_reeve_v1_profiles_proto_depIdxs = []int32{
 	31, // 8: reeve.v1.UpdateProfileResponse.profile:type_name -> reeve.v1.Profile
 	13, // 9: reeve.v1.PluginType.config_fields:type_name -> reeve.v1.ConfigField
 	11, // 10: reeve.v1.PluginType.capabilities:type_name -> reeve.v1.PluginCapabilities
-	0,  // 11: reeve.v1.ConfigField.type:type_name -> reeve.v1.ConfigField.Type
-	14, // 12: reeve.v1.ConfigField.options:type_name -> reeve.v1.ConfigOption
-	12, // 13: reeve.v1.ListPluginTypesResponse.plugin_types:type_name -> reeve.v1.PluginType
-	15, // 14: reeve.v1.GetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
-	15, // 15: reeve.v1.SetProfilePluginsRequest.plugins:type_name -> reeve.v1.ProfilePlugin
-	15, // 16: reeve.v1.SetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
-	22, // 17: reeve.v1.GetUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	22, // 18: reeve.v1.ListUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	22, // 19: reeve.v1.UpsertUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	1,  // 20: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
-	3,  // 21: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
-	5,  // 22: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
-	7,  // 23: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
-	9,  // 24: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
-	16, // 25: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
-	18, // 26: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
-	20, // 27: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
-	23, // 28: reeve.v1.ProfilesService.GetUserPluginSettings:input_type -> reeve.v1.GetUserPluginSettingsRequest
-	25, // 29: reeve.v1.ProfilesService.ListUserPluginSettings:input_type -> reeve.v1.ListUserPluginSettingsRequest
-	27, // 30: reeve.v1.ProfilesService.UpsertUserPluginSettings:input_type -> reeve.v1.UpsertUserPluginSettingsRequest
-	2,  // 31: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
-	4,  // 32: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
-	6,  // 33: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
-	8,  // 34: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
-	10, // 35: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
-	17, // 36: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
-	19, // 37: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
-	21, // 38: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
-	24, // 39: reeve.v1.ProfilesService.GetUserPluginSettings:output_type -> reeve.v1.GetUserPluginSettingsResponse
-	26, // 40: reeve.v1.ProfilesService.ListUserPluginSettings:output_type -> reeve.v1.ListUserPluginSettingsResponse
-	28, // 41: reeve.v1.ProfilesService.UpsertUserPluginSettings:output_type -> reeve.v1.UpsertUserPluginSettingsResponse
-	31, // [31:42] is the sub-list for method output_type
-	20, // [20:31] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	32, // 11: reeve.v1.PluginType.requested_device_facts:type_name -> reeve.v1.DeviceFactKey
+	0,  // 12: reeve.v1.ConfigField.type:type_name -> reeve.v1.ConfigField.Type
+	14, // 13: reeve.v1.ConfigField.options:type_name -> reeve.v1.ConfigOption
+	12, // 14: reeve.v1.ListPluginTypesResponse.plugin_types:type_name -> reeve.v1.PluginType
+	15, // 15: reeve.v1.GetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
+	15, // 16: reeve.v1.SetProfilePluginsRequest.plugins:type_name -> reeve.v1.ProfilePlugin
+	15, // 17: reeve.v1.SetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
+	22, // 18: reeve.v1.GetUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	22, // 19: reeve.v1.ListUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	22, // 20: reeve.v1.UpsertUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	1,  // 21: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
+	3,  // 22: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
+	5,  // 23: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
+	7,  // 24: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
+	9,  // 25: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
+	16, // 26: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
+	18, // 27: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
+	20, // 28: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
+	23, // 29: reeve.v1.ProfilesService.GetUserPluginSettings:input_type -> reeve.v1.GetUserPluginSettingsRequest
+	25, // 30: reeve.v1.ProfilesService.ListUserPluginSettings:input_type -> reeve.v1.ListUserPluginSettingsRequest
+	27, // 31: reeve.v1.ProfilesService.UpsertUserPluginSettings:input_type -> reeve.v1.UpsertUserPluginSettingsRequest
+	2,  // 32: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
+	4,  // 33: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
+	6,  // 34: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
+	8,  // 35: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
+	10, // 36: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
+	17, // 37: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
+	19, // 38: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
+	21, // 39: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
+	24, // 40: reeve.v1.ProfilesService.GetUserPluginSettings:output_type -> reeve.v1.GetUserPluginSettingsResponse
+	26, // 41: reeve.v1.ProfilesService.ListUserPluginSettings:output_type -> reeve.v1.ListUserPluginSettingsResponse
+	28, // 42: reeve.v1.ProfilesService.UpsertUserPluginSettings:output_type -> reeve.v1.UpsertUserPluginSettingsResponse
+	32, // [32:43] is the sub-list for method output_type
+	21, // [21:32] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_profiles_proto_init() }

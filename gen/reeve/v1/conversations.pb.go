@@ -1612,8 +1612,16 @@ type SendMessageRequest struct {
 	// persisting the user turn. Ordinal matches list order. Ignored
 	// when `regenerate` is true (the parent already has its attachments).
 	AttachmentFileIds []string `protobuf:"bytes,8,rep,name=attachment_file_ids,json=attachmentFileIds,proto3" json:"attachment_file_ids,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Per-turn device facts that fact-aware plugins requested via
+	// their `requested_device_facts` capability. Keys are
+	// `DeviceFactKey` enum values; values are free-form per-key
+	// strings the device gathered. Plugins skip keys they don't
+	// recognize. Ignored when `regenerate` is true — re-runs reuse
+	// the original user message, whose grounding block was frozen
+	// at first send.
+	DeviceFacts   []*DeviceFact `protobuf:"bytes,9,rep,name=device_facts,json=deviceFacts,proto3" json:"device_facts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendMessageRequest) Reset() {
@@ -1698,6 +1706,13 @@ func (x *SendMessageRequest) GetRegenerate() bool {
 func (x *SendMessageRequest) GetAttachmentFileIds() []string {
 	if x != nil {
 		return x.AttachmentFileIds
+	}
+	return nil
+}
+
+func (x *SendMessageRequest) GetDeviceFacts() []*DeviceFact {
+	if x != nil {
+		return x.DeviceFacts
 	}
 	return nil
 }
@@ -2091,7 +2106,7 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\x1bCreateContextManualResponse\x12+\n" +
 	"\acontext\x18\x01 \x01(\v2\x11.reeve.v1.ContextR\acontext\x129\n" +
 	"\fuser_message\x18\x02 \x01(\v2\x11.reeve.v1.MessageH\x00R\vuserMessage\x88\x01\x01B\x0f\n" +
-	"\r_user_message\"\xa5\x03\n" +
+	"\r_user_message\"\xde\x03\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -2103,7 +2118,8 @@ const file_reeve_v1_conversations_proto_rawDesc = "" +
 	"\n" +
 	"regenerate\x18\a \x01(\bR\n" +
 	"regenerate\x12.\n" +
-	"\x13attachment_file_ids\x18\b \x03(\tR\x11attachmentFileIdsB\x14\n" +
+	"\x13attachment_file_ids\x18\b \x03(\tR\x11attachmentFileIds\x127\n" +
+	"\fdevice_facts\x18\t \x03(\v2\x14.reeve.v1.DeviceFactR\vdeviceFactsB\x14\n" +
 	"\x12_parent_message_idB\x0e\n" +
 	"\f_provider_idB\v\n" +
 	"\t_model_idB\x10\n" +
@@ -2217,7 +2233,8 @@ var file_reeve_v1_conversations_proto_goTypes = []any{
 	(MessageRole)(0),                              // 41: reeve.v1.MessageRole
 	(CompressionMode)(0),                          // 42: reeve.v1.CompressionMode
 	(*CallSettings)(nil),                          // 43: reeve.v1.CallSettings
-	(*StreamRun)(nil),                             // 44: reeve.v1.StreamRun
+	(*DeviceFact)(nil),                            // 44: reeve.v1.DeviceFact
+	(*StreamRun)(nil),                             // 45: reeve.v1.StreamRun
 }
 var file_reeve_v1_conversations_proto_depIdxs = []int32{
 	37, // 0: reeve.v1.CreateConversationRequest.settings:type_name -> reeve.v1.ConversationSettings
@@ -2243,50 +2260,51 @@ var file_reeve_v1_conversations_proto_depIdxs = []int32{
 	39, // 20: reeve.v1.CreateContextManualResponse.context:type_name -> reeve.v1.Context
 	40, // 21: reeve.v1.CreateContextManualResponse.user_message:type_name -> reeve.v1.Message
 	43, // 22: reeve.v1.SendMessageRequest.call_settings:type_name -> reeve.v1.CallSettings
-	40, // 23: reeve.v1.SendMessageResponse.user_message:type_name -> reeve.v1.Message
-	44, // 24: reeve.v1.SendMessageResponse.stream_run:type_name -> reeve.v1.StreamRun
-	44, // 25: reeve.v1.CompactResponse.stream_run:type_name -> reeve.v1.StreamRun
-	1,  // 26: reeve.v1.ConversationsService.CreateConversation:input_type -> reeve.v1.CreateConversationRequest
-	3,  // 27: reeve.v1.ConversationsService.ListConversations:input_type -> reeve.v1.ListConversationsRequest
-	5,  // 28: reeve.v1.ConversationsService.GetConversation:input_type -> reeve.v1.GetConversationRequest
-	7,  // 29: reeve.v1.ConversationsService.UpdateConversation:input_type -> reeve.v1.UpdateConversationRequest
-	9,  // 30: reeve.v1.ConversationsService.DeleteConversation:input_type -> reeve.v1.DeleteConversationRequest
-	11, // 31: reeve.v1.ConversationsService.ListContexts:input_type -> reeve.v1.ListContextsRequest
-	13, // 32: reeve.v1.ConversationsService.ActivateContext:input_type -> reeve.v1.ActivateContextRequest
-	15, // 33: reeve.v1.ConversationsService.SetCurrentLeaf:input_type -> reeve.v1.SetCurrentLeafRequest
-	17, // 34: reeve.v1.ConversationsService.UpdateContext:input_type -> reeve.v1.UpdateContextRequest
-	19, // 35: reeve.v1.ConversationsService.ListMessages:input_type -> reeve.v1.ListMessagesRequest
-	21, // 36: reeve.v1.ConversationsService.GetMessage:input_type -> reeve.v1.GetMessageRequest
-	23, // 37: reeve.v1.ConversationsService.EditMessage:input_type -> reeve.v1.EditMessageRequest
-	25, // 38: reeve.v1.ConversationsService.DeleteMessage:input_type -> reeve.v1.DeleteMessageRequest
-	27, // 39: reeve.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> reeve.v1.PromoteCompactionToNewContextRequest
-	29, // 40: reeve.v1.ConversationsService.CreateContextManual:input_type -> reeve.v1.CreateContextManualRequest
-	31, // 41: reeve.v1.ConversationsService.SendMessage:input_type -> reeve.v1.SendMessageRequest
-	33, // 42: reeve.v1.ConversationsService.Compact:input_type -> reeve.v1.CompactRequest
-	35, // 43: reeve.v1.ConversationsService.CountContextTokens:input_type -> reeve.v1.CountContextTokensRequest
-	2,  // 44: reeve.v1.ConversationsService.CreateConversation:output_type -> reeve.v1.CreateConversationResponse
-	4,  // 45: reeve.v1.ConversationsService.ListConversations:output_type -> reeve.v1.ListConversationsResponse
-	6,  // 46: reeve.v1.ConversationsService.GetConversation:output_type -> reeve.v1.GetConversationResponse
-	8,  // 47: reeve.v1.ConversationsService.UpdateConversation:output_type -> reeve.v1.UpdateConversationResponse
-	10, // 48: reeve.v1.ConversationsService.DeleteConversation:output_type -> reeve.v1.DeleteConversationResponse
-	12, // 49: reeve.v1.ConversationsService.ListContexts:output_type -> reeve.v1.ListContextsResponse
-	14, // 50: reeve.v1.ConversationsService.ActivateContext:output_type -> reeve.v1.ActivateContextResponse
-	16, // 51: reeve.v1.ConversationsService.SetCurrentLeaf:output_type -> reeve.v1.SetCurrentLeafResponse
-	18, // 52: reeve.v1.ConversationsService.UpdateContext:output_type -> reeve.v1.UpdateContextResponse
-	20, // 53: reeve.v1.ConversationsService.ListMessages:output_type -> reeve.v1.ListMessagesResponse
-	22, // 54: reeve.v1.ConversationsService.GetMessage:output_type -> reeve.v1.GetMessageResponse
-	24, // 55: reeve.v1.ConversationsService.EditMessage:output_type -> reeve.v1.EditMessageResponse
-	26, // 56: reeve.v1.ConversationsService.DeleteMessage:output_type -> reeve.v1.DeleteMessageResponse
-	28, // 57: reeve.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> reeve.v1.PromoteCompactionToNewContextResponse
-	30, // 58: reeve.v1.ConversationsService.CreateContextManual:output_type -> reeve.v1.CreateContextManualResponse
-	32, // 59: reeve.v1.ConversationsService.SendMessage:output_type -> reeve.v1.SendMessageResponse
-	34, // 60: reeve.v1.ConversationsService.Compact:output_type -> reeve.v1.CompactResponse
-	36, // 61: reeve.v1.ConversationsService.CountContextTokens:output_type -> reeve.v1.CountContextTokensResponse
-	44, // [44:62] is the sub-list for method output_type
-	26, // [26:44] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	44, // 23: reeve.v1.SendMessageRequest.device_facts:type_name -> reeve.v1.DeviceFact
+	40, // 24: reeve.v1.SendMessageResponse.user_message:type_name -> reeve.v1.Message
+	45, // 25: reeve.v1.SendMessageResponse.stream_run:type_name -> reeve.v1.StreamRun
+	45, // 26: reeve.v1.CompactResponse.stream_run:type_name -> reeve.v1.StreamRun
+	1,  // 27: reeve.v1.ConversationsService.CreateConversation:input_type -> reeve.v1.CreateConversationRequest
+	3,  // 28: reeve.v1.ConversationsService.ListConversations:input_type -> reeve.v1.ListConversationsRequest
+	5,  // 29: reeve.v1.ConversationsService.GetConversation:input_type -> reeve.v1.GetConversationRequest
+	7,  // 30: reeve.v1.ConversationsService.UpdateConversation:input_type -> reeve.v1.UpdateConversationRequest
+	9,  // 31: reeve.v1.ConversationsService.DeleteConversation:input_type -> reeve.v1.DeleteConversationRequest
+	11, // 32: reeve.v1.ConversationsService.ListContexts:input_type -> reeve.v1.ListContextsRequest
+	13, // 33: reeve.v1.ConversationsService.ActivateContext:input_type -> reeve.v1.ActivateContextRequest
+	15, // 34: reeve.v1.ConversationsService.SetCurrentLeaf:input_type -> reeve.v1.SetCurrentLeafRequest
+	17, // 35: reeve.v1.ConversationsService.UpdateContext:input_type -> reeve.v1.UpdateContextRequest
+	19, // 36: reeve.v1.ConversationsService.ListMessages:input_type -> reeve.v1.ListMessagesRequest
+	21, // 37: reeve.v1.ConversationsService.GetMessage:input_type -> reeve.v1.GetMessageRequest
+	23, // 38: reeve.v1.ConversationsService.EditMessage:input_type -> reeve.v1.EditMessageRequest
+	25, // 39: reeve.v1.ConversationsService.DeleteMessage:input_type -> reeve.v1.DeleteMessageRequest
+	27, // 40: reeve.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> reeve.v1.PromoteCompactionToNewContextRequest
+	29, // 41: reeve.v1.ConversationsService.CreateContextManual:input_type -> reeve.v1.CreateContextManualRequest
+	31, // 42: reeve.v1.ConversationsService.SendMessage:input_type -> reeve.v1.SendMessageRequest
+	33, // 43: reeve.v1.ConversationsService.Compact:input_type -> reeve.v1.CompactRequest
+	35, // 44: reeve.v1.ConversationsService.CountContextTokens:input_type -> reeve.v1.CountContextTokensRequest
+	2,  // 45: reeve.v1.ConversationsService.CreateConversation:output_type -> reeve.v1.CreateConversationResponse
+	4,  // 46: reeve.v1.ConversationsService.ListConversations:output_type -> reeve.v1.ListConversationsResponse
+	6,  // 47: reeve.v1.ConversationsService.GetConversation:output_type -> reeve.v1.GetConversationResponse
+	8,  // 48: reeve.v1.ConversationsService.UpdateConversation:output_type -> reeve.v1.UpdateConversationResponse
+	10, // 49: reeve.v1.ConversationsService.DeleteConversation:output_type -> reeve.v1.DeleteConversationResponse
+	12, // 50: reeve.v1.ConversationsService.ListContexts:output_type -> reeve.v1.ListContextsResponse
+	14, // 51: reeve.v1.ConversationsService.ActivateContext:output_type -> reeve.v1.ActivateContextResponse
+	16, // 52: reeve.v1.ConversationsService.SetCurrentLeaf:output_type -> reeve.v1.SetCurrentLeafResponse
+	18, // 53: reeve.v1.ConversationsService.UpdateContext:output_type -> reeve.v1.UpdateContextResponse
+	20, // 54: reeve.v1.ConversationsService.ListMessages:output_type -> reeve.v1.ListMessagesResponse
+	22, // 55: reeve.v1.ConversationsService.GetMessage:output_type -> reeve.v1.GetMessageResponse
+	24, // 56: reeve.v1.ConversationsService.EditMessage:output_type -> reeve.v1.EditMessageResponse
+	26, // 57: reeve.v1.ConversationsService.DeleteMessage:output_type -> reeve.v1.DeleteMessageResponse
+	28, // 58: reeve.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> reeve.v1.PromoteCompactionToNewContextResponse
+	30, // 59: reeve.v1.ConversationsService.CreateContextManual:output_type -> reeve.v1.CreateContextManualResponse
+	32, // 60: reeve.v1.ConversationsService.SendMessage:output_type -> reeve.v1.SendMessageResponse
+	34, // 61: reeve.v1.ConversationsService.Compact:output_type -> reeve.v1.CompactResponse
+	36, // 62: reeve.v1.ConversationsService.CountContextTokens:output_type -> reeve.v1.CountContextTokensResponse
+	45, // [45:63] is the sub-list for method output_type
+	27, // [27:45] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_conversations_proto_init() }

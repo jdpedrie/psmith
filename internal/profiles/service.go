@@ -727,6 +727,12 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 	for _, f := range d.ConfigFields {
 		fields = append(fields, configFieldToProto(f))
 	}
+	requestedFacts := make([]reevev1.DeviceFactKey, 0, len(d.RequestedDeviceFacts))
+	for _, k := range d.RequestedDeviceFacts {
+		if proto := deviceFactKeyToProto(k); proto != reevev1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED {
+			requestedFacts = append(requestedFacts, proto)
+		}
+	}
 	return &reevev1.PluginType{
 		Name:         d.Name,
 		DisplayName:  d.DisplayName,
@@ -742,7 +748,31 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 			ToolProvider:                d.Capabilities.ToolProvider,
 			AssistantContentTransformer: d.Capabilities.AssistantContentTransformer,
 			MessageLifecycleHook:        d.Capabilities.MessageLifecycleHook,
+			DeviceFactRequester:         d.Capabilities.DeviceFactRequester,
 		},
+		RequestedDeviceFacts: requestedFacts,
+	}
+}
+
+// deviceFactKeyToProto mirrors the same string ↔ enum mapping
+// the conversations service uses on the inbound side. Defined
+// here to avoid a cross-package dep from internal/profiles into
+// internal/conversations; both pin to the plugins.DeviceFactKey*
+// string constants as the source of truth.
+func deviceFactKeyToProto(k string) reevev1.DeviceFactKey {
+	switch k {
+	case plugins.DeviceFactKeyLocale:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
+	case plugins.DeviceFactKeyTimezone:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
+	case plugins.DeviceFactKeyPlatform:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
+	case plugins.DeviceFactKeyLocationCity:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
+	case plugins.DeviceFactKeyLocationCoords:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
+	default:
+		return reevev1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
 	}
 }
 

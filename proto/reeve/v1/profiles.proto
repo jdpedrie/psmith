@@ -141,6 +141,11 @@ message PluginCapabilities {
   // summary) in a detached goroutine. Use cases: embedding generation,
   // webhooks, auto-tagging, audit logs.
   bool message_lifecycle_hook = 9;
+  // Plugin opts into device-supplied facts (location, locale,
+  // platform, etc.) on every outgoing user turn. The actual list
+  // of requested fact keys is on `PluginType.requested_device_facts`
+  // — this flag is the cheap "should the client even look?" gate.
+  bool device_fact_requester = 10;
 }
 
 // PluginType is one entry in the server's compiled-in plugin registry.
@@ -155,6 +160,12 @@ message PluginType {
   // The `name` field above is the stable machine identifier used as the
   // plugin's primary key.
   string display_name = 5;
+  // Device facts the plugin wants on every outgoing user turn.
+  // Empty unless `capabilities.device_fact_requester` is true. The
+  // client unions this list across enabled plugins on the active
+  // profile; values it can gather (with permission as needed) ride
+  // back on `SendMessageRequest.device_facts`.
+  repeated DeviceFactKey requested_device_facts = 6;
 }
 
 // ConfigField is one entry in a plugin's per-instance config descriptor.
