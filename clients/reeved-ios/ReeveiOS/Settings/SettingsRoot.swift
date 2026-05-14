@@ -44,6 +44,11 @@ struct SettingsRoot: View {
                     categoryRow("Notifications", systemImage: "bell")
                 }
                 NavigationLink {
+                    PrivacyDetailView()
+                } label: {
+                    categoryRow("Privacy", systemImage: "hand.raised")
+                }
+                NavigationLink {
                     CostDetailView()
                 } label: {
                     categoryRow("Cost", systemImage: "dollarsign.circle")

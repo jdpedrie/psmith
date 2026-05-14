@@ -41,6 +41,11 @@ targets:
         # "Take Photo" action; iOS requires a usage-description
         # string before showing the camera permission prompt.
         NSCameraUsageDescription: "Take a photo to attach to your conversation."
+        # Optional location-grounding for basic_grounding —
+        # opt-in via Settings → Privacy. Only requested when the
+        # user toggles it on; iOS requires a usage-description
+        # string for the prompt to fire at all.
+        NSLocationWhenInUseUsageDescription: "Your approximate location can be sent with your messages so models give locale-aware answers (e.g. 'restaurants near me')."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS

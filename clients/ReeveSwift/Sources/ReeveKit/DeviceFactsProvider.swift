@@ -7,22 +7,16 @@ import UIKit
 /// pipeline asks for, returning a list of `ReeveDeviceFact`
 /// suitable for `SendMessageRequest.deviceFacts`.
 ///
-/// v1 covers the zero-permission facts (`locale`, `platform`,
-/// `timezone`) — these are gathered synchronously and shipped on
-/// every send. The location facts (`locationCity`,
-/// `locationCoords`) are scaffolded but not auto-gathered yet:
-/// they require an OS-level permission prompt and a settings UI
-/// to opt-in, which lands in a follow-up. The provider returns
-/// them only when explicitly requested.
-public final class DeviceFactsProvider: Sendable {
+/// Always supplies the zero-permission facts (`locale`,
+/// `timezone`, `platform`) synchronously. Location facts ride
+/// along ONLY when the user has opted in via
+/// `LocationFactPreference` AND `LocationProvider.shared` has a
+/// fresh fix — never synchronously waits for one (CLLocationManager
+/// fixes can take seconds; we'd rather skip the fact this turn
+/// and ship what we have than gate the send).
+public final class DeviceFactsProvider {
     public init() {}
 
-    /// Gather the facts in `requested`, returning the subset the
-    /// device can supply right now (no permission gates yet for
-    /// location). Caller drops nothing — the absent-facts
-    /// behavior is owned by the server-side plugin (it skips
-    /// rendering lines for missing keys), so an empty result is
-    /// always a safe send.
     public func gather(_ requested: Set<ReeveDeviceFactKey> = .defaults) -> [ReeveDeviceFact] {
         var out: [ReeveDeviceFact] = []
         out.reserveCapacity(requested.count)
@@ -31,6 +25,26 @@ public final class DeviceFactsProvider: Sendable {
                 out.append(ReeveDeviceFact(key: key, value: value))
             }
         }
+        // Location facts: opt-in via LocationFactPreference, gated
+        // on a fresh cached fix. We always opportunistically kick
+        // a background refresh so the *next* send benefits from a
+        // newer position. (The CLLocationManager call is nil-cheap
+        // when un-authorized.)
+        #if canImport(CoreLocation)
+        if LocationFactPreference.enabled {
+            Task { @MainActor in
+                LocationProvider.shared.refreshIfAuthorized()
+            }
+            if let fact = MainActor.assumeIsolated({ LocationProvider.shared.freshFact() }) {
+                if requested.contains(.locationCoords) {
+                    out.append(ReeveDeviceFact(key: .locationCoords, value: fact.coords))
+                }
+                if requested.contains(.locationCity), let city = fact.city {
+                    out.append(ReeveDeviceFact(key: .locationCity, value: city))
+                }
+            }
+        }
+        #endif
         return out
     }
 
@@ -40,11 +54,9 @@ public final class DeviceFactsProvider: Sendable {
         case .timezone: return timezoneValue()
         case .platform: return platformValue()
         case .locationCity, .locationCoords:
-            // Location gathering deferred — needs CLLocationManager
-            // wiring + a permission flow on top of the existing
-            // settings UI. Until both ship, return nil so the
-            // server-side plugin renders no Location line even if
-            // the user enabled it on basic_grounding.
+            // Handled in the LocationProvider branch in `gather`
+            // above — the basic-loop case can't reach the actor-
+            // isolated provider safely from here.
             return nil
         }
     }
@@ -102,11 +114,28 @@ public final class DeviceFactsProvider: Sendable {
 }
 
 extension Set where Element == ReeveDeviceFactKey {
-    /// Default fact set the client gathers without any explicit
-    /// opt-in: zero-permission, zero-permission-prompt, fully
-    /// available on all platforms. Plugins that asked for
-    /// these read them; plugins that didn't ignore them.
+    /// Default fact set the client gathers on every send. The
+    /// zero-permission facts are always in; location facts are
+    /// in too because gathering them is cheap when the user
+    /// hasn't opted in (the provider drops them silently). The
+    /// server-side plugin makes the final decision on whether to
+    /// render them.
     public static var defaults: Set<ReeveDeviceFactKey> {
-        [.locale, .timezone, .platform]
+        [.locale, .timezone, .platform, .locationCity, .locationCoords]
+    }
+}
+
+/// UserDefaults-backed flag for "user wants location to ride
+/// along on outgoing messages". Toggled from
+/// `PrivacyDetailView`; read by `DeviceFactsProvider.gather`.
+/// Stored in the standard suite — survives reinstall via iCloud
+/// keychain doesn't apply here, but a fresh install starts with
+/// the conservative default-off, which is what we want anyway.
+public enum LocationFactPreference {
+    private static let key = "reeve.deviceFacts.locationEnabled"
+
+    public static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: key) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 }

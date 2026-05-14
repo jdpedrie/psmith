@@ -27,6 +27,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach to your conversation.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your approximate location can be sent with your messages so models give locale-aware answers (e.g. 'restaurants near me').</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
