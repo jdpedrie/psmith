@@ -26,14 +26,18 @@ public final class DeviceFactsProvider {
             }
         }
         // Location facts: opt-in via LocationFactPreference, gated
-        // on a fresh cached fix. We always opportunistically kick
-        // a background refresh so the *next* send benefits from a
-        // newer position. (The CLLocationManager call is nil-cheap
-        // when un-authorized.)
+        // on a fresh cached fix. We call `requestPermissionAndFix`
+        // (not just `refreshIfAuthorized`) so the very first send
+        // after the preference is enabled also triggers the OS
+        // permission prompt — without this, the user has to find
+        // the Privacy toggle and manually flip it AGAIN to start
+        // the CLLocationManager flow even though they already opted
+        // in. The call is cheap when permission is already granted
+        // (just kicks off a fresh fix request).
         #if canImport(CoreLocation)
         if LocationFactPreference.enabled {
             Task { @MainActor in
-                LocationProvider.shared.refreshIfAuthorized()
+                LocationProvider.shared.requestPermissionAndFix()
             }
             if let fact = MainActor.assumeIsolated({ LocationProvider.shared.freshFact() }) {
                 if requested.contains(.locationCoords) {
