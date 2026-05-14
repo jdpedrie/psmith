@@ -255,15 +255,12 @@ struct MessageRow: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .contextMenu { contextMenuItems }
-        .messageActionTray(
-            onCopy: { copyToClipboard() },
-            onEdit: isEditableRole ? { startEdit() } : nil,
-            onReload: (message.role != .user && isReloadable)
-                ? { Task { await model.reloadFromMessage(id: message.id) } }
-                : nil,
-            onDelete: { showDeleteConfirm = true },
-            onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
-        )
+        // Swipe-tray temporarily disabled — its DragGesture
+        // intercepted vertical scroll on long messages, making
+        // the chat unusable. Long-press contextMenu (above) still
+        // exposes the same actions. See MessageActionTray.swift
+        // for the implementation; re-enable once the gesture
+        // disambiguation is fixed.
     }
 
     /// First non-empty line of the message body, used as the
@@ -373,15 +370,9 @@ struct MessageRow: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contextMenu { contextMenuItems }
-            .messageActionTray(
-                onCopy: { copyToClipboard() },
-                onEdit: isEditableRole ? { startEdit() } : nil,
-                onReload: (message.role != .user && isReloadable)
-                    ? { Task { await model.reloadFromMessage(id: message.id) } }
-                    : nil,
-                onDelete: { showDeleteConfirm = true },
-                onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
-            )
+            // Swipe-tray temporarily disabled — see other call site
+            // for rationale; long-press contextMenu still exposes
+            // the same actions.
     }
 
     /// Image-kind attachments only — rendered as inline thumbnails.
@@ -438,15 +429,9 @@ struct MessageRow: View {
             .padding(.vertical, 4)
             .contentShape(Rectangle())
             .contextMenu { contextMenuItems }
-            .messageActionTray(
-                onCopy: { copyToClipboard() },
-                onEdit: isEditableRole ? { startEdit() } : nil,
-                onReload: (message.role != .user && isReloadable)
-                    ? { Task { await model.reloadFromMessage(id: message.id) } }
-                    : nil,
-                onDelete: { showDeleteConfirm = true },
-                onDeleteAllReplies: hasDescendants ? { showCascadeDeleteConfirm = true } : nil
-            )
+            // Swipe-tray temporarily disabled — see other call site
+            // for rationale; long-press contextMenu still exposes
+            // the same actions.
     }
 
     @ViewBuilder
