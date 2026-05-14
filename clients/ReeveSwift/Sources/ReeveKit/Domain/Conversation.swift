@@ -558,7 +558,16 @@ extension ReeveMessage {
             parentID: p.hasParentID ? p.parentID : nil,
             role: ReeveMessageRole(from: p.role),
             content: p.content,
-            displayContent: p.displayContent.isEmpty ? nil : p.displayContent,
+            // The server always populates display_content via
+            // `applyDisplay` — equal to content when no
+            // DisplayTransformer ran, or the transformed result
+            // otherwise. An empty string here means "transform
+            // ran and stripped everything" (e.g. basic_grounding
+            // on an image-only user message), NOT "no transform"
+            // — collapsing empty → nil here would make the row
+            // fall back to raw `content`, exposing the
+            // <grounding>…</grounding> wrapper in the bubble.
+            displayContent: p.displayContent,
             siblingCount: p.siblingCount,
             providerID: p.hasProviderID ? p.providerID : nil,
             modelID: p.hasModelID ? p.modelID : nil,
