@@ -626,6 +626,24 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 				Response: responseObj,
 			},
 		})
+		// Gemini's functionResponse part can't itself carry
+		// inline image content, so each tool-produced
+		// attachment ships as a sibling inlineData part on the
+		// same user content. The model treats them as part of
+		// the function's "answer" because they immediately
+		// follow the functionResponse part — the only ordering
+		// signal Gemini exposes here.
+		for _, att := range tr.Attachments {
+			if len(att.Data) == 0 || att.MimeType == "" {
+				continue
+			}
+			parts = append(parts, geminiPart{
+				InlineData: &geminiInlineData{
+					MimeType: att.MimeType,
+					Data:     base64.StdEncoding.EncodeToString(att.Data),
+				},
+			})
+		}
 	}
 	// Attachments → inlineData parts. Gemini supports all four
 	// kinds (image, document, audio, video) via the same

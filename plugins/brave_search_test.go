@@ -95,7 +95,7 @@ func TestBraveSearch_HappyPath(t *testing.T) {
 	}
 
 	var decoded braveSearchOutput
-	if err := json.Unmarshal(out, &decoded); err != nil {
+	if err := json.Unmarshal(out.Output, &decoded); err != nil {
 		t.Fatalf("decode output: %v", err)
 	}
 	if decoded.Query != "anthropic claude" {

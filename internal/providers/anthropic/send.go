@@ -378,7 +378,36 @@ func userBlocks(m providers.WireMessage) ([]sdk.ContentBlockParamUnion, error) {
 			body = tr.Error
 			isError = true
 		}
-		blocks = append(blocks, sdk.NewToolResultBlock(tr.ToolUseID, body, isError))
+		// Anthropic supports image content inside tool_result
+		// blocks. Build the union manually so we can mix the
+		// text body with one image block per inline image
+		// attachment the tool produced. Non-image attachments
+		// (PDF / audio / video) drop silently — Anthropic's
+		// tool_result content union only accepts text + image.
+		content := []sdk.ToolResultBlockParamContentUnion{
+			{OfText: &sdk.TextBlockParam{Text: body}},
+		}
+		for _, att := range tr.Attachments {
+			if att.Kind != providers.AttachmentImage || len(att.Data) == 0 {
+				continue
+			}
+			img := sdk.ImageBlockParam{
+				Source: sdk.ImageBlockParamSourceUnion{
+					OfBase64: &sdk.Base64ImageSourceParam{
+						MediaType: sdk.Base64ImageSourceMediaType(att.MimeType),
+						Data:      base64.StdEncoding.EncodeToString(att.Data),
+					},
+				},
+			}
+			content = append(content, sdk.ToolResultBlockParamContentUnion{OfImage: &img})
+		}
+		blocks = append(blocks, sdk.ContentBlockParamUnion{
+			OfToolResult: &sdk.ToolResultBlockParam{
+				ToolUseID: tr.ToolUseID,
+				Content:   content,
+				IsError:   sdk.Bool(isError),
+			},
+		})
 	}
 	for _, att := range m.Attachments {
 		if len(att.Data) == 0 {

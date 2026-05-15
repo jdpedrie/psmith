@@ -264,7 +264,15 @@ type PersistedMessage struct {
 // the plugin owning that tool name.
 type ToolProvider interface {
 	Tools() []ToolDef
-	ExecuteTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error)
+	// ExecuteTool returns the tool's structured output (what the
+	// model sees on the next round) plus any attachments
+	// (images, files) the tool produced. Attachments are
+	// persisted with role_hint=tool_result and bound to the
+	// assistant message that emitted the tool_use; drivers that
+	// support image-in-tool-result blocks (Anthropic, Google)
+	// inline them on the next round so the model can see what
+	// the tool returned.
+	ExecuteTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error)
 }
 
 // ToolDef describes a single callable tool. InputSchema is the raw JSON
@@ -273,6 +281,31 @@ type ToolDef struct {
 	Name        string
 	Description string
 	InputSchema []byte
+}
+
+// ToolResult is the full return shape from a tool call. `Output`
+// is the JSON the model sees on the next round (treated as the
+// tool's textual answer). `Attachments` carry any binary content
+// (typically screenshots or generated images) that the tool
+// produced — these get persisted on the assistant message and,
+// when the upstream provider supports it, ride back into the
+// next-round wire prefix as image blocks the model can read.
+type ToolResult struct {
+	Output      json.RawMessage
+	Attachments []ToolAttachment
+}
+
+// ToolAttachment is one binary blob a tool produced (e.g. a
+// screenshot from a web-browse tool, a chart from a code-exec
+// tool, an image from an MCP server). Mirrors the shape of
+// `providers.Attachment` so it slots into the rest of the
+// pipeline; `Filename` is optional and used as a download hint.
+type ToolAttachment struct {
+	// "image" | "document" | "audio" | "video"
+	Kind     string
+	MimeType string
+	Data     []byte
+	Filename string
 }
 
 // ---------------------------------------------------------------------------

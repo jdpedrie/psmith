@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -253,9 +254,9 @@ func (p *mcpPlugin) Tools() []ToolDef {
 	return out
 }
 
-func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
 	if !p.configValid() {
-		return nil, errors.New("mcp: plugin not fully configured")
+		return ToolResult{}, errors.New("mcp: plugin not fully configured")
 	}
 	realName := name
 	if p.cfg.ToolPrefix != "" {
@@ -263,7 +264,7 @@ func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.Raw
 	}
 	srv, err := mcpPool.get(ctx, p.spec)
 	if err != nil {
-		return nil, err
+		return ToolResult{}, err
 	}
 	callCtx, cancel := context.WithTimeout(ctx, mcpCallTimeout)
 	defer cancel()
@@ -459,16 +460,27 @@ func (s *mcpServer) toolsSnapshot() []ToolDef {
 	return out
 }
 
-func (s *mcpServer) callTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+func (s *mcpServer) callTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
 	args := input
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
+	// MCP content parts: text, image (base64 + mimeType), resource
+	// (uri / blob / mimeType). Image parts become ToolAttachments;
+	// resource parts of inline-blob shape do too. Anything else
+	// still gets the dropped-count flag for the model.
 	var resp struct {
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-			// Image / resource parts are accepted but discarded for v1.
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Data     string `json:"data"`
+			MimeType string `json:"mimeType"`
+			Resource *struct {
+				URI      string `json:"uri"`
+				MimeType string `json:"mimeType"`
+				Blob     string `json:"blob"`
+				Text     string `json:"text"`
+			} `json:"resource"`
 		} `json:"content"`
 		IsError bool `json:"isError"`
 	}
@@ -476,16 +488,59 @@ func (s *mcpServer) callTool(ctx context.Context, name string, input json.RawMes
 		"name":      name,
 		"arguments": args,
 	}, &resp); err != nil {
-		return nil, err
+		return ToolResult{}, err
 	}
-	// Concatenate text parts. Non-text parts are dropped; flag in the
-	// response so the model sees something rather than silent truncation.
+
 	var b strings.Builder
+	var attachments []ToolAttachment
 	dropped := 0
 	for _, part := range resp.Content {
-		if part.Type == "text" {
+		switch part.Type {
+		case "text":
 			b.WriteString(part.Text)
-		} else {
+		case "image":
+			data, err := base64.StdEncoding.DecodeString(part.Data)
+			if err != nil || len(data) == 0 {
+				dropped++
+				continue
+			}
+			mime := part.MimeType
+			if mime == "" {
+				mime = "image/png"
+			}
+			attachments = append(attachments, ToolAttachment{
+				Kind:     "image",
+				MimeType: mime,
+				Data:     data,
+			})
+		case "resource":
+			r := part.Resource
+			if r == nil {
+				dropped++
+				continue
+			}
+			// Inline blob: surface as an attachment, kind picked
+			// from mime type. Bare URI references (no blob) get
+				// dropped — we'd need a resources/read round-trip to
+			// fetch them, which v1 skips.
+			if r.Blob != "" {
+				data, err := base64.StdEncoding.DecodeString(r.Blob)
+				if err != nil || len(data) == 0 {
+					dropped++
+					continue
+				}
+				attachments = append(attachments, ToolAttachment{
+					Kind:     kindForMime(r.MimeType),
+					MimeType: r.MimeType,
+					Data:     data,
+					Filename: filenameFromURI(r.URI),
+				})
+			} else if r.Text != "" {
+				b.WriteString(r.Text)
+			} else {
+				dropped++
+			}
+		default:
 			dropped++
 		}
 	}
@@ -496,7 +551,47 @@ func (s *mcpServer) callTool(ctx context.Context, name string, input json.RawMes
 	if resp.IsError {
 		out["is_error"] = true
 	}
-	return json.Marshal(out)
+	if len(attachments) > 0 {
+		// Hint to the model that the tool produced N attachments
+		// the user can see — even if the upstream provider
+		// doesn't carry them inline on the next round, the
+		// model knows they exist and was the result of its call.
+		out["attachment_count"] = len(attachments)
+	}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{Output: encoded, Attachments: attachments}, nil
+}
+
+// kindForMime maps a mime type to the providers.AttachmentKind
+// string used by message_attachments rows. Same buckets the iOS
+// composer uses on the upload side.
+func kindForMime(mime string) string {
+	switch {
+	case strings.HasPrefix(mime, "image/"):
+		return "image"
+	case strings.HasPrefix(mime, "audio/"):
+		return "audio"
+	case strings.HasPrefix(mime, "video/"):
+		return "video"
+	default:
+		return "document"
+	}
+}
+
+// filenameFromURI extracts the last path component of a URI for
+// use as a download-hint filename. Falls back to empty when the
+// URI is malformed; the persistence layer is fine with no name.
+func filenameFromURI(uri string) string {
+	if uri == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(uri, "/"); idx >= 0 {
+		return uri[idx+1:]
+	}
+	return uri
 }
 
 func (s *mcpServer) touch() {

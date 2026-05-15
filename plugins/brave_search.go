@@ -215,21 +215,21 @@ func (p *braveSearch) Tools() []ToolDef {
 	}
 }
 
-func (p *braveSearch) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+func (p *braveSearch) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
 	if name != "web_search" {
-		return nil, fmt.Errorf("brave_search: unknown tool %q", name)
+		return ToolResult{}, fmt.Errorf("brave_search: unknown tool %q", name)
 	}
 	if p.cfg.APIKey == "" {
-		return nil, fmt.Errorf("brave_search: api_key is not configured")
+		return ToolResult{}, fmt.Errorf("brave_search: api_key is not configured")
 	}
 
 	var in braveSearchInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("brave_search: parse input: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: parse input: %w", err)
 	}
 	in.Query = strings.TrimSpace(in.Query)
 	if in.Query == "" {
-		return nil, fmt.Errorf("brave_search: query is required")
+		return ToolResult{}, fmt.Errorf("brave_search: query is required")
 	}
 
 	count := p.cfg.DefaultCount
@@ -260,20 +260,20 @@ func (p *braveSearch) ExecuteTool(ctx context.Context, name string, input json.R
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("brave_search: build request: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Subscription-Token", p.cfg.APIKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("brave_search: http call: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: http call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("brave_search: read body: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		// Surface the status + a short body excerpt so the caller can see
@@ -283,12 +283,12 @@ func (p *braveSearch) ExecuteTool(ctx context.Context, name string, input json.R
 		if len(excerpt) > 240 {
 			excerpt = excerpt[:240] + "…"
 		}
-		return nil, fmt.Errorf("brave_search: %s — %s", resp.Status, excerpt)
+		return ToolResult{}, fmt.Errorf("brave_search: %s — %s", resp.Status, excerpt)
 	}
 
 	var raw braveAPIResponse
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("brave_search: decode response: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: decode response: %w", err)
 	}
 
 	out := braveSearchOutput{Query: in.Query}
@@ -303,7 +303,7 @@ func (p *braveSearch) ExecuteTool(ctx context.Context, name string, input json.R
 
 	encoded, err := json.Marshal(out)
 	if err != nil {
-		return nil, fmt.Errorf("brave_search: encode output: %w", err)
+		return ToolResult{}, fmt.Errorf("brave_search: encode output: %w", err)
 	}
-	return encoded, nil
+	return ToolResult{Output: encoded}, nil
 }

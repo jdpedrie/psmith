@@ -154,10 +154,21 @@ type ToolUseBlock struct {
 
 // ToolResultBlock is the corresponding result for a previous ToolUseBlock.
 // Either Output or Error is set, never both.
+//
+// Attachments carry binary content the tool produced (most
+// commonly screenshots from a browse-tool, generated images
+// from an image-gen plugin, charts from a code-exec sandbox).
+// Drivers that support image-in-tool-result blocks (Anthropic,
+// Google) inline them on the next-round wire prefix so the
+// model can see what its tool returned; drivers that don't
+// (OpenAI Chat) drop them silently — the user still sees them
+// in the chat surface because they're persisted on the
+// assistant message with role_hint=tool_result.
 type ToolResultBlock struct {
-	ToolUseID string          // matches ToolUseBlock.ID
-	Output    json.RawMessage // tool's JSON output; empty if Error is set
-	Error     string          // human-readable failure message; empty on success
+	ToolUseID   string          // matches ToolUseBlock.ID
+	Output      json.RawMessage // tool's JSON output; empty if Error is set
+	Error       string          // human-readable failure message; empty on success
+	Attachments []Attachment    // binary outputs (images, files); may be empty
 }
 
 // CallSettings carries per-turn provider settings. The shape mirrors the

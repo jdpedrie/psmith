@@ -159,6 +159,16 @@ type StartParams struct {
 	// Optional: nil pipeline = no plugin transforms / no lifecycle
 	// hooks fired.
 	Pipeline plugins.Pipeline
+
+	// OnAssistantMaterialized fires after the assistant row is
+	// inserted, with the new message id. Per-run hook (in
+	// addition to Supervisor.onAssistantMaterialized) — the
+	// conversations service uses it to persist tool-result
+	// attachments accumulated during the tool loop, since those
+	// have to bind to the just-inserted message id. Runs in the
+	// supervisor's goroutine after materialization completes;
+	// errors are logged and don't propagate.
+	OnAssistantMaterialized func(ctx context.Context, assistantMsgID uuid.UUID)
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't

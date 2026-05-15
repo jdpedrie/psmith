@@ -45,6 +45,13 @@ func makeToolLoopSendFunc(
 	initial providers.SendRequest,
 	pipeline plugins.Pipeline,
 	logger *slog.Logger,
+	// onToolAttachment, when non-nil, is called once per
+	// attachment a tool produces (typically a screenshot or
+	// generated image). The conversations service captures these
+	// per-run + persists them on the assistant message in the
+	// post-materialize hook so they show up in the chat surface
+	// alongside the tool's text output.
+	onToolAttachment func(plugins.ToolAttachment),
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline)
 
@@ -79,12 +86,12 @@ func makeToolLoopSendFunc(
 						return
 					}
 					started := time.Now()
-					var output json.RawMessage
+					var toolOut plugins.ToolResult
 					var execErr error
 					if dispatch == nil {
 						execErr = errors.New("no ToolProvider in pipeline")
 					} else {
-						output, execErr = dispatch(ctx, c.Name, c.Input)
+						toolOut, execErr = dispatch(ctx, c.Name, c.Input)
 					}
 					elapsed := time.Since(started)
 
@@ -102,15 +109,38 @@ func makeToolLoopSendFunc(
 								"err", execErr)
 						}
 					} else {
-						rb.Output = output
+						rb.Output = toolOut.Output
+						// Forward attachments to the next-round
+						// wire prefix. Drivers that support
+						// image-in-tool-result blocks (Anthropic,
+						// Google) re-encode them on the way out;
+						// drivers that don't drop silently.
+						for _, a := range toolOut.Attachments {
+							rb.Attachments = append(rb.Attachments, providers.Attachment{
+								Kind:     providers.AttachmentKind(a.Kind),
+								MimeType: a.MimeType,
+								Data:     a.Data,
+								Filename: a.Filename,
+							})
+							// Hand a copy to the persistence
+							// callback so the conversations
+							// service can bind it to the
+							// assistant message after
+							// materialize. Best-effort: callback
+							// nil = caller doesn't care.
+							if onToolAttachment != nil {
+								onToolAttachment(a)
+							}
+						}
 					}
 					results = append(results, rb)
 
 					payload, _ := json.Marshal(map[string]any{
-						"tool_use_id": c.ID,
-						"output":      json.RawMessage(rb.Output),
-						"error":       rb.Error,
-						"elapsed_ms":  elapsed.Milliseconds(),
+						"tool_use_id":      c.ID,
+						"output":           json.RawMessage(rb.Output),
+						"error":            rb.Error,
+						"elapsed_ms":       elapsed.Milliseconds(),
+						"attachment_count": len(rb.Attachments),
 					})
 					if !forward(ctx, out, providers.Chunk{
 						Type: providers.ChunkToolResult, Payload: payload,
@@ -168,7 +198,7 @@ func collectPipelineTools(pipeline plugins.Pipeline) []providers.ToolDef {
 }
 
 // buildToolDispatch constructs a (toolName → owning plugin) lookup.
-func buildToolDispatch(pipeline plugins.Pipeline) func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+func buildToolDispatch(pipeline plugins.Pipeline) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
 	owners := map[string]plugins.ToolProvider{}
 	for _, pl := range pipeline {
 		tp, ok := pl.(plugins.ToolProvider)
@@ -185,10 +215,10 @@ func buildToolDispatch(pipeline plugins.Pipeline) func(ctx context.Context, name
 	if len(owners) == 0 {
 		return nil
 	}
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+	return func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
 		owner, ok := owners[name]
 		if !ok {
-			return nil, fmt.Errorf("no plugin owns tool %q", name)
+			return plugins.ToolResult{}, fmt.Errorf("no plugin owns tool %q", name)
 		}
 		return owner.ExecuteTool(ctx, name, input)
 	}

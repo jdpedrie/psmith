@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -1131,16 +1132,47 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 	// itself returns immediately — the user's typed message is durable
 	// the moment the user-row INSERT commits, regardless of upstream
 	// health.
+	// Per-run collector for tool-result attachments. The
+	// tool_loop's appender writes here as each plugin returns
+	// attachments; the post-materialize hook below drains the
+	// slice and persists each as a `files` row + a
+	// message_attachments row bound to the just-inserted
+	// assistant message id (role_hint=tool_result).
+	var (
+		toolAttachMu      sync.Mutex
+		toolAttachPending []plugins.ToolAttachment
+	)
+	appendToolAttachment := func(a plugins.ToolAttachment) {
+		toolAttachMu.Lock()
+		defer toolAttachMu.Unlock()
+		toolAttachPending = append(toolAttachPending, a)
+	}
 	var sendFunc func(driverCtx context.Context) (<-chan providers.Chunk, error)
 	if len(sendReq.Tools) > 0 {
 		// Tools present → wrap the driver's Send in a per-round tool loop
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger)
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment)
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)
+		}
+	}
+	ownerUserID := conv.UserID
+	persistAttachments := func(persistCtx context.Context, assistantMsgID uuid.UUID) {
+		toolAttachMu.Lock()
+		atts := append([]plugins.ToolAttachment(nil), toolAttachPending...)
+		toolAttachPending = nil
+		toolAttachMu.Unlock()
+		if len(atts) == 0 {
+			return
+		}
+		if err := s.persistToolResultAttachments(persistCtx, ownerUserID, assistantMsgID, atts); err != nil {
+			s.logger.Warn("persist tool-result attachments failed",
+				"err", err,
+				"assistant_msg_id", assistantMsgID,
+				"count", len(atts))
 		}
 	}
 
@@ -1167,9 +1199,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// thinking_provider_type + thinking_rendered_text on the assistant
 		// row. `stateless` already implements providers.Provider via the
 		// embedded interface chain.
-		Provider:              stateless,
-		ExplicitCacheAttached: explicitCacheAttached,
-		Pipeline:              pipeline,
+		Provider:                stateless,
+		ExplicitCacheAttached:   explicitCacheAttached,
+		Pipeline:                pipeline,
+		OnAssistantMaterialized: persistAttachments,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start stream: %w", err))

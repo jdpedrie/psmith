@@ -511,6 +511,16 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	// tokens it produced, regardless of whether the answer was useful.
 	logCostEvent(insertCtx, s.queries, providerID, modelID, &msgID, usageParams.TotalCostUsd, logger)
 
+	// Per-run materialization hook — used by the conversations
+	// service to persist tool-result attachments collected during
+	// the tool loop. Runs synchronously inside this goroutine
+	// (the persist work has to finish before the supervisor
+	// closes the run + frees the collector slice); any returned
+	// error is the caller's to log.
+	if params.OnAssistantMaterialized != nil && len(errPayload) == 0 {
+		params.OnAssistantMaterialized(context.Background(), msgID)
+	}
+
 	// Fire the post-materialization hook (auto-title generation, etc.) in a
 	// detached goroutine so the supervisor's terminal handling is unaffected
 	// by hook latency or failure. Skip on errored runs — there's no useful
