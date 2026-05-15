@@ -677,7 +677,8 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reev
 			Thinking:      c.Thinking,
 			ToolUse:       c.ToolUse,
 			Vision:        c.Vision,
-			PromptCaching: c.PromptCaching,
+			PromptCaching:   c.PromptCaching,
+			GeneratesImages: c.GeneratesImages,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal capabilities: %w", err))
@@ -767,7 +768,8 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[reeve
 			Thinking:      c.Thinking,
 			ToolUse:       c.ToolUse,
 			Vision:        c.Vision,
-			PromptCaching: c.PromptCaching,
+			PromptCaching:   c.PromptCaching,
+			GeneratesImages: c.GeneratesImages,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal capabilities: %w", err))
@@ -990,11 +992,12 @@ func providerModelToSnapshot(providerID uuid.UUID, m providers.Model, now time.T
 		out.CacheWritePerMillion = floatPtrOrNil(m.Pricing.CacheWritePerMillion)
 	}
 	if capJSON, err := json.Marshal(modelmeta.Capabilities{
-		Streaming:     m.Capabilities.Streaming,
-		Thinking:      m.Capabilities.Thinking,
-		ToolUse:       m.Capabilities.ToolUse,
-		Vision:        m.Capabilities.Vision,
-		PromptCaching: m.Capabilities.PromptCaching,
+		Streaming:       m.Capabilities.Streaming,
+		Thinking:        m.Capabilities.Thinking,
+		ToolUse:         m.Capabilities.ToolUse,
+		Vision:          m.Capabilities.Vision,
+		PromptCaching:   m.Capabilities.PromptCaching,
+		GeneratesImages: m.Capabilities.GeneratesImages,
 	}); err == nil {
 		out.Capabilities = capJSON
 	}
