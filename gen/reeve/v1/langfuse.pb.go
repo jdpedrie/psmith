@@ -32,10 +32,17 @@ type LangfuseConfig struct {
 	// Field name avoids `has_secret_key` because Swift Protobuf
 	// auto-generates a `hasFoo` accessor for proto3 optionals,
 	// which would collide.
-	SecretKeySet  bool                   `protobuf:"varint,3,opt,name=secret_key_set,json=secretKeySet,proto3" json:"secret_key_set,omitempty"`
-	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	SecretKeySet bool                   `protobuf:"varint,3,opt,name=secret_key_set,json=secretKeySet,proto3" json:"secret_key_set,omitempty"`
+	Enabled      bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Wall-clock of the last successful POST to Langfuse for this
+	// user, sourced from the in-memory Emitter cache (zero when no
+	// successful emit has happened in this server process). Settings
+	// UI renders "Last emit: N ago" so the user has confirmation
+	// events are flowing. NOT persisted — restarts reset to zero
+	// until the next successful flush.
+	LastEmittedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_emitted_at,json=lastEmittedAt,proto3,oneof" json:"last_emitted_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,6 +115,13 @@ func (x *LangfuseConfig) GetCreatedAt() *timestamppb.Timestamp {
 func (x *LangfuseConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *LangfuseConfig) GetLastEmittedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastEmittedAt
 	}
 	return nil
 }
@@ -485,7 +499,7 @@ var File_reeve_v1_langfuse_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_langfuse_proto_rawDesc = "" +
 	"\n" +
-	"\x17reeve/v1/langfuse.proto\x12\breeve.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf9\x01\n" +
+	"\x17reeve/v1/langfuse.proto\x12\breeve.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x02\n" +
 	"\x0eLangfuseConfig\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x1d\n" +
 	"\n" +
@@ -495,7 +509,9 @@ const file_reeve_v1_langfuse_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x1a\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12G\n" +
+	"\x0flast_emitted_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\rlastEmittedAt\x88\x01\x01B\x12\n" +
+	"\x10_last_emitted_at\"\x1a\n" +
 	"\x18GetLangfuseConfigRequest\"M\n" +
 	"\x19GetLangfuseConfigResponse\x120\n" +
 	"\x06config\x18\x01 \x01(\v2\x18.reeve.v1.LangfuseConfigR\x06config\"\xd0\x01\n" +
@@ -555,21 +571,22 @@ var file_reeve_v1_langfuse_proto_goTypes = []any{
 var file_reeve_v1_langfuse_proto_depIdxs = []int32{
 	9, // 0: reeve.v1.LangfuseConfig.created_at:type_name -> google.protobuf.Timestamp
 	9, // 1: reeve.v1.LangfuseConfig.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 2: reeve.v1.GetLangfuseConfigResponse.config:type_name -> reeve.v1.LangfuseConfig
-	0, // 3: reeve.v1.UpdateLangfuseConfigResponse.config:type_name -> reeve.v1.LangfuseConfig
-	1, // 4: reeve.v1.LangfuseService.GetLangfuseConfig:input_type -> reeve.v1.GetLangfuseConfigRequest
-	3, // 5: reeve.v1.LangfuseService.UpdateLangfuseConfig:input_type -> reeve.v1.UpdateLangfuseConfigRequest
-	5, // 6: reeve.v1.LangfuseService.DeleteLangfuseConfig:input_type -> reeve.v1.DeleteLangfuseConfigRequest
-	7, // 7: reeve.v1.LangfuseService.TestLangfuseConfig:input_type -> reeve.v1.TestLangfuseConfigRequest
-	2, // 8: reeve.v1.LangfuseService.GetLangfuseConfig:output_type -> reeve.v1.GetLangfuseConfigResponse
-	4, // 9: reeve.v1.LangfuseService.UpdateLangfuseConfig:output_type -> reeve.v1.UpdateLangfuseConfigResponse
-	6, // 10: reeve.v1.LangfuseService.DeleteLangfuseConfig:output_type -> reeve.v1.DeleteLangfuseConfigResponse
-	8, // 11: reeve.v1.LangfuseService.TestLangfuseConfig:output_type -> reeve.v1.TestLangfuseConfigResponse
-	8, // [8:12] is the sub-list for method output_type
-	4, // [4:8] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	9, // 2: reeve.v1.LangfuseConfig.last_emitted_at:type_name -> google.protobuf.Timestamp
+	0, // 3: reeve.v1.GetLangfuseConfigResponse.config:type_name -> reeve.v1.LangfuseConfig
+	0, // 4: reeve.v1.UpdateLangfuseConfigResponse.config:type_name -> reeve.v1.LangfuseConfig
+	1, // 5: reeve.v1.LangfuseService.GetLangfuseConfig:input_type -> reeve.v1.GetLangfuseConfigRequest
+	3, // 6: reeve.v1.LangfuseService.UpdateLangfuseConfig:input_type -> reeve.v1.UpdateLangfuseConfigRequest
+	5, // 7: reeve.v1.LangfuseService.DeleteLangfuseConfig:input_type -> reeve.v1.DeleteLangfuseConfigRequest
+	7, // 8: reeve.v1.LangfuseService.TestLangfuseConfig:input_type -> reeve.v1.TestLangfuseConfigRequest
+	2, // 9: reeve.v1.LangfuseService.GetLangfuseConfig:output_type -> reeve.v1.GetLangfuseConfigResponse
+	4, // 10: reeve.v1.LangfuseService.UpdateLangfuseConfig:output_type -> reeve.v1.UpdateLangfuseConfigResponse
+	6, // 11: reeve.v1.LangfuseService.DeleteLangfuseConfig:output_type -> reeve.v1.DeleteLangfuseConfigResponse
+	8, // 12: reeve.v1.LangfuseService.TestLangfuseConfig:output_type -> reeve.v1.TestLangfuseConfigResponse
+	9, // [9:13] is the sub-list for method output_type
+	5, // [5:9] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_langfuse_proto_init() }
@@ -577,6 +594,7 @@ func file_reeve_v1_langfuse_proto_init() {
 	if File_reeve_v1_langfuse_proto != nil {
 		return
 	}
+	file_reeve_v1_langfuse_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reeve_v1_langfuse_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -19,6 +19,13 @@ public struct ReeveLangfuseConfig: Sendable, Hashable, Codable {
     public let enabled: Bool
     public let createdAt: Date?
     public let updatedAt: Date?
+    /// Wall-clock of the last successful POST to Langfuse for the
+    /// calling user. nil when no successful emit has happened in
+    /// this server process (server restarted recently, or the
+    /// integration was just enabled but no turn has fired yet).
+    /// The settings UI renders this as "Last emit: N ago" so the
+    /// user has confirmation events are flowing.
+    public let lastEmittedAt: Date?
 
     public init(
         host: String,
@@ -26,7 +33,8 @@ public struct ReeveLangfuseConfig: Sendable, Hashable, Codable {
         secretKeySet: Bool,
         enabled: Bool,
         createdAt: Date? = nil,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        lastEmittedAt: Date? = nil
     ) {
         self.host = host
         self.publicKey = publicKey
@@ -34,6 +42,7 @@ public struct ReeveLangfuseConfig: Sendable, Hashable, Codable {
         self.enabled = enabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.lastEmittedAt = lastEmittedAt
     }
 
     init(from p: Reeve_V1_LangfuseConfig) {
@@ -43,6 +52,7 @@ public struct ReeveLangfuseConfig: Sendable, Hashable, Codable {
         enabled = p.enabled
         createdAt = p.hasCreatedAt ? p.createdAt.date : nil
         updatedAt = p.hasUpdatedAt ? p.updatedAt.date : nil
+        lastEmittedAt = p.hasLastEmittedAt ? p.lastEmittedAt.date : nil
     }
 }
 

@@ -61,7 +61,7 @@ func (s *Service) GetLangfuseConfig(ctx context.Context, _ *connect.Request[reev
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.GetLangfuseConfigResponse{
-		Config: rowToProto(row),
+		Config: s.rowToProto(row),
 	}), nil
 }
 
@@ -148,7 +148,7 @@ func (s *Service) UpdateLangfuseConfig(ctx context.Context, req *connect.Request
 	s.refreshEmitter(user.ID.String(), row)
 
 	return connect.NewResponse(&reevev1.UpdateLangfuseConfigResponse{
-		Config: rowToProto(row),
+		Config: s.rowToProto(row),
 	}), nil
 }
 
@@ -278,8 +278,8 @@ func defaultProtoConfig() *reevev1.LangfuseConfig {
 	}
 }
 
-func rowToProto(row store.UserLangfuseConfig) *reevev1.LangfuseConfig {
-	return &reevev1.LangfuseConfig{
+func (s *Service) rowToProto(row store.UserLangfuseConfig) *reevev1.LangfuseConfig {
+	out := &reevev1.LangfuseConfig{
 		Host:         row.Host,
 		PublicKey:    row.PublicKey,
 		SecretKeySet: row.SecretKeyEncrypted != nil,
@@ -287,6 +287,12 @@ func rowToProto(row store.UserLangfuseConfig) *reevev1.LangfuseConfig {
 		CreatedAt:    timestamppb.New(row.CreatedAt),
 		UpdatedAt:    timestamppb.New(row.UpdatedAt),
 	}
+	if s.emitter != nil {
+		if t := s.emitter.LastEmitAt(row.UserID.String()); !t.IsZero() {
+			out.LastEmittedAt = timestamppb.New(t)
+		}
+	}
+	return out
 }
 
 // decryptedConfig pulls the encrypted secret_key off the row,

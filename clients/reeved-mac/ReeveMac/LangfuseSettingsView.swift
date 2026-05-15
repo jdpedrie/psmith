@@ -150,6 +150,22 @@ struct LangfuseSettingsView: View {
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
+                if let last = model.saved?.lastEmittedAt {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text("Last successful emit \(last.formatted(.relative(presentation: .numeric)))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text(last.formatted(date: .omitted, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
                 HStack(spacing: 10) {
                     Button {
                         Task { await model.test() }
@@ -165,6 +181,13 @@ struct LangfuseSettingsView: View {
                     }
                     .buttonStyle(.glass)
                     .disabled(!testEligible)
+                    Button {
+                        Task { await model.load() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Reload from server (refreshes the last-emit timestamp)")
                     Spacer()
                 }
                 Text(testHelpText)

@@ -57,12 +57,28 @@ public struct Reeve_V1_LangfuseConfig: Sendable {
   /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
   public mutating func clearUpdatedAt() {self._updatedAt = nil}
 
+  /// Wall-clock of the last successful POST to Langfuse for this
+  /// user, sourced from the in-memory Emitter cache (zero when no
+  /// successful emit has happened in this server process). Settings
+  /// UI renders "Last emit: N ago" so the user has confirmation
+  /// events are flowing. NOT persisted — restarts reset to zero
+  /// until the next successful flush.
+  public var lastEmittedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_lastEmittedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_lastEmittedAt = newValue}
+  }
+  /// Returns true if `lastEmittedAt` has been explicitly set.
+  public var hasLastEmittedAt: Bool {self._lastEmittedAt != nil}
+  /// Clears the value of `lastEmittedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearLastEmittedAt() {self._lastEmittedAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _lastEmittedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public struct Reeve_V1_GetLangfuseConfigRequest: Sendable {
@@ -229,7 +245,7 @@ fileprivate let _protobuf_package = "reeve.v1"
 
 extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LangfuseConfig"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}secret_key_set\0\u{1}enabled\0\u{3}created_at\0\u{3}updated_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}secret_key_set\0\u{1}enabled\0\u{3}created_at\0\u{3}updated_at\0\u{3}last_emitted_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -243,6 +259,7 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
       case 4: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
       case 5: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
+      case 7: try { try decoder.decodeSingularMessageField(value: &self._lastEmittedAt) }()
       default: break
       }
     }
@@ -271,6 +288,9 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
     try { if let v = self._updatedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
     } }()
+    try { if let v = self._lastEmittedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -281,6 +301,7 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
     if lhs.enabled != rhs.enabled {return false}
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}
+    if lhs._lastEmittedAt != rhs._lastEmittedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

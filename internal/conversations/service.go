@@ -1195,33 +1195,67 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		v := toolCostTotal
 		return &v
 	}
+	// Per-run buffer for tool spans. The tool_loop appends here on
+	// every dispatch; the post-materialize hook drains the buffer
+	// and fans out one Langfuse span event per call, all nested
+	// under the parent assistant trace via the just-materialized
+	// message ID. Skipped entirely when Langfuse isn't configured
+	// (the appender callback is still wired so the cost is one
+	// nil-check per call rather than a control-flow branch).
+	var (
+		toolSpanMu      sync.Mutex
+		toolSpanPending []ToolSpan
+	)
+	appendToolSpan := func(sp ToolSpan) {
+		toolSpanMu.Lock()
+		defer toolSpanMu.Unlock()
+		toolSpanPending = append(toolSpanPending, sp)
+	}
 	var sendFunc func(driverCtx context.Context) (<-chan providers.Chunk, error)
 	if len(sendReq.Tools) > 0 {
 		// Tools present → wrap the driver's Send in a per-round tool loop
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, s.newProviderResolver(conv.UserID))
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID))
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)
 		}
 	}
 	ownerUserID := conv.UserID
-	persistAttachments := func(persistCtx context.Context, assistantMsgID uuid.UUID) {
+	postMaterialize := func(persistCtx context.Context, assistantMsgID uuid.UUID) {
+		// 1. Persist any tool-result attachments collected during
+		//    the run. Best-effort: a failure logs and continues so
+		//    the rest of post-materialize work isn't blocked.
 		toolAttachMu.Lock()
 		atts := append([]plugins.ToolAttachment(nil), toolAttachPending...)
 		toolAttachPending = nil
 		toolAttachMu.Unlock()
-		if len(atts) == 0 {
-			return
+		if len(atts) > 0 {
+			if err := s.persistToolResultAttachments(persistCtx, ownerUserID, assistantMsgID, atts); err != nil {
+				s.logger.Warn("persist tool-result attachments failed",
+					"err", err,
+					"assistant_msg_id", assistantMsgID,
+					"count", len(atts))
+			}
 		}
-		if err := s.persistToolResultAttachments(persistCtx, ownerUserID, assistantMsgID, atts); err != nil {
-			s.logger.Warn("persist tool-result attachments failed",
-				"err", err,
-				"assistant_msg_id", assistantMsgID,
-				"count", len(atts))
-		}
+
+		// 2. Drain the tool-span buffer. Spans land in Langfuse
+		//    nested under the assistant trace, so we hand them to
+		//    EmitLangfuseTurn which builds the parent trace + gen
+		//    and the child spans together.
+		toolSpanMu.Lock()
+		spans := append([]ToolSpan(nil), toolSpanPending...)
+		toolSpanPending = nil
+		toolSpanMu.Unlock()
+
+		// 3. Fire the Langfuse trace + generation + spans. Skipped
+		//    silently when the user hasn't configured the
+		//    integration. Runs in this same goroutine so the
+		//    span buffer drain is causally before any
+		//    process-wide hooks see the materialised message.
+		s.emitLangfuseAssistantTurn(persistCtx, conv.UserID, conv.ID, activeCtx.ID, providerID, assistantMsgID, spans)
 	}
 
 	// Hand the chunk channel to the supervisor; it persists chunks, fans out to subscribers,
@@ -1250,7 +1284,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		Provider:                stateless,
 		ExplicitCacheAttached:   explicitCacheAttached,
 		Pipeline:                pipeline,
-		OnAssistantMaterialized: persistAttachments,
+		OnAssistantMaterialized: postMaterialize,
 		ToolCostProvider:        readToolCost,
 	})
 	if err != nil {
@@ -1931,17 +1965,30 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 	// plugins observe summaries the same way they observe assistant turns.
 	compactPipeline, _ := s.resolvePipelineForConversation(ctx, conv)
 
+	// Per-run hook: after the compression_summary materialises,
+	// fan out a Langfuse trace tagged "compression" so the
+	// observability timeline includes secondary LLM activity
+	// (not just user-facing assistant turns). Skipped silently
+	// when the user hasn't configured Langfuse.
+	compConvID := conv.ID
+	compContextID := activeCtx.ID
+	compUserID := conv.UserID
+	emitCompression := func(emitCtx context.Context, summaryMsgID uuid.UUID) {
+		s.emitLangfuseCompressionTurn(emitCtx, compUserID, compConvID, compContextID, summaryMsgID)
+	}
+
 	runID, err := s.supervisor.Start(ctx, stream.StartParams{
-		ConversationID:  conv.ID,
-		ContextID:       activeCtx.ID,
-		ParentMessageID: parentID,
-		ProviderID:      provRow.ID,
-		ModelID:         *modelID,
-		Purpose:         stream.PurposeCompression,
-		CompressionMode: mode,
-		SendFunc:        compactSendFunc,
-		Provider:        stateless,
-		Pipeline:        compactPipeline,
+		ConversationID:            conv.ID,
+		ContextID:                 activeCtx.ID,
+		ParentMessageID:           parentID,
+		ProviderID:                provRow.ID,
+		ModelID:                   *modelID,
+		Purpose:                   stream.PurposeCompression,
+		CompressionMode:           mode,
+		SendFunc:                  compactSendFunc,
+		Provider:                  stateless,
+		Pipeline:                  compactPipeline,
+		OnCompressionMaterialized: emitCompression,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start compression stream: %w", err))

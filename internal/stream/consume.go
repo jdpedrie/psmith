@@ -292,6 +292,13 @@ loop:
 				resultContextID = &cid
 			}
 		}
+		// Per-run compression hook — used by the conversations
+		// service to fan out post-materialise work for compaction
+		// turns (today, the Langfuse trace). Skip on errored runs;
+		// they don't represent useful turn semantics.
+		if mid != uuid.Nil && len(errPayload) == 0 && params.OnCompressionMaterialized != nil {
+			params.OnCompressionMaterialized(context.Background(), mid)
+		}
 	}
 
 	// Finalize. Use context.Background so a cancelled run still gets its

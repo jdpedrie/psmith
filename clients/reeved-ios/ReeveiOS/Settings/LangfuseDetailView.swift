@@ -91,6 +91,16 @@ struct LangfuseDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+                if let last = model.saved?.lastEmittedAt {
+                    HStack {
+                        Label("Last emit", systemImage: "clock")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(last.formatted(.relative(presentation: .numeric)))
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                }
             } header: {
                 Text("State")
             }

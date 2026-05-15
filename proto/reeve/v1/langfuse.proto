@@ -66,6 +66,13 @@ message LangfuseConfig {
   bool enabled = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
+  // Wall-clock of the last successful POST to Langfuse for this
+  // user, sourced from the in-memory Emitter cache (zero when no
+  // successful emit has happened in this server process). Settings
+  // UI renders "Last emit: N ago" so the user has confirmation
+  // events are flowing. NOT persisted — restarts reset to zero
+  // until the next successful flush.
+  optional google.protobuf.Timestamp last_emitted_at = 7;
 }
 
 message GetLangfuseConfigRequest {}

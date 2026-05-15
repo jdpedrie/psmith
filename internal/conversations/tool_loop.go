@@ -40,6 +40,19 @@ const maxToolRounds = 8
 //     cap is reached. The loop swallows the upstream's intermediate
 //     ChunkDone events so the supervisor only sees one ChunkDone at
 //     the very end.
+// ToolSpan is the per-call observation the tool loop hands to its
+// onToolSpan callback. The conversations service uses these to fan
+// out Langfuse span events nested under the parent assistant
+// trace; tests can use them to assert tool dispatch happened.
+type ToolSpan struct {
+	ToolName  string
+	Input     []byte // raw JSON the model emitted
+	Output    []byte // raw JSON the plugin returned (empty when ErrorMsg is set)
+	ErrorMsg  string // empty on success
+	StartedAt time.Time
+	EndedAt   time.Time
+}
+
 func makeToolLoopSendFunc(
 	drv providers.StatelessProvider,
 	initial providers.SendRequest,
@@ -60,6 +73,15 @@ func makeToolLoopSendFunc(
 	// at materialize time and writes to messages.tool_cost_usd
 	// (also folded into total_cost_usd).
 	onToolCost func(float64),
+	// onToolSpan, when non-nil, is called once per tool dispatch
+	// (success or failure) with the input/output/timing window.
+	// Conversations service buffers these into per-run Langfuse
+	// spans nested under the parent assistant trace; the
+	// supervisor's post-materialize hook drains the buffer and
+	// fans out the spans alongside the trace + generation events.
+	// Best-effort: the loop continues if the callback panics
+	// (defensive — Langfuse going sideways shouldn't break tools).
+	onToolSpan func(ToolSpan),
 	// resolver, when non-nil, is attached to the dispatch
 	// context so plugins (e.g. `imagegen`) can look up the
 	// (provider_id, model_id) pair the user picked in their
@@ -107,7 +129,8 @@ func makeToolLoopSendFunc(
 					} else {
 						toolOut, execErr = dispatch(ctx, c.Name, c.Input)
 					}
-					elapsed := time.Since(started)
+					ended := time.Now()
+					elapsed := ended.Sub(started)
 
 					if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
 						return
@@ -167,6 +190,35 @@ func makeToolLoopSendFunc(
 						Type: providers.ChunkToolResult, Payload: payload,
 					}) {
 						return
+					}
+
+					// Hand the per-call span window to the observability
+					// callback (Langfuse). Best-effort: nil callback OR a
+					// panic inside it must not break tool dispatch. Output
+					// is the plugin's raw JSON when the call succeeded;
+					// the model-emitted Input is captured verbatim either
+					// way so failures still get the request body.
+					if onToolSpan != nil {
+						span := ToolSpan{
+							ToolName:  c.Name,
+							Input:     append([]byte(nil), c.Input...),
+							StartedAt: started,
+							EndedAt:   ended,
+						}
+						if execErr != nil {
+							span.ErrorMsg = execErr.Error()
+						} else {
+							span.Output = append([]byte(nil), rb.Output...)
+						}
+						func() {
+							defer func() {
+								if r := recover(); r != nil && logger != nil {
+									logger.Warn("tool span callback panicked",
+										"tool", c.Name, "recover", r)
+								}
+							}()
+							onToolSpan(span)
+						}()
 					}
 				}
 

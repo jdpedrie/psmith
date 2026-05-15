@@ -178,6 +178,14 @@ type StartParams struct {
 	// nil pointer / nil callback both mean "no tool reported a
 	// cost" — the column stays NULL.
 	ToolCostProvider func() *float64
+
+	// OnCompressionMaterialized fires after the supervisor inserts
+	// the compression_summary row, with the new row's id. Per-run
+	// hook used by the conversations service to fan out post-
+	// compaction work — today, the Langfuse trace for the
+	// compression turn. Only fires for PurposeCompression runs;
+	// nil callback is a silent no-op.
+	OnCompressionMaterialized func(ctx context.Context, summaryMsgID uuid.UUID)
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't

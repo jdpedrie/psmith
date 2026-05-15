@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -118,7 +119,9 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	}
 
 	// Generate.
+	startedAt := time.Now()
 	title, err := s.callTitleModel(ctx, *resolved.TitleProviderID, *resolved.TitleModelID, guide, transcript)
+	endedAt := time.Now()
 	if err != nil {
 		s.logger.Warn("title: generation failed", "err", err)
 		return
@@ -128,6 +131,23 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 		s.logger.Warn("title: model returned empty/unusable title")
 		return
 	}
+
+	// Mirror the title call into Langfuse as its own trace so the
+	// per-conversation observability includes secondary LLM
+	// activity (not just the user-facing assistant turn). Best-
+	// effort: silent no-op when the user hasn't configured
+	// Langfuse; never blocks title persistence below.
+	s.emitLangfuseTitleCall(
+		conv.UserID,
+		conv.ID,
+		assistantMsgID,
+		*resolved.TitleProviderID,
+		*resolved.TitleModelID,
+		transcript,
+		title,
+		startedAt,
+		endedAt,
+	)
 
 	if needConvTitle {
 		if err := s.queries.UpdateConversationTitle(ctx, store.UpdateConversationTitleParams{

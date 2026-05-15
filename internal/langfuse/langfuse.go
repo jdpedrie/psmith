@@ -98,6 +98,27 @@ type Generation struct {
 	Metadata            map[string]any
 }
 
+// Span describes a single Langfuse span event — a non-LLM unit of
+// work nested under a trace. Reeve uses these for tool calls dispatched
+// during a turn (one span per tool call, with input = model-emitted
+// arguments, output = plugin return value).
+//
+// Set Level + StatusMessage to "ERROR" + the error text when the
+// underlying call failed; Langfuse renders failed spans in red and
+// surfaces the message inline.
+type Span struct {
+	ID            string         // unique span id (UUIDv7)
+	TraceID       string         // matches Trace.ID
+	Name          string         // e.g. tool name
+	Input         any            // marshaled to JSON
+	Output        any            // marshaled to JSON
+	StartTime     time.Time
+	EndTime       time.Time
+	Metadata      map[string]any
+	Level         string         // "DEFAULT" | "ERROR" | "WARNING" | "DEBUG" — Langfuse-defined; empty defaults to DEFAULT
+	StatusMessage string         // free-form detail; rendered next to Level
+}
+
 // Emitter is a non-blocking, batching client for Langfuse ingestion.
 // Construct one with NewEmitter, drop events on it via Trace /
 // Generation, and call Stop on shutdown. Per-user credentials are
@@ -110,9 +131,10 @@ type Emitter struct {
 	flushBatch    int
 	maxQueue      int
 
-	mu          sync.Mutex
-	queue       []envelopeEvent
-	configsByUser map[string]Config // per-user creds keyed by user_id
+	mu              sync.Mutex
+	queue           []envelopeEvent
+	configsByUser   map[string]Config    // per-user creds keyed by user_id
+	lastEmitByUser  map[string]time.Time // last successful POST per user — surfaced in the settings UI
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -153,14 +175,15 @@ func NewEmitter(logger *slog.Logger, cfg EmitterConfig) *Emitter {
 		logger = slog.Default()
 	}
 	e := &Emitter{
-		httpClient:    cfg.HTTPClient,
-		logger:        logger,
-		flushInterval: cfg.FlushInterval,
-		flushBatch:    cfg.FlushBatchSize,
-		maxQueue:      cfg.MaxQueueSize,
-		configsByUser: make(map[string]Config),
-		stopCh:        make(chan struct{}),
-		doneCh:        make(chan struct{}),
+		httpClient:     cfg.HTTPClient,
+		logger:         logger,
+		flushInterval:  cfg.FlushInterval,
+		flushBatch:     cfg.FlushBatchSize,
+		maxQueue:       cfg.MaxQueueSize,
+		configsByUser:  make(map[string]Config),
+		lastEmitByUser: make(map[string]time.Time),
+		stopCh:         make(chan struct{}),
+		doneCh:         make(chan struct{}),
 	}
 	go e.run()
 	return e
@@ -176,9 +199,21 @@ func (e *Emitter) SetUserConfig(userID string, cfg Config) {
 	defer e.mu.Unlock()
 	if cfg == (Config{}) {
 		delete(e.configsByUser, userID)
+		delete(e.lastEmitByUser, userID)
 		return
 	}
 	e.configsByUser[userID] = cfg
+}
+
+// LastEmitAt returns the wall-clock of the last successful POST to
+// Langfuse for this user. Zero value when no successful emit has
+// happened yet (cache empty after restart, or the user has never
+// triggered an emit). Surfaced in the settings UI as "Last emit:
+// N seconds ago" so the user has confirmation things are flowing.
+func (e *Emitter) LastEmitAt(userID string) time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastEmitByUser[userID]
 }
 
 // EmitTurn is the high-level convenience: queue both the trace and
@@ -201,6 +236,32 @@ func (e *Emitter) EmitTurn(userID string, trace Trace, generation Generation) {
 		return
 	}
 	e.enqueue(userID, eventTrace(trace), eventGeneration(generation))
+}
+
+// EmitSpan queues a single span event under an existing trace. Used
+// by the tool loop to instrument each plugin dispatch as a
+// non-LLM unit of work nested under the parent assistant trace.
+// Same per-user gating as EmitTurn — silent no-op when the user
+// hasn't configured Langfuse.
+func (e *Emitter) EmitSpan(userID string, span Span) {
+	if userID == "" {
+		return
+	}
+	e.mu.Lock()
+	cfg, ok := e.configsByUser[userID]
+	e.mu.Unlock()
+	if !ok || !cfg.Valid() {
+		return
+	}
+	e.enqueue(userID, eventSpan(span))
+}
+
+// EmitTrace queues a standalone trace + generation pair (same
+// shape as EmitTurn but caller-built). Used by the title and
+// compression paths, which produce their own trace IDs and don't
+// share the assistant turn's parent identity.
+func (e *Emitter) EmitTrace(userID string, trace Trace, generation Generation) {
+	e.EmitTurn(userID, trace, generation)
 }
 
 // enqueue appends events to the buffer and triggers a flush when the
@@ -277,7 +338,13 @@ func (e *Emitter) flush() {
 		if err := e.send(cfg, batch); err != nil {
 			e.logger.Warn("langfuse: send failed",
 				"err", err, "user_id", userID, "events", len(batch))
+			continue
 		}
+		// Stamp the per-user "last successful emit" timestamp so
+		// the settings UI can render a freshness signal.
+		e.mu.Lock()
+		e.lastEmitByUser[userID] = time.Now().UTC()
+		e.mu.Unlock()
 	}
 }
 
@@ -361,6 +428,32 @@ func eventTrace(t Trace) envelopeEventBody {
 	}
 }
 
+// eventSpan builds a span-create event from a Span.
+func eventSpan(s Span) envelopeEventBody {
+	id, _ := uuid.NewV7()
+	level := s.Level
+	if level == "" {
+		level = "DEFAULT"
+	}
+	return envelopeEventBody{
+		ID:        id.String(),
+		Type:      "span-create",
+		Timestamp: time.Now().UTC(),
+		Body: spanBody{
+			ID:            s.ID,
+			TraceID:       s.TraceID,
+			Name:          s.Name,
+			StartTime:     s.StartTime.UTC(),
+			EndTime:       s.EndTime.UTC(),
+			Input:         s.Input,
+			Output:        s.Output,
+			Metadata:      s.Metadata,
+			Level:         level,
+			StatusMessage: s.StatusMessage,
+		},
+	}
+}
+
 // eventGeneration builds a generation-create event from a Generation.
 func eventGeneration(g Generation) envelopeEventBody {
 	id, _ := uuid.NewV7()
@@ -423,6 +516,19 @@ type generationUsage struct {
 	Total     *int     `json:"total,omitempty"`
 	Unit      string   `json:"unit,omitempty"`
 	TotalCost *float64 `json:"totalCost,omitempty"`
+}
+
+type spanBody struct {
+	ID            string         `json:"id"`
+	TraceID       string         `json:"traceId"`
+	Name          string         `json:"name,omitempty"`
+	StartTime     time.Time      `json:"startTime"`
+	EndTime       time.Time      `json:"endTime"`
+	Input         any            `json:"input,omitempty"`
+	Output        any            `json:"output,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+	Level         string         `json:"level,omitempty"`
+	StatusMessage string         `json:"statusMessage,omitempty"`
 }
 
 // ErrInvalidConfig is returned by helpers that synchronously
