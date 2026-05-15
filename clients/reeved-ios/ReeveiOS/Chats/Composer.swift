@@ -539,16 +539,14 @@ struct Composer: View {
     private var canSend: Bool {
         let trimmed = model.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasContent = !trimmed.isEmpty || !model.pendingAttachments.isEmpty
-        // Block sends when the server is unreachable — the request would
-        // hang on a TCP timeout and leave the user staring at a spinner.
-        // `.unknown` is treated as send-allowed so a fresh launch isn't
-        // gated on the first probe completing.
-        let serverReachable = app.connectivity.state != .offline
-        // Block sends while an upload is still in flight: the chip
-        // is showing a spinner and sending without it would drop
-        // the user's intent on the floor.
+        // Offline sends are no longer blocked — they go to the
+        // outbound queue and drain when the server is back. The
+        // composer still won't fire while an upload is pending
+        // (the file_ids the queue would reference don't exist
+        // yet) or while a compaction is mid-stream (those run on
+        // their own dedicated stream and overlap is unsupported).
         let noUploadInFlight = model.attachmentUploadCount == 0
-        return hasContent && !model.sending && !model.isCompacting && serverReachable && noUploadInFlight
+        return hasContent && !model.sending && !model.isCompacting && noUploadInFlight
     }
 
     private func triggerSend() {

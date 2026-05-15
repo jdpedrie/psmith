@@ -16,6 +16,14 @@ public final class ConversationViewModel {
     /// the view model can register newly-started runs + observe state
     /// without owning the subscriber task itself.
     private let hub: StreamHub
+    /// Optional app-wide outbound queue. When provided, sends that
+    /// can't reach the server route through it instead of failing.
+    /// Kept optional so test harnesses + alt callers stay simple.
+    private let outboundQueue: OutboundQueue?
+    /// Read-only handle to the connectivity monitor. Used to decide
+    /// at send time whether to try the RPC or skip straight to
+    /// queueing. Optional for the same test-harness reason.
+    private let connectivity: ConnectivityMonitor?
     private let onTerminal: @MainActor () async -> Void
     /// Fires after a successful assistant turn lands in `messages`. The
     /// app uses it to drive side effects that depend on completed turns
@@ -276,6 +284,8 @@ public final class ConversationViewModel {
         conversation: ReeveConversation,
         client: ReeveClient,
         hub: StreamHub,
+        outboundQueue: OutboundQueue? = nil,
+        connectivity: ConnectivityMonitor? = nil,
         onTerminal: @MainActor @escaping () async -> Void,
         onAssistantTurnComplete: AssistantTurnCompleteHandler? = nil,
         localTitler: LocalTitler? = nil
@@ -283,6 +293,8 @@ public final class ConversationViewModel {
         self.conversation = conversation
         self.client = client
         self.hub = hub
+        self.outboundQueue = outboundQueue
+        self.connectivity = connectivity
         self.onTerminal = onTerminal
         self.onAssistantTurnComplete = onAssistantTurnComplete
         self.localTitler = localTitler
@@ -530,8 +542,6 @@ public final class ConversationViewModel {
         // ready to greet them on next open.
         DraftStore.clear(conversationID: conversation.id)
         sending = true
-        // Show message optimistically before the RPC round-trip completes.
-        pendingUserText = text
         // Snapshot the pending attachments so we can restore them on
         // failure; clear the live list immediately so the chips
         // disappear as part of the optimistic state.
@@ -545,6 +555,27 @@ public final class ConversationViewModel {
         // message. Plugins that don't request a fact ignore it,
         // so over-supplying is safe.
         let deviceFacts = DeviceFactsProvider().gather()
+
+        // Offline shortcut: skip the RPC entirely, enqueue the
+        // request, return clean. ConnectivityMonitor will drain
+        // when the server is back. The composer reads
+        // `queuedEntries` to render the queued bubble in the
+        // meantime — no separate optimistic state path needed.
+        if let outboundQueue, connectivity?.state == .offline {
+            outboundQueue.enqueue(.init(
+                conversationID: conversation.id,
+                content: text,
+                providerID: selectedProviderID,
+                modelID: selectedModelID,
+                parentMessageID: nil,
+                attachmentFileIDs: attachmentIDs,
+                deviceFacts: deviceFacts
+            ))
+            return
+        }
+
+        // Show message optimistically before the RPC round-trip completes.
+        pendingUserText = text
 
         do {
             let (userMsg, run) = try await client.conversations.sendMessage(
@@ -568,21 +599,79 @@ public final class ConversationViewModel {
                 purpose: .assistantResponse
             )
         } catch {
-            // Pre-stream RPC failure (validation, network before the
-            // server even spawned a run): no message row exists. Restore
-            // the user's typed text + the attachment chips so they can
-            // retry without re-picking the images — losing the draft on
-            // a network blip is worst-case UX.
+            // Pre-stream RPC failure. Two paths:
+            //
+            //   1. Network-class error AND we have a queue → enqueue
+            //      so the user's intent isn't lost on a blip. The
+            //      ConnectivityMonitor's next probe (which is now
+            //      backoff-fast because the queue is non-empty) will
+            //      drain it as soon as the server is back. No error
+            //      surfaced — the queued bubble shows the message
+            //      is on its way.
+            //
+            //   2. Anything else (server returned 4xx, validation
+            //      error, permission denied) → restore the typed
+            //      text + chips and surface the error. The user
+            //      needs to fix something before another send will
+            //      succeed.
             pendingUserText = nil
-            if draft.isEmpty { draft = originalDraft }
-            pendingAttachments = attachmentSnapshot
-            // Re-persist the restored text so it survives a quick
-            // background/relaunch — we cleared the store optimistically
-            // above on the assumption the send would succeed.
-            DraftStore.save(conversationID: conversation.id, text: draft)
-            await load()
-            loadError = ReeveError.display(error)
+            if let outboundQueue, isLikelyTransientNetworkError(error) {
+                outboundQueue.enqueue(.init(
+                    conversationID: conversation.id,
+                    content: text,
+                    providerID: selectedProviderID,
+                    modelID: selectedModelID,
+                    parentMessageID: nil,
+                    attachmentFileIDs: attachmentIDs,
+                    deviceFacts: deviceFacts
+                ))
+            } else {
+                if draft.isEmpty { draft = originalDraft }
+                pendingAttachments = attachmentSnapshot
+                DraftStore.save(conversationID: conversation.id, text: draft)
+                await load()
+                loadError = ReeveError.display(error)
+            }
         }
+    }
+
+    /// Heuristic for "this looked like a network blip, not a
+    /// real server-side rejection". Used to decide whether to
+    /// route a failed send into the offline queue or surface the
+    /// error to the user. Connect-go's URLError maps cover the
+    /// usual suspects (no internet, lost connection, timeout);
+    /// we also treat anything that arrived via the `unavailable`
+    /// or `cancelled` Connect codes as transient.
+    private func isLikelyTransientNetworkError(_ error: Error) -> Bool {
+        if let urlErr = error as? URLError {
+            switch urlErr.code {
+            case .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .timedOut,
+                 .cannotConnectToHost,
+                 .cannotFindHost,
+                 .dnsLookupFailed,
+                 .resourceUnavailable:
+                return true
+            default:
+                return false
+            }
+        }
+        // Best-effort string sniff for ReeveError-wrapped Connect
+        // errors. We don't import Connect here for the type
+        // check — the error description carries enough signal.
+        let desc = String(describing: error).lowercased()
+        return desc.contains("unavailable")
+            || desc.contains("connection")
+            || desc.contains("timed out")
+            || desc.contains("offline")
+    }
+
+    /// Queued sends for this conversation, in queue order. Used by
+    /// the composer / message scroll to render queued bubbles
+    /// alongside settled history.
+    public var queuedEntries: [OutboundQueueEntry] {
+        outboundQueue?.entries(forConversation: conversation.id) ?? []
     }
 
     /// Upload `data` as an image attachment and add the resulting

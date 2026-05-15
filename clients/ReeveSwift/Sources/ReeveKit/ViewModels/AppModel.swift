@@ -32,6 +32,15 @@ public final class AppModel {
     /// `hub.streams[conversationID]` instead of owning it directly.
     public let streamHub: StreamHub
 
+    /// Persistent outbound send queue — holds SendMessage requests
+    /// that couldn't reach the server (typically because
+    /// connectivity dropped) and drains them when the
+    /// ConnectivityMonitor flips back to online. ConversationViewModel.send
+    /// routes through this on offline so the user never gets a
+    /// blocked Send button — the message rides in the queue and
+    /// goes out the moment the server is reachable again.
+    public let outboundQueue: OutboundQueue
+
     public init(host: URL, tokenStore: TokenStore, authState: AuthState = .init()) {
         self.authState = authState
         self.serverURL = host
@@ -50,7 +59,8 @@ public final class AppModel {
         self.client = c
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
-        self.connectivity = ConnectivityMonitor(host: host)
+        self.outboundQueue = OutboundQueue()
+        self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
         self.streamHub = StreamHub(subscriber: c.streams)
     }
 
@@ -79,6 +89,15 @@ public final class AppModel {
         // interstitial would persist forever for fresh installs.
         if authState.phase == .resolving {
             authState.clear()
+        }
+        // Register the drain hook BEFORE starting the monitor so
+        // the first probe of the session — which can fire online
+        // immediately — runs the drain. Otherwise queued messages
+        // from a prior offline session sit until the next state
+        // transition.
+        connectivity.onOnline { [weak self] in
+            guard let self else { return }
+            _ = await self.outboundQueue.drain(client: self.client)
         }
         connectivity.start()
         // After successful auth, sweep the server for runs that were

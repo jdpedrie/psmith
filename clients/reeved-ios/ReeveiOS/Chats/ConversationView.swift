@@ -66,6 +66,8 @@ struct ConversationView: View {
                 conversation: conversation,
                 client: app.client,
                 hub: app.streamHub,
+                outboundQueue: app.outboundQueue,
+                connectivity: app.connectivity,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
                     liveNotifier.generationCompleted(
@@ -632,15 +634,71 @@ private struct ChatHistoryArea: View {
     }
 }
 
-/// Optimistic user message rendered before the SendMessage RPC returns.
-/// Observes only `model.pendingUserText`.
+/// Optimistic user message rendered before the SendMessage RPC returns,
+/// plus any messages queued offline waiting on the OutboundQueue
+/// drain. Both render as user bubbles; queued ones get a small
+/// clock chip so the user knows they're still waiting on the
+/// server.
+///
+/// Observes `model.pendingUserText` AND the queue snapshot. When
+/// the OutboundQueue drains, the entry slides into `messages`
+/// via the normal SendMessage response path and disappears from
+/// `queuedEntries` — same one-frame swap as `pendingUserText`.
 private struct PendingUserArea: View {
     @Bindable var model: ConversationViewModel
+    @State private var queuedTick: Int = 0
 
     var body: some View {
-        if let pending = model.pendingUserText {
-            PendingUserRow(text: pending)
-                .id("__pending__")
+        Group {
+            if let pending = model.pendingUserText {
+                PendingUserRow(text: pending)
+                    .id("__pending__")
+            }
+            ForEach(model.queuedEntries) { entry in
+                QueuedUserRow(text: entry.content)
+                    .id("__queued_\(entry.id)")
+            }
+        }
+        // OutboundQueue posts a notification on every mutation;
+        // bumping queuedTick re-evaluates `model.queuedEntries`
+        // which the parent View hierarchy doesn't otherwise
+        // observe (it's not @Observable property — it computes
+        // through the queue).
+        .onReceive(
+            NotificationCenter.default.publisher(for: OutboundQueue.didChangeNotification)
+        ) { _ in
+            queuedTick &+= 1
+        }
+    }
+}
+
+/// Bubble for a message that's sitting in the offline queue,
+/// waiting for the server to come back. Visually mirrors
+/// `PendingUserRow` but with a small clock chip below the text
+/// so the user can tell at a glance it hasn't gone out yet.
+private struct QueuedUserRow: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack {
+                Spacer(minLength: 60)
+                Text(text)
+                    .font(.body)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 16))
+                    .foregroundStyle(.primary)
+            }
+            HStack(spacing: 4) {
+                Spacer()
+                Image(systemName: "clock")
+                    .font(.caption2)
+                Text("Queued — will send when online")
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.trailing, 4)
         }
     }
 }
