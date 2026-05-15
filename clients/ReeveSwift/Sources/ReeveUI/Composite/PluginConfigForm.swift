@@ -226,18 +226,13 @@ public struct PluginConfigForm: View {
             },
             set: { config[field.name] = $0 }
         )
-        if field.options.count <= 4 {
-            SelectFieldPopover(field: field, selection: binding)
-        } else {
-            Picker("", selection: binding) {
-                ForEach(field.options, id: \.value) { opt in
-                    Text(opt.label.isEmpty ? opt.value : opt.label).tag(opt.value)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(maxWidth: 280)
-        }
+        // Always use the popover-button style so SELECT and
+        // MODEL_PICKER triggers look the same. (Earlier the form
+        // forked into a native Picker(.menu) for >4 options to
+        // dodge a SwiftUI macOS Menu bug, but that produced two
+        // different styles in the same form — the popover already
+        // scrolls, so one style covers both.)
+        SelectFieldPopover(field: field, selection: binding)
     }
 
     // MARK: defaults decoding
@@ -450,32 +445,37 @@ private struct SelectFieldPopover: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $shown, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(field.options, id: \.value) { opt in
-                    Button {
-                        selection = opt.value
-                        shown = false
-                    } label: {
-                        HStack {
-                            Text(opt.label.isEmpty ? opt.value : opt.label)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if opt.value == selection {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.secondary)
-                                    .font(.caption)
+            // Scroll wraps the option list so a long set (e.g.
+            // imagegen's 6-option `quality` field) doesn't blow the
+            // popover off-screen. ~320pt cap = ~10 rows visible.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(field.options, id: \.value) { opt in
+                        Button {
+                            selection = opt.value
+                            shown = false
+                        } label: {
+                            HStack {
+                                Text(opt.label.isEmpty ? opt.value : opt.label)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if opt.value == selection {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.secondary)
+                                        .font(.caption)
+                                }
                             }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.vertical, 4)
             }
-            .frame(minWidth: 200)
-            .padding(.vertical, 4)
+            .frame(minWidth: 220, maxHeight: 320)
         }
     }
 }
