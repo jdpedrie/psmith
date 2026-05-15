@@ -1837,8 +1837,17 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 		return nil, err
 	}
 
-	// Render the active context's messages as a transcript for the compression prompt.
-	transcript, err := s.renderTranscript(ctx, activeCtx.ID)
+	// Render the active chain — the linear walk from the current
+	// leaf back to root — as a transcript for the compression
+	// prompt. We use the chain (not every row in the context) so
+	// forks/branches don't pollute the summary with sibling
+	// turns the user can't see in the active thread.
+	//
+	// parentID was just resolved above; it points at the chain's
+	// tip (cursor or latest). When the context is empty parentID
+	// is nil and the transcript comes back empty — which the
+	// "nothing to compact" check below catches the same way.
+	transcript, err := s.renderTranscript(ctx, parentID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1927,16 +1936,29 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[reevev1.Comp
 	return connect.NewResponse(&reevev1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
 }
 
-// renderTranscript turns the active context's messages into a plain-text
-// transcript "[role]: content" suitable for embedding in a compression prompt.
-// Skips role=compression_summary rows (they're audit records, not real turns).
-func (s *Service) renderTranscript(ctx context.Context, contextID uuid.UUID) (string, error) {
-	msgs, err := s.queries.ListMessagesByContext(ctx, contextID)
+// renderTranscript turns the active chain — the linear walk from
+// `leafID` back to root — into a plain-text transcript "[role]: content"
+// suitable for embedding in a compression prompt. Skips
+// role=compression_summary rows (they're audit records, not real turns).
+//
+// Walking the ancestor chain (rather than ListMessagesByContext) is
+// load-bearing: contexts can hold multiple branches once the user
+// forks via Reload, and the user only sees one branch at a time.
+// Including sibling branches would feed the compressor turns the
+// user-facing conversation never had — produces summaries that
+// reference assistant replies the user wouldn't recognise.
+//
+// leafID nil = empty context: returns empty transcript.
+func (s *Service) renderTranscript(ctx context.Context, leafID *uuid.UUID) (string, error) {
+	if leafID == nil {
+		return "", nil
+	}
+	rows, err := s.queries.ListMessageAncestorChain(ctx, *leafID)
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	for _, m := range msgs {
+	for _, m := range rows {
 		if m.Role == roleCompressionSummary {
 			continue
 		}

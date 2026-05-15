@@ -330,3 +330,113 @@ func TestCompact_InvalidOverrideProviderID(t *testing.T) {
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
+
+// TestCompact_TranscriptUsesActiveChainOnly is a regression for a bug
+// where Compact's renderTranscript called ListMessagesByContext —
+// returning every message in the context including sibling forks. The
+// compressor then saw turns from branches the user can't see in the
+// active thread, producing summaries that referenced assistant replies
+// the user wouldn't recognise.
+//
+// Setup: one shared user prompt → assistant reply, then a fork off
+// that assistant. Active leaf is on the MAIN branch; the FORK branch
+// also exists but should NOT appear in the compaction prompt.
+//
+// The fixture's seed message becomes the system framing (visible in
+// every chain ancestor walk too), which we tolerate — what we assert
+// is that the FORK branch's content is absent.
+func TestCompact_TranscriptUsesActiveChainOnly(t *testing.T) {
+	t.Parallel()
+	svc, q, sup := newFullSvc(t)
+	driverType := registerFakeDriver(t, "compact-active-chain",
+		[]providers.Chunk{textChunk("active-chain summary"), doneChunk()}, nil)
+	f := seedSendable(t, q, driverType)
+	bg := context.Background()
+
+	// Profile-side compression so the request stays minimal.
+	guide := "Summarise the conversation."
+	mode := "REPLACE"
+	if err := q.UpdateProfileCompressionGuide(bg, store.UpdateProfileCompressionGuideParams{
+		ID: f.profile.ID, CompressionGuide: &guide,
+	}); err != nil {
+		t.Fatalf("UpdateProfileCompressionGuide: %v", err)
+	}
+	if err := q.UpdateProfileCompressionMode(bg, store.UpdateProfileCompressionModeParams{
+		ID: f.profile.ID, CompressionMode: &mode,
+	}); err != nil {
+		t.Fatalf("UpdateProfileCompressionMode: %v", err)
+	}
+	if err := q.UpdateProfileCompressionProviderID(bg, store.UpdateProfileCompressionProviderIDParams{
+		ID: f.profile.ID, CompressionProviderID: &f.provider.ID,
+	}); err != nil {
+		t.Fatalf("UpdateProfileCompressionProviderID: %v", err)
+	}
+	if err := q.UpdateProfileCompressionModelID(bg, store.UpdateProfileCompressionModelIDParams{
+		ID: f.profile.ID, CompressionModelID: &f.modelID,
+	}); err != nil {
+		t.Fatalf("UpdateProfileCompressionModelID: %v", err)
+	}
+
+	// Build the chain:
+	//   system (fixture) → user("ALPHA") → assistant("ALPHA-REPLY")
+	//   assistant("ALPHA-REPLY") forks two ways:
+	//     MAIN: user("BETA-MAIN") → assistant("BETA-MAIN-REPLY")  ← active leaf
+	//     FORK: user("BETA-FORK") → assistant("BETA-FORK-REPLY")  ← must be invisible
+	parent := f.systemMsgID
+	alphaUser := insertMessage(t, q, f.contextID, &parent, "user", "ALPHA")
+	alphaAssistant := insertMessage(t, q, f.contextID, &alphaUser.ID, "assistant", "ALPHA-REPLY")
+
+	// MAIN branch.
+	betaMainUser := insertMessage(t, q, f.contextID, &alphaAssistant.ID, "user", "BETA-MAIN")
+	betaMainAssistant := insertMessage(t, q, f.contextID, &betaMainUser.ID, "assistant", "BETA-MAIN-REPLY")
+
+	// FORK branch (sibling under the same parent).
+	betaForkUser := insertMessage(t, q, f.contextID, &alphaAssistant.ID, "user", "BETA-FORK")
+	_ = insertMessage(t, q, f.contextID, &betaForkUser.ID, "assistant", "BETA-FORK-REPLY")
+
+	// Cursor → MAIN tip so resolveParent picks it as the leaf.
+	if _, err := q.UpdateContextCurrentLeaf(bg, store.UpdateContextCurrentLeafParams{
+		ID:                   f.contextID,
+		CurrentLeafMessageID: &betaMainAssistant.ID,
+	}); err != nil {
+		t.Fatalf("UpdateContextCurrentLeaf: %v", err)
+	}
+
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+		ConversationId: f.conv.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	if final.Status != "completed" {
+		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
+	}
+
+	// Inspect the wire prefix the compaction driver actually received.
+	// The transcript lives in the user message at index 1 (system=guide
+	// is index 0).
+	drv := fetchDriver(t, driverType)
+	drv.mu.Lock()
+	req := drv.lastRequest
+	drv.mu.Unlock()
+	if req == nil || len(req.Messages) < 2 {
+		t.Fatalf("expected captured request with system+user messages, got %+v", req)
+	}
+	transcript := req.Messages[1].Content
+
+	// Active chain content must be present.
+	for _, want := range []string{"ALPHA", "ALPHA-REPLY", "BETA-MAIN", "BETA-MAIN-REPLY"} {
+		if !strings.Contains(transcript, want) {
+			t.Errorf("transcript missing active-chain content %q\n--- transcript ---\n%s", want, transcript)
+		}
+	}
+
+	// Sibling-branch content must NOT be present — that's the bug.
+	for _, banned := range []string{"BETA-FORK", "BETA-FORK-REPLY"} {
+		if strings.Contains(transcript, banned) {
+			t.Errorf("transcript leaked sibling-branch content %q\n--- transcript ---\n%s", banned, transcript)
+		}
+	}
+}
