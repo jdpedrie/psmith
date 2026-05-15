@@ -228,6 +228,12 @@ public struct ReeveMessageUsage: Sendable, Hashable, Codable {
     public let outputCostUsd: Double?
     public let cacheReadCostUsd: Double?
     public let cacheWriteCostUsd: Double?
+    /// Sum of every tool call this turn dispatched that returned a
+    /// `cost_usd` (today: imagegen — OpenAI's images endpoint or
+    /// Gemini's image-output models). Independent of token costs but
+    /// already folded into `totalCostUsd`. nil when no tool reported
+    /// a cost on this turn.
+    public let toolCostUsd: Double?
     public let totalCostUsd: Double?
     /// True/false/nil per the proto field of the same name. nil = not
     /// applicable (toggle off, non-google, or pre-feature message);
@@ -250,6 +256,7 @@ public struct ReeveMessageUsage: Sendable, Hashable, Codable {
         outputCostUsd: Double? = nil,
         cacheReadCostUsd: Double? = nil,
         cacheWriteCostUsd: Double? = nil,
+        toolCostUsd: Double? = nil,
         totalCostUsd: Double? = nil,
         explicitCacheAttached: Bool? = nil
     ) {
@@ -262,6 +269,7 @@ public struct ReeveMessageUsage: Sendable, Hashable, Codable {
         self.outputCostUsd = outputCostUsd
         self.cacheReadCostUsd = cacheReadCostUsd
         self.cacheWriteCostUsd = cacheWriteCostUsd
+        self.toolCostUsd = toolCostUsd
         self.totalCostUsd = totalCostUsd
         self.explicitCacheAttached = explicitCacheAttached
     }
@@ -278,6 +286,7 @@ extension ReeveMessageUsage {
         outputCostUsd     = p.hasOutputCostUsd     ? p.outputCostUsd     : nil
         cacheReadCostUsd  = p.hasCacheReadCostUsd  ? p.cacheReadCostUsd  : nil
         cacheWriteCostUsd = p.hasCacheWriteCostUsd ? p.cacheWriteCostUsd : nil
+        toolCostUsd       = p.hasToolCostUsd       ? p.toolCostUsd       : nil
         totalCostUsd      = p.hasTotalCostUsd      ? p.totalCostUsd      : nil
         explicitCacheAttached = p.hasExplicitCacheAttached ? p.explicitCacheAttached : nil
     }

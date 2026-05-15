@@ -32,12 +32,31 @@ type ProviderResolver interface {
 // APIKey may be empty for providers that don't need one (e.g.
 // "local"); plugins that REQUIRE a key check for emptiness and
 // surface a configuration error themselves.
+//
+// Pricing fields mirror `modelmeta.Pricing` and are populated
+// from the user_model snapshot. Plugins that compute per-call
+// costs (e.g. `imagegen` reading a `usage` block from the
+// upstream response) multiply tokens × per-million pricing to
+// produce the `ToolResult.CostUSD` field. All four are 0 when
+// the catalog had no pricing for the model — plugins should
+// treat 0 as "unknown" and skip cost reporting rather than
+// reporting $0.
 type ResolvedModel struct {
 	ProviderType string
 	ProviderID   string
 	ModelID      string
 	APIKey       string
 	BaseURL      string
+	Pricing      ResolvedPricing
+}
+
+// ResolvedPricing carries per-million-token rates from the user_model
+// snapshot, in USD. Mirror of `modelmeta.Pricing`.
+type ResolvedPricing struct {
+	InputPerMillion      float64
+	OutputPerMillion     float64
+	CacheReadPerMillion  float64
+	CacheWritePerMillion float64
 }
 
 type providerResolverKey struct{}

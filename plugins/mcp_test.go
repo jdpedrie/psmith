@@ -203,7 +203,7 @@ func TestMCP_BasicHandshakeAndToolCall(t *testing.T) {
 	}
 	var got map[string]any
 	if err := json.Unmarshal(out.Output, &got); err != nil {
-		t.Fatalf("decode output: %v\n%s", err, out)
+		t.Fatalf("decode output: %v\n%+v", err, out)
 	}
 	if got["text"] != "hi" {
 		t.Errorf("expected text=hi, got %+v", got)
@@ -238,7 +238,7 @@ func TestMCP_ToolPrefix(t *testing.T) {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
 	if !strings.Contains(string(out.Output), "SHOUTED:hi") {
-		t.Errorf("expected SHOUTED:hi, got %s", out)
+		t.Errorf("expected SHOUTED:hi, got %+v", out)
 	}
 }
 
@@ -507,7 +507,7 @@ func TestMCP_HTTPTransport_SSE(t *testing.T) {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
 	if !strings.Contains(string(out.Output), "pong") {
-		t.Errorf("expected pong in SSE response, got %s", out)
+		t.Errorf("expected pong in SSE response, got %+v", out)
 	}
 }
 

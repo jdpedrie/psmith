@@ -52,6 +52,14 @@ func makeToolLoopSendFunc(
 	// post-materialize hook so they show up in the chat surface
 	// alongside the tool's text output.
 	onToolAttachment func(plugins.ToolAttachment),
+	// onToolCost, when non-nil, is called once per tool result
+	// that returned a non-nil ToolResult.CostUSD (today: imagegen
+	// after a successful gpt-image-1 / gemini image generation).
+	// The conversations service accumulates these into a per-run
+	// total that the supervisor reads via StartParams.ToolCostProvider
+	// at materialize time and writes to messages.tool_cost_usd
+	// (also folded into total_cost_usd).
+	onToolCost func(float64),
 	// resolver, when non-nil, is attached to the dispatch
 	// context so plugins (e.g. `imagegen`) can look up the
 	// (provider_id, model_id) pair the user picked in their
@@ -137,6 +145,13 @@ func makeToolLoopSendFunc(
 							if onToolAttachment != nil {
 								onToolAttachment(a)
 							}
+						}
+						// Forward the tool's reported spend (if
+						// any) to the per-run accumulator. Plugins
+						// without a price model leave CostUSD nil
+						// and the accumulator stays untouched.
+						if onToolCost != nil && toolOut.CostUSD != nil {
+							onToolCost(*toolOut.CostUSD)
 						}
 					}
 					results = append(results, rb)

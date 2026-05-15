@@ -169,6 +169,15 @@ type StartParams struct {
 	// supervisor's goroutine after materialization completes;
 	// errors are logged and don't propagate.
 	OnAssistantMaterialized func(ctx context.Context, assistantMsgID uuid.UUID)
+
+	// ToolCostProvider, when non-nil, is called by the supervisor
+	// at materialization time to read the accumulated tool-side
+	// spend for the run (sum of every ToolResult.CostUSD the tool
+	// loop saw). The returned value is written to
+	// `messages.tool_cost_usd` and folded into `total_cost_usd`.
+	// nil pointer / nil callback both mean "no tool reported a
+	// cost" — the column stays NULL.
+	ToolCostProvider func() *float64
 }
 
 // ErrNotFound is returned by Get/Subscribe/Cancel when the run doesn't

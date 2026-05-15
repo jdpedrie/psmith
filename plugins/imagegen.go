@@ -268,9 +268,45 @@ type imagegenOpenAIResponse struct {
 		B64JSON       string `json:"b64_json"`
 		RevisedPrompt string `json:"revised_prompt,omitempty"`
 	} `json:"data"`
+	// Usage is populated by gpt-image-1 (token-based billing). dall-e-3
+	// returns no usage block — for that model we fall back to the
+	// `dalle3PriceTable` size×quality lookup.
+	Usage *struct {
+		InputTokens        int `json:"input_tokens"`
+		OutputTokens       int `json:"output_tokens"`
+		TotalTokens        int `json:"total_tokens"`
+		InputTokensDetails struct {
+			TextTokens  int `json:"text_tokens"`
+			ImageTokens int `json:"image_tokens"`
+		} `json:"input_tokens_details"`
+	} `json:"usage,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+}
+
+// dalle3PriceTable holds OpenAI's published per-image rates for dall-e-3.
+// dall-e-3 doesn't return a usage block, so when the user picks dall-e-3
+// we look up the price by (size, quality). Source: OpenAI pricing page,
+// snapshotted 2026-05; if OpenAI changes rates we update here. Returns 0
+// for unknown combos so the caller can treat that as "unknown" and skip
+// cost reporting rather than reporting an inaccurate $0.
+var dalle3PriceTable = map[string]map[string]float64{
+	"1024x1024": {"standard": 0.040, "hd": 0.080},
+	"1024x1792": {"standard": 0.080, "hd": 0.120},
+	"1792x1024": {"standard": 0.080, "hd": 0.120},
+}
+
+func dalle3Cost(size, quality string) float64 {
+	if quality == "" {
+		quality = "standard"
+	}
+	if row, ok := dalle3PriceTable[size]; ok {
+		if v, ok := row[quality]; ok {
+			return v
+		}
+	}
+	return 0
 }
 
 func (p *imagegen) callOpenAI(ctx context.Context, resolved ResolvedModel, prompt, size, quality string) (ToolResult, error) {
@@ -346,16 +382,60 @@ func (p *imagegen) callOpenAI(ctx context.Context, resolved ResolvedModel, promp
 	if raw.Data[0].RevisedPrompt != "" {
 		out["revised_prompt"] = raw.Data[0].RevisedPrompt
 	}
-	encoded, _ := json.Marshal(out)
-	return ToolResult{
-		Output: encoded,
+
+	// Cost: gpt-image-1 reports token usage; dall-e-3 doesn't and is
+	// billed per-image. For unknown models with non-zero pricing we fall
+	// back to the token math too — gateways speaking the same API may
+	// route to image models that bill the same way.
+	cost := computeOpenAIImageCost(resolved, raw.Usage, size, quality)
+
+	res := ToolResult{
+		Output: encoded(out),
 		Attachments: []ToolAttachment{{
 			Kind:     "image",
 			MimeType: "image/png",
 			Data:     imgBytes,
 			Filename: "generated.png",
 		}},
-	}, nil
+	}
+	if cost > 0 {
+		res.CostUSD = &cost
+	}
+	return res, nil
+}
+
+// computeOpenAIImageCost folds the response usage block (when present)
+// into the resolved per-million pricing snapshot and returns the dollar
+// cost of the call. Returns 0 when the cost can't be computed (no usage
+// AND no dall-e-3 fallback hit; or pricing is zero) — the caller treats
+// 0 as "unknown" and skips cost reporting rather than persisting $0.
+func computeOpenAIImageCost(resolved ResolvedModel, usage *struct {
+	InputTokens        int `json:"input_tokens"`
+	OutputTokens       int `json:"output_tokens"`
+	TotalTokens        int `json:"total_tokens"`
+	InputTokensDetails struct {
+		TextTokens  int `json:"text_tokens"`
+		ImageTokens int `json:"image_tokens"`
+	} `json:"input_tokens_details"`
+}, size, quality string) float64 {
+	// dall-e-3 path: no usage block, look up the published per-image rate.
+	if resolved.ModelID == "dall-e-3" {
+		return dalle3Cost(size, quality)
+	}
+	// Token path (gpt-image-1 + any other openai-compatible model that
+	// reports a usage block). Multiply each side of the usage by the
+	// per-million rate snapshotted on the user_model.
+	if usage == nil {
+		return 0
+	}
+	in := float64(usage.InputTokens) * resolved.Pricing.InputPerMillion / 1_000_000.0
+	out := float64(usage.OutputTokens) * resolved.Pricing.OutputPerMillion / 1_000_000.0
+	return in + out
+}
+
+func encoded(m map[string]any) json.RawMessage {
+	b, _ := json.Marshal(m)
+	return b
 }
 
 // --- Google dispatch (gemini-2.5-flash-image-preview, etc.) ---
@@ -372,6 +452,15 @@ type imagegenGoogleResponse struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	// Gemini reports tokens in the same shape as a regular generateContent
+	// call. For image-output models the candidatesTokenCount captures the
+	// image-output tokens used — multiplying by the per-million output
+	// rate snapshotted on the user_model gives the dollar cost.
+	UsageMetadata *struct {
+		PromptTokenCount     int `json:"promptTokenCount"`
+		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		TotalTokenCount      int `json:"totalTokenCount"`
+	} `json:"usageMetadata,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
@@ -477,11 +566,24 @@ func (p *imagegen) callGoogle(ctx context.Context, resolved ResolvedModel, promp
 	if narration.Len() > 0 {
 		out["narration"] = narration.String()
 	}
-	encoded, _ := json.Marshal(out)
-	return ToolResult{
-		Output:      encoded,
+
+	res := ToolResult{
+		Output:      encoded(out),
 		Attachments: attachments,
-	}, nil
+	}
+	if raw.UsageMetadata != nil {
+		// Gemini bills image-output tokens at the same per-million rate
+		// as normal output tokens; the catalog snapshot already carries
+		// the correct number for image-capable models like
+		// gemini-2.5-flash-image-preview.
+		in := float64(raw.UsageMetadata.PromptTokenCount) * resolved.Pricing.InputPerMillion / 1_000_000.0
+		outCost := float64(raw.UsageMetadata.CandidatesTokenCount) * resolved.Pricing.OutputPerMillion / 1_000_000.0
+		total := in + outCost
+		if total > 0 {
+			res.CostUSD = &total
+		}
+	}
+	return res, nil
 }
 
 func truncate(s string, n int) string {

@@ -72,12 +72,14 @@ struct MessageUsageSheet: View {
         if let usage = message.usage,
            (usage.totalCostUsd ?? 0) > 0
             || (usage.inputCostUsd ?? 0) > 0
-            || (usage.outputCostUsd ?? 0) > 0 {
+            || (usage.outputCostUsd ?? 0) > 0
+            || (usage.toolCostUsd ?? 0) > 0 {
             Section("Cost") {
                 if let v = usage.inputCostUsd, v > 0      { row("Input",       priceStr(v)) }
                 if let v = usage.outputCostUsd, v > 0     { row("Output",      priceStr(v)) }
                 if let v = usage.cacheReadCostUsd, v > 0  { row("Cache read",  priceStr(v)) }
                 if let v = usage.cacheWriteCostUsd, v > 0 { row("Cache write", priceStr(v)) }
+                if let v = usage.toolCostUsd, v > 0       { row("Tools",       priceStr(v)) }
                 if let v = usage.totalCostUsd, v > 0 {
                     row("Total", priceStr(v), bold: true)
                 }

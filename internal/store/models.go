@@ -101,6 +101,7 @@ type Message struct {
 	ExplicitCacheAttached *bool
 	ToolCalls             []byte
 	FinishReason          *string
+	ToolCostUsd           pgtype.Numeric
 }
 
 type MessageAttachment struct {

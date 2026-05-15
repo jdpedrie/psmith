@@ -556,6 +556,17 @@ message MessageUsage {
   // cache_read_tokens this distinguishes explicit cache hits from
   // implicit ones.
   optional bool explicit_cache_attached = 11;
+
+  // tool_cost_usd is the sum of every tool call the assistant
+  // dispatched during this turn that returned a `cost_usd` value
+  // (today: imagegen — OpenAI images endpoint or Gemini's
+  // generateContent for image output; future: any plugin that can
+  // compute its own API spend). Independent of input/output/cache
+  // token costs, but already folded into total_cost_usd at write
+  // time so the existing chip captures total spend without UI
+  // changes. NULL when no tool reported a cost (or pre-migration
+  // rows). Surface separately when the UI wants to break down spend.
+  optional double tool_cost_usd = 12;
 }
 
 // ---------------------------------------------------------------------------

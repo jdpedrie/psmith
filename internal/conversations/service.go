@@ -1147,13 +1147,43 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		defer toolAttachMu.Unlock()
 		toolAttachPending = append(toolAttachPending, a)
 	}
+	// Per-run accumulator for tool-side spend. The tool_loop calls
+	// this for every ToolResult.CostUSD it sees; the supervisor
+	// reads the total at materialize time via the
+	// ToolCostProvider closure (see StartParams below). Mutex-
+	// guarded because tool dispatch could fan out across
+	// goroutines in the future, even though today it's serial per
+	// round.
+	var (
+		toolCostMu    sync.Mutex
+		toolCostTotal float64
+		toolCostAny   bool
+	)
+	appendToolCost := func(c float64) {
+		if c <= 0 {
+			return
+		}
+		toolCostMu.Lock()
+		defer toolCostMu.Unlock()
+		toolCostTotal += c
+		toolCostAny = true
+	}
+	readToolCost := func() *float64 {
+		toolCostMu.Lock()
+		defer toolCostMu.Unlock()
+		if !toolCostAny {
+			return nil
+		}
+		v := toolCostTotal
+		return &v
+	}
 	var sendFunc func(driverCtx context.Context) (<-chan providers.Chunk, error)
 	if len(sendReq.Tools) > 0 {
 		// Tools present → wrap the driver's Send in a per-round tool loop
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, s.newProviderResolver(conv.UserID))
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, s.newProviderResolver(conv.UserID))
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)
@@ -1203,6 +1233,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		ExplicitCacheAttached:   explicitCacheAttached,
 		Pipeline:                pipeline,
 		OnAssistantMaterialized: persistAttachments,
+		ToolCostProvider:        readToolCost,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("start stream: %w", err))

@@ -440,7 +440,14 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	defer cancel()
 
 	// Compute usage params and per-component cost from the user_model snapshot.
-	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, logger)
+	// toolCost may be nil when no tool reported a cost; buildUsageParams folds
+	// it into the total when set so the existing per-message cost chip
+	// captures total spend without a UI refactor.
+	var toolCost *float64
+	if params.ToolCostProvider != nil {
+		toolCost = params.ToolCostProvider()
+	}
+	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, toolCost, logger)
 
 	// AssistantContentTransformer plugins rewrite the just-finalised
 	// assistant text BEFORE the row is inserted. The persisted bytes
@@ -477,6 +484,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		OutputCostUsd:        usageParams.OutputCostUsd,
 		CacheReadCostUsd:     usageParams.CacheReadCostUsd,
 		CacheWriteCostUsd:    usageParams.CacheWriteCostUsd,
+		ToolCostUsd:          usageParams.ToolCostUsd,
 		TotalCostUsd:         usageParams.TotalCostUsd,
 		ErrorPayload:         errPayload,
 		ExplicitCacheAttached: params.ExplicitCacheAttached,
@@ -560,15 +568,27 @@ type usageColumns struct {
 	OutputCostUsd     pgtype.Numeric
 	CacheReadCostUsd  pgtype.Numeric
 	CacheWriteCostUsd pgtype.Numeric
+	ToolCostUsd       pgtype.Numeric
 	TotalCostUsd      pgtype.Numeric
 }
 
 // buildUsageParams converts a *providers.Usage (which may be nil) plus the
 // user_model pricing snapshot into the column values for CreateAssistantMessageWithUsage.
 // On any DB error fetching the user_model, costs are left null and tokens are still recorded.
-func buildUsageParams(ctx context.Context, q *store.Queries, providerID uuid.UUID, modelID string, usage *providers.Usage, logger interface{ Error(string, ...any) }) usageColumns {
+//
+// toolCost is the run's accumulated tool-side spend (sum of every
+// ToolResult.CostUSD seen during the tool loop). Nil = no tool reported a
+// cost; non-nil values are written to ToolCostUsd and folded into
+// TotalCostUsd alongside token costs.
+func buildUsageParams(ctx context.Context, q *store.Queries, providerID uuid.UUID, modelID string, usage *providers.Usage, toolCost *float64, logger interface{ Error(string, ...any) }) usageColumns {
 	out := usageColumns{}
+	if toolCost != nil {
+		out.ToolCostUsd = floatToNumeric(*toolCost)
+	}
 	if usage == nil {
+		// Even with no token usage, a tool may have spent money. The
+		// total then equals just the tool cost.
+		out.TotalCostUsd = sumNumerics(out.ToolCostUsd)
 		return out
 	}
 	out.InputTokens = intToPtrInt32(usage.InputTokens)
@@ -584,11 +604,11 @@ func buildUsageParams(ctx context.Context, q *store.Queries, providerID uuid.UUI
 	})
 	if err != nil {
 		// If the model row vanished (deleted, etc.), record tokens but
-		// leave costs null. Not a hard failure — assistant message still
-		// gets written.
+		// leave token costs null. Tool cost still flows through.
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.Error("usage: fetch user_model failed", "err", err)
 		}
+		out.TotalCostUsd = sumNumerics(out.ToolCostUsd)
 		return out
 	}
 
@@ -596,7 +616,7 @@ func buildUsageParams(ctx context.Context, q *store.Queries, providerID uuid.UUI
 	out.OutputCostUsd = costFromTokens(usage.OutputTokens, row.OutputPricePerMillion)
 	out.CacheReadCostUsd = costFromTokens(usage.CacheReadTokens, row.CacheReadPerMillion)
 	out.CacheWriteCostUsd = costFromTokens(usage.CacheWriteTokens, row.CacheWritePerMillion)
-	out.TotalCostUsd = sumNumerics(out.InputCostUsd, out.OutputCostUsd, out.CacheReadCostUsd, out.CacheWriteCostUsd)
+	out.TotalCostUsd = sumNumerics(out.InputCostUsd, out.OutputCostUsd, out.CacheReadCostUsd, out.CacheWriteCostUsd, out.ToolCostUsd)
 	return out
 }
 
@@ -680,7 +700,8 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 	}
 	providerID := params.ProviderID
 	modelID := params.ModelID
-	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, logger)
+	// Compression turns never call tools today — pass nil for toolCost.
+	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, nil, logger)
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                summaryID,
 		ContextID:         params.ContextID,

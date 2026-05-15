@@ -19,6 +19,7 @@ type fakeResolver struct {
 	providerType string
 	apiKey       string
 	baseURL      string
+	pricing      ResolvedPricing
 }
 
 func (f fakeResolver) ResolveModel(_ context.Context, providerID, modelID string) (ResolvedModel, error) {
@@ -31,6 +32,7 @@ func (f fakeResolver) ResolveModel(_ context.Context, providerID, modelID string
 		ModelID:      modelID,
 		APIKey:       f.apiKey,
 		BaseURL:      f.baseURL,
+		Pricing:      f.pricing,
 	}, nil
 }
 
@@ -221,6 +223,111 @@ func TestImagegen_GoogleDispatch(t *testing.T) {
 	_ = json.Unmarshal(out.Output, &meta)
 	if meta["narration"] != "Here is the image you requested." {
 		t.Errorf("narration round-trip failed: %v", meta["narration"])
+	}
+}
+
+func TestImagegen_OpenAICostFromUsage(t *testing.T) {
+	t.Parallel()
+	pngBytes := []byte{0x89, 0x50, 0x4e, 0x47}
+	encoded := base64.StdEncoding.EncodeToString(pngBytes)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// 100 input tokens × $5/M = $0.0005, 50 output tokens × $40/M = $0.002, total $0.0025.
+		_, _ = w.Write([]byte(`{
+			"data":[{"b64_json":"` + encoded + `"}],
+			"usage":{"input_tokens":100,"output_tokens":50,"total_tokens":150,"input_tokens_details":{"text_tokens":100,"image_tokens":0}}
+		}`))
+	}))
+	defer srv.Close()
+
+	cfg, _ := json.Marshal(imagegenConfig{
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "gpt-image-1"},
+		EndpointOverride: srv.URL,
+	})
+	pl, _ := newImagegen(cfg)
+	tp := pl.(ToolProvider)
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "openai-compatible",
+		apiKey:       "sk",
+		pricing:      ResolvedPricing{InputPerMillion: 5.0, OutputPerMillion: 40.0},
+	})
+	out, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"x"}`))
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if out.CostUSD == nil {
+		t.Fatal("expected CostUSD to be populated from usage block")
+	}
+	if want := 0.0025; *out.CostUSD < want-1e-9 || *out.CostUSD > want+1e-9 {
+		t.Errorf("CostUSD = %v, want %v", *out.CostUSD, want)
+	}
+}
+
+func TestImagegen_DallE3CostFromPriceTable(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString([]byte{0x89}) + `"}]}`))
+	}))
+	defer srv.Close()
+
+	cfg, _ := json.Marshal(imagegenConfig{
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "dall-e-3"},
+		Size:             "1024x1024",
+		Quality:          "hd",
+		EndpointOverride: srv.URL,
+	})
+	pl, _ := newImagegen(cfg)
+	tp := pl.(ToolProvider)
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "openai-compatible",
+		apiKey:       "sk",
+	})
+	out, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"x"}`))
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if out.CostUSD == nil {
+		t.Fatal("expected CostUSD from dall-e-3 price table")
+	}
+	if want := 0.080; *out.CostUSD != want {
+		t.Errorf("CostUSD = %v, want %v (1024x1024 hd)", *out.CostUSD, want)
+	}
+}
+
+func TestImagegen_GoogleCostFromUsageMetadata(t *testing.T) {
+	t.Parallel()
+	pngBytes := []byte{0x89, 0x50}
+	encoded := base64.StdEncoding.EncodeToString(pngBytes)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// 200 prompt × $0.30/M + 1300 candidates × $30/M = 0.00006 + 0.039 = 0.03906
+		_, _ = w.Write([]byte(`{
+			"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"` + encoded + `"}}]}}],
+			"usageMetadata":{"promptTokenCount":200,"candidatesTokenCount":1300,"totalTokenCount":1500}
+		}`))
+	}))
+	defer srv.Close()
+
+	cfg, _ := json.Marshal(imagegenConfig{
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "gemini-2.5-flash-image-preview"},
+		EndpointOverride: srv.URL,
+	})
+	pl, _ := newImagegen(cfg)
+	tp := pl.(ToolProvider)
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "google",
+		apiKey:       "AIza-test",
+		pricing:      ResolvedPricing{InputPerMillion: 0.30, OutputPerMillion: 30.0},
+	})
+	out, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"x"}`))
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if out.CostUSD == nil {
+		t.Fatal("expected CostUSD from usageMetadata")
+	}
+	if want := 0.03906; *out.CostUSD < want-1e-6 || *out.CostUSD > want+1e-6 {
+		t.Errorf("CostUSD = %v, want %v", *out.CostUSD, want)
 	}
 }
 

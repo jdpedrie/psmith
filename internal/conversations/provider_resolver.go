@@ -51,12 +51,37 @@ func (r *userScopedResolver) ResolveModel(ctx context.Context, providerIDStr, mo
 	}
 	apiKey, baseURL := extractCredentials(cfgBytes)
 
+	// Load the user_model to surface per-million pricing for
+	// cost-aware plugins (imagegen multiplies usage × pricing
+	// to populate ToolResult.CostUSD). Best-effort: if the row
+	// is missing or pricing is null we hand back zeros and the
+	// plugin treats that as "unknown".
+	var pricing plugins.ResolvedPricing
+	if modelRow, err := r.svc.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: providerID,
+		ModelID:             modelID,
+	}); err == nil {
+		if modelRow.InputPricePerMillion != nil {
+			pricing.InputPerMillion = *modelRow.InputPricePerMillion
+		}
+		if modelRow.OutputPricePerMillion != nil {
+			pricing.OutputPerMillion = *modelRow.OutputPricePerMillion
+		}
+		if modelRow.CacheReadPerMillion != nil {
+			pricing.CacheReadPerMillion = *modelRow.CacheReadPerMillion
+		}
+		if modelRow.CacheWritePerMillion != nil {
+			pricing.CacheWritePerMillion = *modelRow.CacheWritePerMillion
+		}
+	}
+
 	return plugins.ResolvedModel{
 		ProviderType: provRow.Type,
 		ProviderID:   providerIDStr,
 		ModelID:      modelID,
 		APIKey:       apiKey,
 		BaseURL:      baseURL,
+		Pricing:      pricing,
 	}, nil
 }
 

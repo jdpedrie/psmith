@@ -1640,6 +1640,7 @@ private struct MessageUsagePopover: View {
                 // Costs
                 let hasCosts = u.inputCostUsd != nil || u.outputCostUsd != nil
                     || u.cacheReadCostUsd != nil || u.cacheWriteCostUsd != nil
+                    || u.toolCostUsd != nil
                     || u.totalCostUsd != nil
                 if hasCosts {
                     section("Cost (USD)") {
@@ -1647,6 +1648,7 @@ private struct MessageUsagePopover: View {
                         if let c = u.outputCostUsd     { row("Output",      costStr(c)) }
                         if let c = u.cacheReadCostUsd  { row("Cache read",  costStr(c)) }
                         if let c = u.cacheWriteCostUsd { row("Cache write", costStr(c)) }
+                        if let c = u.toolCostUsd       { row("Tools",       costStr(c)) }
                         if let c = u.totalCostUsd      { row("Total",       costStr(c), bold: true) }
                     }
                 }

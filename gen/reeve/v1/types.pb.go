@@ -3232,8 +3232,18 @@ type MessageUsage struct {
 	// cache_read_tokens this distinguishes explicit cache hits from
 	// implicit ones.
 	ExplicitCacheAttached *bool `protobuf:"varint,11,opt,name=explicit_cache_attached,json=explicitCacheAttached,proto3,oneof" json:"explicit_cache_attached,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// tool_cost_usd is the sum of every tool call the assistant
+	// dispatched during this turn that returned a `cost_usd` value
+	// (today: imagegen — OpenAI images endpoint or Gemini's
+	// generateContent for image output; future: any plugin that can
+	// compute its own API spend). Independent of input/output/cache
+	// token costs, but already folded into total_cost_usd at write
+	// time so the existing chip captures total spend without UI
+	// changes. NULL when no tool reported a cost (or pre-migration
+	// rows). Surface separately when the UI wants to break down spend.
+	ToolCostUsd   *float64 `protobuf:"fixed64,12,opt,name=tool_cost_usd,json=toolCostUsd,proto3,oneof" json:"tool_cost_usd,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MessageUsage) Reset() {
@@ -3341,6 +3351,13 @@ func (x *MessageUsage) GetExplicitCacheAttached() bool {
 		return *x.ExplicitCacheAttached
 	}
 	return false
+}
+
+func (x *MessageUsage) GetToolCostUsd() float64 {
+	if x != nil && x.ToolCostUsd != nil {
+		return *x.ToolCostUsd
+	}
+	return 0
 }
 
 type StreamRun struct {
@@ -4005,7 +4022,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"elapsed_ms\x18\x06 \x01(\x03R\telapsedMs\x12,\n" +
 	"\x0fprovider_opaque\x18\a \x01(\tH\x01R\x0eproviderOpaque\x88\x01\x01B\b\n" +
 	"\x06_errorB\x12\n" +
-	"\x10_provider_opaque\"\x8a\x06\n" +
+	"\x10_provider_opaque\"\xc5\x06\n" +
 	"\fMessageUsage\x12&\n" +
 	"\finput_tokens\x18\x01 \x01(\x05H\x00R\vinputTokens\x88\x01\x01\x12(\n" +
 	"\routput_tokens\x18\x02 \x01(\x05H\x01R\foutputTokens\x88\x01\x01\x12/\n" +
@@ -4019,7 +4036,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x0etotal_cost_usd\x18\n" +
 	" \x01(\x01H\tR\ftotalCostUsd\x88\x01\x01\x12;\n" +
 	"\x17explicit_cache_attached\x18\v \x01(\bH\n" +
-	"R\x15explicitCacheAttached\x88\x01\x01B\x0f\n" +
+	"R\x15explicitCacheAttached\x88\x01\x01\x12'\n" +
+	"\rtool_cost_usd\x18\f \x01(\x01H\vR\vtoolCostUsd\x88\x01\x01B\x0f\n" +
 	"\r_input_tokensB\x10\n" +
 	"\x0e_output_tokensB\x14\n" +
 	"\x12_cache_read_tokensB\x15\n" +
@@ -4030,7 +4048,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x14_cache_read_cost_usdB\x17\n" +
 	"\x15_cache_write_cost_usdB\x11\n" +
 	"\x0f_total_cost_usdB\x1a\n" +
-	"\x18_explicit_cache_attached\"\xf3\x06\n" +
+	"\x18_explicit_cache_attachedB\x10\n" +
+	"\x0e_tool_cost_usd\"\xf3\x06\n" +
 	"\tStreamRun\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x1d\n" +

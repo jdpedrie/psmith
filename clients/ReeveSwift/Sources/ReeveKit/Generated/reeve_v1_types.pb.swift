@@ -2433,6 +2433,24 @@ public struct Reeve_V1_MessageUsage: Sendable {
   /// Clears the value of `explicitCacheAttached`. Subsequent reads from it will return its default value.
   public mutating func clearExplicitCacheAttached() {self._explicitCacheAttached = nil}
 
+  /// tool_cost_usd is the sum of every tool call the assistant
+  /// dispatched during this turn that returned a `cost_usd` value
+  /// (today: imagegen — OpenAI images endpoint or Gemini's
+  /// generateContent for image output; future: any plugin that can
+  /// compute its own API spend). Independent of input/output/cache
+  /// token costs, but already folded into total_cost_usd at write
+  /// time so the existing chip captures total spend without UI
+  /// changes. NULL when no tool reported a cost (or pre-migration
+  /// rows). Surface separately when the UI wants to break down spend.
+  public var toolCostUsd: Double {
+    get {_toolCostUsd ?? 0}
+    set {_toolCostUsd = newValue}
+  }
+  /// Returns true if `toolCostUsd` has been explicitly set.
+  public var hasToolCostUsd: Bool {self._toolCostUsd != nil}
+  /// Clears the value of `toolCostUsd`. Subsequent reads from it will return its default value.
+  public mutating func clearToolCostUsd() {self._toolCostUsd = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2448,6 +2466,7 @@ public struct Reeve_V1_MessageUsage: Sendable {
   fileprivate var _cacheWriteCostUsd: Double? = nil
   fileprivate var _totalCostUsd: Double? = nil
   fileprivate var _explicitCacheAttached: Bool? = nil
+  fileprivate var _toolCostUsd: Double? = nil
 }
 
 public struct Reeve_V1_StreamRun: @unchecked Sendable {
@@ -4659,7 +4678,7 @@ extension Reeve_V1_ToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
 
 extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MessageUsage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}cache_read_tokens\0\u{3}cache_write_tokens\0\u{3}reasoning_tokens\0\u{3}input_cost_usd\0\u{3}output_cost_usd\0\u{3}cache_read_cost_usd\0\u{3}cache_write_cost_usd\0\u{3}total_cost_usd\0\u{3}explicit_cache_attached\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}cache_read_tokens\0\u{3}cache_write_tokens\0\u{3}reasoning_tokens\0\u{3}input_cost_usd\0\u{3}output_cost_usd\0\u{3}cache_read_cost_usd\0\u{3}cache_write_cost_usd\0\u{3}total_cost_usd\0\u{3}explicit_cache_attached\0\u{3}tool_cost_usd\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4678,6 +4697,7 @@ extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 9: try { try decoder.decodeSingularDoubleField(value: &self._cacheWriteCostUsd) }()
       case 10: try { try decoder.decodeSingularDoubleField(value: &self._totalCostUsd) }()
       case 11: try { try decoder.decodeSingularBoolField(value: &self._explicitCacheAttached) }()
+      case 12: try { try decoder.decodeSingularDoubleField(value: &self._toolCostUsd) }()
       default: break
       }
     }
@@ -4721,6 +4741,9 @@ extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try { if let v = self._explicitCacheAttached {
       try visitor.visitSingularBoolField(value: v, fieldNumber: 11)
     } }()
+    try { if let v = self._toolCostUsd {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 12)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4736,6 +4759,7 @@ extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs._cacheWriteCostUsd != rhs._cacheWriteCostUsd {return false}
     if lhs._totalCostUsd != rhs._totalCostUsd {return false}
     if lhs._explicitCacheAttached != rhs._explicitCacheAttached {return false}
+    if lhs._toolCostUsd != rhs._toolCostUsd {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

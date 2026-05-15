@@ -27,7 +27,7 @@ INSERT INTO messages (
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
     reasoning_tokens, provider_usage_raw,
     input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd,
-    total_cost_usd,
+    tool_cost_usd, total_cost_usd,
     error_payload,
     explicit_cache_attached,
     tool_calls,
@@ -40,11 +40,11 @@ INSERT INTO messages (
     $13, $14, $15, $16,
     $17, $18,
     $19, $20, $21, $22,
-    $23,
-    $24,
+    $23, $24,
     $25,
     $26,
-    $27
+    $27,
+    $28
 )
 RETURNING *;
 
@@ -149,6 +149,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.input_tokens, chain.output_tokens, chain.cache_read_tokens, chain.cache_write_tokens,
        chain.reasoning_tokens, chain.provider_usage_raw,
        chain.input_cost_usd, chain.output_cost_usd, chain.cache_read_cost_usd, chain.cache_write_cost_usd,
+       chain.tool_cost_usd,
        chain.total_cost_usd,
        chain.error_payload,
        chain.tool_calls,

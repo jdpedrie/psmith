@@ -307,9 +307,20 @@ type ToolDef struct {
 // produced — these get persisted on the assistant message and,
 // when the upstream provider supports it, ride back into the
 // next-round wire prefix as image blocks the model can read.
+//
+// `CostUSD` is the dollar cost the plugin's upstream API
+// charged for this call. Plugins compute it at call time
+// (per-token billing × usage from the response, or a flat
+// per-call price); the conversations-side tool loop accumulates
+// it into the assistant message's `tool_cost_usd` column so the
+// chat surface's cost chip reflects total spend (LLM + tools).
+// nil = unknown / not billed (typical for free / self-hosted
+// tools like brave_search via a personal key, where we don't
+// model the spend).
 type ToolResult struct {
 	Output      json.RawMessage
 	Attachments []ToolAttachment
+	CostUSD     *float64
 }
 
 // ToolAttachment is one binary blob a tool produced (e.g. a

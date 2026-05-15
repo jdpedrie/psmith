@@ -405,6 +405,7 @@ func messageUsageToProto(m store.Message) *reevev1.MessageUsage {
 		m.ReasoningTokens == nil &&
 		!m.InputCostUsd.Valid && !m.OutputCostUsd.Valid &&
 		!m.CacheReadCostUsd.Valid && !m.CacheWriteCostUsd.Valid &&
+		!m.ToolCostUsd.Valid &&
 		!m.TotalCostUsd.Valid &&
 		m.ExplicitCacheAttached == nil {
 		return nil
@@ -419,6 +420,7 @@ func messageUsageToProto(m store.Message) *reevev1.MessageUsage {
 		OutputCostUsd:         numericToFloat64Ptr(m.OutputCostUsd),
 		CacheReadCostUsd:      numericToFloat64Ptr(m.CacheReadCostUsd),
 		CacheWriteCostUsd:     numericToFloat64Ptr(m.CacheWriteCostUsd),
+		ToolCostUsd:           numericToFloat64Ptr(m.ToolCostUsd),
 		TotalCostUsd:          numericToFloat64Ptr(m.TotalCostUsd),
 		ExplicitCacheAttached: m.ExplicitCacheAttached,
 	}
@@ -464,6 +466,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *reevev1.Message {
 		OutputCostUsd:        r.OutputCostUsd,
 		CacheReadCostUsd:     r.CacheReadCostUsd,
 		CacheWriteCostUsd:    r.CacheWriteCostUsd,
+		ToolCostUsd:          r.ToolCostUsd,
 		TotalCostUsd:         r.TotalCostUsd,
 		ErrorPayload:         r.ErrorPayload,
 		ToolCalls:            r.ToolCalls,
