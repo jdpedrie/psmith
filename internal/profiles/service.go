@@ -806,6 +806,16 @@ func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
 		}
 		out.Options = opts
 	}
+	if f.Type == plugins.ConfigFieldModelPicker {
+		out.ModelPickerFilter = &reevev1.ModelPickerFilter{
+			RequiresStreaming:       f.ModelPickerFilter.RequiresStreaming,
+			RequiresThinking:        f.ModelPickerFilter.RequiresThinking,
+			RequiresToolUse:         f.ModelPickerFilter.RequiresToolUse,
+			RequiresVision:          f.ModelPickerFilter.RequiresVision,
+			RequiresPromptCaching:   f.ModelPickerFilter.RequiresPromptCaching,
+			RequiresGeneratesImages: f.ModelPickerFilter.RequiresGeneratesImages,
+		}
+	}
 	return out
 }
 
@@ -821,6 +831,8 @@ func configFieldTypeToProto(t plugins.ConfigFieldType) reevev1.ConfigField_Type 
 		return reevev1.ConfigField_BOOLEAN
 	case plugins.ConfigFieldSelect:
 		return reevev1.ConfigField_SELECT
+	case plugins.ConfigFieldModelPicker:
+		return reevev1.ConfigField_MODEL_PICKER
 	default:
 		return reevev1.ConfigField_TYPE_UNSPECIFIED
 	}

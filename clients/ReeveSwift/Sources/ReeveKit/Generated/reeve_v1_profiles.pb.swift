@@ -571,6 +571,19 @@ public struct Reeve_V1_ConfigField: Sendable {
   /// Populated only when type == SELECT.
   public var options: [Reeve_V1_ConfigOption] = []
 
+  /// Populated only when type == MODEL_PICKER. Hints to the UI
+  /// which models to surface in the picker. Multiple flags AND
+  /// (a model must satisfy every flag set to true). Empty / all-
+  /// false = no filter, surface every user_model.
+  public var modelPickerFilter: Reeve_V1_ModelPickerFilter {
+    get {_modelPickerFilter ?? Reeve_V1_ModelPickerFilter()}
+    set {_modelPickerFilter = newValue}
+  }
+  /// Returns true if `modelPickerFilter` has been explicitly set.
+  public var hasModelPickerFilter: Bool {self._modelPickerFilter != nil}
+  /// Clears the value of `modelPickerFilter`. Subsequent reads from it will return its default value.
+  public mutating func clearModelPickerFilter() {self._modelPickerFilter = nil}
+
   /// True when the form must collect a value before the plugin can be
   /// saved. UIs disable the parent Save button and show inline validation
   /// when a required field is empty. The plugin's constructor remains
@@ -596,6 +609,15 @@ public struct Reeve_V1_ConfigField: Sendable {
     case textarea // = 3
     case boolean // = 4
     case select // = 5
+
+    /// MODEL_PICKER renders the same model chooser the
+    /// conversation composer uses, optionally filtered by a
+    /// capability flag (see `model_picker_filter`). The stored
+    /// value is a JSON object `{"provider_id":"…","model_id":"…"}`
+    /// — provider_id is the user_model_provider id and model_id
+    /// is the catalog model id, mirroring how the conversation
+    /// settings persist a chosen model.
+    case modelPicker // = 6
     case UNRECOGNIZED(Int)
 
     public init() {
@@ -610,6 +632,7 @@ public struct Reeve_V1_ConfigField: Sendable {
       case 3: self = .textarea
       case 4: self = .boolean
       case 5: self = .select
+      case 6: self = .modelPicker
       default: self = .UNRECOGNIZED(rawValue)
       }
     }
@@ -622,6 +645,7 @@ public struct Reeve_V1_ConfigField: Sendable {
       case .textarea: return 3
       case .boolean: return 4
       case .select: return 5
+      case .modelPicker: return 6
       case .UNRECOGNIZED(let i): return i
       }
     }
@@ -634,11 +658,14 @@ public struct Reeve_V1_ConfigField: Sendable {
       .textarea,
       .boolean,
       .select,
+      .modelPicker,
     ]
 
   }
 
   public init() {}
+
+  fileprivate var _modelPickerFilter: Reeve_V1_ModelPickerFilter? = nil
 }
 
 /// ConfigOption is one entry in a SELECT field's options list.
@@ -650,6 +677,33 @@ public struct Reeve_V1_ConfigOption: Sendable {
   public var value: String = String()
 
   public var label: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// ModelPickerFilter constrains which user_models a MODEL_PICKER
+/// field surfaces. Any flag set to `true` is a hard requirement;
+/// all flags ANDed together. Empty = surface every user_model.
+public struct Reeve_V1_ModelPickerFilter: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var requiresStreaming: Bool = false
+
+  public var requiresThinking: Bool = false
+
+  public var requiresToolUse: Bool = false
+
+  public var requiresVision: Bool = false
+
+  public var requiresPromptCaching: Bool = false
+
+  /// Picks only models that produce image output (e.g. for
+  /// `imagegen`, `nano-banana`, `dall-e-3`).
+  public var requiresGeneratesImages: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1592,7 +1646,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
 extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1608,12 +1662,17 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 6: try { try decoder.decodeRepeatedMessageField(value: &self.options) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.required) }()
       case 8: try { try decoder.decodeSingularBoolField(value: &self.global) }()
+      case 9: try { try decoder.decodeSingularMessageField(value: &self._modelPickerFilter) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
@@ -1638,6 +1697,9 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if self.global != false {
       try visitor.visitSingularBoolField(value: self.global, fieldNumber: 8)
     }
+    try { if let v = self._modelPickerFilter {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1648,6 +1710,7 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.type != rhs.type {return false}
     if lhs.defaultJson != rhs.defaultJson {return false}
     if lhs.options != rhs.options {return false}
+    if lhs._modelPickerFilter != rhs._modelPickerFilter {return false}
     if lhs.required != rhs.required {return false}
     if lhs.global != rhs.global {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1656,7 +1719,7 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 }
 
 extension Reeve_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0")
 }
 
 extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1689,6 +1752,61 @@ extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   public static func ==(lhs: Reeve_V1_ConfigOption, rhs: Reeve_V1_ConfigOption) -> Bool {
     if lhs.value != rhs.value {return false}
     if lhs.label != rhs.label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ModelPickerFilter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ModelPickerFilter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}requires_streaming\0\u{3}requires_thinking\0\u{3}requires_tool_use\0\u{3}requires_vision\0\u{3}requires_prompt_caching\0\u{3}requires_generates_images\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.requiresStreaming) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.requiresThinking) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.requiresToolUse) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.requiresVision) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.requiresPromptCaching) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.requiresGeneratesImages) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.requiresStreaming != false {
+      try visitor.visitSingularBoolField(value: self.requiresStreaming, fieldNumber: 1)
+    }
+    if self.requiresThinking != false {
+      try visitor.visitSingularBoolField(value: self.requiresThinking, fieldNumber: 2)
+    }
+    if self.requiresToolUse != false {
+      try visitor.visitSingularBoolField(value: self.requiresToolUse, fieldNumber: 3)
+    }
+    if self.requiresVision != false {
+      try visitor.visitSingularBoolField(value: self.requiresVision, fieldNumber: 4)
+    }
+    if self.requiresPromptCaching != false {
+      try visitor.visitSingularBoolField(value: self.requiresPromptCaching, fieldNumber: 5)
+    }
+    if self.requiresGeneratesImages != false {
+      try visitor.visitSingularBoolField(value: self.requiresGeneratesImages, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ModelPickerFilter, rhs: Reeve_V1_ModelPickerFilter) -> Bool {
+    if lhs.requiresStreaming != rhs.requiresStreaming {return false}
+    if lhs.requiresThinking != rhs.requiresThinking {return false}
+    if lhs.requiresToolUse != rhs.requiresToolUse {return false}
+    if lhs.requiresVision != rhs.requiresVision {return false}
+    if lhs.requiresPromptCaching != rhs.requiresPromptCaching {return false}
+    if lhs.requiresGeneratesImages != rhs.requiresGeneratesImages {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

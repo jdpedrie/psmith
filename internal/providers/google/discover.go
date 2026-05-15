@@ -164,7 +164,8 @@ func (d *Driver) enrichModel(ctx context.Context, info geminiModelInfo) provider
 		Thinking:      cat.Capabilities.Thinking,
 		ToolUse:       cat.Capabilities.ToolUse,
 		Vision:        cat.Capabilities.Vision,
-		PromptCaching: cat.Capabilities.PromptCaching,
+		PromptCaching:   cat.Capabilities.PromptCaching,
+		GeneratesImages: cat.Capabilities.GeneratesImages,
 	}
 	if len(cat.Modalities) > 0 {
 		m.Modalities = append([]string(nil), cat.Modalities...)

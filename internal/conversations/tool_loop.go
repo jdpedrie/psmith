@@ -52,8 +52,14 @@ func makeToolLoopSendFunc(
 	// post-materialize hook so they show up in the chat surface
 	// alongside the tool's text output.
 	onToolAttachment func(plugins.ToolAttachment),
+	// resolver, when non-nil, is attached to the dispatch
+	// context so plugins (e.g. `imagegen`) can look up the
+	// (provider_id, model_id) pair the user picked in their
+	// MODEL_PICKER config and dispatch to the corresponding
+	// upstream API.
+	resolver plugins.ProviderResolver,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
-	dispatch := buildToolDispatch(pipeline)
+	dispatch := buildToolDispatch(pipeline, resolver)
 
 	return func(ctx context.Context) (<-chan providers.Chunk, error) {
 		out := make(chan providers.Chunk, 32)
@@ -198,7 +204,13 @@ func collectPipelineTools(pipeline plugins.Pipeline) []providers.ToolDef {
 }
 
 // buildToolDispatch constructs a (toolName → owning plugin) lookup.
-func buildToolDispatch(pipeline plugins.Pipeline) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
+// `resolver` is attached to every dispatch ctx so plugins that need
+// to resolve a user_model id (typically because they hold a
+// MODEL_PICKER config) can do so without a service dependency.
+func buildToolDispatch(
+	pipeline plugins.Pipeline,
+	resolver plugins.ProviderResolver,
+) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
 	owners := map[string]plugins.ToolProvider{}
 	for _, pl := range pipeline {
 		tp, ok := pl.(plugins.ToolProvider)
@@ -220,7 +232,7 @@ func buildToolDispatch(pipeline plugins.Pipeline) func(ctx context.Context, name
 		if !ok {
 			return plugins.ToolResult{}, fmt.Errorf("no plugin owns tool %q", name)
 		}
-		return owner.ExecuteTool(ctx, name, input)
+		return owner.ExecuteTool(plugins.WithProviderResolver(ctx, resolver), name, input)
 	}
 }
 

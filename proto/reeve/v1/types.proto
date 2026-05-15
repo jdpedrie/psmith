@@ -87,8 +87,15 @@ message ModelCapabilities {
   bool streaming = 1;
   bool thinking = 2;
   bool tool_use = 3;
+  // `vision` is the input modality — model accepts image attachments
+  // in user messages.
   bool vision = 4;
   bool prompt_caching = 5;
+  // `generates_images` is the output modality — model emits image
+  // bytes in its response. Used by modality-aware plugin config
+  // (e.g. `imagegen`) to filter the model picker so the user only
+  // sees models that can actually produce what the plugin needs.
+  bool generates_images = 6;
 }
 
 message ModelPricing {

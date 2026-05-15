@@ -375,11 +375,12 @@ type Model struct {
 }
 
 type ModelCapabilities struct {
-	Streaming     bool
-	Thinking      bool
-	ToolUse       bool
-	Vision        bool
-	PromptCaching bool
+	Streaming       bool
+	Thinking        bool
+	ToolUse         bool
+	Vision          bool
+	PromptCaching   bool
+	GeneratesImages bool
 }
 
 type Pricing struct {

@@ -59,8 +59,14 @@ type Capabilities struct {
 	Streaming     bool
 	Thinking      bool
 	ToolUse       bool
+	// Vision is the input modality — model accepts image
+	// attachments in user messages.
 	Vision        bool
 	PromptCaching bool
+	// GeneratesImages is the output modality — model produces
+	// image bytes in its response. Drives the `MODEL_PICKER`
+	// filter in modality-aware plugin config (e.g. `imagegen`).
+	GeneratesImages bool
 }
 
 // Status is a snapshot of the catalog contents.

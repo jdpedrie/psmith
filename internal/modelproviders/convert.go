@@ -122,21 +122,23 @@ func capabilitiesFromJSON(b []byte) *reevev1.ModelCapabilities {
 
 func capabilitiesToProto(c modelmeta.Capabilities) *reevev1.ModelCapabilities {
 	return &reevev1.ModelCapabilities{
-		Streaming:     c.Streaming,
-		Thinking:      c.Thinking,
-		ToolUse:       c.ToolUse,
-		Vision:        c.Vision,
-		PromptCaching: c.PromptCaching,
+		Streaming:       c.Streaming,
+		Thinking:        c.Thinking,
+		ToolUse:         c.ToolUse,
+		Vision:          c.Vision,
+		PromptCaching:   c.PromptCaching,
+		GeneratesImages: c.GeneratesImages,
 	}
 }
 
 func providerCapsToProto(c providers.ModelCapabilities) *reevev1.ModelCapabilities {
 	return &reevev1.ModelCapabilities{
-		Streaming:     c.Streaming,
-		Thinking:      c.Thinking,
-		ToolUse:       c.ToolUse,
-		Vision:        c.Vision,
-		PromptCaching: c.PromptCaching,
+		Streaming:       c.Streaming,
+		Thinking:        c.Thinking,
+		ToolUse:         c.ToolUse,
+		Vision:          c.Vision,
+		PromptCaching:   c.PromptCaching,
+		GeneratesImages: c.GeneratesImages,
 	}
 }
 

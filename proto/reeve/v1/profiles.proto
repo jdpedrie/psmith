@@ -179,6 +179,14 @@ message ConfigField {
     TEXTAREA = 3;
     BOOLEAN = 4;
     SELECT = 5;
+    // MODEL_PICKER renders the same model chooser the
+    // conversation composer uses, optionally filtered by a
+    // capability flag (see `model_picker_filter`). The stored
+    // value is a JSON object `{"provider_id":"…","model_id":"…"}`
+    // — provider_id is the user_model_provider id and model_id
+    // is the catalog model id, mirroring how the conversation
+    // settings persist a chosen model.
+    MODEL_PICKER = 6;
   }
   string name = 1;
   string display = 2;
@@ -188,6 +196,11 @@ message ConfigField {
   string default_json = 5;
   // Populated only when type == SELECT.
   repeated ConfigOption options = 6;
+  // Populated only when type == MODEL_PICKER. Hints to the UI
+  // which models to surface in the picker. Multiple flags AND
+  // (a model must satisfy every flag set to true). Empty / all-
+  // false = no filter, surface every user_model.
+  optional ModelPickerFilter model_picker_filter = 9;
   // True when the form must collect a value before the plugin can be
   // saved. UIs disable the parent Save button and show inline validation
   // when a required field is empty. The plugin's constructor remains
@@ -207,6 +220,20 @@ message ConfigField {
 message ConfigOption {
   string value = 1;
   string label = 2;
+}
+
+// ModelPickerFilter constrains which user_models a MODEL_PICKER
+// field surfaces. Any flag set to `true` is a hard requirement;
+// all flags ANDed together. Empty = surface every user_model.
+message ModelPickerFilter {
+  bool requires_streaming = 1;
+  bool requires_thinking = 2;
+  bool requires_tool_use = 3;
+  bool requires_vision = 4;
+  bool requires_prompt_caching = 5;
+  // Picks only models that produce image output (e.g. for
+  // `imagegen`, `nano-banana`, `dall-e-3`).
+  bool requires_generates_images = 6;
 }
 
 // ProfilePlugin is one row in a profile's pipeline. On input to

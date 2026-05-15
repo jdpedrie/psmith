@@ -973,14 +973,21 @@ func (x *ProviderTemplate) GetLogoSlug() string {
 }
 
 type ModelCapabilities struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Streaming     bool                   `protobuf:"varint,1,opt,name=streaming,proto3" json:"streaming,omitempty"`
-	Thinking      bool                   `protobuf:"varint,2,opt,name=thinking,proto3" json:"thinking,omitempty"`
-	ToolUse       bool                   `protobuf:"varint,3,opt,name=tool_use,json=toolUse,proto3" json:"tool_use,omitempty"`
-	Vision        bool                   `protobuf:"varint,4,opt,name=vision,proto3" json:"vision,omitempty"`
-	PromptCaching bool                   `protobuf:"varint,5,opt,name=prompt_caching,json=promptCaching,proto3" json:"prompt_caching,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Streaming bool                   `protobuf:"varint,1,opt,name=streaming,proto3" json:"streaming,omitempty"`
+	Thinking  bool                   `protobuf:"varint,2,opt,name=thinking,proto3" json:"thinking,omitempty"`
+	ToolUse   bool                   `protobuf:"varint,3,opt,name=tool_use,json=toolUse,proto3" json:"tool_use,omitempty"`
+	// `vision` is the input modality — model accepts image attachments
+	// in user messages.
+	Vision        bool `protobuf:"varint,4,opt,name=vision,proto3" json:"vision,omitempty"`
+	PromptCaching bool `protobuf:"varint,5,opt,name=prompt_caching,json=promptCaching,proto3" json:"prompt_caching,omitempty"`
+	// `generates_images` is the output modality — model emits image
+	// bytes in its response. Used by modality-aware plugin config
+	// (e.g. `imagegen`) to filter the model picker so the user only
+	// sees models that can actually produce what the plugin needs.
+	GeneratesImages bool `protobuf:"varint,6,opt,name=generates_images,json=generatesImages,proto3" json:"generates_images,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ModelCapabilities) Reset() {
@@ -1044,6 +1051,13 @@ func (x *ModelCapabilities) GetVision() bool {
 func (x *ModelCapabilities) GetPromptCaching() bool {
 	if x != nil {
 		return x.PromptCaching
+	}
+	return false
+}
+
+func (x *ModelCapabilities) GetGeneratesImages() bool {
+	if x != nil {
+		return x.GeneratesImages
 	}
 	return false
 }
@@ -3670,13 +3684,14 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"_preset_idB\f\n" +
 	"\n" +
-	"_logo_slug\"\xa7\x01\n" +
+	"_logo_slug\"\xd2\x01\n" +
 	"\x11ModelCapabilities\x12\x1c\n" +
 	"\tstreaming\x18\x01 \x01(\bR\tstreaming\x12\x1a\n" +
 	"\bthinking\x18\x02 \x01(\bR\bthinking\x12\x19\n" +
 	"\btool_use\x18\x03 \x01(\bR\atoolUse\x12\x16\n" +
 	"\x06vision\x18\x04 \x01(\bR\x06vision\x12%\n" +
-	"\x0eprompt_caching\x18\x05 \x01(\bR\rpromptCaching\"\x9c\x03\n" +
+	"\x0eprompt_caching\x18\x05 \x01(\bR\rpromptCaching\x12)\n" +
+	"\x10generates_images\x18\x06 \x01(\bR\x0fgeneratesImages\"\x9c\x03\n" +
 	"\fModelPricing\x12<\n" +
 	"\x18input_per_million_tokens\x18\x01 \x01(\x01H\x00R\x15inputPerMillionTokens\x88\x01\x01\x12>\n" +
 	"\x19output_per_million_tokens\x18\x02 \x01(\x01H\x01R\x16outputPerMillionTokens\x88\x01\x01\x12E\n" +

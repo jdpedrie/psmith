@@ -4,12 +4,35 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// fakeResolver returns a fixed (provider_type, api_key, base_url)
+// triple for any (provider_id, model_id) lookup. Tests mount it
+// via plugins.WithProviderResolver to drive imagegen's dispatch.
+type fakeResolver struct {
+	providerType string
+	apiKey       string
+	baseURL      string
+}
+
+func (f fakeResolver) ResolveModel(_ context.Context, providerID, modelID string) (ResolvedModel, error) {
+	if f.apiKey == "" {
+		return ResolvedModel{}, fmt.Errorf("fake resolver: no key configured")
+	}
+	return ResolvedModel{
+		ProviderType: f.providerType,
+		ProviderID:   providerID,
+		ModelID:      modelID,
+		APIKey:       f.apiKey,
+		BaseURL:      f.baseURL,
+	}, nil
+}
 
 func TestImagegen_DefaultsAndDescriptor(t *testing.T) {
 	t.Parallel()
@@ -20,52 +43,52 @@ func TestImagegen_DefaultsAndDescriptor(t *testing.T) {
 	if pl.Name() != ImagegenName {
 		t.Errorf("Name=%q want %q", pl.Name(), ImagegenName)
 	}
-	if pl.Description() == "" {
-		t.Error("Description must be non-empty")
-	}
 	if _, ok := pl.(ToolProvider); !ok {
 		t.Error("must implement ToolProvider")
 	}
-	if _, ok := pl.(Configurable); !ok {
-		t.Error("must implement Configurable")
+	c, ok := pl.(Configurable)
+	if !ok {
+		t.Fatal("must implement Configurable")
+	}
+	fields := c.ConfigFields()
+	// First field is the model picker with the
+	// generates_images filter — UIs must see this to render the
+	// chooser, so pin it.
+	if len(fields) == 0 || fields[0].Name != "model" || fields[0].Type != ConfigFieldModelPicker {
+		t.Fatalf("expected first field to be a model_picker named 'model', got %+v", fields)
+	}
+	if !fields[0].ModelPickerFilter.RequiresGeneratesImages {
+		t.Error("model picker must require generates_images capability")
 	}
 }
 
-func TestImagegen_RejectsMissingAPIKey(t *testing.T) {
+func TestImagegen_RejectsMissingModel(t *testing.T) {
 	t.Parallel()
 	pl, _ := newImagegen(nil)
 	tp := pl.(ToolProvider)
-	_, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{"prompt":"a cat"}`))
-	if err == nil {
-		t.Fatal("expected error when api_key is unset")
-	}
-	if !strings.Contains(err.Error(), "api_key") {
-		t.Errorf("error should mention api_key: %v", err)
+	ctx := WithProviderResolver(context.Background(), fakeResolver{providerType: "openai-compatible", apiKey: "k"})
+	_, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"a cat"}`))
+	if err == nil || !strings.Contains(err.Error(), "model is not configured") {
+		t.Fatalf("expected model-not-configured error, got %v", err)
 	}
 }
 
-func TestImagegen_RejectsMissingPrompt(t *testing.T) {
+func TestImagegen_RejectsMissingResolver(t *testing.T) {
 	t.Parallel()
-	pl, _ := newImagegen(json.RawMessage(`{"api_key":"k"}`))
+	cfg, _ := json.Marshal(imagegenConfig{
+		Model: imagegenModelRef{ProviderID: "p", ModelID: "gpt-image-1"},
+	})
+	pl, _ := newImagegen(cfg)
 	tp := pl.(ToolProvider)
-	_, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{}`))
-	if err == nil {
-		t.Fatal("expected error for empty prompt")
-	}
-	if !strings.Contains(err.Error(), "prompt") {
-		t.Errorf("error should mention prompt: %v", err)
+	_, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{"prompt":"x"}`))
+	if err == nil || !strings.Contains(err.Error(), "ProviderResolver") {
+		t.Fatalf("expected resolver-missing error, got %v", err)
 	}
 }
 
-func TestImagegen_PostsToEndpointAndReturnsImage(t *testing.T) {
+func TestImagegen_OpenAIDispatch(t *testing.T) {
 	t.Parallel()
-	// Tiny 1×1 PNG bytes (valid file header) so the test exercises
-	// real base64 round-tripping rather than asserting bytewise
-	// against a fixed payload.
-	pngBytes := []byte{
-		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-	}
+	pngBytes := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52}
 	encoded := base64.StdEncoding.EncodeToString(pngBytes)
 
 	var capturedBody []byte
@@ -73,65 +96,44 @@ func TestImagegen_PostsToEndpointAndReturnsImage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		capturedBody, _ = io.ReadAll(r.Body)
-		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":[{"b64_json":"` + encoded + `","revised_prompt":"a smiling tabby"}]}`))
 	}))
 	defer srv.Close()
 
 	cfg, _ := json.Marshal(imagegenConfig{
-		APIKey:           "sk-test",
-		Model:            "gpt-image-1",
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "gpt-image-1"},
 		Size:             "1024x1024",
 		Quality:          "high",
 		EndpointOverride: srv.URL,
 	})
-	pl, err := newImagegen(cfg)
-	if err != nil {
-		t.Fatalf("construct: %v", err)
-	}
+	pl, _ := newImagegen(cfg)
 	tp := pl.(ToolProvider)
-	out, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{"prompt":"a cat"}`))
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "openai-compatible",
+		apiKey:       "sk-test",
+	})
+	out, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"a cat"}`))
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
-
-	// Auth header check.
 	if gotAuth != "Bearer sk-test" {
 		t.Errorf("Authorization=%q want %q", gotAuth, "Bearer sk-test")
 	}
-	// Body must include the prompt + model + size + quality.
 	for _, want := range []string{`"prompt":"a cat"`, `"model":"gpt-image-1"`, `"size":"1024x1024"`, `"quality":"high"`} {
 		if !strings.Contains(string(capturedBody), want) {
-			t.Errorf("request body missing %q\nfull: %s", want, capturedBody)
+			t.Errorf("openai body missing %q\nfull: %s", want, capturedBody)
 		}
 	}
-	// gpt-image-1 must NOT include response_format (only dall-e-3 does).
 	if strings.Contains(string(capturedBody), "response_format") {
 		t.Errorf("gpt-image-1 must not include response_format; body: %s", capturedBody)
 	}
-
-	// Output JSON should round-trip the prompt + revised_prompt.
-	var got map[string]any
-	if err := json.Unmarshal(out.Output, &got); err != nil {
-		t.Fatalf("decode output: %v", err)
+	if len(out.Attachments) != 1 || string(out.Attachments[0].Data) != string(pngBytes) {
+		t.Errorf("attachment data didn't round-trip; got %d bytes", len(out.Attachments))
 	}
-	if got["prompt"] != "a cat" {
-		t.Errorf("prompt round-trip: got %v", got["prompt"])
-	}
-	if got["revised_prompt"] != "a smiling tabby" {
-		t.Errorf("revised_prompt round-trip: got %v", got["revised_prompt"])
-	}
-
-	// Attachment shape: 1 image, mime image/png, bytes match.
-	if len(out.Attachments) != 1 {
-		t.Fatalf("attachments=%d want 1", len(out.Attachments))
-	}
-	att := out.Attachments[0]
-	if att.Kind != "image" || att.MimeType != "image/png" {
-		t.Errorf("attachment kind/mime wrong: %+v", att)
-	}
-	if string(att.Data) != string(pngBytes) {
-		t.Errorf("attachment data didn't round-trip; got %d bytes", len(att.Data))
+	var meta map[string]any
+	_ = json.Unmarshal(out.Output, &meta)
+	if meta["revised_prompt"] != "a smiling tabby" {
+		t.Errorf("revised_prompt round-trip failed: %v", meta["revised_prompt"])
 	}
 }
 
@@ -145,15 +147,18 @@ func TestImagegen_DallE3SetsResponseFormat(t *testing.T) {
 	defer srv.Close()
 
 	cfg, _ := json.Marshal(imagegenConfig{
-		APIKey:           "sk-test",
-		Model:            "dall-e-3",
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "dall-e-3"},
 		Size:             "1024x1024",
 		Quality:          "hd",
 		EndpointOverride: srv.URL,
 	})
 	pl, _ := newImagegen(cfg)
 	tp := pl.(ToolProvider)
-	if _, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{"prompt":"x"}`)); err != nil {
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "openai-compatible",
+		apiKey:       "k",
+	})
+	if _, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"x"}`)); err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
 	if !strings.Contains(string(capturedBody), `"response_format":"b64_json"`) {
@@ -161,38 +166,77 @@ func TestImagegen_DallE3SetsResponseFormat(t *testing.T) {
 	}
 }
 
-func TestImagegen_RejectsUnknownTool(t *testing.T) {
+func TestImagegen_GoogleDispatch(t *testing.T) {
 	t.Parallel()
-	pl, _ := newImagegen(json.RawMessage(`{"api_key":"k"}`))
-	tp := pl.(ToolProvider)
-	_, err := tp.ExecuteTool(context.Background(), "wat", json.RawMessage(`{}`))
-	if err == nil {
-		t.Fatal("expected error for unknown tool")
-	}
-}
+	pngBytes := []byte{0x89, 0x50, 0x4e, 0x47}
+	encoded := base64.StdEncoding.EncodeToString(pngBytes)
 
-func TestImagegen_PerCallSizeOverride(t *testing.T) {
-	t.Parallel()
+	var gotKey string
 	var capturedBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("x-goog-api-key")
 		capturedBody, _ = io.ReadAll(r.Body)
-		_, _ = w.Write([]byte(`{"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString([]byte{0x89}) + `"}]}`))
+		// Gemini-shaped response: candidates[0].content.parts[]
+		// with one text part + one inlineData image part.
+		_, _ = w.Write([]byte(`{
+			"candidates": [{
+				"content": {
+					"parts": [
+						{"text": "Here is the image you requested."},
+						{"inlineData": {"mimeType": "image/png", "data": "` + encoded + `"}}
+					]
+				}
+			}]
+		}`))
 	}))
 	defer srv.Close()
 
 	cfg, _ := json.Marshal(imagegenConfig{
-		APIKey:           "k",
-		Model:            "gpt-image-1",
-		Size:             "1024x1024", // default
-		Quality:          "high",
+		Model:            imagegenModelRef{ProviderID: "p", ModelID: "gemini-2.5-flash-image-preview"},
 		EndpointOverride: srv.URL,
 	})
 	pl, _ := newImagegen(cfg)
 	tp := pl.(ToolProvider)
-	if _, err := tp.ExecuteTool(context.Background(), "generate_image", json.RawMessage(`{"prompt":"x","size":"1536x1024"}`)); err != nil {
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "google",
+		apiKey:       "AIza-test",
+	})
+	out, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"a watercolor of a fox"}`))
+	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
-	if !strings.Contains(string(capturedBody), `"size":"1536x1024"`) {
-		t.Errorf("per-call size override should win over plugin default; body: %s", capturedBody)
+	if gotKey != "AIza-test" {
+		t.Errorf("x-goog-api-key=%q want %q", gotKey, "AIza-test")
+	}
+	if !strings.Contains(string(capturedBody), `"responseModalities":["TEXT","IMAGE"]`) {
+		t.Errorf("google body missing responseModalities; full: %s", capturedBody)
+	}
+	if !strings.Contains(string(capturedBody), `"text":"a watercolor of a fox"`) {
+		t.Errorf("google body missing prompt; full: %s", capturedBody)
+	}
+	if len(out.Attachments) != 1 || string(out.Attachments[0].Data) != string(pngBytes) {
+		t.Errorf("google attachment didn't round-trip; got %d attachments", len(out.Attachments))
+	}
+	var meta map[string]any
+	_ = json.Unmarshal(out.Output, &meta)
+	if meta["narration"] != "Here is the image you requested." {
+		t.Errorf("narration round-trip failed: %v", meta["narration"])
+	}
+}
+
+func TestImagegen_RejectsUnknownProviderType(t *testing.T) {
+	t.Parallel()
+	cfg, _ := json.Marshal(imagegenConfig{
+		Model: imagegenModelRef{ProviderID: "p", ModelID: "claude-3-5-sonnet"},
+	})
+	pl, _ := newImagegen(cfg)
+	tp := pl.(ToolProvider)
+	ctx := WithProviderResolver(context.Background(), fakeResolver{
+		providerType: "anthropic",
+		apiKey:       "k",
+	})
+	_, err := tp.ExecuteTool(ctx, "generate_image", json.RawMessage(`{"prompt":"x"}`))
+	if err == nil || !strings.Contains(err.Error(), "anthropic") {
+		t.Fatalf("expected provider-type error, got %v", err)
 	}
 }

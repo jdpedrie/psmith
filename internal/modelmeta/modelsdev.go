@@ -166,11 +166,12 @@ func modelsDevToModel(providerID string, m modelsDevModelDoc, fetchedAt time.Tim
 		DisplayName: m.Name,
 		Modalities:  collectModalities(m.Modalities),
 		Capabilities: Capabilities{
-			Streaming:     true, // assume true; providers that can't stream are rare
-			Thinking:      m.Reasoning,
-			ToolUse:       m.ToolCall,
-			Vision:        hasModality(m.Modalities, "input", "image"),
-			PromptCaching: m.Cost != nil && (m.Cost.CacheRead > 0 || m.Cost.CacheWrite > 0),
+			Streaming:       true, // assume true; providers that can't stream are rare
+			Thinking:        m.Reasoning,
+			ToolUse:         m.ToolCall,
+			Vision:          hasModality(m.Modalities, "input", "image"),
+			PromptCaching:   m.Cost != nil && (m.Cost.CacheRead > 0 || m.Cost.CacheWrite > 0),
+			GeneratesImages: hasModality(m.Modalities, "output", "image"),
 		},
 		FetchedAt: fetchedAt,
 	}

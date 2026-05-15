@@ -61,11 +61,12 @@ type Constructor func(configBytes json.RawMessage) (Plugin, error)
 type ConfigFieldType string
 
 const (
-	ConfigFieldNumber   ConfigFieldType = "number"
-	ConfigFieldText     ConfigFieldType = "text"
-	ConfigFieldTextarea ConfigFieldType = "textarea"
-	ConfigFieldBoolean  ConfigFieldType = "boolean"
-	ConfigFieldSelect   ConfigFieldType = "select"
+	ConfigFieldNumber      ConfigFieldType = "number"
+	ConfigFieldText        ConfigFieldType = "text"
+	ConfigFieldTextarea    ConfigFieldType = "textarea"
+	ConfigFieldBoolean     ConfigFieldType = "boolean"
+	ConfigFieldSelect      ConfigFieldType = "select"
+	ConfigFieldModelPicker ConfigFieldType = "model_picker"
 )
 
 // ConfigField describes one entry in a plugin's per-instance config shape.
@@ -78,6 +79,10 @@ type ConfigField struct {
 	Type        ConfigFieldType
 	Default     any            // JSON-marshaled when sent over the wire; nil = no default
 	Options     []ConfigOption // only when Type==ConfigFieldSelect
+	// ModelPickerFilter constrains which user_models the
+	// chooser surfaces. Only consulted when Type==ConfigFieldModelPicker.
+	// Any flag set to true is a hard requirement; flags AND.
+	ModelPickerFilter ModelPickerFilter
 	// Required is a hint for the UI: a plugin can't be considered ready
 	// until this field has a non-empty value (or, for booleans/numbers,
 	// an explicit value chosen). The plugin's constructor remains the
@@ -100,6 +105,18 @@ type ConfigField struct {
 type ConfigOption struct {
 	Value string
 	Label string
+}
+
+// ModelPickerFilter constrains which user_models a MODEL_PICKER
+// field surfaces. Mirror of `reeve.v1.ModelPickerFilter`. Any
+// flag set to true is required; flags AND. Empty = no filter.
+type ModelPickerFilter struct {
+	RequiresStreaming       bool
+	RequiresThinking        bool
+	RequiresToolUse         bool
+	RequiresVision          bool
+	RequiresPromptCaching   bool
+	RequiresGeneratesImages bool
 }
 
 // Configurable lets the system introspect the plugin's per-instance config

@@ -750,9 +750,17 @@ public struct Reeve_V1_ModelCapabilities: Sendable {
 
   public var toolUse: Bool = false
 
+  /// `vision` is the input modality — model accepts image attachments
+  /// in user messages.
   public var vision: Bool = false
 
   public var promptCaching: Bool = false
+
+  /// `generates_images` is the output modality — model emits image
+  /// bytes in its response. Used by modality-aware plugin config
+  /// (e.g. `imagegen`) to filter the model picker so the user only
+  /// sees models that can actually produce what the plugin needs.
+  public var generatesImages: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2896,7 +2904,7 @@ extension Reeve_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
 extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelCapabilities"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}streaming\0\u{1}thinking\0\u{3}tool_use\0\u{1}vision\0\u{3}prompt_caching\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}streaming\0\u{1}thinking\0\u{3}tool_use\0\u{1}vision\0\u{3}prompt_caching\0\u{3}generates_images\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2909,6 +2917,7 @@ extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
       case 3: try { try decoder.decodeSingularBoolField(value: &self.toolUse) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.vision) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.promptCaching) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.generatesImages) }()
       default: break
       }
     }
@@ -2930,6 +2939,9 @@ extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if self.promptCaching != false {
       try visitor.visitSingularBoolField(value: self.promptCaching, fieldNumber: 5)
     }
+    if self.generatesImages != false {
+      try visitor.visitSingularBoolField(value: self.generatesImages, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2939,6 +2951,7 @@ extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
     if lhs.toolUse != rhs.toolUse {return false}
     if lhs.vision != rhs.vision {return false}
     if lhs.promptCaching != rhs.promptCaching {return false}
+    if lhs.generatesImages != rhs.generatesImages {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

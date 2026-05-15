@@ -30,6 +30,14 @@ const (
 	ConfigField_TEXTAREA         ConfigField_Type = 3
 	ConfigField_BOOLEAN          ConfigField_Type = 4
 	ConfigField_SELECT           ConfigField_Type = 5
+	// MODEL_PICKER renders the same model chooser the
+	// conversation composer uses, optionally filtered by a
+	// capability flag (see `model_picker_filter`). The stored
+	// value is a JSON object `{"provider_id":"…","model_id":"…"}`
+	// — provider_id is the user_model_provider id and model_id
+	// is the catalog model id, mirroring how the conversation
+	// settings persist a chosen model.
+	ConfigField_MODEL_PICKER ConfigField_Type = 6
 )
 
 // Enum value maps for ConfigField_Type.
@@ -41,6 +49,7 @@ var (
 		3: "TEXTAREA",
 		4: "BOOLEAN",
 		5: "SELECT",
+		6: "MODEL_PICKER",
 	}
 	ConfigField_Type_value = map[string]int32{
 		"TYPE_UNSPECIFIED": 0,
@@ -49,6 +58,7 @@ var (
 		"TEXTAREA":         3,
 		"BOOLEAN":          4,
 		"SELECT":           5,
+		"MODEL_PICKER":     6,
 	}
 )
 
@@ -1014,6 +1024,11 @@ type ConfigField struct {
 	DefaultJson string `protobuf:"bytes,5,opt,name=default_json,json=defaultJson,proto3" json:"default_json,omitempty"`
 	// Populated only when type == SELECT.
 	Options []*ConfigOption `protobuf:"bytes,6,rep,name=options,proto3" json:"options,omitempty"`
+	// Populated only when type == MODEL_PICKER. Hints to the UI
+	// which models to surface in the picker. Multiple flags AND
+	// (a model must satisfy every flag set to true). Empty / all-
+	// false = no filter, surface every user_model.
+	ModelPickerFilter *ModelPickerFilter `protobuf:"bytes,9,opt,name=model_picker_filter,json=modelPickerFilter,proto3,oneof" json:"model_picker_filter,omitempty"`
 	// True when the form must collect a value before the plugin can be
 	// saved. UIs disable the parent Save button and show inline validation
 	// when a required field is empty. The plugin's constructor remains
@@ -1103,6 +1118,13 @@ func (x *ConfigField) GetOptions() []*ConfigOption {
 	return nil
 }
 
+func (x *ConfigField) GetModelPickerFilter() *ModelPickerFilter {
+	if x != nil {
+		return x.ModelPickerFilter
+	}
+	return nil
+}
+
 func (x *ConfigField) GetRequired() bool {
 	if x != nil {
 		return x.Required
@@ -1170,6 +1192,95 @@ func (x *ConfigOption) GetLabel() string {
 	return ""
 }
 
+// ModelPickerFilter constrains which user_models a MODEL_PICKER
+// field surfaces. Any flag set to `true` is a hard requirement;
+// all flags ANDed together. Empty = surface every user_model.
+type ModelPickerFilter struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	RequiresStreaming     bool                   `protobuf:"varint,1,opt,name=requires_streaming,json=requiresStreaming,proto3" json:"requires_streaming,omitempty"`
+	RequiresThinking      bool                   `protobuf:"varint,2,opt,name=requires_thinking,json=requiresThinking,proto3" json:"requires_thinking,omitempty"`
+	RequiresToolUse       bool                   `protobuf:"varint,3,opt,name=requires_tool_use,json=requiresToolUse,proto3" json:"requires_tool_use,omitempty"`
+	RequiresVision        bool                   `protobuf:"varint,4,opt,name=requires_vision,json=requiresVision,proto3" json:"requires_vision,omitempty"`
+	RequiresPromptCaching bool                   `protobuf:"varint,5,opt,name=requires_prompt_caching,json=requiresPromptCaching,proto3" json:"requires_prompt_caching,omitempty"`
+	// Picks only models that produce image output (e.g. for
+	// `imagegen`, `nano-banana`, `dall-e-3`).
+	RequiresGeneratesImages bool `protobuf:"varint,6,opt,name=requires_generates_images,json=requiresGeneratesImages,proto3" json:"requires_generates_images,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *ModelPickerFilter) Reset() {
+	*x = ModelPickerFilter{}
+	mi := &file_reeve_v1_profiles_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelPickerFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelPickerFilter) ProtoMessage() {}
+
+func (x *ModelPickerFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_profiles_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelPickerFilter.ProtoReflect.Descriptor instead.
+func (*ModelPickerFilter) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ModelPickerFilter) GetRequiresStreaming() bool {
+	if x != nil {
+		return x.RequiresStreaming
+	}
+	return false
+}
+
+func (x *ModelPickerFilter) GetRequiresThinking() bool {
+	if x != nil {
+		return x.RequiresThinking
+	}
+	return false
+}
+
+func (x *ModelPickerFilter) GetRequiresToolUse() bool {
+	if x != nil {
+		return x.RequiresToolUse
+	}
+	return false
+}
+
+func (x *ModelPickerFilter) GetRequiresVision() bool {
+	if x != nil {
+		return x.RequiresVision
+	}
+	return false
+}
+
+func (x *ModelPickerFilter) GetRequiresPromptCaching() bool {
+	if x != nil {
+		return x.RequiresPromptCaching
+	}
+	return false
+}
+
+func (x *ModelPickerFilter) GetRequiresGeneratesImages() bool {
+	if x != nil {
+		return x.RequiresGeneratesImages
+	}
+	return false
+}
+
 // ProfilePlugin is one row in a profile's pipeline. On input to
 // SetProfilePlugins, `ordinal` is ignored — the request's list order is
 // authoritative. On output, `ordinal` reflects the persisted position
@@ -1185,7 +1296,7 @@ type ProfilePlugin struct {
 
 func (x *ProfilePlugin) Reset() {
 	*x = ProfilePlugin{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[14]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1197,7 +1308,7 @@ func (x *ProfilePlugin) String() string {
 func (*ProfilePlugin) ProtoMessage() {}
 
 func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[14]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,7 +1321,7 @@ func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfilePlugin.ProtoReflect.Descriptor instead.
 func (*ProfilePlugin) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{14}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ProfilePlugin) GetPluginName() string {
@@ -1242,7 +1353,7 @@ type ListPluginTypesRequest struct {
 
 func (x *ListPluginTypesRequest) Reset() {
 	*x = ListPluginTypesRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[15]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1365,7 @@ func (x *ListPluginTypesRequest) String() string {
 func (*ListPluginTypesRequest) ProtoMessage() {}
 
 func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[15]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1378,7 @@ func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{15}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{16}
 }
 
 type ListPluginTypesResponse struct {
@@ -1279,7 +1390,7 @@ type ListPluginTypesResponse struct {
 
 func (x *ListPluginTypesResponse) Reset() {
 	*x = ListPluginTypesResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[16]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1291,7 +1402,7 @@ func (x *ListPluginTypesResponse) String() string {
 func (*ListPluginTypesResponse) ProtoMessage() {}
 
 func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[16]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1304,7 +1415,7 @@ func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{16}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListPluginTypesResponse) GetPluginTypes() []*PluginType {
@@ -1323,7 +1434,7 @@ type GetProfilePluginsRequest struct {
 
 func (x *GetProfilePluginsRequest) Reset() {
 	*x = GetProfilePluginsRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[17]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1446,7 @@ func (x *GetProfilePluginsRequest) String() string {
 func (*GetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[17]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1459,7 @@ func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{17}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetProfilePluginsRequest) GetProfileId() string {
@@ -1367,7 +1478,7 @@ type GetProfilePluginsResponse struct {
 
 func (x *GetProfilePluginsResponse) Reset() {
 	*x = GetProfilePluginsResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[18]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1379,7 +1490,7 @@ func (x *GetProfilePluginsResponse) String() string {
 func (*GetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[18]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1392,7 +1503,7 @@ func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{18}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1412,7 +1523,7 @@ type SetProfilePluginsRequest struct {
 
 func (x *SetProfilePluginsRequest) Reset() {
 	*x = SetProfilePluginsRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[19]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1424,7 +1535,7 @@ func (x *SetProfilePluginsRequest) String() string {
 func (*SetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[19]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1437,7 +1548,7 @@ func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{19}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetProfilePluginsRequest) GetProfileId() string {
@@ -1463,7 +1574,7 @@ type SetProfilePluginsResponse struct {
 
 func (x *SetProfilePluginsResponse) Reset() {
 	*x = SetProfilePluginsResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[20]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1475,7 +1586,7 @@ func (x *SetProfilePluginsResponse) String() string {
 func (*SetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[20]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1488,7 +1599,7 @@ func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{20}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1511,7 +1622,7 @@ type UserPluginSettings struct {
 
 func (x *UserPluginSettings) Reset() {
 	*x = UserPluginSettings{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1523,7 +1634,7 @@ func (x *UserPluginSettings) String() string {
 func (*UserPluginSettings) ProtoMessage() {}
 
 func (x *UserPluginSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[21]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1536,7 +1647,7 @@ func (x *UserPluginSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserPluginSettings.ProtoReflect.Descriptor instead.
 func (*UserPluginSettings) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{21}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UserPluginSettings) GetPluginName() string {
@@ -1562,7 +1673,7 @@ type GetUserPluginSettingsRequest struct {
 
 func (x *GetUserPluginSettingsRequest) Reset() {
 	*x = GetUserPluginSettingsRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1574,7 +1685,7 @@ func (x *GetUserPluginSettingsRequest) String() string {
 func (*GetUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *GetUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[22]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1587,7 +1698,7 @@ func (x *GetUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{22}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetUserPluginSettingsRequest) GetPluginName() string {
@@ -1606,7 +1717,7 @@ type GetUserPluginSettingsResponse struct {
 
 func (x *GetUserPluginSettingsResponse) Reset() {
 	*x = GetUserPluginSettingsResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1618,7 +1729,7 @@ func (x *GetUserPluginSettingsResponse) String() string {
 func (*GetUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *GetUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[23]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1631,7 +1742,7 @@ func (x *GetUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{23}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
@@ -1649,7 +1760,7 @@ type ListUserPluginSettingsRequest struct {
 
 func (x *ListUserPluginSettingsRequest) Reset() {
 	*x = ListUserPluginSettingsRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1661,7 +1772,7 @@ func (x *ListUserPluginSettingsRequest) String() string {
 func (*ListUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *ListUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[24]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1674,7 +1785,7 @@ func (x *ListUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*ListUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{24}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{25}
 }
 
 type ListUserPluginSettingsResponse struct {
@@ -1686,7 +1797,7 @@ type ListUserPluginSettingsResponse struct {
 
 func (x *ListUserPluginSettingsResponse) Reset() {
 	*x = ListUserPluginSettingsResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1698,7 +1809,7 @@ func (x *ListUserPluginSettingsResponse) String() string {
 func (*ListUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *ListUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[25]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1711,7 +1822,7 @@ func (x *ListUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*ListUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{25}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListUserPluginSettingsResponse) GetSettings() []*UserPluginSettings {
@@ -1731,7 +1842,7 @@ type UpsertUserPluginSettingsRequest struct {
 
 func (x *UpsertUserPluginSettingsRequest) Reset() {
 	*x = UpsertUserPluginSettingsRequest{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1743,7 +1854,7 @@ func (x *UpsertUserPluginSettingsRequest) String() string {
 func (*UpsertUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *UpsertUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[26]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1756,7 +1867,7 @@ func (x *UpsertUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpsertUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{26}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpsertUserPluginSettingsRequest) GetPluginName() string {
@@ -1782,7 +1893,7 @@ type UpsertUserPluginSettingsResponse struct {
 
 func (x *UpsertUserPluginSettingsResponse) Reset() {
 	*x = UpsertUserPluginSettingsResponse{}
-	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1905,7 @@ func (x *UpsertUserPluginSettingsResponse) String() string {
 func (*UpsertUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *UpsertUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_profiles_proto_msgTypes[27]
+	mi := &file_reeve_v1_profiles_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1918,7 @@ func (x *UpsertUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpsertUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{27}
+	return file_reeve_v1_profiles_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UpsertUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
@@ -1928,16 +2039,17 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\rconfig_fields\x18\x03 \x03(\v2\x15.reeve.v1.ConfigFieldR\fconfigFields\x12@\n" +
 	"\fcapabilities\x18\x04 \x01(\v2\x1c.reeve.v1.PluginCapabilitiesR\fcapabilities\x12!\n" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12M\n" +
-	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x17.reeve.v1.DeviceFactKeyR\x14requestedDeviceFacts\"\xf1\x02\n" +
+	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x17.reeve.v1.DeviceFactKeyR\x14requestedDeviceFacts\"\xed\x03\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12.\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x1a.reeve.v1.ConfigField.TypeR\x04type\x12!\n" +
 	"\fdefault_json\x18\x05 \x01(\tR\vdefaultJson\x120\n" +
-	"\aoptions\x18\x06 \x03(\v2\x16.reeve.v1.ConfigOptionR\aoptions\x12\x1a\n" +
+	"\aoptions\x18\x06 \x03(\v2\x16.reeve.v1.ConfigOptionR\aoptions\x12P\n" +
+	"\x13model_picker_filter\x18\t \x01(\v2\x1b.reeve.v1.ModelPickerFilterH\x00R\x11modelPickerFilter\x88\x01\x01\x12\x1a\n" +
 	"\brequired\x18\a \x01(\bR\brequired\x12\x16\n" +
-	"\x06global\x18\b \x01(\bR\x06global\"Y\n" +
+	"\x06global\x18\b \x01(\bR\x06global\"k\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +
@@ -1946,10 +2058,19 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\bTEXTAREA\x10\x03\x12\v\n" +
 	"\aBOOLEAN\x10\x04\x12\n" +
 	"\n" +
-	"\x06SELECT\x10\x05\":\n" +
+	"\x06SELECT\x10\x05\x12\x10\n" +
+	"\fMODEL_PICKER\x10\x06B\x16\n" +
+	"\x14_model_picker_filter\":\n" +
 	"\fConfigOption\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\"b\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xb8\x02\n" +
+	"\x11ModelPickerFilter\x12-\n" +
+	"\x12requires_streaming\x18\x01 \x01(\bR\x11requiresStreaming\x12+\n" +
+	"\x11requires_thinking\x18\x02 \x01(\bR\x10requiresThinking\x12*\n" +
+	"\x11requires_tool_use\x18\x03 \x01(\bR\x0frequiresToolUse\x12'\n" +
+	"\x0frequires_vision\x18\x04 \x01(\bR\x0erequiresVision\x126\n" +
+	"\x17requires_prompt_caching\x18\x05 \x01(\bR\x15requiresPromptCaching\x12:\n" +
+	"\x19requires_generates_images\x18\x06 \x01(\bR\x17requiresGeneratesImages\"b\n" +
 	"\rProfilePlugin\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x12\x18\n" +
@@ -2014,7 +2135,7 @@ func file_reeve_v1_profiles_proto_rawDescGZIP() []byte {
 }
 
 var file_reeve_v1_profiles_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reeve_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_reeve_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_reeve_v1_profiles_proto_goTypes = []any{
 	(ConfigField_Type)(0),                    // 0: reeve.v1.ConfigField.Type
 	(*CreateProfileRequest)(nil),             // 1: reeve.v1.CreateProfileRequest
@@ -2031,74 +2152,76 @@ var file_reeve_v1_profiles_proto_goTypes = []any{
 	(*PluginType)(nil),                       // 12: reeve.v1.PluginType
 	(*ConfigField)(nil),                      // 13: reeve.v1.ConfigField
 	(*ConfigOption)(nil),                     // 14: reeve.v1.ConfigOption
-	(*ProfilePlugin)(nil),                    // 15: reeve.v1.ProfilePlugin
-	(*ListPluginTypesRequest)(nil),           // 16: reeve.v1.ListPluginTypesRequest
-	(*ListPluginTypesResponse)(nil),          // 17: reeve.v1.ListPluginTypesResponse
-	(*GetProfilePluginsRequest)(nil),         // 18: reeve.v1.GetProfilePluginsRequest
-	(*GetProfilePluginsResponse)(nil),        // 19: reeve.v1.GetProfilePluginsResponse
-	(*SetProfilePluginsRequest)(nil),         // 20: reeve.v1.SetProfilePluginsRequest
-	(*SetProfilePluginsResponse)(nil),        // 21: reeve.v1.SetProfilePluginsResponse
-	(*UserPluginSettings)(nil),               // 22: reeve.v1.UserPluginSettings
-	(*GetUserPluginSettingsRequest)(nil),     // 23: reeve.v1.GetUserPluginSettingsRequest
-	(*GetUserPluginSettingsResponse)(nil),    // 24: reeve.v1.GetUserPluginSettingsResponse
-	(*ListUserPluginSettingsRequest)(nil),    // 25: reeve.v1.ListUserPluginSettingsRequest
-	(*ListUserPluginSettingsResponse)(nil),   // 26: reeve.v1.ListUserPluginSettingsResponse
-	(*UpsertUserPluginSettingsRequest)(nil),  // 27: reeve.v1.UpsertUserPluginSettingsRequest
-	(*UpsertUserPluginSettingsResponse)(nil), // 28: reeve.v1.UpsertUserPluginSettingsResponse
-	(CompressionMode)(0),                     // 29: reeve.v1.CompressionMode
-	(*ProfileDefaults)(nil),                  // 30: reeve.v1.ProfileDefaults
-	(*Profile)(nil),                          // 31: reeve.v1.Profile
-	(DeviceFactKey)(0),                       // 32: reeve.v1.DeviceFactKey
+	(*ModelPickerFilter)(nil),                // 15: reeve.v1.ModelPickerFilter
+	(*ProfilePlugin)(nil),                    // 16: reeve.v1.ProfilePlugin
+	(*ListPluginTypesRequest)(nil),           // 17: reeve.v1.ListPluginTypesRequest
+	(*ListPluginTypesResponse)(nil),          // 18: reeve.v1.ListPluginTypesResponse
+	(*GetProfilePluginsRequest)(nil),         // 19: reeve.v1.GetProfilePluginsRequest
+	(*GetProfilePluginsResponse)(nil),        // 20: reeve.v1.GetProfilePluginsResponse
+	(*SetProfilePluginsRequest)(nil),         // 21: reeve.v1.SetProfilePluginsRequest
+	(*SetProfilePluginsResponse)(nil),        // 22: reeve.v1.SetProfilePluginsResponse
+	(*UserPluginSettings)(nil),               // 23: reeve.v1.UserPluginSettings
+	(*GetUserPluginSettingsRequest)(nil),     // 24: reeve.v1.GetUserPluginSettingsRequest
+	(*GetUserPluginSettingsResponse)(nil),    // 25: reeve.v1.GetUserPluginSettingsResponse
+	(*ListUserPluginSettingsRequest)(nil),    // 26: reeve.v1.ListUserPluginSettingsRequest
+	(*ListUserPluginSettingsResponse)(nil),   // 27: reeve.v1.ListUserPluginSettingsResponse
+	(*UpsertUserPluginSettingsRequest)(nil),  // 28: reeve.v1.UpsertUserPluginSettingsRequest
+	(*UpsertUserPluginSettingsResponse)(nil), // 29: reeve.v1.UpsertUserPluginSettingsResponse
+	(CompressionMode)(0),                     // 30: reeve.v1.CompressionMode
+	(*ProfileDefaults)(nil),                  // 31: reeve.v1.ProfileDefaults
+	(*Profile)(nil),                          // 32: reeve.v1.Profile
+	(DeviceFactKey)(0),                       // 33: reeve.v1.DeviceFactKey
 }
 var file_reeve_v1_profiles_proto_depIdxs = []int32{
-	29, // 0: reeve.v1.CreateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
-	30, // 1: reeve.v1.CreateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
-	31, // 2: reeve.v1.CreateProfileResponse.profile:type_name -> reeve.v1.Profile
-	31, // 3: reeve.v1.ListProfilesResponse.profiles:type_name -> reeve.v1.Profile
-	31, // 4: reeve.v1.GetProfileResponse.profile:type_name -> reeve.v1.Profile
-	31, // 5: reeve.v1.GetProfileResponse.resolved:type_name -> reeve.v1.Profile
-	29, // 6: reeve.v1.UpdateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
-	30, // 7: reeve.v1.UpdateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
-	31, // 8: reeve.v1.UpdateProfileResponse.profile:type_name -> reeve.v1.Profile
+	30, // 0: reeve.v1.CreateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
+	31, // 1: reeve.v1.CreateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
+	32, // 2: reeve.v1.CreateProfileResponse.profile:type_name -> reeve.v1.Profile
+	32, // 3: reeve.v1.ListProfilesResponse.profiles:type_name -> reeve.v1.Profile
+	32, // 4: reeve.v1.GetProfileResponse.profile:type_name -> reeve.v1.Profile
+	32, // 5: reeve.v1.GetProfileResponse.resolved:type_name -> reeve.v1.Profile
+	30, // 6: reeve.v1.UpdateProfileRequest.compression_mode:type_name -> reeve.v1.CompressionMode
+	31, // 7: reeve.v1.UpdateProfileRequest.default_settings:type_name -> reeve.v1.ProfileDefaults
+	32, // 8: reeve.v1.UpdateProfileResponse.profile:type_name -> reeve.v1.Profile
 	13, // 9: reeve.v1.PluginType.config_fields:type_name -> reeve.v1.ConfigField
 	11, // 10: reeve.v1.PluginType.capabilities:type_name -> reeve.v1.PluginCapabilities
-	32, // 11: reeve.v1.PluginType.requested_device_facts:type_name -> reeve.v1.DeviceFactKey
+	33, // 11: reeve.v1.PluginType.requested_device_facts:type_name -> reeve.v1.DeviceFactKey
 	0,  // 12: reeve.v1.ConfigField.type:type_name -> reeve.v1.ConfigField.Type
 	14, // 13: reeve.v1.ConfigField.options:type_name -> reeve.v1.ConfigOption
-	12, // 14: reeve.v1.ListPluginTypesResponse.plugin_types:type_name -> reeve.v1.PluginType
-	15, // 15: reeve.v1.GetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
-	15, // 16: reeve.v1.SetProfilePluginsRequest.plugins:type_name -> reeve.v1.ProfilePlugin
-	15, // 17: reeve.v1.SetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
-	22, // 18: reeve.v1.GetUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	22, // 19: reeve.v1.ListUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	22, // 20: reeve.v1.UpsertUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
-	1,  // 21: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
-	3,  // 22: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
-	5,  // 23: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
-	7,  // 24: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
-	9,  // 25: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
-	16, // 26: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
-	18, // 27: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
-	20, // 28: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
-	23, // 29: reeve.v1.ProfilesService.GetUserPluginSettings:input_type -> reeve.v1.GetUserPluginSettingsRequest
-	25, // 30: reeve.v1.ProfilesService.ListUserPluginSettings:input_type -> reeve.v1.ListUserPluginSettingsRequest
-	27, // 31: reeve.v1.ProfilesService.UpsertUserPluginSettings:input_type -> reeve.v1.UpsertUserPluginSettingsRequest
-	2,  // 32: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
-	4,  // 33: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
-	6,  // 34: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
-	8,  // 35: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
-	10, // 36: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
-	17, // 37: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
-	19, // 38: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
-	21, // 39: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
-	24, // 40: reeve.v1.ProfilesService.GetUserPluginSettings:output_type -> reeve.v1.GetUserPluginSettingsResponse
-	26, // 41: reeve.v1.ProfilesService.ListUserPluginSettings:output_type -> reeve.v1.ListUserPluginSettingsResponse
-	28, // 42: reeve.v1.ProfilesService.UpsertUserPluginSettings:output_type -> reeve.v1.UpsertUserPluginSettingsResponse
-	32, // [32:43] is the sub-list for method output_type
-	21, // [21:32] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	15, // 14: reeve.v1.ConfigField.model_picker_filter:type_name -> reeve.v1.ModelPickerFilter
+	12, // 15: reeve.v1.ListPluginTypesResponse.plugin_types:type_name -> reeve.v1.PluginType
+	16, // 16: reeve.v1.GetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
+	16, // 17: reeve.v1.SetProfilePluginsRequest.plugins:type_name -> reeve.v1.ProfilePlugin
+	16, // 18: reeve.v1.SetProfilePluginsResponse.plugins:type_name -> reeve.v1.ProfilePlugin
+	23, // 19: reeve.v1.GetUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	23, // 20: reeve.v1.ListUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	23, // 21: reeve.v1.UpsertUserPluginSettingsResponse.settings:type_name -> reeve.v1.UserPluginSettings
+	1,  // 22: reeve.v1.ProfilesService.CreateProfile:input_type -> reeve.v1.CreateProfileRequest
+	3,  // 23: reeve.v1.ProfilesService.ListProfiles:input_type -> reeve.v1.ListProfilesRequest
+	5,  // 24: reeve.v1.ProfilesService.GetProfile:input_type -> reeve.v1.GetProfileRequest
+	7,  // 25: reeve.v1.ProfilesService.UpdateProfile:input_type -> reeve.v1.UpdateProfileRequest
+	9,  // 26: reeve.v1.ProfilesService.DeleteProfile:input_type -> reeve.v1.DeleteProfileRequest
+	17, // 27: reeve.v1.ProfilesService.ListPluginTypes:input_type -> reeve.v1.ListPluginTypesRequest
+	19, // 28: reeve.v1.ProfilesService.GetProfilePlugins:input_type -> reeve.v1.GetProfilePluginsRequest
+	21, // 29: reeve.v1.ProfilesService.SetProfilePlugins:input_type -> reeve.v1.SetProfilePluginsRequest
+	24, // 30: reeve.v1.ProfilesService.GetUserPluginSettings:input_type -> reeve.v1.GetUserPluginSettingsRequest
+	26, // 31: reeve.v1.ProfilesService.ListUserPluginSettings:input_type -> reeve.v1.ListUserPluginSettingsRequest
+	28, // 32: reeve.v1.ProfilesService.UpsertUserPluginSettings:input_type -> reeve.v1.UpsertUserPluginSettingsRequest
+	2,  // 33: reeve.v1.ProfilesService.CreateProfile:output_type -> reeve.v1.CreateProfileResponse
+	4,  // 34: reeve.v1.ProfilesService.ListProfiles:output_type -> reeve.v1.ListProfilesResponse
+	6,  // 35: reeve.v1.ProfilesService.GetProfile:output_type -> reeve.v1.GetProfileResponse
+	8,  // 36: reeve.v1.ProfilesService.UpdateProfile:output_type -> reeve.v1.UpdateProfileResponse
+	10, // 37: reeve.v1.ProfilesService.DeleteProfile:output_type -> reeve.v1.DeleteProfileResponse
+	18, // 38: reeve.v1.ProfilesService.ListPluginTypes:output_type -> reeve.v1.ListPluginTypesResponse
+	20, // 39: reeve.v1.ProfilesService.GetProfilePlugins:output_type -> reeve.v1.GetProfilePluginsResponse
+	22, // 40: reeve.v1.ProfilesService.SetProfilePlugins:output_type -> reeve.v1.SetProfilePluginsResponse
+	25, // 41: reeve.v1.ProfilesService.GetUserPluginSettings:output_type -> reeve.v1.GetUserPluginSettingsResponse
+	27, // 42: reeve.v1.ProfilesService.ListUserPluginSettings:output_type -> reeve.v1.ListUserPluginSettingsResponse
+	29, // 43: reeve.v1.ProfilesService.UpsertUserPluginSettings:output_type -> reeve.v1.UpsertUserPluginSettingsResponse
+	33, // [33:44] is the sub-list for method output_type
+	22, // [22:33] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_profiles_proto_init() }
@@ -2110,13 +2233,14 @@ func file_reeve_v1_profiles_proto_init() {
 	file_reeve_v1_profiles_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reeve_v1_profiles_proto_msgTypes[5].OneofWrappers = []any{}
 	file_reeve_v1_profiles_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reeve_v1_profiles_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_profiles_proto_rawDesc), len(file_reeve_v1_profiles_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
