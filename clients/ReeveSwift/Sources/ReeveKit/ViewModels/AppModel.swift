@@ -14,6 +14,11 @@ public final class AppModel {
     /// LoginView can show "logging into ${serverURL}" and so a "change
     /// server" affordance can compare against the persisted store.
     public let serverURL: URL
+    /// The account this model serves, when running under
+    /// AccountManager (every multi-account flow). nil for legacy
+    /// single-account constructions; in that case caches use the
+    /// process-wide default paths.
+    public let accountID: UUID?
 
     /// Settings-tab view models held eagerly so SettingsView never has to
     /// wait for them to materialise (which causes a visible layout flash).
@@ -41,16 +46,29 @@ public final class AppModel {
     /// goes out the moment the server is reachable again.
     public let outboundQueue: OutboundQueue
 
-    public init(host: URL, tokenStore: TokenStore, authState: AuthState = .init()) {
+    public init(
+        host: URL,
+        tokenStore: TokenStore,
+        authState: AuthState = .init(),
+        accountID: UUID? = nil
+    ) {
         self.authState = authState
         self.serverURL = host
+        self.accountID = accountID
         // Cache is best-effort: if SwiftData can't bring up the
         // store (corrupt file, sandbox issue), the client falls
         // back to network-only — no offline reads, but the app
         // otherwise works. We log so the failure is debuggable.
+        //
+        // When an accountID is supplied, the cache file is
+        // namespaced so two accounts don't share entries.
         let cache: ReeveCache?
         do {
-            cache = try ReeveCache()
+            if let accountID {
+                cache = try Self.makeAccountScopedCache(accountID: accountID)
+            } else {
+                cache = try ReeveCache()
+            }
         } catch {
             NSLog("ReeveCache init failed: \(error). Running without on-device cache.")
             cache = nil
@@ -62,6 +80,22 @@ public final class AppModel {
         self.outboundQueue = OutboundQueue()
         self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
         self.streamHub = StreamHub(subscriber: c.streams)
+    }
+
+    /// Builds a ReeveCache whose store URL embeds the account id.
+    /// Two accounts (even on the same host) get distinct sqlite
+    /// files so cache hits never cross identity boundaries.
+    private static func makeAccountScopedCache(accountID: UUID) throws -> ReeveCache {
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let dir = support.appendingPathComponent("Reeve/Accounts/\(accountID.uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let storeURL = dir.appendingPathComponent("cache.sqlite", isDirectory: false)
+        return try ReeveCache(storeURL: storeURL)
     }
 
     /// Default factory: pulls the URL from `ServerURLStore` (which falls

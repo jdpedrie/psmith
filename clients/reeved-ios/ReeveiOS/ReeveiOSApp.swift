@@ -12,7 +12,7 @@ import ReeveUI
 /// "log out → change server → sign back in" doesn't need a relaunch.
 @main
 struct ReeveiOSApp: App {
-    @State private var appModel = AppModel()
+    @State private var accountManager = AccountManager()
     @State private var urlStore = ServerURLStore.shared
     @State private var themeStore = ThemeStore()
     @State private var prefs = sharedAppPreferences
@@ -25,8 +25,8 @@ struct ReeveiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(appModel)
+            iOSAppShell(accountManager: accountManager)
+                .environment(accountManager)
                 .environment(themeStore)
                 .environment(prefs)
                 .environment(navigator)
@@ -35,29 +35,18 @@ struct ReeveiOSApp: App {
                 .environment(\.notifier, sharedIOSNotifier)
                 .tint(themeStore.current.accent)
                 .task {
-                    await appModel.bootstrap()
-                }
-                .onChange(of: urlStore.current) { _, _ in
-                    appModel = AppModel()
-                    Task { await appModel.bootstrap() }
+                    if let active = accountManager.active {
+                        await active.bootstrap()
+                    }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhase(newPhase)
                 }
                 // Two-way bg-keeper bookkeeping driven by stream
-                // start/end events while the scene is non-active:
-                //
-                //   - streams empty → release the token (whether
-                //     we're foregrounded or not — `end()` is a no-op
-                //     when no token is held).
-                //   - streams become non-empty while backgrounded →
-                //     extend NOW. This is the case the old code
-                //     missed: kicking off compaction (or any new run
-                //     via background adopt) while the app was already
-                //     suspended produced no scene-phase transition,
-                //     so the bgKeeper was never extended and iOS
-                //     froze the supervisor mid-stream.
-                .onChange(of: appModel.streamHub.activeConversationIDs.isEmpty) { _, isEmpty in
+                // start/end events. Reads through the active
+                // account's StreamHub so a switched-away account
+                // doesn't influence background extension.
+                .onChange(of: accountManager.active?.streamHub.activeConversationIDs.isEmpty ?? true) { _, isEmpty in
                     if isEmpty {
                         bgKeeper.end()
                     } else if scenePhase != .active {
@@ -70,13 +59,30 @@ struct ReeveiOSApp: App {
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .background, .inactive:
-            if !appModel.streamHub.activeConversationIDs.isEmpty {
+            if let app = accountManager.active,
+               !app.streamHub.activeConversationIDs.isEmpty {
                 bgKeeper.extend()
             }
         case .active:
             bgKeeper.end()
         @unknown default:
             break
+        }
+    }
+}
+
+/// iOS root shell — picks RootView when an active account exists,
+/// AccountSetupView otherwise. Mirrors the Mac AppShell.
+struct iOSAppShell: View {
+    @Bindable var accountManager: AccountManager
+
+    var body: some View {
+        if let app = accountManager.active {
+            RootView()
+                .environment(app)
+                .id(app.accountID ?? UUID())
+        } else {
+            iOSAccountSetupView()
         }
     }
 }

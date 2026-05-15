@@ -198,11 +198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ReeveMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var appModel = AppModel()
-    /// The shared ServerURLStore. Watching it via @State means the App
-    /// re-renders when the user picks a new server in the LoginView,
-    /// and our `.onChange` hook below rebuilds AppModel against the new
-    /// URL — the new ReeveClient takes effect without needing a relaunch.
+    /// Top-level multi-account host. Holds the persisted accounts
+    /// list + one AppModel per account. The active AppModel is
+    /// what the rest of the app sees as `app`; switching accounts
+    /// swaps which one that resolves to without reconstructing
+    /// stream subscriptions or caches.
+    @State private var accountManager = AccountManager()
+    /// The shared ServerURLStore. Read by the LoginView for the
+    /// initial host suggestion when adding the first account.
     @State private var urlStore = ServerURLStore.shared
     /// Use the shared ThemeStore (defined in Theme.swift) so AppDelegate can
     /// read the active chrome color for NSWindow.backgroundColor without
@@ -223,8 +226,13 @@ struct ReeveMacApp: App {
 
     var body: some Scene {
         WindowGroup("") {
-            RootView()
-                .environment(appModel)
+            // Compose env: AccountManager always; AppModel only
+            // when an active account exists. RootView reads
+            // AppModel via env when present and falls back to
+            // showing AccountSetupView (a thin LoginView wrapper
+            // that calls accountManager.addAccount).
+            AppShell(accountManager: accountManager)
+                .environment(accountManager)
                 .environment(sharedWindowState)
                 .environment(sharedNavigator)
                 .environment(themeStore)
@@ -238,29 +246,17 @@ struct ReeveMacApp: App {
                 .background(WindowChrome())
                 .navigationTitle("")
                 .task {
-                    await appModel.bootstrap()
-                    // Touch sharedNotifier so its UNUserNotificationCenter
-                    // delegate registration runs once at app startup. The
-                    // lazy init wires the click-handler before any
-                    // notification could possibly arrive.
+                    // Bootstrap every existing account so live runs
+                    // adopt + connectivity monitors start. New
+                    // accounts added after launch bootstrap
+                    // themselves inside AccountManager.addAccount.
+                    if let active = accountManager.active {
+                        await active.bootstrap()
+                    }
                     _ = sharedNotifier
                 }
-                // Refresh NSWindow.backgroundColor whenever the active theme
-                // flips. AppDelegate.configure pulls from sharedThemeStore,
-                // but it isn't called on a SwiftUI env change — without this
-                // hook the title-bar fill stays on the previous theme's
-                // chrome until the next NSWindow notification fires.
                 .onChange(of: themeStore.current.id) { _, _ in
                     AppDelegate.configureAndTrackAllWindows()
-                }
-                // When the user picks a new server URL in LoginView,
-                // ServerURLStore.current changes — rebuild AppModel
-                // against the new URL so ReeveClient (and every
-                // repository it owns) targets the right host. Live swap;
-                // no relaunch.
-                .onChange(of: urlStore.current) { _, _ in
-                    appModel = AppModel()
-                    Task { await appModel.bootstrap() }
                 }
         }
         // Default size on first run. macOS state-restores the window's last
