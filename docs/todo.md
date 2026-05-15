@@ -52,51 +52,9 @@ Ordered by impact on getting Reeve to a "useful for sustained personal chat" sta
 
 ## iOS streaming reconnection + background story
 
-The iOS streaming UX has two persistent gaps that this work targets:
+✅ **Phases 1–3 done.** `StreamHub` lives in `clients/ReeveSwift/Sources/ReeveKit/StreamSubscriber/StreamHub.swift` as an app-lifetime owner of active runs; `ConversationViewModel` reads streaming state through it. Server-side `Streams.ListActiveRuns` (`internal/streamsvc/service.go`, tests in `service_test.go`) lets `AppModel` adopt in-flight runs on launch and lets `ConversationsModel` derive a "generating…" indicator on each `ConversationRow`. Re-entering a mid-generation chat now repaints the streaming bubble immediately.
 
-1. **Re-entering a chat during generation** lands the user on a chain with no in-flight assistant turn visible. The server-side run is still going, chunks are landing in `stream_chunks`, but the freshly-mounted ConversationViewModel has no idea — `load()` returns the chain (user message + nothing) and there's no "this run is still running, resume it" signal.
-2. **Backgrounding the app during generation** works (suspend / resume via `scenePhase`) but the resume round-trip is visibly slow — resubscribe → server replays missed chunks → first deltas appear.
-
-Root cause: `ConversationViewModel` is view-lifetime. When the view unmounts (back to list, drilldown elsewhere, etc.) the streamTask is cancelled and the model is gone. There's no app-level concept of "what runs are in flight right now."
-
-### Plan, phased
-
-**Phase 1 — `StreamHub` (app-lifetime singleton on `AppModel`).** New `@Observable` actor in ReeveKit that owns active stream subscriptions independently of any view. Per active run:
-- `runID`, `conversationID`, `contextID`
-- accumulated `streamingText`, `streamingThinking`, tool calls, `lastSequence`
-- the live subscriber Task
-
-`ConversationViewModel` becomes a view *over* the hub:
-- `send()` / `sendForking()` / `regenerateAssistant()` / `reloadFromMessage()` / `compact()` register the started run with `StreamHub` instead of (or alongside) owning the subscribe task themselves.
-- `load()` calls `StreamHub.attach(conversationID:)` — if there's an active state for that conversation, the ViewModel adopts streamingText / streamRunID / streamingToolCalls / etc. *immediately* and observes the hub for new chunks.
-- On view dismissal the hub keeps subscribing. On re-attach the streaming bubble repaints with whatever's accumulated so far — fixes symptom (1) entirely.
-- On terminal, the hub fires `terminalReached(conversationID, messageID)`; whichever ViewModel is attached at the moment runs the existing terminal flow (`load()` + `clearStreamingState()`). If no ViewModel is attached, the hub retains terminal state so the next attach gets it.
-
-**Phase 2 — Server-side "what's running" RPC.** Today the only way to find a run is to know its `runID`. Needs:
-- SQL: `ListActiveStreamRunsByConversation(conversation_id)` + `ListActiveStreamRunsByUser(user_id)` (`WHERE status = 'running'`).
-- RPC: `Streams.ListActiveRuns(filter)`.
-
-Use cases:
-- On app launch (after auth restore), `ConversationsModel.refresh` queries active runs for the user; each one gets adopted by `StreamHub`. The list comes up "live" — cold launch into a mid-stream conversation works.
-- On conversation entry, `StreamHub.attach(conversationID:)` falls back to a server query if the hub has nothing, so the hub doesn't have to be persisted across app launches to remain useful.
-
-**Phase 3 — Conversations list indicator (polish, after 1+2 ship).** `ConversationsModel` observes `StreamHub.activeConversationIDs` (a derived Set). Conversation rows in the list show a small spinner / "generating…" chip. Tapping a row with an active stream lands the user in the conversation with content already painted.
-
-**Phase 4 — Real iOS backgrounding (defer until 1–3 are stable, possibly forever).** iOS suspends after ~30s of background. To keep the hub running past that:
-- `UIApplication.beginBackgroundTask` extends the grace window (~30s of bonus execution).
-- Past that, silent push (APNs) is the only iOS-blessed path — a non-starter for self-hosted Reeve without an APNs setup story.
-- Realistic plan: `beginBackgroundTask` while StreamHub has at least one active run, fall back to existing suspend/resume past the limit. Document: "if you background for >30s during generation, you'll see a brief refresh on return."
-
-### Trade-offs
-
-- Memory: hub holds per-run state. Bounded by user's concurrent stream count (1, occasionally 2 for turn + compaction).
-- Coupling: `ConversationViewModel` shrinks (streaming state moves to hub). Lots of files touched but well-defined moves.
-- Subscriber churn: currently each ViewModel.send opens a fresh subscribe; the hub centralizes that. Net win.
-- Testing: a single observable concept is easier to test than the per-VM subscribe loops scattered across send / sendForking / regenerate / reload / compact.
-
-### Order of work
-
-Ship **Phases 1+2 together** as one cohesive refactor (~half day). They reinforce each other and Phase 1 alone leaves a hole on cold launch. **Phase 3** is small polish on top. **Phase 4** waits.
+**Phase 4 (real iOS backgrounding past the ~30s suspend) still deferred** — `beginBackgroundTask` would buy the grace window; APNs silent push is the only path past that and is a non-starter without a hosted APNs story. Document the current behaviour: backgrounding for >30s during generation triggers a brief resubscribe-and-replay on return.
 
 ---
 
