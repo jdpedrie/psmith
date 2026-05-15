@@ -823,9 +823,26 @@ public struct Reeve_V1_TestUserModelRequest: Sendable {
 
   public var modelID: String = String()
 
+  /// Optional per-call settings overrides. When set, the test send
+  /// applies them on top of the model's default_settings before
+  /// dispatch — surfaces "this provider rejects temperature=2.0" or
+  /// "thinking requires temperature=1.0" the same way the production
+  /// SendMessage path would. Used by the discover-constraints
+  /// tooling to map the per-model constraint table empirically.
+  public var callSettings: Reeve_V1_CallSettings {
+    get {_callSettings ?? Reeve_V1_CallSettings()}
+    set {_callSettings = newValue}
+  }
+  /// Returns true if `callSettings` has been explicitly set.
+  public var hasCallSettings: Bool {self._callSettings != nil}
+  /// Clears the value of `callSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearCallSettings() {self._callSettings = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _callSettings: Reeve_V1_CallSettings? = nil
 }
 
 public struct Reeve_V1_TestUserModelResponse: Sendable {
@@ -2393,7 +2410,7 @@ extension Reeve_V1_TestUserModelProviderResponse: SwiftProtobuf.Message, SwiftPr
 
 extension Reeve_V1_TestUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestUserModelRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}call_settings\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2403,24 +2420,33 @@ extension Reeve_V1_TestUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.userModelProviderID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._callSettings) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.userModelProviderID.isEmpty {
       try visitor.visitSingularStringField(value: self.userModelProviderID, fieldNumber: 1)
     }
     if !self.modelID.isEmpty {
       try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 2)
     }
+    try { if let v = self._callSettings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Reeve_V1_TestUserModelRequest, rhs: Reeve_V1_TestUserModelRequest) -> Bool {
     if lhs.userModelProviderID != rhs.userModelProviderID {return false}
     if lhs.modelID != rhs.modelID {return false}
+    if lhs._callSettings != rhs._callSettings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

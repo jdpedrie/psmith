@@ -19,6 +19,7 @@ import (
 	"connectrpc.com/connect"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/internal/protoconv"
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
@@ -116,6 +117,12 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[reevev
 		Messages: []providers.WireMessage{
 			{Role: "user", Content: modelTestPrompt},
 		},
+		// Per-call settings overrides flow straight through. Used by
+		// the discover-constraints tool to empirically map which
+		// (model, setting) pairs the upstream API actually accepts;
+		// production UI clients omit this field and inherit the
+		// per-model defaults at SendMessage time instead.
+		Settings: protoconv.CallSettings(req.Msg.CallSettings),
 	})
 	if sendErr != nil {
 		// Driver refused to even start (4xx, etc.). Pack into the response so

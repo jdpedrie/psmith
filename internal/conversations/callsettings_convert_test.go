@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/internal/protoconv"
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
@@ -90,7 +91,7 @@ func TestConvertProtoCacheTTL_Direct(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := convertProtoCacheTTL(tc.in)
+			got := protoconv.CacheTTL(tc.in)
 			if got != tc.want {
 				t.Errorf("got %d, want %d", got, tc.want)
 			}

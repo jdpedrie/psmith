@@ -277,6 +277,13 @@ message TestUserModelProviderResponse {
 message TestUserModelRequest {
   string user_model_provider_id = 1;
   string model_id = 2;
+  // Optional per-call settings overrides. When set, the test send
+  // applies them on top of the model's default_settings before
+  // dispatch — surfaces "this provider rejects temperature=2.0" or
+  // "thinking requires temperature=1.0" the same way the production
+  // SendMessage path would. Used by the discover-constraints
+  // tooling to map the per-model constraint table empirically.
+  optional CallSettings call_settings = 3;
 }
 message TestUserModelResponse {
   bool ok = 1;
