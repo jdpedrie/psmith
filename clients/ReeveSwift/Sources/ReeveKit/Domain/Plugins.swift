@@ -35,7 +35,35 @@ public struct ReevePluginCapabilities: Sendable, Hashable {
 }
 
 public enum ReeveConfigFieldType: Sendable, Hashable {
-    case number, text, textarea, boolean, select
+    case number, text, textarea, boolean, select, modelPicker
+}
+
+/// Mirror of `reeve.v1.ModelPickerFilter`. Drives which user_models
+/// the chooser surfaces for a `.modelPicker` field. Any flag set to
+/// true is required; flags AND together. Empty = no filter.
+public struct ReeveModelPickerFilter: Sendable, Hashable {
+    public let requiresStreaming: Bool
+    public let requiresThinking: Bool
+    public let requiresToolUse: Bool
+    public let requiresVision: Bool
+    public let requiresPromptCaching: Bool
+    public let requiresGeneratesImages: Bool
+
+    public init(
+        requiresStreaming: Bool = false,
+        requiresThinking: Bool = false,
+        requiresToolUse: Bool = false,
+        requiresVision: Bool = false,
+        requiresPromptCaching: Bool = false,
+        requiresGeneratesImages: Bool = false
+    ) {
+        self.requiresStreaming = requiresStreaming
+        self.requiresThinking = requiresThinking
+        self.requiresToolUse = requiresToolUse
+        self.requiresVision = requiresVision
+        self.requiresPromptCaching = requiresPromptCaching
+        self.requiresGeneratesImages = requiresGeneratesImages
+    }
 }
 
 public struct ReeveConfigOption: Sendable, Hashable {
@@ -67,6 +95,10 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
     /// surface instead of in the per-profile plugin form (the user
     /// only enters credentials and other shared values once).
     public let global: Bool
+    /// Optional filter for `.modelPicker` fields. Hints to the UI
+    /// which models to surface in the chooser. nil = no filter
+    /// (irrelevant on non-`.modelPicker` types).
+    public let modelPickerFilter: ReeveModelPickerFilter?
 
     public init(
         name: String,
@@ -76,7 +108,8 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         defaultJSON: String,
         options: [ReeveConfigOption],
         required: Bool = false,
-        global: Bool = false
+        global: Bool = false,
+        modelPickerFilter: ReeveModelPickerFilter? = nil
     ) {
         self.name = name
         self.display = display
@@ -86,6 +119,7 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         self.options = options
         self.required = required
         self.global = global
+        self.modelPickerFilter = modelPickerFilter
     }
 
     /// True when `value` is missing or blank for a required field.
@@ -102,6 +136,16 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         case .boolean:
             // For required booleans, "false" still counts as a chosen value.
             return value == nil
+        case .modelPicker:
+            // Model picker stores `{"provider_id":"…","model_id":"…"}`;
+            // any dict with both halves non-empty satisfies.
+            if let dict = value as? [String: Any],
+               let pid = dict["provider_id"] as? String,
+               let mid = dict["model_id"] as? String,
+               !pid.isEmpty, !mid.isEmpty {
+                return false
+            }
+            return true
         }
     }
 }
@@ -200,14 +244,28 @@ extension ReevePluginCapabilities {
 extension ReeveConfigFieldType {
     init(from p: Reeve_V1_ConfigField.TypeEnum) {
         switch p {
-        case .number:   self = .number
-        case .text:     self = .text
-        case .textarea: self = .textarea
-        case .boolean:  self = .boolean
-        case .select:   self = .select
+        case .number:      self = .number
+        case .text:        self = .text
+        case .textarea:    self = .textarea
+        case .boolean:     self = .boolean
+        case .select:      self = .select
+        case .modelPicker: self = .modelPicker
         case .unspecified, .UNRECOGNIZED:
             self = .text
         }
+    }
+}
+
+extension ReeveModelPickerFilter {
+    init(from p: Reeve_V1_ModelPickerFilter) {
+        self.init(
+            requiresStreaming:       p.requiresStreaming,
+            requiresThinking:        p.requiresThinking,
+            requiresToolUse:         p.requiresToolUse,
+            requiresVision:          p.requiresVision,
+            requiresPromptCaching:   p.requiresPromptCaching,
+            requiresGeneratesImages: p.requiresGeneratesImages
+        )
     }
 }
 
@@ -219,6 +277,9 @@ extension ReeveConfigOption {
 
 extension ReeveConfigField {
     init(from p: Reeve_V1_ConfigField) {
+        let filter: ReeveModelPickerFilter? = p.hasModelPickerFilter
+            ? ReeveModelPickerFilter(from: p.modelPickerFilter)
+            : nil
         self.init(
             name: p.name,
             display: p.display,
@@ -227,7 +288,8 @@ extension ReeveConfigField {
             defaultJSON: p.defaultJson,
             options: p.options.map(ReeveConfigOption.init(from:)),
             required: p.required,
-            global: p.global
+            global: p.global,
+            modelPickerFilter: filter
         )
     }
 }

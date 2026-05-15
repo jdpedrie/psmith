@@ -169,29 +169,33 @@ public struct ReeveModelCapabilities: Sendable, Hashable, Codable {
     public let toolUse: Bool
     public let vision: Bool
     public let promptCaching: Bool
+    public let generatesImages: Bool
 
     public init(
         streaming: Bool,
         thinking: Bool,
         toolUse: Bool,
         vision: Bool,
-        promptCaching: Bool
+        promptCaching: Bool,
+        generatesImages: Bool = false
     ) {
         self.streaming = streaming
         self.thinking = thinking
         self.toolUse = toolUse
         self.vision = vision
         self.promptCaching = promptCaching
+        self.generatesImages = generatesImages
     }
 }
 
 extension ReeveModelCapabilities {
     init(from p: Reeve_V1_ModelCapabilities) {
-        streaming     = p.streaming
-        thinking      = p.thinking
-        toolUse       = p.toolUse
-        vision        = p.vision
-        promptCaching = p.promptCaching
+        streaming       = p.streaming
+        thinking        = p.thinking
+        toolUse         = p.toolUse
+        vision          = p.vision
+        promptCaching   = p.promptCaching
+        generatesImages = p.generatesImages
     }
 }
 

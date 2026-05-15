@@ -1453,7 +1453,8 @@ private struct ProfileForm: View {
                                 config: Binding(
                                     get: { pluginsDraft[index].config },
                                     set: { pluginsDraft[index].config = $0 }
-                                )
+                                ),
+                                availableModels: app.profiles.availableModels
                             )
                             if !globalFields.isEmpty {
                                 Divider().padding(.vertical, 6)

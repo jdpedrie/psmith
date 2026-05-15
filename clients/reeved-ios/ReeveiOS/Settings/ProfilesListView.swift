@@ -1010,6 +1010,7 @@ private struct PluginConfigSubScreen: View {
     let pluginName: String
     let pluginType: ReevePluginType?
     @Binding var config: [String: Any]
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         ScrollView {
@@ -1028,7 +1029,11 @@ private struct PluginConfigSubScreen: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     } else {
-                        PluginConfigForm(fields: fields, config: $config)
+                        PluginConfigForm(
+                            fields: fields,
+                            config: $config,
+                            availableModels: app.profiles.availableModels
+                        )
                     }
                 } else {
                     Text("Plugin descriptor not loaded — pull back to refresh, then re-enter.")
