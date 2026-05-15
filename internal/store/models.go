@@ -197,7 +197,6 @@ type UserLangfuseConfig struct {
 	Host               string
 	PublicKey          string
 	SecretKeyEncrypted []byte
-	SecretKey          *string
 	Enabled            bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time

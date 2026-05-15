@@ -198,6 +198,11 @@ type Querier interface {
 	// sequence cursor. Used to replay missed chunks for late subscribers.
 	ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error)
 	ListStreamRunsByConversation(ctx context.Context, conversationID uuid.UUID) ([]StreamRun, error)
+	// Every existing row across all users. Used at server boot to prime
+	// the in-memory emitter cache so tracing works for the very first
+	// assistant turn after a restart, not just after the first
+	// LangfuseService.Update RPC of the new process.
+	ListUserLangfuseConfigs(ctx context.Context) ([]UserLangfuseConfig, error)
 	ListUserModelProvidersByUser(ctx context.Context, userID uuid.UUID) ([]UserModelProvider, error)
 	ListUserModelsByProvider(ctx context.Context, userModelProviderID uuid.UUID) ([]UserModel, error)
 	ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([]UserModel, error)
@@ -291,10 +296,9 @@ type Querier interface {
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
 	// Single-call full replace. The service layer reads the existing row
 	// (if any), merges request fields onto it, then calls this — same
-	// pattern as UpdateUserModel. secret_key (plaintext column) is
-	// always cleared by this query; we never write to it from the
-	// service path. The legacy column exists only for the rollover
-	// window described on the table comment.
+	// pattern as UpdateUserModel. secret_key_encrypted is the only
+	// credential column; the value is AES-GCM encrypted before it
+	// reaches this query (see internal/langfusesvc).
 	UpsertUserLangfuseConfig(ctx context.Context, arg UpsertUserLangfuseConfigParams) (UserLangfuseConfig, error)
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
 	// Idempotent: insert-or-update. updated_at is bumped to NOW() on every

@@ -24,7 +24,7 @@ func (q *Queries) DeleteUserLangfuseConfig(ctx context.Context, userID uuid.UUID
 }
 
 const getUserLangfuseConfig = `-- name: GetUserLangfuseConfig :one
-SELECT user_id, host, public_key, secret_key_encrypted, secret_key, enabled, created_at, updated_at FROM user_langfuse_config
+SELECT user_id, host, public_key, secret_key_encrypted, enabled, created_at, updated_at FROM user_langfuse_config
 WHERE user_id = $1
 `
 
@@ -39,12 +39,47 @@ func (q *Queries) GetUserLangfuseConfig(ctx context.Context, userID uuid.UUID) (
 		&i.Host,
 		&i.PublicKey,
 		&i.SecretKeyEncrypted,
-		&i.SecretKey,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listUserLangfuseConfigs = `-- name: ListUserLangfuseConfigs :many
+SELECT user_id, host, public_key, secret_key_encrypted, enabled, created_at, updated_at FROM user_langfuse_config ORDER BY user_id
+`
+
+// Every existing row across all users. Used at server boot to prime
+// the in-memory emitter cache so tracing works for the very first
+// assistant turn after a restart, not just after the first
+// LangfuseService.Update RPC of the new process.
+func (q *Queries) ListUserLangfuseConfigs(ctx context.Context) ([]UserLangfuseConfig, error) {
+	rows, err := q.db.Query(ctx, listUserLangfuseConfigs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserLangfuseConfig
+	for rows.Next() {
+		var i UserLangfuseConfig
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Host,
+			&i.PublicKey,
+			&i.SecretKeyEncrypted,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertUserLangfuseConfig = `-- name: UpsertUserLangfuseConfig :one
@@ -56,9 +91,8 @@ ON CONFLICT (user_id) DO UPDATE SET
     public_key           = EXCLUDED.public_key,
     secret_key_encrypted = EXCLUDED.secret_key_encrypted,
     enabled              = EXCLUDED.enabled,
-    secret_key           = NULL,
     updated_at           = NOW()
-RETURNING user_id, host, public_key, secret_key_encrypted, secret_key, enabled, created_at, updated_at
+RETURNING user_id, host, public_key, secret_key_encrypted, enabled, created_at, updated_at
 `
 
 type UpsertUserLangfuseConfigParams struct {
@@ -71,10 +105,9 @@ type UpsertUserLangfuseConfigParams struct {
 
 // Single-call full replace. The service layer reads the existing row
 // (if any), merges request fields onto it, then calls this — same
-// pattern as UpdateUserModel. secret_key (plaintext column) is
-// always cleared by this query; we never write to it from the
-// service path. The legacy column exists only for the rollover
-// window described on the table comment.
+// pattern as UpdateUserModel. secret_key_encrypted is the only
+// credential column; the value is AES-GCM encrypted before it
+// reaches this query (see internal/langfusesvc).
 func (q *Queries) UpsertUserLangfuseConfig(ctx context.Context, arg UpsertUserLangfuseConfigParams) (UserLangfuseConfig, error) {
 	row := q.db.QueryRow(ctx, upsertUserLangfuseConfig,
 		arg.UserID,
@@ -89,7 +122,6 @@ func (q *Queries) UpsertUserLangfuseConfig(ctx context.Context, arg UpsertUserLa
 		&i.Host,
 		&i.PublicKey,
 		&i.SecretKeyEncrypted,
-		&i.SecretKey,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
