@@ -26,6 +26,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/history"
+	"github.com/jdpedrie/reeve/internal/langfuse"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/protoconv"
@@ -54,6 +55,13 @@ type Service struct {
 	cipher     crypto.Cipher
 	storage    storage.Storage
 	logger     *slog.Logger
+	// langfuse, when non-nil, receives a Trace + Generation pair
+	// for every assistant turn the supervisor materialises.
+	// Wired by cmd/reeved at startup; nil in tests that don't
+	// care about observability. The Emitter itself is per-user-
+	// gated — emit is a silent no-op when the calling user
+	// hasn't configured Langfuse.
+	langfuse *langfuse.Emitter
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -83,6 +91,15 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 		storage:    st,
 		logger:     logger,
 	}
+}
+
+// SetLangfuseEmitter installs the per-user Langfuse emitter the
+// service uses to fire Trace + Generation events on every assistant
+// materialisation. Pass nil to disable (tests, deployments without
+// the integration). Called by cmd/reeved at startup so tests can
+// construct the service without an emitter dependency.
+func (s *Service) SetLangfuseEmitter(e *langfuse.Emitter) {
+	s.langfuse = e
 }
 
 // resolveProviderConfig decrypts provRow.ConfigEncrypted (or falls back

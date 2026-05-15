@@ -22,6 +22,8 @@ import (
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/files"
+	"github.com/jdpedrie/reeve/internal/langfuse"
+	"github.com/jdpedrie/reeve/internal/langfusesvc"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
@@ -139,11 +141,31 @@ func run() error {
 
 	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default())
 	profilesSvc := profiles.NewService(queries, pool, cipher)
+
+	// Process-wide Langfuse emitter. Per-user gating happens inside
+	// the Emitter via SetUserConfig; the integration is fully opt-in
+	// (a user without a user_langfuse_config row is silently skipped
+	// with no DB hop). Wired before the conversations service so we
+	// can hand the emitter in.
+	langfuseEmitter := langfuse.NewEmitter(slog.Default(), langfuse.EmitterConfig{})
 	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, fileStorage, slog.Default())
-	// Wire the auto-title hook so the supervisor pings the conversations
-	// service after every assistant materialization. Profile-opt-in; no-op
-	// when title fields aren't configured.
-	supervisor.SetOnAssistantMaterialized(conversationsSvc.MaybeGenerateTitle)
+	conversationsSvc.SetLangfuseEmitter(langfuseEmitter)
+
+	// Single supervisor hook fans out to title generation +
+	// Langfuse emit. Both run in their own goroutines (see
+	// OnAssistantPersisted) so a slow titler doesn't gate
+	// observability emit (and vice versa).
+	supervisor.SetOnAssistantMaterialized(conversationsSvc.OnAssistantPersisted)
+
+	langfuseSvc := langfusesvc.NewService(queries, cipher, langfuseEmitter, slog.Default())
+	// Prime the per-user credential cache from existing rows so the
+	// first turn after restart traces correctly (without this, the
+	// cache only populates after the first Update RPC of the new
+	// process). Best-effort: a load failure here logs and continues.
+	if err := langfuseSvc.LoadAllOnStartup(ctx); err != nil {
+		slog.Warn("langfuse: bootstrap load failed", "err", err)
+	}
+
 	streamsSvc := streamsvc.NewService(queries, supervisor)
 	filesSvc := files.NewService(queries, fileStorage, urlSigningKey, baseURL)
 
@@ -154,6 +176,7 @@ func run() error {
 	mux.Handle(reevev1connect.NewConversationsServiceHandler(conversationsSvc, opts))
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
 	mux.Handle(reevev1connect.NewFilesServiceHandler(filesSvc, opts))
+	mux.Handle(reevev1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
 	// Raw-bytes endpoint for signed file URLs. Bypasses Connect framing
 	// so a system image loader can fetch the bytes directly.
 	mux.HandleFunc("GET /files/{id}", filesSvc.BytesHandler())
@@ -191,6 +214,11 @@ func run() error {
 
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
+	// Drain the Langfuse buffer before exiting so the last few
+	// turns from a busy session don't get dropped on shutdown.
+	// Stop is bounded by the same shutdownCtx so a hung Langfuse
+	// host can't block server exit indefinitely.
+	langfuseEmitter.Stop(shutdownCtx)
 	return srv.Shutdown(shutdownCtx)
 }
 
