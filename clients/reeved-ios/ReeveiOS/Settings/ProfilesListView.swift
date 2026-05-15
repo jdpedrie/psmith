@@ -1032,7 +1032,10 @@ private struct PluginConfigSubScreen: View {
                         PluginConfigForm(
                             fields: fields,
                             config: $config,
-                            availableModels: app.profiles.availableModels
+                            availableModels: app.profiles.availableModels,
+                            providerLabels: app.profiles.providerLabels,
+                            providerTypes: app.profiles.providerTypes,
+                            providerPresetIDs: app.profiles.providerPresetIDs
                         )
                     }
                 } else {

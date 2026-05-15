@@ -21,15 +21,29 @@ public struct PluginConfigForm: View {
     /// renders a "no models configured" hint instead of an empty
     /// chooser.
     let availableModels: [ReeveUserModel]
+    /// Provider metadata the shared `ModelPickerList` needs to
+    /// render section headers + provider logos. Mirrors what
+    /// `ConversationViewModel` holds — pass them through unchanged
+    /// from the host. Optional: empty dicts produce a list with
+    /// fallback labels and no logos.
+    let providerLabels: [String: String]
+    let providerTypes: [String: String]
+    let providerPresetIDs: [String: String]
 
     public init(
         fields: [ReeveConfigField],
         config: Binding<[String: Any]>,
-        availableModels: [ReeveUserModel] = []
+        availableModels: [ReeveUserModel] = [],
+        providerLabels: [String: String] = [:],
+        providerTypes: [String: String] = [:],
+        providerPresetIDs: [String: String] = [:]
     ) {
         self.fields = fields
         self._config = config
         self.availableModels = availableModels
+        self.providerLabels = providerLabels
+        self.providerTypes = providerTypes
+        self.providerPresetIDs = providerPresetIDs
     }
 
     public var body: some View {
@@ -87,6 +101,9 @@ public struct PluginConfigForm: View {
         ModelPickerFieldControl(
             field: field,
             allModels: availableModels,
+            providerLabels: providerLabels,
+            providerTypes: providerTypes,
+            providerPresetIDs: providerPresetIDs,
             current: pickerSelection(for: field),
             onPick: { ref in
                 config[field.name] = [
@@ -246,15 +263,17 @@ public struct PluginConfigForm: View {
 }
 
 /// Model-picker control for `.modelPicker` config fields.
-/// Surfaces the user_models that satisfy the field's
-/// ModelPickerFilter (e.g. only image-generating models for
-/// imagegen), grouped by provider for legibility. Stores the
-/// chosen `(provider_id, model_id)` pair via the `onPick`
-/// callback; the host owns the JSON-shaped storage in the
-/// per-plugin config dict.
+/// Trigger button + sheet wrapping the shared `ModelPickerList` —
+/// the same chooser the conversation composer uses, just filtered
+/// by the field's `ModelPickerFilter`. Tapping a row commits the
+/// `(provider_id, model_id)` selection to the host's config dict
+/// via `onPick` and dismisses the sheet.
 private struct ModelPickerFieldControl: View {
     let field: ReeveConfigField
     let allModels: [ReeveUserModel]
+    let providerLabels: [String: String]
+    let providerTypes: [String: String]
+    let providerPresetIDs: [String: String]
     let current: (providerID: String, modelID: String)?
     let onPick: ((providerID: String, modelID: String)) -> Void
 
@@ -309,49 +328,21 @@ private struct ModelPickerFieldControl: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
             }
             .buttonStyle(.plain)
-            .popover(isPresented: $shown, arrowEdge: .bottom) {
-                modelList(models)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func modelList(_ models: [ReeveUserModel]) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(models) { m in
-                    Button {
-                        onPick((providerID: m.providerID, modelID: m.modelID))
+            .sheet(isPresented: $shown) {
+                ModelPickerSheetContent(
+                    models: models,
+                    providerLabels: providerLabels,
+                    providerTypes: providerTypes,
+                    providerPresetIDs: providerPresetIDs,
+                    current: current,
+                    onPick: { providerID, modelID in
+                        onPick((providerID: providerID, modelID: modelID))
                         shown = false
-                    } label: {
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(m.displayName)
-                                    .foregroundStyle(.primary)
-                                Text(m.modelID)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            if let cur = current,
-                               cur.providerID == m.providerID,
-                               cur.modelID == m.modelID {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.secondary)
-                                    .font(.caption)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
+                    },
+                    onDismiss: { shown = false }
+                )
             }
-            .padding(.vertical, 4)
         }
-        .frame(minWidth: 280, maxHeight: 380)
     }
 
     private var emptyHint: String {
@@ -359,6 +350,72 @@ private struct ModelPickerFieldControl: View {
             return "No image-generating models configured. Add one under Providers (e.g. OpenAI gpt-image-1, Google gemini-2.5-flash-image-preview)."
         }
         return "No models configured. Add one under Providers."
+    }
+}
+
+/// Sheet content wrapping the shared `ModelPickerList` — same
+/// look + behavior as the conversation composer's
+/// `ModelPickerSheet`, but parameterised by an injected
+/// pre-filtered model list and a host-owned commit callback.
+private struct ModelPickerSheetContent: View {
+    let models: [ReeveUserModel]
+    let providerLabels: [String: String]
+    let providerTypes: [String: String]
+    let providerPresetIDs: [String: String]
+    let current: (providerID: String, modelID: String)?
+    let onPick: (_ providerID: String, _ modelID: String) -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if !models.isEmpty {
+                        Text("\(models.count) model\(models.count == 1 ? "" : "s") across \(providerCount) provider\(providerCount == 1 ? "" : "s")")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .textCase(.uppercase)
+                            .padding(.horizontal, 4)
+                    }
+                    ModelPickerList(
+                        models: models,
+                        providerLabels: providerLabels,
+                        providerTypes: providerTypes,
+                        providerPresetIDs: providerPresetIDs,
+                        selectedProviderID: current?.providerID,
+                        selectedModelID: current?.modelID,
+                        onSelect: onPick
+                    )
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+            }
+            #if os(iOS)
+            .navigationTitle("Model")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done", action: onDismiss)
+                }
+            }
+            #else
+            .navigationTitle("Model")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onDismiss)
+                }
+            }
+            #endif
+        }
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #endif
+    }
+
+    private var providerCount: Int {
+        Set(models.map(\.providerID)).count
     }
 }
 
