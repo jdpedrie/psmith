@@ -74,8 +74,18 @@ public struct CompressionSummaryCard: View {
                     Button("Dismiss") {
                         Task { await model.deleteMessage(id: message.id) }
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
                     .help("Remove this failed compaction from the history. You can retry compaction at any time.")
+
+                    Button {
+                        Task { await model.compact() }
+                    } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(model.isCompacting || model.sending || model.isStreaming)
+                    .help("Re-fire compaction with the current profile defaults. The failed summary stays in history until dismissed.")
                 } else {
                     Button("Edit…") {
                         model.editingMessage = message

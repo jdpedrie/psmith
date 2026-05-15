@@ -338,6 +338,21 @@ struct MessageRow: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                if message.role == .assistant {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task { await model.reloadFromMessage(id: message.id) }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .font(.callout)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(model.isStreaming || model.sending)
+                    }
+                    .padding(.top, 2)
+                }
             } else if !bodyText.isEmpty {
                 MarkdownText(bodyText, cacheKey: markdownCacheKey)
             }

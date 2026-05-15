@@ -1173,8 +1173,9 @@ private struct MessageRow: View {
     /// Body for an errored assistant turn: shows the error text in full,
     /// plus a disclosure-style group for whatever partial content streamed
     /// before the failure. Reads as a clear "this attempt failed" surface
-    /// that the user can review in the history (and, in a future change,
-    /// retry from).
+    /// that the user can review and retry from. The Retry button forks
+    /// off the same parent — produces a new sibling assistant so the
+    /// failed turn stays in history (the user can delete it if desired).
     @ViewBuilder
     private var erroredBody: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1196,6 +1197,22 @@ private struct MessageRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+            if message.role == .assistant {
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { await model.reloadFromMessage(id: message.id) }
+                    } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.small)
+                    .disabled(model.isStreaming || model.sending)
+                    .help("Re-fire the same turn — produces a new sibling assistant under the same parent.")
+                }
+                .padding(.top, 2)
             }
         }
     }
