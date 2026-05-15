@@ -192,6 +192,17 @@ type User struct {
 	UpdatedAt    time.Time
 }
 
+type UserLangfuseConfig struct {
+	UserID             uuid.UUID
+	Host               string
+	PublicKey          string
+	SecretKeyEncrypted []byte
+	SecretKey          *string
+	Enabled            bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type UserModel struct {
 	UserModelProviderID   uuid.UUID
 	ModelID               string

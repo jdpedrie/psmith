@@ -54,6 +54,10 @@ type Querier interface {
 	DeleteProfile(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	// Removes the entire row. Drops both credentials and the enabled
+	// toggle in one shot — for users who want to fully sever the
+	// integration rather than just disable it.
+	DeleteUserLangfuseConfig(ctx context.Context, userID uuid.UUID) error
 	DeleteUserModel(ctx context.Context, arg DeleteUserModelParams) error
 	DeleteUserModelProvider(ctx context.Context, id uuid.UUID) error
 	DeleteUserPluginSettings(ctx context.Context, arg DeleteUserPluginSettingsParams) error
@@ -96,6 +100,10 @@ type Querier interface {
 	GetStreamRunByID(ctx context.Context, id uuid.UUID) (StreamRun, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	// Returns the user's Langfuse config row, if any. pgx ErrNoRows on
+	// absent — service layer maps that to "tracing disabled" rather than
+	// a hard error so the GET RPC can return the default-disabled shape.
+	GetUserLangfuseConfig(ctx context.Context, userID uuid.UUID) (UserLangfuseConfig, error)
 	GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error)
 	GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error)
 	// Returns the row for one (user, plugin) — caller decides what "missing"
@@ -281,6 +289,13 @@ type Querier interface {
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
+	// Single-call full replace. The service layer reads the existing row
+	// (if any), merges request fields onto it, then calls this — same
+	// pattern as UpdateUserModel. secret_key (plaintext column) is
+	// always cleared by this query; we never write to it from the
+	// service path. The legacy column exists only for the rollover
+	// window described on the table comment.
+	UpsertUserLangfuseConfig(ctx context.Context, arg UpsertUserLangfuseConfigParams) (UserLangfuseConfig, error)
 	UpsertUserModel(ctx context.Context, arg UpsertUserModelParams) (UserModel, error)
 	// Idempotent: insert-or-update. updated_at is bumped to NOW() on every
 	// save. Empty config (encrypted form of `{}`) is a valid stored value
