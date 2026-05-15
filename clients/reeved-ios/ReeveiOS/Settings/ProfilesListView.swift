@@ -326,6 +326,13 @@ private struct ProfileEditSheet: View {
     // we know whether to call savePlugins(...) on save (avoids a
     // round-trip when nothing changed).
     @State private var pluginsDraft: [DraftPlugin] = []
+    /// Drives the inner NavigationStack so we can push a fresh
+    /// plugin's config sub-screen the moment the user picks one
+    /// from AddPluginSheet — no second tap on the row required.
+    @State private var navPath: [PluginConfigDestination] = []
+    /// Show the "Discard changes?" confirmation when the user tries
+    /// to back out of the editor with unsaved work.
+    @State private var showingDiscardConfirm: Bool = false
     @State private var pluginsBaseline: [ReeveProfilePlugin] = []
     @State private var pluginsLoaded: Bool = false
     @State private var addingPlugin: Bool = false
@@ -344,7 +351,7 @@ private struct ProfileEditSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             Form {
                 Section("Identity") {
                     TextField("Name", text: $name)
@@ -531,7 +538,7 @@ private struct ProfileEditSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { attemptDismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -545,6 +552,22 @@ private struct ProfileEditSheet: View {
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || saving)
                 }
+            }
+            // Block swipe-down dismissal when there's unsaved
+            // work — the user has to go through the Cancel button
+            // (which routes through the confirmation alert) so a
+            // careless swipe doesn't silently drop a half-
+            // configured plugin or an in-progress system message.
+            .interactiveDismissDisabled(isDirty)
+            .confirmationDialog(
+                "Discard changes?",
+                isPresented: $showingDiscardConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Discard", role: .destructive) { dismiss() }
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                Text("Your edits to this profile will be lost.")
             }
             .sheet(isPresented: $pickingDefaultModel) {
                 NavigationStack {
@@ -723,7 +746,19 @@ private struct ProfileEditSheet: View {
                 initial[field.name] = any
             }
         }
-        pluginsDraft.append(DraftPlugin(pluginName: pluginType.name, config: initial))
+        let draft = DraftPlugin(pluginName: pluginType.name, config: initial)
+        pluginsDraft.append(draft)
+        // Immediately drill into the new plugin's config screen
+        // when it has any per-profile fields. Saves the user a
+        // second tap on the row chevron and makes "fill in the
+        // required model" the default next action — fewer ways to
+        // end up with a saved-but-unconfigured plugin.
+        if !pluginType.profileScopedConfigFields.isEmpty {
+            navPath.append(PluginConfigDestination(
+                localID: draft.localID,
+                pluginName: pluginType.name
+            ))
+        }
     }
 
     /// Two-way binding into the indexed plugin's config dict — passed
@@ -774,6 +809,64 @@ private struct ProfileEditSheet: View {
             if !configsEqual(bDict, d.config) { return true }
         }
         return false
+    }
+
+    /// Composite "user has unsaved edits" check — drives the
+    /// dismiss-confirmation flow. Errs on the side of false-
+    /// positive: a typo in the description that the user
+    /// then deletes still trips this on the assumption they
+    /// might want to keep editing other things. The cost of
+    /// over-warning (one extra tap on Discard) is much smaller
+    /// than the cost of under-warning (lost plugin config).
+    private var isDirty: Bool {
+        // Plugin add / remove / edit is the most expensive thing
+        // to lose, so we always check it.
+        if pluginsAreDirty { return true }
+        // For new profiles, anything typed at all is dirt.
+        guard let p = existing else {
+            return !name.trimmingCharacters(in: .whitespaces).isEmpty
+                || !description.isEmpty
+                || !systemMessage.isEmpty
+                || !defaultUserMessage.isEmpty
+                || defaultProviderID != nil
+                || defaultModelID != nil
+                || parentProfileID != nil
+                || compressionProviderID != nil
+                || compressionModelID != nil
+                || titleProviderID != nil
+                || titleModelID != nil
+                || favorite
+                || parentOnly
+        }
+        // For existing profiles, compare every field that this
+        // form lets the user edit.
+        return name != p.name
+            || description != p.description
+            || favorite != p.favorite
+            || parentOnly != p.parentOnly
+            || parentProfileID != p.parentProfileID
+            || systemMessage != (p.systemMessage ?? "")
+            || defaultUserMessage != (p.defaultUserMessage ?? "")
+            || defaultProviderID != p.defaultSettings?.defaultProviderID
+            || defaultModelID != p.defaultSettings?.defaultModelID
+            || compressionMode != p.compressionMode
+            || compressionProviderID != p.compressionProviderID
+            || compressionModelID != p.compressionModelID
+            || compressionGuide != (p.compressionGuide ?? "")
+            || titleProviderKind != p.titleProviderKind
+            || titleProviderID != p.titleProviderID
+            || titleModelID != p.titleModelID
+            || titleGuide != (p.titleGuide ?? "")
+    }
+
+    /// Dismiss the editor — go through the discard-confirm flow
+    /// when there's unsaved work, dismiss directly otherwise.
+    private func attemptDismiss() {
+        if isDirty {
+            showingDiscardConfirm = true
+        } else {
+            dismiss()
+        }
     }
 
 
