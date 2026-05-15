@@ -111,8 +111,8 @@ func TestGet_NeverEchoesSecret(t *testing.T) {
 		t.Fatalf("Get: %v", err)
 	}
 	cfg := resp.Msg.Config
-	if !cfg.HasSecretKey {
-		t.Error("HasSecretKey = false after setting a secret")
+	if !cfg.SecretKeySet {
+		t.Error("SecretKeySet = false after setting a secret")
 	}
 	// Hard guard: serialise the response and grep the bytes for any
 	// trace of the plaintext.

@@ -13,6 +13,7 @@ struct SettingsView: View {
     @Bindable var profilesModel: ProfilesViewModel
     let onBack: () -> Void
 
+    @Environment(AppModel.self) private var app
     @State private var category: SettingsCategory = .providers
     /// Which section of the Appearance pane is selected in the middle
     /// column. Persists across category switches so coming back to
@@ -160,6 +161,8 @@ struct SettingsView: View {
             AppearanceMiddleColumn(onBack: onBack, selection: $appearanceSection)
         case .notifications:
             NotificationsMiddleColumn(onBack: onBack, selection: $notificationsSection)
+        case .langfuse:
+            LangfuseMiddleColumn(onBack: onBack)
         }
     }
 
@@ -178,6 +181,43 @@ struct SettingsView: View {
             AppearanceSettingsView(section: appearanceSection)
         case .notifications:
             NotificationsSettingsView(section: notificationsSection)
+        case .langfuse:
+            LangfuseSettingsView(client: app.client)
+        }
+    }
+}
+
+/// Header-only middle column for the Langfuse pane. The settings
+/// itself has no sub-sections so the middle column just shows the
+/// back button + a name. Mirrors the visual shape the appearance
+/// + notifications middle columns established.
+private struct LangfuseMiddleColumn: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
+                Text("Langfuse")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: paneHeaderHeight)
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Per-user observability")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                Text("Mirror assistant turns into Langfuse for traces, costs, and evaluation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }

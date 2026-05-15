@@ -59,7 +59,10 @@ message LangfuseConfig {
   // True when a secret_key is currently stored on the row. The
   // value itself is never returned — clients render this as a
   // "credentials saved" indicator next to a "Replace" button.
-  bool has_secret_key = 3;
+  // Field name avoids `has_secret_key` because Swift Protobuf
+  // auto-generates a `hasFoo` accessor for proto3 optionals,
+  // which would collide.
+  bool secret_key_set = 3;
   bool enabled = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;

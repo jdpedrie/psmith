@@ -29,7 +29,10 @@ type LangfuseConfig struct {
 	// True when a secret_key is currently stored on the row. The
 	// value itself is never returned — clients render this as a
 	// "credentials saved" indicator next to a "Replace" button.
-	HasSecretKey  bool                   `protobuf:"varint,3,opt,name=has_secret_key,json=hasSecretKey,proto3" json:"has_secret_key,omitempty"`
+	// Field name avoids `has_secret_key` because Swift Protobuf
+	// auto-generates a `hasFoo` accessor for proto3 optionals,
+	// which would collide.
+	SecretKeySet  bool                   `protobuf:"varint,3,opt,name=secret_key_set,json=secretKeySet,proto3" json:"secret_key_set,omitempty"`
 	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -81,9 +84,9 @@ func (x *LangfuseConfig) GetPublicKey() string {
 	return ""
 }
 
-func (x *LangfuseConfig) GetHasSecretKey() bool {
+func (x *LangfuseConfig) GetSecretKeySet() bool {
 	if x != nil {
-		return x.HasSecretKey
+		return x.SecretKeySet
 	}
 	return false
 }
@@ -487,7 +490,7 @@ const file_reeve_v1_langfuse_proto_rawDesc = "" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x02 \x01(\tR\tpublicKey\x12$\n" +
-	"\x0ehas_secret_key\x18\x03 \x01(\bR\fhasSecretKey\x12\x18\n" +
+	"\x0esecret_key_set\x18\x03 \x01(\bR\fsecretKeySet\x12\x18\n" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x129\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +

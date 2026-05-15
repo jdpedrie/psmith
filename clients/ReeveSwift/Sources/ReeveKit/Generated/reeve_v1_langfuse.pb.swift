@@ -32,7 +32,10 @@ public struct Reeve_V1_LangfuseConfig: Sendable {
   /// True when a secret_key is currently stored on the row. The
   /// value itself is never returned — clients render this as a
   /// "credentials saved" indicator next to a "Replace" button.
-  public var hasSecretKey_p: Bool = false
+  /// Field name avoids `has_secret_key` because Swift Protobuf
+  /// auto-generates a `hasFoo` accessor for proto3 optionals,
+  /// which would collide.
+  public var secretKeySet: Bool = false
 
   public var enabled: Bool = false
 
@@ -226,7 +229,7 @@ fileprivate let _protobuf_package = "reeve.v1"
 
 extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LangfuseConfig"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}has_secret_key\0\u{1}enabled\0\u{3}created_at\0\u{3}updated_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}secret_key_set\0\u{1}enabled\0\u{3}created_at\0\u{3}updated_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -236,7 +239,7 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.host) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.publicKey) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.hasSecretKey_p) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.secretKeySet) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
       case 5: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
@@ -256,8 +259,8 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
     if !self.publicKey.isEmpty {
       try visitor.visitSingularStringField(value: self.publicKey, fieldNumber: 2)
     }
-    if self.hasSecretKey_p != false {
-      try visitor.visitSingularBoolField(value: self.hasSecretKey_p, fieldNumber: 3)
+    if self.secretKeySet != false {
+      try visitor.visitSingularBoolField(value: self.secretKeySet, fieldNumber: 3)
     }
     if self.enabled != false {
       try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 4)
@@ -274,7 +277,7 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
   public static func ==(lhs: Reeve_V1_LangfuseConfig, rhs: Reeve_V1_LangfuseConfig) -> Bool {
     if lhs.host != rhs.host {return false}
     if lhs.publicKey != rhs.publicKey {return false}
-    if lhs.hasSecretKey_p != rhs.hasSecretKey_p {return false}
+    if lhs.secretKeySet != rhs.secretKeySet {return false}
     if lhs.enabled != rhs.enabled {return false}
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}

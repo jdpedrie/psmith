@@ -48,6 +48,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case plugins
     case appearance
     case notifications
+    case langfuse
 
     var label: String {
         switch self {
@@ -56,6 +57,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .plugins:       return "Plugins"
         case .appearance:    return "Appearance"
         case .notifications: return "Notifications"
+        case .langfuse:      return "Langfuse"
         }
     }
 
@@ -66,6 +68,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .plugins:       return "puzzlepiece.extension"
         case .appearance:    return "paintpalette"
         case .notifications: return "bell"
+        case .langfuse:      return "chart.line.uptrend.xyaxis"
         }
     }
 
@@ -77,7 +80,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     /// needing a tree-style sidebar widget.
     var isAppSettings: Bool {
         switch self {
-        case .appearance, .notifications: return true
+        case .appearance, .notifications, .langfuse: return true
         default: return false
         }
     }

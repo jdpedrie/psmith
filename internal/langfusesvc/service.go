@@ -282,7 +282,7 @@ func rowToProto(row store.UserLangfuseConfig) *reevev1.LangfuseConfig {
 	return &reevev1.LangfuseConfig{
 		Host:         row.Host,
 		PublicKey:    row.PublicKey,
-		HasSecretKey: row.SecretKeyEncrypted != nil,
+		SecretKeySet: row.SecretKeyEncrypted != nil,
 		Enabled:      row.Enabled,
 		CreatedAt:    timestamppb.New(row.CreatedAt),
 		UpdatedAt:    timestamppb.New(row.UpdatedAt),

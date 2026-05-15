@@ -53,6 +53,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Cost", systemImage: "dollarsign.circle")
                 }
+                NavigationLink {
+                    LangfuseDetailView()
+                } label: {
+                    categoryRow("Langfuse", systemImage: "chart.line.uptrend.xyaxis")
+                }
             }
         }
         .navigationTitle("Settings")
