@@ -153,6 +153,41 @@ message UserModel {
   // model pickers. Identity-style metadata, like profiles.favorite — does not
   // affect snapshotted catalog metadata.
   bool favorite = 14;
+
+  // constraints describes per-model limits on the CallSettings the UI
+  // can offer for this model — clamp temperature ranges, hide controls
+  // for unsupported fields, etc. Sourced from a hand-maintained
+  // server-side table (see internal/modelmeta/constraints.go),
+  // empirically discovered via cmd/discover-constraints. Sparse: any
+  // field left empty means "no known constraint" — UI offers the full
+  // range and reactively renders any upstream rejection inline.
+  optional ModelConstraints constraints = 15;
+}
+
+// ModelConstraints carries per-model UI guardrails for CallSettings.
+// Sparse — any field left empty means "no known constraint." See
+// internal/modelmeta/constraints.go for the source-of-truth table.
+message ModelConstraints {
+  // temperature, when set, defines the model's accepted temperature
+  // interval. The UI clamps slider bounds and rejects out-of-range
+  // values at edit time.
+  optional Range temperature = 1;
+
+  // unsupported lists dotted CallSettings field paths the model is
+  // known to reject (e.g. "openai.response_format" for some Z.AI
+  // models). Clients hide or disable controls for any path in this
+  // list.
+  repeated string unsupported = 2;
+}
+
+// Range is the supported interval for a numeric setting. min and max
+// are inclusive; locked_at overrides both — when set, the only valid
+// value is exactly locked_at (e.g. OpenAI's o-series + gpt-5 family
+// lock temperature at 1.0).
+message Range {
+  optional double min = 1;
+  optional double max = 2;
+  optional double locked_at = 3;
 }
 
 // Per-call provider settings. Hybrid common-core + provider-specific shape:

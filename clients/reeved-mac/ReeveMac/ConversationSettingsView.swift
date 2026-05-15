@@ -29,7 +29,8 @@ struct ConversationSettingsView: View {
                         settings: $model.conversationCallSettingsDraft,
                         inheritedSettings: model.resolvedCallSettings,
                         driverType: effectiveDriverType,
-                        modelCapabilities: effectiveModelCapabilities
+                        modelCapabilities: effectiveModelCapabilities,
+                        modelConstraints: effectiveModelConstraints
                     )
                 }
             }
@@ -92,5 +93,16 @@ struct ConversationSettingsView: View {
         return model.availableModels
             .first(where: { $0.providerID == pid && $0.modelID == mid })?
             .capabilities
+    }
+
+    /// Per-model UI guardrails for the active conversation's pinned
+    /// model. Sourced from `internal/modelmeta/constraints.go` over
+    /// the wire on `ReeveUserModel.constraints`. nil = no known
+    /// constraints; the form falls back to driver-type heuristics.
+    private var effectiveModelConstraints: ReeveModelConstraints? {
+        guard let pid = effectiveProviderID, let mid = effectiveModelID else { return nil }
+        return model.availableModels
+            .first(where: { $0.providerID == pid && $0.modelID == mid })?
+            .constraints
     }
 }

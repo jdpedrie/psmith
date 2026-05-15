@@ -246,7 +246,7 @@ func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request
 	}
 	enabled := make([]*reevev1.UserModel, 0, len(models))
 	for _, m := range models {
-		enabled = append(enabled, storeUserModelToProto(m))
+		enabled = append(enabled, storeUserModelToProto(m, row.Type))
 	}
 	return connect.NewResponse(&reevev1.GetUserModelProviderResponse{
 		Provider:      s.storeProviderToProto(row),
@@ -473,7 +473,7 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		enabled = append(enabled, storeUserModelToProto(written))
+		enabled = append(enabled, storeUserModelToProto(written, row.Type))
 	}
 
 	return connect.NewResponse(&reevev1.EnableModelsResponse{Enabled: enabled}), nil
@@ -509,7 +509,7 @@ func (s *Service) ListUserModels(ctx context.Context, req *connect.Request[reeve
 	}
 	out := make([]*reevev1.UserModel, 0, len(models))
 	for _, m := range models {
-		out = append(out, storeUserModelToProto(m))
+		out = append(out, storeUserModelToProto(m, row.Type))
 	}
 	return connect.NewResponse(&reevev1.ListUserModelsResponse{Models: out}), nil
 }
@@ -537,7 +537,7 @@ func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[reev
 		}
 		entries = append(entries, &reevev1.UserModelEntry{
 			Provider: s.storeProviderToProto(p),
-			Model:    storeUserModelToProto(m),
+			Model:    storeUserModelToProto(m, p.Type),
 		})
 	}
 	return connect.NewResponse(&reevev1.ListAllUserModelsResponse{Entries: entries}), nil
@@ -585,7 +585,7 @@ func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.ToggleUserModelFavoriteResponse{
-		Model: storeUserModelToProto(updated),
+		Model: storeUserModelToProto(updated, row.Type),
 	}), nil
 }
 
@@ -707,7 +707,7 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reev
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.UpdateUserModelResponse{
-		UserModel: storeUserModelToProto(written),
+		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil
 }
 
@@ -789,7 +789,7 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[reeve
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.AddManualModelResponse{
-		UserModel: storeUserModelToProto(written),
+		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil
 }
 

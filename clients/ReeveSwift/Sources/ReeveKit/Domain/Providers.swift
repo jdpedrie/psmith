@@ -215,6 +215,13 @@ public struct ReeveUserModel: Sendable, Identifiable, Hashable, Codable {
     /// the merge chain — a profile's `defaultSettings.callSettings` overrides
     /// any field this layer sets.
     public let defaultSettings: ReeveCallSettings?
+    /// Server-supplied UI guardrails for this model (clamped temperature
+    /// ranges, locked-at values, hidden-control list). Sourced from
+    /// internal/modelmeta/constraints.go and empirically refreshed via
+    /// cmd/discover-constraints. nil = no known constraints; the UI
+    /// offers the full range and reactively renders any upstream
+    /// rejection inline.
+    public let constraints: ReeveModelConstraints?
 
     public init(
         providerID: String,
@@ -227,7 +234,8 @@ public struct ReeveUserModel: Sendable, Identifiable, Hashable, Codable {
         modalities: [String],
         capabilities: ReeveModelCapabilities?,
         favorite: Bool,
-        defaultSettings: ReeveCallSettings? = nil
+        defaultSettings: ReeveCallSettings? = nil,
+        constraints: ReeveModelConstraints? = nil
     ) {
         self.providerID = providerID
         self.modelID = modelID
@@ -240,6 +248,7 @@ public struct ReeveUserModel: Sendable, Identifiable, Hashable, Codable {
         self.capabilities = capabilities
         self.favorite = favorite
         self.defaultSettings = defaultSettings
+        self.constraints = constraints
     }
 }
 
@@ -256,6 +265,68 @@ extension ReeveUserModel {
         capabilities   = p.hasCapabilities   ? ReeveModelCapabilities(from: p.capabilities) : nil
         favorite       = p.favorite
         defaultSettings = p.hasDefaultSettings ? ReeveCallSettings(from: p.defaultSettings) : nil
+        constraints   = p.hasConstraints    ? ReeveModelConstraints(from: p.constraints)  : nil
+    }
+}
+
+/// Per-model UI guardrails for CallSettings. Sparse — any field left
+/// nil means "no known constraint." Mirrors the Go `modelmeta.Constraints`
+/// + `proto Reeve_V1_ModelConstraints`. Source-of-truth table lives in
+/// `internal/modelmeta/constraints.go`.
+public struct ReeveModelConstraints: Sendable, Hashable, Codable {
+    /// Accepted temperature interval. nil = no constraint; UI offers
+    /// the full slider range.
+    public let temperature: ReeveRange?
+    /// Dotted CallSettings field paths the model is known to reject
+    /// (e.g. "openai.response_format" on some Z.AI models). UIs should
+    /// hide or disable controls for any path in this list.
+    public let unsupported: [String]
+
+    public init(temperature: ReeveRange? = nil, unsupported: [String] = []) {
+        self.temperature = temperature
+        self.unsupported = unsupported
+    }
+
+    init(from p: Reeve_V1_ModelConstraints) {
+        temperature = p.hasTemperature ? ReeveRange(from: p.temperature) : nil
+        unsupported = p.unsupported
+    }
+
+    /// Convenience: true when the named field path is in `unsupported`.
+    public func isUnsupported(_ path: String) -> Bool {
+        unsupported.contains(path)
+    }
+}
+
+/// Supported numeric range for a single setting. Min/max inclusive;
+/// `lockedAt`, when set, overrides both — the only valid value is
+/// exactly `lockedAt` (e.g. OpenAI's o-series + gpt-5 family lock
+/// temperature at 1.0).
+public struct ReeveRange: Sendable, Hashable, Codable {
+    public let min: Double?
+    public let max: Double?
+    public let lockedAt: Double?
+
+    public init(min: Double? = nil, max: Double? = nil, lockedAt: Double? = nil) {
+        self.min = min
+        self.max = max
+        self.lockedAt = lockedAt
+    }
+
+    init(from p: Reeve_V1_Range) {
+        min = p.hasMin ? p.min : nil
+        max = p.hasMax ? p.max : nil
+        lockedAt = p.hasLockedAt ? p.lockedAt : nil
+    }
+
+    /// Clamp `value` to the range. If `lockedAt` is set, returns it
+    /// unconditionally. Otherwise applies min/max bounds.
+    public func clamp(_ value: Double) -> Double {
+        if let l = lockedAt { return l }
+        var v = value
+        if let lo = min, v < lo { v = lo }
+        if let hi = max, v > hi { v = hi }
+        return v
     }
 }
 

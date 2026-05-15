@@ -23,7 +23,8 @@ struct ConversationSettingsView: View {
                             settings: $model.conversationCallSettingsDraft,
                             inheritedSettings: model.resolvedCallSettings,
                             driverType: effectiveDriverType,
-                            modelCapabilities: effectiveModelCapabilities
+                            modelCapabilities: effectiveModelCapabilities,
+                            modelConstraints: effectiveModelConstraints
                         )
                     }
                     .padding(.horizontal, 16)
@@ -76,5 +77,12 @@ struct ConversationSettingsView: View {
         return model.availableModels
             .first(where: { $0.providerID == pid && $0.modelID == mid })?
             .capabilities
+    }
+
+    private var effectiveModelConstraints: ReeveModelConstraints? {
+        guard let pid = effectiveProviderID, let mid = effectiveModelID else { return nil }
+        return model.availableModels
+            .first(where: { $0.providerID == pid && $0.modelID == mid })?
+            .constraints
     }
 }

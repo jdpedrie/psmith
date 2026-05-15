@@ -1084,11 +1084,105 @@ public struct Reeve_V1_UserModel: @unchecked Sendable {
     set {_uniqueStorage()._favorite = newValue}
   }
 
+  /// constraints describes per-model limits on the CallSettings the UI
+  /// can offer for this model — clamp temperature ranges, hide controls
+  /// for unsupported fields, etc. Sourced from a hand-maintained
+  /// server-side table (see internal/modelmeta/constraints.go),
+  /// empirically discovered via cmd/discover-constraints. Sparse: any
+  /// field left empty means "no known constraint" — UI offers the full
+  /// range and reactively renders any upstream rejection inline.
+  public var constraints: Reeve_V1_ModelConstraints {
+    get {_storage._constraints ?? Reeve_V1_ModelConstraints()}
+    set {_uniqueStorage()._constraints = newValue}
+  }
+  /// Returns true if `constraints` has been explicitly set.
+  public var hasConstraints: Bool {_storage._constraints != nil}
+  /// Clears the value of `constraints`. Subsequent reads from it will return its default value.
+  public mutating func clearConstraints() {_uniqueStorage()._constraints = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// ModelConstraints carries per-model UI guardrails for CallSettings.
+/// Sparse — any field left empty means "no known constraint." See
+/// internal/modelmeta/constraints.go for the source-of-truth table.
+public struct Reeve_V1_ModelConstraints: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// temperature, when set, defines the model's accepted temperature
+  /// interval. The UI clamps slider bounds and rejects out-of-range
+  /// values at edit time.
+  public var temperature: Reeve_V1_Range {
+    get {_temperature ?? Reeve_V1_Range()}
+    set {_temperature = newValue}
+  }
+  /// Returns true if `temperature` has been explicitly set.
+  public var hasTemperature: Bool {self._temperature != nil}
+  /// Clears the value of `temperature`. Subsequent reads from it will return its default value.
+  public mutating func clearTemperature() {self._temperature = nil}
+
+  /// unsupported lists dotted CallSettings field paths the model is
+  /// known to reject (e.g. "openai.response_format" for some Z.AI
+  /// models). Clients hide or disable controls for any path in this
+  /// list.
+  public var unsupported: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _temperature: Reeve_V1_Range? = nil
+}
+
+/// Range is the supported interval for a numeric setting. min and max
+/// are inclusive; locked_at overrides both — when set, the only valid
+/// value is exactly locked_at (e.g. OpenAI's o-series + gpt-5 family
+/// lock temperature at 1.0).
+public struct Reeve_V1_Range: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var min: Double {
+    get {_min ?? 0}
+    set {_min = newValue}
+  }
+  /// Returns true if `min` has been explicitly set.
+  public var hasMin: Bool {self._min != nil}
+  /// Clears the value of `min`. Subsequent reads from it will return its default value.
+  public mutating func clearMin() {self._min = nil}
+
+  public var max: Double {
+    get {_max ?? 0}
+    set {_max = newValue}
+  }
+  /// Returns true if `max` has been explicitly set.
+  public var hasMax: Bool {self._max != nil}
+  /// Clears the value of `max`. Subsequent reads from it will return its default value.
+  public mutating func clearMax() {self._max = nil}
+
+  public var lockedAt: Double {
+    get {_lockedAt ?? 0}
+    set {_lockedAt = newValue}
+  }
+  /// Returns true if `lockedAt` has been explicitly set.
+  public var hasLockedAt: Bool {self._lockedAt != nil}
+  /// Clears the value of `lockedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearLockedAt() {self._lockedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _min: Double? = nil
+  fileprivate var _max: Double? = nil
+  fileprivate var _lockedAt: Double? = nil
 }
 
 /// Per-call provider settings. Hybrid common-core + provider-specific shape:
@@ -3224,7 +3318,7 @@ extension Reeve_V1_CatalogModel: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModel"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}default_settings\0\u{3}metadata_source\0\u{3}metadata_snapshot_at\0\u{3}enabled_at\0\u{1}favorite\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}default_settings\0\u{3}metadata_source\0\u{3}metadata_snapshot_at\0\u{3}enabled_at\0\u{1}favorite\0\u{1}constraints\0")
 
   fileprivate class _StorageClass {
     var _userModelProviderID: String = String()
@@ -3241,6 +3335,7 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     var _metadataSnapshotAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _enabledAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _favorite: Bool = false
+    var _constraints: Reeve_V1_ModelConstraints? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -3265,6 +3360,7 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       _metadataSnapshotAt = source._metadataSnapshotAt
       _enabledAt = source._enabledAt
       _favorite = source._favorite
+      _constraints = source._constraints
     }
   }
 
@@ -3297,6 +3393,7 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._metadataSnapshotAt) }()
         case 13: try { try decoder.decodeSingularMessageField(value: &_storage._enabledAt) }()
         case 14: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
+        case 15: try { try decoder.decodeSingularMessageField(value: &_storage._constraints) }()
         default: break
         }
       }
@@ -3351,6 +3448,9 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       if _storage._favorite != false {
         try visitor.visitSingularBoolField(value: _storage._favorite, fieldNumber: 14)
       }
+      try { if let v = _storage._constraints {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -3374,10 +3474,94 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         if _storage._metadataSnapshotAt != rhs_storage._metadataSnapshotAt {return false}
         if _storage._enabledAt != rhs_storage._enabledAt {return false}
         if _storage._favorite != rhs_storage._favorite {return false}
+        if _storage._constraints != rhs_storage._constraints {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_ModelConstraints: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ModelConstraints"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{1}unsupported\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._temperature) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.unsupported) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._temperature {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.unsupported.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.unsupported, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ModelConstraints, rhs: Reeve_V1_ModelConstraints) -> Bool {
+    if lhs._temperature != rhs._temperature {return false}
+    if lhs.unsupported != rhs.unsupported {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_Range: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Range"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}min\0\u{1}max\0\u{3}locked_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularDoubleField(value: &self._min) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self._max) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self._lockedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._min {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._max {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._lockedAt {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_Range, rhs: Reeve_V1_Range) -> Bool {
+    if lhs._min != rhs._min {return false}
+    if lhs._max != rhs._max {return false}
+    if lhs._lockedAt != rhs._lockedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

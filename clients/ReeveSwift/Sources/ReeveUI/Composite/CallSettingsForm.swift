@@ -47,17 +47,25 @@ public struct CallSettingsForm: View {
     let inheritedSettings: ReeveCallSettings?
     let driverType: String
     let modelCapabilities: ReeveModelCapabilities?
+    /// Server-supplied per-model constraints (clamped temperature
+    /// ranges, locked-at values, hidden field paths). nil = no
+    /// known constraints; the form falls back to driver-type
+    /// heuristics. Source-of-truth lives in
+    /// `internal/modelmeta/constraints.go`.
+    let modelConstraints: ReeveModelConstraints?
 
     public init(
         settings: Binding<ReeveCallSettings>,
         inheritedSettings: ReeveCallSettings?,
         driverType: String,
-        modelCapabilities: ReeveModelCapabilities?
+        modelCapabilities: ReeveModelCapabilities?,
+        modelConstraints: ReeveModelConstraints? = nil
     ) {
         self._settings = settings
         self.inheritedSettings = inheritedSettings
         self.driverType = driverType
         self.modelCapabilities = modelCapabilities
+        self.modelConstraints = modelConstraints
     }
 
     private var showsTopK: Bool {
@@ -117,7 +125,8 @@ public struct CallSettingsForm: View {
                 inherited: inheritedSettings?.temperature,
                 range: temperatureRange,
                 step: 0.05,
-                format: { String(format: "%.2f", $0) }
+                format: { String(format: "%.2f", $0) },
+                disabled: temperatureLocked
             )
 
             // Top P
@@ -148,6 +157,20 @@ public struct CallSettingsForm: View {
     }
 
     private var temperatureDescription: String {
+        // Constraint-aware first: if the server published a locked-at
+        // value or a tighter range than the driver-type default, the
+        // description should reflect that exact rule rather than the
+        // generic guidance.
+        if let r = modelConstraints?.temperature {
+            if let l = r.lockedAt {
+                return "This model locks temperature at \(String(format: "%.2f", l)). The slider is disabled."
+            }
+            if r.min != nil || r.max != nil {
+                let lo = r.min.map { String(format: "%.2f", $0) } ?? "0"
+                let hi = r.max.map { String(format: "%.2f", $0) } ?? "∞"
+                return "Sampling temperature. This model accepts [\(lo), \(hi)]."
+            }
+        }
         switch driverType {
         case "anthropic":
             return "Sampling temperature. Anthropic clamps to [0, 1]."
@@ -159,7 +182,24 @@ public struct CallSettingsForm: View {
     }
 
     private var temperatureRange: ClosedRange<Double> {
-        driverType == "anthropic" ? 0...1 : 0...2
+        // If the server published a constraint, honour its tighter
+        // bounds. lockedAt collapses the range to a single value so
+        // the slider clamps; the row also disables interaction below.
+        if let r = modelConstraints?.temperature {
+            if let l = r.lockedAt {
+                return l...l
+            }
+            let lo = r.min ?? 0
+            let hi = r.max ?? (driverType == "anthropic" ? 1 : 2)
+            if lo <= hi { return lo...hi }
+        }
+        return driverType == "anthropic" ? 0...1 : 0...2
+    }
+
+    /// True when the model's temperature is fixed at a single value
+    /// — collapses the slider to a static read-out.
+    private var temperatureLocked: Bool {
+        modelConstraints?.temperature?.lockedAt != nil
     }
 
     private var topKRow: some View {
@@ -904,7 +944,8 @@ public struct CallSettingsForm: View {
         inherited: Double?,
         range: ClosedRange<Double>,
         step: Double,
-        format: @escaping (Double) -> String
+        format: @escaping (Double) -> String,
+        disabled: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
@@ -940,6 +981,7 @@ public struct CallSettingsForm: View {
                 in: range,
                 step: step
             )
+            .disabled(disabled)
         }
     }
 

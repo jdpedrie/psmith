@@ -1627,7 +1627,8 @@ private struct ModelEditForm: View {
                         settings: $defaultSettings,
                         inheritedSettings: nil,
                         driverType: providerType,
-                        modelCapabilities: capabilitiesValue
+                        modelCapabilities: capabilitiesValue,
+                        modelConstraints: formMode.existingModel?.constraints
                     )
                     .padding(.top, 8)
                 } else {
@@ -1636,7 +1637,8 @@ private struct ModelEditForm: View {
                             settings: $defaultSettings,
                             inheritedSettings: nil,
                             driverType: providerType,
-                            modelCapabilities: capabilitiesValue
+                            modelCapabilities: capabilitiesValue,
+                            modelConstraints: formMode.existingModel?.constraints
                         )
                         .padding(.top, 8)
                     } label: {

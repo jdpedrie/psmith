@@ -70,8 +70,12 @@ func (s *Service) storeProviderToProto(p store.UserModelProvider) *reevev1.UserM
 	return out
 }
 
-// storeUserModelToProto maps a store user_models row to its proto shape.
-func storeUserModelToProto(m store.UserModel) *reevev1.UserModel {
+// storeUserModelToProto maps a store user_models row to its proto
+// shape. providerType is the driver-type identifier ("anthropic",
+// "openai-compatible", "google") that gates the per-model constraint
+// lookup; pass "" when the caller doesn't know it (constraints are
+// then omitted, which is safe — the UI just offers the full range).
+func storeUserModelToProto(m store.UserModel, providerType string) *reevev1.UserModel {
 	out := &reevev1.UserModel{
 		UserModelProviderId: m.UserModelProviderID.String(),
 		ModelId:             m.ModelID,
@@ -97,7 +101,39 @@ func storeUserModelToProto(m store.UserModel) *reevev1.UserModel {
 	if len(m.DefaultSettings) > 0 {
 		out.DefaultSettings = callSettingsFromJSON(m.DefaultSettings)
 	}
+	if providerType != "" {
+		out.Constraints = constraintsToProto(modelmeta.ConstraintsFor(providerType, m.ModelID))
+	}
 	return out
+}
+
+// constraintsToProto converts the in-memory Constraints struct (from
+// internal/modelmeta) to the proto wire shape. Returns nil for the
+// zero-value (no known constraints) so unknown-model rows stay light
+// on the wire.
+func constraintsToProto(c modelmeta.Constraints) *reevev1.ModelConstraints {
+	if c.Temperature == nil && len(c.Unsupported) == 0 {
+		return nil
+	}
+	out := &reevev1.ModelConstraints{}
+	if c.Temperature != nil {
+		out.Temperature = rangeToProto(c.Temperature)
+	}
+	if len(c.Unsupported) > 0 {
+		out.Unsupported = append([]string(nil), c.Unsupported...)
+	}
+	return out
+}
+
+func rangeToProto(r *modelmeta.Range) *reevev1.Range {
+	if r == nil {
+		return nil
+	}
+	return &reevev1.Range{
+		Min:      r.Min,
+		Max:      r.Max,
+		LockedAt: r.LockedAt,
+	}
 }
 
 func pricingFromCols(in, out, cr, cw *float64) *reevev1.ModelPricing {
