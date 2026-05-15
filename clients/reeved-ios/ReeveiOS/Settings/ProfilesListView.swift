@@ -329,7 +329,7 @@ private struct ProfileEditSheet: View {
     /// Drives the inner NavigationStack so we can push a fresh
     /// plugin's config sub-screen the moment the user picks one
     /// from AddPluginSheet — no second tap on the row required.
-    @State private var navPath: [PluginConfigDestination] = []
+    @State private var navPath: [ProfileSubScreen] = []
     /// Show the "Discard changes?" confirmation when the user tries
     /// to back out of the editor with unsaved work.
     @State private var showingDiscardConfirm: Bool = false
@@ -408,26 +408,14 @@ private struct ProfileEditSheet: View {
                 }
 
                 Section("Prompt") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("System message")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        MultilineEditor(
-                            placeholder: "Optional — sent at the top of every conversation",
-                            text: $systemMessage,
-                            minHeight: 120
-                        )
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Default user message")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        MultilineEditor(
-                            placeholder: "Optional — pre-fills the first user turn",
-                            text: $defaultUserMessage,
-                            minHeight: 100
-                        )
-                    }
+                    LongTextEditorRow(label: "System message",
+                                      preview: systemMessage,
+                                      placeholder: "Optional — sent at the top of every conversation",
+                                      destination: .longTextEditor(field: .systemMessage))
+                    LongTextEditorRow(label: "Default user message",
+                                      preview: defaultUserMessage,
+                                      placeholder: "Optional — pre-fills the first user turn",
+                                      destination: .longTextEditor(field: .defaultUserMessage))
                 }
 
                 Section("Compression") {
@@ -445,16 +433,10 @@ private struct ProfileEditSheet: View {
                         action: { pickingCompressionModel = true }
                     )
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Guide")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        MultilineEditor(
-                            placeholder: "Optional extra instruction for the summariser",
-                            text: $compressionGuide,
-                            minHeight: 80
-                        )
-                    }
+                    LongTextEditorRow(label: "Guide",
+                                      preview: compressionGuide,
+                                      placeholder: "Optional extra instruction for the summariser",
+                                      destination: .longTextEditor(field: .compressionGuide))
                 }
 
                 Section("Auto-titling") {
@@ -489,16 +471,10 @@ private struct ProfileEditSheet: View {
                         )
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Guide")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        MultilineEditor(
-                            placeholder: "Optional — e.g. \"prefer technical phrasing\"",
-                            text: $titleGuide,
-                            minHeight: 70
-                        )
-                    }
+                    LongTextEditorRow(label: "Guide",
+                                      preview: titleGuide,
+                                      placeholder: "Optional — e.g. \"prefer technical phrasing\"",
+                                      destination: .longTextEditor(field: .titleGuide))
                 }
 
                 Section {
@@ -634,12 +610,21 @@ private struct ProfileEditSheet: View {
                     }
                 )
             }
-            .navigationDestination(for: PluginConfigDestination.self) { dest in
-                PluginConfigSubScreen(
-                    pluginName: dest.pluginName,
-                    pluginType: app.profiles.pluginTypes.first(where: { $0.name == dest.pluginName }),
-                    config: bindingForPluginConfig(localID: dest.localID)
-                )
+            .navigationDestination(for: ProfileSubScreen.self) { dest in
+                switch dest {
+                case let .pluginConfig(localID, pluginName):
+                    PluginConfigSubScreen(
+                        pluginName: pluginName,
+                        pluginType: app.profiles.pluginTypes.first(where: { $0.name == pluginName }),
+                        config: bindingForPluginConfig(localID: localID)
+                    )
+                case let .longTextEditor(field):
+                    LongTextEditorScreen(
+                        title: field.title,
+                        placeholder: field.placeholder,
+                        text: longTextBinding(for: field)
+                    )
+                }
             }
             .onAppear {
                 seedFromExisting()
@@ -709,7 +694,7 @@ private struct ProfileEditSheet: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Remove plugin")
             if drillable {
-                NavigationLink(value: PluginConfigDestination(
+                NavigationLink(value: ProfileSubScreen.pluginConfig(
                     localID: plugin.localID,
                     pluginName: plugin.pluginName
                 )) {
@@ -747,17 +732,35 @@ private struct ProfileEditSheet: View {
             }
         }
         let draft = DraftPlugin(pluginName: pluginType.name, config: initial)
+        NSLog("REEVE-DEBUG attachPlugin BEFORE draft=\(pluginsDraft.map { $0.pluginName })")
         pluginsDraft.append(draft)
+        NSLog("REEVE-DEBUG attachPlugin AFTER draft=\(pluginsDraft.map { $0.pluginName })")
         // Immediately drill into the new plugin's config screen
         // when it has any per-profile fields. Saves the user a
         // second tap on the row chevron and makes "fill in the
         // required model" the default next action — fewer ways to
         // end up with a saved-but-unconfigured plugin.
         if !pluginType.profileScopedConfigFields.isEmpty {
-            navPath.append(PluginConfigDestination(
+            navPath.append(.pluginConfig(
                 localID: draft.localID,
                 pluginName: pluginType.name
             ))
+        }
+    }
+
+    /// Binding glue for the long-text editor sub-screen. Routes
+    /// reads + writes back to the right @State String so dirty-
+    /// check + save see the edits live.
+    private func longTextBinding(for field: ProfileLongTextField) -> Binding<String> {
+        switch field {
+        case .systemMessage:
+            return Binding(get: { systemMessage },      set: { systemMessage = $0 })
+        case .defaultUserMessage:
+            return Binding(get: { defaultUserMessage }, set: { defaultUserMessage = $0 })
+        case .compressionGuide:
+            return Binding(get: { compressionGuide },   set: { compressionGuide = $0 })
+        case .titleGuide:
+            return Binding(get: { titleGuide },         set: { titleGuide = $0 })
         }
     }
 
@@ -779,6 +782,16 @@ private struct ProfileEditSheet: View {
 
     @MainActor
     private func loadPlugins() async {
+        // Idempotent — once we've populated pluginsDraft from the
+        // server, never overwrite it again. Without this guard a
+        // late-arriving load (race on .task firing while the user
+        // is mid-edit, or a re-task on view re-mount) wipes
+        // freshly-added drafts and the plugin "vanishes" from the
+        // list after a navigation pop.
+        guard !pluginsLoaded else {
+            NSLog("REEVE-DEBUG loadPlugins SKIP (already loaded)")
+            return
+        }
         // Need the catalog (plugin descriptors) before the rows can
         // render fields. Load only if not already cached on the VM.
         if app.profiles.pluginTypes.isEmpty {
@@ -799,6 +812,7 @@ private struct ProfileEditSheet: View {
             }
         }
         pluginsLoaded = true
+        NSLog("REEVE-DEBUG loadPlugins DONE draft=\(pluginsDraft.map { $0.pluginName })")
     }
 
     private var pluginsAreDirty: Bool {
@@ -1062,14 +1076,49 @@ private struct DraftPlugin {
     var config: [String: Any]
 }
 
-/// NavigationDestination value for the per-plugin config sub-screen.
-/// Identifying by `localID` (not pluginName) so two attachments of the
-/// same plugin would still navigate independently — defensive; the
-/// add-flow filters out already-attached types so this can't happen
-/// today.
-private struct PluginConfigDestination: Hashable {
-    let localID: UUID
-    let pluginName: String
+/// All the routes the profile editor's inner NavigationStack can
+/// push to. Listed as cases on one enum so a single `navigationDestination(for:)`
+/// handler can dispatch (NavigationStack accepts one route type per
+/// destination handler).
+private enum ProfileSubScreen: Hashable {
+    /// Per-plugin config sub-screen. Identifying by `localID` (not
+    /// pluginName) so two attachments of the same plugin would
+    /// still navigate independently — defensive; the add-flow
+    /// filters out already-attached types so this can't happen today.
+    case pluginConfig(localID: UUID, pluginName: String)
+    /// Long-text field editor (system message, default user
+    /// message, compression guide, title guide). Renders a
+    /// full-screen TextEditor so multi-paragraph prompts have
+    /// real room to breathe instead of a 70–120pt inline box.
+    case longTextEditor(field: ProfileLongTextField)
+}
+
+/// Identifies which long-text field a `longTextEditor` push is
+/// editing. The editor reads + writes through a binding the
+/// destination handler builds at push time.
+private enum ProfileLongTextField: String, Hashable {
+    case systemMessage
+    case defaultUserMessage
+    case compressionGuide
+    case titleGuide
+
+    var title: String {
+        switch self {
+        case .systemMessage:      return "System Message"
+        case .defaultUserMessage: return "Default User Message"
+        case .compressionGuide:   return "Compression Guide"
+        case .titleGuide:         return "Title Guide"
+        }
+    }
+
+    var placeholder: String {
+        switch self {
+        case .systemMessage:      return "Optional — sent at the top of every conversation"
+        case .defaultUserMessage: return "Optional — pre-fills the first user turn"
+        case .compressionGuide:   return "Optional extra instruction for the summariser"
+        case .titleGuide:         return "Optional — e.g. \"prefer technical phrasing\""
+        }
+    }
 }
 
 /// Shallow equality on the JSON-serializable subset PluginConfigForm
@@ -1387,5 +1436,66 @@ private struct MultilineEditor: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
         )
+    }
+}
+
+// MARK: - Long-text-editor row + screen
+
+/// Compact row for a long-text field. Shows the label + a single-
+/// line preview (or placeholder when empty) and a chevron pushing
+/// to the dedicated editor screen. Replaces the inline
+/// MultilineEditor for system message / default user message /
+/// compression guide / title guide — those got tall enough to
+/// dominate the form on long values.
+private struct LongTextEditorRow: View {
+    let label: String
+    let preview: String
+    let placeholder: String
+    let destination: ProfileSubScreen
+
+    var body: some View {
+        NavigationLink(value: destination) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                Spacer(minLength: 12)
+                Text(preview.isEmpty ? placeholder : preview.replacingOccurrences(of: "\n", with: " "))
+                    .font(.callout)
+                    .foregroundStyle(preview.isEmpty ? .tertiary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+}
+
+/// Full-screen TextEditor for one of the long-text profile
+/// fields. The bound String is the editor's source of truth; the
+/// editor screen has no Save / Cancel of its own — pop-back
+/// commits the edit (writes already flowed through the binding).
+/// This matches the iOS pattern for "edit a single field" pushes
+/// (e.g. Settings.app's Wi-Fi name editor).
+private struct LongTextEditorScreen: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .font(.body)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
+                    .allowsHitTesting(false)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
