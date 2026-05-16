@@ -438,6 +438,18 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 		emit(out, providers.ChunkError, map[string]string{"message": err.Error()})
 	}
 
+	// Order matters here. openStreamWithRetry treats a ChunkError as
+	// the FIRST chunk as "transient failure, retry from scratch" — a
+	// Gemini MALFORMED_FUNCTION_CALL run typically produces zero text
+	// + zero tool-use chunks, so without usage in front the error
+	// would arrive first and trigger 3x prompt billing for the same
+	// deterministic failure. Emitting usage first guarantees the
+	// supervisor's openOnce sees a non-error first chunk → success
+	// path → consume loop reads the trailing error normally and
+	// marks the message as errored (one billing, one error).
+	if lastUsage != nil {
+		emitUsage(out, *lastUsage, lastUsageRaw, lastFinishReason)
+	}
 	// Surface a failure-shaped finish reason as a ChunkError so the
 	// supervisor marks the resulting message as errored — without this
 	// the bubble lands empty + finish_reason in the DB but no inline
@@ -448,9 +460,6 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 			"message": msg,
 			"code":    lastFinishReason,
 		})
-	}
-	if lastUsage != nil {
-		emitUsage(out, *lastUsage, lastUsageRaw, lastFinishReason)
 	}
 	emit(out, providers.ChunkDone, map[string]any{})
 }
