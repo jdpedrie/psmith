@@ -24,6 +24,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/files"
 	"github.com/jdpedrie/reeve/internal/langfuse"
 	"github.com/jdpedrie/reeve/internal/langfusesvc"
+	"github.com/jdpedrie/reeve/internal/mcpserver"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
@@ -189,6 +190,15 @@ func run() error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
+
+	// MCP server — exposes a curated subset of the Connect RPCs as
+	// Model Context Protocol tools so an assistant attached to a
+	// profile can self-introspect and edit its own and other profiles
+	// (the "profile builder" use case). Auth piggybacks on the same
+	// Bearer-token sessions; user resolution happens inside the
+	// handler so it can return the HTTP-status flavour of unauth.
+	mcpSrv := mcpserver.New(profilesSvc, conversationsSvc, modelProvidersSvc, slog.Default())
+	mux.Handle("/mcp", mcpserver.Handler(mcpSrv, queries))
 
 	srv := &http.Server{
 		Addr:    addr,

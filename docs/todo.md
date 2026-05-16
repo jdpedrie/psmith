@@ -73,6 +73,36 @@ Recorded here for grep-ability; the canonical discussion is in [architecture.md]
 
 ---
 
+## MCP server (v1 shipped — `internal/mcpserver`)
+
+Exposes a curated subset of the Connect RPCs as MCP tools at `/mcp`,
+served over Streamable HTTP, JSON-only responses. Bearer-token auth
+shared with the Connect surface. Tools: `list_profiles`,
+`get_profile`, `create_profile`, `update_profile`,
+`list_plugin_types`, `get_profile_plugins`, `set_profile_plugins`,
+`list_providers`, `list_models`, `list_conversations`,
+`get_conversation`, `list_messages`. Use case: dogfood through
+Reeve's own `mcp` plugin to power a "Profile Builder" assistant.
+
+Deferred:
+- **Elicitation** — Reeve's mcp client doesn't speak the
+  elicitation protocol yet (server-initiated user prompts during
+  tool calls). Wire on both sides before adding destructive tools
+  (delete_*) so confirmation gating is in-protocol rather than a
+  proposed-action convention.
+- **Conversation write tools** — `send_message`, `compact`,
+  `delete_conversation` etc. all live on `ConversationsService` but
+  aren't exposed yet. `send_message` in particular is a streaming
+  RPC and needs a different mapping (probably accumulate the full
+  response server-side and return when complete, since MCP tools
+  are request/response).
+- **Model write tools** — `enable_models` / `disable_models` /
+  `update_user_model` need elicitation gating before exposure (a
+  rogue assistant disabling models would be annoying).
+- **System profiles seeding** — ship a "Profile Builder" profile
+  out of the box that has the Reeve MCP server pre-attached and a
+  system message teaching the assistant to use these tools well.
+
 ## Smaller items
 
 - **Connect server-streaming via raw curl** doesn't pretty-print — Connect's wire format isn't plain newline-delimited JSON. For terminal smoke testing, write a small `clarkctl` helper or use `buf curl` to subscribe to streams.

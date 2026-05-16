@@ -33,6 +33,9 @@ public struct ComponentBuilderConfigForm: View {
     /// serialisable data so the host's save flow round-trips
     /// cleanly).
     @State private var definitions: [Definition] = []
+    @State private var pasteExpanded: Bool = false
+    @State private var pasteText: String = ""
+    @State private var pasteError: String?
 
     public init(config: Binding<[String: Any]>) {
         self._config = config
@@ -57,6 +60,8 @@ public struct ComponentBuilderConfigForm: View {
                     .font(.callout)
             }
             .buttonStyle(.glass)
+
+            pasteJSONSection
         }
         .onAppear { load() }
         .onChange(of: definitions) { _, _ in persist() }
@@ -109,6 +114,103 @@ public struct ComponentBuilderConfigForm: View {
             return
         }
         config["components"] = definitions.map { $0.toDict() }
+    }
+
+    // MARK: - Paste JSON
+
+    /// Power-user escape hatch — accepts a pasted JSON blob in either of
+    /// the two shapes the rest of the system uses (raw `[…]` array, or
+    /// `{"components":[…]}` wrapper) and replaces the current definition
+    /// list. Useful when seeding from an AI-generated config or copying
+    /// between profiles. Validation errors render inline; nothing is
+    /// applied until parsing fully succeeds.
+    @ViewBuilder
+    private var pasteJSONSection: some View {
+        DisclosureGroup(isExpanded: $pasteExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Paste a JSON array of definitions, or a `{\"components\": [...]}` wrapper. Replaces the entire list.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextEditor(text: $pasteText)
+                    .font(.callout.monospaced())
+                    .frame(minHeight: 120)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+                if let err = pasteError {
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Button("Replace from JSON") { applyPaste() }
+                        .buttonStyle(.glassProminent)
+                        .disabled(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Load current") { loadCurrentIntoPaste() }
+                        .buttonStyle(.glass)
+                    Spacer()
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            Text("Paste JSON")
+                .font(.callout.weight(.medium))
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func applyPaste() {
+        let trimmed = pasteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else {
+            pasteError = "Could not encode as UTF-8."
+            return
+        }
+        let parsed: Any
+        do {
+            parsed = try JSONSerialization.jsonObject(with: data, options: [])
+        } catch {
+            pasteError = "JSON parse error: \(error.localizedDescription)"
+            return
+        }
+        let arr: [[String: Any]]?
+        if let direct = parsed as? [[String: Any]] {
+            arr = direct
+        } else if let wrapper = parsed as? [String: Any], let nested = wrapper["components"] as? [[String: Any]] {
+            arr = nested
+        } else {
+            arr = nil
+        }
+        guard let entries = arr else {
+            pasteError = "Expected an array of definitions or a {\"components\": [...]} wrapper."
+            return
+        }
+        let decoded = entries.compactMap(Definition.init(dict:))
+        guard decoded.count == entries.count else {
+            pasteError = "One or more entries failed to decode."
+            return
+        }
+        definitions = decoded
+        pasteError = nil
+        pasteText = ""
+        pasteExpanded = false
+        persist()
+    }
+
+    private func loadCurrentIntoPaste() {
+        let wrapper: [String: Any] = ["components": definitions.map { $0.toDict() }]
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: wrapper,
+            options: [.prettyPrinted, .sortedKeys]
+        ),
+        let str = String(data: data, encoding: .utf8) else {
+            return
+        }
+        pasteText = str
+        pasteError = nil
     }
 }
 
