@@ -36,13 +36,26 @@ const (
 	lcOutputModeComponent = "component"
 )
 
-// lcChoiceLineRe matches one lettered-choice line inside a parsed
-// choices block. Tolerant of the common delimiter styles the default
-// template demonstrates ("A." / "A)" / "A:") and of an optional
-// leading whitespace indent the model sometimes adds when it's been
-// echoing markdown lists. Anything that isn't a letter line — section
-// headers, blank lines, prose — is skipped silently.
-var lcChoiceLineRe = regexp.MustCompile(`^\s*([A-Z])[.):]?\s+(.+\S)\s*$`)
+// lcChoiceStartRe matches the start of a lettered-choice item anywhere
+// in the body. Boundary classes are deliberately permissive so the
+// parser handles the common ways a model emits items without a clean
+// newline between them — Gemini in particular sometimes concatenates
+// `(like X)B. label` on a single line. The match consists of:
+//
+//   - a "soft boundary" preceding character: start-of-string, any
+//     whitespace, or one of `)]>}` (closing brackets that commonly
+//     end the previous label's parenthetical),
+//   - a single uppercase ASCII letter (the choice key),
+//   - an optional `. ) :` delimiter,
+//   - one or more whitespace characters separating the prefix from
+//     the label content.
+//
+// Capture group 1 is the boundary char (used to decide whether it
+// belongs to the previous label or should be trimmed); group 2 is
+// the letter; group 3 is the delimiter (or empty); group 4 is the
+// trailing whitespace. The label runs from the end of this match
+// up to the start of the next match — see parseChoiceItems.
+var lcChoiceStartRe = regexp.MustCompile(`(^|[\s)\]>}])([A-Z])([.):]?)(\s+)`)
 
 // lcSystemReminderExplainer is appended to the system slot to teach the model
 // what [system_reminder ...] tags mean and how to handle them. Pairs with
@@ -458,21 +471,68 @@ func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
 	}
 }
 
-// parseChoiceItems scans a block body for lettered lines like "A. Attack"
-// and returns one fragment item per match. Labels carry the letter
-// prefix ("A. Attack") so the rendered button matches what the model
-// emitted; the action is `compose:<letter>` so tapping types the
-// chosen letter into the composer — the user sees one tap, the model
-// sees a single-letter user message it can interpret as a choice
-// selection per its own system prompt.
+// parseChoiceItems scans a block body for lettered choice prefixes and
+// returns one fragment item per occurrence. Operates on the whole
+// body rather than line-by-line so it handles the (real, observed)
+// case where a model emits two items on the same line without a
+// newline separator — Gemini sometimes produces
+// `B. View available plugins (like X)C. Check ...` as one line; the
+// older line-by-line parser saw one entry, this one sees both.
+//
+// Each item's label runs from the end of its prefix match up to the
+// start of the next prefix match (or the end of the body for the
+// last item). The boundary character (the `(^|[\s)\]>}])` capture)
+// is kept in the previous label when it's punctuation — `)` and
+// friends are usually part of the prior label's parenthetical — and
+// dropped when it's whitespace. trimSpace normalises trailing newlines
+// inside labels so adjacent items render cleanly in the UI.
+//
+// Labels carry the letter prefix ("A. Attack") so the rendered button
+// matches what the model emitted; the action is `compose:<letter>` so
+// tapping types the chosen letter into the composer — the user sees
+// one tap, the model sees a single-letter user message it can
+// interpret as a choice selection per its own system prompt.
 func (p *letteredChoices) parseChoiceItems(body string) []map[string]string {
+	matches := lcChoiceStartRe.FindAllStringSubmatchIndex(body, -1)
+	if len(matches) == 0 {
+		return nil
+	}
 	var items []map[string]string
-	for _, line := range strings.Split(body, "\n") {
-		m := lcChoiceLineRe.FindStringSubmatch(line)
-		if m == nil {
+	for i, m := range matches {
+		// m layout from FindAllStringSubmatchIndex with our regex:
+		//   m[0..1] = full-match start..end
+		//   m[2..3] = boundary capture (^ or one of \s)\]>})
+		//   m[4..5] = letter
+		//   m[6..7] = delimiter (or empty)
+		//   m[8..9] = trailing whitespace
+		letter := body[m[4]:m[5]]
+		labelStart := m[1] // first char after the whitespace following the prefix
+		var labelEnd int
+		if i+1 < len(matches) {
+			next := matches[i+1]
+			// next[0] is the start of the next match (which begins
+			// with the boundary capture). If that boundary is
+			// whitespace, exclude it from the current label (TrimSpace
+			// would anyway, but leave room for nothing); if it's a
+			// closing bracket/paren, include it — those usually
+			// belong to the parenthetical that ended this label.
+			labelEnd = next[0]
+			if labelEnd >= 0 && labelEnd < len(body) {
+				b := body[labelEnd]
+				if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+					labelEnd++
+				}
+			}
+		} else {
+			labelEnd = len(body)
+		}
+		if labelEnd < labelStart {
+			labelEnd = labelStart
+		}
+		label := strings.TrimSpace(body[labelStart:labelEnd])
+		if label == "" {
 			continue
 		}
-		letter, label := m[1], m[2]
 		items = append(items, map[string]string{
 			"label":  letter + ". " + label,
 			"value":  letter,

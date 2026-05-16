@@ -121,6 +121,74 @@ func TestLetteredChoices_ComponentMode_UnmatchedOpenLeftInPlace(t *testing.T) {
 	}
 }
 
+// TestLetteredChoices_ComponentMode_ItemsMergedOnSameLine reproduces the
+// real Gemini failure mode: the model emitted two items on one line
+// without a newline between them, like
+// `B. View available plugins (like Brave Search)C. Check ...`. The
+// older line-by-line parser produced one merged button; the body-scan
+// parser splits them at the `)C.` boundary.
+func TestLetteredChoices_ComponentMode_ItemsMergedOnSameLine(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
+	body := "Understood. We'll start fresh. What would you like to do instead?\n<choices>\nA. Look at your existing profiles\nB. View available plugins (like Brave Search)C. Check your providers and models\nD. Review recent conversations\n</choices>"
+	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
+	// Expect: [text "Understood…"] [choice_list with 4 items]
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts (prose + fragment); got %d: %+v", len(parts), parts)
+	}
+	if parts[1].Fragment == nil || parts[1].Fragment.Component != "choice_list" {
+		t.Fatalf("expected choice_list; got %+v", parts[1])
+	}
+	var props struct {
+		Items []map[string]string `json:"items"`
+	}
+	mustDecodeJSON(t, parts[1].Fragment.Props, &props)
+	if len(props.Items) != 4 {
+		t.Fatalf("expected 4 items, got %d: %+v", len(props.Items), props.Items)
+	}
+	want := []struct{ letter, label string }{
+		{"A", "A. Look at your existing profiles"},
+		{"B", "B. View available plugins (like Brave Search)"},
+		{"C", "C. Check your providers and models"},
+		{"D", "D. Review recent conversations"},
+	}
+	for i, w := range want {
+		if props.Items[i]["value"] != w.letter {
+			t.Errorf("item[%d] letter: got %q want %q", i, props.Items[i]["value"], w.letter)
+		}
+		if props.Items[i]["label"] != w.label {
+			t.Errorf("item[%d] label: got %q want %q", i, props.Items[i]["label"], w.label)
+		}
+	}
+}
+
+// Sanity check that a clean newline-separated body still parses correctly
+// after the regex change (test added so a future tweak to lcChoiceStartRe
+// doesn't silently regress the happy path).
+func TestLetteredChoices_ComponentMode_ParsesNewlineSeparated(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
+	body := "<choices>\nA. one\nB. two\nC. three\n</choices>"
+	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
+	if parts[0].Fragment == nil {
+		t.Fatalf("expected a choice_list fragment; got %+v", parts)
+	}
+	var props struct {
+		Items []map[string]string `json:"items"`
+	}
+	mustDecodeJSON(t, parts[0].Fragment.Props, &props)
+	if len(props.Items) != 3 {
+		t.Fatalf("expected 3 items; got %d: %+v", len(props.Items), props.Items)
+	}
+}
+
+func mustDecodeJSON(t *testing.T, raw []byte, out any) {
+	t.Helper()
+	if err := json.Unmarshal(raw, out); err != nil {
+		t.Fatalf("json decode: %v", err)
+	}
+}
+
 func TestLetteredChoices_ComponentMode_MultipleBlocks(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
