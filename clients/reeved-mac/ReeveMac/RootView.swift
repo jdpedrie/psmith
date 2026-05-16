@@ -44,7 +44,7 @@ struct RootView: View {
                 .environment(convos)
         } else {
             Color.clear
-                .task { convos = ConversationsModel(client: app.client, hub: app.streamHub) }
+                .task { convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub) }
         }
     }
 }
