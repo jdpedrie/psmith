@@ -195,7 +195,8 @@ private struct PluginSettingsForm: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
-                        PluginConfigForm(
+                        PluginConfigEditor(
+                            pluginName: plugin.name,
                             fields: globals,
                             config: Binding(
                                 get: { draft },

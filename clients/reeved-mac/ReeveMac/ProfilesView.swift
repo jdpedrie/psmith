@@ -1448,7 +1448,8 @@ private struct ProfileForm: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         } else {
-                            PluginConfigForm(
+                            PluginConfigEditor(
+                                pluginName: plugin.pluginName,
                                 fields: profileFields,
                                 config: Binding(
                                     get: { pluginsDraft[index].config },

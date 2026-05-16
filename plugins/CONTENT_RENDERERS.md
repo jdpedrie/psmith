@@ -117,6 +117,43 @@ each only touches Text parts and respects `WalkText`.
 
 ---
 
+## Skip the Go entirely: `component_builder`
+
+For the common case — "teach the model to wrap structured output
+in tags, then render the body as a UIFragment" — there's a
+shipped plugin that does this without writing any Go.
+`component_builder` lets you define one or more (component, open
+tag, close tag, system instructions, optional `[system_reminder]`
+user-tail) recipes through a structured editor in the settings
+page. Each definition becomes:
+
+  - A section appended to the system prompt explaining what the
+    component does + how to wrap the body
+  - (Optional, per-definition) a `[system_reminder ...]` injected
+    on the head user message every turn so the model stays
+    grounded in the convention
+  - A ContentRenderer that scans the assistant's output for the
+    open/close tags, decodes the body as JSON for the
+    component's Props, and emits the UIFragment in place
+
+Use this when:
+- You want to ship a tagged-output convention without touching
+  the codebase.
+- You're prototyping a new renderer-driven workflow and want to
+  iterate on the tag conventions / instructions live.
+
+Reach for a hand-rolled ContentRenderer when:
+- The body shape isn't naturally JSON (e.g. you're parsing a
+  fenced code block out of free prose).
+- You need to compose with other renderers that operate on the
+  same tags.
+- You want span-replacement semantics (multiple matches per
+  message, interleaved with prose) — `component_builder` handles
+  multiple matches per definition, but a custom renderer can do
+  fancier passes.
+
+---
+
 ## Authoring a renderer — minimal example
 
 ```go

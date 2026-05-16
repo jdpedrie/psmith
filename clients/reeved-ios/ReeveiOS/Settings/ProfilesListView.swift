@@ -1171,7 +1171,8 @@ private struct PluginConfigSubScreen: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     } else {
-                        PluginConfigForm(
+                        PluginConfigEditor(
+                            pluginName: type.name,
                             fields: fields,
                             config: $config,
                             availableModels: app.profiles.availableModels,
