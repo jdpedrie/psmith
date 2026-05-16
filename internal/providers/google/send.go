@@ -438,10 +438,49 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 		emit(out, providers.ChunkError, map[string]string{"message": err.Error()})
 	}
 
+	// Surface a failure-shaped finish reason as a ChunkError so the
+	// supervisor marks the resulting message as errored — without this
+	// the bubble lands empty + finish_reason in the DB but no inline
+	// error text, leaving the user staring at a blank assistant turn
+	// with no signal about what went wrong.
+	if msg := geminiFinishReasonErrorMessage(lastFinishReason); msg != "" {
+		emit(out, providers.ChunkError, map[string]string{
+			"message": msg,
+			"code":    lastFinishReason,
+		})
+	}
 	if lastUsage != nil {
 		emitUsage(out, *lastUsage, lastUsageRaw, lastFinishReason)
 	}
 	emit(out, providers.ChunkDone, map[string]any{})
+}
+
+// geminiFinishReasonErrorMessage maps a finish reason to a
+// user-facing error string, or "" when the reason is a normal
+// terminator (STOP, MAX_TOKENS — the latter is "complete-but-truncated"
+// and the partial content is still useful). Lists from the GenerateContent
+// API spec; any reason we don't recognise falls through to "" so a
+// new server-side enum value doesn't accidentally start erroring runs.
+func geminiFinishReasonErrorMessage(reason string) string {
+	switch reason {
+	case "MALFORMED_FUNCTION_CALL":
+		return "Gemini tried to call a tool but the call was malformed (invalid JSON args or unknown function). Try rephrasing or removing the active tool."
+	case "SAFETY":
+		return "Gemini blocked the response under its safety filters."
+	case "RECITATION":
+		return "Gemini blocked the response under its recitation (training-data overlap) filter."
+	case "BLOCKLIST":
+		return "Gemini blocked a term on the safety blocklist."
+	case "PROHIBITED_CONTENT":
+		return "Gemini blocked the response as prohibited content."
+	case "SPII":
+		return "Gemini blocked the response as containing sensitive personally identifiable information."
+	case "IMAGE_SAFETY":
+		return "Gemini blocked an image output under its safety filters."
+	case "OTHER":
+		return "Gemini stopped with an unspecified failure (finish_reason=OTHER)."
+	}
+	return ""
 }
 
 // emitGeminiToolCall translates one functionCall part into the

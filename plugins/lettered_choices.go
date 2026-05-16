@@ -289,13 +289,100 @@ func (p *letteredChoices) TransformForDisplay(content string) string {
 		return content
 	}
 	// Text mode (default): keep choice content but drop just the delimiters.
-	// Use stripTagPreservingWordBoundary instead of a plain ReplaceAll so
-	// that `</choices>What's next?` doesn't render as `BarWhat's next?` —
+	// Content-aware first pass: if a block body is JSON (left over from
+	// a previous run with component mode on), rewrite it to lettered
+	// text in place so the user sees readable choices instead of raw
+	// JSON. Bodies that are already lettered text pass through unchanged.
+	content = rewriteJSONChoiceBodiesAsLettered(content)
+	// Then strip the delimiters with the word-boundary-preserving helper
+	// so `</choices>What's next?` doesn't render as `BarWhat's next?` —
 	// the tag itself isn't a word boundary, so removing it can smash
 	// words together when the model didn't include a separating space.
 	out := stripTagPreservingWordBoundary(content, lcOpenTag)
 	out = stripTagPreservingWordBoundary(out, lcCloseTag)
 	return out
+}
+
+// rewriteJSONChoiceBodiesAsLettered scans content for choice blocks
+// whose body is a valid choice_list JSON object and replaces each body
+// with a lettered-text rendering of the same items. Used by text mode
+// to handle messages that were generated under component mode: without
+// this pass the body would render as raw `{"items":[...]}` after tag
+// strip — readable but ugly. Bodies that aren't JSON (or don't match
+// the expected shape) are left alone; this is a pure progressive-
+// enhancement pass.
+func rewriteJSONChoiceBodiesAsLettered(content string) string {
+	if !strings.Contains(content, lcOpenTag) {
+		return content
+	}
+	var b strings.Builder
+	b.Grow(len(content))
+	rest := content
+	for {
+		open := strings.Index(rest, lcOpenTag)
+		if open < 0 {
+			b.WriteString(rest)
+			return b.String()
+		}
+		bodyStart := open + len(lcOpenTag)
+		closeRel := strings.Index(rest[bodyStart:], lcCloseTag)
+		if closeRel < 0 {
+			b.WriteString(rest)
+			return b.String()
+		}
+		bodyEnd := bodyStart + closeRel
+		blockEnd := bodyEnd + len(lcCloseTag)
+		b.WriteString(rest[:bodyStart])
+		body := rest[bodyStart:bodyEnd]
+		if rendered := renderLetteredFromJSONBody(body); rendered != "" {
+			// Sandwich with newlines so the lettered list reads as
+			// its own paragraph after tag strip, rather than
+			// collapsing into surrounding prose.
+			b.WriteString("\n")
+			b.WriteString(rendered)
+			b.WriteString("\n")
+		} else {
+			b.WriteString(body)
+		}
+		b.WriteString(lcCloseTag)
+		rest = rest[blockEnd:]
+	}
+}
+
+// renderLetteredFromJSONBody parses a choice-block body as a
+// choice_list JSON object and returns "A. label\nB. label\n…" lettered
+// text. Returns "" when the body isn't valid JSON or has no items —
+// callers fall back to the body verbatim in that case.
+func renderLetteredFromJSONBody(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	var in lcChoicePropsIn
+	if err := json.Unmarshal([]byte(body), &in); err != nil {
+		return ""
+	}
+	if len(in.Items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, it := range in.Items {
+		label := strings.TrimSpace(it.Label)
+		if label == "" {
+			continue
+		}
+		letter := "Z"
+		if i < 26 {
+			letter = string(rune('A' + i))
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(letter)
+		b.WriteString(". ")
+		b.WriteString(label)
+	}
+	return b.String()
 }
 
 // stripTagPreservingWordBoundary removes every occurrence of `tag` from
@@ -420,6 +507,15 @@ func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
 			// strings), silently drop the block. The text body is
 			// already out of the parts list; an error here would
 			// be worse than a missing fragment.
+		} else if trimmed := strings.TrimSpace(body); trimmed != "" {
+			// Body didn't parse as choice_list JSON — most likely an
+			// old message generated under text mode (lettered lines
+			// like "A. Foo\nB. Bar") that predates this profile's
+			// switch to component mode. Render the body as a plain
+			// text part so the message stays visible. Not interactive,
+			// but readable — better than the alternative of dropping
+			// the block entirely.
+			out = append(out, ContentPart{Text: trimmed})
 		}
 
 		// Continue after the close tag, trimming leading whitespace

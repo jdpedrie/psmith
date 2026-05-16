@@ -85,21 +85,29 @@ func TestLetteredChoices_ComponentMode_EmitsChoiceListFragment(t *testing.T) {
 	}
 }
 
-func TestLetteredChoices_ComponentMode_MalformedJSONDroppedSilently(t *testing.T) {
+func TestLetteredChoices_ComponentMode_TextBodyFallsBackToTextPart(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	// Model fell back to text mode by mistake. Without a clean JSON
-	// parse the renderer drops the block — no fragment, no garbled
-	// text — so the user sees the surrounding prose without a
-	// broken control.
+	// Common case: profile flipped from text mode to component mode,
+	// historical messages still carry lettered-text bodies. Don't
+	// hide them — render the body as a text part so the message
+	// stays visible. Not interactive, but readable.
 	body := "Prose. <choices>\nA. Attack\nB. Flee\n</choices> tail"
 	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
-	// Expect just the surrounding text parts; the malformed block
-	// contributes no fragment.
 	for _, p := range parts {
 		if p.Fragment != nil {
-			t.Errorf("expected no fragments for malformed JSON body; got %+v", p.Fragment)
+			t.Errorf("text-format body should not produce a fragment; got %+v", p.Fragment)
 		}
+	}
+	// Body content should appear somewhere in the rendered parts.
+	var combined string
+	for _, p := range parts {
+		if p.IsText() {
+			combined += p.Text
+		}
+	}
+	if !strings.Contains(combined, "A. Attack") || !strings.Contains(combined, "B. Flee") {
+		t.Errorf("text-format body content missing from rendered parts; got %q", combined)
 	}
 }
 

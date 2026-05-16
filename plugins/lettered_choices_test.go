@@ -257,6 +257,36 @@ func TestLetteredChoices_DisplayStripsTagsKeepsContent(t *testing.T) {
 	}
 }
 
+// Text mode encountering an old message that was generated under
+// component mode (JSON body) should render lettered text inline
+// instead of raw JSON.
+func TestLetteredChoices_DisplayRewritesJSONBodyAsLettered(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	in := `Pick:<choices>{"items":[{"label":"Read"},{"label":"Write"},{"label":"Code"}]}</choices>`
+	got := lc.TransformForDisplay(in)
+	if strings.Contains(got, `"items"`) {
+		t.Errorf("raw JSON should be replaced with lettered text; got %q", got)
+	}
+	for _, want := range []string{"A. Read", "B. Write", "C. Code"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lettered output missing %q in: %q", want, got)
+		}
+	}
+}
+
+func TestLetteredChoices_DisplayLeavesLetteredBodyAlone(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	in := "Pick:\n<choices>\nA. Read\nB. Write\n</choices>"
+	got := lc.TransformForDisplay(in)
+	for _, want := range []string{"A. Read", "B. Write"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lettered body should pass through unchanged; missing %q in: %q", want, got)
+		}
+	}
+}
+
 // --- Configurable ---
 
 func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
