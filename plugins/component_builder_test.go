@@ -40,11 +40,14 @@ func TestComponentBuilder_EmptyConfigIsNoOp(t *testing.T) {
 func TestComponentBuilder_RejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"missing component": `{"components":[{"open_tag":"<a>","close_tag":"</a>"}]}`,
-		"missing open":      `{"components":[{"component":"choice_list","close_tag":"</a>"}]}`,
-		"missing close":     `{"components":[{"component":"choice_list","open_tag":"<a>"}]}`,
-		"identical tags":    `{"components":[{"component":"choice_list","open_tag":"X","close_tag":"X"}]}`,
-		"bad json":          `{not json`,
+		"missing name":         `{"components":[{"component":"choice_list","open_tag":"<a>","close_tag":"</a>"}]}`,
+		"missing component":    `{"components":[{"name":"x","open_tag":"<a>","close_tag":"</a>"}]}`,
+		"missing open":         `{"components":[{"name":"x","component":"choice_list","close_tag":"</a>"}]}`,
+		"missing close":        `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>"}]}`,
+		"identical tags":       `{"components":[{"name":"x","component":"choice_list","open_tag":"X","close_tag":"X"}]}`,
+		"duplicate names":      `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>"},{"name":"x","component":"key_value","open_tag":"<b>","close_tag":"</b>"}]}`,
+		"bad reminder mode":    `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>","reminder_mode":"sometimes"}]}`,
+		"bad json":             `{not json`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -58,14 +61,14 @@ func TestComponentBuilder_RejectsInvalidConfig(t *testing.T) {
 func TestComponentBuilder_SystemMessageIncludesEachDefinition(t *testing.T) {
 	t.Parallel()
 	cfg := `{"components":[
-		{"component":"choice_list","open_tag":"<choices>","close_tag":"</choices>","position":"end","instructions":"Use this when offering choices."},
-		{"component":"key_value","open_tag":"<stats>","close_tag":"</stats>","position":"start","instructions":"Use this for stats."}
+		{"name":"combat_choices","component":"choice_list","open_tag":"<choices>","close_tag":"</choices>","position":"end","instructions":"Use this when offering choices."},
+		{"name":"weather_stats","component":"key_value","open_tag":"<stats>","close_tag":"</stats>","position":"start","instructions":"Use this for stats."}
 	]}`
 	cb := buildComponentBuilder(t, cfg)
 	got := cb.AppendSystemMessage()
 	for _, want := range []string{
-		"## choice_list", "<choices>", "</choices>", "END of your response",
-		"## key_value", "<stats>", "</stats>", "START of your response",
+		"## combat_choices (choice_list)", "<choices>", "</choices>", "END of your response",
+		"## weather_stats (key_value)", "<stats>", "</stats>", "START of your response",
 		"Use this when offering choices.", "Use this for stats.",
 	} {
 		if !strings.Contains(got, want) {
@@ -74,27 +77,27 @@ func TestComponentBuilder_SystemMessageIncludesEachDefinition(t *testing.T) {
 	}
 }
 
-func TestComponentBuilder_UserReminderHeadOnlyAndCombines(t *testing.T) {
+func TestComponentBuilder_ReminderHeadOnlyAndModes(t *testing.T) {
 	t.Parallel()
 	cfg := `{"components":[
-		{"component":"choice_list","open_tag":"<a>","close_tag":"</a>","user_reminder_enabled":true,"user_reminder":"Always offer choices when appropriate."},
-		{"component":"key_value","open_tag":"<b>","close_tag":"</b>","user_reminder_enabled":false},
-		{"component":"card_list","open_tag":"<c>","close_tag":"</c>","user_reminder_enabled":true}
+		{"name":"combat_choices","component":"choice_list","open_tag":"<a>","close_tag":"</a>","reminder_mode":"always"},
+		{"name":"weather_stats","component":"key_value","open_tag":"<b>","close_tag":"</b>","reminder_mode":"none"},
+		{"name":"search_results","component":"card_list","open_tag":"<c>","close_tag":"</c>","reminder_mode":"when_appropriate"}
 	]}`
 	cb := buildComponentBuilder(t, cfg)
-	// Head: both enabled reminders fire; the disabled one (key_value) is skipped.
+	// Head: always + when_appropriate reminders fire; none is skipped.
 	head := cb.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "ok"},
 		HistoryPos{FromHeadSameRole: 0},
 	)
-	if !strings.Contains(head.Content, "Always offer choices when appropriate.") {
-		t.Errorf("explicit reminder text missing; got %q", head.Content)
+	if !strings.Contains(head.Content, "[system_reminder Always generate the combat_choices component.]") {
+		t.Errorf("always-mode reminder missing; got %q", head.Content)
 	}
-	if !strings.Contains(head.Content, "Use the card_list component when appropriate.") {
-		t.Errorf("default reminder text missing for empty user_reminder; got %q", head.Content)
+	if !strings.Contains(head.Content, "[system_reminder Generate the search_results component when appropriate.]") {
+		t.Errorf("when_appropriate-mode reminder missing; got %q", head.Content)
 	}
-	if strings.Contains(head.Content, "key_value") {
-		t.Errorf("disabled reminder leaked into head; got %q", head.Content)
+	if strings.Contains(head.Content, "weather_stats") {
+		t.Errorf("none-mode reminder leaked into head; got %q", head.Content)
 	}
 	// Older user message: untouched.
 	older := cb.TransformHistoryMessage(
@@ -108,7 +111,7 @@ func TestComponentBuilder_UserReminderHeadOnlyAndCombines(t *testing.T) {
 
 func TestComponentBuilder_RendererSkipsNonAssistant(t *testing.T) {
 	t.Parallel()
-	cfg := `{"components":[{"component":"choice_list","open_tag":"<c>","close_tag":"</c>"}]}`
+	cfg := `{"components":[{"name":"x","component":"choice_list","open_tag":"<c>","close_tag":"</c>"}]}`
 	cb := buildComponentBuilder(t, cfg)
 	in := []ContentPart{NewTextPart(`<c>{"items":[]}</c>`)}
 	out := cb.RenderContent(in, "user")
@@ -119,7 +122,7 @@ func TestComponentBuilder_RendererSkipsNonAssistant(t *testing.T) {
 
 func TestComponentBuilder_RendererExtractsTaggedBlock(t *testing.T) {
 	t.Parallel()
-	cfg := `{"components":[{"component":"choice_list","open_tag":"<choices>","close_tag":"</choices>"}]}`
+	cfg := `{"components":[{"name":"x","component":"choice_list","open_tag":"<choices>","close_tag":"</choices>"}]}`
 	cb := buildComponentBuilder(t, cfg)
 	body := `Pick one:
 <choices>{"items":[{"label":"A"},{"label":"B"}]}</choices>
@@ -152,7 +155,7 @@ Or pick again later.`
 
 func TestComponentBuilder_PreservesMalformedJSONAsText(t *testing.T) {
 	t.Parallel()
-	cfg := `{"components":[{"component":"choice_list","open_tag":"<c>","close_tag":"</c>"}]}`
+	cfg := `{"components":[{"name":"x","component":"choice_list","open_tag":"<c>","close_tag":"</c>"}]}`
 	cb := buildComponentBuilder(t, cfg)
 	body := `before <c>{not json</c> after`
 	out := cb.RenderContent([]ContentPart{NewTextPart(body)}, "assistant")
@@ -171,8 +174,8 @@ func TestComponentBuilder_PreservesMalformedJSONAsText(t *testing.T) {
 func TestComponentBuilder_MultipleDefinitionsApplyInConfigOrder(t *testing.T) {
 	t.Parallel()
 	cfg := `{"components":[
-		{"component":"choice_list","open_tag":"<choices>","close_tag":"</choices>"},
-		{"component":"key_value","open_tag":"<stats>","close_tag":"</stats>"}
+		{"name":"x","component":"choice_list","open_tag":"<choices>","close_tag":"</choices>"},
+		{"name":"y","component":"key_value","open_tag":"<stats>","close_tag":"</stats>"}
 	]}`
 	cb := buildComponentBuilder(t, cfg)
 	body := `<stats>{"pairs":[{"key":"k","value":"v"}]}</stats>

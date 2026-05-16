@@ -42,10 +42,16 @@ type componentBuilderConfig struct {
 	Components []componentDef `json:"components"`
 }
 
-// componentDef is one (component, tags, instructions, reminder)
-// recipe. Stored verbatim in the plugin's config blob; the
-// custom client form CRUDs against this shape.
+// componentDef is one (name, component, tags, instructions,
+// reminder) recipe. Stored verbatim in the plugin's config blob;
+// the custom client form CRUDs against this shape.
 type componentDef struct {
+	// Name is the per-definition identifier the system message
+	// + system reminders reference. Used to disambiguate when
+	// multiple definitions share the same Component (e.g. two
+	// choice_list variants for different scenarios). Must be
+	// unique within the plugin instance and non-empty.
+	Name string `json:"name"`
 	// Component names a UIFragment.Component the model's body
 	// JSON populates. Must match a renderer the client knows
 	// (see plugins/CONTENT_RENDERERS.md): card_list,
@@ -70,18 +76,22 @@ type componentDef struct {
 	// scaffolding around it; the user supplies the per-component
 	// guidance + body-shape JSON example.
 	Instructions string `json:"instructions"`
-	// UserReminderEnabled toggles the head-only [system_reminder]
-	// tail injection on user messages every turn. When true the
-	// `UserReminder` text rides on the most-recent user message
-	// in the wire prefix (not persisted) so a long-context model
-	// stays grounded in the convention.
-	UserReminderEnabled bool `json:"user_reminder_enabled"`
-	// UserReminder is the literal text that goes inside the
-	// [system_reminder ...] envelope. Empty falls back to a
-	// generic "use the {component} component when appropriate"
-	// reminder so the toggle is useful even without typing copy.
-	UserReminder string `json:"user_reminder"`
+	// ReminderMode controls the head-only [system_reminder]
+	// tail injection on user messages every turn. Three states:
+	//   - "none"             → no reminder (default)
+	//   - "always"           → "Always generate the {name} component."
+	//   - "when_appropriate" → "Generate the {name} component when appropriate."
+	// The reminder text is derived from mode + Name so it
+	// always references this exact definition rather than the
+	// (possibly shared) Component.
+	ReminderMode string `json:"reminder_mode"`
 }
+
+const (
+	reminderModeNone            = "none"
+	reminderModeAlways          = "always"
+	reminderModeWhenAppropriate = "when_appropriate"
+)
 
 func newComponentBuilder(configBytes json.RawMessage) (Plugin, error) {
 	var cfg componentBuilderConfig
@@ -90,7 +100,15 @@ func newComponentBuilder(configBytes json.RawMessage) (Plugin, error) {
 			return nil, fmt.Errorf("component_builder: parse config: %w", err)
 		}
 	}
+	seenNames := make(map[string]struct{}, len(cfg.Components))
 	for i, d := range cfg.Components {
+		if strings.TrimSpace(d.Name) == "" {
+			return nil, fmt.Errorf("component_builder: components[%d].name is required", i)
+		}
+		if _, dup := seenNames[d.Name]; dup {
+			return nil, fmt.Errorf("component_builder: components[%d].name %q is duplicated", i, d.Name)
+		}
+		seenNames[d.Name] = struct{}{}
 		if strings.TrimSpace(d.Component) == "" {
 			return nil, fmt.Errorf("component_builder: components[%d].component is required", i)
 		}
@@ -99,6 +117,13 @@ func newComponentBuilder(configBytes json.RawMessage) (Plugin, error) {
 		}
 		if d.OpenTag == d.CloseTag {
 			return nil, fmt.Errorf("component_builder: components[%d] open_tag and close_tag must differ", i)
+		}
+		switch d.ReminderMode {
+		case "", reminderModeNone, reminderModeAlways, reminderModeWhenAppropriate:
+			// ok
+		default:
+			return nil, fmt.Errorf("component_builder: components[%d].reminder_mode must be one of %q/%q/%q (got %q)",
+				i, reminderModeNone, reminderModeAlways, reminderModeWhenAppropriate, d.ReminderMode)
 		}
 	}
 	return &componentBuilder{defs: cfg.Components}, nil
@@ -134,7 +159,7 @@ func (p *componentBuilder) ConfigFields() []ConfigField {
 		{
 			Name:        "components",
 			Display:     "Component definitions",
-			Description: "Edited via the Component Builder settings page (Mac + iOS). Stored as a JSON array; each entry has component, open_tag, close_tag, position, instructions, user_reminder_enabled, user_reminder.",
+			Description: "Edited via the Component Builder settings page (Mac + iOS). Stored as a JSON array; each entry has name, component, open_tag, close_tag, position, instructions, reminder_mode (none/always/when_appropriate).",
 			Type:        ConfigFieldTextarea,
 		},
 	}
@@ -158,14 +183,14 @@ func (p *componentBuilder) AppendSystemMessage() string {
 	var sections []string
 	for _, d := range p.defs {
 		var b strings.Builder
-		fmt.Fprintf(&b, "## %s\n\n", d.Component)
+		fmt.Fprintf(&b, "## %s (%s)\n\n", d.Name, d.Component)
 		switch strings.ToLower(d.Position) {
 		case "start":
-			fmt.Fprintf(&b, "When you use this component, place it at the START of your response, wrapped in the literal delimiters %s and %s.\n\n", d.OpenTag, d.CloseTag)
+			fmt.Fprintf(&b, "When you use the %s component, place it at the START of your response, wrapped in the literal delimiters %s and %s.\n\n", d.Name, d.OpenTag, d.CloseTag)
 		case "end":
-			fmt.Fprintf(&b, "When you use this component, place it at the END of your response, wrapped in the literal delimiters %s and %s.\n\n", d.OpenTag, d.CloseTag)
+			fmt.Fprintf(&b, "When you use the %s component, place it at the END of your response, wrapped in the literal delimiters %s and %s.\n\n", d.Name, d.OpenTag, d.CloseTag)
 		default:
-			fmt.Fprintf(&b, "When you use this component, wrap its body in the literal delimiters %s and %s.\n\n", d.OpenTag, d.CloseTag)
+			fmt.Fprintf(&b, "When you use the %s component, wrap its body in the literal delimiters %s and %s.\n\n", d.Name, d.OpenTag, d.CloseTag)
 		}
 		b.WriteString("The body inside the delimiters MUST be valid JSON matching the component's expected shape. Anything before or after the delimiters is rendered as normal markdown.\n\n")
 		if strings.TrimSpace(d.Instructions) != "" {
@@ -181,21 +206,20 @@ func (p *componentBuilder) AppendSystemMessage() string {
 
 // TransformHistoryMessage appends a single combined
 // [system_reminder] tail to the most-recent user message
-// (FromHeadSameRole==0) covering every definition that has
-// UserReminderEnabled. Only the head user message gets the
-// reminder, so older turns don't accumulate reminders.
+// (FromHeadSameRole==0) covering every definition whose
+// ReminderMode is non-"none". The reminder text is derived
+// from the mode + the definition's Name — no free-form text
+// to maintain. Only the head user message gets the reminder,
+// so older turns don't accumulate.
 func (p *componentBuilder) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage {
 	if msg.Role != "user" || pos.FromHeadSameRole != 0 {
 		return msg
 	}
 	var reminders []string
 	for _, d := range p.defs {
-		if !d.UserReminderEnabled {
-			continue
-		}
-		text := strings.TrimSpace(d.UserReminder)
+		text := reminderTextFor(d)
 		if text == "" {
-			text = fmt.Sprintf("Use the %s component when appropriate.", d.Component)
+			continue
 		}
 		reminders = append(reminders, fmt.Sprintf("[system_reminder %s]", text))
 	}
@@ -205,6 +229,19 @@ func (p *componentBuilder) TransformHistoryMessage(msg providers.WireMessage, po
 	out := msg
 	out.Content = msg.Content + "\n\n" + strings.Join(reminders, "\n")
 	return out
+}
+
+// reminderTextFor renders the per-mode reminder string. Empty
+// when the definition opts out (mode == none / unset).
+func reminderTextFor(d componentDef) string {
+	switch d.ReminderMode {
+	case reminderModeAlways:
+		return fmt.Sprintf("Always generate the %s component.", d.Name)
+	case reminderModeWhenAppropriate:
+		return fmt.Sprintf("Generate the %s component when appropriate.", d.Name)
+	default:
+		return ""
+	}
 }
 
 // --- ContentRenderer ---

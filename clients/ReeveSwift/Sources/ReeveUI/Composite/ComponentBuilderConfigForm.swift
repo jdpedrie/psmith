@@ -119,76 +119,83 @@ public struct ComponentBuilderConfigForm: View {
 /// (de)serialisation is mechanical.
 struct Definition: Identifiable, Hashable, Codable {
     let id: UUID
+    /// Per-definition identifier. Referenced by the system
+    /// reminder ("Always generate the {name} component.") and
+    /// disambiguates two definitions sharing the same Component.
+    var name: String
     var component: String
     var openTag: String
     var closeTag: String
     var position: String
     var instructions: String
-    var userReminderEnabled: Bool
-    var userReminder: String
+    /// Three-state reminder mode. "none" / "always" /
+    /// "when_appropriate". The actual reminder text is derived
+    /// from the mode + name on the server side; this form just
+    /// chooses which mode applies.
+    var reminderMode: String
 
     enum CodingKeys: String, CodingKey {
+        case name
         case component
         case openTag = "open_tag"
         case closeTag = "close_tag"
         case position
         case instructions
-        case userReminderEnabled = "user_reminder_enabled"
-        case userReminder = "user_reminder"
+        case reminderMode = "reminder_mode"
     }
 
     init(
         id: UUID = UUID(),
+        name: String = "",
         component: String = "choice_list",
         openTag: String = "<choices>",
         closeTag: String = "</choices>",
         position: String = "end",
         instructions: String = "",
-        userReminderEnabled: Bool = false,
-        userReminder: String = ""
+        reminderMode: String = "none"
     ) {
         self.id = id
+        self.name = name
         self.component = component
         self.openTag = openTag
         self.closeTag = closeTag
         self.position = position
         self.instructions = instructions
-        self.userReminderEnabled = userReminderEnabled
-        self.userReminder = userReminder
+        self.reminderMode = reminderMode
     }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = UUID()  // not persisted; freshly minted on every load
+        self.name = (try? c.decode(String.self, forKey: .name)) ?? ""
         self.component = (try? c.decode(String.self, forKey: .component)) ?? ""
         self.openTag = (try? c.decode(String.self, forKey: .openTag)) ?? ""
         self.closeTag = (try? c.decode(String.self, forKey: .closeTag)) ?? ""
         self.position = (try? c.decode(String.self, forKey: .position)) ?? "anywhere"
         self.instructions = (try? c.decode(String.self, forKey: .instructions)) ?? ""
-        self.userReminderEnabled = (try? c.decode(Bool.self, forKey: .userReminderEnabled)) ?? false
-        self.userReminder = (try? c.decode(String.self, forKey: .userReminder)) ?? ""
+        self.reminderMode = (try? c.decode(String.self, forKey: .reminderMode)) ?? "none"
     }
 
     init?(dict: [String: Any]) {
         self.id = UUID()
+        self.name = dict["name"] as? String ?? ""
         self.component = dict["component"] as? String ?? ""
         self.openTag = dict["open_tag"] as? String ?? ""
         self.closeTag = dict["close_tag"] as? String ?? ""
         self.position = dict["position"] as? String ?? "anywhere"
         self.instructions = dict["instructions"] as? String ?? ""
-        self.userReminderEnabled = dict["user_reminder_enabled"] as? Bool ?? false
-        self.userReminder = dict["user_reminder"] as? String ?? ""
+        self.reminderMode = dict["reminder_mode"] as? String ?? "none"
     }
 
     func toDict() -> [String: Any] {
         [
+            "name": name,
             "component": component,
             "open_tag": openTag,
             "close_tag": closeTag,
             "position": position,
             "instructions": instructions,
-            "user_reminder_enabled": userReminderEnabled,
-            "user_reminder": userReminder,
+            "reminder_mode": reminderMode,
         ]
     }
 
@@ -204,6 +211,11 @@ struct Definition: Identifiable, Hashable, Codable {
     ]
 
     static let positions: [String] = ["start", "end", "anywhere"]
+    static let reminderModes: [(value: String, label: String)] = [
+        ("none", "No reminder"),
+        ("when_appropriate", "Generate when appropriate"),
+        ("always", "Always generate"),
+    ]
 }
 
 private struct DefinitionEditor: View {
@@ -213,6 +225,7 @@ private struct DefinitionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
+            nameRow
             componentRow
             tagRow
             positionRow
@@ -225,7 +238,7 @@ private struct DefinitionEditor: View {
 
     private var header: some View {
         HStack {
-            Text(definition.component.isEmpty ? "(unnamed)" : definition.component)
+            Text(definition.name.isEmpty ? "(unnamed)" : definition.name)
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -236,6 +249,16 @@ private struct DefinitionEditor: View {
             }
             .buttonStyle(.borderless)
             .help("Remove this definition")
+        }
+    }
+
+    private var nameRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Name").font(.caption.weight(.medium))
+            TextField("e.g. combat_choices", text: $definition.name)
+                .textFieldStyle(.roundedBorder)
+            Text("Identifier the system message + reminders reference. Must be unique within this plugin instance.")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -305,19 +328,16 @@ private struct DefinitionEditor: View {
 
     private var reminderRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Toggle("Per-turn user reminder", isOn: $definition.userReminderEnabled)
-                .font(.caption.weight(.medium))
-            if definition.userReminderEnabled {
-                TextEditor(text: $definition.userReminder)
-                    .font(.callout)
-                    .frame(minHeight: 60)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
-                Text("Riden on the most-recent user message every turn (not persisted) wrapped in [system_reminder ...]. Empty = generic 'use the {component} component when appropriate.'")
-                    .font(.caption2).foregroundStyle(.tertiary)
+            Text("Per-turn user reminder").font(.caption.weight(.medium))
+            Picker("", selection: $definition.reminderMode) {
+                ForEach(Definition.reminderModes, id: \.value) { option in
+                    Text(option.label).tag(option.value)
+                }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text("Wraps a [system_reminder] tail onto the most-recent user message (not persisted) — re-grounds the convention every turn. The reminder text is auto-generated from the component name.")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 }
