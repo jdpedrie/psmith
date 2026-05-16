@@ -337,6 +337,70 @@ func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	}
 }
 
+// --- DisplayTransformer word-boundary preservation ---
+
+func TestLetteredChoices_DisplayPreservesWordBoundaryAfterCloseTag(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	// Real-world regression: model emits choices block then resumes
+	// prose without a separating space. Naive ReplaceAll would smash
+	// the close tag into the next word.
+	in := "You can <choices>A. Read B. Write</choices>What sounds good?"
+	want := "You can A. Read B. Write What sounds good?"
+	if got := lc.TransformForDisplay(in); got != want {
+		t.Errorf("TransformForDisplay smashed word boundary\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestLetteredChoices_DisplayPreservesWordBoundaryBeforeOpenTag(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	in := "Sure thing<choices>A. one</choices> done"
+	want := "Sure thing A. one done"
+	if got := lc.TransformForDisplay(in); got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+func TestLetteredChoices_DisplayDoesNotPadExistingWhitespace(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	// When the model puts a space before/after tags, we shouldn't
+	// promote it to a double space.
+	in := "Prose. <choices>A. one</choices> more prose."
+	want := "Prose. A. one more prose."
+	if got := lc.TransformForDisplay(in); got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+func TestLetteredChoices_DisplayHandlesNewlineAdjacency(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	in := "Prose.\n<choices>\nA. one\n</choices>\nMore prose."
+	want := "Prose.\n\nA. one\n\nMore prose."
+	if got := lc.TransformForDisplay(in); got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+func TestLetteredChoices_DisplayHandlesTagAtBoundary(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, "")
+	// Tag at start of string — no preceding char to pair with.
+	in := "<choices>A. one</choices>tail"
+	want := "A. one tail"
+	if got := lc.TransformForDisplay(in); got != want {
+		t.Errorf("start-boundary: got %q want %q", got, want)
+	}
+	// Tag at end of string — no following char to pair with.
+	in2 := "head<choices>A. one</choices>"
+	want2 := "head A. one"
+	if got := lc.TransformForDisplay(in2); got != want2 {
+		t.Errorf("end-boundary: got %q want %q", got, want2)
+	}
+}
+
 // --- Registration ---
 
 func TestLetteredChoices_RegisteredByDefault(t *testing.T) {

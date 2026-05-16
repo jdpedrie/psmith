@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jdpedrie/reeve/internal/providers"
 )
@@ -316,9 +318,62 @@ func (p *letteredChoices) TransformForDisplay(content string) string {
 		return content
 	}
 	// Text mode (default): keep choice content but drop just the delimiters.
-	out := strings.ReplaceAll(content, p.cfg.OpenTag, "")
-	out = strings.ReplaceAll(out, p.cfg.CloseTag, "")
+	// Use stripTagPreservingWordBoundary instead of a plain ReplaceAll so
+	// that `</choices>What's next?` doesn't render as `BarWhat's next?` —
+	// the tag itself isn't a word boundary, so removing it can smash
+	// words together when the model didn't include a separating space.
+	out := stripTagPreservingWordBoundary(content, p.cfg.OpenTag)
+	out = stripTagPreservingWordBoundary(out, p.cfg.CloseTag)
 	return out
+}
+
+// stripTagPreservingWordBoundary removes every occurrence of `tag` from
+// `s`. When the character immediately before AND immediately after the
+// tag are both non-whitespace, a single space is inserted in the tag's
+// place so adjacent words don't smash together. When either side is
+// already whitespace (or the tag sits at a string boundary), no padding
+// is added — the existing whitespace is the word boundary.
+//
+// Motivating example: an assistant message like
+//
+//	"You can <choices>A. Read B. Write</choices>What sounds good?"
+//
+// naive strip produces `"You can A. Read B. WriteWhat sounds good?"`.
+// This helper produces `"You can A. Read B. Write What sounds good?"`.
+func stripTagPreservingWordBoundary(s, tag string) string {
+	if tag == "" || !strings.Contains(s, tag) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	rest := s
+	for {
+		i := strings.Index(rest, tag)
+		if i < 0 {
+			b.WriteString(rest)
+			return b.String()
+		}
+		b.WriteString(rest[:i])
+		end := i + len(tag)
+		// Look one rune in each direction. utf8.DecodeLastRune /
+		// DecodeRune handle multi-byte cleanly; ASCII fast-paths
+		// the common case.
+		var prev, next rune
+		if i > 0 {
+			prev, _ = utf8.DecodeLastRuneInString(rest[:i])
+		}
+		if end < len(rest) {
+			next, _ = utf8.DecodeRuneInString(rest[end:])
+		}
+		// Only insert a space when BOTH sides have non-whitespace
+		// content. Tag at boundary, or already-whitespace on either
+		// side, falls through unchanged so we don't pad existing
+		// whitespace into a double space.
+		if prev != 0 && next != 0 && !unicode.IsSpace(prev) && !unicode.IsSpace(next) {
+			b.WriteByte(' ')
+		}
+		rest = rest[end:]
+	}
 }
 
 // --- ContentRenderer ---
