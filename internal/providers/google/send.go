@@ -773,7 +773,17 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 		parts = append(parts, geminiPart{Text: m.Content})
 	}
 	if len(parts) == 0 {
-		parts = append(parts, geminiPart{Text: ""})
+		// Gemini rejects empty contents with "parts[*].data: required
+		// oneof field 'data' must have one initialized field." Emitting
+		// geminiPart{Text: ""} doesn't help because the struct's
+		// `text,omitempty` tag strips the empty string → serialized as
+		// {} → oneof unset. A single space survives the omitempty trim
+		// and Gemini accepts it without distorting the model's view of
+		// the turn. This branch fires when the wire-build produced a
+		// truly empty user content (no text, no attachments that
+		// survived the filter, no tool results) — defensive fallback
+		// so we never POST `{ "parts": [{}] }`.
+		parts = append(parts, geminiPart{Text: " "})
 	}
 	return parts
 }
@@ -857,7 +867,9 @@ func assistantPartsFromWire(m providers.WireMessage) []geminiPart {
 		})
 	}
 	if len(parts) == 0 {
-		parts = append(parts, geminiPart{Text: ""})
+		// Same omitempty trap as userPartsFromWire — empty text strips
+		// to {} and Gemini rejects the oneof. Single space survives.
+		parts = append(parts, geminiPart{Text: " "})
 	}
 	return parts
 }
