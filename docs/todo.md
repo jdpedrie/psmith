@@ -80,26 +80,32 @@ served over Streamable HTTP, JSON-only responses. Bearer-token auth
 shared with the Connect surface. Tools: `list_profiles`,
 `get_profile`, `create_profile`, `update_profile`,
 `registered_plugins`, `get_profile_plugins`, `set_profile_plugins`,
-`list_providers`, `list_models`, `list_conversations`,
-`get_conversation`, `list_messages`. Plus the `inproc` MCP transport
-on the client side so the seeded `Reeve Manager` profile dispatches to
-the local server with no port and no token.
+`list_providers`, `list_models`, `list_provider_types`,
+`list_provider_templates`, `discover_models`, `enable_models`,
+`toggle_user_model_favorite`, `test_user_model_provider`,
+`list_conversations`, `get_conversation`, `list_messages`. Plus the
+`inproc` MCP transport on the client side so the seeded
+`Reeve Manager` profile dispatches to the local server with no port
+and no token.
 
 Deferred:
 - **Elicitation** — Reeve's mcp client doesn't speak the
   elicitation protocol yet (server-initiated user prompts during
   tool calls). Wire on both sides before adding destructive tools
   (delete_*) so confirmation gating is in-protocol rather than a
-  proposed-action convention.
+  proposed-action convention. Significant protocol surgery: SSE
+  responses for HTTP transport, bidirectional dispatcher for
+  inproc, mcp client UI for elicitation prompts, plumbing to bring
+  user response back through the in-flight tool call.
 - **Conversation write tools** — `send_message`, `compact`,
   `delete_conversation` etc. all live on `ConversationsService` but
   aren't exposed yet. `send_message` in particular is a streaming
   RPC and needs a different mapping (probably accumulate the full
   response server-side and return when complete, since MCP tools
   are request/response).
-- **Model write tools** — `enable_models` / `disable_models` /
-  `update_user_model` need elicitation gating before exposure (a
-  rogue assistant disabling models would be annoying).
+- **Destructive write tools** — `disable_models`, `delete_profile`,
+  `update_user_model` (settings clears) etc. all need elicitation
+  gating before exposure. Defer until elicitation lands.
 
 ## System profiles + capability enforcement (v1 shipped)
 
@@ -119,16 +125,26 @@ effective pipeline) and `PluginType.required_model_capabilities`
 the profile's union and returns `FailedPrecondition` with the
 missing-cap names when it doesn't.
 
+UI capability filter — Mac + iOS conversation model pickers now grey
+out and disable models that don't satisfy the active profile's
+`required_model_capabilities`, with a "needs: tool_use, vision"
+caption on each disabled row. The active profile's caps load via a
+parallel `GetProfile` inside `loadAvailableModels` so the filter is
+ready by the time the picker first renders.
+
 Deferred:
-- **UI capability filter on model picker** — clients should hide /
-  disable models that don't satisfy the active profile's
-  `required_model_capabilities`. Backend enforcement is in; UI
-  filtering is the polish that prevents the user from picking a bad
-  model in the first place.
+- **Profile form picker filter** — the three model-picker slots in
+  the profile form (default / compression / title) don't filter yet.
+  Tricky because the relevant requirements are derived from the
+  profile-being-edited's plugin pipeline, which lives in local form
+  state until save. Either compute caps from the local-state plugins
+  (more code) or skip filtering during edit and rely on the
+  conversation-level filter to catch mismatches at send time.
 - **Profile-level explicit cap requirements** — today only plugin-
   derived requirements flow through. A profile that wants vision
-  even with a plugin-free pipeline (e.g. "always pick a vision-
-  capable model") would need an explicit field on Profile.
+  even with a plugin-free pipeline ("always pick a vision-capable
+  model") would need an explicit field on Profile. Smaller backend
+  + meaningful UI work; defer until a concrete use case shows up.
 
 ## Smaller items
 

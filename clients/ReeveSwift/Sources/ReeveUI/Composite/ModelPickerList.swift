@@ -28,6 +28,13 @@ public struct ModelPickerList: View {
     /// compression: "use parent compression model").
     let onUnset: (() -> Void)?
     let unsetDescription: String?
+    /// Capabilities the active profile's plugin pipeline needs from a
+    /// model. When non-nil and any field is true, models lacking one or
+    /// more required capabilities render greyed out + disabled with an
+    /// inline "needs: tool_use, vision" caption explaining why. Picker
+    /// callers without a profile context (e.g. plugin config form's
+    /// model picker field) pass nil and every model stays selectable.
+    let requiredCapabilities: ReeveModelCapabilities?
     let onSelect: (_ providerID: String, _ modelID: String) -> Void
 
     @Environment(\.theme) private var theme
@@ -41,6 +48,7 @@ public struct ModelPickerList: View {
         selectedModelID: String?,
         onUnset: (() -> Void)? = nil,
         unsetDescription: String? = nil,
+        requiredCapabilities: ReeveModelCapabilities? = nil,
         onSelect: @escaping (_ providerID: String, _ modelID: String) -> Void
     ) {
         self.models = models
@@ -51,6 +59,7 @@ public struct ModelPickerList: View {
         self.selectedModelID = selectedModelID
         self.onUnset = onUnset
         self.unsetDescription = unsetDescription
+        self.requiredCapabilities = requiredCapabilities
         self.onSelect = onSelect
     }
 
@@ -88,16 +97,27 @@ public struct ModelPickerList: View {
             .padding(.horizontal, 4)
             VStack(spacing: 6) {
                 ForEach(group.models) { m in
+                    let missing = missingCapabilities(for: m)
                     PickerModelRow(
                         model: m,
                         providerLabel: group.label,
                         isSelected: m.modelID == selectedModelID
                             && m.providerID == selectedProviderID,
+                        missingCapabilities: missing,
                         onSelect: { onSelect(m.providerID, m.modelID) }
                     )
                 }
             }
         }
+    }
+
+    /// Returns the names of the required capabilities the model lacks. Empty
+    /// when no requirements are set, when the requirements are all empty, or
+    /// when the model satisfies every requirement.
+    private func missingCapabilities(for model: ReeveUserModel) -> [String] {
+        guard let req = requiredCapabilities, !req.isEmpty else { return [] }
+        let actual = model.capabilities ?? .empty
+        return req.shortfall(against: actual)
     }
 
     private var grouped: [GroupedProvider] {
@@ -140,9 +160,16 @@ private struct PickerModelRow: View {
     let model: ReeveUserModel
     let providerLabel: String?
     let isSelected: Bool
+    /// Names of required capabilities the model lacks. Non-empty means
+    /// the row renders disabled with a "needs: …" caption explaining
+    /// why; tap is a no-op so the user can't pick a model the active
+    /// profile's pipeline can't drive.
+    let missingCapabilities: [String]
     let onSelect: () -> Void
 
     @Environment(\.theme) private var theme
+
+    private var isDisabled: Bool { !missingCapabilities.isEmpty }
 
     var body: some View {
         Button(action: onSelect) {
@@ -151,7 +178,7 @@ private struct PickerModelRow: View {
                     HStack(spacing: 6) {
                         Text(model.displayName)
                             .fontWeight(isSelected ? .semibold : .regular)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(isDisabled ? .secondary : .primary)
                         if isSelected {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(theme.accent)
@@ -159,6 +186,11 @@ private struct PickerModelRow: View {
                         }
                     }
                     ModelMetaStrip(snapshot: model.metaSnapshot(providerLabel: providerLabel))
+                    if isDisabled {
+                        Text("Needs: " + missingCapabilities.joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -175,8 +207,13 @@ private struct PickerModelRow: View {
                     )
             }
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .opacity(isDisabled ? 0.55 : 1.0)
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(isDisabled
+            ? "This model lacks: " + missingCapabilities.joined(separator: ", ")
+            : "")
     }
 }
 

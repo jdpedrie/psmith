@@ -208,18 +208,24 @@ func TestServer_ToolsListIncludesEverySchema(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	want := map[string]bool{
-		"list_profiles":       false,
-		"get_profile":         false,
-		"create_profile":      false,
-		"update_profile":      false,
-		"registered_plugins":  false,
-		"get_profile_plugins": false,
-		"set_profile_plugins": false,
-		"list_providers":      false,
-		"list_models":         false,
-		"list_conversations":  false,
-		"get_conversation":    false,
-		"list_messages":       false,
+		"list_profiles":              false,
+		"get_profile":                false,
+		"create_profile":             false,
+		"update_profile":             false,
+		"registered_plugins":         false,
+		"get_profile_plugins":        false,
+		"set_profile_plugins":        false,
+		"list_providers":             false,
+		"list_models":                false,
+		"list_provider_types":        false,
+		"list_provider_templates":    false,
+		"discover_models":            false,
+		"enable_models":              false,
+		"toggle_user_model_favorite": false,
+		"test_user_model_provider":   false,
+		"list_conversations":         false,
+		"get_conversation":           false,
+		"list_messages":              false,
 	}
 	for _, tool := range body.Tools {
 		if _, ok := want[tool.Name]; ok {
@@ -337,6 +343,95 @@ func TestTools_RegisteredPluginsNonEmpty(t *testing.T) {
 		if pt["name"] == "" {
 			t.Errorf("plugin missing name: %+v", pt)
 		}
+	}
+}
+
+// --- new model tool spot-checks ---
+
+func TestTools_ListProviderTypes(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	res := callTool(t, f.server, f.ctx, "list_provider_types", map[string]any{})
+	if res.IsError {
+		t.Fatalf("errored: %+v", res)
+	}
+	var body struct {
+		ProviderTypes []map[string]any `json:"provider_types"`
+	}
+	mustDecodeText(t, res, &body)
+	if len(body.ProviderTypes) == 0 {
+		t.Fatal("expected at least one provider type to be registered")
+	}
+	wantOneOf := map[string]bool{"anthropic": false, "openai": false, "google": false, "openai-compatible": false}
+	for _, pt := range body.ProviderTypes {
+		name, _ := pt["name"].(string)
+		if _, ok := wantOneOf[name]; ok {
+			wantOneOf[name] = true
+		}
+	}
+	found := false
+	for _, ok := range wantOneOf {
+		if ok {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected at least one of %v in provider_types; got %+v", wantOneOf, body.ProviderTypes)
+	}
+}
+
+func TestTools_ListProviderTemplates(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	res := callTool(t, f.server, f.ctx, "list_provider_templates", map[string]any{})
+	if res.IsError {
+		t.Fatalf("errored: %+v", res)
+	}
+	var body struct {
+		Templates []map[string]any `json:"templates"`
+	}
+	mustDecodeText(t, res, &body)
+	if len(body.Templates) == 0 {
+		t.Fatal("expected at least one provider template to be returned")
+	}
+	for _, tpl := range body.Templates {
+		if tpl["name"] == "" {
+			t.Errorf("template missing name: %+v", tpl)
+		}
+		if tpl["driver_type"] == "" {
+			t.Errorf("template missing driver_type: %+v", tpl)
+		}
+	}
+}
+
+func TestTools_DiscoverModelsRequiresProviderID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	res := callTool(t, f.server, f.ctx, "discover_models", map[string]any{})
+	if !res.IsError {
+		t.Errorf("expected isError when user_model_provider_id missing; got %+v", res)
+	}
+}
+
+func TestTools_EnableModelsRequiresArguments(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	res := callTool(t, f.server, f.ctx, "enable_models", map[string]any{
+		"user_model_provider_id": "00000000-0000-0000-0000-000000000000",
+		"model_ids":              []string{},
+	})
+	if !res.IsError {
+		t.Errorf("expected isError when model_ids empty; got %+v", res)
+	}
+}
+
+func TestTools_ToggleUserModelFavoriteRequiresArguments(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	res := callTool(t, f.server, f.ctx, "toggle_user_model_favorite", map[string]any{})
+	if !res.IsError {
+		t.Errorf("expected isError when ids missing; got %+v", res)
 	}
 }
 

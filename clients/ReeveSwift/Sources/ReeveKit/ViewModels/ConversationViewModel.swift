@@ -221,6 +221,12 @@ public final class ConversationViewModel {
     public var providerPresetIDs: [String: String] = [:]
     public var selectedProviderID: String?
     public var selectedModelID: String?
+    /// Active profile's resolved required model capabilities. Populated by
+    /// `loadAvailableModels` from a fresh GetProfile call. Drives the model
+    /// picker's capability filter — models lacking required caps render
+    /// disabled with a "needs: …" caption. Nil when the profile has no
+    /// requirements (typical for plugin-free profiles).
+    public var activeProfileRequiredCapabilities: ReeveModelCapabilities?
 
     // Conversation model picker page (page-replaces-pane pattern,
     // sibling to Compact / Contexts / Settings). When true, the
@@ -495,7 +501,7 @@ public final class ConversationViewModel {
             providerPresetIDs = Dictionary(uniqueKeysWithValues:
                 providers.compactMap { p in p.presetID.map { (p.id, $0) } }
             )
-            availableModels = try await withThrowingTaskGroup(of: [ReeveUserModel].self) { group in
+            async let modelsTask: [ReeveUserModel] = withThrowingTaskGroup(of: [ReeveUserModel].self) { group in
                 for p in providers {
                     group.addTask { try await self.client.modelProviders.listModels(providerID: p.id) }
                 }
@@ -503,6 +509,21 @@ public final class ConversationViewModel {
                 for try await models in group { all.append(contentsOf: models) }
                 return all.sorted { $0.displayName < $1.displayName }
             }
+            // Fire the profile fetch in parallel — its sole job here is to
+            // surface required_model_capabilities so the picker can filter.
+            // Failure is non-fatal: filter stays inactive and every model
+            // remains selectable.
+            async let profileTask: ReeveProfile? = {
+                do {
+                    let (p, _) = try await client.profiles.get(id: conversation.profileID, resolve: false)
+                    return p
+                } catch {
+                    return nil
+                }
+            }()
+
+            availableModels = try await modelsTask
+            activeProfileRequiredCapabilities = await profileTask?.requiredModelCapabilities
         } catch {
             // Non-fatal; model picker stays hidden if unavailable
         }

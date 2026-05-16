@@ -197,6 +197,37 @@ extension ReeveModelCapabilities {
         promptCaching   = p.promptCaching
         generatesImages = p.generatesImages
     }
+
+    /// Zero-value caps — convenient default for "model has no capability info."
+    public static let empty = ReeveModelCapabilities(
+        streaming: false,
+        thinking: false,
+        toolUse: false,
+        vision: false,
+        promptCaching: false,
+        generatesImages: false
+    )
+
+    /// True when no field is true. Used by callers that want to short-circuit
+    /// "this model lacks capabilities" UI when no requirements are set.
+    public var isEmpty: Bool {
+        !(streaming || thinking || toolUse || vision || promptCaching || generatesImages)
+    }
+
+    /// Returns the names of capability fields set on `self` but missing from
+    /// `actual`. Mirrors the server-side `ModelCapabilityRequirements.Names()`
+    /// for shortfall checks: empty result means `actual` satisfies every
+    /// requirement set on `self`.
+    public func shortfall(against actual: ReeveModelCapabilities) -> [String] {
+        var out: [String] = []
+        if streaming       && !actual.streaming       { out.append("streaming") }
+        if thinking        && !actual.thinking        { out.append("thinking") }
+        if toolUse         && !actual.toolUse         { out.append("tool_use") }
+        if vision          && !actual.vision          { out.append("vision") }
+        if promptCaching   && !actual.promptCaching   { out.append("prompt_caching") }
+        if generatesImages && !actual.generatesImages { out.append("generates_images") }
+        return out
+    }
 }
 
 public struct ReeveUserModel: Sendable, Identifiable, Hashable, Codable {

@@ -29,6 +29,7 @@ struct ConversationModelPicker: View {
                     providerPresetIDs: model.providerPresetIDs,
                     selectedProviderID: model.selectedProviderID,
                     selectedModelID: model.selectedModelID,
+                    requiredCapabilities: model.activeProfileRequiredCapabilities,
                     onSelect: { providerID, modelID in
                         Task {
                             await model.selectModel(providerID: providerID, modelID: modelID)

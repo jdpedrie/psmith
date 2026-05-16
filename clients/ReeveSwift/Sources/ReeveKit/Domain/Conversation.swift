@@ -712,6 +712,12 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
     public let titleProviderKind: String?
     public let createdAt: Date?
     public let updatedAt: Date?
+    /// Union of model capability requirements declared by every plugin in this
+    /// profile's effective pipeline (with parent-chain inheritance applied).
+    /// DERIVED — recomputed server-side on every read; clients filter the
+    /// model picker by this. Nil when the profile has no plugins or none of
+    /// them require anything.
+    public let requiredModelCapabilities: ReeveModelCapabilities?
 
     public init(
         id: String,
@@ -732,7 +738,8 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
         titleGuide: String? = nil,
         titleProviderKind: String? = nil,
         createdAt: Date? = nil,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        requiredModelCapabilities: ReeveModelCapabilities? = nil
     ) {
         self.id = id
         self.name = name
@@ -753,6 +760,7 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
         self.titleProviderKind = titleProviderKind
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.requiredModelCapabilities = requiredModelCapabilities
     }
 }
 
@@ -794,7 +802,10 @@ extension ReeveProfile {
             titleGuide:            p.hasTitleGuide            ? p.titleGuide            : nil,
             titleProviderKind:     p.hasTitleProviderKind     ? p.titleProviderKind     : nil,
             createdAt:             p.hasCreatedAt ? p.createdAt.date : nil,
-            updatedAt:             p.hasUpdatedAt ? p.updatedAt.date : nil
+            updatedAt:             p.hasUpdatedAt ? p.updatedAt.date : nil,
+            requiredModelCapabilities: p.hasRequiredModelCapabilities
+                ? ReeveModelCapabilities(from: p.requiredModelCapabilities)
+                : nil
         )
     }
 }
