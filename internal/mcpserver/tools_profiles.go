@@ -68,12 +68,12 @@ func (s *Server) registerProfileTools() {
 	)
 	s.register(
 		"set_profile_plugins",
-		"Replace a profile's plugin pipeline atomically. The order of `plugins` is the execution order (index 0 runs first). Each plugin's `config` must match the shape advertised by list_plugin_types — pass an empty object for plugins with no config. Replaces the entire pipeline; pass an empty list to clear it (which makes the profile inherit from its parent).",
+		"Replace a profile's plugin pipeline atomically. The order of `plugins` is the execution order (index 0 runs first). Each plugin's `config_json` is a JSON-encoded string matching the shape advertised by registered_plugins (the `config_fields` list) — pass `\"{}\"` for plugins with no config, otherwise a JSON object literal like `\"{\\\"output_mode\\\":\\\"component\\\"}\"`. Replaces the entire pipeline; pass an empty list to clear it (which makes the profile inherit from its parent).",
 		`{"type":"object","required":["profile_id","plugins"],"properties":{`+
 			`"profile_id":{"type":"string"},`+
-			`"plugins":{"type":"array","description":"Ordered list of plugins to attach.","items":{"type":"object","required":["plugin_name"],"properties":{`+
-			`"plugin_name":{"type":"string","description":"Machine name from list_plugin_types (e.g. \"lettered_choices\", \"component_builder\")."},`+
-			`"config":{"type":"object","description":"Plugin-specific config. Keys must match the plugin's config_fields. Use {} for plugins with no config."}`+
+			`"plugins":{"type":"array","description":"Ordered list of plugins to attach.","items":{"type":"object","required":["plugin_name","config_json"],"properties":{`+
+			`"plugin_name":{"type":"string","description":"Machine name from registered_plugins (e.g. \"lettered_choices\", \"basic_grounding\")."},`+
+			`"config_json":{"type":"string","description":"Plugin config as a JSON-encoded string. Use \"{}\" for plugins with no config; otherwise a JSON object whose keys match the plugin's config_fields, e.g. \"{\\\"keep_last_n\\\":1}\"."}`+
 			`},"additionalProperties":false}}`+
 			`},"additionalProperties":false}`,
 		s.toolSetProfilePlugins,
@@ -244,11 +244,17 @@ func (s *Server) toolGetProfilePlugins(ctx context.Context, args json.RawMessage
 
 // --- set_profile_plugins -------------------------------------------------
 
+// setProfilePluginsArgs carries the typed args. `config_json` is a
+// string (not a nested object) because Gemini's function-calling
+// implementation requires concrete `properties` on every `object`-typed
+// schema; an open-ended config object causes MALFORMED_FUNCTION_CALL.
+// Stringifying lets the model emit whatever JSON the plugin actually
+// accepts without us having to predeclare a schema for every plugin.
 type setProfilePluginsArgs struct {
 	ProfileID string `json:"profile_id"`
 	Plugins   []struct {
-		PluginName string         `json:"plugin_name"`
-		Config     map[string]any `json:"config"`
+		PluginName string `json:"plugin_name"`
+		ConfigJSON string `json:"config_json"`
 	} `json:"plugins"`
 }
 
@@ -265,17 +271,20 @@ func (s *Server) toolSetProfilePlugins(ctx context.Context, args json.RawMessage
 		if p.PluginName == "" {
 			return errorResult(fmt.Sprintf("plugins[%d].plugin_name is required", i)), nil
 		}
-		cfg := p.Config
-		if cfg == nil {
-			cfg = map[string]any{}
+		cfgStr := p.ConfigJSON
+		if cfgStr == "" {
+			cfgStr = "{}"
 		}
-		raw, err := json.Marshal(cfg)
-		if err != nil {
-			return errorResult(fmt.Sprintf("plugins[%d].config: %v", i, err)), nil
+		// Validate the config parses as JSON before sending it through —
+		// `set_profile_plugins` would reject malformed bytes downstream
+		// with a less-helpful error, and the model can correct its
+		// JSON if we tell it which entry was bad.
+		if !json.Valid([]byte(cfgStr)) {
+			return errorResult(fmt.Sprintf("plugins[%d].config_json is not valid JSON: %q", i, cfgStr)), nil
 		}
 		plugins = append(plugins, &reevev1.ProfilePlugin{
 			PluginName: p.PluginName,
-			Config:     raw,
+			Config:     []byte(cfgStr),
 		})
 	}
 	resp, err := s.profilesSvc.SetProfilePlugins(ctx, connect.NewRequest(&reevev1.SetProfilePluginsRequest{
