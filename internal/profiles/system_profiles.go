@@ -92,8 +92,10 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 			{Name: plugins.MCPName, Config: json.RawMessage(`{"transport":"inproc"}`)},
 			// lettered_choices makes the assistant emit A/B/C choice
 			// blocks at decision points — perfect for a step-by-step
-			// configuration walkthrough.
-			{Name: plugins.LetteredChoicesName, Config: json.RawMessage(`{}`)},
+			// configuration walkthrough. Component mode renders the
+			// choices as tappable buttons; tapping types the chosen
+			// letter into the composer.
+			{Name: plugins.LetteredChoicesName, Config: json.RawMessage(`{"output_mode":"component"}`)},
 		},
 	},
 }

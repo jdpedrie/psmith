@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -20,6 +21,26 @@ const (
 	defaultLCOpenTag  = "<choices>"
 	defaultLCCloseTag = "</choices>"
 )
+
+// Output mode values for letteredChoicesConfig.OutputMode. "text" keeps
+// the historical behavior — strip just the delimiters at display time
+// and render the choice text inline as markdown. "component" emits a
+// `choice_list` UIFragment via the ContentRenderer pipeline so the
+// client can render tappable buttons that drop the picked letter into
+// the composer. Default remains "text" so existing profiles don't
+// silently change render shape on a build update.
+const (
+	lcOutputModeText      = "text"
+	lcOutputModeComponent = "component"
+)
+
+// lcChoiceLineRe matches one lettered-choice line inside a parsed
+// choices block. Tolerant of the common delimiter styles the default
+// template demonstrates ("A." / "A)" / "A:") and of an optional
+// leading whitespace indent the model sometimes adds when it's been
+// echoing markdown lists. Anything that isn't a letter line — section
+// headers, blank lines, prose — is skipped silently.
+var lcChoiceLineRe = regexp.MustCompile(`^\s*([A-Z])[.):]?\s+(.+\S)\s*$`)
 
 // lcSystemReminderExplainer is appended to the system slot to teach the model
 // what [system_reminder ...] tags mean and how to handle them. Pairs with
@@ -91,14 +112,27 @@ type letteredChoicesConfig struct {
 	// SystemInstructionOverride replaces the default system instruction.
 	// Empty = use the default.
 	SystemInstructionOverride string `json:"system_instruction_override"`
+
+	// OutputMode picks how the choice block surfaces to the user.
+	// "text" (default): DisplayTransformer strips just the delimiters
+	// and the choices render as inline markdown — works in any
+	// markdown-capable view, no plugin renderer required.
+	// "component": ContentRenderer parses the block and emits a
+	// `choice_list` UIFragment with one item per lettered line, each
+	// item wired to a `compose:<letter>` action so tapping types the
+	// chosen letter into the composer. Clients that don't recognize
+	// the component fall back to UnknownComponentRenderer (a small
+	// JSON viewer), so opting in is forward-safe.
+	OutputMode string `json:"output_mode"`
 }
 
 // newLetteredChoices is the registered constructor.
 func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 	cfg := letteredChoicesConfig{
-		KeepLastN: 1,
-		OpenTag:   defaultLCOpenTag,
-		CloseTag:  defaultLCCloseTag,
+		KeepLastN:  1,
+		OpenTag:    defaultLCOpenTag,
+		CloseTag:   defaultLCCloseTag,
+		OutputMode: lcOutputModeText,
 	}
 	if len(configBytes) > 0 {
 		if err := json.Unmarshal(configBytes, &cfg); err != nil {
@@ -110,6 +144,15 @@ func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 		}
 		if cfg.CloseTag == "" {
 			cfg.CloseTag = defaultLCCloseTag
+		}
+		if cfg.OutputMode == "" {
+			cfg.OutputMode = lcOutputModeText
+		}
+		switch cfg.OutputMode {
+		case lcOutputModeText, lcOutputModeComponent:
+		default:
+			return nil, fmt.Errorf("lettered_choices: invalid output_mode %q (want %q or %q)",
+				cfg.OutputMode, lcOutputModeText, lcOutputModeComponent)
 		}
 		if cfg.KeepLastN < 0 {
 			return nil, fmt.Errorf("lettered_choices: keep_last_n must be >= 0")
@@ -177,6 +220,17 @@ func (p *letteredChoices) ConfigFields() []ConfigField {
 				"{{.CloseTag}} (the configured Close tag). " +
 				"Save fails if the template doesn't parse.",
 			Type: ConfigFieldTextarea,
+		},
+		{
+			Name:        "output_mode",
+			Display:     "Output mode",
+			Description: "How the choices render in the chat. \"Text\" keeps the historical behavior (delimiters stripped, choice text rendered inline as markdown). \"Component\" emits a structured choice_list fragment — clients render tappable buttons that drop the picked letter into the composer when tapped.",
+			Type:        ConfigFieldSelect,
+			Default:     lcOutputModeText,
+			Options: []ConfigOption{
+				{Value: lcOutputModeText, Label: "Text (inline markdown)"},
+				{Value: lcOutputModeComponent, Label: "Component (tappable buttons)"},
+			},
 		},
 	}
 }
@@ -254,10 +308,123 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 // --- DisplayTransformer ---
 
 func (p *letteredChoices) TransformForDisplay(content string) string {
-	// For display we keep the choice content but drop just the delimiters.
+	// In component mode the ContentRenderer takes over — it needs the
+	// raw tag block to find the choices, so we MUST NOT strip
+	// delimiters here. The renderer rewrites the block in-place with
+	// a fragment, dropping the tag text from the rendered output.
+	if p.cfg.OutputMode == lcOutputModeComponent {
+		return content
+	}
+	// Text mode (default): keep choice content but drop just the delimiters.
 	out := strings.ReplaceAll(content, p.cfg.OpenTag, "")
 	out = strings.ReplaceAll(out, p.cfg.CloseTag, "")
 	return out
+}
+
+// --- ContentRenderer ---
+
+// RenderContent finds every choices block in assistant content and
+// replaces it with a `choice_list` UIFragment. The text before/after
+// the block is preserved as text ContentParts so prose framing
+// renders normally. Only fires in component mode + on assistant
+// messages — user / system / context turns fall through unchanged.
+func (p *letteredChoices) RenderContent(parts []ContentPart, role string) []ContentPart {
+	if p.cfg.OutputMode != lcOutputModeComponent {
+		return parts
+	}
+	if role != "assistant" {
+		return parts
+	}
+	return WalkText(parts, func(text string) []ContentPart {
+		return p.splitChoiceBlocks(text)
+	})
+}
+
+// splitChoiceBlocks scans text for `OpenTag…CloseTag` regions and
+// converts each into a `choice_list` UIFragment. Surrounding prose
+// becomes text ContentParts. Unmatched OpenTag (no close found) is
+// left in place — surfacing a malformed message beats silently
+// truncating, matching the HistoryTransformer behavior above.
+func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
+	var out []ContentPart
+	rest := text
+	for {
+		open := strings.Index(rest, p.cfg.OpenTag)
+		if open < 0 {
+			if rest != "" {
+				out = append(out, ContentPart{Text: rest})
+			}
+			return out
+		}
+		closeRel := strings.Index(rest[open+len(p.cfg.OpenTag):], p.cfg.CloseTag)
+		if closeRel < 0 {
+			// Malformed — preserve the rest as text and stop.
+			if rest != "" {
+				out = append(out, ContentPart{Text: rest})
+			}
+			return out
+		}
+		blockStart := open + len(p.cfg.OpenTag)
+		blockEnd := blockStart + closeRel
+		afterClose := blockEnd + len(p.cfg.CloseTag)
+
+		// Preserve prose before the block, trimmed of trailing
+		// whitespace so the block visually anchors flush to the
+		// preceding paragraph rather than carrying a dangling
+		// blank line.
+		if pre := strings.TrimRight(rest[:open], " \t\n\r"); pre != "" {
+			out = append(out, ContentPart{Text: pre})
+		}
+
+		body := rest[blockStart:blockEnd]
+		items := p.parseChoiceItems(body)
+		if len(items) > 0 {
+			// Empty key — choice_list rows don't need stable
+			// identity across re-renders (no internal state like
+			// expansion or selection that survives a content
+			// change).
+			props, err := json.Marshal(map[string]any{"items": items})
+			if err == nil {
+				out = append(out, ContentPart{Fragment: &UIFragment{
+					Component: "choice_list",
+					Props:     props,
+				}})
+			}
+			// If marshal failed (shouldn't — items are plain
+			// strings), silently drop the block. The text body is
+			// already out of the parts list; an error here would
+			// be worse than a missing fragment.
+		}
+
+		// Continue after the close tag, trimming leading whitespace
+		// so prose flows back into the next part without an
+		// orphan blank line.
+		rest = strings.TrimLeft(rest[afterClose:], " \t\n\r")
+	}
+}
+
+// parseChoiceItems scans a block body for lettered lines like "A. Attack"
+// and returns one fragment item per match. Labels carry the letter
+// prefix ("A. Attack") so the rendered button matches what the model
+// emitted; the action is `compose:<letter>` so tapping types the
+// chosen letter into the composer — the user sees one tap, the model
+// sees a single-letter user message it can interpret as a choice
+// selection per its own system prompt.
+func (p *letteredChoices) parseChoiceItems(body string) []map[string]string {
+	var items []map[string]string
+	for _, line := range strings.Split(body, "\n") {
+		m := lcChoiceLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		letter, label := m[1], m[2]
+		items = append(items, map[string]string{
+			"label":  letter + ". " + label,
+			"value":  letter,
+			"action": "compose:" + letter,
+		})
+	}
+	return items
 }
 
 // stripBetween removes every span starting at openTag and ending at the next

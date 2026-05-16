@@ -308,14 +308,14 @@ func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, "")
 	fields := lc.ConfigFields()
-	if len(fields) != 4 {
-		t.Fatalf("ConfigFields len = %d want 4", len(fields))
+	if len(fields) != 5 {
+		t.Fatalf("ConfigFields len = %d want 5", len(fields))
 	}
 	byName := map[string]ConfigField{}
 	for _, f := range fields {
 		byName[f.Name] = f
 	}
-	for _, want := range []string{"keep_last_n", "open_tag", "close_tag", "system_instruction_override"} {
+	for _, want := range []string{"keep_last_n", "open_tag", "close_tag", "system_instruction_override", "output_mode"} {
 		if _, ok := byName[want]; !ok {
 			t.Errorf("ConfigFields missing %q", want)
 		}
@@ -328,6 +328,12 @@ func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	}
 	if byName["system_instruction_override"].Default != nil {
 		t.Errorf("system_instruction_override default = %v want nil", byName["system_instruction_override"].Default)
+	}
+	if byName["output_mode"].Type != ConfigFieldSelect {
+		t.Errorf("output_mode type = %q want %q", byName["output_mode"].Type, ConfigFieldSelect)
+	}
+	if byName["output_mode"].Default != lcOutputModeText {
+		t.Errorf("output_mode default = %v want %q", byName["output_mode"].Default, lcOutputModeText)
 	}
 }
 
