@@ -476,9 +476,12 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *reevev1.Message {
 	return out
 }
 
-// applyDisplay populates m.DisplayContent. When the pipeline is empty (or
-// has no DisplayTransformer plugins), display_content equals content so
-// clients can always read display_content without checking for absence.
+// applyDisplay populates m.DisplayContent + m.UiFragments by running
+// the active pipeline's DisplayTransformer chain followed by its
+// ContentRenderer chain. When the pipeline is empty (or has no
+// transformers / renderers), display_content equals content and
+// ui_fragments stays empty so clients can always read either field
+// without checking for absence.
 func applyDisplay(m *reevev1.Message, pipeline plugins.Pipeline) {
 	if m == nil {
 		return
@@ -488,6 +491,65 @@ func applyDisplay(m *reevev1.Message, pipeline plugins.Pipeline) {
 		return
 	}
 	m.DisplayContent = pipeline.TransformForDisplay(m.Content)
+	if parts := pipeline.RenderContent(m.DisplayContent, roleProtoToString(m.Role)); parts != nil {
+		m.UiFragments = contentPartsToProto(parts)
+	}
+}
+
+// contentPartsToProto flattens a renderer pipeline's []ContentPart
+// into the wire shape the client renders. Text parts emit a
+// fragment with component="text" + props {"text": "..."} so the
+// client can render the parts list uniformly without having to
+// special-case the absence of a Fragment. Returns nil when the
+// list is empty so the proto field stays unset on the wire.
+func contentPartsToProto(parts []plugins.ContentPart) []*reevev1.UIFragment {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]*reevev1.UIFragment, 0, len(parts))
+	for _, part := range parts {
+		if part.IsText() {
+			// Skip empty text segments — they'd render as a
+			// no-op anyway and the wire shape stays leaner.
+			if part.Text == "" {
+				continue
+			}
+			textProps, _ := json.Marshal(map[string]string{"text": part.Text})
+			out = append(out, &reevev1.UIFragment{
+				Component: "text",
+				Props:     textProps,
+			})
+			continue
+		}
+		out = append(out, &reevev1.UIFragment{
+			Component: part.Fragment.Component,
+			Props:     append([]byte(nil), part.Fragment.Props...),
+			Key:       part.Fragment.Key,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// roleProtoToString maps the proto enum back to the canonical
+// string the plugin Pipeline.RenderContent expects. Mirrors the
+// values used elsewhere in the package.
+func roleProtoToString(r reevev1.MessageRole) string {
+	switch r {
+	case reevev1.MessageRole_MESSAGE_ROLE_SYSTEM:
+		return "system"
+	case reevev1.MessageRole_MESSAGE_ROLE_CONTEXT:
+		return "context"
+	case reevev1.MessageRole_MESSAGE_ROLE_USER:
+		return "user"
+	case reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT:
+		return "assistant"
+	case reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
+		return "compression_summary"
+	}
+	return ""
 }
 
 // deviceFactsFromProto translates the wire `[]*reevev1.DeviceFact`

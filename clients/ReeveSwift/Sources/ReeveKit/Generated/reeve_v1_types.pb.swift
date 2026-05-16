@@ -2308,11 +2308,64 @@ public struct Reeve_V1_Message: @unchecked Sendable {
     set {_uniqueStorage()._attachments = newValue}
   }
 
+  /// Structured UI fragments produced by the active profile's
+  /// ContentRenderer plugin chain. When non-empty, the client renders
+  /// these natively (typed UI components) instead of (or alongside)
+  /// `display_content`'s plain markdown. Empty when no
+  /// ContentRenderer fired — the client falls back to rendering
+  /// `display_content` as before.
+  ///
+  /// DERIVED, not stored. The server re-renders on every fetch so
+  /// adding/removing a ContentRenderer plugin from a profile takes
+  /// effect retroactively across the whole history without a
+  /// backfill job. See plugins/CONTENT_RENDERERS.md for the
+  /// component catalog + Props schemas.
+  public var uiFragments: [Reeve_V1_UIFragment] {
+    get {_storage._uiFragments}
+    set {_uniqueStorage()._uiFragments = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// UIFragment is one structured UI component the server hands the
+/// client to render with a native view. Plugins emit these via the
+/// ContentRenderer interface; clients dispatch on `component` to a
+/// per-component renderer in their PluginRenderers/ directory.
+///
+/// `text` is a special component name reserved for literal text
+/// segments — text-only fragments carry their string in
+/// `props.text`. Mixing text + component fragments in one
+/// `Message.ui_fragments` slice is the supported way to interleave
+/// markdown with structured UI.
+public struct Reeve_V1_UIFragment: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Stable identifier matching the client's renderer registry.
+  /// Examples: "text", "card_list", "choice_list", "key_value",
+  /// "image", "image_grid", "error", "raw_json".
+  public var component: String = String()
+
+  /// Component-specific JSON payload. The schema for each
+  /// component lives in plugins/CONTENT_RENDERERS.md. Clients
+  /// validate inline + fall back to a safe rendering on
+  /// malformed payloads (typically an empty Text node).
+  public var props: Data = Data()
+
+  /// Optional stable key the client uses to preserve per-fragment
+  /// view state (selection, scroll, expansion) across re-renders.
+  /// Empty when the renderer doesn't need stable identity.
+  public var key: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// MessageAttachment is the client-side projection of a
@@ -4524,7 +4577,7 @@ extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
 
 extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0\u{3}ui_fragments\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4548,6 +4601,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _toolCalls: [Reeve_V1_ToolCall] = []
     var _finishReason: String? = nil
     var _attachments: [Reeve_V1_MessageAttachment] = []
+    var _uiFragments: [Reeve_V1_UIFragment] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4579,6 +4633,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _toolCalls = source._toolCalls
       _finishReason = source._finishReason
       _attachments = source._attachments
+      _uiFragments = source._uiFragments
     }
   }
 
@@ -4618,6 +4673,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._toolCalls) }()
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._finishReason) }()
         case 21: try { try decoder.decodeRepeatedMessageField(value: &_storage._attachments) }()
+        case 22: try { try decoder.decodeRepeatedMessageField(value: &_storage._uiFragments) }()
         default: break
         }
       }
@@ -4693,6 +4749,9 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       if !_storage._attachments.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._attachments, fieldNumber: 21)
       }
+      if !_storage._uiFragments.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._uiFragments, fieldNumber: 22)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4723,10 +4782,51 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._toolCalls != rhs_storage._toolCalls {return false}
         if _storage._finishReason != rhs_storage._finishReason {return false}
         if _storage._attachments != rhs_storage._attachments {return false}
+        if _storage._uiFragments != rhs_storage._uiFragments {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UIFragment"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}component\0\u{1}props\0\u{1}key\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.component) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.props) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.component.isEmpty {
+      try visitor.visitSingularStringField(value: self.component, fieldNumber: 1)
+    }
+    if !self.props.isEmpty {
+      try visitor.visitSingularBytesField(value: self.props, fieldNumber: 2)
+    }
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_UIFragment, rhs: Reeve_V1_UIFragment) -> Bool {
+    if lhs.component != rhs.component {return false}
+    if lhs.props != rhs.props {return false}
+    if lhs.key != rhs.key {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

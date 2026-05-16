@@ -450,6 +450,15 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
     /// Files attached to this message in storage order. Bytes aren't
     /// inline — clients render via FilesRepository.signedURL.
     public let attachments: [ReeveMessageAttachment]
+    /// Structured UI fragments produced by the active profile's
+    /// ContentRenderer plugin chain. When non-empty, the client should
+    /// render these (via the per-component PluginRenderers/ views)
+    /// instead of `displayContent`'s plain markdown. Empty when no
+    /// renderer fired — fall back to `displayContent`.
+    ///
+    /// DERIVED on every fetch; not persisted server-side. See
+    /// plugins/CONTENT_RENDERERS.md for the component catalog.
+    public let uiFragments: [ReeveUIFragment]
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -485,7 +494,8 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         toolCalls: [ReeveToolCall] = [],
         finishReason: String? = nil,
         createdAt: Date = Date(timeIntervalSince1970: 0),
-        attachments: [ReeveMessageAttachment] = []
+        attachments: [ReeveMessageAttachment] = [],
+        uiFragments: [ReeveUIFragment] = []
     ) {
         self.id = id
         self.contextID = contextID
@@ -505,6 +515,36 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         self.finishReason = finishReason
         self.createdAt = createdAt
         self.attachments = attachments
+        self.uiFragments = uiFragments
+    }
+}
+
+/// One structured UI fragment from the server's ContentRenderer
+/// pipeline. Mirrors `Reeve_V1_UIFragment`. The `component` keys
+/// into the client's per-component renderer registry; `props` is
+/// the component-specific JSON payload (validated by the
+/// renderer); `key` is an optional stable identifier for view
+/// state.
+///
+/// `component == "text"` is the special case for literal text
+/// segments — the renderer reads the string out of `props.text`
+/// and renders as markdown. All other components render via a
+/// dedicated SwiftUI view in PluginRenderers/.
+public struct ReeveUIFragment: Sendable, Hashable, Codable {
+    public let component: String
+    public let props: Data
+    public let key: String
+
+    public init(component: String, props: Data, key: String = "") {
+        self.component = component
+        self.props = props
+        self.key = key
+    }
+
+    init(from p: Reeve_V1_UIFragment) {
+        component = p.component
+        props = p.props
+        key = p.key
     }
 }
 
@@ -590,7 +630,8 @@ extension ReeveMessage {
             toolCalls: p.toolCalls.map(ReeveToolCall.init(from:)),
             finishReason: p.hasFinishReason && !p.finishReason.isEmpty ? p.finishReason : nil,
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
-            attachments: p.attachments.map(ReeveMessageAttachment.init(from:))
+            attachments: p.attachments.map(ReeveMessageAttachment.init(from:)),
+            uiFragments: p.uiFragments.map(ReeveUIFragment.init(from:))
         )
     }
 }

@@ -521,6 +521,45 @@ message Message {
   // bytes aren't inlined — clients fetch them via the FilesService
   // signed URL endpoint. Empty for text-only turns.
   repeated MessageAttachment attachments = 21;
+  // Structured UI fragments produced by the active profile's
+  // ContentRenderer plugin chain. When non-empty, the client renders
+  // these natively (typed UI components) instead of (or alongside)
+  // `display_content`'s plain markdown. Empty when no
+  // ContentRenderer fired — the client falls back to rendering
+  // `display_content` as before.
+  //
+  // DERIVED, not stored. The server re-renders on every fetch so
+  // adding/removing a ContentRenderer plugin from a profile takes
+  // effect retroactively across the whole history without a
+  // backfill job. See plugins/CONTENT_RENDERERS.md for the
+  // component catalog + Props schemas.
+  repeated UIFragment ui_fragments = 22;
+}
+
+// UIFragment is one structured UI component the server hands the
+// client to render with a native view. Plugins emit these via the
+// ContentRenderer interface; clients dispatch on `component` to a
+// per-component renderer in their PluginRenderers/ directory.
+//
+// `text` is a special component name reserved for literal text
+// segments — text-only fragments carry their string in
+// `props.text`. Mixing text + component fragments in one
+// `Message.ui_fragments` slice is the supported way to interleave
+// markdown with structured UI.
+message UIFragment {
+  // Stable identifier matching the client's renderer registry.
+  // Examples: "text", "card_list", "choice_list", "key_value",
+  // "image", "image_grid", "error", "raw_json".
+  string component = 1;
+  // Component-specific JSON payload. The schema for each
+  // component lives in plugins/CONTENT_RENDERERS.md. Clients
+  // validate inline + fall back to a safe rendering on
+  // malformed payloads (typically an empty Text node).
+  bytes props = 2;
+  // Optional stable key the client uses to preserve per-fragment
+  // view state (selection, scroll, expansion) across re-renders.
+  // Empty when the renderer doesn't need stable identity.
+  string key = 3;
 }
 
 // MessageAttachment is the client-side projection of a

@@ -947,6 +947,17 @@ private struct MessageRow: View {
                 inlineEditor
             } else if isErrored {
                 erroredBody
+            } else if !message.uiFragments.isEmpty {
+                // Server's ContentRenderer pipeline produced a
+                // structured rendering — surface that instead of
+                // the markdown fallback. Interactive components
+                // (choice_list, card_list links) route their
+                // actions through `model` so a tap drops into
+                // the composer / opens a URL.
+                FragmentView(
+                    fragments: message.uiFragments,
+                    onAction: handleFragmentAction
+                )
             } else {
                 let displayText = message.displayContent ?? message.content
                 if displayText.isEmpty {
@@ -1172,6 +1183,29 @@ private struct MessageRow: View {
 
     /// Body for an errored assistant turn: shows the error text in full,
     /// plus a disclosure-style group for whatever partial content streamed
+    /// Routes a `FragmentAction` from a renderer into the right
+    /// per-conversation handler. `.compose` drops into the
+    /// composer for the user to edit + send; `.external` opens
+    /// a URL via the system browser. Falls through silently for
+    /// any future cases the renderer might emit before the
+    /// handler grows them.
+    private func handleFragmentAction(_ action: FragmentAction) {
+        switch action {
+        case .compose(let text):
+            if model.draft.isEmpty {
+                model.draft = text
+            } else {
+                model.draft += "\n" + text
+            }
+        case .external(let url):
+            // System link-safety check + handoff. The host's
+            // browser owns final security policy from here.
+            #if canImport(AppKit)
+            NSWorkspace.shared.open(url)
+            #endif
+        }
+    }
+
     /// before the failure. Reads as a clear "this attempt failed" surface
     /// that the user can review and retry from. The Retry button forks
     /// off the same parent — produces a new sibling assistant so the

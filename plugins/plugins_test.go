@@ -218,6 +218,147 @@ func TestPipeline_PluginsWithoutCapabilityAreSkipped(t *testing.T) {
 	}
 }
 
+// --- ContentRenderer ---
+
+// fakeBracketRenderer wraps every Text part in [PREFIX]…[SUFFIX].
+// Demonstrates the simplest renderer pattern: WalkText + return one
+// part per input.
+type fakeBracketRenderer struct {
+	dummyPlugin
+	prefix, suffix string
+}
+
+func (f *fakeBracketRenderer) RenderContent(parts []ContentPart, _ string) []ContentPart {
+	return WalkText(parts, func(s string) []ContentPart {
+		return []ContentPart{NewTextPart(f.prefix + s + f.suffix)}
+	})
+}
+
+// fakeFragmentInjector splits each Text part into [Text("BEFORE")
+// Fragment("test_card") Text("AFTER")] regardless of input. Demonstrates
+// span replacement.
+type fakeFragmentInjector struct{ dummyPlugin }
+
+func (f *fakeFragmentInjector) RenderContent(parts []ContentPart, _ string) []ContentPart {
+	return WalkText(parts, func(s string) []ContentPart {
+		return []ContentPart{
+			NewTextPart("BEFORE:" + s),
+			NewFragmentPart("test_card", json.RawMessage(`{"label":"hello"}`), "k1"),
+			NewTextPart("AFTER:" + s),
+		}
+	})
+}
+
+// fakeRoleSensitiveRenderer only fires on assistant role; otherwise
+// passes through. Demonstrates role-gated rendering.
+type fakeRoleSensitiveRenderer struct{ dummyPlugin }
+
+func (f *fakeRoleSensitiveRenderer) RenderContent(parts []ContentPart, role string) []ContentPart {
+	if role != "assistant" {
+		return parts
+	}
+	return WalkText(parts, func(s string) []ContentPart {
+		return []ContentPart{NewTextPart("ASSISTANT:" + s)}
+	})
+}
+
+func TestPipeline_RenderContent_NoRendererReturnsNil(t *testing.T) {
+	t.Parallel()
+	p := Pipeline{
+		&dummyPlugin{name: "bare"},
+		&fakeSystemPrompter{dummyPlugin{name: "sp"}, "p", "a"},
+	}
+	if got := p.RenderContent("hello", "user"); got != nil {
+		t.Errorf("expected nil when no ContentRenderer is in the pipeline; got %#v", got)
+	}
+}
+
+func TestPipeline_RenderContent_SingleRendererTextOnly(t *testing.T) {
+	t.Parallel()
+	p := Pipeline{
+		&fakeBracketRenderer{dummyPlugin{name: "br"}, "[", "]"},
+	}
+	got := p.RenderContent("hi", "user")
+	if len(got) != 1 || !got[0].IsText() || got[0].Text != "[hi]" {
+		t.Errorf("got %#v; want one Text part [hi]", got)
+	}
+}
+
+func TestPipeline_RenderContent_MultipleRenderersComposeInOrder(t *testing.T) {
+	t.Parallel()
+	p := Pipeline{
+		&fakeBracketRenderer{dummyPlugin{name: "first"}, "(", ")"},
+		&fakeBracketRenderer{dummyPlugin{name: "second"}, "<", ">"},
+	}
+	got := p.RenderContent("x", "user")
+	if len(got) != 1 || got[0].Text != "<(x)>" {
+		t.Errorf("got %#v; want one Text part <(x)>", got)
+	}
+}
+
+func TestPipeline_RenderContent_FragmentSplitPreservesOrder(t *testing.T) {
+	t.Parallel()
+	p := Pipeline{
+		&fakeFragmentInjector{dummyPlugin{name: "inj"}},
+	}
+	got := p.RenderContent("body", "assistant")
+	if len(got) != 3 {
+		t.Fatalf("expected 3 parts (text, fragment, text); got %d (%#v)", len(got), got)
+	}
+	if !got[0].IsText() || got[0].Text != "BEFORE:body" {
+		t.Errorf("part 0 = %#v; want Text BEFORE:body", got[0])
+	}
+	if got[1].IsText() {
+		t.Errorf("part 1 should be a Fragment; got Text %q", got[1].Text)
+	}
+	if got[1].Fragment.Component != "test_card" {
+		t.Errorf("fragment component = %q; want test_card", got[1].Fragment.Component)
+	}
+	if got[1].Fragment.Key != "k1" {
+		t.Errorf("fragment key = %q; want k1", got[1].Fragment.Key)
+	}
+	if !got[2].IsText() || got[2].Text != "AFTER:body" {
+		t.Errorf("part 2 = %#v; want Text AFTER:body", got[2])
+	}
+}
+
+func TestPipeline_RenderContent_DownstreamSeesUpstreamFragments(t *testing.T) {
+	t.Parallel()
+	// First plugin injects a fragment between two text parts; second
+	// plugin (bracket renderer) should rewrap only the Text parts and
+	// pass the Fragment through untouched.
+	p := Pipeline{
+		&fakeFragmentInjector{dummyPlugin{name: "inj"}},
+		&fakeBracketRenderer{dummyPlugin{name: "br"}, "[", "]"},
+	}
+	got := p.RenderContent("x", "user")
+	if len(got) != 3 {
+		t.Fatalf("expected 3 parts; got %d (%#v)", len(got), got)
+	}
+	if got[0].Text != "[BEFORE:x]" {
+		t.Errorf("part 0 = %q; want [BEFORE:x]", got[0].Text)
+	}
+	if got[1].IsText() || got[1].Fragment.Component != "test_card" {
+		t.Errorf("part 1 should still be the test_card Fragment after second renderer; got %#v", got[1])
+	}
+	if got[2].Text != "[AFTER:x]" {
+		t.Errorf("part 2 = %q; want [AFTER:x]", got[2].Text)
+	}
+}
+
+func TestPipeline_RenderContent_RoleGated(t *testing.T) {
+	t.Parallel()
+	p := Pipeline{&fakeRoleSensitiveRenderer{dummyPlugin{name: "rg"}}}
+	gotUser := p.RenderContent("hi", "user")
+	if len(gotUser) != 1 || gotUser[0].Text != "hi" {
+		t.Errorf("user-role passthrough failed; got %#v", gotUser)
+	}
+	gotAsst := p.RenderContent("hi", "assistant")
+	if len(gotAsst) != 1 || gotAsst[0].Text != "ASSISTANT:hi" {
+		t.Errorf("assistant-role transform failed; got %#v", gotAsst)
+	}
+}
+
 // --- Resolve ---
 
 func TestResolve_BuildsByName(t *testing.T) {
