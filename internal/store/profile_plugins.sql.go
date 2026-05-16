@@ -96,3 +96,26 @@ func (q *Queries) ReplaceProfilePlugins(ctx context.Context, profileID uuid.UUID
 	_, err := q.db.Exec(ctx, replaceProfilePlugins, profileID)
 	return err
 }
+
+const updateProfilePluginConfig = `-- name: UpdateProfilePluginConfig :exec
+UPDATE profile_plugins
+SET config_encrypted = $3, config = NULL
+WHERE profile_id = $1 AND plugin_name = $2
+`
+
+type UpdateProfilePluginConfigParams struct {
+	ProfileID       uuid.UUID
+	PluginName      string
+	ConfigEncrypted []byte
+}
+
+// Overwrite the encrypted config for one plugin entry in a profile's
+// pipeline. Also clears the legacy plaintext column so a read can't
+// accidentally fall back to it after an upgrade. Used by the system-
+// profile backfill to repair stale configs left over from older seed
+// versions; ordinary plugin edits go through ReplaceProfilePlugins +
+// InsertProfilePlugin (atomic whole-pipeline swap).
+func (q *Queries) UpdateProfilePluginConfig(ctx context.Context, arg UpdateProfilePluginConfigParams) error {
+	_, err := q.db.Exec(ctx, updateProfilePluginConfig, arg.ProfileID, arg.PluginName, arg.ConfigEncrypted)
+	return err
+}

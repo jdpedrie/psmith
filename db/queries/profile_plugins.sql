@@ -20,3 +20,14 @@ DELETE FROM profile_plugins WHERE profile_id = $1;
 INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config_encrypted)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
+
+-- name: UpdateProfilePluginConfig :exec
+-- Overwrite the encrypted config for one plugin entry in a profile's
+-- pipeline. Also clears the legacy plaintext column so a read can't
+-- accidentally fall back to it after an upgrade. Used by the system-
+-- profile backfill to repair stale configs left over from older seed
+-- versions; ordinary plugin edits go through ReplaceProfilePlugins +
+-- InsertProfilePlugin (atomic whole-pipeline swap).
+UPDATE profile_plugins
+SET config_encrypted = $3, config = NULL
+WHERE profile_id = $1 AND plugin_name = $2;

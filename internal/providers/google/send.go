@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
@@ -254,6 +256,10 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 	endpoint, err := d.streamEndpoint(req.ModelID)
 	if err != nil {
 		return nil, err
+	}
+
+	if os.Getenv("REEVE_DEBUG_GEMINI_REQUEST") != "" {
+		slog.Info("google: outgoing request", "model", req.ModelID, "body", string(bodyJSON))
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyJSON))

@@ -4,6 +4,10 @@ Reeve is a self-hosted AI chat orchestrator. It mixes cloud APIs (Anthropic, Ope
 
 It's a personal project. The roadmap, scope, and tradeoffs are biased toward "one developer using this every day," not "platform for many tenants."
 
+> **Human Note:**
+>
+> Reeve was built to scratch an itch. It's entirely vibe-coded, but I use it frequently and it works well. It's "ChatGPT with any model and provider and a lot of configuration". I make no claims as to the code quality, because I didn't write it, but I did do my best to constrain the architectural path to something which seemed sane to me.
+
 ![Conversation view](docs/screenshots/capital.png)
 
 ## Why this exists

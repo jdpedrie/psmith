@@ -277,6 +277,13 @@ type Querier interface {
 	UpdateProfileFavorite(ctx context.Context, arg UpdateProfileFavoriteParams) error
 	UpdateProfileName(ctx context.Context, arg UpdateProfileNameParams) error
 	UpdateProfileParentOnly(ctx context.Context, arg UpdateProfileParentOnlyParams) error
+	// Overwrite the encrypted config for one plugin entry in a profile's
+	// pipeline. Also clears the legacy plaintext column so a read can't
+	// accidentally fall back to it after an upgrade. Used by the system-
+	// profile backfill to repair stale configs left over from older seed
+	// versions; ordinary plugin edits go through ReplaceProfilePlugins +
+	// InsertProfilePlugin (atomic whole-pipeline swap).
+	UpdateProfilePluginConfig(ctx context.Context, arg UpdateProfilePluginConfigParams) error
 	UpdateProfileSystemMessage(ctx context.Context, arg UpdateProfileSystemMessageParams) error
 	UpdateProfileTitleGuide(ctx context.Context, arg UpdateProfileTitleGuideParams) error
 	UpdateProfileTitleModelID(ctx context.Context, arg UpdateProfileTitleModelIDParams) error

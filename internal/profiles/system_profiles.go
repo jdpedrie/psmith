@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -101,28 +102,30 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 }
 
 // BackfillSystemProfiles runs SeedSystemProfiles for every user whose
-// `system_profiles_seeded` flag is still false. Intended for cmd/reeved
-// startup so existing accounts pick up newly-added templates on next
-// restart, without waiting for each user to log in. Failures on
-// individual users are logged via the slog default and don't abort
-// the loop — one bad row shouldn't block server start.
+// `system_profiles_seeded` flag is still false, PLUS runs the
+// "repair existing system profile plugin configs" pass for every
+// user. Intended for cmd/reeved startup so existing accounts pick up
+// newly-added templates AND get stale plugin configs repaired
+// without waiting for each user to log in. Failures on individual
+// users are logged via the slog default and don't abort the loop —
+// one bad row shouldn't block server start.
 func BackfillSystemProfiles(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	queries *store.Queries,
 	cipher crypto.Cipher,
 ) error {
-	ids, err := queries.ListUnseededUserIDs(ctx)
+	ids, err := queries.ListUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("backfill system profiles: list: %w", err)
 	}
-	for _, id := range ids {
-		if err := SeedSystemProfiles(ctx, pool, queries, cipher, id); err != nil {
+	for _, u := range ids {
+		if err := SeedSystemProfiles(ctx, pool, queries, cipher, u.ID); err != nil {
 			// Log and continue — a failed seed for one user shouldn't
 			// block server startup or block other users from getting
 			// their templates.
 			slog.Default().Warn("backfill system profiles: per-user seed failed",
-				"err", err, "user_id", id)
+				"err", err, "user_id", u.ID)
 		}
 	}
 	return nil
@@ -146,14 +149,12 @@ func SeedSystemProfiles(
 	cipher crypto.Cipher,
 	userID uuid.UUID,
 ) error {
-	user, err := queries.GetUserByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("seed system profiles: lookup user: %w", err)
-	}
-	if user.SystemProfilesSeeded {
-		return nil
-	}
-
+	// Note: no early-return on user.SystemProfilesSeeded. The pass is
+	// cheap, and the welcome-message + plugin-config repair logic
+	// downstream needs to run for users who were seeded under older
+	// versions of this code. MarkSystemProfilesSeeded at the end is
+	// idempotent — already-seeded users just get their timestamp
+	// nudged.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("seed system profiles: begin tx: %w", err)
@@ -194,6 +195,15 @@ func SeedSystemProfiles(
 					return fmt.Errorf("seed system profiles: %s: backfill welcome: %w", tpl.Name, err)
 				}
 			}
+			// Repair stale plugin configs left over from older seed
+			// versions. Conservative: only overwrites configs that
+			// decrypt to empty/{} (user clearly didn't customize) AND
+			// have a non-trivial template config to apply. Anything
+			// the user actively edited (non-empty config) is left
+			// alone.
+			if err := repairSystemProfilePluginConfigs(ctx, qtx, cipher, existing.ID, tpl); err != nil {
+				return fmt.Errorf("seed system profiles: %s: repair plugin configs: %w", tpl.Name, err)
+			}
 			continue
 		}
 		if err := insertSystemProfile(ctx, qtx, cipher, userID, tpl); err != nil {
@@ -208,6 +218,95 @@ func SeedSystemProfiles(
 		return fmt.Errorf("seed system profiles: commit: %w", err)
 	}
 	return nil
+}
+
+// repairSystemProfilePluginConfigs walks an existing system-profile's
+// plugin pipeline and overwrites any plugin entry whose stored config
+// decrypts to empty / `{}` with the template's config. Motivating
+// case: an older seed wrote the mcp plugin with no transport hint,
+// which defaults to stdio and produces zero tools — so the model gets
+// a system prompt telling it about MCP tools but no actual function
+// declarations, leading to MALFORMED_FUNCTION_CALL.
+//
+// Conservative by design — only touches configs the user clearly
+// didn't customize (empty / `{}`). Anything with real content is
+// left alone.
+func repairSystemProfilePluginConfigs(
+	ctx context.Context,
+	qtx *store.Queries,
+	cipher crypto.Cipher,
+	profileID uuid.UUID,
+	tpl SystemProfileTemplate,
+) error {
+	if len(tpl.Plugins) == 0 {
+		return nil
+	}
+	wantByName := make(map[string]json.RawMessage, len(tpl.Plugins))
+	for _, sp := range tpl.Plugins {
+		if isTrivialConfig(sp.Config) {
+			continue
+		}
+		wantByName[sp.Name] = sp.Config
+	}
+	if len(wantByName) == 0 {
+		return nil
+	}
+	rows, err := qtx.ListProfilePlugins(ctx, profileID)
+	if err != nil {
+		return fmt.Errorf("list plugins: %w", err)
+	}
+	for _, r := range rows {
+		want, ok := wantByName[r.PluginName]
+		if !ok {
+			continue
+		}
+		// Decrypt the existing row to check whether the user has
+		// customized it. The fallback path (legacy plaintext) is
+		// handled the same way the conversations service handles it
+		// — try encrypted first, fall back to plaintext column.
+		var current []byte
+		if len(r.ConfigEncrypted) > 0 {
+			decrypted, derr := cipher.Decrypt(r.ConfigEncrypted)
+			if derr != nil {
+				// Can't read; better to leave untouched than risk
+				// trampling a config we don't understand.
+				continue
+			}
+			current = decrypted
+		} else if len(r.Config) > 0 {
+			current = r.Config
+		}
+		if !isTrivialConfig(current) {
+			continue
+		}
+		encrypted, err := cipher.Encrypt(want)
+		if err != nil {
+			return fmt.Errorf("encrypt repair for %s: %w", r.PluginName, err)
+		}
+		if err := qtx.UpdateProfilePluginConfig(ctx, store.UpdateProfilePluginConfigParams{
+			ProfileID:       profileID,
+			PluginName:      r.PluginName,
+			ConfigEncrypted: encrypted,
+		}); err != nil {
+			return fmt.Errorf("update config for %s: %w", r.PluginName, err)
+		}
+	}
+	return nil
+}
+
+// isTrivialConfig returns true for an empty config blob or one that
+// decodes to an empty JSON object — the "user clearly didn't fill
+// anything in" cases the repair pass is allowed to overwrite.
+func isTrivialConfig(raw []byte) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return true
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &obj); err != nil {
+		return false
+	}
+	return len(obj) == 0
 }
 
 func insertSystemProfile(
