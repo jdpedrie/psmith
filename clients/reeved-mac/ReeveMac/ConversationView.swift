@@ -1211,6 +1211,15 @@ private struct MessageRow: View {
             } else {
                 model.draft += "\n" + text
             }
+        case .send(let text):
+            // Replace any in-flight draft with the chosen text and
+            // submit immediately — one tap resolves the choice
+            // instead of two (tap → press Send). Pre-existing
+            // draft content is discarded because the user
+            // explicitly picked a choice; mixing it with prior
+            // draft text would be surprising.
+            model.draft = text
+            Task { await model.send() }
         case .external(let url):
             // System link-safety check + handoff. The host's
             // browser owns final security policy from here.

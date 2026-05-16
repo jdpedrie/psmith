@@ -697,6 +697,12 @@ struct MessageRow: View {
             } else {
                 model.draft += "\n" + text
             }
+        case .send(let text):
+            // One tap resolves the choice instead of two — replaces
+            // any in-flight draft and submits immediately. Mirrors
+            // the Mac handler so both platforms behave the same.
+            model.draft = text
+            Task { await model.send() }
         case .external(let url):
             UIApplication.shared.open(url)
         }

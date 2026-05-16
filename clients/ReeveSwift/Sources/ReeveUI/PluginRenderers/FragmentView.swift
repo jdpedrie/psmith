@@ -73,6 +73,11 @@ public struct FragmentView: View {
 public enum FragmentAction: Sendable, Hashable {
     /// Drop a string into the composer for the user to send.
     case compose(String)
+    /// Drop a string into the composer AND immediately submit it
+    /// as a user message. Used by `choice_list` so tapping a button
+    /// resolves the decision in one click instead of two (tap →
+    /// edit-if-needed → press Send).
+    case send(String)
     /// Open a URL externally (link-safety check applies on the
     /// host's side before dispatch).
     case external(URL)
@@ -88,6 +93,7 @@ public enum FragmentAction: Sendable, Hashable {
 ///
 /// Recognised forms:
 ///   - `compose:<text>`     — drop `<text>` into the composer
+///   - `send:<text>`        — drop into composer + auto-submit
 ///   - `external:<url>`     — open `<url>` externally
 public enum FragmentActionParser {
     public static func parse(_ raw: String) -> FragmentAction? {
@@ -97,6 +103,8 @@ public enum FragmentActionParser {
         switch scheme {
         case "compose":
             return .compose(value)
+        case "send":
+            return .send(value)
         case "external":
             guard let url = URL(string: value) else { return nil }
             return .external(url)

@@ -68,9 +68,9 @@ func TestLetteredChoices_ComponentMode_EmitsChoiceListFragment(t *testing.T) {
 		t.Fatalf("expected 3 items; got %d: %+v", len(props.Items), props.Items)
 	}
 	want := []struct{ label, value, action string }{
-		{"A. Attack", "A", "compose:A"},
-		{"B. Flee", "B", "compose:B"},
-		{"C. Negotiate", "C", "compose:C"},
+		{"A. Attack", "A", "send:A"},
+		{"B. Flee", "B", "send:B"},
+		{"C. Negotiate", "C", "send:C"},
 	}
 	for i, w := range want {
 		if props.Items[i]["label"] != w.label {

@@ -372,10 +372,11 @@ Interactive components (`choice_list`, the URL button on
 `scheme:value` string the client parses into a `FragmentAction`.
 Recognised schemes today:
 
-| Scheme     | Value         | Effect                                           |
-|------------|---------------|--------------------------------------------------|
-| `compose`  | text          | Drop `text` into the composer for the user to send. |
-| `external` | URL           | Open the URL externally (system browser).        |
+| Scheme     | Value         | Effect                                                                       |
+|------------|---------------|------------------------------------------------------------------------------|
+| `compose`  | text          | Drop `text` into the composer for the user to send.                          |
+| `send`     | text          | Drop `text` into the composer AND submit immediately (one-tap choice).       |
+| `external` | URL           | Open the URL externally (system browser).                                    |
 
 Unknown schemes are silently ignored — a renderer can't fire an
 action the client doesn't understand. To grow the vocabulary:

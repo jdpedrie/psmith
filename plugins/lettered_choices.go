@@ -562,7 +562,7 @@ func (p *letteredChoices) parseChoiceItems(body string) []map[string]string {
 		items = append(items, map[string]string{
 			"label":  letter + ". " + label,
 			"value":  letter,
-			"action": "compose:" + letter,
+			"action": "send:" + letter,
 		})
 	}
 	if len(items) == 0 {
