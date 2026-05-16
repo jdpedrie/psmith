@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"text/template"
 	"unicode"
@@ -36,26 +35,16 @@ const (
 	lcOutputModeComponent = "component"
 )
 
-// lcChoiceStartRe matches the start of a lettered-choice item anywhere
-// in the body. Boundary classes are deliberately permissive so the
-// parser handles the common ways a model emits items without a clean
-// newline between them — Gemini in particular sometimes concatenates
-// `(like X)B. label` on a single line. The match consists of:
-//
-//   - a "soft boundary" preceding character: start-of-string, any
-//     whitespace, or one of `)]>}` (closing brackets that commonly
-//     end the previous label's parenthetical),
-//   - a single uppercase ASCII letter (the choice key),
-//   - an optional `. ) :` delimiter,
-//   - one or more whitespace characters separating the prefix from
-//     the label content.
-//
-// Capture group 1 is the boundary char (used to decide whether it
-// belongs to the previous label or should be trimmed); group 2 is
-// the letter; group 3 is the delimiter (or empty); group 4 is the
-// trailing whitespace. The label runs from the end of this match
-// up to the start of the next match — see parseChoiceItems.
-var lcChoiceStartRe = regexp.MustCompile(`(^|[\s)\]>}])([A-Z])([.):]?)(\s+)`)
+// Component-mode parsing: the model emits a JSON object inside the
+// delimiters matching this shape. Letters are NOT in the JSON — the
+// server auto-assigns them by index. Keeps the model's output minimal
+// (less to escape, less to get wrong) and the rendered button labels
+// consistent with the convention the system prompt teaches.
+type lcChoicePropsIn struct {
+	Items []struct {
+		Label string `json:"label"`
+	} `json:"items"`
+}
 
 // lcSystemReminderExplainer is appended to the system slot to teach the model
 // what [system_reminder ...] tags mean and how to handle them. Pairs with
@@ -73,10 +62,10 @@ const lcSystemReminderExplainer = "\n\n[system_reminder <x>] is a special value 
 // here.
 const lcUserReminderTail = "\n\n[system_reminder Always generate choices as directed by the system message]"
 
-// defaultLCSystemTemplate is the system instruction the plugin appends when
-// no override is configured. Same Go-template shape as a user-supplied
-// override — sharing the rendering path keeps the two consistent and lets
-// us add new template variables without two divergent code branches.
+// defaultLCSystemTemplate is the text-mode system instruction. Same
+// Go-template shape as a user-supplied override — sharing the rendering
+// path keeps the two consistent and lets us add new template variables
+// without two divergent code branches.
 const defaultLCSystemTemplate = `Always offer the user 3-5 lettered choices wrapped in the literal delimiters {{.OpenTag}} and {{.CloseTag}}. Choices may be one word up to a short sentence. Use the following format:
 
 {{.OpenTag}}
@@ -86,6 +75,16 @@ B. Flee
 C. Negotiate
 D. Stop and think a while
 {{.CloseTag}}`
+
+// defaultLCSystemTemplateComponent is the component-mode system
+// instruction. Tells the model to emit a single JSON object inside the
+// delimiters rather than free-form lettered text. The server parses
+// the JSON with json.Unmarshal — no bespoke regex, no merged-line
+// failure modes — and auto-assigns A/B/C letters by index. Models
+// that struggle with strict JSON should use text mode instead.
+const defaultLCSystemTemplateComponent = `Always offer the user 3-5 choices wrapped in the literal delimiters {{.OpenTag}} and {{.CloseTag}}. The body MUST be a single JSON object with an "items" array — one entry per choice, each with a "label" field. Letters (A, B, C…) are assigned automatically by position; do NOT include them in the label. Labels may be one word up to a short sentence. No prose inside the delimiters, only the JSON object. Example:
+
+{{.OpenTag}}{"items":[{"label":"Attack"},{"label":"Flee"},{"label":"Negotiate"},{"label":"Stop and think a while"}]}{{.CloseTag}}`
 
 // letteredChoices implements SystemPrompter, HistoryTransformer,
 // DisplayTransformer, and Configurable. Bundling them in one plugin is the
@@ -131,13 +130,15 @@ type letteredChoicesConfig struct {
 	// OutputMode picks how the choice block surfaces to the user.
 	// "text" (default): DisplayTransformer strips just the delimiters
 	// and the choices render as inline markdown — works in any
-	// markdown-capable view, no plugin renderer required.
-	// "component": ContentRenderer parses the block and emits a
-	// `choice_list` UIFragment with one item per lettered line, each
-	// item wired to a `compose:<letter>` action so tapping types the
-	// chosen letter into the composer. Clients that don't recognize
-	// the component fall back to UnknownComponentRenderer (a small
-	// JSON viewer), so opting in is forward-safe.
+	// markdown-capable view, no plugin renderer required. Picks this
+	// when the conversation's model is small or unreliable at strict
+	// JSON output.
+	// "component": System prompt teaches the model to emit a JSON
+	// `{"items":[{"label":"..."}]}` object inside the delimiters; the
+	// ContentRenderer parses with json.Unmarshal and emits a
+	// `choice_list` UIFragment with letters auto-assigned by index
+	// and `compose:<letter>` actions. Clients that don't recognize
+	// the component fall back to UnknownComponentRenderer.
 	OutputMode string `json:"output_mode"`
 }
 
@@ -175,9 +176,13 @@ func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 	}
 	// Eager template validation — surface a malformed override at
 	// config-save time rather than silently falling through to literal
-	// text on every send. The default template is parsed for free here
-	// so an init-time edit that breaks it is caught the same way.
+	// text on every send. Validate whichever default is in play for
+	// this mode (text vs component) so an init-time edit to either
+	// built-in template surfaces immediately.
 	src := defaultLCSystemTemplate
+	if cfg.OutputMode == lcOutputModeComponent {
+		src = defaultLCSystemTemplateComponent
+	}
 	if cfg.SystemInstructionOverride != "" {
 		src = cfg.SystemInstructionOverride
 	}
@@ -256,6 +261,13 @@ func (p *letteredChoices) PrependSystemMessage() string { return "" }
 
 func (p *letteredChoices) AppendSystemMessage() string {
 	src := defaultLCSystemTemplate
+	if p.cfg.OutputMode == lcOutputModeComponent {
+		// Component mode teaches the model to emit JSON directly so
+		// the server parser is a plain json.Unmarshal — no regex over
+		// free-form text, no merged-line failure modes when a model
+		// concatenates items.
+		src = defaultLCSystemTemplateComponent
+	}
 	if p.cfg.SystemInstructionOverride != "" {
 		src = p.cfg.SystemInstructionOverride
 	}
@@ -471,73 +483,48 @@ func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
 	}
 }
 
-// parseChoiceItems scans a block body for lettered choice prefixes and
-// returns one fragment item per occurrence. Operates on the whole
-// body rather than line-by-line so it handles the (real, observed)
-// case where a model emits two items on the same line without a
-// newline separator — Gemini sometimes produces
-// `B. View available plugins (like X)C. Check ...` as one line; the
-// older line-by-line parser saw one entry, this one sees both.
-//
-// Each item's label runs from the end of its prefix match up to the
-// start of the next prefix match (or the end of the body for the
-// last item). The boundary character (the `(^|[\s)\]>}])` capture)
-// is kept in the previous label when it's punctuation — `)` and
-// friends are usually part of the prior label's parenthetical — and
-// dropped when it's whitespace. trimSpace normalises trailing newlines
-// inside labels so adjacent items render cleanly in the UI.
-//
-// Labels carry the letter prefix ("A. Attack") so the rendered button
-// matches what the model emitted; the action is `compose:<letter>` so
-// tapping types the chosen letter into the composer — the user sees
-// one tap, the model sees a single-letter user message it can
-// interpret as a choice selection per its own system prompt.
+// parseChoiceItems decodes the JSON body of a `<choices>…</choices>`
+// block emitted in component mode and produces the fragment items the
+// `choice_list` renderer expects. Letters (A, B, C…) are auto-assigned
+// by index so the model's JSON only carries labels — minimal escape
+// surface, no merged-line failure modes from free-form text. Returns
+// nil when the body is empty, isn't JSON, or has no items; the caller
+// drops the block silently in that case so a malformed turn shows the
+// raw choices block as text rather than a broken fragment.
 func (p *letteredChoices) parseChoiceItems(body string) []map[string]string {
-	matches := lcChoiceStartRe.FindAllStringSubmatchIndex(body, -1)
-	if len(matches) == 0 {
+	body = strings.TrimSpace(body)
+	if body == "" {
 		return nil
 	}
-	var items []map[string]string
-	for i, m := range matches {
-		// m layout from FindAllStringSubmatchIndex with our regex:
-		//   m[0..1] = full-match start..end
-		//   m[2..3] = boundary capture (^ or one of \s)\]>})
-		//   m[4..5] = letter
-		//   m[6..7] = delimiter (or empty)
-		//   m[8..9] = trailing whitespace
-		letter := body[m[4]:m[5]]
-		labelStart := m[1] // first char after the whitespace following the prefix
-		var labelEnd int
-		if i+1 < len(matches) {
-			next := matches[i+1]
-			// next[0] is the start of the next match (which begins
-			// with the boundary capture). If that boundary is
-			// whitespace, exclude it from the current label (TrimSpace
-			// would anyway, but leave room for nothing); if it's a
-			// closing bracket/paren, include it — those usually
-			// belong to the parenthetical that ended this label.
-			labelEnd = next[0]
-			if labelEnd >= 0 && labelEnd < len(body) {
-				b := body[labelEnd]
-				if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
-					labelEnd++
-				}
-			}
-		} else {
-			labelEnd = len(body)
-		}
-		if labelEnd < labelStart {
-			labelEnd = labelStart
-		}
-		label := strings.TrimSpace(body[labelStart:labelEnd])
+	var in lcChoicePropsIn
+	if err := json.Unmarshal([]byte(body), &in); err != nil {
+		return nil
+	}
+	if len(in.Items) == 0 {
+		return nil
+	}
+	items := make([]map[string]string, 0, len(in.Items))
+	for i, it := range in.Items {
+		label := strings.TrimSpace(it.Label)
 		if label == "" {
 			continue
+		}
+		// Auto-assign letters A-Z; degrade gracefully past 26 by
+		// repeating the last letter rather than wrapping to a
+		// non-letter. Models that emit more than 26 choices have
+		// other problems.
+		letter := "Z"
+		if i < 26 {
+			letter = string(rune('A' + i))
 		}
 		items = append(items, map[string]string{
 			"label":  letter + ". " + label,
 			"value":  letter,
 			"action": "compose:" + letter,
 		})
+	}
+	if len(items) == 0 {
+		return nil
 	}
 	return items
 }

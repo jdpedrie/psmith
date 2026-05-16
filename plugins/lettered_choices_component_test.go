@@ -43,7 +43,7 @@ func TestLetteredChoices_TextMode_DisplayTransformerStripsDelimiters(t *testing.
 func TestLetteredChoices_ComponentMode_EmitsChoiceListFragment(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	body := "Here are some options:\n<choices>\n### Choices\nA. Attack\nB. Flee\nC. Negotiate\n</choices>\nWhat's it gonna be?"
+	body := "Here are some options:\n<choices>{\"items\":[{\"label\":\"Attack\"},{\"label\":\"Flee\"},{\"label\":\"Negotiate\"}]}</choices>\nWhat's it gonna be?"
 	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
 	if len(parts) != 3 {
 		t.Fatalf("expected 3 parts (pre-text, fragment, post-text); got %d: %+v", len(parts), parts)
@@ -58,7 +58,6 @@ func TestLetteredChoices_ComponentMode_EmitsChoiceListFragment(t *testing.T) {
 		t.Errorf("trailing part: %+v", parts[2])
 	}
 
-	// Inspect the items.
 	var props struct {
 		Items []map[string]string `json:"items"`
 	}
@@ -82,6 +81,55 @@ func TestLetteredChoices_ComponentMode_EmitsChoiceListFragment(t *testing.T) {
 		}
 		if props.Items[i]["action"] != w.action {
 			t.Errorf("item[%d].action = %q want %q", i, props.Items[i]["action"], w.action)
+		}
+	}
+}
+
+func TestLetteredChoices_ComponentMode_MalformedJSONDroppedSilently(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
+	// Model fell back to text mode by mistake. Without a clean JSON
+	// parse the renderer drops the block — no fragment, no garbled
+	// text — so the user sees the surrounding prose without a
+	// broken control.
+	body := "Prose. <choices>\nA. Attack\nB. Flee\n</choices> tail"
+	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
+	// Expect just the surrounding text parts; the malformed block
+	// contributes no fragment.
+	for _, p := range parts {
+		if p.Fragment != nil {
+			t.Errorf("expected no fragments for malformed JSON body; got %+v", p.Fragment)
+		}
+	}
+}
+
+func TestLetteredChoices_ComponentMode_EmptyItemsArrayDropped(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
+	body := `<choices>{"items":[]}</choices>`
+	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
+	for _, p := range parts {
+		if p.Fragment != nil {
+			t.Errorf("expected no fragment for empty items; got %+v", p.Fragment)
+		}
+	}
+}
+
+func TestLetteredChoices_ComponentMode_AutoAssignsLettersByIndex(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
+	body := `<choices>{"items":[{"label":"first"},{"label":"second"},{"label":"third"},{"label":"fourth"}]}</choices>`
+	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
+	if parts[0].Fragment == nil {
+		t.Fatalf("expected fragment; got %+v", parts)
+	}
+	var props struct {
+		Items []map[string]string `json:"items"`
+	}
+	mustDecodeJSON(t, parts[0].Fragment.Props, &props)
+	for i, want := range []string{"A", "B", "C", "D"} {
+		if props.Items[i]["value"] != want {
+			t.Errorf("item[%d] letter: got %q want %q", i, props.Items[i]["value"], want)
 		}
 	}
 }
@@ -121,67 +169,6 @@ func TestLetteredChoices_ComponentMode_UnmatchedOpenLeftInPlace(t *testing.T) {
 	}
 }
 
-// TestLetteredChoices_ComponentMode_ItemsMergedOnSameLine reproduces the
-// real Gemini failure mode: the model emitted two items on one line
-// without a newline between them, like
-// `B. View available plugins (like Brave Search)C. Check ...`. The
-// older line-by-line parser produced one merged button; the body-scan
-// parser splits them at the `)C.` boundary.
-func TestLetteredChoices_ComponentMode_ItemsMergedOnSameLine(t *testing.T) {
-	t.Parallel()
-	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	body := "Understood. We'll start fresh. What would you like to do instead?\n<choices>\nA. Look at your existing profiles\nB. View available plugins (like Brave Search)C. Check your providers and models\nD. Review recent conversations\n</choices>"
-	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
-	// Expect: [text "Understood…"] [choice_list with 4 items]
-	if len(parts) != 2 {
-		t.Fatalf("expected 2 parts (prose + fragment); got %d: %+v", len(parts), parts)
-	}
-	if parts[1].Fragment == nil || parts[1].Fragment.Component != "choice_list" {
-		t.Fatalf("expected choice_list; got %+v", parts[1])
-	}
-	var props struct {
-		Items []map[string]string `json:"items"`
-	}
-	mustDecodeJSON(t, parts[1].Fragment.Props, &props)
-	if len(props.Items) != 4 {
-		t.Fatalf("expected 4 items, got %d: %+v", len(props.Items), props.Items)
-	}
-	want := []struct{ letter, label string }{
-		{"A", "A. Look at your existing profiles"},
-		{"B", "B. View available plugins (like Brave Search)"},
-		{"C", "C. Check your providers and models"},
-		{"D", "D. Review recent conversations"},
-	}
-	for i, w := range want {
-		if props.Items[i]["value"] != w.letter {
-			t.Errorf("item[%d] letter: got %q want %q", i, props.Items[i]["value"], w.letter)
-		}
-		if props.Items[i]["label"] != w.label {
-			t.Errorf("item[%d] label: got %q want %q", i, props.Items[i]["label"], w.label)
-		}
-	}
-}
-
-// Sanity check that a clean newline-separated body still parses correctly
-// after the regex change (test added so a future tweak to lcChoiceStartRe
-// doesn't silently regress the happy path).
-func TestLetteredChoices_ComponentMode_ParsesNewlineSeparated(t *testing.T) {
-	t.Parallel()
-	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	body := "<choices>\nA. one\nB. two\nC. three\n</choices>"
-	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
-	if parts[0].Fragment == nil {
-		t.Fatalf("expected a choice_list fragment; got %+v", parts)
-	}
-	var props struct {
-		Items []map[string]string `json:"items"`
-	}
-	mustDecodeJSON(t, parts[0].Fragment.Props, &props)
-	if len(props.Items) != 3 {
-		t.Fatalf("expected 3 items; got %d: %+v", len(props.Items), props.Items)
-	}
-}
-
 func mustDecodeJSON(t *testing.T, raw []byte, out any) {
 	t.Helper()
 	if err := json.Unmarshal(raw, out); err != nil {
@@ -192,7 +179,11 @@ func mustDecodeJSON(t *testing.T, raw []byte, out any) {
 func TestLetteredChoices_ComponentMode_MultipleBlocks(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	body := "first:\n<choices>\nA. one\nB. two\n</choices>\nmiddle\n<choices>\nA. three\n</choices>\ntail"
+	body := `first:
+<choices>{"items":[{"label":"one"},{"label":"two"}]}</choices>
+middle
+<choices>{"items":[{"label":"three"}]}</choices>
+tail`
 	parts := lc.RenderContent([]ContentPart{{Text: body}}, "assistant")
 	// Expect: [text "first:"] [frag] [text "middle"] [frag] [text "tail"]
 	if len(parts) != 5 {
