@@ -196,6 +196,7 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[reevev
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachRequiredCaps(ctx, proto)
 	return connect.NewResponse(&reevev1.CreateProfileResponse{Profile: proto}), nil
 }
 
@@ -215,6 +216,7 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[reevev1
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
+		s.attachRequiredCaps(ctx, p)
 		out = append(out, p)
 	}
 	return connect.NewResponse(&reevev1.ListProfilesResponse{Profiles: out}), nil
@@ -239,6 +241,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[reevev1.G
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachRequiredCaps(ctx, proto)
 
 	resp := &reevev1.GetProfileResponse{Profile: proto}
 
@@ -251,6 +254,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[reevev1.G
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
+		s.attachRequiredCaps(ctx, rproto)
 		resp.Resolved = rproto
 	}
 
@@ -474,6 +478,7 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[reevev
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachRequiredCaps(ctx, proto)
 	return connect.NewResponse(&reevev1.UpdateProfileResponse{Profile: proto}), nil
 }
 
@@ -751,7 +756,25 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 			DeviceFactRequester:         d.Capabilities.DeviceFactRequester,
 			ContentRenderer:             d.Capabilities.ContentRenderer,
 		},
-		RequestedDeviceFacts: requestedFacts,
+		RequestedDeviceFacts:      requestedFacts,
+		RequiredModelCapabilities: capabilityRequirementsToProto(d.RequiredModelCapabilities),
+	}
+}
+
+// capabilityRequirementsToProto converts the plugins-package shape to its
+// proto twin. Returns nil when the requirement set is empty so the proto
+// field stays unset (mirroring the optional<ModelCapabilities> on the wire).
+func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *reevev1.ModelCapabilities {
+	if r.Empty() {
+		return nil
+	}
+	return &reevev1.ModelCapabilities{
+		Streaming:       r.Streaming,
+		Thinking:        r.Thinking,
+		ToolUse:         r.ToolUse,
+		Vision:          r.Vision,
+		PromptCaching:   r.PromptCaching,
+		GeneratesImages: r.GeneratesImages,
 	}
 }
 
@@ -1002,6 +1025,26 @@ func profileToProto(p store.Profile) (*reevev1.Profile, error) {
 	out.TitleGuide = p.TitleGuide
 	out.TitleProviderKind = p.TitleProviderKind
 	return out, nil
+}
+
+// attachRequiredCaps sets the proto's required_model_capabilities by
+// walking the profile's effective plugin pipeline (with parent-chain
+// inheritance). Best-effort: resolution failures are logged-and-skipped
+// rather than failing the read — a stale row shouldn't make GetProfile
+// itself fail.
+func (s *Service) attachRequiredCaps(ctx context.Context, p *reevev1.Profile) {
+	if p == nil {
+		return
+	}
+	pid, err := uuid.Parse(p.GetId())
+	if err != nil {
+		return
+	}
+	caps, err := ResolveRequiredModelCapabilities(ctx, s.queries, pid)
+	if err != nil {
+		return
+	}
+	p.RequiredModelCapabilities = capabilityRequirementsToProto(caps)
 }
 
 // isFKViolation returns true if err is a Postgres foreign-key violation.

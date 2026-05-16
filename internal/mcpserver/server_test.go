@@ -212,7 +212,7 @@ func TestServer_ToolsListIncludesEverySchema(t *testing.T) {
 		"get_profile":         false,
 		"create_profile":      false,
 		"update_profile":      false,
-		"list_plugin_types":   false,
+		"registered_plugins":  false,
 		"get_profile_plugins": false,
 		"set_profile_plugins": false,
 		"list_providers":      false,
@@ -318,10 +318,10 @@ func TestTools_MissingRequiredArgReturnsIsError(t *testing.T) {
 
 // --- list_plugin_types ---
 
-func TestTools_ListPluginTypesNonEmpty(t *testing.T) {
+func TestTools_RegisteredPluginsNonEmpty(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	res := callTool(t, f.server, f.ctx, "list_plugin_types", map[string]any{})
+	res := callTool(t, f.server, f.ctx, "registered_plugins", map[string]any{})
 	if res.IsError {
 		t.Fatalf("errored: %+v", res)
 	}

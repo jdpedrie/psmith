@@ -513,45 +513,76 @@ public struct Reeve_V1_PluginCapabilities: Sendable {
 }
 
 /// PluginType is one entry in the server's compiled-in plugin registry.
-public struct Reeve_V1_PluginType: Sendable {
+public struct Reeve_V1_PluginType: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var name: String = String()
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
 
-  public var description_p: String = String()
+  public var description_p: String {
+    get {_storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
 
   /// Flat list of typed fields describing the per-instance config blob the
   /// plugin accepts. Empty when the plugin doesn't implement Configurable.
-  public var configFields: [Reeve_V1_ConfigField] = []
+  public var configFields: [Reeve_V1_ConfigField] {
+    get {_storage._configFields}
+    set {_uniqueStorage()._configFields = newValue}
+  }
 
   public var capabilities: Reeve_V1_PluginCapabilities {
-    get {_capabilities ?? Reeve_V1_PluginCapabilities()}
-    set {_capabilities = newValue}
+    get {_storage._capabilities ?? Reeve_V1_PluginCapabilities()}
+    set {_uniqueStorage()._capabilities = newValue}
   }
   /// Returns true if `capabilities` has been explicitly set.
-  public var hasCapabilities: Bool {self._capabilities != nil}
+  public var hasCapabilities: Bool {_storage._capabilities != nil}
   /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
-  public mutating func clearCapabilities() {self._capabilities = nil}
+  public mutating func clearCapabilities() {_uniqueStorage()._capabilities = nil}
 
   /// Human-friendly label shown everywhere in the UI (e.g. "Brave Search").
   /// The `name` field above is the stable machine identifier used as the
   /// plugin's primary key.
-  public var displayName: String = String()
+  public var displayName: String {
+    get {_storage._displayName}
+    set {_uniqueStorage()._displayName = newValue}
+  }
 
   /// Device facts the plugin wants on every outgoing user turn.
   /// Empty unless `capabilities.device_fact_requester` is true. The
   /// client unions this list across enabled plugins on the active
   /// profile; values it can gather (with permission as needed) ride
   /// back on `SendMessageRequest.device_facts`.
-  public var requestedDeviceFacts: [Reeve_V1_DeviceFactKey] = []
+  public var requestedDeviceFacts: [Reeve_V1_DeviceFactKey] {
+    get {_storage._requestedDeviceFacts}
+    set {_uniqueStorage()._requestedDeviceFacts = newValue}
+  }
+
+  /// Model capabilities the plugin needs from the conversation's assigned
+  /// model. Sparse: any field left false is "no requirement here." Auto-
+  /// derived: every plugin with `capabilities.tool_provider == true` reports
+  /// `tool_use = true` here too. Plugins with extra needs (e.g. an image-
+  /// generating plugin) implement an additional CapabilityRequirer hook
+  /// server-side. UIs filter the model picker by the union across a
+  /// profile's pipeline; the server validates at SendMessage time.
+  public var requiredModelCapabilities: Reeve_V1_ModelCapabilities {
+    get {_storage._requiredModelCapabilities ?? Reeve_V1_ModelCapabilities()}
+    set {_uniqueStorage()._requiredModelCapabilities = newValue}
+  }
+  /// Returns true if `requiredModelCapabilities` has been explicitly set.
+  public var hasRequiredModelCapabilities: Bool {_storage._requiredModelCapabilities != nil}
+  /// Clears the value of `requiredModelCapabilities`. Subsequent reads from it will return its default value.
+  public mutating func clearRequiredModelCapabilities() {_uniqueStorage()._requiredModelCapabilities = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _capabilities: Reeve_V1_PluginCapabilities? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// ConfigField is one entry in a plugin's per-instance config descriptor.
@@ -1597,58 +1628,111 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0\u{3}required_model_capabilities\0")
+
+  fileprivate class _StorageClass {
+    var _name: String = String()
+    var _description_p: String = String()
+    var _configFields: [Reeve_V1_ConfigField] = []
+    var _capabilities: Reeve_V1_PluginCapabilities? = nil
+    var _displayName: String = String()
+    var _requestedDeviceFacts: [Reeve_V1_DeviceFactKey] = []
+    var _requiredModelCapabilities: Reeve_V1_ModelCapabilities? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _name = source._name
+      _description_p = source._description_p
+      _configFields = source._configFields
+      _capabilities = source._capabilities
+      _displayName = source._displayName
+      _requestedDeviceFacts = source._requestedDeviceFacts
+      _requiredModelCapabilities = source._requiredModelCapabilities
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.configFields) }()
-      case 4: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
-      case 6: try { try decoder.decodeRepeatedEnumField(value: &self.requestedDeviceFacts) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 3: try { try decoder.decodeRepeatedMessageField(value: &_storage._configFields) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._capabilities) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._displayName) }()
+        case 6: try { try decoder.decodeRepeatedEnumField(value: &_storage._requestedDeviceFacts) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._requiredModelCapabilities) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
-    }
-    if !self.description_p.isEmpty {
-      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 2)
-    }
-    if !self.configFields.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.configFields, fieldNumber: 3)
-    }
-    try { if let v = self._capabilities {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-    } }()
-    if !self.displayName.isEmpty {
-      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 5)
-    }
-    if !self.requestedDeviceFacts.isEmpty {
-      try visitor.visitPackedEnumField(value: self.requestedDeviceFacts, fieldNumber: 6)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 1)
+      }
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 2)
+      }
+      if !_storage._configFields.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._configFields, fieldNumber: 3)
+      }
+      try { if let v = _storage._capabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      if !_storage._displayName.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._displayName, fieldNumber: 5)
+      }
+      if !_storage._requestedDeviceFacts.isEmpty {
+        try visitor.visitPackedEnumField(value: _storage._requestedDeviceFacts, fieldNumber: 6)
+      }
+      try { if let v = _storage._requiredModelCapabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Reeve_V1_PluginType, rhs: Reeve_V1_PluginType) -> Bool {
-    if lhs.name != rhs.name {return false}
-    if lhs.description_p != rhs.description_p {return false}
-    if lhs.configFields != rhs.configFields {return false}
-    if lhs._capabilities != rhs._capabilities {return false}
-    if lhs.displayName != rhs.displayName {return false}
-    if lhs.requestedDeviceFacts != rhs.requestedDeviceFacts {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._configFields != rhs_storage._configFields {return false}
+        if _storage._capabilities != rhs_storage._capabilities {return false}
+        if _storage._displayName != rhs_storage._displayName {return false}
+        if _storage._requestedDeviceFacts != rhs_storage._requestedDeviceFacts {return false}
+        if _storage._requiredModelCapabilities != rhs_storage._requiredModelCapabilities {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

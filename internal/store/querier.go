@@ -214,6 +214,7 @@ type Querier interface {
 	// Called once on server boot. The upstream sockets died with the process and
 	// cannot be resumed; users see a partial assistant message + retry affordance.
 	MarkRunningAsInterrupted(ctx context.Context) error
+	MarkSystemProfilesSeeded(ctx context.Context, id uuid.UUID) error
 	// Returns the highest persisted sequence for a run, or NULL if none persisted.
 	MaxStreamChunkSequence(ctx context.Context, streamRunID uuid.UUID) (int64, error)
 	// Deletes stream_chunks belonging to stream_runs that finalized more

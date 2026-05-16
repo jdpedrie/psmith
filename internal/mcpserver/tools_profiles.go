@@ -55,8 +55,8 @@ func (s *Server) registerProfileTools() {
 		s.toolUpdateProfile,
 	)
 	s.register(
-		"list_plugin_types",
-		"List every plugin type compiled into this server. Each entry includes the plugin's machine name, display name, description, capabilities (which interfaces it implements), and config_fields (the typed schema for its per-instance config). Use this before set_profile_plugins to learn what plugins exist and what shape their config takes.",
+		"registered_plugins",
+		"REQUIRED before any work on a profile's plugin pipeline. Returns every plugin compiled into this Reeve build with its machine name, display name, description, capabilities (which interfaces it implements), and config_fields (the typed schema for its per-instance config). Without calling this you don't know which plugins exist or what shape their config takes — set_profile_plugins will fail with bad_argument if you guess. Re-call after a Reeve restart in case the build changed.",
 		`{"type":"object","properties":{},"additionalProperties":false}`,
 		s.toolListPluginTypes,
 	)

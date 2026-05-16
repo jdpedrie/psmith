@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
@@ -20,14 +21,30 @@ import (
 // SessionTTL is the lifetime of a freshly-issued session.
 const SessionTTL = 30 * 24 * time.Hour
 
+// PostLoginHook runs synchronously after a successful Login completes
+// (token generated, session row inserted). Receives the just-
+// authenticated user's ID. Errors returned are logged at WARN and
+// otherwise ignored — a hook miss must never block sign-in. Intended
+// for one-shot per-user setup work (system profile seeding being the
+// motivating case).
+type PostLoginHook func(ctx context.Context, userID uuid.UUID) error
+
 // Service implements reevev1connect.AuthServiceHandler.
 type Service struct {
 	reevev1connect.UnimplementedAuthServiceHandler
-	queries *store.Queries
+	queries       *store.Queries
+	postLoginHook PostLoginHook
 }
 
 func NewService(queries *store.Queries) *Service {
 	return &Service{queries: queries}
+}
+
+// SetPostLoginHook installs a hook that runs after every successful
+// Login. Pass nil to clear. Wiring lives in cmd/reeved/main.go so the
+// auth package itself stays free of profile/seeding dependencies.
+func (s *Service) SetPostLoginHook(h PostLoginHook) {
+	s.postLoginHook = h
 }
 
 // --- Probe / Login / Logout / WhoAmI ---
@@ -86,6 +103,16 @@ func (s *Service) Login(ctx context.Context, req *connect.Request[reevev1.LoginR
 		ExpiresAt:   expiresAt,
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// Per-user setup that should happen exactly once (system profile
+	// seeding today). Idempotent inside the hook — running on every
+	// login is fine. Failure is non-fatal so a transient DB blip
+	// during seeding doesn't lock the user out.
+	if s.postLoginHook != nil {
+		if err := s.postLoginHook(ctx, user.ID); err != nil {
+			slog.Warn("post-login hook failed", "err", err, "user_id", user.ID)
+		}
 	}
 
 	return connect.NewResponse(&reevev1.LoginResponse{

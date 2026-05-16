@@ -395,6 +395,21 @@ message Profile {
   // When true, surface this profile at the start of pickers. Identity
   // metadata — not inherited.
   bool favorite = 19;
+
+  // Union of the model capability requirements declared by every plugin
+  // in this profile's effective pipeline (with parent-chain inheritance
+  // applied). DERIVED, not stored — recomputed on every read so adding a
+  // tool-providing plugin to the parent immediately reflects in the
+  // child's requirements. Sparse: any field left false is "no
+  // requirement here." Empty when the profile has no plugins or none of
+  // them require anything.
+  //
+  // UIs filter the model picker by these flags so the user can't pick a
+  // model that the active pipeline can't drive (e.g. attaching the
+  // `mcp` plugin to a profile whose default model lacks tool_use). The
+  // server also validates at SendMessage time so a stale picker doesn't
+  // sneak an unsupported send through.
+  optional ModelCapabilities required_model_capabilities = 21;
 }
 
 // ---------------------------------------------------------------------------

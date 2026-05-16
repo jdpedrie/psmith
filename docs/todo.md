@@ -79,10 +79,11 @@ Exposes a curated subset of the Connect RPCs as MCP tools at `/mcp`,
 served over Streamable HTTP, JSON-only responses. Bearer-token auth
 shared with the Connect surface. Tools: `list_profiles`,
 `get_profile`, `create_profile`, `update_profile`,
-`list_plugin_types`, `get_profile_plugins`, `set_profile_plugins`,
+`registered_plugins`, `get_profile_plugins`, `set_profile_plugins`,
 `list_providers`, `list_models`, `list_conversations`,
-`get_conversation`, `list_messages`. Use case: dogfood through
-Reeve's own `mcp` plugin to power a "Profile Builder" assistant.
+`get_conversation`, `list_messages`. Plus the `inproc` MCP transport
+on the client side so the seeded `Reeve Manager` profile dispatches to
+the local server with no port and no token.
 
 Deferred:
 - **Elicitation** — Reeve's mcp client doesn't speak the
@@ -99,9 +100,35 @@ Deferred:
 - **Model write tools** — `enable_models` / `disable_models` /
   `update_user_model` need elicitation gating before exposure (a
   rogue assistant disabling models would be annoying).
-- **System profiles seeding** — ship a "Profile Builder" profile
-  out of the box that has the Reeve MCP server pre-attached and a
-  system message teaching the assistant to use these tools well.
+
+## System profiles + capability enforcement (v1 shipped)
+
+Two seeded profiles materialize on first login (Personal Assistant +
+Reeve Manager). Backed by `users.system_profiles_seeded`; idempotent;
+the user can edit, rename, or delete them like any other profile —
+deleted ones don't resurrect on next login. Templates live in
+`internal/profiles/seeds/*.md`.
+
+Plugin model-capability requirements: `plugins.CapabilityRequirer`
+declares what a plugin needs from the conversation's model
+(`tool_use`, `vision`, `generates_images`, etc.). Auto-derives
+`tool_use` from any plugin implementing `ToolProvider`. Exposed on the
+proto as `Profile.required_model_capabilities` (union across the
+effective pipeline) and `PluginType.required_model_capabilities`
+(per-plugin). `SendMessage` validates the resolved model satisfies
+the profile's union and returns `FailedPrecondition` with the
+missing-cap names when it doesn't.
+
+Deferred:
+- **UI capability filter on model picker** — clients should hide /
+  disable models that don't satisfy the active profile's
+  `required_model_capabilities`. Backend enforcement is in; UI
+  filtering is the polish that prevents the user from picking a bad
+  model in the first place.
+- **Profile-level explicit cap requirements** — today only plugin-
+  derived requirements flow through. A profile that wants vision
+  even with a plugin-free pipeline (e.g. "always pick a vision-
+  capable model") would need an explicit field on Profile.
 
 ## Smaller items
 

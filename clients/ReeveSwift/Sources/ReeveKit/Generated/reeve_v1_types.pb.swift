@@ -1897,6 +1897,28 @@ public struct Reeve_V1_Profile: @unchecked Sendable {
     set {_uniqueStorage()._favorite = newValue}
   }
 
+  /// Union of the model capability requirements declared by every plugin
+  /// in this profile's effective pipeline (with parent-chain inheritance
+  /// applied). DERIVED, not stored — recomputed on every read so adding a
+  /// tool-providing plugin to the parent immediately reflects in the
+  /// child's requirements. Sparse: any field left false is "no
+  /// requirement here." Empty when the profile has no plugins or none of
+  /// them require anything.
+  ///
+  /// UIs filter the model picker by these flags so the user can't pick a
+  /// model that the active pipeline can't drive (e.g. attaching the
+  /// `mcp` plugin to a profile whose default model lacks tool_use). The
+  /// server also validates at SendMessage time so a stale picker doesn't
+  /// sneak an unsupported send through.
+  public var requiredModelCapabilities: Reeve_V1_ModelCapabilities {
+    get {_storage._requiredModelCapabilities ?? Reeve_V1_ModelCapabilities()}
+    set {_uniqueStorage()._requiredModelCapabilities = newValue}
+  }
+  /// Returns true if `requiredModelCapabilities` has been explicitly set.
+  public var hasRequiredModelCapabilities: Bool {_storage._requiredModelCapabilities != nil}
+  /// Clears the value of `requiredModelCapabilities`. Subsequent reads from it will return its default value.
+  public mutating func clearRequiredModelCapabilities() {_uniqueStorage()._requiredModelCapabilities = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -4172,7 +4194,7 @@ extension Reeve_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
 extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Profile"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}required_model_capabilities\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4195,6 +4217,7 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
     var _description_p: String = String()
     var _parentOnly: Bool = false
     var _favorite: Bool = false
+    var _requiredModelCapabilities: Reeve_V1_ModelCapabilities? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4225,6 +4248,7 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       _description_p = source._description_p
       _parentOnly = source._parentOnly
       _favorite = source._favorite
+      _requiredModelCapabilities = source._requiredModelCapabilities
     }
   }
 
@@ -4263,6 +4287,7 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         case 18: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
         case 19: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        case 21: try { try decoder.decodeSingularMessageField(value: &_storage._requiredModelCapabilities) }()
         default: break
         }
       }
@@ -4335,6 +4360,9 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
       try { if let v = _storage._titleProviderKind {
         try visitor.visitSingularStringField(value: v, fieldNumber: 20)
       } }()
+      try { if let v = _storage._requiredModelCapabilities {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4364,6 +4392,7 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
         if _storage._description_p != rhs_storage._description_p {return false}
         if _storage._parentOnly != rhs_storage._parentOnly {return false}
         if _storage._favorite != rhs_storage._favorite {return false}
+        if _storage._requiredModelCapabilities != rhs_storage._requiredModelCapabilities {return false}
         return true
       }
       if !storagesAreEqual {return false}

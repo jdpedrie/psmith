@@ -736,6 +736,74 @@ type Capabilities struct {
 	ContentRenderer             bool
 }
 
+// ModelCapabilityRequirements is the set of model capabilities a plugin needs
+// from the conversation's assigned model in order to function. Sparse: any
+// field left false is "no requirement here." Multiple plugins on a profile
+// OR together (Combine).
+//
+// Distinct from `Capabilities` above (which-interfaces-a-plugin-implements).
+// Mirrors the field set on the proto `ModelCapabilities` so a server-side
+// check is a straight field-by-field implication test.
+type ModelCapabilityRequirements struct {
+	Streaming       bool
+	Thinking        bool
+	ToolUse         bool
+	Vision          bool
+	PromptCaching   bool
+	GeneratesImages bool
+}
+
+// Combine returns the union — every requirement set on either input is set on
+// the result. Used to roll up an entire pipeline's requirements.
+func (r ModelCapabilityRequirements) Combine(o ModelCapabilityRequirements) ModelCapabilityRequirements {
+	return ModelCapabilityRequirements{
+		Streaming:       r.Streaming || o.Streaming,
+		Thinking:        r.Thinking || o.Thinking,
+		ToolUse:         r.ToolUse || o.ToolUse,
+		Vision:          r.Vision || o.Vision,
+		PromptCaching:   r.PromptCaching || o.PromptCaching,
+		GeneratesImages: r.GeneratesImages || o.GeneratesImages,
+	}
+}
+
+// Empty reports whether no requirement is set — every field is false.
+func (r ModelCapabilityRequirements) Empty() bool {
+	return r == ModelCapabilityRequirements{}
+}
+
+// Names returns the field names that are set to true, in stable order.
+// Useful for human-facing error messages ("model lacks: tool_use, vision").
+func (r ModelCapabilityRequirements) Names() []string {
+	var out []string
+	if r.Streaming {
+		out = append(out, "streaming")
+	}
+	if r.Thinking {
+		out = append(out, "thinking")
+	}
+	if r.ToolUse {
+		out = append(out, "tool_use")
+	}
+	if r.Vision {
+		out = append(out, "vision")
+	}
+	if r.PromptCaching {
+		out = append(out, "prompt_caching")
+	}
+	if r.GeneratesImages {
+		out = append(out, "generates_images")
+	}
+	return out
+}
+
+// CapabilityRequirer is implemented by plugins that need specific model
+// capabilities to function (e.g. an image-generating plugin needs
+// `GeneratesImages`). Plugins that only need ToolUse don't need to implement
+// this — Describe auto-derives ToolUse from the ToolProvider interface.
+type CapabilityRequirer interface {
+	RequiredModelCapabilities() ModelCapabilityRequirements
+}
+
 // TypeDescriptor is the introspectable metadata for one registered plugin.
 // Returned by Describe and DescribeAll for use by management RPCs.
 type TypeDescriptor struct {
@@ -749,6 +817,11 @@ type TypeDescriptor struct {
 	// before each SendMessage; absent keys mean "no need to ask
 	// the OS for permission for this fact".
 	RequestedDeviceFacts []string
+	// Model capabilities the plugin needs from the conversation's
+	// assigned model. Auto-derives ToolUse from the ToolProvider
+	// interface; additional requirements come from the
+	// CapabilityRequirer interface.
+	RequiredModelCapabilities ModelCapabilityRequirements
 }
 
 // Describe instantiates the plugin with a nil config (the Constructor
@@ -785,6 +858,11 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if _, ok := inst.(ToolProvider); ok {
 		desc.Capabilities.ToolProvider = true
+		// A plugin that exposes tools necessarily needs the
+		// model to support tool calls. Auto-derive — saves every
+		// tool-providing plugin from re-declaring it via
+		// CapabilityRequirer.
+		desc.RequiredModelCapabilities.ToolUse = true
 	}
 	if _, ok := inst.(AssistantContentTransformer); ok {
 		desc.Capabilities.AssistantContentTransformer = true
@@ -798,6 +876,13 @@ func Describe(name string) (TypeDescriptor, error) {
 	if r, ok := inst.(DeviceFactRequester); ok {
 		desc.Capabilities.DeviceFactRequester = true
 		desc.RequestedDeviceFacts = r.RequestedDeviceFacts()
+	}
+	if r, ok := inst.(CapabilityRequirer); ok {
+		// Combine with the auto-derived ToolUse requirement above
+		// so a plugin can both expose tools and declare extras
+		// (e.g. an image-generating tool plugin needs ToolUse +
+		// GeneratesImages).
+		desc.RequiredModelCapabilities = desc.RequiredModelCapabilities.Combine(r.RequiredModelCapabilities())
 	}
 	return desc, nil
 }

@@ -25,7 +25,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, username, display_name, password_hash, is_admin)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, username, display_name, password_hash, is_admin, created_at, updated_at
+RETURNING id, username, display_name, password_hash, is_admin, created_at, updated_at, system_profiles_seeded
 `
 
 type CreateUserParams struct {
@@ -53,6 +53,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SystemProfilesSeeded,
 	)
 	return i, err
 }
@@ -67,7 +68,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at, system_profiles_seeded FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -81,12 +82,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SystemProfilesSeeded,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at FROM users WHERE username = $1
+SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at, system_profiles_seeded FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -100,12 +102,13 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.IsAdmin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SystemProfilesSeeded,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at FROM users ORDER BY created_at
+SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at, system_profiles_seeded FROM users ORDER BY created_at
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -125,6 +128,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.IsAdmin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SystemProfilesSeeded,
 		); err != nil {
 			return nil, err
 		}
@@ -134,6 +138,15 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const markSystemProfilesSeeded = `-- name: MarkSystemProfilesSeeded :exec
+UPDATE users SET system_profiles_seeded = TRUE, updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) MarkSystemProfilesSeeded(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markSystemProfilesSeeded, id)
+	return err
 }
 
 const updateUserDisplayName = `-- name: UpdateUserDisplayName :exec

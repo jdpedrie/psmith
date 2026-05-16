@@ -26,3 +26,6 @@ DELETE FROM users WHERE id = $1;
 
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
+
+-- name: MarkSystemProfilesSeeded :exec
+UPDATE users SET system_profiles_seeded = TRUE, updated_at = NOW() WHERE id = $1;

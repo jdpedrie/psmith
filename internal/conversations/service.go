@@ -861,6 +861,16 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	// Capability gate: reject the send before doing any expensive work
+	// when the resolved model can't drive the profile's plugin pipeline
+	// (e.g. an `mcp` plugin attached to a profile pointing at a non-tool-
+	// using model). The error is FailedPrecondition so clients can
+	// surface the mismatch and prompt the user to either change models or
+	// drop the offending plugin.
+	if err := s.validateModelCapabilities(ctx, conv.ProfileID, modelID, enabledModel.Capabilities); err != nil {
+		return nil, err
+	}
+
 	// Resolve the chat-plugin pipeline up front. Needed before the user-row
 	// INSERT so OutgoingUserTransformer plugins (e.g. basic_grounding's
 	// `<grounding>` block) can rewrite the content that gets persisted —

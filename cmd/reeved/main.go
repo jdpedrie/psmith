@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -32,6 +33,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/streamsvc"
+	"github.com/jdpedrie/reeve/plugins"
 
 	// Driver packages self-register their provider type in init().
 	_ "github.com/jdpedrie/reeve/internal/providers/anthropic"
@@ -109,6 +111,13 @@ func run() error {
 	}
 
 	authSvc := auth.NewService(queries)
+	// On every successful login, materialize the system profile
+	// templates if the user hasn't been seeded yet. Idempotent —
+	// no-op for already-seeded users. Non-fatal failure keeps the
+	// login path online during transient DB issues.
+	authSvc.SetPostLoginHook(func(hookCtx context.Context, userID uuid.UUID) error {
+		return profiles.SeedSystemProfiles(hookCtx, pool, queries, cipher, userID)
+	})
 	authInterceptor := auth.NewInterceptor(queries,
 		reevev1connect.AuthServiceLoginProcedure,
 		reevev1connect.AuthServiceProbeProcedure,
@@ -199,6 +208,11 @@ func run() error {
 	// handler so it can return the HTTP-status flavour of unauth.
 	mcpSrv := mcpserver.New(profilesSvc, conversationsSvc, modelProvidersSvc, slog.Default())
 	mux.Handle("/mcp", mcpserver.Handler(mcpSrv, queries))
+	// Register the in-process MCP transport. Plugin instances configured
+	// with `transport: "inproc"` (e.g. the seeded "Reeve Manager" profile)
+	// dispatch directly through HandleRPC — no port, no token, the
+	// authenticated user on ctx flows through unchanged.
+	plugins.RegisterInprocMCPDispatcher(mcpSrv.HandleRPC)
 
 	srv := &http.Server{
 		Addr:    addr,

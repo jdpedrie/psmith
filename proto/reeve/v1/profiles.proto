@@ -170,6 +170,14 @@ message PluginType {
   // profile; values it can gather (with permission as needed) ride
   // back on `SendMessageRequest.device_facts`.
   repeated DeviceFactKey requested_device_facts = 6;
+  // Model capabilities the plugin needs from the conversation's assigned
+  // model. Sparse: any field left false is "no requirement here." Auto-
+  // derived: every plugin with `capabilities.tool_provider == true` reports
+  // `tool_use = true` here too. Plugins with extra needs (e.g. an image-
+  // generating plugin) implement an additional CapabilityRequirer hook
+  // server-side. UIs filter the model picker by the union across a
+  // profile's pipeline; the server validates at SendMessage time.
+  optional ModelCapabilities required_model_capabilities = 7;
 }
 
 // ConfigField is one entry in a plugin's per-instance config descriptor.

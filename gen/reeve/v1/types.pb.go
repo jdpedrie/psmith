@@ -2416,9 +2416,23 @@ type Profile struct {
 	ParentOnly bool `protobuf:"varint,18,opt,name=parent_only,json=parentOnly,proto3" json:"parent_only,omitempty"`
 	// When true, surface this profile at the start of pickers. Identity
 	// metadata — not inherited.
-	Favorite      bool `protobuf:"varint,19,opt,name=favorite,proto3" json:"favorite,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Favorite bool `protobuf:"varint,19,opt,name=favorite,proto3" json:"favorite,omitempty"`
+	// Union of the model capability requirements declared by every plugin
+	// in this profile's effective pipeline (with parent-chain inheritance
+	// applied). DERIVED, not stored — recomputed on every read so adding a
+	// tool-providing plugin to the parent immediately reflects in the
+	// child's requirements. Sparse: any field left false is "no
+	// requirement here." Empty when the profile has no plugins or none of
+	// them require anything.
+	//
+	// UIs filter the model picker by these flags so the user can't pick a
+	// model that the active pipeline can't drive (e.g. attaching the
+	// `mcp` plugin to a profile whose default model lacks tool_use). The
+	// server also validates at SendMessage time so a stale picker doesn't
+	// sneak an unsupported send through.
+	RequiredModelCapabilities *ModelCapabilities `protobuf:"bytes,21,opt,name=required_model_capabilities,json=requiredModelCapabilities,proto3,oneof" json:"required_model_capabilities,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -2589,6 +2603,13 @@ func (x *Profile) GetFavorite() bool {
 		return x.Favorite
 	}
 	return false
+}
+
+func (x *Profile) GetRequiredModelCapabilities() *ModelCapabilities {
+	if x != nil {
+		return x.RequiredModelCapabilities
+	}
+	return nil
 }
 
 type ConversationSettings struct {
@@ -4134,7 +4155,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
 	"\x1c_include_thinking_in_historyB\x10\n" +
-	"\x0e_call_settings\"\xb5\t\n" +
+	"\x0e_call_settings\"\xb7\n" +
+	"\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12/\n" +
 	"\x11parent_profile_id\x18\x02 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
@@ -4161,7 +4183,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\vdescription\x18\x11 \x01(\tR\vdescription\x12\x1f\n" +
 	"\vparent_only\x18\x12 \x01(\bR\n" +
 	"parentOnly\x12\x1a\n" +
-	"\bfavorite\x18\x13 \x01(\bR\bfavoriteB\x14\n" +
+	"\bfavorite\x18\x13 \x01(\bR\bfavorite\x12`\n" +
+	"\x1brequired_model_capabilities\x18\x15 \x01(\v2\x1b.reeve.v1.ModelCapabilitiesH\fR\x19requiredModelCapabilities\x88\x01\x01B\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -4173,7 +4196,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
 	"\f_title_guideB\x16\n" +
-	"\x14_title_provider_kind\"\xdf\x02\n" +
+	"\x14_title_provider_kindB\x1e\n" +
+	"\x1c_required_model_capabilities\"\xdf\x02\n" +
 	"\x14ConversationSettings\x123\n" +
 	"\x13default_provider_id\x18\x01 \x01(\tH\x00R\x11defaultProviderId\x88\x01\x01\x12-\n" +
 	"\x10default_model_id\x18\x02 \x01(\tH\x01R\x0edefaultModelId\x88\x01\x01\x12B\n" +
@@ -4507,31 +4531,32 @@ var file_reeve_v1_types_proto_depIdxs = []int32{
 	29, // 33: reeve.v1.Profile.default_settings:type_name -> reeve.v1.ProfileDefaults
 	43, // 34: reeve.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
 	43, // 35: reeve.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	21, // 36: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
-	31, // 37: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
-	43, // 38: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	43, // 39: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	43, // 40: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	43, // 41: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	43, // 42: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 43: reeve.v1.Message.role:type_name -> reeve.v1.MessageRole
-	43, // 44: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	38, // 45: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
-	43, // 46: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	37, // 47: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
-	36, // 48: reeve.v1.Message.attachments:type_name -> reeve.v1.MessageAttachment
-	35, // 49: reeve.v1.Message.ui_fragments:type_name -> reeve.v1.UIFragment
-	6,  // 50: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
-	7,  // 51: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
-	43, // 52: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	43, // 53: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 54: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
-	9,  // 55: reeve.v1.DeviceFact.key:type_name -> reeve.v1.DeviceFactKey
-	56, // [56:56] is the sub-list for method output_type
-	56, // [56:56] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	14, // 36: reeve.v1.Profile.required_model_capabilities:type_name -> reeve.v1.ModelCapabilities
+	21, // 37: reeve.v1.ConversationSettings.call_settings:type_name -> reeve.v1.CallSettings
+	31, // 38: reeve.v1.Conversation.settings:type_name -> reeve.v1.ConversationSettings
+	43, // 39: reeve.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	43, // 40: reeve.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	43, // 41: reeve.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	43, // 42: reeve.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	43, // 43: reeve.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 44: reeve.v1.Message.role:type_name -> reeve.v1.MessageRole
+	43, // 45: reeve.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	38, // 46: reeve.v1.Message.usage:type_name -> reeve.v1.MessageUsage
+	43, // 47: reeve.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	37, // 48: reeve.v1.Message.tool_calls:type_name -> reeve.v1.ToolCall
+	36, // 49: reeve.v1.Message.attachments:type_name -> reeve.v1.MessageAttachment
+	35, // 50: reeve.v1.Message.ui_fragments:type_name -> reeve.v1.UIFragment
+	6,  // 51: reeve.v1.StreamRun.status:type_name -> reeve.v1.StreamRunStatus
+	7,  // 52: reeve.v1.StreamRun.purpose:type_name -> reeve.v1.StreamRunPurpose
+	43, // 53: reeve.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	43, // 54: reeve.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 55: reeve.v1.Chunk.type:type_name -> reeve.v1.ChunkType
+	9,  // 56: reeve.v1.DeviceFact.key:type_name -> reeve.v1.DeviceFactKey
+	57, // [57:57] is the sub-list for method output_type
+	57, // [57:57] is the sub-list for method input_type
+	57, // [57:57] is the sub-list for extension type_name
+	57, // [57:57] is the sub-list for extension extendee
+	0,  // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_types_proto_init() }

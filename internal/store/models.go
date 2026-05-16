@@ -183,13 +183,14 @@ type StreamRun struct {
 }
 
 type User struct {
-	ID           uuid.UUID
-	Username     string
-	DisplayName  *string
-	PasswordHash string
-	IsAdmin      bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                   uuid.UUID
+	Username             string
+	DisplayName          *string
+	PasswordHash         string
+	IsAdmin              bool
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	SystemProfilesSeeded bool
 }
 
 type UserLangfuseConfig struct {

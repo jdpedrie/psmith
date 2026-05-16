@@ -32,8 +32,9 @@ const MCPName = "mcp"
 
 // MCP transport selector values.
 const (
-	mcpTransportStdio = "stdio"
-	mcpTransportHTTP  = "http"
+	mcpTransportStdio  = "stdio"
+	mcpTransportHTTP   = "http"
+	mcpTransportInproc = "inproc"
 )
 
 // MCP protocol version this client speaks. Servers negotiate down via
@@ -125,15 +126,15 @@ func newMCP(configBytes json.RawMessage) (Plugin, error) {
 	cfg.Command = strings.TrimSpace(cfg.Command)
 	cfg.URL = strings.TrimSpace(cfg.URL)
 	switch cfg.Transport {
-	case mcpTransportStdio, mcpTransportHTTP:
+	case mcpTransportStdio, mcpTransportHTTP, mcpTransportInproc:
 		// nil-config Build (used by Describe) is OK — we register
 		// an unconfigured plugin. The descriptor's Required hint
 		// surfaces the missing transport-specific field; downstream
 		// Tools() / ExecuteTool calls no-op + log when fields are
 		// missing.
 	default:
-		return nil, fmt.Errorf("mcp: unknown transport %q (want %q or %q)",
-			cfg.Transport, mcpTransportStdio, mcpTransportHTTP)
+		return nil, fmt.Errorf("mcp: unknown transport %q (want %q, %q, or %q)",
+			cfg.Transport, mcpTransportStdio, mcpTransportHTTP, mcpTransportInproc)
 	}
 	spec := mcpServerSpec{
 		Transport: cfg.Transport,
@@ -168,12 +169,13 @@ func (p *mcpPlugin) ConfigFields() []ConfigField {
 		{
 			Name:        "transport",
 			Display:     "Transport",
-			Description: "stdio spawns a local subprocess; http POSTs JSON-RPC to a remote URL (Streamable HTTP). Each transport uses a different subset of the fields below.",
+			Description: "stdio spawns a local subprocess; http POSTs JSON-RPC to a remote URL (Streamable HTTP); inproc dispatches to this Reeve instance's own MCP surface (no port, no token). Each transport uses a different subset of the fields below.",
 			Type:        ConfigFieldSelect,
 			Default:     mcpTransportStdio,
 			Options: []ConfigOption{
 				{Value: mcpTransportStdio, Label: "Stdio (subprocess)"},
 				{Value: mcpTransportHTTP, Label: "HTTP (remote URL)"},
+				{Value: mcpTransportInproc, Label: "In-process (this Reeve instance)"},
 			},
 		},
 		{
@@ -225,6 +227,14 @@ func (p *mcpPlugin) configValid() bool {
 		return p.cfg.Command != ""
 	case mcpTransportHTTP:
 		return p.cfg.URL != ""
+	case mcpTransportInproc:
+		// Inproc takes no config — validity is "is a dispatcher
+		// registered?" which we can only really check at call time.
+		// Treat as always valid here so Tools() actually attempts
+		// the lookup; the resulting error surfaces if the dispatcher
+		// is missing (typically only in tests or partially-wired
+		// environments).
+		return true
 	}
 	return false
 }
@@ -627,9 +637,109 @@ func newTransport(ctx context.Context, spec mcpServerSpec) (mcpTransport, error)
 		return newStdioTransport(ctx, spec)
 	case mcpTransportHTTP:
 		return newHTTPTransport(ctx, spec)
+	case mcpTransportInproc:
+		return newInprocTransport(), nil
 	default:
 		return nil, fmt.Errorf("mcp: unknown transport %q", spec.Transport)
 	}
+}
+
+// --- inproc transport (this-process MCP server) -----------------------------
+
+// InprocDispatcher is the call-into-server hook the inproc transport
+// dispatches against. Set by RegisterInprocMCPDispatcher (typically
+// from cmd/reeved/main.go pointing at the local mcpserver.Server's
+// HandleRPC method). Takes a JSON-RPC request body and returns the
+// JSON-RPC response body — same shape as the HTTP transport's wire
+// format. Returning (nil, nil) means "this was a notification, no
+// response."
+type InprocDispatcher func(ctx context.Context, body []byte) ([]byte, error)
+
+var (
+	inprocMu       sync.RWMutex
+	inprocDispatch InprocDispatcher
+)
+
+// RegisterInprocMCPDispatcher installs the in-process dispatcher used
+// by mcp plugin instances configured with transport="inproc". Pass nil
+// to clear. Safe to call from main.go before any plugin instances are
+// constructed; tests can install a fake dispatcher per-test.
+func RegisterInprocMCPDispatcher(d InprocDispatcher) {
+	inprocMu.Lock()
+	defer inprocMu.Unlock()
+	inprocDispatch = d
+}
+
+func currentInprocDispatcher() InprocDispatcher {
+	inprocMu.RLock()
+	defer inprocMu.RUnlock()
+	return inprocDispatch
+}
+
+// inprocTransport routes JSON-RPC calls through a registered
+// in-process dispatcher. No subprocess, no network, no auth handshake
+// — the authenticated user already on ctx flows through unchanged.
+type inprocTransport struct {
+	nextID atomic.Int64
+}
+
+func newInprocTransport() *inprocTransport {
+	return &inprocTransport{}
+}
+
+func (t *inprocTransport) call(ctx context.Context, method string, params any, into any) error {
+	d := currentInprocDispatcher()
+	if d == nil {
+		return errors.New("mcp inproc: no dispatcher registered (cmd/reeved should call plugins.RegisterInprocMCPDispatcher at startup)")
+	}
+	id := t.nextID.Add(1)
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+	respBody, err := d(ctx, body)
+	if err != nil {
+		return err
+	}
+	if len(respBody) == 0 {
+		// Notification ack or empty success — nothing to decode.
+		return nil
+	}
+	var rr rpcResponse
+	if err := json.Unmarshal(respBody, &rr); err != nil {
+		return fmt.Errorf("mcp inproc decode: %w", err)
+	}
+	if rr.Error != nil {
+		return rr.Error
+	}
+	if into != nil && len(rr.Result) > 0 {
+		return json.Unmarshal(rr.Result, into)
+	}
+	return nil
+}
+
+func (t *inprocTransport) notify(method string, params any) error {
+	d := currentInprocDispatcher()
+	if d == nil {
+		// Notifications are best-effort even on the wire transports;
+		// silently no-op when there's no dispatcher rather than
+		// surfacing a non-actionable error.
+		return nil
+	}
+	body, err := json.Marshal(struct {
+		JSONRPC string `json:"jsonrpc"`
+		Method  string `json:"method"`
+		Params  any    `json:"params,omitempty"`
+	}{JSONRPC: "2.0", Method: method, Params: params})
+	if err != nil {
+		return err
+	}
+	_, _ = d(context.Background(), body)
+	return nil
+}
+
+func (t *inprocTransport) close() {
+	// No resources held — nothing to tear down.
 }
 
 // --- stdio transport -------------------------------------------------------
