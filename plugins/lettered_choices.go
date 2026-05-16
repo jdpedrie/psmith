@@ -1,11 +1,9 @@
 package plugins
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"text/template"
 	"unicode"
 	"unicode/utf8"
 
@@ -15,12 +13,15 @@ import (
 // LetteredChoicesName is the registered name for the lettered-choices plugin.
 const LetteredChoicesName = "lettered_choices"
 
-// Default tag pair the plugin instructs the model to wrap choices in. Plugins
-// can be configured to use different markers (e.g., a project's existing
-// convention).
+// Tag pair the plugin instructs the model to wrap choices in. Not
+// user-configurable — the value is baked into the plugin's contract
+// with the model (system prompt teaches it, history strip + display
+// transform both depend on it). Three converging callers + zero
+// observed need for customization made the user-facing knob more
+// surface than it was worth.
 const (
-	defaultLCOpenTag  = "<choices>"
-	defaultLCCloseTag = "</choices>"
+	lcOpenTag  = "<choices>"
+	lcCloseTag = "</choices>"
 )
 
 // Output mode values for letteredChoicesConfig.OutputMode. "text" keeps
@@ -62,29 +63,42 @@ const lcSystemReminderExplainer = "\n\n[system_reminder <x>] is a special value 
 // here.
 const lcUserReminderTail = "\n\n[system_reminder Always generate choices as directed by the system message]"
 
-// defaultLCSystemTemplate is the text-mode system instruction. Same
-// Go-template shape as a user-supplied override — sharing the rendering
-// path keeps the two consistent and lets us add new template variables
-// without two divergent code branches.
-const defaultLCSystemTemplate = `Always offer the user 3-5 lettered choices wrapped in the literal delimiters {{.OpenTag}} and {{.CloseTag}}. Choices may be one word up to a short sentence. Use the following format:
+// defaultLCInstruction is the prose half of the system message — the
+// "what to do" instruction the user can override via the form. The
+// tag/format half is appended at runtime by AppendSystemMessage so
+// the user can rewrite the prose without having to remember or
+// restate the tag mechanics (and so changes to the mechanics don't
+// silently drift away from any user overrides). Same prose works for
+// both text and component modes — they only differ in HOW the
+// choices are wrapped, not WHEN or WHY they're offered.
+const defaultLCInstruction = `Always offer the user 3-5 choices at the end of each response. Choices may be one word up to a short sentence.`
 
-{{.OpenTag}}
-### Choices
+// lcTagFooterText is appended to the user's (or default) instruction
+// in text output mode. Demonstrates the literal tag pair the parser
+// recognises plus the lettered-line shape the DisplayTransformer
+// strips at render time.
+const lcTagFooterText = `
+
+Wrap the choices in ` + lcOpenTag + `...` + lcCloseTag + `. Use this format:
+
+` + lcOpenTag + `
 A. Attack
 B. Flee
 C. Negotiate
 D. Stop and think a while
-{{.CloseTag}}`
+` + lcCloseTag
 
-// defaultLCSystemTemplateComponent is the component-mode system
-// instruction. Tells the model to emit a single JSON object inside the
-// delimiters rather than free-form lettered text. The server parses
-// the JSON with json.Unmarshal — no bespoke regex, no merged-line
-// failure modes — and auto-assigns A/B/C letters by index. Models
-// that struggle with strict JSON should use text mode instead.
-const defaultLCSystemTemplateComponent = `Always offer the user 3-5 choices wrapped in the literal delimiters {{.OpenTag}} and {{.CloseTag}}. The body MUST be a single JSON object with an "items" array — one entry per choice, each with a "label" field. Letters (A, B, C…) are assigned automatically by position; do NOT include them in the label. Labels may be one word up to a short sentence. No prose inside the delimiters, only the JSON object. Example:
+// lcTagFooterComponent is appended to the user's (or default)
+// instruction in component output mode. Teaches the model to emit a
+// single JSON object inside the delimiters; the server uses
+// json.Unmarshal to turn it into a choice_list UIFragment. Letters
+// are NOT in the JSON — the server assigns them by index so the
+// model has the smallest possible escape surface.
+const lcTagFooterComponent = `
 
-{{.OpenTag}}{"items":[{"label":"Attack"},{"label":"Flee"},{"label":"Negotiate"},{"label":"Stop and think a while"}]}{{.CloseTag}}`
+Wrap the choices in ` + lcOpenTag + `...` + lcCloseTag + `. The body MUST be a single JSON object with an "items" array — one entry per choice, each with a "label" field. Letters (A, B, C…) are assigned automatically by position; do NOT include them in the label. No prose inside the delimiters, only the JSON object. Example:
+
+` + lcOpenTag + `{"items":[{"label":"Attack"},{"label":"Flee"},{"label":"Negotiate"},{"label":"Stop and think a while"}]}` + lcCloseTag
 
 // letteredChoices implements SystemPrompter, HistoryTransformer,
 // DisplayTransformer, and Configurable. Bundling them in one plugin is the
@@ -118,13 +132,10 @@ type letteredChoicesConfig struct {
 	// choices intact; older ones get stripped. Defaults to 1.
 	KeepLastN int `json:"keep_last_n"`
 
-	// OpenTag/CloseTag delimit the choices block in assistant content.
-	// Defaults to "<choices>" / "</choices>".
-	OpenTag  string `json:"open_tag"`
-	CloseTag string `json:"close_tag"`
-
-	// SystemInstructionOverride replaces the default system instruction.
-	// Empty = use the default.
+	// SystemInstructionOverride replaces the default prose instruction
+	// telling the model when/why to offer choices. The tag/format
+	// requirement is appended automatically by AppendSystemMessage —
+	// callers shouldn't restate it here. Empty = use the default.
 	SystemInstructionOverride string `json:"system_instruction_override"`
 
 	// OutputMode picks how the choice block surfaces to the user.
@@ -146,20 +157,11 @@ type letteredChoicesConfig struct {
 func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 	cfg := letteredChoicesConfig{
 		KeepLastN:  1,
-		OpenTag:    defaultLCOpenTag,
-		CloseTag:   defaultLCCloseTag,
 		OutputMode: lcOutputModeText,
 	}
 	if len(configBytes) > 0 {
 		if err := json.Unmarshal(configBytes, &cfg); err != nil {
 			return nil, fmt.Errorf("lettered_choices: parse config: %w", err)
-		}
-		// Re-apply defaults for any fields that JSON left zero.
-		if cfg.OpenTag == "" {
-			cfg.OpenTag = defaultLCOpenTag
-		}
-		if cfg.CloseTag == "" {
-			cfg.CloseTag = defaultLCCloseTag
 		}
 		if cfg.OutputMode == "" {
 			cfg.OutputMode = lcOutputModeText
@@ -173,21 +175,6 @@ func newLetteredChoices(configBytes json.RawMessage) (Plugin, error) {
 		if cfg.KeepLastN < 0 {
 			return nil, fmt.Errorf("lettered_choices: keep_last_n must be >= 0")
 		}
-	}
-	// Eager template validation — surface a malformed override at
-	// config-save time rather than silently falling through to literal
-	// text on every send. Validate whichever default is in play for
-	// this mode (text vs component) so an init-time edit to either
-	// built-in template surfaces immediately.
-	src := defaultLCSystemTemplate
-	if cfg.OutputMode == lcOutputModeComponent {
-		src = defaultLCSystemTemplateComponent
-	}
-	if cfg.SystemInstructionOverride != "" {
-		src = cfg.SystemInstructionOverride
-	}
-	if _, err := template.New("system").Parse(src); err != nil {
-		return nil, fmt.Errorf("lettered_choices: parse system_instruction_override template: %w", err)
 	}
 	return &letteredChoices{cfg: cfg}, nil
 }
@@ -217,34 +204,16 @@ func (p *letteredChoices) ConfigFields() []ConfigField {
 			Default:     1,
 		},
 		{
-			Name:        "open_tag",
-			Display:     "Open tag",
-			Description: "Opening delimiter for the choices block.",
-			Type:        ConfigFieldText,
-			Default:     defaultLCOpenTag,
-		},
-		{
-			Name:        "close_tag",
-			Display:     "Close tag",
-			Description: "Closing delimiter for the choices block.",
-			Type:        ConfigFieldText,
-			Default:     defaultLCCloseTag,
-		},
-		{
-			Name:    "system_instruction_override",
-			Display: "System instruction override",
-			Description: "If set, replaces the default system-message instruction. " +
-				"Rendered as a Go text/template (https://pkg.go.dev/text/template) so the open/close tags stay in sync with the other settings. " +
-				"Available variables: " +
-				"{{.OpenTag}} (the configured Open tag), " +
-				"{{.CloseTag}} (the configured Close tag). " +
-				"Save fails if the template doesn't parse.",
-			Type: ConfigFieldTextarea,
+			Name:        "system_instruction_override",
+			Display:     "Instruction",
+			Description: "Prose telling the model when and how to offer choices. The tag/format mechanics (delimiters, JSON or lettered-text shape) are appended automatically based on the output mode below — don't restate them here.",
+			Type:        ConfigFieldTextarea,
+			Default:     defaultLCInstruction,
 		},
 		{
 			Name:        "output_mode",
 			Display:     "Output mode",
-			Description: "How the choices render in the chat. \"Text\" keeps the historical behavior (delimiters stripped, choice text rendered inline as markdown). \"Component\" emits a structured choice_list fragment — clients render tappable buttons that drop the picked letter into the composer when tapped.",
+			Description: "How the choices render in the chat. \"Text\" keeps the historical behavior (delimiters stripped, choice text rendered inline as markdown — better with small models that flake on strict JSON). \"Component\" teaches the model to emit a JSON choice_list — clients render tappable buttons that drop the picked letter into the composer when tapped.",
 			Type:        ConfigFieldSelect,
 			Default:     lcOutputModeText,
 			Options: []ConfigOption{
@@ -259,44 +228,21 @@ func (p *letteredChoices) ConfigFields() []ConfigField {
 
 func (p *letteredChoices) PrependSystemMessage() string { return "" }
 
+// AppendSystemMessage returns the prose instruction concatenated with
+// the tag-mechanics footer for the current output mode. The user's
+// override (if set) replaces just the prose half; the footer is
+// always appended by the plugin so a malformed override can never
+// silently break the parser's contract with the model.
 func (p *letteredChoices) AppendSystemMessage() string {
-	src := defaultLCSystemTemplate
-	if p.cfg.OutputMode == lcOutputModeComponent {
-		// Component mode teaches the model to emit JSON directly so
-		// the server parser is a plain json.Unmarshal — no regex over
-		// free-form text, no merged-line failure modes when a model
-		// concatenates items.
-		src = defaultLCSystemTemplateComponent
-	}
+	instruction := defaultLCInstruction
 	if p.cfg.SystemInstructionOverride != "" {
-		src = p.cfg.SystemInstructionOverride
+		instruction = p.cfg.SystemInstructionOverride
 	}
-	// Re-parse on every call. Cheap (templates are small + simple)
-	// and lets future hot-reload of plugin config Just Work without
-	// a separate cache. Errors here would have been caught at
-	// constructor time; if somehow they slip through, fall back to
-	// the literal source rather than emitting an empty system slot.
-	tmpl, err := template.New("system").Parse(src)
-	if err != nil {
-		return src + lcSystemReminderExplainer
+	footer := lcTagFooterText
+	if p.cfg.OutputMode == lcOutputModeComponent {
+		footer = lcTagFooterComponent
 	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, lcTemplateVars{
-		OpenTag:  p.cfg.OpenTag,
-		CloseTag: p.cfg.CloseTag,
-	}); err != nil {
-		return src + lcSystemReminderExplainer
-	}
-	return buf.String() + lcSystemReminderExplainer
-}
-
-// lcTemplateVars is the data passed to the system-instruction template.
-// Field names are the variables the user references with {{.Name}};
-// keep in sync with the description on the system_instruction_override
-// ConfigField.
-type lcTemplateVars struct {
-	OpenTag  string
-	CloseTag string
+	return instruction + footer + lcSystemReminderExplainer
 }
 
 // --- HistoryTransformer ---
@@ -323,7 +269,7 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 	if pos.FromHeadSameRole < p.cfg.KeepLastN {
 		return msg
 	}
-	stripped := stripBetween(msg.Content, p.cfg.OpenTag, p.cfg.CloseTag)
+	stripped := stripBetween(msg.Content, lcOpenTag, lcCloseTag)
 	if stripped == msg.Content {
 		return msg
 	}
@@ -347,8 +293,8 @@ func (p *letteredChoices) TransformForDisplay(content string) string {
 	// that `</choices>What's next?` doesn't render as `BarWhat's next?` —
 	// the tag itself isn't a word boundary, so removing it can smash
 	// words together when the model didn't include a separating space.
-	out := stripTagPreservingWordBoundary(content, p.cfg.OpenTag)
-	out = stripTagPreservingWordBoundary(out, p.cfg.CloseTag)
+	out := stripTagPreservingWordBoundary(content, lcOpenTag)
+	out = stripTagPreservingWordBoundary(out, lcCloseTag)
 	return out
 }
 
@@ -429,14 +375,14 @@ func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
 	var out []ContentPart
 	rest := text
 	for {
-		open := strings.Index(rest, p.cfg.OpenTag)
+		open := strings.Index(rest, lcOpenTag)
 		if open < 0 {
 			if rest != "" {
 				out = append(out, ContentPart{Text: rest})
 			}
 			return out
 		}
-		closeRel := strings.Index(rest[open+len(p.cfg.OpenTag):], p.cfg.CloseTag)
+		closeRel := strings.Index(rest[open+len(lcOpenTag):], lcCloseTag)
 		if closeRel < 0 {
 			// Malformed — preserve the rest as text and stop.
 			if rest != "" {
@@ -444,9 +390,9 @@ func (p *letteredChoices) splitChoiceBlocks(text string) []ContentPart {
 			}
 			return out
 		}
-		blockStart := open + len(p.cfg.OpenTag)
+		blockStart := open + len(lcOpenTag)
 		blockEnd := blockStart + closeRel
-		afterClose := blockEnd + len(p.cfg.CloseTag)
+		afterClose := blockEnd + len(lcCloseTag)
 
 		// Preserve prose before the block, trimmed of trailing
 		// whitespace so the block visually anchors flush to the

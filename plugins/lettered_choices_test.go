@@ -31,11 +31,8 @@ func TestLetteredChoices_Defaults(t *testing.T) {
 	if lc.cfg.KeepLastN != 1 {
 		t.Errorf("KeepLastN default = %d want 1", lc.cfg.KeepLastN)
 	}
-	if lc.cfg.OpenTag != defaultLCOpenTag {
-		t.Errorf("OpenTag default = %q want %q", lc.cfg.OpenTag, defaultLCOpenTag)
-	}
-	if lc.cfg.CloseTag != defaultLCCloseTag {
-		t.Errorf("CloseTag default = %q want %q", lc.cfg.CloseTag, defaultLCCloseTag)
+	if lc.cfg.OutputMode != lcOutputModeText {
+		t.Errorf("OutputMode default = %q want %q", lc.cfg.OutputMode, lcOutputModeText)
 	}
 }
 
@@ -45,8 +42,8 @@ func TestLetteredChoices_PartialConfigRetainsDefaults(t *testing.T) {
 	if lc.cfg.KeepLastN != 3 {
 		t.Errorf("KeepLastN = %d want 3", lc.cfg.KeepLastN)
 	}
-	if lc.cfg.OpenTag != defaultLCOpenTag {
-		t.Errorf("OpenTag should fall back to default when omitted; got %q", lc.cfg.OpenTag)
+	if lc.cfg.OutputMode != lcOutputModeText {
+		t.Errorf("OutputMode should fall back to default when omitted; got %q", lc.cfg.OutputMode)
 	}
 }
 
@@ -70,8 +67,11 @@ func TestLetteredChoices_AppendSystemMessageDefault(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, "")
 	got := lc.AppendSystemMessage()
-	if !strings.Contains(got, defaultLCOpenTag) || !strings.Contains(got, defaultLCCloseTag) {
+	if !strings.Contains(got, lcOpenTag) || !strings.Contains(got, lcCloseTag) {
 		t.Errorf("system message should reference both delimiters; got %q", got)
+	}
+	if !strings.HasPrefix(got, defaultLCInstruction) {
+		t.Errorf("default instruction prose should lead the message; got %q", got)
 	}
 }
 
@@ -82,47 +82,24 @@ func TestLetteredChoices_AppendSystemMessageOverride(t *testing.T) {
 	if !strings.HasPrefix(got, "use ONLY uppercase letters") {
 		t.Errorf("override not honored: got %q", got)
 	}
+	// Tag mechanics footer must still be appended after the user's prose.
+	if !strings.Contains(got, lcOpenTag) {
+		t.Errorf("tag footer should still be appended after override; got %q", got)
+	}
 	if !strings.Contains(got, "[system_reminder") {
 		t.Errorf("system_reminder explainer missing: got %q", got)
 	}
 }
 
-func TestLetteredChoices_AppendSystemMessageOverrideTemplateInterpolation(t *testing.T) {
+func TestLetteredChoices_AppendSystemMessage_ComponentModeUsesJSONFooter(t *testing.T) {
 	t.Parallel()
-	cfg := `{
-		"open_tag": "[opts]",
-		"close_tag": "[/opts]",
-		"system_instruction_override": "Wrap choices with {{.OpenTag}} and {{.CloseTag}} please."
-	}`
-	lc := buildLetteredChoices(t, cfg)
+	lc := buildLetteredChoices(t, `{"output_mode":"component"}`)
 	got := lc.AppendSystemMessage()
-	wantPrefix := "Wrap choices with [opts] and [/opts] please."
-	if !strings.HasPrefix(got, wantPrefix) {
-		t.Errorf("template not interpolated:\n  got:  %q\n  want prefix: %q", got, wantPrefix)
+	if !strings.Contains(got, `"items"`) {
+		t.Errorf("component-mode footer should teach the JSON shape; got %q", got)
 	}
-}
-
-func TestLetteredChoices_AppendSystemMessageDefaultUsesTemplate(t *testing.T) {
-	t.Parallel()
-	// Custom tags must propagate through the default template.
-	cfg := `{"open_tag": "<<", "close_tag": ">>"}`
-	lc := buildLetteredChoices(t, cfg)
-	got := lc.AppendSystemMessage()
-	if !strings.Contains(got, "<<") || !strings.Contains(got, ">>") {
-		t.Errorf("custom delimiters didn't reach the default template; got %q", got)
-	}
-	// And the original {{.OpenTag}} placeholder should NOT appear
-	// literally — that'd mean the template wasn't executed.
-	if strings.Contains(got, "{{.OpenTag}}") {
-		t.Errorf("template not executed; got literal placeholder: %q", got)
-	}
-}
-
-func TestLetteredChoices_MalformedOverrideRejectedAtConstruction(t *testing.T) {
-	t.Parallel()
-	bad := `{"system_instruction_override": "{{ .NotClosed "}`
-	if _, err := newLetteredChoices([]byte(bad)); err == nil {
-		t.Error("malformed Go template in override should be rejected at constructor time")
+	if !strings.Contains(got, `"label"`) {
+		t.Errorf("component-mode footer should mention label field; got %q", got)
 	}
 }
 
@@ -267,19 +244,6 @@ func TestLetteredChoices_HistoryTransformer_MultipleBlocksAllStripped(t *testing
 	}
 }
 
-func TestLetteredChoices_HistoryTransformer_CustomTags(t *testing.T) {
-	t.Parallel()
-	lc := buildLetteredChoices(t, `{"keep_last_n": 0, "open_tag": "[[", "close_tag": "]]"}`)
-	msg := providers.WireMessage{
-		Role:    "assistant",
-		Content: "Body.\n\n[[A) Yes\nB) No]]",
-	}
-	got := lc.TransformHistoryMessage(msg, HistoryPos{FromHead: 5, FromHeadSameRole: 5})
-	want := "Body."
-	if got.Content != want {
-		t.Errorf("custom-tag strip = %q want %q", got.Content, want)
-	}
-}
 
 // --- DisplayTransformer ---
 
@@ -293,31 +257,28 @@ func TestLetteredChoices_DisplayStripsTagsKeepsContent(t *testing.T) {
 	}
 }
 
-func TestLetteredChoices_DisplayCustomTags(t *testing.T) {
-	t.Parallel()
-	lc := buildLetteredChoices(t, `{"open_tag": "[[", "close_tag": "]]"}`)
-	got := lc.TransformForDisplay("Body. [[A) one]]")
-	if got != "Body. A) one" {
-		t.Errorf("display custom-tag strip = %q want %q", got, "Body. A) one")
-	}
-}
-
 // --- Configurable ---
 
 func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, "")
 	fields := lc.ConfigFields()
-	if len(fields) != 5 {
-		t.Fatalf("ConfigFields len = %d want 5", len(fields))
+	if len(fields) != 3 {
+		t.Fatalf("ConfigFields len = %d want 3", len(fields))
 	}
 	byName := map[string]ConfigField{}
 	for _, f := range fields {
 		byName[f.Name] = f
 	}
-	for _, want := range []string{"keep_last_n", "open_tag", "close_tag", "system_instruction_override", "output_mode"} {
+	for _, want := range []string{"keep_last_n", "system_instruction_override", "output_mode"} {
 		if _, ok := byName[want]; !ok {
 			t.Errorf("ConfigFields missing %q", want)
+		}
+	}
+	// Tag fields should NOT be configurable any more.
+	for _, gone := range []string{"open_tag", "close_tag"} {
+		if _, ok := byName[gone]; ok {
+			t.Errorf("ConfigFields still exposes removed field %q", gone)
 		}
 	}
 	if byName["keep_last_n"].Type != ConfigFieldNumber {
@@ -326,8 +287,10 @@ func TestLetteredChoices_ConfigFieldsCoverConfigShape(t *testing.T) {
 	if byName["system_instruction_override"].Type != ConfigFieldTextarea {
 		t.Errorf("system_instruction_override type = %q want %q", byName["system_instruction_override"].Type, ConfigFieldTextarea)
 	}
-	if byName["system_instruction_override"].Default != nil {
-		t.Errorf("system_instruction_override default = %v want nil", byName["system_instruction_override"].Default)
+	// Pre-populated with the default prose so the form is editable
+	// from a starting point rather than blank.
+	if byName["system_instruction_override"].Default != defaultLCInstruction {
+		t.Errorf("system_instruction_override default = %v want %q", byName["system_instruction_override"].Default, defaultLCInstruction)
 	}
 	if byName["output_mode"].Type != ConfigFieldSelect {
 		t.Errorf("output_mode type = %q want %q", byName["output_mode"].Type, ConfigFieldSelect)
