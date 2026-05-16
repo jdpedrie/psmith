@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,6 +82,34 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 	},
 }
 
+// BackfillSystemProfiles runs SeedSystemProfiles for every user whose
+// `system_profiles_seeded` flag is still false. Intended for cmd/reeved
+// startup so existing accounts pick up newly-added templates on next
+// restart, without waiting for each user to log in. Failures on
+// individual users are logged via the slog default and don't abort
+// the loop — one bad row shouldn't block server start.
+func BackfillSystemProfiles(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	queries *store.Queries,
+	cipher crypto.Cipher,
+) error {
+	ids, err := queries.ListUnseededUserIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("backfill system profiles: list: %w", err)
+	}
+	for _, id := range ids {
+		if err := SeedSystemProfiles(ctx, pool, queries, cipher, id); err != nil {
+			// Log and continue — a failed seed for one user shouldn't
+			// block server startup or block other users from getting
+			// their templates.
+			slog.Default().Warn("backfill system profiles: per-user seed failed",
+				"err", err, "user_id", id)
+		}
+	}
+	return nil
+}
+
 // SeedSystemProfiles inserts the SystemProfileTemplates as user-owned
 // rows for `userID`, then marks the user as seeded so subsequent calls
 // are a no-op. Idempotent: a user who's been seeded before short-
@@ -114,7 +143,25 @@ func SeedSystemProfiles(
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	qtx := queries.WithTx(tx)
 
+	// Build the set of profile names the user already has so we don't
+	// duplicate a template the user already created by hand (the
+	// motivating case: existing users whose "Personal Assistant" predates
+	// this seeding mechanism). Name match is the lightest reasonable
+	// signal — system messages and plugin pipelines diverge over time as
+	// the user customizes, so a content match would be brittle.
+	existing, err := qtx.ListProfilesByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("seed system profiles: list existing: %w", err)
+	}
+	have := make(map[string]bool, len(existing))
+	for _, p := range existing {
+		have[p.Name] = true
+	}
+
 	for _, tpl := range SystemProfileTemplates {
+		if have[tpl.Name] {
+			continue
+		}
 		if err := insertSystemProfile(ctx, qtx, cipher, userID, tpl); err != nil {
 			return fmt.Errorf("seed system profiles: %s: %w", tpl.Name, err)
 		}

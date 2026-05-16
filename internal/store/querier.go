@@ -198,6 +198,10 @@ type Querier interface {
 	// sequence cursor. Used to replay missed chunks for late subscribers.
 	ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error)
 	ListStreamRunsByConversation(ctx context.Context, conversationID uuid.UUID) ([]StreamRun, error)
+	// IDs of users who haven't had the system profile templates seeded yet.
+	// Drives the server-startup backfill so existing users get the new templates
+	// on next restart without waiting for a login.
+	ListUnseededUserIDs(ctx context.Context) ([]uuid.UUID, error)
 	// Every existing row across all users. Used at server boot to prime
 	// the in-memory emitter cache so tracing works for the very first
 	// assistant turn after a restart, not just after the first

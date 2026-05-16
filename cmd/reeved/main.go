@@ -118,6 +118,14 @@ func run() error {
 	authSvc.SetPostLoginHook(func(hookCtx context.Context, userID uuid.UUID) error {
 		return profiles.SeedSystemProfiles(hookCtx, pool, queries, cipher, userID)
 	})
+
+	// Backfill any users who predate the seeding mechanism (or who
+	// got added templates after a build update). Runs once per
+	// startup; the same idempotency guard inside SeedSystemProfiles
+	// means a flag-already-true user is a no-op.
+	if err := profiles.BackfillSystemProfiles(ctx, pool, queries, cipher); err != nil {
+		slog.Warn("system profile backfill failed", "err", err)
+	}
 	authInterceptor := auth.NewInterceptor(queries,
 		reevev1connect.AuthServiceLoginProcedure,
 		reevev1connect.AuthServiceProbeProcedure,

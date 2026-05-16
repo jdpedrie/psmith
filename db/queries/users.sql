@@ -29,3 +29,9 @@ SELECT COUNT(*) FROM users;
 
 -- name: MarkSystemProfilesSeeded :exec
 UPDATE users SET system_profiles_seeded = TRUE, updated_at = NOW() WHERE id = $1;
+
+-- name: ListUnseededUserIDs :many
+-- IDs of users who haven't had the system profile templates seeded yet.
+-- Drives the server-startup backfill so existing users get the new templates
+-- on next restart without waiting for a login.
+SELECT id FROM users WHERE system_profiles_seeded = FALSE;

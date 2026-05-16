@@ -107,6 +107,33 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const listUnseededUserIDs = `-- name: ListUnseededUserIDs :many
+SELECT id FROM users WHERE system_profiles_seeded = FALSE
+`
+
+// IDs of users who haven't had the system profile templates seeded yet.
+// Drives the server-startup backfill so existing users get the new templates
+// on next restart without waiting for a login.
+func (q *Queries) ListUnseededUserIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUnseededUserIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, username, display_name, password_hash, is_admin, created_at, updated_at, system_profiles_seeded FROM users ORDER BY created_at
 `
