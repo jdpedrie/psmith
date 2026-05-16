@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
@@ -39,12 +40,26 @@ struct RootView: View {
 
     @ViewBuilder
     private func authed(user: ReeveUser) -> some View {
-        if let convos {
+        if needsOnboarding {
+            OnboardingView()
+                .task { await app.providers.load() }
+        } else if let convos {
             HomeView(user: user)
                 .environment(convos)
         } else {
             Color.clear
                 .task { convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub) }
         }
+    }
+
+    /// Block the main app surface until the user has at least one
+    /// configured provider AND one enabled model. The Reeve Manager
+    /// system profile depends on a working model for its first turn —
+    /// without this gate the user lands in a chat surface with nothing
+    /// to send to. Observed via @Environment, so as soon as the user
+    /// completes the wizard the parent re-renders and HomeView takes
+    /// over.
+    private var needsOnboarding: Bool {
+        app.providers.providers.isEmpty || app.providers.enabledModels.isEmpty
     }
 }

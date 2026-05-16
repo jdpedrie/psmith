@@ -410,6 +410,18 @@ message Profile {
   // server also validates at SendMessage time so a stale picker doesn't
   // sneak an unsupported send through.
   optional ModelCapabilities required_model_capabilities = 21;
+
+  // Optional opening assistant message. Persisted as a real `messages`
+  // row at conversation-create time (role=assistant, is_welcome=true),
+  // included in the wire history sent to the LLM on every subsequent
+  // turn so the model knows what greeting it opened with. Clients
+  // play a fake-stream reveal animation the first time the conversation
+  // is opened in an app session; subsequent visits render it instantly.
+  //
+  // Snapshotted at conversation create — later edits to this field do
+  // NOT mutate the welcome message in existing conversations. Inherits
+  // through the parent chain like the other text fields (null = inherit).
+  optional string welcome_message = 22;
 }
 
 // ---------------------------------------------------------------------------
@@ -549,6 +561,12 @@ message Message {
   // backfill job. See plugins/CONTENT_RENDERERS.md for the
   // component catalog + Props schemas.
   repeated UIFragment ui_fragments = 22;
+  // True when this row is the profile's welcome message — inserted at
+  // conversation-create time so the LLM sees its own opening greeting
+  // in history. Clients gate a fake-stream reveal animation on this
+  // flag (first open in an app session). Same wire shape as a normal
+  // assistant turn otherwise.
+  bool is_welcome = 23;
 }
 
 // UIFragment is one structured UI component the server hands the

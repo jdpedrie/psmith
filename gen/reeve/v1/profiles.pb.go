@@ -112,8 +112,11 @@ type CreateProfileRequest struct {
 	// Sentinel for a non-server title generator (e.g. "apple_foundation" for
 	// Mac on-device titling). See Profile.title_provider_kind.
 	TitleProviderKind *string `protobuf:"bytes,16,opt,name=title_provider_kind,json=titleProviderKind,proto3,oneof" json:"title_provider_kind,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Opening assistant turn shown in a fresh conversation. See
+	// Profile.welcome_message.
+	WelcomeMessage *string `protobuf:"bytes,17,opt,name=welcome_message,json=welcomeMessage,proto3,oneof" json:"welcome_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateProfileRequest) Reset() {
@@ -254,6 +257,13 @@ func (x *CreateProfileRequest) GetFavorite() bool {
 func (x *CreateProfileRequest) GetTitleProviderKind() string {
 	if x != nil && x.TitleProviderKind != nil {
 		return *x.TitleProviderKind
+	}
+	return ""
+}
+
+func (x *CreateProfileRequest) GetWelcomeMessage() string {
+	if x != nil && x.WelcomeMessage != nil {
+		return *x.WelcomeMessage
 	}
 	return ""
 }
@@ -512,8 +522,11 @@ type UpdateProfileRequest struct {
 	// Sentinel for a non-server title generator. See Profile.title_provider_kind.
 	// Listed in clear_fields to revert to inherited / cloud-titled behavior.
 	TitleProviderKind *string `protobuf:"bytes,17,opt,name=title_provider_kind,json=titleProviderKind,proto3,oneof" json:"title_provider_kind,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Opening assistant turn for new conversations. See
+	// Profile.welcome_message. Listed in clear_fields to revert.
+	WelcomeMessage *string `protobuf:"bytes,18,opt,name=welcome_message,json=welcomeMessage,proto3,oneof" json:"welcome_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateProfileRequest) Reset() {
@@ -661,6 +674,13 @@ func (x *UpdateProfileRequest) GetFavorite() bool {
 func (x *UpdateProfileRequest) GetTitleProviderKind() string {
 	if x != nil && x.TitleProviderKind != nil {
 		return *x.TitleProviderKind
+	}
+	return ""
+}
+
+func (x *UpdateProfileRequest) GetWelcomeMessage() string {
+	if x != nil && x.WelcomeMessage != nil {
+		return *x.WelcomeMessage
 	}
 	return ""
 }
@@ -1958,7 +1978,7 @@ var File_reeve_v1_profiles_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\n" +
-	"\x17reeve/v1/profiles.proto\x12\breeve.v1\x1a\x14reeve/v1/types.proto\"\x98\b\n" +
+	"\x17reeve/v1/profiles.proto\x12\breeve.v1\x1a\x14reeve/v1/types.proto\"\xda\b\n" +
 	"\x14CreateProfileRequest\x12/\n" +
 	"\x11parent_profile_id\x18\x01 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12*\n" +
@@ -1979,7 +1999,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\vparent_only\x18\x0e \x01(\bR\n" +
 	"parentOnly\x12\x1a\n" +
 	"\bfavorite\x18\x0f \x01(\bR\bfavorite\x123\n" +
-	"\x13title_provider_kind\x18\x10 \x01(\tH\vR\x11titleProviderKind\x88\x01\x01B\x14\n" +
+	"\x13title_provider_kind\x18\x10 \x01(\tH\vR\x11titleProviderKind\x88\x01\x01\x12,\n" +
+	"\x0fwelcome_message\x18\x11 \x01(\tH\fR\x0ewelcomeMessage\x88\x01\x01B\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -1991,7 +2012,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x12_title_provider_idB\x11\n" +
 	"\x0f_title_model_idB\x0e\n" +
 	"\f_title_guideB\x16\n" +
-	"\x14_title_provider_kind\"D\n" +
+	"\x14_title_provider_kindB\x12\n" +
+	"\x10_welcome_message\"D\n" +
 	"\x15CreateProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\"\x15\n" +
 	"\x13ListProfilesRequest\"E\n" +
@@ -2003,7 +2025,7 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x12GetProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\x122\n" +
 	"\bresolved\x18\x02 \x01(\v2\x11.reeve.v1.ProfileH\x00R\bresolved\x88\x01\x01B\v\n" +
-	"\t_resolved\"\xce\b\n" +
+	"\t_resolved\"\x90\t\n" +
 	"\x14UpdateProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12*\n" +
@@ -2025,7 +2047,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\vparent_only\x18\x0f \x01(\bH\fR\n" +
 	"parentOnly\x88\x01\x01\x12\x1f\n" +
 	"\bfavorite\x18\x10 \x01(\bH\rR\bfavorite\x88\x01\x01\x123\n" +
-	"\x13title_provider_kind\x18\x11 \x01(\tH\x0eR\x11titleProviderKind\x88\x01\x01B\a\n" +
+	"\x13title_provider_kind\x18\x11 \x01(\tH\x0eR\x11titleProviderKind\x88\x01\x01\x12,\n" +
+	"\x0fwelcome_message\x18\x12 \x01(\tH\x0fR\x0ewelcomeMessage\x88\x01\x01B\a\n" +
 	"\x05_nameB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -2040,7 +2063,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\f_descriptionB\x0e\n" +
 	"\f_parent_onlyB\v\n" +
 	"\t_favoriteB\x16\n" +
-	"\x14_title_provider_kind\"D\n" +
+	"\x14_title_provider_kindB\x12\n" +
+	"\x10_welcome_message\"D\n" +
 	"\x15UpdateProfileResponse\x12+\n" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\"&\n" +
 	"\x14DeleteProfileRequest\x12\x0e\n" +

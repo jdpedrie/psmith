@@ -364,7 +364,17 @@ struct MessageRow: View {
                     onAction: handleFragmentAction
                 )
             } else if !bodyText.isEmpty {
-                MarkdownText(bodyText, cacheKey: markdownCacheKey)
+                if message.isWelcome && !model.welcomePlayed.contains(message.id) {
+                    // First render of a profile-welcome message in
+                    // this app session — animate the reveal. Mark
+                    // played when complete so scrolling/navigation
+                    // back doesn't replay.
+                    WelcomeReveal(text: bodyText) {
+                        model.welcomePlayed.insert(message.id)
+                    }
+                } else {
+                    MarkdownText(bodyText, cacheKey: markdownCacheKey)
+                }
             }
 
             // Footer — cache-grade dot + token usage summary +

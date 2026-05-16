@@ -218,6 +218,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[r
 		applyDisplay(seedProto, pipeline)
 		seeds = append(seeds, seedProto)
 	}
+	var lastSeedID *uuid.UUID = systemMsgID
 	if resolved.DefaultUserMessage != nil && *resolved.DefaultUserMessage != "" {
 		id, err := uuid.NewV7()
 		if err != nil {
@@ -226,11 +227,46 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[r
 		row, err := s.queries.CreateMessage(ctx, store.CreateMessageParams{
 			ID:        id,
 			ContextID: contextID,
-			ParentID:  systemMsgID, // null when there's no system message
+			ParentID:  lastSeedID, // null when there's no system message
 			Role:      roleContext,
 			Content:   *resolved.DefaultUserMessage,
 		})
 		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		seedProto := messageToProto(row)
+		applyDisplay(seedProto, pipeline)
+		seeds = append(seeds, seedProto)
+		lastSeedID = &row.ID
+	}
+
+	// Welcome message — assistant turn snapshotted at create time so the
+	// LLM sees its own greeting in history. is_welcome marks the row so
+	// clients can play a fake-stream reveal on first open. Position in
+	// the seed chain matters for parenting: this lands after the system
+	// message (and after the default user/context message when present)
+	// so subsequent user turns chain off the welcome the way a normal
+	// assistant→user→assistant sequence would.
+	if resolved.WelcomeMessage != nil && *resolved.WelcomeMessage != "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		row, err := s.queries.CreateWelcomeMessage(ctx, store.CreateWelcomeMessageParams{
+			ID:        id,
+			ContextID: contextID,
+			ParentID:  lastSeedID,
+			Content:   *resolved.WelcomeMessage,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		// Bump the context's current_leaf_message_id so the next SendMessage
+		// chains off the welcome, not the system/context seed below it.
+		if _, err := s.queries.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
+			ID:                   contextID,
+			CurrentLeafMessageID: &row.ID,
+		}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		seedProto := messageToProto(row)

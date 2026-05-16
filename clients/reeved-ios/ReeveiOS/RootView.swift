@@ -1,5 +1,6 @@
 import SwiftUI
 import ReeveKit
+import ReeveUI
 
 /// iOS root surface. Auth gate, then `TabView` shell with two tabs:
 /// **Chats** (the main workflow) and **Settings** (configuration).
@@ -61,7 +62,10 @@ private struct AppShell: View {
 
     var body: some View {
         Group {
-            if let convos {
+            if needsOnboarding {
+                OnboardingView()
+                    .task { await app.providers.load() }
+            } else if let convos {
                 // No tab bar — every pixel of vertical space matters
                 // for the conversation surface. Settings access lives
                 // in the account avatar menu (top-leading), which
@@ -79,5 +83,13 @@ private struct AppShell: View {
                     }
             }
         }
+    }
+
+    /// Block the main app surface until the user has at least one
+    /// configured provider AND one enabled model. Identical gate to
+    /// the Mac client — keeps both platforms aligned on the
+    /// "can you actually chat?" precondition.
+    private var needsOnboarding: Bool {
+        app.providers.providers.isEmpty || app.providers.enabledModels.isEmpty
     }
 }

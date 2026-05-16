@@ -30,6 +30,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jdpedrie/reeve/internal/auth"
+
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
@@ -307,8 +309,17 @@ func (s *Supervisor) Start(ctx context.Context, params StartParams) (uuid.UUID, 
 		return uuid.Nil, fmt.Errorf("stream: create run: %w", err)
 	}
 
-	// Detached context — see Start docstring.
+	// Detached context — see Start docstring. We deliberately drop
+	// the HTTP request deadline (the stream lives longer than the
+	// request) but carry the authenticated User through so in-process
+	// tool dispatch — specifically the inproc MCP transport, which
+	// routes tool calls back into this server's own Connect-style
+	// handlers — has the identity it needs. Wire MCP transports
+	// (stdio, http) don't care; the remote handles its own auth.
 	runCtx, cancel := context.WithCancel(context.Background())
+	if u, ok := auth.FromContext(ctx); ok {
+		runCtx = auth.ContextWithUser(runCtx, u)
+	}
 	rs := &runState{cancel: cancel, fanoutCursor: -1}
 	s.runs.Store(id, rs)
 

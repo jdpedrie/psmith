@@ -459,6 +459,11 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
     /// DERIVED on every fetch; not persisted server-side. See
     /// plugins/CONTENT_RENDERERS.md for the component catalog.
     public let uiFragments: [ReeveUIFragment]
+    /// True when this row is the profile's snapshot welcome message —
+    /// inserted at conversation create time. The conversation view
+    /// uses this to gate a fake-stream reveal animation the first time
+    /// the message renders in an app session.
+    public let isWelcome: Bool
 
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
@@ -495,7 +500,8 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         finishReason: String? = nil,
         createdAt: Date = Date(timeIntervalSince1970: 0),
         attachments: [ReeveMessageAttachment] = [],
-        uiFragments: [ReeveUIFragment] = []
+        uiFragments: [ReeveUIFragment] = [],
+        isWelcome: Bool = false
     ) {
         self.id = id
         self.contextID = contextID
@@ -516,6 +522,7 @@ public struct ReeveMessage: Sendable, Hashable, Identifiable, Codable {
         self.createdAt = createdAt
         self.attachments = attachments
         self.uiFragments = uiFragments
+        self.isWelcome = isWelcome
     }
 }
 
@@ -631,7 +638,8 @@ extension ReeveMessage {
             finishReason: p.hasFinishReason && !p.finishReason.isEmpty ? p.finishReason : nil,
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
             attachments: p.attachments.map(ReeveMessageAttachment.init(from:)),
-            uiFragments: p.uiFragments.map(ReeveUIFragment.init(from:))
+            uiFragments: p.uiFragments.map(ReeveUIFragment.init(from:)),
+            isWelcome: p.isWelcome
         )
     }
 }
@@ -718,6 +726,11 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
     /// model picker by this. Nil when the profile has no plugins or none of
     /// them require anything.
     public let requiredModelCapabilities: ReeveModelCapabilities?
+    /// Optional opening assistant message. Snapshot-inserted as a real
+    /// `messages` row at conversation-create time (role=assistant,
+    /// is_welcome=true); included in wire history sent to the LLM so the
+    /// model knows what greeting it opened with. Nil = no welcome.
+    public let welcomeMessage: String?
 
     public init(
         id: String,
@@ -739,7 +752,8 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
         titleProviderKind: String? = nil,
         createdAt: Date? = nil,
         updatedAt: Date? = nil,
-        requiredModelCapabilities: ReeveModelCapabilities? = nil
+        requiredModelCapabilities: ReeveModelCapabilities? = nil,
+        welcomeMessage: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -761,6 +775,7 @@ public struct ReeveProfile: Sendable, Hashable, Identifiable, Codable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.requiredModelCapabilities = requiredModelCapabilities
+        self.welcomeMessage = welcomeMessage
     }
 }
 
@@ -805,7 +820,8 @@ extension ReeveProfile {
             updatedAt:             p.hasUpdatedAt ? p.updatedAt.date : nil,
             requiredModelCapabilities: p.hasRequiredModelCapabilities
                 ? ReeveModelCapabilities(from: p.requiredModelCapabilities)
-                : nil
+                : nil,
+            welcomeMessage:        p.hasWelcomeMessage ? p.welcomeMessage : nil
         )
     }
 }

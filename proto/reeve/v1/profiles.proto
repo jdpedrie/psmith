@@ -68,6 +68,9 @@ message CreateProfileRequest {
   // Sentinel for a non-server title generator (e.g. "apple_foundation" for
   // Mac on-device titling). See Profile.title_provider_kind.
   optional string title_provider_kind = 16;
+  // Opening assistant turn shown in a fresh conversation. See
+  // Profile.welcome_message.
+  optional string welcome_message = 17;
 }
 message CreateProfileResponse {
   Profile profile = 1;
@@ -112,6 +115,9 @@ message UpdateProfileRequest {
   // Sentinel for a non-server title generator. See Profile.title_provider_kind.
   // Listed in clear_fields to revert to inherited / cloud-titled behavior.
   optional string title_provider_kind = 17;
+  // Opening assistant turn for new conversations. See
+  // Profile.welcome_message. Listed in clear_fields to revert.
+  optional string welcome_message = 18;
 }
 message UpdateProfileResponse {
   Profile profile = 1;

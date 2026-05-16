@@ -43,6 +43,7 @@ const (
 	fieldTitleGuide          = "title_guide"
 	fieldTitleProviderKind   = "title_provider_kind"
 	fieldDescription         = "description"
+	fieldWelcomeMessage      = "welcome_message"
 )
 
 // TitleProviderKindAppleFoundation is the sentinel value of
@@ -187,6 +188,7 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[reevev
 		Description:           req.Msg.Description,
 		ParentOnly:            req.Msg.ParentOnly,
 		Favorite:              req.Msg.Favorite,
+		WelcomeMessage:        req.Msg.WelcomeMessage,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -317,6 +319,17 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[reevev
 		}
 	} else if req.Msg.CompressionGuide != nil {
 		if err := s.queries.UpdateProfileCompressionGuide(ctx, store.UpdateProfileCompressionGuideParams{ID: id, CompressionGuide: req.Msg.CompressionGuide}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+
+	// welcome_message
+	if _, ok := clear[fieldWelcomeMessage]; ok {
+		if err := s.queries.UpdateProfileWelcomeMessage(ctx, store.UpdateProfileWelcomeMessageParams{ID: id, WelcomeMessage: nil}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else if req.Msg.WelcomeMessage != nil {
+		if err := s.queries.UpdateProfileWelcomeMessage(ctx, store.UpdateProfileWelcomeMessageParams{ID: id, WelcomeMessage: req.Msg.WelcomeMessage}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
@@ -1024,6 +1037,7 @@ func profileToProto(p store.Profile) (*reevev1.Profile, error) {
 	out.TitleModelId = p.TitleModelID
 	out.TitleGuide = p.TitleGuide
 	out.TitleProviderKind = p.TitleProviderKind
+	out.WelcomeMessage = p.WelcomeMessage
 	return out, nil
 }
 

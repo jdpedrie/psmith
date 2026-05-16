@@ -102,6 +102,7 @@ type Message struct {
 	ToolCalls             []byte
 	FinishReason          *string
 	ToolCostUsd           pgtype.Numeric
+	IsWelcome             bool
 }
 
 type MessageAttachment struct {
@@ -133,6 +134,7 @@ type Profile struct {
 	ParentOnly            bool
 	Favorite              bool
 	TitleProviderKind     *string
+	WelcomeMessage        *string
 }
 
 type ProfilePlugin struct {

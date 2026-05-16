@@ -42,6 +42,11 @@ type Querier interface {
 	// config for any row that hasn't been touched since the encryption
 	// rollout.
 	CreateUserModelProvider(ctx context.Context, arg CreateUserModelProviderParams) (UserModelProvider, error)
+	// Insert the profile's snapshot welcome message at conversation-create
+	// time. Role is hard-coded to 'assistant' (the welcome is a greeting,
+	// not a system instruction) and is_welcome is set so clients can
+	// gate a fake-stream reveal animation on first open.
+	CreateWelcomeMessage(ctx context.Context, arg CreateWelcomeMessageParams) (Message, error)
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExplicitCache(ctx context.Context, arg DeleteExplicitCacheParams) error
@@ -277,6 +282,7 @@ type Querier interface {
 	UpdateProfileTitleModelID(ctx context.Context, arg UpdateProfileTitleModelIDParams) error
 	UpdateProfileTitleProviderID(ctx context.Context, arg UpdateProfileTitleProviderIDParams) error
 	UpdateProfileTitleProviderKind(ctx context.Context, arg UpdateProfileTitleProviderKindParams) error
+	UpdateProfileWelcomeMessage(ctx context.Context, arg UpdateProfileWelcomeMessageParams) error
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	UpdateUserIsAdmin(ctx context.Context, arg UpdateUserIsAdminParams) error
 	// Replaces (not merges) the per-model default_settings JSONB blob. NULL

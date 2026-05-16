@@ -964,6 +964,14 @@ private struct MessageRow: View {
                     Text("(empty)").foregroundStyle(.secondary)
                 } else if isCollapsibleRole {
                     collapsibleBody(displayText)
+                } else if message.isWelcome && !model.welcomePlayed.contains(message.id) {
+                    // First render of a profile-welcome message in this
+                    // app session — animate the reveal. Mark played
+                    // when the reveal completes so subsequent renders
+                    // (scroll, navigation back) show static text.
+                    WelcomeReveal(text: displayText) {
+                        model.welcomePlayed.insert(message.id)
+                    }
                 } else {
                     MarkdownText(displayText)
                 }

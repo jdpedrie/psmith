@@ -227,6 +227,12 @@ public final class ConversationViewModel {
     /// disabled with a "needs: …" caption. Nil when the profile has no
     /// requirements (typical for plugin-free profiles).
     public var activeProfileRequiredCapabilities: ReeveModelCapabilities?
+    /// Message IDs whose welcome-reveal animation has already played in
+    /// this app session. Views consult this to decide between the
+    /// progressive `WelcomeReveal` view (first render) and the plain
+    /// `MarkdownText` (subsequent renders). Cleared only on app
+    /// relaunch so navigating away and back doesn't replay the reveal.
+    public var welcomePlayed: Set<String> = []
 
     // Conversation model picker page (page-replaces-pane pattern,
     // sibling to Compact / Contexts / Settings). When true, the

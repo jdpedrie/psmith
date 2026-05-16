@@ -107,6 +107,39 @@ Deferred:
   `update_user_model` (settings clears) etc. all need elicitation
   gating before exposure. Defer until elicitation lands.
 
+## Welcome message + onboarding (v1 shipped)
+
+Profiles gain a `welcome_message` field. When non-null, a real
+assistant message is inserted at conversation-create time (role=
+assistant, is_welcome=true) — included in wire history sent to the
+LLM so the model knows what greeting it opened with. Clients render
+the message normally; first open in an app session plays a token-
+chunked fake-stream reveal (`WelcomeReveal` in ReeveUI), subsequent
+opens render statically.
+
+Seed file format extended with YAML-style frontmatter so a single
+`.md` template can carry both `welcome_message` and the system
+message body. Tiny custom parser (`internal/profiles/seed_format.go`,
+~30 LOC) handles single-line scalars and `|` block scalars — enough
+for the current use case without pulling in yaml.v3. New seed
+templates inherit through the backfill path that already runs on
+every startup; existing seeded profiles whose welcome_message is
+NULL get the template's welcome applied without overwriting any
+user customization.
+
+Onboarding gate: when the signed-in user has zero providers or zero
+enabled models, `OnboardingView` takes the full app surface and
+walks them through pick-template → enter-key → discover → enable
+inline. As soon as the state condition flips (live, observed via
+@Environment), the gate lifts and the normal app shell renders.
+Shared SwiftUI view in ReeveUI; both platforms render the same
+flow.
+
+Important fix folded in: the stream supervisor's detached run
+context now carries the authenticated user through, so inproc MCP
+tool calls (Reeve Manager's `mcp` plugin → local /mcp surface)
+resolve identity correctly during background tool dispatch.
+
 ## System profiles + capability enforcement (v1 shipped)
 
 Two seeded profiles materialize on first login (Personal Assistant +

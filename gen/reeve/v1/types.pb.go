@@ -2431,8 +2431,19 @@ type Profile struct {
 	// server also validates at SendMessage time so a stale picker doesn't
 	// sneak an unsupported send through.
 	RequiredModelCapabilities *ModelCapabilities `protobuf:"bytes,21,opt,name=required_model_capabilities,json=requiredModelCapabilities,proto3,oneof" json:"required_model_capabilities,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// Optional opening assistant message. Persisted as a real `messages`
+	// row at conversation-create time (role=assistant, is_welcome=true),
+	// included in the wire history sent to the LLM on every subsequent
+	// turn so the model knows what greeting it opened with. Clients
+	// play a fake-stream reveal animation the first time the conversation
+	// is opened in an app session; subsequent visits render it instantly.
+	//
+	// Snapshotted at conversation create — later edits to this field do
+	// NOT mutate the welcome message in existing conversations. Inherits
+	// through the parent chain like the other text fields (null = inherit).
+	WelcomeMessage *string `protobuf:"bytes,22,opt,name=welcome_message,json=welcomeMessage,proto3,oneof" json:"welcome_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -2610,6 +2621,13 @@ func (x *Profile) GetRequiredModelCapabilities() *ModelCapabilities {
 		return x.RequiredModelCapabilities
 	}
 	return nil
+}
+
+func (x *Profile) GetWelcomeMessage() string {
+	if x != nil && x.WelcomeMessage != nil {
+		return *x.WelcomeMessage
+	}
+	return ""
 }
 
 type ConversationSettings struct {
@@ -2994,7 +3012,13 @@ type Message struct {
 	// effect retroactively across the whole history without a
 	// backfill job. See plugins/CONTENT_RENDERERS.md for the
 	// component catalog + Props schemas.
-	UiFragments   []*UIFragment `protobuf:"bytes,22,rep,name=ui_fragments,json=uiFragments,proto3" json:"ui_fragments,omitempty"`
+	UiFragments []*UIFragment `protobuf:"bytes,22,rep,name=ui_fragments,json=uiFragments,proto3" json:"ui_fragments,omitempty"`
+	// True when this row is the profile's welcome message — inserted at
+	// conversation-create time so the LLM sees its own opening greeting
+	// in history. Clients gate a fake-stream reveal animation on this
+	// flag (first open in an app session). Same wire shape as a normal
+	// assistant turn otherwise.
+	IsWelcome     bool `protobuf:"varint,23,opt,name=is_welcome,json=isWelcome,proto3" json:"is_welcome,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3181,6 +3205,13 @@ func (x *Message) GetUiFragments() []*UIFragment {
 		return x.UiFragments
 	}
 	return nil
+}
+
+func (x *Message) GetIsWelcome() bool {
+	if x != nil {
+		return x.IsWelcome
+	}
+	return false
 }
 
 // UIFragment is one structured UI component the server hands the
@@ -4155,7 +4186,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
 	"\x1c_include_thinking_in_historyB\x10\n" +
-	"\x0e_call_settings\"\xb7\n" +
+	"\x0e_call_settings\"\xf9\n" +
 	"\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12/\n" +
@@ -4184,7 +4215,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\vparent_only\x18\x12 \x01(\bR\n" +
 	"parentOnly\x12\x1a\n" +
 	"\bfavorite\x18\x13 \x01(\bR\bfavorite\x12`\n" +
-	"\x1brequired_model_capabilities\x18\x15 \x01(\v2\x1b.reeve.v1.ModelCapabilitiesH\fR\x19requiredModelCapabilities\x88\x01\x01B\x14\n" +
+	"\x1brequired_model_capabilities\x18\x15 \x01(\v2\x1b.reeve.v1.ModelCapabilitiesH\fR\x19requiredModelCapabilities\x88\x01\x01\x12,\n" +
+	"\x0fwelcome_message\x18\x16 \x01(\tH\rR\x0ewelcomeMessage\x88\x01\x01B\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +
@@ -4197,7 +4229,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x0f_title_model_idB\x0e\n" +
 	"\f_title_guideB\x16\n" +
 	"\x14_title_provider_kindB\x1e\n" +
-	"\x1c_required_model_capabilities\"\xdf\x02\n" +
+	"\x1c_required_model_capabilitiesB\x12\n" +
+	"\x10_welcome_message\"\xdf\x02\n" +
 	"\x14ConversationSettings\x123\n" +
 	"\x13default_provider_id\x18\x01 \x01(\tH\x00R\x11defaultProviderId\x88\x01\x01\x12-\n" +
 	"\x10default_model_id\x18\x02 \x01(\tH\x01R\x0edefaultModelId\x88\x01\x01\x12B\n" +
@@ -4237,7 +4270,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\x8a\t\n" +
+	"\x06_title\"\xa9\t\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4268,7 +4301,9 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\rfinish_reason\x18\x14 \x01(\tH\n" +
 	"R\ffinishReason\x88\x01\x01\x12=\n" +
 	"\vattachments\x18\x15 \x03(\v2\x1b.reeve.v1.MessageAttachmentR\vattachments\x127\n" +
-	"\fui_fragments\x18\x16 \x03(\v2\x14.reeve.v1.UIFragmentR\vuiFragmentsB\f\n" +
+	"\fui_fragments\x18\x16 \x03(\v2\x14.reeve.v1.UIFragmentR\vuiFragments\x12\x1d\n" +
+	"\n" +
+	"is_welcome\x18\x17 \x01(\bR\tisWelcomeB\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +

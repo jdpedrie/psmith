@@ -5,14 +5,14 @@ INSERT INTO profiles (
     compression_mode, compression_provider_id, compression_model_id,
     default_settings,
     title_provider_id, title_model_id, title_guide, title_provider_kind,
-    description, parent_only, favorite
+    description, parent_only, favorite, welcome_message
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9, $10,
     $11,
     $12, $13, $14, $15,
-    $16, $17, $18
+    $16, $17, $18, $19
 )
 RETURNING *;
 
@@ -69,3 +69,6 @@ UPDATE profiles SET parent_only = $2, updated_at = NOW() WHERE id = $1;
 
 -- name: UpdateProfileFavorite :exec
 UPDATE profiles SET favorite = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileWelcomeMessage :exec
+UPDATE profiles SET welcome_message = $2, updated_at = NOW() WHERE id = $1;

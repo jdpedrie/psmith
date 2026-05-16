@@ -223,6 +223,7 @@ func messageToProto(m store.Message) *reevev1.Message {
 	if m.FinishReason != nil && *m.FinishReason != "" {
 		out.FinishReason = m.FinishReason
 	}
+	out.IsWelcome = m.IsWelcome
 	return out
 }
 

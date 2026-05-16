@@ -16,14 +16,22 @@ import (
 )
 
 // System profile prose lives in seeds/*.md so reviewers can read it
-// without scrolling through string literals. Embedded at build time —
-// no filesystem dependency at runtime.
+// without scrolling through string literals. Each file is a YAML-
+// frontmatter header (optional) plus a Markdown body — see SeedDoc
+// for the parsed shape. Embedded at build time so there's no
+// filesystem dependency at runtime; parse failures panic on import
+// so a malformed seed can't ship as a built binary.
 
 //go:embed seeds/personal_assistant.md
-var personalAssistantSystemMessage string
+var personalAssistantSeedRaw string
 
 //go:embed seeds/reeve_manager.md
-var reeveManagerSystemMessage string
+var reeveManagerSeedRaw string
+
+var (
+	personalAssistantSeed = mustParseSeed(personalAssistantSeedRaw)
+	reeveManagerSeed      = mustParseSeed(reeveManagerSeedRaw)
+)
 
 // SystemProfileTemplate is one entry in the static catalog of profiles
 // that get materialised as user-owned rows on first login. After
@@ -35,6 +43,12 @@ type SystemProfileTemplate struct {
 	Name          string
 	Description   string
 	SystemMessage string
+	// Optional opening assistant message. When non-empty, the seeder
+	// will (separately, after profile insert) need to know about it for
+	// snapshotting into conversations — for now this is just held on
+	// the row for proto bridging. The actual welcome-on-conversation-
+	// create happens in internal/conversations on every new convo.
+	WelcomeMessage string
 	// Plugins listed in execution order; index 0 runs first.
 	Plugins []SystemProfilePlugin
 }
@@ -53,9 +67,10 @@ type SystemProfilePlugin struct {
 // migration-style mechanism for that — out of scope for v1).
 var SystemProfileTemplates = []SystemProfileTemplate{
 	{
-		Name:          "Personal Assistant",
-		Description:   "General-purpose assistant for everyday tasks. Defaults to clear, concise answers and stays grounded in current date/time/locale.",
-		SystemMessage: personalAssistantSystemMessage,
+		Name:           "Personal Assistant",
+		Description:    "General-purpose assistant for everyday tasks. Defaults to clear, concise answers and stays grounded in current date/time/locale.",
+		SystemMessage:  personalAssistantSeed.SystemMessage,
+		WelcomeMessage: personalAssistantSeed.WelcomeMessage,
 		Plugins: []SystemProfilePlugin{
 			// basic_grounding teaches the model "today is X" and similar
 			// per-turn facts. Defaults are sensible — date/time + locale
@@ -64,9 +79,10 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 		},
 	},
 	{
-		Name:          "Reeve Manager",
-		Description:   "Walks you through configuring Reeve — providers, models, profiles, plugins — using the local management API.",
-		SystemMessage: reeveManagerSystemMessage,
+		Name:           "Reeve Manager",
+		Description:    "Walks you through configuring Reeve — providers, models, profiles, plugins — using the local management API.",
+		SystemMessage:  reeveManagerSeed.SystemMessage,
+		WelcomeMessage: reeveManagerSeed.WelcomeMessage,
 		Plugins: []SystemProfilePlugin{
 			// In-process MCP transport — talks to this Reeve instance's
 			// own /mcp surface without a token, port, or HTTP round-trip.
@@ -153,13 +169,29 @@ func SeedSystemProfiles(
 	if err != nil {
 		return fmt.Errorf("seed system profiles: list existing: %w", err)
 	}
-	have := make(map[string]bool, len(existing))
+	have := make(map[string]store.Profile, len(existing))
 	for _, p := range existing {
-		have[p.Name] = true
+		have[p.Name] = p
 	}
 
 	for _, tpl := range SystemProfileTemplates {
-		if have[tpl.Name] {
+		if existing, ok := have[tpl.Name]; ok {
+			// Profile already present — don't touch the customizable
+			// fields (system message, plugin pipeline, description),
+			// but backfill an empty welcome_message from the template
+			// so existing seeded profiles pick up new welcomes without
+			// the user having to edit them by hand. If the user has
+			// customized welcome_message themselves (non-null), leave
+			// it alone.
+			if existing.WelcomeMessage == nil && tpl.WelcomeMessage != "" {
+				w := tpl.WelcomeMessage
+				if err := qtx.UpdateProfileWelcomeMessage(ctx, store.UpdateProfileWelcomeMessageParams{
+					ID:             existing.ID,
+					WelcomeMessage: &w,
+				}); err != nil {
+					return fmt.Errorf("seed system profiles: %s: backfill welcome: %w", tpl.Name, err)
+				}
+			}
 			continue
 		}
 		if err := insertSystemProfile(ctx, qtx, cipher, userID, tpl); err != nil {
@@ -188,12 +220,18 @@ func insertSystemProfile(
 		return err
 	}
 	sysMsg := tpl.SystemMessage
+	var welcomePtr *string
+	if tpl.WelcomeMessage != "" {
+		welcome := tpl.WelcomeMessage
+		welcomePtr = &welcome
+	}
 	if _, err := qtx.CreateProfile(ctx, store.CreateProfileParams{
-		ID:            id,
-		UserID:        userID,
-		Name:          tpl.Name,
-		Description:   tpl.Description,
-		SystemMessage: &sysMsg,
+		ID:             id,
+		UserID:         userID,
+		Name:           tpl.Name,
+		Description:    tpl.Description,
+		SystemMessage:  &sysMsg,
+		WelcomeMessage: welcomePtr,
 	}); err != nil {
 		return fmt.Errorf("create profile: %w", err)
 	}

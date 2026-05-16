@@ -10,6 +10,18 @@ INSERT INTO messages (
 )
 RETURNING *;
 
+-- name: CreateWelcomeMessage :one
+-- Insert the profile's snapshot welcome message at conversation-create
+-- time. Role is hard-coded to 'assistant' (the welcome is a greeting,
+-- not a system instruction) and is_welcome is set so clients can
+-- gate a fake-stream reveal animation on first open.
+INSERT INTO messages (
+    id, context_id, parent_id, role, content, is_welcome
+) VALUES (
+    $1, $2, $3, 'assistant', $4, TRUE
+)
+RETURNING *;
+
 -- name: CreateAssistantMessageWithUsage :one
 -- Used by the stream supervisor at materialization. Allows the assistant turn
 -- (or the compression_summary record) to be inserted with usage + cost

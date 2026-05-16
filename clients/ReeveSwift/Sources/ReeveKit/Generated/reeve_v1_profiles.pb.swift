@@ -163,6 +163,17 @@ public struct Reeve_V1_CreateProfileRequest: @unchecked Sendable {
   /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
   public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
 
+  /// Opening assistant turn shown in a fresh conversation. See
+  /// Profile.welcome_message.
+  public var welcomeMessage: String {
+    get {_storage._welcomeMessage ?? String()}
+    set {_uniqueStorage()._welcomeMessage = newValue}
+  }
+  /// Returns true if `welcomeMessage` has been explicitly set.
+  public var hasWelcomeMessage: Bool {_storage._welcomeMessage != nil}
+  /// Clears the value of `welcomeMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearWelcomeMessage() {_uniqueStorage()._welcomeMessage = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -415,6 +426,17 @@ public struct Reeve_V1_UpdateProfileRequest: @unchecked Sendable {
   public var hasTitleProviderKind: Bool {_storage._titleProviderKind != nil}
   /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
   public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
+
+  /// Opening assistant turn for new conversations. See
+  /// Profile.welcome_message. Listed in clear_fields to revert.
+  public var welcomeMessage: String {
+    get {_storage._welcomeMessage ?? String()}
+    set {_uniqueStorage()._welcomeMessage = newValue}
+  }
+  /// Returns true if `welcomeMessage` has been explicitly set.
+  public var hasWelcomeMessage: Bool {_storage._welcomeMessage != nil}
+  /// Clears the value of `welcomeMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearWelcomeMessage() {_uniqueStorage()._welcomeMessage = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -951,7 +973,7 @@ fileprivate let _protobuf_package = "reeve.v1"
 
 extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateProfileRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}welcome_message\0")
 
   fileprivate class _StorageClass {
     var _parentProfileID: String? = nil
@@ -970,6 +992,7 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     var _parentOnly: Bool = false
     var _favorite: Bool = false
     var _titleProviderKind: String? = nil
+    var _welcomeMessage: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -996,6 +1019,7 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       _parentOnly = source._parentOnly
       _favorite = source._favorite
       _titleProviderKind = source._titleProviderKind
+      _welcomeMessage = source._welcomeMessage
     }
   }
 
@@ -1030,6 +1054,7 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         case 14: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
         case 15: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
         case 16: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._welcomeMessage) }()
         default: break
         }
       }
@@ -1090,6 +1115,9 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       try { if let v = _storage._titleProviderKind {
         try visitor.visitSingularStringField(value: v, fieldNumber: 16)
       } }()
+      try { if let v = _storage._welcomeMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 17)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1115,6 +1143,7 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         if _storage._parentOnly != rhs_storage._parentOnly {return false}
         if _storage._favorite != rhs_storage._favorite {return false}
         if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        if _storage._welcomeMessage != rhs_storage._welcomeMessage {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -1283,7 +1312,7 @@ extension Reeve_V1_GetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateProfileRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}welcome_message\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -1303,6 +1332,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     var _parentOnly: Bool? = nil
     var _favorite: Bool? = nil
     var _titleProviderKind: String? = nil
+    var _welcomeMessage: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1330,6 +1360,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       _parentOnly = source._parentOnly
       _favorite = source._favorite
       _titleProviderKind = source._titleProviderKind
+      _welcomeMessage = source._welcomeMessage
     }
   }
 
@@ -1365,6 +1396,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         case 15: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
         case 16: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        case 18: try { try decoder.decodeSingularStringField(value: &_storage._welcomeMessage) }()
         default: break
         }
       }
@@ -1428,6 +1460,9 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       try { if let v = _storage._titleProviderKind {
         try visitor.visitSingularStringField(value: v, fieldNumber: 17)
       } }()
+      try { if let v = _storage._welcomeMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 18)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1454,6 +1489,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         if _storage._parentOnly != rhs_storage._parentOnly {return false}
         if _storage._favorite != rhs_storage._favorite {return false}
         if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        if _storage._welcomeMessage != rhs_storage._welcomeMessage {return false}
         return true
       }
       if !storagesAreEqual {return false}

@@ -18,16 +18,16 @@ INSERT INTO profiles (
     compression_mode, compression_provider_id, compression_model_id,
     default_settings,
     title_provider_id, title_model_id, title_guide, title_provider_kind,
-    description, parent_only, favorite
+    description, parent_only, favorite, welcome_message
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9, $10,
     $11,
     $12, $13, $14, $15,
-    $16, $17, $18
+    $16, $17, $18, $19
 )
-RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind
+RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message
 `
 
 type CreateProfileParams struct {
@@ -49,6 +49,7 @@ type CreateProfileParams struct {
 	Description           string
 	ParentOnly            bool
 	Favorite              bool
+	WelcomeMessage        *string
 }
 
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
@@ -71,6 +72,7 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		arg.Description,
 		arg.ParentOnly,
 		arg.Favorite,
+		arg.WelcomeMessage,
 	)
 	var i Profile
 	err := row.Scan(
@@ -94,6 +96,7 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		&i.ParentOnly,
 		&i.Favorite,
 		&i.TitleProviderKind,
+		&i.WelcomeMessage,
 	)
 	return i, err
 }
@@ -108,7 +111,7 @@ func (q *Queries) DeleteProfile(ctx context.Context, id uuid.UUID) error {
 }
 
 const getProfileByID = `-- name: GetProfileByID :one
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind FROM profiles WHERE id = $1
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles WHERE id = $1
 `
 
 func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error) {
@@ -135,12 +138,13 @@ func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, er
 		&i.ParentOnly,
 		&i.Favorite,
 		&i.TitleProviderKind,
+		&i.WelcomeMessage,
 	)
 	return i, err
 }
 
 const listProfilesByUser = `-- name: ListProfilesByUser :many
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind FROM profiles WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles WHERE user_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error) {
@@ -173,6 +177,7 @@ func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]P
 			&i.ParentOnly,
 			&i.Favorite,
 			&i.TitleProviderKind,
+			&i.WelcomeMessage,
 		); err != nil {
 			return nil, err
 		}
@@ -391,5 +396,19 @@ type UpdateProfileTitleProviderKindParams struct {
 
 func (q *Queries) UpdateProfileTitleProviderKind(ctx context.Context, arg UpdateProfileTitleProviderKindParams) error {
 	_, err := q.db.Exec(ctx, updateProfileTitleProviderKind, arg.ID, arg.TitleProviderKind)
+	return err
+}
+
+const updateProfileWelcomeMessage = `-- name: UpdateProfileWelcomeMessage :exec
+UPDATE profiles SET welcome_message = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileWelcomeMessageParams struct {
+	ID             uuid.UUID
+	WelcomeMessage *string
+}
+
+func (q *Queries) UpdateProfileWelcomeMessage(ctx context.Context, arg UpdateProfileWelcomeMessageParams) error {
+	_, err := q.db.Exec(ctx, updateProfileWelcomeMessage, arg.ID, arg.WelcomeMessage)
 	return err
 }
