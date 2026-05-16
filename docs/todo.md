@@ -41,9 +41,11 @@ Ordered by impact on getting Reeve to a "useful for sustained personal chat" sta
 
 ### Drivers
 
-- **`internal/providers/anthropic`** — tool-use input is one-way: outbound `tool_result` blocks not yet translated from `WireMessage`. `signature_delta` and `citations_delta` events silently dropped (no normalized chunk slot). `MessageDeltaEvent` (usage / stop_reason) not surfaced — needs a chunk type when added.
+- **`internal/providers/anthropic` `citations_delta`** — silently dropped because no normalized chunk type exists for it yet. Narrow (only fires when Anthropic citations are attached); add a chunk slot when a use case lands.
 
-- **`internal/providers/openai`** — tool use tracks one active call (parallel tool calls would need a map keyed by `output_index`). `TokenCounter` intentionally not implemented (no consistent endpoint across compat servers, no tiktoken helper in `openai-go`). Thinking round-trip only works when stored shape matches Responses-API `ResponseReasoningItem`; cross-shape thinking silently omitted.
+- **`internal/providers/openai` parallel tool calls** — the dispatch loop tracks one active call by `output_index`. Two parallel `function_call` items would step on each other; switch the per-output-index slot to a map when a model actually emits parallel calls in production.
+
+- **`internal/providers/openai` cross-shape thinking round-trip** — the persisted thinking shape only round-trips cleanly when it matches the Responses-API `ResponseReasoningItem`. Cross-shape thinking (e.g. assistant turn produced by Anthropic, then sent through OpenAI) is silently omitted on the way back in.
 
 ### History builder
 
