@@ -812,8 +812,12 @@ type PluginCapabilities struct {
 	// of requested fact keys is on `PluginType.requested_device_facts`
 	// — this flag is the cheap "should the client even look?" gate.
 	DeviceFactRequester bool `protobuf:"varint,10,opt,name=device_fact_requester,json=deviceFactRequester,proto3" json:"device_fact_requester,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Plugin emits structured UIFragments via the ContentRenderer
+	// pipeline. UIs surface this as the "Renderer" capability chip;
+	// see plugins/CONTENT_RENDERERS.md for the component vocabulary.
+	ContentRenderer bool `protobuf:"varint,11,opt,name=content_renderer,json=contentRenderer,proto3" json:"content_renderer,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PluginCapabilities) Reset() {
@@ -912,6 +916,13 @@ func (x *PluginCapabilities) GetMessageLifecycleHook() bool {
 func (x *PluginCapabilities) GetDeviceFactRequester() bool {
 	if x != nil {
 		return x.DeviceFactRequester
+	}
+	return false
+}
+
+func (x *PluginCapabilities) GetContentRenderer() bool {
+	if x != nil {
+		return x.ContentRenderer
 	}
 	return false
 }
@@ -2019,7 +2030,7 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\aprofile\x18\x01 \x01(\v2\x11.reeve.v1.ProfileR\aprofile\"&\n" +
 	"\x14DeleteProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15DeleteProfileResponse\"\xff\x03\n" +
+	"\x15DeleteProfileResponse\"\xaa\x04\n" +
 	"\x12PluginCapabilities\x12\"\n" +
 	"\fconfigurable\x18\x01 \x01(\bR\fconfigurable\x12'\n" +
 	"\x0fsystem_prompter\x18\x02 \x01(\bR\x0esystemPrompter\x12:\n" +
@@ -2031,7 +2042,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x1dassistant_content_transformer\x18\b \x01(\bR\x1bassistantContentTransformer\x124\n" +
 	"\x16message_lifecycle_hook\x18\t \x01(\bR\x14messageLifecycleHook\x122\n" +
 	"\x15device_fact_requester\x18\n" +
-	" \x01(\bR\x13deviceFactRequester\"\xb2\x02\n" +
+	" \x01(\bR\x13deviceFactRequester\x12)\n" +
+	"\x10content_renderer\x18\v \x01(\bR\x0fcontentRenderer\"\xb2\x02\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +

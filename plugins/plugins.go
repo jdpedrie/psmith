@@ -733,6 +733,7 @@ type Capabilities struct {
 	AssistantContentTransformer bool
 	MessageLifecycleHook        bool
 	DeviceFactRequester         bool
+	ContentRenderer             bool
 }
 
 // TypeDescriptor is the introspectable metadata for one registered plugin.
@@ -790,6 +791,9 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if _, ok := inst.(MessageLifecycleHook); ok {
 		desc.Capabilities.MessageLifecycleHook = true
+	}
+	if _, ok := inst.(ContentRenderer); ok {
+		desc.Capabilities.ContentRenderer = true
 	}
 	if r, ok := inst.(DeviceFactRequester); ok {
 		desc.Capabilities.DeviceFactRequester = true

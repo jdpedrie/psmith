@@ -502,6 +502,11 @@ public struct Reeve_V1_PluginCapabilities: Sendable {
   /// — this flag is the cheap "should the client even look?" gate.
   public var deviceFactRequester: Bool = false
 
+  /// Plugin emits structured UIFragments via the ContentRenderer
+  /// pipeline. UIs surface this as the "Renderer" capability chip;
+  /// see plugins/CONTENT_RENDERERS.md for the component vocabulary.
+  public var contentRenderer: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1512,7 +1517,7 @@ extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginCapabilities"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0\u{3}content_renderer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1530,6 +1535,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 8: try { try decoder.decodeSingularBoolField(value: &self.assistantContentTransformer) }()
       case 9: try { try decoder.decodeSingularBoolField(value: &self.messageLifecycleHook) }()
       case 10: try { try decoder.decodeSingularBoolField(value: &self.deviceFactRequester) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self.contentRenderer) }()
       default: break
       }
     }
@@ -1566,6 +1572,9 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if self.deviceFactRequester != false {
       try visitor.visitSingularBoolField(value: self.deviceFactRequester, fieldNumber: 10)
     }
+    if self.contentRenderer != false {
+      try visitor.visitSingularBoolField(value: self.contentRenderer, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1580,6 +1589,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.assistantContentTransformer != rhs.assistantContentTransformer {return false}
     if lhs.messageLifecycleHook != rhs.messageLifecycleHook {return false}
     if lhs.deviceFactRequester != rhs.deviceFactRequester {return false}
+    if lhs.contentRenderer != rhs.contentRenderer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

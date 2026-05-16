@@ -146,6 +146,10 @@ message PluginCapabilities {
   // of requested fact keys is on `PluginType.requested_device_facts`
   // — this flag is the cheap "should the client even look?" gate.
   bool device_fact_requester = 10;
+  // Plugin emits structured UIFragments via the ContentRenderer
+  // pipeline. UIs surface this as the "Renderer" capability chip;
+  // see plugins/CONTENT_RENDERERS.md for the component vocabulary.
+  bool content_renderer = 11;
 }
 
 // PluginType is one entry in the server's compiled-in plugin registry.

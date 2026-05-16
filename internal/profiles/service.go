@@ -749,6 +749,7 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *reevev1.PluginType {
 			AssistantContentTransformer: d.Capabilities.AssistantContentTransformer,
 			MessageLifecycleHook:        d.Capabilities.MessageLifecycleHook,
 			DeviceFactRequester:         d.Capabilities.DeviceFactRequester,
+			ContentRenderer:             d.Capabilities.ContentRenderer,
 		},
 		RequestedDeviceFacts: requestedFacts,
 	}
