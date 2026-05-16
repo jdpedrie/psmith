@@ -332,9 +332,20 @@ const (
 	// wrapper after a plugin's ExecuteTool returns. Payload:
 	//   {"tool_use_id": "...", "output": <raw json>, "error": "...", "elapsed_ms": <int>}
 	ChunkToolResult ChunkType = "tool_result"
-	ChunkUsage      ChunkType = "usage"
-	ChunkError      ChunkType = "error"
-	ChunkDone       ChunkType = "done"
+	// ChunkElicit is synthesized by the conversations-side tool-loop when
+	// an in-process MCP tool calls ctx.Elicit (MCP elicitation). It tells
+	// the client to render a form bound to the JSON Schema in the
+	// payload; the response POSTs back to
+	// `/conversations/{id}/elicitations/{eid}/respond` and unblocks the
+	// waiting tool. Payload:
+	//   {"elicitation_id": "<uuid>", "message": "...", "requested_schema": {...}}
+	// Not persisted as message content — purely an in-flight UI cue. The
+	// run finishes normally; the assistant's eventual response narrates
+	// what the elicited input produced.
+	ChunkElicit ChunkType = "elicit"
+	ChunkUsage  ChunkType = "usage"
+	ChunkError  ChunkType = "error"
+	ChunkDone   ChunkType = "done"
 )
 
 // Usage is the normalized token-usage payload emitted via ChunkUsage.

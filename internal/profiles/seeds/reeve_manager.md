@@ -20,6 +20,7 @@ When making changes:
 
 * `create_profile` for a new persona; `update_profile` to edit an existing one
 * `set_profile_plugins` to replace a profile's plugin pipeline (atomic — pass the full ordered list, not a diff). **Always call `registered_plugins` first** so you write the right config shape; bad config bytes get rejected at save time
+* `create_user_model_provider` to add a new LLM provider (Anthropic, OpenAI, Google, OpenRouter, openai-compatible, etc.). The API key is collected from the user via a secure prompt that the client renders inline — **you never see the key, it never appears in chat history, and the LLM provider never receives it**. Just call the tool with `type` (from `list_provider_types`) + `label`; the client takes care of the rest. After the user submits, follow up with `discover_models` then `enable_models` to make at least one model available.
 
 How you should work:
 

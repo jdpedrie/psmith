@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/internal/elicit"
 )
 
 func (s *Server) registerModelTools() {
@@ -64,6 +65,17 @@ func (s *Server) registerModelTools() {
 		"Ping a provider to verify it's reachable and the credentials work. Returns ok/false plus an error message and the count of models the provider currently exposes. Use this before suggesting a configuration change so you can ground the user in the actual current state.",
 		`{"type":"object","required":["user_model_provider_id"],"properties":{"user_model_provider_id":{"type":"string"}},"additionalProperties":false}`,
 		s.toolTestProvider,
+	)
+	s.register(
+		"create_user_model_provider",
+		"Create a new model provider for the user. The API key is collected directly from the user via an in-protocol elicitation prompt — you never see the value, it never enters chat history, and the LLM provider never receives it. Use this whenever the user wants to add a new provider (Anthropic, OpenAI, Google, OpenRouter, an openai-compatible endpoint, etc.). Args: `type` (the driver name from list_provider_types), `label` (display name), and `base_url` (required only for openai-compatible providers). The user must accept the elicitation for the call to succeed; if they decline or cancel, returns isError with a clear message.",
+		`{"type":"object","required":["type","label"],"properties":{`+
+			`"type":{"type":"string","description":"Driver type name (e.g. \"anthropic\", \"openai\", \"google\", \"openai-compatible\"). See list_provider_types."},`+
+			`"label":{"type":"string","description":"Display name shown in pickers. Required."},`+
+			`"base_url":{"type":"string","description":"API base URL — required for openai-compatible providers, ignored for native drivers."},`+
+			`"preset_id":{"type":"string","description":"Optional preset id for openai-compatible providers (see list_provider_templates)."}`+
+			`},"additionalProperties":false}`,
+		s.toolCreateProviderWithElicit,
 	)
 }
 
@@ -300,6 +312,95 @@ func (s *Server) toolTestProvider(ctx context.Context, args json.RawMessage) (To
 		out["error_message"] = msg
 	}
 	return textResult(out), nil
+}
+
+// --- create_user_model_provider (with elicitation for secrets) -----------
+
+type createProviderArgs struct {
+	Type     string `json:"type"`
+	Label    string `json:"label"`
+	BaseURL  string `json:"base_url"`
+	PresetID string `json:"preset_id"`
+}
+
+func (s *Server) toolCreateProviderWithElicit(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in createProviderArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.Type == "" {
+		return errorResult("type is required"), nil
+	}
+	if in.Label == "" {
+		return errorResult("label is required"), nil
+	}
+	if in.Type == "openai-compatible" && in.BaseURL == "" {
+		return errorResult("base_url is required for openai-compatible providers"), nil
+	}
+
+	// Elicitation is the protocol primitive that keeps the secret out
+	// of LLM context: the value flows user→server through the client's
+	// direct response endpoint, never via the assistant's content or
+	// tool args. Tools that need this capability fail loudly when it's
+	// missing (only the inproc transport carries it today).
+	ec, ok := elicit.FromContext(ctx)
+	if !ok {
+		return errorResult("this tool requires elicitation support (in-process MCP transport only)"), nil
+	}
+
+	// Schema: one password-format string field. Clients render
+	// `format: password` as a secure text input.
+	schema := []byte(`{"type":"object","required":["api_key"],"properties":{"api_key":{"type":"string","format":"password","description":"API key for ` + in.Type + `"}},"additionalProperties":false}`)
+
+	resp, err := ec.Elicit(ctx, elicit.Request{
+		Message:         "Paste your API key for " + in.Label + ". It's stored encrypted on this Reeve instance and never sent to the LLM provider.",
+		RequestedSchema: schema,
+	})
+	if err != nil {
+		return errorResult("elicitation failed: " + err.Error()), nil
+	}
+	if resp.Action != elicit.ActionAccept {
+		return errorResult("user " + string(resp.Action) + "ed the secret prompt — provider not created"), nil
+	}
+
+	var content struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal(resp.Content, &content); err != nil {
+		return errorResult("decode elicit response: " + err.Error()), nil
+	}
+	if content.APIKey == "" {
+		return errorResult("api_key is empty"), nil
+	}
+
+	// Assemble the config blob the driver expects. Shape mirrors the
+	// AddProviderSheet form: api_key plus the optional pieces for
+	// openai-compatible providers.
+	configMap := map[string]string{"api_key": content.APIKey}
+	if in.BaseURL != "" {
+		configMap["base_url"] = in.BaseURL
+	}
+	if in.PresetID != "" {
+		configMap["preset_id"] = in.PresetID
+	}
+	configBytes, err := json.Marshal(configMap)
+	if err != nil {
+		return errorResult("marshal config: " + err.Error()), nil
+	}
+
+	created, err := s.modelProvidersSvc.CreateUserModelProvider(ctx, connect.NewRequest(&reevev1.CreateUserModelProviderRequest{
+		Type:   in.Type,
+		Label:  in.Label,
+		Config: configBytes,
+	}))
+	if err != nil {
+		return errorResult("create provider: " + err.Error()), nil
+	}
+
+	return textResult(map[string]any{
+		"provider": providerSummary(created.Msg.GetProvider()),
+		"hint":     "Provider created. Next, call discover_models to see what's available, then enable_models to pick at least one.",
+	}), nil
 }
 
 // providerSummary keeps the secret-bearing config bytes off the wire.

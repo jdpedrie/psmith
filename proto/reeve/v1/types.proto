@@ -743,6 +743,14 @@ enum ChunkType {
   // thinking block. Reeve stores the (text, signature) pair on
   // messages.thinking so it can be round-tripped on the next request.
   CHUNK_TYPE_THINKING_SIGNATURE = 10;
+  // Synthetic — emitted by the conversations-side tool loop when an
+  // in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
+  // JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+  // Clients render a form bound to the JSON Schema; submitting POSTs
+  // the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
+  // which unblocks the waiting tool. Not persisted as message content
+  // — purely an in-flight UI cue.
+  CHUNK_TYPE_ELICIT = 11;
 }
 
 message Chunk {

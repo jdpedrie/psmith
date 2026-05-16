@@ -62,6 +62,11 @@ type Service struct {
 	// gated — emit is a silent no-op when the calling user
 	// hasn't configured Langfuse.
 	langfuse *langfuse.Emitter
+	// elicit routes MCP elicitation requests from in-process tool
+	// calls to the user's UI and back. Process-wide, in-memory; per-
+	// service-instance so test fixtures don't leak elicitations
+	// across runs.
+	elicit *elicitBroker
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -90,7 +95,17 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 		cipher:     cipher,
 		storage:    st,
 		logger:     logger,
+		elicit:     newElicitBroker(),
 	}
+}
+
+// ElicitBroker exposes the in-memory elicitation router so the HTTP
+// handler (mounted from cmd/reeved) can deliver user responses back
+// to in-flight tool calls. Returns nil only in degenerate test
+// fixtures that bypass NewService — production callers always get a
+// live broker.
+func (s *Service) ElicitBroker() *elicitBroker {
+	return s.elicit
 }
 
 // SetLangfuseEmitter installs the per-user Langfuse emitter the
@@ -1263,7 +1278,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID))
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID)
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)

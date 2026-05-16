@@ -37,6 +37,13 @@ public final class AppModel {
     /// `hub.streams[conversationID]` instead of owning it directly.
     public let streamHub: StreamHub
 
+    /// Delivers elicitation responses (user-supplied input to MCP
+    /// tool calls — e.g. an API key for Reeve Manager's
+    /// `create_user_model_provider`) back to the server. Uses the
+    /// session token for auth; bypasses the Connect surface because
+    /// the endpoint is a small bespoke handler, not an RPC.
+    public let elicitations: ElicitationsRepository
+
     /// Persistent outbound send queue — holds SendMessage requests
     /// that couldn't reach the server (typically because
     /// connectivity dropped) and drains them when the
@@ -80,6 +87,7 @@ public final class AppModel {
         self.outboundQueue = OutboundQueue()
         self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
         self.streamHub = StreamHub(subscriber: c.streams)
+        self.elicitations = ElicitationsRepository(host: host, tokenStore: tokenStore)
     }
 
     /// Builds a ReeveCache whose store URL embeds the account id.

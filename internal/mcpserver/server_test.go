@@ -223,6 +223,7 @@ func TestServer_ToolsListIncludesEverySchema(t *testing.T) {
 		"enable_models":              false,
 		"toggle_user_model_favorite": false,
 		"test_user_model_provider":   false,
+		"create_user_model_provider": false,
 		"list_conversations":         false,
 		"get_conversation":           false,
 		"list_messages":              false,

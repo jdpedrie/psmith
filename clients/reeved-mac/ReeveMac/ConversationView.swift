@@ -36,6 +36,12 @@ struct ConversationView: View {
         .onDisappear {
             app.streamHub.markStoppedViewing(conversationID: conversation.id)
         }
+        .sheet(item: Binding(
+            get: { app.streamHub.activeStream(conversationID: conversation.id)?.pendingElicitations.first },
+            set: { _ in /* dismiss handled by ElicitSheet via clearPendingElicitation */ }
+        )) { pending in
+            ElicitSheet(conversationID: conversation.id, pending: pending)
+        }
         .task(id: conversation.id) {
             // Capture the env-injected notifier into the closure so the
             // VM-side firing path doesn't reach into a global. iOS will

@@ -221,6 +221,12 @@ func run() error {
 	// dispatch directly through HandleRPC — no port, no token, the
 	// authenticated user on ctx flows through unchanged.
 	plugins.RegisterInprocMCPDispatcher(mcpSrv.HandleRPC)
+	// Elicitation response endpoint — clients POST the user's answer
+	// here for any in-flight elicit chunk the conversation stream
+	// surfaced. Same Bearer-token auth as the rest; ownership-checked
+	// against the conversation row. See
+	// internal/conversations/elicit_handler.go for the handler.
+	mux.Handle("POST /conversations/{id}/elicitations/{eid}/respond", conversationsSvc.ElicitHandler())
 
 	srv := &http.Server{
 		Addr:    addr,

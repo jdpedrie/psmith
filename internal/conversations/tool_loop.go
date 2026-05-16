@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/jdpedrie/reeve/internal/elicit"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -88,11 +91,45 @@ func makeToolLoopSendFunc(
 	// MODEL_PICKER config and dispatch to the corresponding
 	// upstream API.
 	resolver plugins.ProviderResolver,
+	// elicitBroker, when non-nil, lets in-process MCP tools call
+	// ctx.Elicit(...) to ask the user for input mid-call. The
+	// closure creates a per-run elicit.Client bound to the broker
+	// and the run's chunk channel (so Elicit can emit a UIFragment
+	// chunk before blocking on the user's response).
+	elicitBroker *elicitBroker,
+	// conversationID scopes elicitations to the run's conversation;
+	// the user response endpoint cross-checks ownership before
+	// delivering. Zero UUID when elicitation is disabled.
+	conversationID uuid.UUID,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline, resolver)
 
 	return func(ctx context.Context) (<-chan providers.Chunk, error) {
 		out := make(chan providers.Chunk, 32)
+		// Attach an elicit client bound to this run's chunk
+		// channel so tools can emit a chunk + block on the user's
+		// response. Built inside the closure so the chunk emitter
+		// can reference `out` directly.
+		if elicitBroker != nil {
+			emit := func(eid uuid.UUID, req elicit.Request) {
+				payload, err := json.Marshal(struct {
+					ElicitationID   uuid.UUID       `json:"elicitation_id"`
+					Message         string          `json:"message"`
+					RequestedSchema json.RawMessage `json:"requested_schema"`
+				}{eid, req.Message, req.RequestedSchema})
+				if err != nil {
+					return
+				}
+				select {
+				case out <- providers.Chunk{Type: providers.ChunkElicit, Payload: payload}:
+				default:
+					// Channel full — drop. Better to lose the
+					// prompt than block the entire run on a UI
+					// that may already be disconnected.
+				}
+			}
+			ctx = elicit.WithClient(ctx, newElicitClient(elicitBroker, conversationID, emit))
+		}
 
 		go func() {
 			defer close(out)

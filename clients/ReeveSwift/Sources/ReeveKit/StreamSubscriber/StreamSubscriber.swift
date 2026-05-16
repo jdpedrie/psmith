@@ -92,12 +92,36 @@ public struct ReeveChunk: Sendable, Hashable {
         public let error: String?
         public let elapsedMs: Int64
     }
+
+    /// Decoded `{elicitation_id, message, requested_schema}` payload for
+    /// ChunkElicit. Nil when this isn't an elicit chunk or the payload
+    /// is malformed. `schemaJSON` carries the JSON Schema bytes verbatim
+    /// so the renderer can introspect format hints (e.g. `password`).
+    public var elicitInfo: ElicitInfo? {
+        guard type == .elicit else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let id = obj["elicitation_id"] as? String
+        else { return nil }
+        let message = obj["message"] as? String ?? ""
+        var schemaData = Data()
+        if let schema = obj["requested_schema"] {
+            schemaData = (try? JSONSerialization.data(withJSONObject: schema)) ?? Data()
+        }
+        return ElicitInfo(id: id, message: message, schemaJSON: schemaData)
+    }
+
+    public struct ElicitInfo: Sendable, Hashable {
+        public let id: String
+        public let message: String
+        public let schemaJSON: Data
+    }
 }
 
 public enum ReeveChunkType: Sendable, Hashable {
     case textDelta, thinkingDelta
     case toolUseStart, toolUseDelta, toolUseEnd, toolResult
     case thinkingSignature
+    case elicit
     case error, done, usage, unknown
 
     init(from p: Reeve_V1_ChunkType) {
@@ -109,6 +133,7 @@ public enum ReeveChunkType: Sendable, Hashable {
         case .toolUseEnd: self = .toolUseEnd
         case .toolResult: self = .toolResult
         case .thinkingSignature: self = .thinkingSignature
+        case .elicit: self = .elicit
         case .error: self = .error
         case .done: self = .done
         case .usage: self = .usage

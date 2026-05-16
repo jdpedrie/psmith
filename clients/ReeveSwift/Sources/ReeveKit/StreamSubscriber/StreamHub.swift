@@ -42,8 +42,31 @@ public final class StreamHub {
         public var streamingThinkingFinishedAt: Date?
         public var streamingToolCalls: [LiveToolCall] = []
         public var lastSequence: Int64 = 0
+        /// MCP elicitation prompts emitted by in-process tools mid-run.
+        /// The view layer reads this; when non-empty, render a form for
+        /// the first entry. Submitting (or declining/cancelling) drops
+        /// the entry. Subsequent entries — multiple Elicits in one tool
+        /// call, rare but legal — surface one at a time.
+        public var pendingElicitations: [PendingElicit] = []
 
         public var id: String { runID }
+    }
+
+    /// One in-flight MCP elicitation request waiting for a user response.
+    /// Carries the schema verbatim so renderers can introspect (the
+    /// `format: password` hint drives secure-text rendering, etc.).
+    public struct PendingElicit: Identifiable, Hashable, Sendable {
+        /// UUID assigned server-side. Used as the path segment of the
+        /// response endpoint.
+        public let id: String
+        /// Human-readable prompt the server wants displayed above the
+        /// form.
+        public let message: String
+        /// JSON Schema bytes for the expected response payload. Parsed
+        /// at render time — the schema set our v1 UI handles is narrow
+        /// (object with one or more string / boolean / integer
+        /// properties; string with `format: password` renders secure).
+        public let schemaJSON: Data
     }
 
     /// Public for view-model reads. Mutations stay inside the hub.
@@ -78,6 +101,17 @@ public final class StreamHub {
     /// the app was backgrounded / killed, the indicator still draws
     /// the user's attention back to the right conversation.
     public private(set) var unseenConversationIDs: Set<String> = []
+
+    /// Drops the matching pending elicitation from the active stream.
+    /// Called by the view layer after the response endpoint succeeds
+    /// (the actual POST goes through ElicitationsRepository) so the
+    /// UI form dismisses. Idempotent — dropping an unknown id is a
+    /// no-op.
+    public func clearPendingElicitation(conversationID: String, elicitationID: String) {
+        guard var s = streams[conversationID] else { return }
+        s.pendingElicitations.removeAll { $0.id == elicitationID }
+        streams[conversationID] = s
+    }
 
     private var tasks: [String /* runID */: Task<Void, Never>] = [:]
     private var terminalHandlers: [String /* conversationID */: (ReeveStreamRun) async -> Void] = [:]
@@ -306,6 +340,14 @@ public final class StreamHub {
                 if s.streamingToolCalls[idx].argsCompletedAt == nil {
                     s.streamingToolCalls[idx].argsCompletedAt = s.streamingToolCalls[idx].resultArrivedAt
                 }
+            }
+        case .elicit:
+            if let info = c.elicitInfo {
+                s.pendingElicitations.append(PendingElicit(
+                    id: info.id,
+                    message: info.message,
+                    schemaJSON: info.schemaJSON
+                ))
             }
         default:
             break

@@ -35,6 +35,12 @@ struct ConversationView: View {
         .onDisappear {
             app.streamHub.markStoppedViewing(conversationID: conversation.id)
         }
+        .sheet(item: Binding(
+            get: { app.streamHub.activeStream(conversationID: conversation.id)?.pendingElicitations.first },
+            set: { _ in /* ElicitSheet calls clearPendingElicitation on its own */ }
+        )) { pending in
+            ElicitSheet(conversationID: conversation.id, pending: pending)
+        }
         .onChange(of: scenePhase) { _, newPhase in
             // Per `docs/ios-screens.md` §1.8 + §4.1: cancel the live
             // SSE on background, re-subscribe from the last seen

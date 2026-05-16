@@ -401,6 +401,15 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
   /// thinking block. Reeve stores the (text, signature) pair on
   /// messages.thinking so it can be round-tripped on the next request.
   case thinkingSignature // = 10
+
+  /// Synthetic — emitted by the conversations-side tool loop when an
+  /// in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
+  /// JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+  /// Clients render a form bound to the JSON Schema; submitting POSTs
+  /// the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
+  /// which unblocks the waiting tool. Not persisted as message content
+  /// — purely an in-flight UI cue.
+  case elicit // = 11
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -420,6 +429,7 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 8: self = .usage
     case 9: self = .toolResult
     case 10: self = .thinkingSignature
+    case 11: self = .elicit
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -437,6 +447,7 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .usage: return 8
     case .toolResult: return 9
     case .thinkingSignature: return 10
+    case .elicit: return 11
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -454,6 +465,7 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
     .usage,
     .toolResult,
     .thinkingSignature,
+    .elicit,
   ]
 
 }
@@ -2870,7 +2882,7 @@ extension Reeve_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Reeve_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0\u{1}CHUNK_TYPE_ELICIT\0")
 }
 
 extension Reeve_V1_DeviceFactKey: SwiftProtobuf._ProtoNameProviding {

@@ -469,6 +469,14 @@ const (
 	// thinking block. Reeve stores the (text, signature) pair on
 	// messages.thinking so it can be round-tripped on the next request.
 	ChunkType_CHUNK_TYPE_THINKING_SIGNATURE ChunkType = 10
+	// Synthetic — emitted by the conversations-side tool loop when an
+	// in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
+	// JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+	// Clients render a form bound to the JSON Schema; submitting POSTs
+	// the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
+	// which unblocks the waiting tool. Not persisted as message content
+	// — purely an in-flight UI cue.
+	ChunkType_CHUNK_TYPE_ELICIT ChunkType = 11
 )
 
 // Enum value maps for ChunkType.
@@ -485,6 +493,7 @@ var (
 		8:  "CHUNK_TYPE_USAGE",
 		9:  "CHUNK_TYPE_TOOL_RESULT",
 		10: "CHUNK_TYPE_THINKING_SIGNATURE",
+		11: "CHUNK_TYPE_ELICIT",
 	}
 	ChunkType_value = map[string]int32{
 		"CHUNK_TYPE_UNSPECIFIED":        0,
@@ -498,6 +507,7 @@ var (
 		"CHUNK_TYPE_USAGE":              8,
 		"CHUNK_TYPE_TOOL_RESULT":        9,
 		"CHUNK_TYPE_THINKING_SIGNATURE": 10,
+		"CHUNK_TYPE_ELICIT":             11,
 	}
 )
 
@@ -4447,7 +4457,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x10StreamRunPurpose\x12\"\n" +
 	"\x1eSTREAM_RUN_PURPOSE_UNSPECIFIED\x10\x00\x12)\n" +
 	"%STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE\x10\x01\x12\"\n" +
-	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xbc\x02\n" +
+	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xd3\x02\n" +
 	"\tChunkType\x12\x1a\n" +
 	"\x16CHUNK_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CHUNK_TYPE_TEXT_DELTA\x10\x01\x12\x1d\n" +
@@ -4460,7 +4470,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x10CHUNK_TYPE_USAGE\x10\b\x12\x1a\n" +
 	"\x16CHUNK_TYPE_TOOL_RESULT\x10\t\x12!\n" +
 	"\x1dCHUNK_TYPE_THINKING_SIGNATURE\x10\n" +
-	"*\xd0\x01\n" +
+	"\x12\x15\n" +
+	"\x11CHUNK_TYPE_ELICIT\x10\v*\xd0\x01\n" +
 	"\rDeviceFactKey\x12\x1f\n" +
 	"\x1bDEVICE_FACT_KEY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEVICE_FACT_KEY_LOCALE\x10\x01\x12\x1c\n" +

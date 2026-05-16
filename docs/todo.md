@@ -89,14 +89,11 @@ shared with the Connect surface. Tools: `list_profiles`,
 and no token.
 
 Deferred:
-- **Elicitation** — Reeve's mcp client doesn't speak the
-  elicitation protocol yet (server-initiated user prompts during
-  tool calls). Wire on both sides before adding destructive tools
-  (delete_*) so confirmation gating is in-protocol rather than a
-  proposed-action convention. Significant protocol surgery: SSE
-  responses for HTTP transport, bidirectional dispatcher for
-  inproc, mcp client UI for elicitation prompts, plumbing to bring
-  user response back through the in-flight tool call.
+- **Elicitation over HTTP transport** — inproc elicitation shipped
+  (see below). HTTP-transport elicitation would need SSE response
+  framing on the server-initiated request + a paired POST channel
+  for client responses. Defer until a concrete remote-MCP case
+  needs it; the secrets use case is inproc-only.
 - **Conversation write tools** — `send_message`, `compact`,
   `delete_conversation` etc. all live on `ConversationsService` but
   aren't exposed yet. `send_message` in particular is a streaming
@@ -106,6 +103,50 @@ Deferred:
 - **Destructive write tools** — `disable_models`, `delete_profile`,
   `update_user_model` (settings clears) etc. all need elicitation
   gating before exposure. Defer until elicitation lands.
+
+## Elicitation (inproc shipped — `internal/elicit` + the broker)
+
+MCP elicitation lets a server tool request additional input from the
+user mid-call without that input ever entering LLM context. Reeve
+ships the inproc-transport flavour today:
+
+* `internal/elicit` holds the protocol types (`Request`, `Response`,
+  `Client` interface, ctx helpers). Lives in its own package so both
+  `mcpserver` (publishes the `ctx.Elicit` hook to tool fns) and
+  `internal/conversations` (provides the broker implementation) can
+  import without creating a cycle.
+* `internal/conversations.elicitBroker` routes responses: tools
+  block on a channel; the user-facing endpoint writes into it. 5-minute
+  timeout per request.
+* `providers.ChunkElicit` is the new stream chunk type the tool loop
+  emits before blocking; flows through the supervisor → client like
+  any other chunk.
+* `POST /conversations/{id}/elicitations/{eid}/respond` is the
+  user-facing endpoint. Same Bearer-token auth as the Connect surface;
+  ownership-checked against the conversation row.
+* `ElicitSheet` (ReeveUI) renders a JSON-Schema-driven form. Handles
+  string / boolean / integer fields; string + `format: password`
+  renders as a SecureField (the secrets use case).
+* `ElicitationsRepository` (ReeveKit) POSTs the response.
+* Mac + iOS conversation views mount the sheet via `.sheet(item:)`
+  bound to the first pending elicit on the active stream.
+
+First tool using it: `create_user_model_provider` — Reeve Manager can
+add a provider end-to-end without the API key ever entering chat
+content, the model's context, or DB-persisted message rows. The
+secret flows user → client UI → POST → tool's local stack frame →
+provider config encryption → discarded.
+
+Deferred:
+- **Elicitation over HTTP transport** — needs SSE response framing
+  on server-initiated requests + a paired POST channel for client
+  responses. Inproc is sufficient for Reeve's own assistant
+  (Reeve Manager via local `/mcp`); remote MCP clients calling
+  Elicit get `elicit.ErrUnsupported` and can degrade gracefully.
+- **Schema renderer coverage** — v1 handles flat objects with
+  string/boolean/integer properties + the `password` format hint.
+  Arrays, nested objects, enums, number ranges all fall through to
+  text inputs. Expand the schema-renderer as new tools need it.
 
 ## Welcome message + onboarding (v1 shipped)
 
