@@ -617,7 +617,11 @@ func buildRequestBody(req providers.SendRequest) (*generateContentRequest, error
 }
 
 // toolsToFunctionDeclarations maps the driver-facing ToolDef list into
-// Gemini's flat list of functionDeclarations.
+// Gemini's flat list of functionDeclarations. Parameter schemas are
+// sanitized for the subset Gemini's OpenAPI Schema dialect accepts —
+// see sanitizeGeminiSchema for the field list (chief offender is
+// `additionalProperties`, which Anthropic + OpenAI accept fine but
+// Gemini rejects with HTTP 400 "Cannot find field").
 func toolsToFunctionDeclarations(tools []providers.ToolDef) []geminiFunctionDeclaration {
 	out := make([]geminiFunctionDeclaration, 0, len(tools))
 	for _, t := range tools {
@@ -628,10 +632,76 @@ func toolsToFunctionDeclarations(tools []providers.ToolDef) []geminiFunctionDecl
 		out = append(out, geminiFunctionDeclaration{
 			Name:        t.Name,
 			Description: t.Description,
-			Parameters:  params,
+			Parameters:  sanitizeGeminiSchema(params),
 		})
 	}
 	return out
+}
+
+// geminiUnsupportedSchemaKeys lists JSON Schema fields the Gemini
+// OpenAPI Schema dialect rejects with HTTP 400. Stripped recursively
+// in sanitizeGeminiSchema. The list is conservative — keys we know
+// rejection-fail real requests in production, not "might be ignored."
+//
+// Reference: https://ai.google.dev/api/caching#Schema (the subset of
+// OpenAPI 3.0 Gemini honors). The big-ticket missing fields:
+//
+//   - additionalProperties — common JSON Schema idiom for "no extra
+//     keys allowed." Gemini interprets schemas as closed by default
+//     so the flag is redundant; emitting it triggers the 400.
+//   - $schema — meta-version marker; never useful for tool params.
+//   - $defs / definitions — reference shapes the dialect doesn't
+//     support inline expansion of; tools that need them are out of
+//     scope until we add ref-expansion.
+var geminiUnsupportedSchemaKeys = []string{
+	"additionalProperties",
+	"$schema",
+	"$defs",
+	"definitions",
+}
+
+// sanitizeGeminiSchema returns a JSON Schema with every
+// geminiUnsupportedSchemaKeys entry removed, recursively. Falls back
+// to the raw input when parsing fails — a malformed schema is
+// upstream's problem to reject, not ours to mask.
+func sanitizeGeminiSchema(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return raw
+	}
+	cleaned := stripGeminiKeys(v)
+	out, err := json.Marshal(cleaned)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+// stripGeminiKeys walks a parsed JSON Schema tree and removes any
+// unsupported keys at every nesting depth. Operates on the generic
+// `any` shape json.Unmarshal produces; collections recurse into
+// elements, scalars pass through unchanged.
+func stripGeminiKeys(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for _, key := range geminiUnsupportedSchemaKeys {
+			delete(t, key)
+		}
+		for k, child := range t {
+			t[k] = stripGeminiKeys(child)
+		}
+		return t
+	case []any:
+		for i, child := range t {
+			t[i] = stripGeminiKeys(child)
+		}
+		return t
+	default:
+		return v
+	}
 }
 
 // userPartsFromWire builds the parts array for a user-role content,
