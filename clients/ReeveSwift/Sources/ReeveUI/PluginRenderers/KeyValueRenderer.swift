@@ -15,8 +15,12 @@ import ReeveKit
 ///   ]
 /// }
 /// ```
-struct KeyValueRenderer: View {
+public struct KeyValueRenderer: View {
     let fragment: ReeveUIFragment
+
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
 
     private struct Props: Decodable {
         struct Pair: Decodable, Hashable {
@@ -26,7 +30,7 @@ struct KeyValueRenderer: View {
         let pairs: [Pair]
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         VStack(alignment: .leading, spacing: 4) {
             ForEach(props?.pairs ?? [], id: \.self) { pair in

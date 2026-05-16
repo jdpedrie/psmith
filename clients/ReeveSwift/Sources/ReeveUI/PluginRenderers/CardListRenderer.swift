@@ -20,9 +20,14 @@ import ReeveKit
 ///   ]
 /// }
 /// ```
-struct CardListRenderer: View {
+public struct CardListRenderer: View {
     let fragment: ReeveUIFragment
     let onAction: ((FragmentAction) -> Void)?
+
+    public init(fragment: ReeveUIFragment, onAction: ((FragmentAction) -> Void)?) {
+        self.fragment = fragment
+        self.onAction = onAction
+    }
 
     private struct Props: Decodable {
         struct Item: Decodable, Hashable {
@@ -35,7 +40,7 @@ struct CardListRenderer: View {
         let items: [Item]
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         VStack(alignment: .leading, spacing: 8) {
             ForEach(props?.items ?? [], id: \.self) { item in

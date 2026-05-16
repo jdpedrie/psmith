@@ -353,6 +353,16 @@ struct MessageRow: View {
                     }
                     .padding(.top, 2)
                 }
+            } else if !message.uiFragments.isEmpty {
+                // Server's ContentRenderer pipeline produced a
+                // structured rendering — surface that instead of
+                // the markdown fallback. Same FragmentView the Mac
+                // bubble uses; both platforms share the renderer
+                // set in ReeveUI.
+                FragmentView(
+                    fragments: message.uiFragments,
+                    onAction: handleFragmentAction
+                )
             } else if !bodyText.isEmpty {
                 MarkdownText(bodyText, cacheKey: markdownCacheKey)
             }
@@ -662,6 +672,24 @@ struct MessageRow: View {
 
     private func startEdit() {
         model.editingMessage = message
+    }
+
+    /// Routes a `FragmentAction` from a renderer into the right
+    /// per-conversation handler. `.compose` drops into the
+    /// composer for the user to edit + send; `.external` opens
+    /// a URL via the system browser. Mirrors the Mac handler in
+    /// ConversationView so both platforms have parity behaviour.
+    private func handleFragmentAction(_ action: FragmentAction) {
+        switch action {
+        case .compose(let text):
+            if model.draft.isEmpty {
+                model.draft = text
+            } else {
+                model.draft += "\n" + text
+            }
+        case .external(let url):
+            UIApplication.shared.open(url)
+        }
     }
 
     private func copyToClipboard() {

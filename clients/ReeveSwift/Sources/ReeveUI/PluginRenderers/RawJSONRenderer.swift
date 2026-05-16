@@ -7,10 +7,14 @@ import ReeveKit
 ///
 /// Props schema: any JSON value. The renderer pretty-prints it
 /// directly.
-struct RawJSONRenderer: View {
+public struct RawJSONRenderer: View {
     let fragment: ReeveUIFragment
 
-    var body: some View {
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
+
+    public var body: some View {
         let pretty = prettyJSON(fragment.props) ?? String(data: fragment.props, encoding: .utf8) ?? ""
         ScrollView(.horizontal) {
             Text(pretty)
@@ -33,10 +37,14 @@ struct RawJSONRenderer: View {
 /// Fallback for an unknown component name. Surfaces SOMETHING in
 /// the bubble so a server running ahead of the client doesn't
 /// produce silent gaps in conversations.
-struct UnknownComponentRenderer: View {
+public struct UnknownComponentRenderer: View {
     let fragment: ReeveUIFragment
 
-    var body: some View {
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Unknown component: \(fragment.component)")
                 .font(.caption)

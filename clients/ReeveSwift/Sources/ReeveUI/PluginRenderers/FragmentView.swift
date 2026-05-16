@@ -16,14 +16,22 @@ import ReeveKit
 /// Unknown components fall back to a small `RawJSONRenderer` so
 /// a server running ahead of the client surfaces SOMETHING in
 /// the bubble rather than a silent gap.
-struct FragmentView: View {
+public struct FragmentView: View {
     let fragments: [ReeveUIFragment]
     /// Action handler for interactive components. nil disables
     /// every action — interactive renderers (`choice_list`)
     /// then render in display-only mode.
     let onAction: ((FragmentAction) -> Void)?
 
-    var body: some View {
+    public init(
+        fragments: [ReeveUIFragment],
+        onAction: ((FragmentAction) -> Void)? = nil
+    ) {
+        self.fragments = fragments
+        self.onAction = onAction
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(fragments.enumerated()), id: \.offset) { _, fragment in
                 bodyFor(fragment)
@@ -81,8 +89,8 @@ public enum FragmentAction: Sendable, Hashable {
 /// Recognised forms:
 ///   - `compose:<text>`     — drop `<text>` into the composer
 ///   - `external:<url>`     — open `<url>` externally
-enum FragmentActionParser {
-    static func parse(_ raw: String) -> FragmentAction? {
+public enum FragmentActionParser {
+    public static func parse(_ raw: String) -> FragmentAction? {
         guard let colon = raw.firstIndex(of: ":") else { return nil }
         let scheme = String(raw[..<colon])
         let value = String(raw[raw.index(after: colon)...])

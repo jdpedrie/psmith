@@ -19,9 +19,14 @@ import ReeveKit
 /// render as static text rows; items with an action become
 /// buttons. When `onAction` is nil (display-only context),
 /// everything renders as static rows.
-struct ChoiceListRenderer: View {
+public struct ChoiceListRenderer: View {
     let fragment: ReeveUIFragment
     let onAction: ((FragmentAction) -> Void)?
+
+    public init(fragment: ReeveUIFragment, onAction: ((FragmentAction) -> Void)?) {
+        self.fragment = fragment
+        self.onAction = onAction
+    }
 
     private struct Props: Decodable {
         struct Item: Decodable, Hashable {
@@ -32,7 +37,7 @@ struct ChoiceListRenderer: View {
         let items: [Item]
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         VStack(alignment: .leading, spacing: 6) {
             ForEach(props?.items ?? [], id: \.self) { item in

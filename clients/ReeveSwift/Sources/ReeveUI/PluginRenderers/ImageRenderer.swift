@@ -14,16 +14,20 @@ import ReeveKit
 ///   "caption": "optional below-image caption"
 ///  }
 /// ```
-struct ImageRenderer: View {
+public struct ImageRenderer: View {
     let fragment: ReeveUIFragment
 
-    struct Props: Decodable {
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
+
+    public struct Props: Decodable {
         let url: String
         let alt: String?
         let caption: String?
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         if let urlString = props?.url, let url = URL(string: urlString) {
             VStack(alignment: .leading, spacing: 4) {
@@ -57,14 +61,18 @@ struct ImageRenderer: View {
 
 /// Renderer for `component == "image_grid"` — multiple inline
 /// images in an adaptive grid. Same per-item shape as `ImageRenderer`.
-struct ImageGridRenderer: View {
+public struct ImageGridRenderer: View {
     let fragment: ReeveUIFragment
+
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
 
     struct Props: Decodable {
         let items: [ImageRenderer.Props]
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         let items = props?.items ?? []
         LazyVGrid(

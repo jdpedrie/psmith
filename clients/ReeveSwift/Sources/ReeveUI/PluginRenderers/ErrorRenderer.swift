@@ -14,8 +14,12 @@ import ReeveKit
 ///   "retry": "compose:retry search" // optional FragmentAction
 /// }
 /// ```
-struct ErrorRenderer: View {
+public struct ErrorRenderer: View {
     let fragment: ReeveUIFragment
+
+    public init(fragment: ReeveUIFragment) {
+        self.fragment = fragment
+    }
 
     private struct Props: Decodable {
         let message: String
@@ -23,7 +27,7 @@ struct ErrorRenderer: View {
         let retry: String?
     }
 
-    var body: some View {
+    public var body: some View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
