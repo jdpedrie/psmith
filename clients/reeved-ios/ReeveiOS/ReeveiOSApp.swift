@@ -34,11 +34,9 @@ struct ReeveiOSApp: App {
                 .environment(\.clipboard, UIKitClipboard())
                 .environment(\.notifier, sharedIOSNotifier)
                 .tint(themeStore.current.accent)
-                .task {
-                    if let active = accountManager.active {
-                        await active.bootstrap()
-                    }
-                }
+                // Bootstrap is driven by `iOSAppShell`'s
+                // `.task(id: activeAccountID)` so it re-fires on
+                // every account switch, not just first launch.
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhase(newPhase)
                 }
@@ -77,12 +75,27 @@ struct iOSAppShell: View {
     @Bindable var accountManager: AccountManager
 
     var body: some View {
-        if let app = accountManager.active {
-            RootView()
-                .environment(app)
-                .id(app.accountID ?? UUID())
-        } else {
-            iOSAccountSetupView()
+        Group {
+            if let app = accountManager.active {
+                RootView()
+                    .environment(app)
+                    .id(app.accountID ?? UUID())
+            } else {
+                iOSAccountSetupView()
+            }
+        }
+        // Re-fire on every active-account swap so an account that
+        // hasn't been bootstrapped yet (its AuthState is still
+        // `.resolving`) gets `restoreSession` called and flips to
+        // either `.signedIn` or `.signedOut`. Without this, switching
+        // into a freshly-constructed AppModel leaves the user staring
+        // at AuthInterstitialView forever — looking like the app has
+        // hung. The bootstrap is now guarded internally to be
+        // once-only per AppModel, so re-firing is cheap.
+        .task(id: accountManager.activeAccountID) {
+            if let active = accountManager.active {
+                await active.bootstrap()
+            }
         }
     }
 }

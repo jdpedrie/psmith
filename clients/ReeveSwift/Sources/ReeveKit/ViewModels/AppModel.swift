@@ -122,7 +122,18 @@ public final class AppModel {
         self.init(host: host, tokenStore: tokenStore, authState: AuthState())
     }
 
+    /// Set to true once `bootstrap()` has completed. Bootstrap is
+    /// idempotent at the auth-restore layer, but `connectivity.onOnline`
+    /// appends to a callback list — calling bootstrap twice would
+    /// register the outbound-queue drain twice, causing duplicate
+    /// drains on every reconnect. Guard with this flag so the
+    /// switch-account flow can safely fire `bootstrap` on every
+    /// activation without piling up hooks.
+    private var bootstrapped: Bool = false
+
     public func bootstrap() async {
+        guard !bootstrapped else { return }
+        bootstrapped = true
         _ = await client.auth.restoreSession()
         // `restoreSession()` flips phase to `.signedIn` on success and on
         // cached-restore under transport failure. The "no token" + "dead
