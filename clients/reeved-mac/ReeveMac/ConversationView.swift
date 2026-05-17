@@ -405,12 +405,16 @@ struct ConversationBody: View {
     /// accent — so the entire pane doesn't blank out for a transient
     /// upstream / RPC failure.
     private func loadErrorBanner(_ message: String) -> some View {
-        HStack {
+        HStack(alignment: .top) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            // Let the message wrap to natural height — the earlier
+            // `.lineLimit(2)` ellipsized server errors right at the
+            // noun the user needs to see. fixedSize wins against the
+            // HStack layout pressure from the Dismiss button.
             Text(message)
                 .font(.caption)
-                .lineLimit(2)
-            Spacer()
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
             Button("Dismiss") { model.loadError = nil }
                 .buttonStyle(.borderless)
                 .font(.caption)

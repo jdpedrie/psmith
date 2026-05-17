@@ -355,14 +355,21 @@ private struct ConversationBody: View {
     }
 
     private func loadErrorBanner(_ err: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+            // Let the message wrap to its natural height. The
+            // earlier `.lineLimit(2)` ellipsized server errors like
+            // "model X lacks capabilities required by this profile's
+            // plugin pipeline" right at the noun the user needs to
+            // see. fixedSize forces the Text to take its full
+            // intrinsic vertical size against the HStack layout
+            // pressure from Dismiss on the right.
             Text(err)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer()
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
             Button("Dismiss") { model.loadError = nil }
                 .font(.caption)
         }
