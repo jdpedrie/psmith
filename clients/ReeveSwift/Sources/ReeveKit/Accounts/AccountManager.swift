@@ -123,19 +123,28 @@ public final class AccountManager {
         password: String,
         displayLabel: String? = nil
     ) async throws -> Account {
+        // Dedup: an account already exists for this (host, username).
+        // Re-authenticate on its existing AppModel instead of minting
+        // a duplicate row. This is what lets one form ("LoginView")
+        // cover three flows: fresh first-account, add second account,
+        // and sign-back-in to a signed-out account — the caller
+        // always calls addAccount; this method figures out which.
+        if let existing = accounts.first(where: { $0.host == host && $0.username == username }),
+           let existingModel = appModelByAccount[existing.id] {
+            try await existingModel.client.auth.login(username: username, password: password)
+            // Bootstrap is once-per-AppModel (guarded), so re-calling
+            // is a no-op when this model was bootstrapped earlier.
+            await existingModel.bootstrap()
+            switchAccount(to: existing.id)
+            return existing
+        }
         let account = Account(host: host, username: username, displayLabel: displayLabel)
         let appModel = makeAppModel(for: account)
-        // Authenticate via the per-account AppModel's auth
-        // repository so the token lands in this account's token
-        // store. Errors propagate verbatim — caller renders.
         try await appModel.client.auth.login(username: username, password: password)
-        // Persist + select.
         store.append(account, makeActive: true)
         accounts.append(account)
         appModelByAccount[account.id] = appModel
         activeAccountID = account.id
-        // Bootstrap the new AppModel so connectivity + active runs
-        // are wired before the UI reads from it.
         await appModel.bootstrap()
         return account
     }

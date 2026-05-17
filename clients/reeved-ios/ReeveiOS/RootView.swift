@@ -10,6 +10,7 @@ import ReeveUI
 /// is one screen and lives off the Chats toolbar avatar.
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(AccountManager.self) private var accountManager
 
     var body: some View {
         switch app.authState.phase {
@@ -29,7 +30,18 @@ struct RootView: View {
                 AuthInterstitialView()
             }
         case .signedOut:
-            LoginView()
+            // Seed the form with the active account's host + username
+            // so re-auth is "type your password" rather than the full
+            // server+credentials walk. Falls back to a blank form when
+            // we can't find the active row (defensive — shouldn't
+            // happen since signedOut implies there's an active model).
+            let activeAccount = accountManager.accounts.first {
+                $0.id == accountManager.activeAccountID
+            }
+            LoginView(
+                initialHost: activeAccount?.host,
+                initialUsername: activeAccount?.username
+            )
         }
     }
 }

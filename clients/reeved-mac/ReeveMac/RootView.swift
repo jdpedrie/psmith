@@ -4,6 +4,7 @@ import ReeveUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(AccountManager.self) private var accountManager
 
     /// Owns the conversations view-model so it survives body re-evaluations.
     /// Constructing `ConversationsModel(client:)` inline in the body — like
@@ -34,7 +35,16 @@ struct RootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .signedOut:
-            LoginView()
+            // Seed the form with the active account's host + username
+            // so re-auth is just "type your password". Falls back to
+            // a blank form when we can't resolve the active row.
+            let activeAccount = accountManager.accounts.first {
+                $0.id == accountManager.activeAccountID
+            }
+            LoginView(
+                initialHost: activeAccount?.host,
+                initialUsername: activeAccount?.username
+            )
         }
     }
 

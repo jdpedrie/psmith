@@ -104,9 +104,25 @@ struct HomeView: View {
                 accountSwitcherPopover
             }
             .sheet(isPresented: $showingAddAccount) {
-                AddAccountSheet(isPresented: $showingAddAccount)
-                    .environment(accountManager)
-                    .frame(minWidth: 420, minHeight: 360)
+                // Sheet-presented LoginView (no preselected host)
+                // walks server probe + credentials and routes through
+                // AccountManager.addAccount. AccountManager dedupes on
+                // (host, username), so re-entering an existing
+                // account here reactivates rather than duplicating.
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Add account")
+                            .font(.title3.weight(.semibold))
+                        Spacer()
+                        Button("Cancel") { showingAddAccount = false }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    LoginView()
+                        .environment(accountManager)
+                }
+                .frame(minWidth: 460, minHeight: 420)
             }
             .confirmationDialog(
                 accountToRemove.map { "Remove \($0.resolvedDisplayLabel)?" } ?? "Remove account?",
@@ -158,7 +174,7 @@ struct HomeView: View {
 
     /// Popover content for the user chip. Lists every account
     /// with a check next to the active one, an "Add account…"
-    /// entry that opens the AddAccountSheet, and per-row
+    /// entry that opens LoginView in a sheet, and per-row
     /// remove + sign-out actions on a hover-revealed trailing
     /// menu.
     @ViewBuilder
@@ -251,126 +267,3 @@ private struct AccountSwitcherRow: View {
     }
 }
 
-/// Modal sheet hosting the same two-phase form as
-/// AccountSetupView. Used when the user already has at least
-/// one account and wants to add another. Dismisses on success.
-struct AddAccountSheet: View {
-    @Binding var isPresented: Bool
-    @Environment(AccountManager.self) private var accountManager
-    @State private var phase: Phase = .server
-    @State private var hostText: String = ""
-    @State private var pendingHost: URL?
-    @State private var username: String = ""
-    @State private var password: String = ""
-    @State private var displayLabel: String = ""
-    @State private var inFlight = false
-    @State private var errorMessage: String?
-
-    enum Phase: Hashable { case server, credentials }
-
-    var body: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Text("Add an account")
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Button("Cancel") { isPresented = false }
-                    .keyboardShortcut(.cancelAction)
-            }
-            switch phase {
-            case .server: serverForm
-            case .credentials: credentialsForm
-            }
-            if let err = errorMessage {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-    }
-
-    @ViewBuilder
-    private var serverForm: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Server URL")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            TextField("https://reeve.example.com", text: $hostText)
-                .textFieldStyle(.roundedBorder)
-                .disableAutocorrection(true)
-            HStack {
-                Spacer()
-                Button("Continue") {
-                    guard let url = URL(string: hostText.trimmingCharacters(in: .whitespaces)) else {
-                        errorMessage = "Not a valid URL"
-                        return
-                    }
-                    pendingHost = url
-                    errorMessage = nil
-                    phase = .credentials
-                }
-                .buttonStyle(.glassProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(hostText.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var credentialsForm: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let host = pendingHost {
-                Text("Sign in to \(host.absoluteString)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            TextField("Username", text: $username)
-                .textFieldStyle(.roundedBorder)
-            SecureField("Password", text: $password)
-                .textFieldStyle(.roundedBorder)
-            TextField("Display label (optional)", text: $displayLabel)
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Button("Back") { phase = .server }
-                    .buttonStyle(.borderless)
-                Spacer()
-                Button {
-                    Task { await submit() }
-                } label: {
-                    if inFlight {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Signing in…")
-                        }
-                    } else {
-                        Text("Add").bold()
-                    }
-                }
-                .buttonStyle(.glassProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(inFlight || username.isEmpty || password.isEmpty)
-            }
-        }
-    }
-
-    private func submit() async {
-        guard let host = pendingHost else { return }
-        inFlight = true
-        errorMessage = nil
-        defer { inFlight = false }
-        do {
-            try await accountManager.addAccount(
-                host: host,
-                username: username,
-                password: password,
-                displayLabel: displayLabel.isEmpty ? nil : displayLabel
-            )
-            isPresented = false
-        } catch {
-            errorMessage = ReeveError.display(error)
-        }
-    }
-}

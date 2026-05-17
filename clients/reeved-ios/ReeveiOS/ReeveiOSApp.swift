@@ -70,7 +70,7 @@ struct ReeveiOSApp: App {
 }
 
 /// iOS root shell — picks RootView when an active account exists,
-/// AccountSetupView otherwise. Mirrors the Mac AppShell.
+/// LoginView (cold-start variant) otherwise. Mirrors the Mac AppShell.
 struct iOSAppShell: View {
     @Bindable var accountManager: AccountManager
 
@@ -81,7 +81,12 @@ struct iOSAppShell: View {
                     .environment(app)
                     .id(app.accountID ?? UUID())
             } else {
-                iOSAccountSetupView()
+                // Cold start: no account configured. LoginView with
+                // no preselected host walks the user through server
+                // probe + credentials and calls
+                // `accountManager.addAccount`, which becomes the
+                // first persisted account and makes itself active.
+                LoginView()
             }
         }
         // Re-fire on every active-account swap so an account that

@@ -227,10 +227,10 @@ struct ReeveMacApp: App {
     var body: some Scene {
         WindowGroup("") {
             // Compose env: AccountManager always; AppModel only
-            // when an active account exists. RootView reads
-            // AppModel via env when present and falls back to
-            // showing AccountSetupView (a thin LoginView wrapper
-            // that calls accountManager.addAccount).
+            // when an active account exists. AppShell shows
+            // RootView when there's an active account, otherwise
+            // LoginView (cold-start variant routing through
+            // accountManager.addAccount).
             AppShell(accountManager: accountManager)
                 .environment(accountManager)
                 .environment(sharedWindowState)

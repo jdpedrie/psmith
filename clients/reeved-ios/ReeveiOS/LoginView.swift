@@ -1,58 +1,100 @@
 import SwiftUI
 import ReeveKit
 
-/// Two-phase iOS sign-in. Mirrors `ReeveMac/LoginView.swift` exactly:
+/// Two-phase sign-in form, used in three contexts that look identical
+/// from the user's POV:
 ///
-/// Phase 1 — server URL entry — type the URL, hit Test (probes via
-/// `probeReeveServer`), green → enable Continue.
-/// Phase 2 — credentials — username + password, posts to
-/// `AuthService.Login`. Server URL header carries a "Change" link that
-/// bounces back to phase 1.
+///   1. **Cold start** — no account exists. Shown by `iOSAppShell` when
+///      `accountManager.active == nil`. No `initialHost` → starts on
+///      phase 1 (server URL entry).
+///   2. **Add account** — presented as a sheet from the chats toolbar
+///      account menu. Same blank start.
+///   3. **Sign back in** — the active account signed itself out.
+///      `RootView` renders this with `initialHost` + `initialUsername`
+///      seeded from the active account, skipping phase 1.
 ///
-/// On launch with a previously-validated URL we skip straight to
-/// phase 2 (the persisted URL comes back from `ServerURLStore`). The
-/// user only sees phase 1 the first time, after a server-side change,
-/// or after explicit "Change server".
+/// All three route through `AccountManager.addAccount(...)` — the
+/// manager dedupes on `(host, username)`, so a "sign back in" call
+/// re-authenticates the existing AppModel instead of duplicating the
+/// row. Previously each context had its own form; the duplication
+/// drifted (different field labels, missing affordances).
 struct LoginView: View {
-    @Environment(AppModel.self) private var app
+    var initialHost: URL? = nil
+    var initialUsername: String? = nil
+
     @Environment(AccountManager.self) private var accountManager
-    @State private var phase: Phase = .credentials
+    @Environment(\.dismiss) private var dismiss
+    @State private var phase: Phase
+    @State private var pendingHost: URL?
+    @State private var initialUsernameDraft: String
     @State private var urlStore = ServerURLStore.shared
 
     enum Phase: Hashable { case server, credentials }
 
+    init(initialHost: URL? = nil, initialUsername: String? = nil) {
+        self.initialHost = initialHost
+        self.initialUsername = initialUsername
+        // Skip server-URL entry whenever the caller already knows the
+        // host (sign-back-in path). Pre-fill the username so the user
+        // just types their password.
+        _phase = State(initialValue: initialHost != nil ? .credentials : .server)
+        _pendingHost = State(initialValue: initialHost)
+        _initialUsernameDraft = State(initialValue: initialUsername ?? "")
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Group {
-                        switch phase {
-                        case .server:
-                            ServerURLEntry(onValidated: { newURL in
-                                // Persisting flips ServerURLStore.current,
-                                // which the App scene watches via @State; the
-                                // outer `.onChange(of: urlStore.current)` in
-                                // ReeveiOSApp rebuilds AppModel against the
-                                // new URL. The next render of LoginView is on
-                                // top of the new client.
-                                urlStore.current = newURL
-                                phase = .credentials
-                            })
-                        case .credentials:
+        // No wrapping NavigationStack — callers add navigation chrome
+        // when they need it (the sheet-presented "add account" path
+        // wraps for the Cancel toolbar; cold start + sign-back-in
+        // present LoginView bare).
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Group {
+                    switch phase {
+                    case .server:
+                        ServerURLEntry(initialText: pendingHost?.absoluteString) { newURL in
+                            // Persist as the current process-wide
+                            // server so the legacy ServerURLStore
+                            // stays in sync with whatever the user
+                            // just validated. AccountManager keeps
+                            // its own per-account host record so
+                            // this is just a hint, not authoritative.
+                            urlStore.current = newURL
+                            pendingHost = newURL
+                            phase = .credentials
+                        }
+                    case .credentials:
+                        if let host = pendingHost {
                             CredentialsEntry(
-                                serverURL: app.serverURL,
-                                onChangeServer: { phase = .server }
+                                serverURL: host,
+                                initialUsername: initialUsernameDraft,
+                                onChangeServer: initialHost == nil ? { phase = .server } : nil,
+                                onSubmit: { username, password in
+                                    try await accountManager.addAccount(
+                                        host: host,
+                                        username: username,
+                                        password: password
+                                    )
+                                    // Dismiss closes a sheet
+                                    // presentation; no-op when
+                                    // LoginView is the root view
+                                    // (cold start / signed-out
+                                    // active). The active-account
+                                    // swap re-renders the shell
+                                    // either way.
+                                    dismiss()
+                                }
                             )
                         }
                     }
-
-                    let others = accountManager.otherSignedInAccounts
-                    if !others.isEmpty {
-                        otherAccountsSection(others)
-                    }
                 }
-                .padding(.horizontal, 24)
+
+                let others = accountManager.otherSignedInAccounts
+                if !others.isEmpty {
+                    otherAccountsSection(others)
+                }
             }
+            .padding(.horizontal, 24)
         }
     }
 
@@ -80,6 +122,7 @@ struct LoginView: View {
             ForEach(others) { account in
                 Button {
                     accountManager.switchAccount(to: account.id)
+                    dismiss()
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "person.crop.circle")
@@ -114,8 +157,9 @@ struct LoginView: View {
 // MARK: - Phase 1: server URL entry
 
 private struct ServerURLEntry: View {
+    var initialText: String?
     let onValidated: (URL) -> Void
-    @State private var urlText: String = ServerURLStore.shared.current.absoluteString
+    @State private var urlText: String
     @State private var inFlight = false
     @State private var status: Status = .idle
 
@@ -124,6 +168,12 @@ private struct ServerURLEntry: View {
         case ok(version: String)
         case wrong(String)
         case unreachable(String)
+    }
+
+    init(initialText: String? = nil, onValidated: @escaping (URL) -> Void) {
+        self.initialText = initialText
+        self.onValidated = onValidated
+        _urlText = State(initialValue: initialText ?? ServerURLStore.shared.current.absoluteString)
     }
 
     var body: some View {
@@ -270,17 +320,36 @@ private struct ServerURLEntry: View {
 // MARK: - Phase 2: credentials
 
 private struct CredentialsEntry: View {
-    @Environment(AppModel.self) private var app
     let serverURL: URL
-    let onChangeServer: () -> Void
+    var initialUsername: String = ""
+    /// Tappable "Change" link beside the server chip. Hidden when the
+    /// caller doesn't want the user to alter the host — typically the
+    /// sign-back-in flow where the host is fixed to the active account.
+    var onChangeServer: (() -> Void)? = nil
+    /// Receives (username, password). Throws on failure; the view
+    /// renders the resulting message inline.
+    let onSubmit: (String, String) async throws -> Void
 
-    @State private var username = ""
+    @State private var username: String
     @State private var password = ""
     @State private var inFlight = false
     @State private var errorMessage: String?
     @FocusState private var focused: Field?
 
     enum Field: Hashable { case username, password }
+
+    init(
+        serverURL: URL,
+        initialUsername: String = "",
+        onChangeServer: (() -> Void)? = nil,
+        onSubmit: @escaping (String, String) async throws -> Void
+    ) {
+        self.serverURL = serverURL
+        self.initialUsername = initialUsername
+        self.onChangeServer = onChangeServer
+        self.onSubmit = onSubmit
+        _username = State(initialValue: initialUsername)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -335,7 +404,12 @@ private struct CredentialsEntry: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 32)
-        .onAppear { focused = .username }
+        .onAppear {
+            // Skip to the password field when the username's already
+            // filled in (the sign-back-in flow has the row's
+            // remembered username pre-populated).
+            focused = username.isEmpty ? .username : .password
+        }
     }
 
     private var header: some View {
@@ -353,8 +427,10 @@ private struct CredentialsEntry: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
-            Button("Change", action: onChangeServer)
-                .font(.callout)
+            if let onChangeServer {
+                Button("Change", action: onChangeServer)
+                    .font(.callout)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -367,11 +443,7 @@ private struct CredentialsEntry: View {
         inFlight = true
         errorMessage = nil
         do {
-            _ = try await app.client.auth.login(
-                username: username,
-                password: password,
-                clientLabel: "iOS"
-            )
+            try await onSubmit(username, password)
             Haptics.notify(.success)
         } catch {
             errorMessage = ReeveError.display(error)

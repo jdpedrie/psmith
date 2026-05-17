@@ -82,8 +82,16 @@ struct ChatsRoot: View {
                     }
                 }
                 .sheet(isPresented: $showingAddAccount) {
+                    // LoginView with no preselected host walks through
+                    // server probe + credentials and routes through
+                    // AccountManager.addAccount, which dedupes on
+                    // (host, username) — so even if the user happens
+                    // to re-enter an existing account here, it just
+                    // reactivates instead of failing or duplicating.
                     NavigationStack {
-                        iOSAddAccountForm()
+                        LoginView()
+                            .navigationTitle("Add account")
+                            .navigationBarTitleDisplayMode(.inline)
                             .toolbar {
                                 ToolbarItem(placement: .topBarTrailing) {
                                     Button("Cancel") { showingAddAccount = false }
