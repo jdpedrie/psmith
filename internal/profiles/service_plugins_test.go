@@ -2,7 +2,9 @@ package profiles
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -233,12 +235,76 @@ func TestSetProfilePlugins_HappyPath(t *testing.T) {
 		t.Errorf("ordinals wrong: %+v", resp.Msg.Plugins)
 	}
 
-	// Round-trip via Get to confirm persistence.
+	// Round-trip via Get to confirm persistence — assert the actual
+	// config bytes survive, not just the row count. The earlier
+	// version only checked `len(got.Msg.Plugins) != 2`, which let
+	// the GetProfilePlugins decrypt bug ship: Set wrote encrypted,
+	// Get returned the unrelated plaintext column (NULL for fresh
+	// rows), and the count was right while every field was empty.
 	got, _ := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if len(got.Msg.Plugins) != 2 {
-		t.Errorf("GetProfilePlugins len = %d want 2", len(got.Msg.Plugins))
+		t.Fatalf("GetProfilePlugins len = %d want 2", len(got.Msg.Plugins))
+	}
+	var firstCfg map[string]any
+	if err := json.Unmarshal(got.Msg.Plugins[0].Config, &firstCfg); err != nil {
+		t.Fatalf("decode plugins[0].Config: %v (raw=%q)", err, string(got.Msg.Plugins[0].Config))
+	}
+	if v, ok := firstCfg["keep_last_n"].(float64); !ok || v != 2 {
+		t.Errorf("plugins[0].Config[keep_last_n] = %v want 2 (raw=%q)", firstCfg["keep_last_n"], string(got.Msg.Plugins[0].Config))
+	}
+}
+
+// TestSetProfilePlugins_ConfigRoundTripsAfterEncryption pins the
+// encrypt-on-Set / decrypt-on-Get contract for every config field
+// the user might fill in. Regression test for the bug where
+// GetProfilePlugins returned the legacy plaintext column (NULL for
+// every post-rollover row) instead of decrypting ConfigEncrypted —
+// the profile-edit form re-opened blank after every save until this
+// was fixed. Uses text_injector because it's the most config-heavy
+// plugin (5 textarea fields, exercises long-string round-trip).
+func TestSetProfilePlugins_ConfigRoundTripsAfterEncryption(t *testing.T) {
+	t.Parallel()
+	svc, qs := newTestSvc(t)
+	user := mustCreateUser(t, qs, "alice")
+	prof := makeProfilePlain(t, qs, user.ID, nil)
+
+	originalConfig := map[string]string{
+		"system_prefix":      "[system prefix prose]",
+		"system_suffix":      "[system suffix prose]",
+		"user_prefix":        "<user prefix>",
+		"user_suffix":        "</user suffix>",
+		"user_head_reminder": "Reminder: stay on task. " + strings.Repeat("blah ", 64),
+	}
+	encoded, err := json.Marshal(originalConfig)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+		ProfileId: prof.ID.String(),
+		Plugins:   []*reevev1.ProfilePlugin{{PluginName: plugins.TextInjectorName, Config: encoded}},
+	})); err != nil {
+		t.Fatalf("SetProfilePlugins: %v", err)
+	}
+
+	got, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+		ProfileId: prof.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("GetProfilePlugins: %v", err)
+	}
+	if len(got.Msg.Plugins) != 1 {
+		t.Fatalf("len(plugins) = %d want 1", len(got.Msg.Plugins))
+	}
+	var readBack map[string]string
+	if err := json.Unmarshal(got.Msg.Plugins[0].Config, &readBack); err != nil {
+		t.Fatalf("decode returned Config: %v (raw=%q)", err, string(got.Msg.Plugins[0].Config))
+	}
+	for k, want := range originalConfig {
+		if got := readBack[k]; got != want {
+			t.Errorf("field %q round-trip: got %q want %q", k, got, want)
+		}
 	}
 }
 
