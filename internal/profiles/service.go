@@ -557,11 +557,21 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[re
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := make([]*reevev1.ProfilePlugin, 0, len(rows))
-	for _, r := range rows {
+	for i, r := range rows {
+		// Decrypt the encrypted column when present; fall back to the
+		// legacy plaintext column for rows written before the
+		// encryption rollover. Without this the response returned the
+		// raw plaintext column unconditionally — which is NULL for
+		// every row written after the rollover, so the iOS / Mac
+		// settings form re-opened blank after every save.
+		cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugins[%d] config: %w", i, err))
+		}
 		out = append(out, &reevev1.ProfilePlugin{
 			PluginName: r.PluginName,
 			Ordinal:    r.Ordinal,
-			Config:     r.Config,
+			Config:     cfg,
 		})
 	}
 	return connect.NewResponse(&reevev1.GetProfilePluginsResponse{Plugins: out}), nil
