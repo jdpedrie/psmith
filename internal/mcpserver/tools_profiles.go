@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/internal/elicit"
 )
 
 func (s *Server) registerProfileTools() {
@@ -68,15 +69,34 @@ func (s *Server) registerProfileTools() {
 	)
 	s.register(
 		"set_profile_plugins",
-		"Replace a profile's plugin pipeline atomically. The order of `plugins` is the execution order (index 0 runs first). Each plugin's `config_json` is a JSON-encoded string matching the shape advertised by registered_plugins (the `config_fields` list) — pass `\"{}\"` for plugins with no config, otherwise a JSON object literal like `\"{\\\"output_mode\\\":\\\"component\\\"}\"`. Replaces the entire pipeline; pass an empty list to clear it (which makes the profile inherit from its parent).",
+		"Replace a profile's plugin pipeline atomically. The order of `plugins` is the execution order (index 0 runs first). Each plugin's `config_json` is a JSON-encoded string matching the shape advertised by registered_plugins (the `config_fields` list) — pass `\"{}\"` for plugins with no config, otherwise a JSON object literal like `\"{\\\"output_mode\\\":\\\"component\\\"}\"`. Replaces the entire pipeline; pass an empty list to clear it (which makes the profile inherit from its parent). For fields marked `global: true` in `registered_plugins.config_fields`, do NOT include them in `config_json` — they live in user-scope settings (see upsert_user_plugin_settings) and the server merges them in at runtime.",
 		`{"type":"object","required":["profile_id","plugins"],"properties":{`+
 			`"profile_id":{"type":"string"},`+
 			`"plugins":{"type":"array","description":"Ordered list of plugins to attach.","items":{"type":"object","required":["plugin_name","config_json"],"properties":{`+
 			`"plugin_name":{"type":"string","description":"Machine name from registered_plugins (e.g. \"lettered_choices\", \"basic_grounding\")."},`+
-			`"config_json":{"type":"string","description":"Plugin config as a JSON-encoded string. Use \"{}\" for plugins with no config; otherwise a JSON object whose keys match the plugin's config_fields, e.g. \"{\\\"keep_last_n\\\":1}\"."}`+
+			`"config_json":{"type":"string","description":"Plugin config as a JSON-encoded string. Use \"{}\" for plugins with no config; otherwise a JSON object whose keys match the plugin's config_fields, e.g. \"{\\\"keep_last_n\\\":1}\". Omit any field where config_fields says global:true — those go through upsert_user_plugin_settings."}`+
 			`},"additionalProperties":false}}`+
 			`},"additionalProperties":false}`,
 		s.toolSetProfilePlugins,
+	)
+	s.register(
+		"get_user_plugin_settings",
+		"Read the calling user's stored user-scope (global) config for one plugin. Returns the stored JSON config or `{}` when no row exists. Use this to check whether a plugin's required globals (e.g. API keys) have already been set before attaching it to a profile.",
+		`{"type":"object","required":["plugin_name"],"properties":{"plugin_name":{"type":"string"}},"additionalProperties":false}`,
+		s.toolGetUserPluginSettings,
+	)
+	s.register(
+		"upsert_user_plugin_settings",
+		"Write the calling user's user-scope (global) config for one plugin — used for fields registered_plugins marks `global: true` (typically API keys / shared credentials). Pass `config_json` for non-secret fields; list each secret field in `secret_field_names` and the server will elicit those values directly from the user via a secure prompt. **You never see secret values and they never appear in chat content** — they flow user → server, are encrypted at rest, and merge into the plugin's config when it runs. Use this BEFORE set_profile_plugins for any plugin whose required fields include globals.",
+		`{"type":"object","required":["plugin_name"],"properties":{`+
+			`"plugin_name":{"type":"string","description":"Machine name from registered_plugins."},`+
+			`"config_json":{"type":"string","description":"JSON-encoded object of non-secret config values. Pass \"{}\" or omit when every required field is a secret."},`+
+			`"secret_field_names":{"type":"array","items":{"type":"object","required":["field","prompt"],"properties":{`+
+			`"field":{"type":"string","description":"Name from config_fields (e.g. \"api_key\")."},`+
+			`"prompt":{"type":"string","description":"Human-readable prompt shown above the secure input, e.g. \"Brave Search API key\"."}`+
+			`},"additionalProperties":false},"description":"Secret fields to elicit. The server prompts the user, encrypts the response, and merges it into the saved config under each field name."}`+
+			`},"additionalProperties":false}`,
+		s.toolUpsertUserPluginSettings,
 	)
 }
 
@@ -240,6 +260,154 @@ func (s *Server) toolGetProfilePlugins(ctx context.Context, args json.RawMessage
 		out = append(out, profilePluginDetail(p))
 	}
 	return textResult(map[string]any{"plugins": out}), nil
+}
+
+// --- get_user_plugin_settings --------------------------------------------
+
+type getUserPluginSettingsArgs struct {
+	PluginName string `json:"plugin_name"`
+}
+
+func (s *Server) toolGetUserPluginSettings(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in getUserPluginSettingsArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.PluginName == "" {
+		return errorResult("plugin_name is required"), nil
+	}
+	resp, err := s.profilesSvc.GetUserPluginSettings(ctx, connect.NewRequest(&reevev1.GetUserPluginSettingsRequest{
+		PluginName: in.PluginName,
+	}))
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+	cfg := resp.Msg.GetSettings().GetConfig()
+	if len(cfg) == 0 {
+		cfg = []byte("{}")
+	}
+	var cfgAny any
+	_ = json.Unmarshal(cfg, &cfgAny)
+	return textResult(map[string]any{
+		"plugin_name": in.PluginName,
+		"config":      cfgAny,
+	}), nil
+}
+
+// --- upsert_user_plugin_settings -----------------------------------------
+
+type upsertUserPluginSettingsArgs struct {
+	PluginName       string `json:"plugin_name"`
+	ConfigJSON       string `json:"config_json"`
+	SecretFieldNames []struct {
+		Field  string `json:"field"`
+		Prompt string `json:"prompt"`
+	} `json:"secret_field_names"`
+}
+
+func (s *Server) toolUpsertUserPluginSettings(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in upsertUserPluginSettingsArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.PluginName == "" {
+		return errorResult("plugin_name is required"), nil
+	}
+
+	// Start with the non-secret config (or {}). Each elicited secret
+	// merges in under its field name. Validation: must be a JSON
+	// object so secret-field merging has somewhere to land.
+	configRaw := in.ConfigJSON
+	if configRaw == "" {
+		configRaw = "{}"
+	}
+	if !json.Valid([]byte(configRaw)) {
+		return errorResult("config_json is not valid JSON"), nil
+	}
+	var configMap map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configMap); err != nil {
+		return errorResult("config_json must be a JSON object"), nil
+	}
+	if configMap == nil {
+		configMap = map[string]any{}
+	}
+
+	// Elicit each secret field. Bail with a clear isError if the
+	// user declines/cancels — better than persisting half a config.
+	if len(in.SecretFieldNames) > 0 {
+		ec, ok := elicit.FromContext(ctx)
+		if !ok {
+			return errorResult("this tool requires elicitation support (in-process MCP transport only)"), nil
+		}
+		for _, sf := range in.SecretFieldNames {
+			if sf.Field == "" {
+				return errorResult("secret_field_names[*].field is required"), nil
+			}
+			prompt := sf.Prompt
+			if prompt == "" {
+				prompt = sf.Field
+			}
+			// Schema: one password-format string field named after the
+			// secret. Clients render `format: password` as SecureField.
+			schema := []byte(`{"type":"object","required":["` + sf.Field + `"],"properties":{"` + sf.Field + `":{"type":"string","format":"password","description":"` + jsonEscape(prompt) + `"}},"additionalProperties":false}`)
+			resp, err := ec.Elicit(ctx, elicit.Request{
+				Message:         prompt + " — stored encrypted on this Reeve instance, never sent to the LLM provider.",
+				RequestedSchema: schema,
+			})
+			if err != nil {
+				return errorResult("elicitation failed: " + err.Error()), nil
+			}
+			if resp.Action != elicit.ActionAccept {
+				return errorResult("user " + string(resp.Action) + "ed the secret prompt — settings not saved"), nil
+			}
+			var content map[string]string
+			if err := json.Unmarshal(resp.Content, &content); err != nil {
+				return errorResult("decode elicit response: " + err.Error()), nil
+			}
+			value := content[sf.Field]
+			if value == "" {
+				return errorResult("elicited value for " + sf.Field + " was empty"), nil
+			}
+			configMap[sf.Field] = value
+		}
+	}
+
+	merged, err := json.Marshal(configMap)
+	if err != nil {
+		return errorResult("re-encode merged config: " + err.Error()), nil
+	}
+
+	if _, err := s.profilesSvc.UpsertUserPluginSettings(ctx, connect.NewRequest(&reevev1.UpsertUserPluginSettingsRequest{
+		PluginName: in.PluginName,
+		Config:     merged,
+	})); err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Echo back the names of fields stored — but never the values.
+	// Helps the assistant narrate "set api_key + default_count" without
+	// surfacing the secret in chat content.
+	stored := make([]string, 0, len(configMap))
+	for k := range configMap {
+		stored = append(stored, k)
+	}
+	return textResult(map[string]any{
+		"plugin_name":   in.PluginName,
+		"stored_fields": stored,
+		"hint":          "Globals saved. Next: call set_profile_plugins to attach the plugin to a profile (omit any global fields from config_json — the server merges them in at runtime).",
+	}), nil
+}
+
+// jsonEscape returns s with backslash + double-quote characters escaped
+// so it's safe to interpolate into a raw JSON string literal. Used by
+// the inline schema construction above where calling json.Marshal for
+// every field would be heavier than the input justifies.
+func jsonEscape(s string) string {
+	b, _ := json.Marshal(s)
+	if len(b) >= 2 {
+		return string(b[1 : len(b)-1])
+	}
+	return s
 }
 
 // --- set_profile_plugins -------------------------------------------------

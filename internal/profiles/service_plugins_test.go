@@ -57,8 +57,8 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	if got.Description == "" {
 		t.Error("description should be non-empty")
 	}
-	if len(got.ConfigFields) != 4 {
-		t.Errorf("config_fields len = %d want 4", len(got.ConfigFields))
+	if len(got.ConfigFields) != 3 {
+		t.Errorf("config_fields len = %d want 3", len(got.ConfigFields))
 	}
 	// Spot-check keep_last_n: NUMBER type with default JSON-encoded "1".
 	var keepLastN, sysOverride *reevev1.ConfigField
@@ -85,8 +85,11 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	if sysOverride.Type != reevev1.ConfigField_TEXTAREA {
 		t.Errorf("system_instruction_override type = %v want TEXTAREA", sysOverride.Type)
 	}
-	if sysOverride.DefaultJson != "" {
-		t.Errorf("system_instruction_override default_json = %q want \"\"", sysOverride.DefaultJson)
+	// system_instruction_override carries the default prose instruction so
+	// the form preloads with something the user can edit rather than a
+	// blank box; assert it's non-empty rather than pinning exact text.
+	if sysOverride.DefaultJson == "" {
+		t.Error("system_instruction_override default_json should carry the default prose instruction")
 	}
 	caps := got.Capabilities
 	if caps == nil {

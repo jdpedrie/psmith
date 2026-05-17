@@ -104,8 +104,11 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	for _, blk := range body.System {
 		systemText += blk.Text
 	}
-	// (1) System instruction was appended to the system slot.
-	if !strings.Contains(systemText, "lettered choices") {
+	// (1) System instruction was appended to the system slot. The
+	// lettered_choices plugin's default prose talks about "choices" and
+	// shows the `<choices>` delimiter pair — anchor on the delimiter so
+	// the assertion survives prose tweaks.
+	if !strings.Contains(systemText, "<choices>") {
 		t.Errorf("system message should contain the lettered_choices instruction; got %q", systemText)
 	}
 
