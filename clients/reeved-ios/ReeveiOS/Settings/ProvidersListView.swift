@@ -789,6 +789,17 @@ private struct DiscoverModelsScreen: View {
         }
         .navigationTitle("Discover Models")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await load() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(loading)
+                .accessibilityLabel("Refresh models")
+            }
+        }
         .task {
             await load()
         }
