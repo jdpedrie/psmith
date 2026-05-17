@@ -53,5 +53,10 @@ let package = Package(
             dependencies: ["ReeveKit", "ReeveKitTestHarness"],
             path: "Tests/ReeveKitTests"
         ),
+        .testTarget(
+            name: "ReeveUITests",
+            dependencies: ["ReeveUI"],
+            path: "Tests/ReeveUITests"
+        ),
     ]
 )
