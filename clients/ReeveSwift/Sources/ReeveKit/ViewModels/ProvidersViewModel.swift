@@ -101,9 +101,19 @@ public final class ProvidersViewModel {
 
     public init(client: ReeveClient) { self.client = client }
 
+    /// Flips true at the end of the first `load()` regardless of
+    /// success/failure. Shells use this to distinguish "providers
+    /// genuinely empty, show onboarding" from "providers haven't been
+    /// fetched yet, show splash" — without it the onboarding screen
+    /// flashes on every cold start before the list lands.
+    public private(set) var hasLoadedOnce: Bool = false
+
     public func load() async {
         isLoadingProviders = true
-        defer { isLoadingProviders = false }
+        defer {
+            isLoadingProviders = false
+            hasLoadedOnce = true
+        }
         do {
             providers = try await client.modelProviders.list()
             error = nil

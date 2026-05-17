@@ -74,25 +74,39 @@ private struct AppShell: View {
 
     var body: some View {
         Group {
-            if needsOnboarding {
+            // Splash until BOTH providers and convos are ready.
+            // Without this gate, the OnboardingView header
+            // ("Welcome to Reeve") flashes on every cold start
+            // because `providers.providers` is empty until the
+            // first list completes — needsOnboarding then briefly
+            // returns true before the load finishes.
+            if !app.providers.hasLoadedOnce || convos == nil {
+                AuthInterstitialView()
+            } else if needsOnboarding {
                 OnboardingView()
-                    .task { await app.providers.load() }
             } else if let convos {
                 // No tab bar — every pixel of vertical space matters
                 // for the conversation surface. Settings access lives
                 // in the account avatar menu (top-leading), which
-                // presents SettingsRoot as a sheet. iOSNavigator no
-                // longer carries a selectedTab.
+                // presents SettingsRoot as a sheet.
                 ChatsRoot(user: user)
                     .environment(convos)
-            } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .task {
-                        let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
-                        await m.refresh()
-                        convos = m
-                    }
+            }
+        }
+        // Kick off both fetches as soon as AppShell mounts. The
+        // splash branch above covers whichever is slower. Doing this
+        // here (not from inside OnboardingView's .task) is what
+        // prevents the welcome-screen flash — by the time we even
+        // consider rendering OnboardingView we know whether it's
+        // genuinely warranted.
+        .task {
+            if convos == nil {
+                let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
+                await m.refresh()
+                convos = m
+            }
+            if !app.providers.hasLoadedOnce {
+                await app.providers.load()
             }
         }
     }

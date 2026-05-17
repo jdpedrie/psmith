@@ -50,15 +50,27 @@ struct RootView: View {
 
     @ViewBuilder
     private func authed(user: ReeveUser) -> some View {
-        if needsOnboarding {
+        // Splash until BOTH providers and convos are ready —
+        // without this, OnboardingView flashes briefly on every
+        // cold start because `providers.providers` is empty until
+        // the first list completes.
+        if !app.providers.hasLoadedOnce || convos == nil {
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    if convos == nil {
+                        convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
+                    }
+                    if !app.providers.hasLoadedOnce {
+                        await app.providers.load()
+                    }
+                }
+        } else if needsOnboarding {
             OnboardingView()
-                .task { await app.providers.load() }
         } else if let convos {
             HomeView(user: user)
                 .environment(convos)
-        } else {
-            Color.clear
-                .task { convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub) }
         }
     }
 
