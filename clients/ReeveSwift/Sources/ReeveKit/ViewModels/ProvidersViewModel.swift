@@ -160,7 +160,13 @@ public final class ProvidersViewModel {
     public func selectProvider(_ id: String) async {
         selectedID = id
         detailMode = .viewing
-        enabledModels = []
+        // Intentionally do NOT zero `enabledModels` before the fetch.
+        // AppShell's onboarding gate observes `enabledModels.isEmpty`
+        // and a transient empty state tears down the entire chat
+        // navigation stack (it swaps to OnboardingView and back),
+        // popping the user from "tapped a provider row" to the chat
+        // homepage. Keep the previous list visible during refresh;
+        // the spinner from `isLoadingDetail` signals the reload.
         isLoadingDetail = true
         defer { isLoadingDetail = false }
         do {
