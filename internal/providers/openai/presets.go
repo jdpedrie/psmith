@@ -7,9 +7,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jdpedrie/reeve/internal/providers"
 )
+
+// discoveryTimeout caps a single live-discovery HTTP call so a hung or
+// unreachable upstream (a slow xAI / Ollama / etc.) can't pin the
+// caller indefinitely. Set short enough that the iOS UI doesn't sit
+// waiting for many seconds before the user sees an error, long enough
+// to absorb a slow first byte from a cold-cache endpoint.
+const discoveryTimeout = 20 * time.Second
 
 // PresetID identifies one of the built-in provider configurations the UI
 // surfaces in the "Add provider" picker. New configs persist this id in
@@ -255,6 +263,8 @@ func discoverXAIModels(ctx context.Context, d *Driver) ([]providers.Model, error
 	}
 	u.Path = singleSlashJoin(u.Path, "language-models")
 
+	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("xai: build language-models request: %w", err)
@@ -356,6 +366,8 @@ func discoverOllamaModels(ctx context.Context, d *Driver) ([]providers.Model, er
 	apiBase := strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), "/v1")
 	u.Path = singleSlashJoin(apiBase, "api/tags")
 
+	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("ollama: build /api/tags request: %w", err)
