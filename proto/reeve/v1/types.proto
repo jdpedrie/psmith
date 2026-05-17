@@ -451,6 +451,31 @@ message Conversation {
   // Falls back to created_at when no messages exist yet, so a fresh
   // conversation still sorts above older ones in "Recently Used".
   google.protobuf.Timestamp last_activity_at = 9;
+  // Resolved (tag → renderer-component) pairs from this conversation's
+  // plugin pipeline. Used by clients during streaming to render
+  // complete `<tag>body</tag>` blocks as live components (without
+  // waiting for terminal) and to hide in-progress partial blocks
+  // (avoiding the raw-JSON flash that otherwise jerks into a
+  // component when streaming ends).
+  //
+  // Server-side derived: walk the pipeline, ask each plugin that
+  // emits streaming-renderable tag pairs (component_builder,
+  // lettered_choices in component mode) for its set, aggregate.
+  // Clients without inline-render support ignore this field with
+  // no behaviour change.
+  repeated StreamingComponentTag streaming_components = 10;
+}
+
+// One (tag-name, renderer-component) pair surfaced by a plugin in
+// the resolved pipeline. Tag format is fixed: `<{name}>...</{name}>`.
+// Clients scan the streaming text for these tag names and render
+// completed blocks via the named component renderer.
+message StreamingComponentTag {
+  // The tag name. Format on the wire is `<{name}>...</{name}>`.
+  string tag = 1;
+  // The renderer component to use for the block body. Matches the
+  // `component` field on UIFragment (e.g., "key_value", "choice_list").
+  string component = 2;
 }
 
 message Context {

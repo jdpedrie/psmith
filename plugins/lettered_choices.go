@@ -434,6 +434,20 @@ func stripTagPreservingWordBoundary(s, tag string) string {
 	}
 }
 
+// --- StreamingTagProvider ---
+
+// StreamingTags surfaces the `<choices>` tag when this instance is
+// in component mode so the client can render completed choice blocks
+// as a choice_list inline during streaming. Text mode contributes
+// nothing — its blocks become plain markdown via DisplayTransformer,
+// not a structured component.
+func (p *letteredChoices) StreamingTags() []StreamingTag {
+	if p.cfg.OutputMode != lcOutputModeComponent {
+		return nil
+	}
+	return []StreamingTag{{Tag: "choices", Component: "choice_list"}}
+}
+
 // --- ContentRenderer ---
 
 // RenderContent finds every choices block in assistant content and

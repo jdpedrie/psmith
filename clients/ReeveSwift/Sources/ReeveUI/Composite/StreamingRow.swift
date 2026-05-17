@@ -41,6 +41,13 @@ public struct StreamingRow: View {
     /// CompressionSummaryCard visually so the user sees the right
     /// affordance from the first chunk, not just after stream end.
     let isCompression: Bool
+    /// (tag-name, renderer-component) pairs the active pipeline exposes
+    /// as streamable components. When non-empty, the streamed text is
+    /// parsed into segments — closed `<tag>body</tag>` blocks render
+    /// as the named component inline (no JSON-flash); in-progress
+    /// partials hide until the close lands. Empty list falls back to
+    /// rendering the streamed text verbatim as markdown.
+    let streamingComponents: [ReeveStreamingComponentTag]
     @Environment(\.chatPaneWidth) private var paneWidth
 
     public init(
@@ -50,7 +57,8 @@ public struct StreamingRow: View {
         thinkingFinishedAt: Date?,
         thinkingExpanded: Binding<Bool>,
         toolCalls: [LiveToolCall],
-        isCompression: Bool = false
+        isCompression: Bool = false,
+        streamingComponents: [ReeveStreamingComponentTag] = []
     ) {
         self.text = text
         self.thinkingText = thinkingText
@@ -59,6 +67,7 @@ public struct StreamingRow: View {
         self._thinkingExpanded = thinkingExpanded
         self.toolCalls = toolCalls
         self.isCompression = isCompression
+        self.streamingComponents = streamingComponents
     }
 
     public var body: some View {
@@ -140,93 +149,143 @@ public struct StreamingRow: View {
                 Text("…").foregroundStyle(.secondary)
             }
         } else {
-            // Hide `<tag>...</tag>` blocks (and in-progress `<tag>…`
-            // partials) from the live stream display. Without this,
-            // the user watches a `<scene_header>{` ... `</scene_header>`
-            // block stream in as raw JSON, then jerk into a rendered
-            // component when terminal lands. With buffering, the
-            // block is represented by a small `…` placeholder during
-            // streaming and the real component appears in the
-            // settled MessageRow at terminal — no JSON-to-component
-            // jolt.
-            MarkdownText(bufferComponentTags(in: text))
-                .font(isCompression ? .callout : nil)
+            streamingBody
+        }
+    }
+
+    /// Renders the streaming text as an interleaved sequence of
+    /// markdown segments and live-rendered component blocks. Complete
+    /// `<tag>body</tag>` blocks (for tags in `streamingComponents`)
+    /// hand the parsed JSON body to FragmentView and render the same
+    /// way they will at terminal — no JSON-flash, no jolt. Open-only
+    /// partials (close hasn't streamed yet) collapse to a `…`
+    /// placeholder until the next stream tick fills them in.
+    ///
+    /// When `streamingComponents` is empty (the common pre-config
+    /// case), the entire text renders as plain markdown verbatim —
+    /// no surprise hiding of stray angle brackets in prose.
+    @ViewBuilder
+    private var streamingBody: some View {
+        let segments = parseStreamingSegments(text, components: streamingComponents)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .text(let s):
+                    MarkdownText(s)
+                        .font(isCompression ? .callout : nil)
+                case .fragment(let frag):
+                    FragmentView(fragments: [frag], onAction: { _ in })
+                case .pendingBlock:
+                    Text("…")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
 
-/// Replaces every component-tag block in `text` with a `…` ellipsis
-/// so the streaming bubble doesn't expose raw JSON mid-stream.
+/// One slice of streaming text. Drives the interleaved render
+/// inside StreamingRow.
+enum StreamingSegment {
+    /// Plain prose between (or around) component blocks. Rendered
+    /// as markdown.
+    case text(String)
+    /// A completed `<tag>body</tag>` block whose body parsed as JSON
+    /// for a known component renderer. Rendered live via FragmentView.
+    case fragment(ReeveUIFragment)
+    /// An open tag with no matching close yet. Will resolve on a
+    /// later stream tick; for now we show a small placeholder rather
+    /// than expose the partial JSON.
+    case pendingBlock
+}
+
+/// Walk `text` linearly, splitting on any opening tag listed in
+/// `components`. For a matched close, emit a `.fragment`; for an
+/// unmatched open (mid-stream), emit `.pendingBlock` and stop.
 ///
-/// Rules:
-/// - Closed pair `<tag>body</tag>` → `…`
-/// - Open-only partial `<tag>body…` (no close yet) → `…` + everything
-///   after the open tag is hidden (it'll re-appear in subsequent
-///   ticks as the close arrives).
-///
-/// "Tag" = `<` + a lowercase-letter+underscore identifier + `>`. The
-/// strict identifier pattern excludes literal `<https://…>` autolinks
-/// and most accidental angle-bracket usage. Cap of 40 chars keeps
-/// runaway non-tag matches from eating large spans.
-///
-/// Exposed at file scope (not member-private) so unit tests in ReeveUI
-/// can exercise the rule set without instantiating StreamingRow.
-public func bufferComponentTags(in text: String) -> String {
-    var out = ""
-    out.reserveCapacity(text.count)
+/// Exposed at package scope (internal) for unit testability — callers
+/// outside ReeveUI should drive this through StreamingRow.
+func parseStreamingSegments(_ text: String, components: [ReeveStreamingComponentTag]) -> [StreamingSegment] {
+    // Empty pipeline → no parsing, just one prose segment.
+    if components.isEmpty {
+        return [.text(text)]
+    }
+
+    // Build a tag-name → renderer-component lookup for O(1) match
+    // tests inside the walk.
+    var byTag: [String: String] = [:]
+    byTag.reserveCapacity(components.count)
+    for c in components {
+        byTag[c.tag] = c.component
+    }
+
+    var segments: [StreamingSegment] = []
+    var pending = ""
     var i = text.startIndex
+
+    func flushPending() {
+        if !pending.isEmpty {
+            segments.append(.text(pending))
+            pending = ""
+        }
+    }
+
     while i < text.endIndex {
-        guard let openLT = text[i...].firstIndex(of: "<") else {
-            out += text[i...]
+        guard let lt = text[i...].firstIndex(of: "<") else {
+            pending += text[i...]
             break
         }
-        out += text[i..<openLT]
-        let afterLT = text.index(after: openLT)
-        // Scan up to the next ">" for the tag name. Bail (treat `<`
-        // as literal) on any non-tag-char or if we hit end-of-text
-        // before the closing bracket.
-        guard let gtIdx = text[afterLT...].firstIndex(of: ">"),
-              isValidComponentTagName(text[afterLT..<gtIdx])
-        else {
-            out.append("<")
-            i = afterLT
+        // Accumulate prose up to the `<`.
+        pending += text[i..<lt]
+        let afterLT = text.index(after: lt)
+        guard let gt = text[afterLT...].firstIndex(of: ">") else {
+            // No `>` yet — the model is mid-typing the opening tag.
+            // Hide the dangling `<` + whatever followed and wait for
+            // more bytes.
+            flushPending()
+            segments.append(.pendingBlock)
+            return segments
+        }
+        let tagName = String(text[afterLT..<gt])
+        guard let component = byTag[tagName] else {
+            // Not a known component tag — render the `<...>` as
+            // literal markdown prose.
+            pending += text[lt..<text.index(after: gt)]
+            i = text.index(after: gt)
             continue
         }
-        let tagName = text[afterLT..<gtIdx]
-        let afterOpenTag = text.index(after: gtIdx)
+        let bodyStart = text.index(after: gt)
         let closeTag = "</\(tagName)>"
-        if let closeRange = text.range(of: closeTag, range: afterOpenTag..<text.endIndex) {
-            // Complete block — placeholder, continue after close.
-            out.append("…")
-            i = closeRange.upperBound
-        } else {
-            // Open tag, no close yet — hide from here onward. Stops
-            // the partial JSON from flashing through the bubble. The
-            // next stream tick re-runs this with more text; once the
-            // close arrives, the block becomes a `…` placeholder.
-            out.append("…")
-            return out
+        guard let closeRange = text.range(of: closeTag, range: bodyStart..<text.endIndex) else {
+            // Open tag, no close yet — flush prose, mark a pending
+            // block placeholder, and stop. The next tick re-parses
+            // from scratch with the additional bytes.
+            flushPending()
+            segments.append(.pendingBlock)
+            return segments
         }
+        let body = String(text[bodyStart..<closeRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // The block is closed. Validate the body as JSON — invalid
+        // bodies (e.g., the model emitted prose inside the tags by
+        // mistake) become a pending placeholder so the bubble stays
+        // tidy rather than rendering a broken fragment mid-stream;
+        // the settled MessageRow at terminal will preserve the raw
+        // tags + body as text via the existing fallback path.
+        guard let bodyData = body.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: bodyData, options: [])) != nil
+        else {
+            flushPending()
+            segments.append(.pendingBlock)
+            i = closeRange.upperBound
+            continue
+        }
+        flushPending()
+        segments.append(.fragment(
+            ReeveUIFragment(component: component, props: bodyData, key: "")
+        ))
+        i = closeRange.upperBound
     }
-    return out
-}
-
-/// True when `s` is a plausible component-builder tag name:
-/// lowercase ASCII letters + digits + underscore, starts with a
-/// letter, ≤40 chars. Mirrors the practical shape every shipped
-/// component name uses today (choice_list, scene_header, key_value,
-/// etc.) without committing the client to know any specific
-/// plugin's config.
-private func isValidComponentTagName(_ s: Substring) -> Bool {
-    guard !s.isEmpty, s.count <= 40 else { return false }
-    guard let first = s.first, first.isLetter, first.isASCII, first.isLowercase else {
-        return false
-    }
-    for c in s {
-        if c == "_" { continue }
-        if !c.isASCII { return false }
-        if !c.isLetter && !c.isNumber { return false }
-        if c.isLetter && !c.isLowercase { return false }
-    }
-    return true
+    flushPending()
+    return segments
 }

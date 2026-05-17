@@ -305,6 +305,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[r
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachStreamingComponents(ctx, convoRow, convoProto)
 	return connect.NewResponse(&reevev1.CreateConversationResponse{
 		Conversation:   convoProto,
 		InitialContext: contextToProto(contextRow),
@@ -398,6 +399,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[re
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
+		s.attachStreamingComponents(ctx, r.Conversation, p)
 		out = append(out, p)
 	}
 	return connect.NewResponse(&reevev1.ListConversationsResponse{Conversations: out}), nil
@@ -432,6 +434,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[reev
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachStreamingComponents(ctx, row, convoProto)
 	return connect.NewResponse(&reevev1.GetConversationResponse{
 		Conversation:  convoProto,
 		ActiveContext: contextToProto(active),
@@ -493,6 +496,7 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[r
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.attachStreamingComponents(ctx, updated, proto)
 	return connect.NewResponse(&reevev1.UpdateConversationResponse{Conversation: proto}), nil
 }
 

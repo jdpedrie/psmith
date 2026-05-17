@@ -732,7 +732,8 @@ private struct StreamingArea: View {
                 thinkingFinishedAt: model.streamingThinkingFinishedAt,
                 thinkingExpanded: $model.streamingThinkingExpanded,
                 toolCalls: model.streamingToolCalls,
-                isCompression: model.isCompacting
+                isCompression: model.isCompacting,
+                streamingComponents: model.conversation.streamingComponents
             )
             .id("__streaming__")
             .onGeometryChange(for: CGFloat.self) { proxy in

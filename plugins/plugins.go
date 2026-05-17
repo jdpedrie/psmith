@@ -268,6 +268,54 @@ type ContentRenderer interface {
 	RenderContent(parts []ContentPart, role string) []ContentPart
 }
 
+// StreamingTagProvider is an optional sub-interface for plugins that
+// emit `<tag>body</tag>` blocks the client should render inline as
+// they stream. The returned list is surfaced on the Conversation
+// proto so the client can identify completed blocks mid-stream and
+// hand them to the matching renderer — no JSON-flash before terminal.
+//
+// Each StreamingTag carries the bare tag NAME (the wire shape is
+// fixed at `<{name}>...</{name}>`) and the renderer component name
+// to use for the parsed body. Plugins that don't implement this
+// interface contribute nothing to the streaming-render list; their
+// content still renders correctly at terminal via RenderContent.
+type StreamingTagProvider interface {
+	StreamingTags() []StreamingTag
+}
+
+// StreamingTag is one (tag-name, renderer-component) pair contributed
+// by a plugin. The wire shape is fixed: `<{Tag}>body</{Tag}>`.
+type StreamingTag struct {
+	Tag       string
+	Component string
+}
+
+// StreamingTags aggregates contributions from every plugin in the
+// pipeline that implements StreamingTagProvider. Duplicate tags (two
+// plugins claiming the same name) keep first-seen wins — pipeline
+// order is the deterministic tiebreaker.
+func (p Pipeline) StreamingTags() []StreamingTag {
+	var out []StreamingTag
+	seen := make(map[string]bool)
+	for _, pl := range p {
+		provider, ok := pl.(StreamingTagProvider)
+		if !ok {
+			continue
+		}
+		for _, t := range provider.StreamingTags() {
+			if t.Tag == "" || t.Component == "" {
+				continue
+			}
+			if seen[t.Tag] {
+				continue
+			}
+			seen[t.Tag] = true
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // ContentPart is one element of the rendered parts list. Exactly
 // one of `Text` and `Fragment` is set: a Text part is a literal
 // string the client renders as markdown; a Fragment part names

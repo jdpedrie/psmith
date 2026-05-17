@@ -244,6 +244,44 @@ func reminderTextFor(d componentDef) string {
 	}
 }
 
+// --- StreamingTagProvider ---
+
+// StreamingTags surfaces each user-defined component as a (tag, component)
+// pair the client can use to render completed `<tag>body</tag>` blocks
+// inline during streaming. Only contributes entries whose open/close
+// tags follow the fixed `<{name}>...</{name}>` shape — non-standard
+// delimiters silently fall through and still render correctly at
+// terminal via the regular RenderContent path.
+func (p *componentBuilder) StreamingTags() []StreamingTag {
+	out := make([]StreamingTag, 0, len(p.defs))
+	for _, d := range p.defs {
+		name, ok := extractAngleTagName(d.OpenTag, d.CloseTag)
+		if !ok {
+			continue
+		}
+		out = append(out, StreamingTag{Tag: name, Component: d.Component})
+	}
+	return out
+}
+
+// extractAngleTagName returns the bare tag name when openTag is
+// `<name>` and closeTag is `</name>` with matching names. Empty
+// names (`<>`) and non-matching pairs return (`"", false`).
+func extractAngleTagName(openTag, closeTag string) (string, bool) {
+	if len(openTag) < 3 || openTag[0] != '<' || openTag[len(openTag)-1] != '>' {
+		return "", false
+	}
+	if len(closeTag) < 4 || closeTag[0] != '<' || closeTag[1] != '/' || closeTag[len(closeTag)-1] != '>' {
+		return "", false
+	}
+	openName := openTag[1 : len(openTag)-1]
+	closeName := closeTag[2 : len(closeTag)-1]
+	if openName == "" || openName != closeName {
+		return "", false
+	}
+	return openName, true
+}
+
 // --- ContentRenderer ---
 
 // RenderContent walks every assistant Text part and slices each

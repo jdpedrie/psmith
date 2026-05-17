@@ -486,7 +486,8 @@ struct ConversationBody: View {
                                 thinkingStartedAt: model.streamingThinkingStartedAt,
                                 thinkingFinishedAt: model.streamingThinkingFinishedAt,
                                 thinkingExpanded: $model.streamingThinkingExpanded,
-                                toolCalls: model.streamingToolCalls
+                                toolCalls: model.streamingToolCalls,
+                                streamingComponents: model.conversation.streamingComponents
                             )
                             .id("__streaming__")
                         }

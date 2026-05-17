@@ -16,6 +16,13 @@ public struct ReeveConversation: Sendable, Hashable, Identifiable, Codable {
     /// Per-conversation overrides — top of the call-settings resolution
     /// chain. Nil when the row has no overrides yet (uses profile defaults).
     public let settings: ReeveConversationSettings?
+    /// (tag-name, renderer-component) pairs the resolved plugin pipeline
+    /// emits as `<tag>body</tag>` blocks. Used by StreamingRow to render
+    /// completed blocks as live components mid-stream and hide
+    /// in-progress partials. Empty when the pipeline contributes none
+    /// (most profiles before component_builder / lettered_choices in
+    /// component mode are attached).
+    public let streamingComponents: [ReeveStreamingComponentTag]
 
     public init(
         id: String,
@@ -26,7 +33,8 @@ public struct ReeveConversation: Sendable, Hashable, Identifiable, Codable {
         createdAt: Date,
         updatedAt: Date,
         lastActivityAt: Date? = nil,
-        settings: ReeveConversationSettings? = nil
+        settings: ReeveConversationSettings? = nil,
+        streamingComponents: [ReeveStreamingComponentTag] = []
     ) {
         self.id = id
         self.profileID = profileID
@@ -37,6 +45,24 @@ public struct ReeveConversation: Sendable, Hashable, Identifiable, Codable {
         self.updatedAt = updatedAt
         self.lastActivityAt = lastActivityAt ?? createdAt
         self.settings = settings
+        self.streamingComponents = streamingComponents
+    }
+}
+
+/// One (tag-name, renderer-component) pair surfaced by the resolved
+/// plugin pipeline. Tag wire format is fixed `<{tag}>body</{tag}>`.
+public struct ReeveStreamingComponentTag: Sendable, Hashable, Codable {
+    public let tag: String
+    public let component: String
+
+    public init(tag: String, component: String) {
+        self.tag = tag
+        self.component = component
+    }
+
+    init(from p: Reeve_V1_StreamingComponentTag) {
+        self.tag = p.tag
+        self.component = p.component
     }
 }
 
@@ -51,7 +77,8 @@ extension ReeveConversation {
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
             updatedAt: p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0),
             lastActivityAt: p.hasLastActivityAt ? p.lastActivityAt.date : nil,
-            settings: p.hasSettings ? ReeveConversationSettings(from: p.settings) : nil
+            settings: p.hasSettings ? ReeveConversationSettings(from: p.settings) : nil,
+            streamingComponents: p.streamingComponents.map(ReeveStreamingComponentTag.init(from:))
         )
     }
 }

@@ -2072,6 +2072,20 @@ public struct Reeve_V1_Conversation: Sendable {
   /// Clears the value of `lastActivityAt`. Subsequent reads from it will return its default value.
   public mutating func clearLastActivityAt() {self._lastActivityAt = nil}
 
+  /// Resolved (tag → renderer-component) pairs from this conversation's
+  /// plugin pipeline. Used by clients during streaming to render
+  /// complete `<tag>body</tag>` blocks as live components (without
+  /// waiting for terminal) and to hide in-progress partial blocks
+  /// (avoiding the raw-JSON flash that otherwise jerks into a
+  /// component when streaming ends).
+  ///
+  /// Server-side derived: walk the pipeline, ask each plugin that
+  /// emits streaming-renderable tag pairs (component_builder,
+  /// lettered_choices in component mode) for its set, aggregate.
+  /// Clients without inline-render support ignore this field with
+  /// no behaviour change.
+  public var streamingComponents: [Reeve_V1_StreamingComponentTag] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2081,6 +2095,27 @@ public struct Reeve_V1_Conversation: Sendable {
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// One (tag-name, renderer-component) pair surfaced by a plugin in
+/// the resolved pipeline. Tag format is fixed: `<{name}>...</{name}>`.
+/// Clients scan the streaming text for these tag names and render
+/// completed blocks via the named component renderer.
+public struct Reeve_V1_StreamingComponentTag: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The tag name. Format on the wire is `<{name}>...</{name}>`.
+  public var tag: String = String()
+
+  /// The renderer component to use for the block body. Matches the
+  /// `component` field on UIFragment (e.g., "key_value", "choice_list").
+  public var component: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public struct Reeve_V1_Context: Sendable {
@@ -4501,7 +4536,7 @@ extension Reeve_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4518,6 +4553,7 @@ extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       case 7: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
       case 8: try { try decoder.decodeSingularStringField(value: &self.ownerUserID) }()
       case 9: try { try decoder.decodeSingularMessageField(value: &self._lastActivityAt) }()
+      case 10: try { try decoder.decodeRepeatedMessageField(value: &self.streamingComponents) }()
       default: break
       }
     }
@@ -4555,6 +4591,9 @@ extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try { if let v = self._lastActivityAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     } }()
+    if !self.streamingComponents.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.streamingComponents, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4568,6 +4607,42 @@ extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}
     if lhs._lastActivityAt != rhs._lastActivityAt {return false}
+    if lhs.streamingComponents != rhs.streamingComponents {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Reeve_V1_StreamingComponentTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StreamingComponentTag"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}tag\0\u{1}component\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.tag) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.component) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.tag.isEmpty {
+      try visitor.visitSingularStringField(value: self.tag, fieldNumber: 1)
+    }
+    if !self.component.isEmpty {
+      try visitor.visitSingularStringField(value: self.component, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_StreamingComponentTag, rhs: Reeve_V1_StreamingComponentTag) -> Bool {
+    if lhs.tag != rhs.tag {return false}
+    if lhs.component != rhs.component {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

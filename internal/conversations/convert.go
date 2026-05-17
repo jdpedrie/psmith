@@ -137,6 +137,35 @@ func conversationToProtoWithActivity(c store.Conversation, activeContextID strin
 	}, nil
 }
 
+// attachStreamingComponents resolves the conversation's plugin pipeline
+// and copies any StreamingTagProvider contributions onto the proto.
+// Best-effort: a failed pipeline build is logged but doesn't fail the
+// caller — the client just loses inline streaming-render for this
+// conversation (terminal render still works fine).
+func (s *Service) attachStreamingComponents(ctx context.Context, conv store.Conversation, out *reevev1.Conversation) {
+	if out == nil {
+		return
+	}
+	pipeline, err := s.resolvePluginPipeline(ctx, conv.ProfileID)
+	if err != nil {
+		s.logger.Warn("streaming components: resolve pipeline failed",
+			"err", err,
+			"conversation_id", conv.ID)
+		return
+	}
+	tags := pipeline.StreamingTags()
+	if len(tags) == 0 {
+		return
+	}
+	out.StreamingComponents = make([]*reevev1.StreamingComponentTag, 0, len(tags))
+	for _, t := range tags {
+		out.StreamingComponents = append(out.StreamingComponents, &reevev1.StreamingComponentTag{
+			Tag:       t.Tag,
+			Component: t.Component,
+		})
+	}
+}
+
 func contextToProto(c store.Context) *reevev1.Context {
 	out := &reevev1.Context{
 		Id:             c.ID.String(),
