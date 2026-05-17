@@ -281,7 +281,7 @@ struct ConversationRowMac: View {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red)
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
