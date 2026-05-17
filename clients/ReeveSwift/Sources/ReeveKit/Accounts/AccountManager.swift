@@ -88,6 +88,19 @@ public final class AccountManager {
         !accounts.isEmpty
     }
 
+    /// Accounts other than the currently-active one whose AppModel
+    /// is signed in (token still valid). Used by the login screen
+    /// to offer a "tap to switch back" affordance when the user
+    /// signs out of the active account — without it they'd be
+    /// stranded on the login form with no path back to a working
+    /// session on another account.
+    public var otherSignedInAccounts: [Account] {
+        accounts.filter { account in
+            guard account.id != activeAccountID else { return false }
+            return appModelByAccount[account.id]?.authState.phase == .signedIn
+        }
+    }
+
     /// Build a fresh AppModel for the given account. Per-account
     /// storage paths (token file, SwiftData cache) come from the
     /// account id so two accounts on the same host don't collide.

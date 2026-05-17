@@ -15,6 +15,7 @@ import ReeveKit
 /// or after explicit "Change server".
 struct LoginView: View {
     @Environment(AppModel.self) private var app
+    @Environment(AccountManager.self) private var accountManager
     @State private var phase: Phase = .credentials
     @State private var urlStore = ServerURLStore.shared
 
@@ -22,28 +23,90 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch phase {
-                case .server:
-                    ServerURLEntry(onValidated: { newURL in
-                        // Persisting flips ServerURLStore.current,
-                        // which the App scene watches via @State; the
-                        // outer `.onChange(of: urlStore.current)` in
-                        // ReeveiOSApp rebuilds AppModel against the
-                        // new URL. The next render of LoginView is on
-                        // top of the new client.
-                        urlStore.current = newURL
-                        phase = .credentials
-                    })
-                case .credentials:
-                    CredentialsEntry(
-                        serverURL: app.serverURL,
-                        onChangeServer: { phase = .server }
-                    )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Group {
+                        switch phase {
+                        case .server:
+                            ServerURLEntry(onValidated: { newURL in
+                                // Persisting flips ServerURLStore.current,
+                                // which the App scene watches via @State; the
+                                // outer `.onChange(of: urlStore.current)` in
+                                // ReeveiOSApp rebuilds AppModel against the
+                                // new URL. The next render of LoginView is on
+                                // top of the new client.
+                                urlStore.current = newURL
+                                phase = .credentials
+                            })
+                        case .credentials:
+                            CredentialsEntry(
+                                serverURL: app.serverURL,
+                                onChangeServer: { phase = .server }
+                            )
+                        }
+                    }
+
+                    let others = accountManager.otherSignedInAccounts
+                    if !others.isEmpty {
+                        otherAccountsSection(others)
+                    }
                 }
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
-            .frame(maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// Tap-to-switch list of other signed-in accounts. Shown beneath the
+    /// sign-in form so the user has a path back to a working session
+    /// after signing out of the active account — without this they're
+    /// stuck re-entering credentials.
+    @ViewBuilder
+    private func otherAccountsSection(_ others: [Account]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(.tertiary)
+                    .frame(height: 1)
+                Text("OR CONTINUE AS")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                Rectangle()
+                    .fill(.tertiary)
+                    .frame(height: 1)
+            }
+            .padding(.vertical, 4)
+
+            ForEach(others) { account in
+                Button {
+                    accountManager.switchAccount(to: account.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account.resolvedDisplayLabel)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(account.host.host ?? account.host.absoluteString)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
