@@ -9,67 +9,86 @@ snapshot) has also drifted as recent work prioritized iOS shipping
 velocity. See `~/.claude/projects/-Users-jdp-dev-clark/memory/project_ios_primary_mac_behind.md`
 for the standing context.
 
-**Caveat**: parity findings come from a static-code pass — visual /
-layout regressions that only show up by running the Mac app are likely
-underrepresented. A real walk-through is recommended before committing
-scope.
+**Update 2026-05-17 (post walk-through)**: I built the Mac app from
+current source and walked the major surfaces (Chats, Settings →
+Providers / Profiles / Plugins / Appearance, in-conversation Settings,
+account chip popover). Findings below replace the original static-only
+audit. Net assessment: Mac is in better shape than "well out of
+conformance" suggested — the architectural patterns hold up (3-column
+NSplitView, page-replaces-pane settings, Liquid Glass buttons, theme
+picker is genuinely polished). The real gaps are missing settings
+panes, missing affordances iOS has shipped recently, and a couple of
+visible drift items.
 
 ---
 
-## Mac vs iOS — Parity Gaps
+## Mac vs iOS — Parity Gaps (walk-through verified)
 
 ### P0 — broken / unusable
-*None identified by static audit.*
+*None observed in the walk-through.* Every major surface renders,
+the data layer round-trips, and the recent fixes (red trash, splash
+gate, plugin-config decrypt) are live.
 
-### P1 — present but materially worse than iOS
+### P1 — real gaps the user will notice
 
-- **Three Settings panes missing on Mac**: General, Cost, Privacy.
-  iOS has them at `clients/reeved-ios/ReeveiOS/Settings/SettingsRoot.swift:35–65`;
-  Mac `clients/reeved-mac/ReeveMac/AppNavigation.swift:45–86` doesn't.
-  Users can't configure data retention, cost tracking, or privacy
-  policies on Mac.
+1. **Three Settings panes missing on Mac**: General, Cost, Privacy.
+   Settings sidebar currently has: Providers / Profiles / Plugins /
+   --- / Appearance / Notifications / Langfuse. iOS surfaces General,
+   Cost, Privacy under SETTINGS. Adding them requires new
+   `*DetailView.swift` files mirroring the iOS shape.
 
-- **No refresh button on Discover Models (Mac)**. iOS shipped one at
-  commit `f351dfe7`. Mac `DiscoverModelsInline.swift:1110–1162` loads
-  once on entry; stale discovery requires leaving + re-entering.
+2. **No refresh button on Discover Models (Mac)**. iOS shipped one
+   at `f351dfe7`. On Mac the Discover Models tab loads once and has
+   "+ Add custom model" but no way to re-probe — stale list requires
+   tab-switching away and back. Walk-through confirmed.
 
-- **Conversation row hover trash isn't red on Mac**. iOS got the
-  `.red`/`.destructive` fix at commit `d7e5db48`. Verify Mac uses the
-  same treatment across all delete affordances.
+3. **Model display names truncated in Provider detail header**
+   ("Claude Haik...", "Claude Opu...", "Claude Sonn..."). The
+   Enabled Models list right-column width is too tight for the full
+   names; trailing ellipsis kicks in. Either widen the column, wrap
+   to two lines, or use a tooltip-only truncation pattern.
 
-- **Account menu placement**. iOS keeps the account avatar in the
-  chats toolbar (top-leading, very discoverable). Mac hides it in a
-  sidebar chip popover at the bottom (`HomeView.swift:79–105`).
-  First-use discoverability is worse on Mac.
+4. **Legacy account label shows as "imported"** in the account chip
+   popover (with host `reeve.secure.pedrie.com`). This is a one-time
+   migration leftover — backfill the displayLabel from the live
+   username on next auth restore, or surface the username instead of
+   the displayLabel when the latter is the literal string "imported".
 
-### P2 — design taste / Liquid Glass conformance drift
+### P2 — design taste / conformance drift (visible in walk-through)
 
-(All flagged by static audit but **need visual verification** before
-acting — agent couldn't see the actual rendering.)
+5. **Account chip popover doesn't show username + server URL header**.
+   iOS shows username + URL at the top of the account menu; Mac
+   account row only shows the displayLabel + host (and only for the
+   active account — current host isn't restated separately). Less
+   "you're signed in as X on Y" reinforcement.
 
-- Title-bar inset (`.padding(.top, 28)`) — confirm applied
-  consistently on all detail panes (`ProvidersView`, `PluginSettingsView`,
-  `LangfuseSettingsView`, etc.) per `feedback_titlebar_overlay.md`.
+6. **Settings flow modality**. Mac `HomeView.swift:106–126` opens
+   LoginView + account-removal as sheets. iOS uses inline navigation.
+   Per `feedback_no_popup_settings.md` routine flows should be inline.
+   Lower priority on Mac because sheets are a stronger native idiom
+   here than on iOS — but auditable.
 
-- Secondary button style — audit all "Edit", "Delete", "Disable"
-  buttons across Mac to ensure `.buttonStyle(.glass)` not `.bordered`,
-  per `project_liquid_glass.md`.
+### P3 — small polish
 
-- Footer band material — verify status strips on `LangfuseSettingsView`,
-  `NotificationsSettingsView`, `AppearanceSettingsView` use
-  `.thinMaterial` / `.regularMaterial`.
+7. **Conversation header title duplicates as subtitle** — title bar
+   shows "Optimizing Character Voice — $0.2069" with subtitle
+   "Optimizing Character Voice". The subtitle should be something
+   else (profile? context label?) or hidden when it matches the title.
 
-- Settings flow modality — Mac `HomeView.swift:106–126` opens
-  LoginView + account-removal as sheets. iOS uses inline navigation.
-  Per `feedback_no_popup_settings.md`, routine flows should be inline.
+8. **Settings → Providers sidebar shows providers in a flat list with
+   a long Available section** (Mistral, Together AI, Ollama, ...
+   continuing). The list grows long and the user has to scroll
+   past Configured to reach Available. Section headers + collapse
+   would help once the list crosses ~10 entries (currently ~12).
 
-### P3 — smaller polish
+9. **Search field on `ConversationListView` (Mac) hand-rolls a
+   TextField**; iOS uses `.searchable`. Less native feel on Mac.
 
-- Search field on `ConversationListView` (Mac) hand-rolls a TextField;
-  iOS uses `.searchable`. Less native feel on Mac.
-- Empty-state verb standardization ("Tap +" vs "Add").
-- Verify model-picker chip uses `.menuIndicator(.hidden)` + manual
-  chevron to avoid double-chevron rendering.
+10. **Liquid Glass conformance** (need targeted re-check, not blocking):
+    title-bar inset on detail panes, secondary button styles, footer
+    band materials. The walk-through didn't surface obvious offenders
+    but a focused sweep with `project_liquid_glass.md` checklist would
+    confirm.
 
 ---
 
@@ -155,27 +174,36 @@ These shipped this week and touch core state:
 
 ## Suggested attack order
 
-Three reasonable cuts:
+### ✅ A. Mac visual walk-through — DONE 2026-05-17
+Built Mac app from current source, walked every major surface,
+replaced the static-audit P0–P3 with verified observations. Findings
+above.
 
-### A. Mac visual walk-through first (~30 min, no code)
-Open the Mac app, navigate every surface, and produce a real-eyes
-punchlist. The static parity audit is probably undercounting. Output:
-revised P0–P3 with actual observations.
-
-### B. Knock out obvious Mac parity items (~2–3 hrs)
-Ship the three missing Settings panes (General / Cost / Privacy) +
-refresh button on Discover Models + red trash audit. L2 snapshot for
-each new pane.
+### B. Knock out the verified Mac parity items (~2–3 hrs)
+In rough priority order:
+- (P1) Three missing Settings panes: General, Cost, Privacy.
+  Mirror iOS shape. L2 snapshot each.
+- (P1) Refresh button on Discover Models (Mac).
+- (P1) Model name truncation in provider detail header.
+- (P1) Backfill / normalize the "imported" legacy account label.
+- (P2/P3) Account popover header, title duplicate, search field native.
 
 ### C. Test-debt sprint (~2 hrs)
-Add L1 tests for the four highest-risk recent ViewModel methods
-(`addAccount` dedup, `bootstrap` guard, `sendForking`, splash gate
-behavior via `hasLoadedOnce`). Then L2 snapshots for `LoginView` +
-`AppShell` + splash states.
+Add L1 tests for the highest-risk recent ViewModel methods. Then L2
+snapshots for the load-bearing views without coverage.
 
-**Recommendation**: A → B → C in order. Get a real list before
-committing to scope, ship visible Mac improvements next, catch tests
-up last.
+Prerequisite for L2 work: **fix
+`clients/reeved-mac/Tests/SnapshotHarness/Stubs.swift`** — it assigns
+to ConversationViewModel properties that became hub-derived
+(get-only), so the entire snapshot test target fails to compile.
+That's why `make mac-app` failed until I changed `mac-build` to
+target only the app (commit `969f4c6b`). Until the stubs are
+updated, every L2 snapshot will block.
+
+**Recommendation**: B → C now (A is done). The Phase B items are
+visible improvements the user actually wants; the snapshot harness
+fix in C should be the first task in C so subsequent L2 work isn't
+blocked.
 
 ---
 
