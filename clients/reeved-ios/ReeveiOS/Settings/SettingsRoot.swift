@@ -6,55 +6,14 @@ import ReeveUI
 /// (the user's configured providers / profiles / plugins) and
 /// "Settings" (app-level preferences). Each row pushes its detail
 /// screen onto the NavigationStack. Per `docs/ios-screens.md` §2.14.
+///
+/// Account switching (add / switch / sign out) lives on the chats
+/// toolbar's account menu, not here — the menu surfaces the active
+/// identity at the top of every chats session, which makes a
+/// dedicated Settings section redundant.
 struct SettingsRoot: View {
-    @Environment(AccountManager.self) private var accountManager
-    @State private var accountToRemove: Account? = nil
-    @State private var showingAddAccount = false
-
     var body: some View {
         List {
-            // Accounts section — switch / add / sign out / remove.
-            // Sits at the top so the active identity is the first
-            // thing the user sees on opening Settings.
-            Section {
-                ForEach(accountManager.accounts) { account in
-                    accountRow(account)
-                }
-                NavigationLink {
-                    iOSAddAccountForm()
-                } label: {
-                    Label("Add account…", systemImage: "plus.circle")
-                }
-                if accountManager.activeAccountID != nil {
-                    Button(role: .destructive) {
-                        Task { await accountManager.signOutActive() }
-                    } label: {
-                        Label("Sign out of active account", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                }
-            } header: {
-                Text("Accounts")
-            } footer: {
-                Text("Switch between signed-in accounts without re-authenticating. Each account can live on a different reeved server.")
-            }
-            .confirmationDialog(
-                accountToRemove.map { "Remove \($0.resolvedDisplayLabel)?" } ?? "Remove account?",
-                isPresented: Binding(
-                    get: { accountToRemove != nil },
-                    set: { if !$0 { accountToRemove = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Remove account", role: .destructive) {
-                    if let id = accountToRemove?.id {
-                        Task { await accountManager.removeAccount(id: id) }
-                    }
-                    accountToRemove = nil
-                }
-                Button("Cancel", role: .cancel) { accountToRemove = nil }
-            } message: {
-                Text("Removes the saved credentials and forgets this account locally. Conversations on the server are unchanged.")
-            }
             Section("Data") {
                 NavigationLink {
                     ProvidersListView()
@@ -112,41 +71,6 @@ struct SettingsRoot: View {
 
     private func categoryRow(_ title: String, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
-    }
-
-    @ViewBuilder
-    private func accountRow(_ account: Account) -> some View {
-        let isActive = account.id == accountManager.activeAccountID
-        Button {
-            accountManager.switchAccount(to: account.id)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(account.username)
-                        .foregroundStyle(.primary)
-                    Text(account.host.host ?? account.host.absoluteString)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if !isActive {
-                // Removing the active account would leave the
-                // settings tab in an undefined state; only expose
-                // the destructive swipe on inactive rows.
-                Button(role: .destructive) {
-                    accountToRemove = account
-                } label: {
-                    Label("Remove", systemImage: "trash")
-                }
-            }
-        }
     }
 }
 

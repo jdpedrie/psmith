@@ -11,6 +11,7 @@ import ReeveUI
 struct ChatsRoot: View {
     let user: ReeveUser
     @Environment(AppModel.self) private var app
+    @Environment(AccountManager.self) private var accountManager
     @Environment(ConversationsModel.self) private var convos
 
     /// Local mode binding driven by the segmented picker. Search isn't
@@ -23,6 +24,7 @@ struct ChatsRoot: View {
     @State private var renameDraft: String = ""
     @State private var showingNewConversation = false
     @State private var showingSettings = false
+    @State private var showingAddAccount = false
     /// Path appended-to when NewConversationSheet creates a chat — auto-
     /// pushes the conversation onto the stack so the user lands inside
     /// the new chat instead of having to find + tap it in the list.
@@ -75,6 +77,16 @@ struct ChatsRoot: View {
                             .toolbar {
                                 ToolbarItem(placement: .topBarTrailing) {
                                     Button("Done") { showingSettings = false }
+                                }
+                            }
+                    }
+                }
+                .sheet(isPresented: $showingAddAccount) {
+                    NavigationStack {
+                        iOSAddAccountForm()
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Cancel") { showingAddAccount = false }
                                 }
                             }
                     }
@@ -355,21 +367,54 @@ struct ChatsRoot: View {
                 Text(app.serverURL.absoluteString)
                     .font(.caption)
             }
-            Button {
-                showingSettings = true
-            } label: {
-                Label("Settings", systemImage: "gear")
+            Section {
+                Button {
+                    showingAddAccount = true
+                } label: {
+                    Label("Add account", systemImage: "plus.circle")
+                }
+                if otherAccounts.count > 0 {
+                    Menu {
+                        ForEach(otherAccounts) { account in
+                            Button {
+                                accountManager.switchAccount(to: account.id)
+                            } label: {
+                                // Two-line label so the user can tell two
+                                // accounts on the same host apart by their
+                                // username, and two accounts with the same
+                                // username on different hosts apart by URL.
+                                Text("\(account.resolvedDisplayLabel) — \(account.host.host ?? account.host.absoluteString)")
+                            }
+                        }
+                    } label: {
+                        Label("Switch account", systemImage: "person.2")
+                    }
+                }
             }
-            Button(role: .destructive) {
-                Task { try? await app.client.auth.logout() }
-            } label: {
-                Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+            Section {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Label("Settings", systemImage: "gear")
+                }
+                Button(role: .destructive) {
+                    Task { await accountManager.signOutActive() }
+                } label: {
+                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
             }
         } label: {
             Image(systemName: "person.crop.circle")
                 .imageScale(.large)
         }
         .accessibilityLabel("Account")
+    }
+
+    /// Accounts other than the active one — the candidates for "switch
+    /// account". The active account is the one the menu's header
+    /// section already names, so listing it again would be noise.
+    private var otherAccounts: [Account] {
+        accountManager.accounts.filter { $0.id != accountManager.activeAccountID }
     }
 }
 
