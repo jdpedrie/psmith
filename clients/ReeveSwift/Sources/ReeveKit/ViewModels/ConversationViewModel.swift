@@ -10,7 +10,13 @@ import UniformTypeIdentifiers
 @Observable
 @MainActor
 public final class ConversationViewModel {
-    public let conversation: ReeveConversation
+    /// Latest snapshot of the conversation row. Refreshed by `load()`
+    /// so fields the server can mutate post-open (title, settings,
+    /// streamingComponents resolved from the pipeline) reflect current
+    /// state without forcing the user to close + reopen the chat.
+    /// Read-only externally — mutate via `load()` (or the targeted
+    /// setters that already update specific fields).
+    public private(set) var conversation: ReeveConversation
     private let client: ReeveClient
     /// App-lifetime owner of active stream subscriptions. Passed in so
     /// the view model can register newly-started runs + observe state
@@ -333,6 +339,11 @@ public final class ConversationViewModel {
         defer { loading = false }
         do {
             let (conv, ctx) = try await client.conversations.get(id: conversation.id)
+            // Refresh the cached conversation snapshot so server-set
+            // fields (title overwrites, settings updates, the
+            // streamingComponents the pipeline resolves to right now)
+            // propagate into the view without a re-open.
+            self.conversation = conv
             self.activeContext = ctx
             self.messages = try await client.conversations.listMessages(contextID: ctx.id)
             self.loadError = nil
