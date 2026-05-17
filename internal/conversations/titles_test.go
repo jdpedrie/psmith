@@ -181,9 +181,12 @@ func TestTitle_E2E_SkippedWhenAppleFoundationKind(t *testing.T) {
 	}
 }
 
-// TestTitle_E2E_SkippedWhenProfileNotConfigured — profile has no title_*
-// fields; the hook fires but does nothing. Title remains NULL.
-func TestTitle_E2E_SkippedWhenProfileNotConfigured(t *testing.T) {
+// TestTitle_E2E_FallbackWhenProfileNotConfigured — profile has no
+// title_* fields; the hook fires and writes the derived fallback
+// "ProfileName (YYYY-MM-DD)" so untitled rows don't show as "Untitled"
+// in the sidebar. Only the assistant request hit the fake server; no
+// title call should have fired.
+func TestTitle_E2E_FallbackWhenProfileNotConfigured(t *testing.T) {
 	t.Parallel()
 
 	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
@@ -196,15 +199,31 @@ func TestTitle_E2E_SkippedWhenProfileNotConfigured(t *testing.T) {
 
 	_, _ = runOneTurn(t, svc, sup, q, f, "hi")
 
-	// Wait briefly; ensure title stays NULL.
+	// Wait briefly for the goroutine to land its fallback write.
 	time.Sleep(200 * time.Millisecond)
+
+	// CreateConversation already pre-seeded a derived title at row
+	// creation. The MaybeGenerateTitle path (no title_* configured)
+	// short-circuits because the title is already non-empty —
+	// effectively a no-op. Confirm the persisted title matches the
+	// derived shape: "<profile name> (YYYY-MM-DD)".
 	row, _ := q.GetConversationByID(context.Background(), f.conv.ID)
-	if row.Title != nil {
-		t.Errorf("title should remain NULL when profile not configured; got %+v", row.Title)
+	if row.Title == nil || *row.Title == "" {
+		t.Fatalf("title should carry the derived fallback, not be NULL/empty; got %+v", row.Title)
 	}
+	if !strings.Contains(*row.Title, "(") || !strings.Contains(*row.Title, ")") {
+		t.Errorf("title doesn't look derived (expected \"<name> (YYYY-MM-DD)\"); got %q", *row.Title)
+	}
+
+	// The context title is written by MaybeGenerateTitle (not by
+	// CreateConversation, which only seeds the conversation row).
 	cx, _ := q.GetContextByID(context.Background(), f.contextID)
-	if cx.Title != nil {
-		t.Errorf("context title should remain NULL; got %+v", cx.Title)
+	if cx.Title == nil || *cx.Title == "" {
+		t.Errorf("context title should carry the derived fallback; got %+v", cx.Title)
+	}
+
+	if reqs := fake.Requests(); len(reqs) != 1 {
+		t.Errorf("expected 1 fake request (assistant only); got %d", len(reqs))
 	}
 }
 

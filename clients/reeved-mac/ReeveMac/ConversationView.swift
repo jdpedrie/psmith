@@ -84,7 +84,6 @@ struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: ReeveConversation
     @Environment(AppModel.self) private var app
-    @Environment(ConversationsModel.self) private var convos
     /// Drives keyboard focus into the composer the moment the conversation
     /// pane mounts (and again when the conversation switches). Without
     /// this the user has to click into the field after every navigation —
@@ -219,7 +218,8 @@ struct ConversationBody: View {
         if model.showingCompactView { return "Compact" }
         if model.showingSettingsView { return "Settings" }
         if model.showingModelPicker { return "Choose model" }
-        let base = conversationDisplayTitle(for: liveConversation, profiles: convos.profiles)
+        let raw = liveConversation.title ?? ""
+        let base = raw.isEmpty ? "Untitled" : raw
         let cost = model.conversationCost
         if cost > 0 {
             return "\(base) — \(cost.formatted(.currency(code: "USD").precision(.fractionLength(4))))"

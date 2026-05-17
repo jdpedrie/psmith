@@ -85,15 +85,29 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	// Sentinel: a non-server title generator owns this profile. v1 case is
 	// "apple_foundation" — the Mac client runs Apple's on-device
 	// FoundationModels framework and persists the title via the existing
-	// UpdateConversation RPC. Server skips its cloud roundtrip entirely.
+	// UpdateConversation RPC. Server skips its cloud roundtrip entirely
+	// AND skips the fallback write — the client is responsible for both
+	// the generated title and the fallback on its own failure.
 	if resolved.TitleProviderKind != nil && *resolved.TitleProviderKind != "" {
 		s.logger.Debug("title: client-side generator configured; skipping server-side generation",
 			"kind", *resolved.TitleProviderKind,
 			"conversation_id", params.ConversationID)
 		return
 	}
+
+	// Derived fallback used whenever generation isn't configured, fails,
+	// or returns empty. Format: "ProfileName (YYYY-MM-DD)" — gives the
+	// user something to navigate by even when no model titled the row.
+	// Computed up-front so every early-return branch below can persist
+	// it without re-resolving the profile.
+	derivedConvTitle := derivedTitle(prof.Name, conv.CreatedAt)
+	derivedCtxTitle := derivedTitle(prof.Name, cx.CreatedAt)
+
 	if resolved.TitleProviderID == nil || resolved.TitleModelID == nil || *resolved.TitleModelID == "" {
-		// Opt-in feature; profile didn't configure it.
+		// Opt-in feature; profile didn't configure it. Write the
+		// derived fallback so untitled rows surface with persona +
+		// date instead of "Untitled".
+		s.persistFallbacks(ctx, params, conv, cx, derivedConvTitle, derivedCtxTitle, needConvTitle, needCtxTitle)
 		return
 	}
 	guide := defaultTitleGuide
@@ -107,6 +121,7 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	asst, err := s.queries.GetMessageByID(ctx, assistantMsgID)
 	if err != nil {
 		s.logger.Warn("title: load assistant msg failed", "err", err)
+		s.persistFallbacks(ctx, params, conv, cx, derivedConvTitle, derivedCtxTitle, needConvTitle, needCtxTitle)
 		return
 	}
 	var userMsg store.Message
@@ -115,6 +130,7 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	}
 	transcript := s.renderTitleTranscript(userMsg, asst)
 	if transcript == "" {
+		s.persistFallbacks(ctx, params, conv, cx, derivedConvTitle, derivedCtxTitle, needConvTitle, needCtxTitle)
 		return
 	}
 
@@ -124,11 +140,13 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	endedAt := time.Now()
 	if err != nil {
 		s.logger.Warn("title: generation failed", "err", err)
+		s.persistFallbacks(ctx, params, conv, cx, derivedConvTitle, derivedCtxTitle, needConvTitle, needCtxTitle)
 		return
 	}
 	title = sanitizeTitle(title)
 	if title == "" {
 		s.logger.Warn("title: model returned empty/unusable title")
+		s.persistFallbacks(ctx, params, conv, cx, derivedConvTitle, derivedCtxTitle, needConvTitle, needCtxTitle)
 		return
 	}
 
@@ -257,6 +275,48 @@ func (s *Service) callTitleModel(ctx context.Context, providerID uuid.UUID, mode
 		return "", fmt.Errorf("title model returned error chunk")
 	}
 	return out.String(), nil
+}
+
+// derivedTitle returns the fallback we persist when title generation
+// is disabled or fails. Format: "ProfileName (YYYY-MM-DD)" using the
+// supplied profile display name and timestamp (conv.CreatedAt for the
+// conversation title, ctx.CreatedAt for the context title — each row
+// reflects when its own surface came into existence). Locale-
+// independent date so titles are consistent across users / installs.
+func derivedTitle(profileName string, t time.Time) string {
+	return fmt.Sprintf("%s (%s)", profileName, t.Format("2006-01-02"))
+}
+
+// persistFallbacks writes the derived fallback titles for whichever
+// of (conversation, context) still needs one. Each write is best-
+// effort and logs on failure — the caller has already decided to
+// give up on generation, so a write failure shouldn't cascade. Both
+// writes are independent: a conversation that can't be titled doesn't
+// stop the context title from landing.
+func (s *Service) persistFallbacks(
+	ctx context.Context,
+	params stream.StartParams,
+	conv store.Conversation,
+	cx store.Context,
+	convTitle, ctxTitle string,
+	needConv, needCtx bool,
+) {
+	if needConv {
+		if err := s.queries.UpdateConversationTitle(ctx, store.UpdateConversationTitleParams{
+			ID: conv.ID, Title: &convTitle,
+		}); err != nil {
+			s.logger.Warn("title: persist conversation fallback failed", "err", err,
+				"conversation_id", params.ConversationID)
+		}
+	}
+	if needCtx {
+		if err := s.queries.UpdateContextTitle(ctx, store.UpdateContextTitleParams{
+			ID: cx.ID, Title: &ctxTitle,
+		}); err != nil {
+			s.logger.Warn("title: persist context fallback failed", "err", err,
+				"context_id", params.ContextID)
+		}
+	}
 }
 
 // sanitizeTitle trims whitespace, strips wrapping quotes a model may add,

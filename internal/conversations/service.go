@@ -184,11 +184,23 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[r
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	// Pre-seed the title with the derived "ProfileName (YYYY-MM-DD)"
+	// fallback when the caller didn't supply one. Without this, fresh
+	// conversations appear as "Untitled" in the sidebar until the
+	// first assistant turn materializes and MaybeGenerateTitle either
+	// generates a real title or writes the same fallback. Setting it
+	// now keeps the sidebar coherent from the moment the row exists;
+	// any successful later generation overwrites this.
+	initialTitle := req.Msg.Title
+	if initialTitle == nil || *initialTitle == "" {
+		fallback := derivedTitle(profile.Name, time.Now().UTC())
+		initialTitle = &fallback
+	}
 	convoRow, err := s.queries.CreateConversation(ctx, store.CreateConversationParams{
 		ID:        convoID,
 		UserID:    caller.ID,
 		ProfileID: profileID,
-		Title:     req.Msg.Title,
+		Title:     initialTitle,
 		Settings:  settingsJSON,
 	})
 	if err != nil {

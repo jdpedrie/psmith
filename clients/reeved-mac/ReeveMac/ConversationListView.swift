@@ -23,8 +23,9 @@ struct ConversationListView: View {
             .listStyle(.sidebar)
             .tint(theme.accent)
             .confirmationDialog(
-                conversationToDelete.map {
-                    "Delete \"\(conversationDisplayTitle(for: $0, profiles: convos.profiles))\"?"
+                conversationToDelete.map { c in
+                    let t = c.title ?? ""
+                    return "Delete \"\(t.isEmpty ? "Untitled" : t)\"?"
                 } ?? "Delete conversation?",
                 isPresented: Binding(
                     get: { conversationToDelete != nil },
@@ -275,7 +276,6 @@ struct ConversationRowMac: View {
                 profileChainName: hideProfileLabel
                     ? nil
                     : profileChainName(for: conversation, profiles: convos.profiles),
-                fallbackTitle: conversationDisplayTitle(for: conversation, profiles: convos.profiles),
                 isGenerating: app.streamHub.activeConversationIDs.contains(conversation.id),
                 isUnseen: app.streamHub.unseenConversationIDs.contains(conversation.id)
             )
