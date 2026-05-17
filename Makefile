@@ -62,7 +62,7 @@ swift-test-l2-record:
 swift-test: swift-test-l1 swift-test-l2
 
 mac-build:
-	cd clients/reeved-mac && swift build
+	cd clients/reeved-mac && swift build --target ReeveMac
 
 mac-run:
 	cd clients/reeved-mac && swift run ReeveMac
