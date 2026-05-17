@@ -15,6 +15,13 @@ import ReeveKit
 public struct ConversationRow: View {
     let conversation: ReeveConversation
     let profileChainName: String?
+    /// Pre-computed fallback for an unset title. Callers should pass
+    /// `conversationDisplayTitle(for:profiles:)` here so untitled rows
+    /// surface as "Profile name (YYYY-MM-DD)" instead of "Untitled" —
+    /// untitled is silent and gives the user nothing to navigate by.
+    /// Optional so call sites without profile context (snapshot tests,
+    /// fixtures) keep the legacy "Untitled" fallback.
+    let fallbackTitle: String?
     /// When true the row renders a small spinner + "generating" caption,
     /// signalling that the conversation has an active stream the user
     /// can tap into to watch live. Driven by
@@ -29,11 +36,13 @@ public struct ConversationRow: View {
     public init(
         conversation: ReeveConversation,
         profileChainName: String? = nil,
+        fallbackTitle: String? = nil,
         isGenerating: Bool = false,
         isUnseen: Bool = false
     ) {
         self.conversation = conversation
         self.profileChainName = profileChainName
+        self.fallbackTitle = fallbackTitle
         self.isGenerating = isGenerating
         self.isUnseen = isUnseen
     }
@@ -70,9 +79,40 @@ public struct ConversationRow: View {
 
     private var displayTitle: String {
         if let t = conversation.title, !t.isEmpty { return t }
-        return "Untitled"
+        return fallbackTitle ?? "Untitled"
     }
 }
+
+/// Shared display-title resolver for a conversation. Returns the
+/// model-generated or user-edited title when present, otherwise
+/// "ProfileName (YYYY-MM-DD)" so untitled rows stay scannable —
+/// which persona, when — without forcing the user to open the
+/// conversation to remember it. Falls back further to
+/// "Conversation (YYYY-MM-DD)" only when the profile lookup fails
+/// (deleted profile, etc.).
+public func conversationDisplayTitle(
+    for conversation: ReeveConversation,
+    profiles: [ReeveProfile]
+) -> String {
+    if let t = conversation.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+        return t
+    }
+    let date = isoDateFormatter.string(from: conversation.createdAt)
+    if let profile = profiles.first(where: { $0.id == conversation.profileID }) {
+        return "\(profile.name) (\(date))"
+    }
+    return "Conversation (\(date))"
+}
+
+/// Force ISO yyyy-MM-dd locale-independently. The format is part of
+/// the fallback's contract — locale-shifted variants would look
+/// inconsistent across users / installs.
+private let isoDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    return f
+}()
 
 /// Helper for resolving "Profile (parent, grandparent)" from a
 /// conversation's profile id against a `ConversationsModel`'s profile

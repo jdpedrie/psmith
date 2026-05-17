@@ -273,6 +273,7 @@ struct ChatsRoot: View {
                 profileChainName: hideProfile
                     ? nil
                     : profileChainName(for: c, profiles: convos.profiles),
+                fallbackTitle: conversationDisplayTitle(for: c, profiles: convos.profiles),
                 isGenerating: app.streamHub.activeConversationIDs.contains(c.id),
                 isUnseen: app.streamHub.unseenConversationIDs.contains(c.id)
             )
@@ -426,29 +427,3 @@ struct ChatsRoot: View {
     }
 }
 
-// MARK: - Placeholder destination (Phase 5c replaces this)
-
-/// Holds the slot that `ConversationView` will fill in Phase 5c.
-/// Renders the conversation's title + an explainer so navigation
-/// works end-to-end before the real view exists.
-private struct ConversationViewPlaceholder: View {
-    let conversation: ReeveConversation
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
-                .font(.title3.weight(.semibold))
-            Text("ConversationView lands in Phase 5c. The push, the back chevron, and the conversation row plumbing all work — this is the destination slot.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle(conversation.title?.isEmpty == false ? conversation.title! : "Untitled")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}

@@ -113,8 +113,7 @@ struct ConversationView: View {
     }
 
     private var navTitle: String {
-        let title = liveConversation.title?.isEmpty == false ? liveConversation.title! : "Untitled"
-        return title
+        conversationDisplayTitle(for: liveConversation, profiles: convos.profiles)
     }
 }
 
