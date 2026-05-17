@@ -780,6 +780,10 @@ private struct MessageRow: View {
     /// to ~4 lines; tap "Show more" to expand. Only relevant when
     /// `isCollapsibleRole` is true; ignored otherwise.
     @State private var bodyExpanded: Bool = false
+    /// Pending choice text waiting on a fork confirmation. Set when
+    /// the user taps a `send:` choice on a non-tip message; cleared
+    /// when the confirmation dialog resolves either way.
+    @State private var pendingForkText: String?
     @Environment(\.chatPaneWidth) private var paneWidth
 
     private var isEditing: Bool {
@@ -804,6 +808,23 @@ private struct MessageRow: View {
             }
         } message: {
             Text("This message will be removed from the conversation. Children will be stitched to its parent.")
+        }
+        .confirmationDialog(
+            "Submit choice on an earlier message?",
+            isPresented: Binding(
+                get: { pendingForkText != nil },
+                set: { if !$0 { pendingForkText = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingForkText
+        ) { text in
+            Button("Fork & Send") {
+                Task { await model.sendForking(content: text, parentMessageID: message.id) }
+                pendingForkText = nil
+            }
+            Button("Cancel", role: .cancel) { pendingForkText = nil }
+        } message: { _ in
+            Text("This will fork the conversation from this message and submit your choice as a new branch — the current branch stays intact.")
         }
     }
 
@@ -1212,14 +1233,19 @@ private struct MessageRow: View {
                 model.draft += "\n" + text
             }
         case .send(let text):
-            // Replace any in-flight draft with the chosen text and
-            // submit immediately — one tap resolves the choice
-            // instead of two (tap → press Send). Pre-existing
-            // draft content is discarded because the user
-            // explicitly picked a choice; mixing it with prior
-            // draft text would be surprising.
-            model.draft = text
-            Task { await model.send() }
+            // If this row isn't the current tip, auto-submitting would
+            // append onto a stale branch (or unintentionally extend an
+            // older turn the user was just re-reading). Confirm + fork
+            // off this message instead — the new user reply becomes a
+            // sibling under this assistant turn rather than under the
+            // active leaf. On tip, behave as before: replace draft and
+            // submit so one tap resolves the choice.
+            if let latestID = model.latestAssistantMessageID, latestID != message.id {
+                pendingForkText = text
+            } else {
+                model.draft = text
+                Task { await model.send() }
+            }
         case .external(let url):
             // System link-safety check + handoff. The host's
             // browser owns final security policy from here.

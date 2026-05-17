@@ -24,6 +24,10 @@ struct MessageRow: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var showCascadeDeleteConfirm: Bool = false
     @State private var showUsageSheet: Bool = false
+    /// Pending choice text waiting on a fork confirmation. Set when
+    /// the user taps a `send:` choice on a non-tip message; cleared
+    /// when the confirmation alert resolves either way.
+    @State private var pendingForkText: String?
 
     private var isErrored: Bool { message.errorText != nil }
 
@@ -112,6 +116,23 @@ struct MessageRow: View {
         } message: {
             let count = descendantCount
             Text("This deletes the message and \(count) repl\(count == 1 ? "y" : "ies") underneath it.")
+        }
+        .alert(
+            "Submit choice on an earlier message?",
+            isPresented: Binding(
+                get: { pendingForkText != nil },
+                set: { if !$0 { pendingForkText = nil } }
+            ),
+            presenting: pendingForkText
+        ) { text in
+            Button("Fork & Send") {
+                Haptics.notify(.success)
+                Task { await model.sendForking(content: text, parentMessageID: message.id) }
+                pendingForkText = nil
+            }
+            Button("Cancel", role: .cancel) { pendingForkText = nil }
+        } message: { _ in
+            Text("This will fork the conversation from this message and submit your choice as a new branch — the current branch stays intact.")
         }
         .sheet(isPresented: $showUsageSheet) {
             NavigationStack {
@@ -698,11 +719,17 @@ struct MessageRow: View {
                 model.draft += "\n" + text
             }
         case .send(let text):
-            // One tap resolves the choice instead of two — replaces
-            // any in-flight draft and submits immediately. Mirrors
-            // the Mac handler so both platforms behave the same.
-            model.draft = text
-            Task { await model.send() }
+            // If this row isn't the current tip, auto-submitting would
+            // append onto a stale branch. Confirm + fork off this
+            // message instead — the new user reply becomes a sibling
+            // under this assistant turn. On tip, behave as before:
+            // replace draft and submit so one tap resolves the choice.
+            if let latestID = model.latestAssistantMessageID, latestID != message.id {
+                pendingForkText = text
+            } else {
+                model.draft = text
+                Task { await model.send() }
+            }
         case .external(let url):
             UIApplication.shared.open(url)
         }
