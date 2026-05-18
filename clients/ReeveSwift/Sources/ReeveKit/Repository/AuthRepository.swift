@@ -308,12 +308,20 @@ public final class AuthRepository: Sendable {
     /// keychain when the stored token is rejected, so subsequent launches
     /// don't repeat the dead-token round-trip and force the user through a
     /// fresh login flow once.
+    ///
+    /// Wraps the whoAmI call in a short timeout so a dead / unreachable
+    /// server can't pin the app on the auth interstitial for the
+    /// URLSession default (600s here per ReeveClient). On timeout we
+    /// fall through to the same transport-error path as a real
+    /// network failure: cached identity if we have one, login if not.
     @discardableResult
     public func restoreSession() async -> ReeveUser? {
         guard let token = try? tokenStore.load(), !token.isEmpty else { return nil }
         _ = token
         do {
-            return try await whoAmI()
+            return try await withTimeout(seconds: 8) { [self] in
+                try await whoAmI()
+            }
         } catch {
             // Wipe the dead token only on auth-class failures. Network /
             // transport errors are transient — keep the token so the next
@@ -323,17 +331,46 @@ public final class AuthRepository: Sendable {
                 try? tokenStore.clear()
                 return nil
             }
-            // Transport/unavailable: rather than bouncing the user to
-            // Login, fall back to the cached identity if we have one.
+            // Transport/timeout/unavailable: rather than bouncing the user
+            // to Login, fall back to the cached identity if we have one.
             // The connectivity monitor + composer-disable already
             // signal "server unreachable" once they get inside; this
-            // just lets them get past the front door.
+            // just lets them get past the front door (and lets a
+            // multi-account install switch away to a working account
+            // via the login screen's "OR CONTINUE AS" list).
             if let cache,
                let cached: ReeveUser = await cache.get(ReeveUser.self, kind: CacheKind.currentUser, id: "me") {
                 await MainActor.run { authState.setAuthenticated(cached) }
                 return cached
             }
             return nil
+        }
+    }
+
+    /// Race `operation` against a sleep; whichever finishes first wins.
+    /// On timeout, throws a deadline-exceeded ReeveError so restore's
+    /// catch block treats it as a transport failure (cache fallback or
+    /// signed-out) rather than wedging on the URLSession default.
+    private func withTimeout<T: Sendable>(
+        seconds: TimeInterval,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw ReeveError.rpc(
+                    code: .deadlineExceeded,
+                    message: "operation timed out after \(Int(seconds))s"
+                )
+            }
+            defer { group.cancelAll() }
+            // First completion wins (whether success or throw); the
+            // other branch is cancelled. `group.next()` on a non-empty
+            // group never returns nil, so the force-unwrap is safe.
+            return try await group.next()!
         }
     }
 
