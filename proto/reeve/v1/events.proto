@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package reeve.v1;
+
+option go_package = "github.com/jdpedrie/reeve/gen/reeve/v1;reevev1";
+
+// Account-scoped server push. Lets clients react to server-side
+// mutations made elsewhere (another client, MCP tools, direct DB
+// edits the server is aware of) without polling. In-memory bus on
+// the server side — events are lost on restart, which is fine: the
+// client re-fetches state on every entry path anyway, so a missed
+// push just means the next user-visible action sees the change.
+service EventsService {
+  // Open a long-lived server-streaming subscription for the calling
+  // user's account events. The server pushes events as they fire;
+  // the client closes the stream when it goes to sleep / detaches.
+  // No replay — events are fire-and-forget; reconnection starts a
+  // fresh subscription.
+  rpc SubscribeAccountEvents(SubscribeAccountEventsRequest) returns (stream AccountEvent);
+}
+
+message SubscribeAccountEventsRequest {}
+
+// One push from the server to the client. New event categories add
+// new variants to the `kind` oneof; clients ignore variants they
+// don't understand, so server can ship new events without breaking
+// older builds.
+message AccountEvent {
+  oneof kind {
+    // A profile owned by the calling user was mutated. Carries the
+    // id + change shape so a client that already has that profile
+    // loaded can be targeted in its refresh; clients without that
+    // granularity can refresh the full list.
+    ProfileChanged profile_changed = 1;
+  }
+}
+
+message ProfileChanged {
+  string profile_id = 1;
+  ProfileChangeKind kind = 2;
+}
+
+enum ProfileChangeKind {
+  PROFILE_CHANGE_KIND_UNSPECIFIED = 0;
+  PROFILE_CHANGE_KIND_CREATED = 1;
+  PROFILE_CHANGE_KIND_UPDATED = 2;
+  PROFILE_CHANGE_KIND_DELETED = 3;
+}

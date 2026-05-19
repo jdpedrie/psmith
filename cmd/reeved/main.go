@@ -22,6 +22,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/crypto"
+	"github.com/jdpedrie/reeve/internal/events"
 	"github.com/jdpedrie/reeve/internal/files"
 	"github.com/jdpedrie/reeve/internal/langfuse"
 	"github.com/jdpedrie/reeve/internal/langfusesvc"
@@ -157,8 +158,15 @@ func run() error {
 	urlSigningKey := files.DeriveSigningKey(masterKey)
 	baseURL := os.Getenv("REEVE_PUBLIC_BASE_URL") // empty → clients prepend
 
+	// Per-process pub/sub bus for account-scoped events (profile
+	// mutations today; conversation + provider events likely follow).
+	// In-memory only — restart loses any in-flight events, and clients
+	// re-fetch on every entry path so a missed push is recoverable.
+	eventBus := events.New(slog.Default())
+
 	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default())
-	profilesSvc := profiles.NewService(queries, pool, cipher)
+	profilesSvc := profiles.NewService(queries, pool, cipher).WithBus(eventBus)
+	eventsSvc := events.NewService(eventBus)
 
 	// Process-wide Langfuse emitter. Per-user gating happens inside
 	// the Emitter via SetUserConfig; the integration is fully opt-in
@@ -195,6 +203,7 @@ func run() error {
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
 	mux.Handle(reevev1connect.NewFilesServiceHandler(filesSvc, opts))
 	mux.Handle(reevev1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
+	mux.Handle(reevev1connect.NewEventsServiceHandler(eventsSvc, opts))
 	// Raw-bytes endpoint for signed file URLs. Bypasses Connect framing
 	// so a system image loader can fetch the bytes directly.
 	mux.HandleFunc("GET /files/{id}", filesSvc.BytesHandler())

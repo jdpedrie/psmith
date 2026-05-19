@@ -16,6 +16,7 @@ import (
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/crypto"
+	"github.com/jdpedrie/reeve/internal/events"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -76,17 +77,45 @@ type Service struct {
 	queries *store.Queries
 	pool    *pgxpool.Pool
 	cipher  crypto.Cipher
+	bus     *events.Bus
 }
 
 // NewService builds a Service backed by the given query set. pool may be
 // nil for tests that don't exercise SetProfilePlugins; production must
 // pass a real pool so the atomic-replace TX has something to begin from.
 // cipher must be non-nil; pass crypto.Nop{} when running unencrypted.
+// bus may be nil — when set, profile mutations publish ProfileChanged
+// events for subscribed clients (cross-client live update).
 func NewService(queries *store.Queries, pool *pgxpool.Pool, cipher crypto.Cipher) *Service {
 	if cipher == nil {
 		cipher = crypto.Nop{}
 	}
 	return &Service{queries: queries, pool: pool, cipher: cipher}
+}
+
+// WithBus returns the service with the event bus wired in. Optional
+// — the bus is only used to publish profile-mutation events, and
+// existing callers (tests, fixtures) keep working with no bus.
+func (s *Service) WithBus(bus *events.Bus) *Service {
+	s.bus = bus
+	return s
+}
+
+// publishProfileEvent is the single point that fires profile events
+// onto the bus. Centralised so the call sites stay one-liners and so
+// adding new mutation paths doesn't risk forgetting to publish.
+func (s *Service) publishProfileEvent(userID, profileID uuid.UUID, kind events.ProfileChangeKind) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(events.Event{
+		Type:   events.ProfileChanged,
+		UserID: userID,
+		Profile: events.ProfilePayload{
+			ProfileID: profileID,
+			Kind:      kind,
+		},
+	})
 }
 
 // --- CreateProfile ---
@@ -200,6 +229,7 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[reevev
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachRequiredCaps(ctx, proto)
+	s.publishProfileEvent(caller.ID, id, events.ProfileChangeCreated)
 	return connect.NewResponse(&reevev1.CreateProfileResponse{Profile: proto}), nil
 }
 
@@ -528,6 +558,7 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[reevev
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachRequiredCaps(ctx, proto)
+	s.publishProfileEvent(caller.ID, id, events.ProfileChangeUpdated)
 	return connect.NewResponse(&reevev1.UpdateProfileResponse{Profile: proto}), nil
 }
 
@@ -554,6 +585,7 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[reevev
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProfileEvent(caller.ID, id, events.ProfileChangeDeleted)
 	return connect.NewResponse(&reevev1.DeleteProfileResponse{}), nil
 }
 

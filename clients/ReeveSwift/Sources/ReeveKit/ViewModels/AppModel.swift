@@ -134,6 +134,17 @@ public final class AppModel {
     public func bootstrap() async {
         guard !bootstrapped else { return }
         bootstrapped = true
+        // Wire the server push channel BEFORE restoreSession so an
+        // event fired during the restore window doesn't slip past
+        // (rare but possible — a slow whoAmI + a fast MCP edit by
+        // the same user from another client). The subscriber's
+        // onProfileChanged just calls profiles.load(); idempotent +
+        // cheap, so any race is harmless.
+        client.events.onProfileChanged = { [weak self] _ in
+            guard let self else { return }
+            Task { await self.profiles.load() }
+        }
+        client.events.start()
         _ = await client.auth.restoreSession()
         // `restoreSession()` flips phase to `.signedIn` on success and on
         // cached-restore under transport failure. The "no token" + "dead
