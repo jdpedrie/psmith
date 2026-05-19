@@ -209,6 +209,20 @@ public final class ConversationViewModel {
     public var settingsResolvedProfile: ReeveProfile?
     public var preparingSettingsView = false
 
+    /// Merged pipeline (profile chain + conversation overrides, with
+    /// `disabled` subtracts already applied). What's actually running for
+    /// this conversation right now. Refreshed by `prepareSettingsView()`
+    /// and after any plugin override mutation.
+    public var resolvedPluginPipeline: [ReeveResolvedPipelineEntry] = []
+    /// Literal conversation-level plugin overrides (NOT the merged view).
+    /// Each entry either replaces an inherited same-name plugin's config
+    /// or, when `disabled == true`, subtracts the inherited plugin from
+    /// this conversation's resolved pipeline.
+    public var conversationPluginOverrides: [ReeveConversationPlugin] = []
+    /// Registered plugin types — used to render display names + look up
+    /// config field schemas in the Plugins tab.
+    public var registeredPluginTypes: [ReevePluginType] = []
+
     // Model switcher
     public var availableModels: [ReeveUserModel] = []
     public var providerLabels: [String: String] = [:]
@@ -916,6 +930,65 @@ public final class ConversationViewModel {
             }
         }
         resolvedCallSettings = resolved
+
+        // Pull the merged pipeline + literal overrides + registered types
+        // in parallel — the Plugins tab needs all three to render rows
+        // with proper labels and inherited-vs-overridden state.
+        async let pipeline   = (try? await client.conversations.resolvePipeline(conversationID: liveConvo.id)) ?? []
+        async let overrides  = (try? await client.conversations.getPlugins(conversationID: liveConvo.id)) ?? []
+        async let pluginCat  = (try? await client.profiles.listPluginTypes()) ?? []
+        resolvedPluginPipeline      = await pipeline
+        conversationPluginOverrides = await overrides
+        registeredPluginTypes       = await pluginCat
+    }
+
+    // MARK: - Conversation plugin overrides
+
+    /// Toggle the disabled state of an inherited plugin at conversation
+    /// scope. If the plugin currently runs only because it's inherited
+    /// from the profile chain, this writes a `disabled: true` override
+    /// to subtract it. If the plugin is already subtracted by a
+    /// conversation override, this removes the override (re-enabling it).
+    public func toggleConversationDisableInherited(pluginName: String) async {
+        var next = conversationPluginOverrides
+        if let i = next.firstIndex(where: { $0.pluginName == pluginName && $0.disabled }) {
+            // Already subtracted — drop the override row to re-enable.
+            next.remove(at: i)
+        } else if let i = next.firstIndex(where: { $0.pluginName == pluginName && !$0.disabled }) {
+            // Conv override exists and is enabled — swap it for a disable row.
+            next[i] = ReeveConversationPlugin(pluginName: pluginName, ordinal: next[i].ordinal, config: Data(), disabled: true)
+        } else {
+            // No row yet — append a subtract row. Ordinal placeholder is
+            // ignored by the server: disabled rows don't sort into the
+            // pipeline, they just remove the inherited one.
+            next.append(ReeveConversationPlugin(pluginName: pluginName, ordinal: Int32(next.count), config: Data(), disabled: true))
+        }
+        await pushPluginOverrides(next)
+    }
+
+    /// Remove a non-disabled conversation-level override for one plugin,
+    /// reverting that plugin's config to whatever the profile chain
+    /// supplies (or removing it entirely if it was conv-only).
+    public func removeConversationOverride(pluginName: String) async {
+        let next = conversationPluginOverrides.filter { $0.pluginName != pluginName }
+        await pushPluginOverrides(next)
+    }
+
+    /// Clear every conversation-level plugin override. Conversation
+    /// falls back to the profile-chain pipeline.
+    public func clearAllConversationOverrides() async {
+        await pushPluginOverrides([])
+    }
+
+    private func pushPluginOverrides(_ overrides: [ReeveConversationPlugin]) async {
+        do {
+            _ = try await client.conversations.setPlugins(conversationID: conversation.id, plugins: overrides)
+            conversationPluginOverrides = overrides
+            // Refresh the merged view so the UI reflects the new state.
+            resolvedPluginPipeline = (try? await client.conversations.resolvePipeline(conversationID: conversation.id)) ?? []
+        } catch {
+            loadError = ReeveError.display(error)
+        }
     }
 
     /// Persists the current `conversationCallSettingsDraft` back to the

@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -32,6 +33,31 @@ func (s *Server) registerConversationTools() {
 		"Read one conversation's metadata + active context (id, title, profile_id, last_activity_at, message_count, cumulative_cost_usd).",
 		`{"type":"object","required":["id"],"properties":{"id":{"type":"string"}},"additionalProperties":false}`,
 		s.toolGetConversation,
+	)
+	s.register(
+		"get_conversation_plugins",
+		"Read the LITERAL stored plugin overrides for one conversation. Empty list means \"no overrides — falls back to the profile-chain pipeline.\" For the merged view (what's actually running), use resolve_conversation_pipeline.",
+		`{"type":"object","required":["conversation_id"],"properties":{"conversation_id":{"type":"string"}},"additionalProperties":false}`,
+		s.toolGetConversationPlugins,
+	)
+	s.register(
+		"set_conversation_plugins",
+		"Atomically replace this conversation's plugin OVERRIDES (not the full pipeline). Merged on top of the profile chain at resolve time: same-name entries override the inherited plugin's config; `disabled: true` rows subtract an inherited plugin for this conversation only. Pass an empty list to clear all overrides (the conversation falls back to the profile-chain pipeline).",
+		`{"type":"object","required":["conversation_id","plugins"],"properties":{`+
+			`"conversation_id":{"type":"string"},`+
+			`"plugins":{"type":"array","description":"Ordered list of overrides. Order is preserved on the stored ordinal but the resolver re-sorts by ordinal across all sources at runtime.","items":{"type":"object","required":["plugin_name","config_json"],"properties":{`+
+			`"plugin_name":{"type":"string","description":"Machine name from registered_plugins."},`+
+			`"config_json":{"type":"string","description":"Plugin config as a JSON-encoded string. Pass \"{}\" when disabling (config is ignored)."},`+
+			`"disabled":{"type":"boolean","description":"If true, the inherited plugin of this name is removed from the conversation's resolved pipeline."}`+
+			`},"additionalProperties":false}}`+
+			`},"additionalProperties":false}`,
+		s.toolSetConversationPlugins,
+	)
+	s.register(
+		"resolve_conversation_pipeline",
+		"Returns the merged view of plugins running for one conversation — profile chain + conversation overrides + disabled subtracts already applied. Each entry is tagged with where it came from (profile-chain vs conversation-override).",
+		`{"type":"object","required":["conversation_id"],"properties":{"conversation_id":{"type":"string"}},"additionalProperties":false}`,
+		s.toolResolveConversationPipeline,
 	)
 	s.register(
 		"list_messages",
@@ -149,6 +175,111 @@ func (s *Server) toolListMessages(ctx context.Context, args json.RawMessage) (To
 	return textResult(body), nil
 }
 
+// --- get_conversation_plugins -------------------------------------------
+
+type getConversationPluginsArgs struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+func (s *Server) toolGetConversationPlugins(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in getConversationPluginsArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.ConversationID == "" {
+		return errorResult("conversation_id is required"), nil
+	}
+	resp, err := s.conversationsSvc.GetConversationPlugins(ctx, connect.NewRequest(&reevev1.GetConversationPluginsRequest{
+		ConversationId: in.ConversationID,
+	}))
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+	out := make([]map[string]any, 0, len(resp.Msg.GetPlugins()))
+	for _, p := range resp.Msg.GetPlugins() {
+		out = append(out, conversationPluginDetail(p))
+	}
+	return textResult(map[string]any{"plugins": out}), nil
+}
+
+// --- set_conversation_plugins -------------------------------------------
+
+type setConversationPluginsArgs struct {
+	ConversationID string `json:"conversation_id"`
+	Plugins        []struct {
+		PluginName string `json:"plugin_name"`
+		ConfigJSON string `json:"config_json"`
+		Disabled   bool   `json:"disabled"`
+	} `json:"plugins"`
+}
+
+func (s *Server) toolSetConversationPlugins(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in setConversationPluginsArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.ConversationID == "" {
+		return errorResult("conversation_id is required"), nil
+	}
+	overrides := make([]*reevev1.ConversationPlugin, 0, len(in.Plugins))
+	for i, p := range in.Plugins {
+		if p.PluginName == "" {
+			return errorResult(fmt.Sprintf("plugins[%d].plugin_name is required", i)), nil
+		}
+		cfg := p.ConfigJSON
+		if cfg == "" {
+			cfg = "{}"
+		}
+		if !p.Disabled && !json.Valid([]byte(cfg)) {
+			return errorResult(fmt.Sprintf("plugins[%d].config_json is not valid JSON: %q", i, cfg)), nil
+		}
+		overrides = append(overrides, &reevev1.ConversationPlugin{
+			PluginName: p.PluginName,
+			Config:     []byte(cfg),
+			Disabled:   p.Disabled,
+		})
+	}
+	resp, err := s.conversationsSvc.SetConversationPlugins(ctx, connect.NewRequest(&reevev1.SetConversationPluginsRequest{
+		ConversationId: in.ConversationID,
+		Plugins:        overrides,
+	}))
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+	out := make([]map[string]any, 0, len(resp.Msg.GetPlugins()))
+	for _, p := range resp.Msg.GetPlugins() {
+		out = append(out, conversationPluginDetail(p))
+	}
+	return textResult(map[string]any{"plugins": out}), nil
+}
+
+// --- resolve_conversation_pipeline --------------------------------------
+
+type resolveConversationPipelineArgs struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+func (s *Server) toolResolveConversationPipeline(ctx context.Context, args json.RawMessage) (ToolResult, error) {
+	var in resolveConversationPipelineArgs
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errorResult("invalid arguments: " + err.Error()), nil
+	}
+	if in.ConversationID == "" {
+		return errorResult("conversation_id is required"), nil
+	}
+	resp, err := s.conversationsSvc.ResolveConversationPipeline(ctx, connect.NewRequest(&reevev1.ResolveConversationPipelineRequest{
+		ConversationId: in.ConversationID,
+	}))
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+	out := make([]map[string]any, 0, len(resp.Msg.GetEntries()))
+	for _, e := range resp.Msg.GetEntries() {
+		out = append(out, resolvedPipelineEntryDetail(e))
+	}
+	return textResult(map[string]any{"entries": out}), nil
+}
+
 // --- shape helpers -------------------------------------------------------
 
 func conversationSummary(c *reevev1.Conversation) map[string]any {
@@ -220,6 +351,57 @@ func messageSummary(m *reevev1.Message) map[string]any {
 		out["finish_reason"] = m.GetFinishReason()
 	}
 	return out
+}
+
+func conversationPluginDetail(p *reevev1.ConversationPlugin) map[string]any {
+	out := map[string]any{
+		"plugin_name": p.GetPluginName(),
+		"ordinal":     p.GetOrdinal(),
+		"disabled":    p.GetDisabled(),
+	}
+	cfgBytes := p.GetConfig()
+	if len(cfgBytes) == 0 {
+		out["config"] = map[string]any{}
+	} else {
+		var cfg any
+		if err := json.Unmarshal(cfgBytes, &cfg); err != nil {
+			out["config_raw"] = string(cfgBytes)
+		} else {
+			out["config"] = cfg
+		}
+	}
+	return out
+}
+
+func resolvedPipelineEntryDetail(e *reevev1.ResolvedPipelineEntry) map[string]any {
+	out := map[string]any{
+		"plugin_name": e.GetPluginName(),
+		"ordinal":     e.GetOrdinal(),
+		"source":      pipelineSourceString(e.GetSource()),
+	}
+	cfgBytes := e.GetConfig()
+	if len(cfgBytes) == 0 {
+		out["config"] = map[string]any{}
+	} else {
+		var cfg any
+		if err := json.Unmarshal(cfgBytes, &cfg); err != nil {
+			out["config_raw"] = string(cfgBytes)
+		} else {
+			out["config"] = cfg
+		}
+	}
+	return out
+}
+
+func pipelineSourceString(s reevev1.ResolvedPipelineSource) string {
+	switch s {
+	case reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE:
+		return "profile"
+	case reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION:
+		return "conversation"
+	default:
+		return "unspecified"
+	}
 }
 
 func roleString(r reevev1.MessageRole) string {

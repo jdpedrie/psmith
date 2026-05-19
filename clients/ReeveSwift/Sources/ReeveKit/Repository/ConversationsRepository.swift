@@ -345,6 +345,43 @@ public final class ConversationsRepository: Sendable {
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("activate context") }
         return ReeveContext(from: msg.context)
     }
+
+    // MARK: - Conversation plugin overrides
+
+    /// Read the conversation's literal plugin overrides (not the merged view).
+    /// Empty list means the conversation falls back to the profile-chain pipeline.
+    public func getPlugins(conversationID: String) async throws -> [ReeveConversationPlugin] {
+        var req = Reeve_V1_GetConversationPluginsRequest()
+        req.conversationID = conversationID
+        let resp = await client.getConversationPlugins(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("get conversation plugins") }
+        return msg.plugins.map(ReeveConversationPlugin.init(from:))
+    }
+
+    /// Atomically replace the conversation's plugin overrides. Pass an empty
+    /// list to clear all overrides (the conversation falls back to the
+    /// profile-chain pipeline). `disabled: true` entries subtract a same-name
+    /// inherited plugin from this conversation's resolved pipeline.
+    @discardableResult
+    public func setPlugins(conversationID: String, plugins: [ReeveConversationPlugin]) async throws -> [ReeveConversationPlugin] {
+        var req = Reeve_V1_SetConversationPluginsRequest()
+        req.conversationID = conversationID
+        req.plugins = plugins.map { $0.proto }
+        let resp = await client.setConversationPlugins(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("set conversation plugins") }
+        return msg.plugins.map(ReeveConversationPlugin.init(from:))
+    }
+
+    /// Returns the merged view of the conversation's pipeline — profile chain
+    /// plus conversation overrides, with `disabled` subtracts already applied.
+    /// Each entry is tagged with where it came from.
+    public func resolvePipeline(conversationID: String) async throws -> [ReeveResolvedPipelineEntry] {
+        var req = Reeve_V1_ResolveConversationPipelineRequest()
+        req.conversationID = conversationID
+        let resp = await client.resolveConversationPipeline(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("resolve conversation pipeline") }
+        return msg.entries.map(ReeveResolvedPipelineEntry.init(from:))
+    }
 }
 
 extension ReeveError {

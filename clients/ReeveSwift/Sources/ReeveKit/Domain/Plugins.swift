@@ -215,11 +215,58 @@ public struct ReeveProfilePlugin: Sendable, Hashable, Identifiable {
     /// Raw JSON object encoding the per-instance config. Caller responsible
     /// for matching the plugin type's ConfigFields.
     public let config: Data
+    /// When true, this row subtracts the same-named plugin inherited
+    /// from a parent profile instead of contributing one. `config` is
+    /// ignored in this case.
+    public let disabled: Bool
 
-    public init(pluginName: String, ordinal: Int32, config: Data) {
+    public init(pluginName: String, ordinal: Int32, config: Data, disabled: Bool = false) {
         self.pluginName = pluginName
         self.ordinal = ordinal
         self.config = config
+        self.disabled = disabled
+    }
+}
+
+/// Conversation-scoped plugin override. Same shape as `ReeveProfilePlugin`
+/// but lives on the conversation row; merged on top of the profile chain
+/// at resolve time (same-name entries override, `disabled: true` subtracts).
+public struct ReeveConversationPlugin: Sendable, Hashable, Identifiable {
+    public var id: String { "\(ordinal)-\(pluginName)" }
+    public let pluginName: String
+    public let ordinal: Int32
+    public let config: Data
+    public let disabled: Bool
+
+    public init(pluginName: String, ordinal: Int32, config: Data, disabled: Bool = false) {
+        self.pluginName = pluginName
+        self.ordinal = ordinal
+        self.config = config
+        self.disabled = disabled
+    }
+}
+
+/// Which layer of the resolver produced an entry in the merged pipeline.
+public enum ReeveResolvedPipelineSource: Sendable, Hashable {
+    case profile
+    case conversation
+    case unspecified
+}
+
+/// One entry in the merged pipeline (profile chain + conversation
+/// overrides + disabled subtracts already applied).
+public struct ReeveResolvedPipelineEntry: Sendable, Hashable, Identifiable {
+    public var id: String { "\(ordinal)-\(pluginName)" }
+    public let pluginName: String
+    public let ordinal: Int32
+    public let config: Data
+    public let source: ReeveResolvedPipelineSource
+
+    public init(pluginName: String, ordinal: Int32, config: Data, source: ReeveResolvedPipelineSource) {
+        self.pluginName = pluginName
+        self.ordinal = ordinal
+        self.config = config
+        self.source = source
     }
 }
 
@@ -311,7 +358,8 @@ extension ReeveProfilePlugin {
         self.init(
             pluginName: p.pluginName,
             ordinal: p.ordinal,
-            config: p.config
+            config: p.config,
+            disabled: p.disabled
         )
     }
 
@@ -320,6 +368,49 @@ extension ReeveProfilePlugin {
         p.pluginName = pluginName
         p.ordinal = ordinal
         p.config = config
+        p.disabled = disabled
         return p
+    }
+}
+
+extension ReeveConversationPlugin {
+    init(from p: Reeve_V1_ConversationPlugin) {
+        self.init(
+            pluginName: p.pluginName,
+            ordinal: p.ordinal,
+            config: p.config,
+            disabled: p.disabled
+        )
+    }
+
+    var proto: Reeve_V1_ConversationPlugin {
+        var p = Reeve_V1_ConversationPlugin()
+        p.pluginName = pluginName
+        p.ordinal = ordinal
+        p.config = config
+        p.disabled = disabled
+        return p
+    }
+}
+
+extension ReeveResolvedPipelineSource {
+    init(from p: Reeve_V1_ResolvedPipelineSource) {
+        switch p {
+        case .profile:      self = .profile
+        case .conversation: self = .conversation
+        case .unspecified, .UNRECOGNIZED:
+            self = .unspecified
+        }
+    }
+}
+
+extension ReeveResolvedPipelineEntry {
+    init(from p: Reeve_V1_ResolvedPipelineEntry) {
+        self.init(
+            pluginName: p.pluginName,
+            ordinal: p.ordinal,
+            config: p.config,
+            source: ReeveResolvedPipelineSource(from: p.source)
+        )
     }
 }
