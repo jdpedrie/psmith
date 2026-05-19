@@ -268,7 +268,7 @@ loop:
 			ms := int32(thinkingLastAt.Sub(thinkingFirstAt).Milliseconds())
 			thinkingDurMs = &ms
 		}
-		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, toolCalls.serialise(), logger)
+		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, cancelled, toolCalls.serialise(), logger)
 		if err != nil {
 			logger.Error("materialize assistant message failed", "err", err)
 		} else if mid != uuid.Nil {
@@ -436,7 +436,7 @@ func extractErrorMessage(payload json.RawMessage) string {
 // blocks, OpenAI reasoning items) are NOT reconstructed here — they require
 // driver cooperation and are deferred to the (future) inbound transform
 // pipeline. See "Materialization" in the task spec.
-func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, toolCallsJSON []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
+func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, cancelled bool, toolCallsJSON []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
 	// We always write a row, even with empty content, so the user can
 	// see that an attempt was made and so result_message_id is non-null
 	// for downstream UX.
@@ -497,6 +497,14 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	var finishReason *string
 	if usage != nil {
 		finishReason = usage.FinishReason
+	}
+	// User-cancelled runs override whatever the upstream said (or didn't
+	// say) — we want a deterministic "Stopped: user cancelled" hint on
+	// the row regardless of whether the driver got a chance to emit a
+	// final usage chunk before ctx cancellation tore the stream down.
+	if cancelled {
+		s := "user_cancelled"
+		finishReason = &s
 	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                   msgID,

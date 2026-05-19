@@ -433,6 +433,18 @@ func TestCancel_InFlight_MaterializesPartial(t *testing.T) {
 	if msg.Role != "assistant" {
 		t.Errorf("role = %q", msg.Role)
 	}
+	// User cancellation must override (or fill in) finish_reason with
+	// "user_cancelled" so the UI's MessageRow can render the
+	// "Stopped: user cancelled" hint deterministically — independent of
+	// whether the upstream got a final usage chunk out before ctx
+	// cancellation tore the stream down.
+	if msg.FinishReason == nil || *msg.FinishReason != "user_cancelled" {
+		got := "<nil>"
+		if msg.FinishReason != nil {
+			got = *msg.FinishReason
+		}
+		t.Errorf("finish_reason = %q, want %q", got, "user_cancelled")
+	}
 }
 
 func TestSourceClean_Completes_WithThinking(t *testing.T) {
