@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,37 +13,48 @@ import (
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
-func TestGeminiFinishReasonErrorMessage_FailureReasonsHaveText(t *testing.T) {
+// Hard-failure finish reasons (system-level failures where retry chrome
+// makes sense) must produce a non-empty error message.
+func TestGeminiHardFailureMessage_HardReasonsHaveText(t *testing.T) {
 	for _, reason := range []string{
 		"MALFORMED_FUNCTION_CALL",
+		"OTHER",
+	} {
+		if got := geminiHardFailureMessage(reason); got == "" {
+			t.Errorf("expected hard-failure message for %q; got empty", reason)
+		}
+	}
+}
+
+// Safety-block finish reasons (model's deliberate refusal) must NOT
+// produce an error message — finish_reason alone carries the signal,
+// the message lands in history with a "Stopped: …" hint instead of the
+// red error banner.
+func TestGeminiHardFailureMessage_SafetyReasonsAreSoft(t *testing.T) {
+	for _, reason := range []string{
 		"SAFETY",
 		"RECITATION",
 		"BLOCKLIST",
 		"PROHIBITED_CONTENT",
 		"SPII",
 		"IMAGE_SAFETY",
-		"OTHER",
 	} {
-		got := geminiFinishReasonErrorMessage(reason)
-		if got == "" {
-			t.Errorf("expected error message for %q; got empty", reason)
+		if got := geminiHardFailureMessage(reason); got != "" {
+			t.Errorf("expected empty hard-failure message for safety reason %q; got %q", reason, got)
 		}
 	}
 }
 
-func TestGeminiFinishReasonErrorMessage_NormalReasonsEmpty(t *testing.T) {
+func TestGeminiHardFailureMessage_NormalReasonsEmpty(t *testing.T) {
 	for _, reason := range []string{"STOP", "MAX_TOKENS", "", "FINISH_REASON_UNSPECIFIED"} {
-		if got := geminiFinishReasonErrorMessage(reason); got != "" {
+		if got := geminiHardFailureMessage(reason); got != "" {
 			t.Errorf("expected empty error message for %q; got %q", reason, got)
 		}
 	}
 }
 
-func TestGeminiFinishReasonErrorMessage_MalformedMentionsTool(t *testing.T) {
-	// The most common failure shape — the message should explicitly
-	// name the cause so the user can correlate it with their
-	// configured tools.
-	msg := geminiFinishReasonErrorMessage("MALFORMED_FUNCTION_CALL")
+func TestGeminiHardFailureMessage_MalformedMentionsTool(t *testing.T) {
+	msg := geminiHardFailureMessage("MALFORMED_FUNCTION_CALL")
 	if !strings.Contains(strings.ToLower(msg), "tool") {
 		t.Errorf("expected MALFORMED_FUNCTION_CALL message to mention 'tool'; got %q", msg)
 	}
@@ -60,10 +72,6 @@ func TestSend_MalformedFunctionCallEmitsUsageBeforeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("X-Accel-Buffering", "no")
-		// Single event: zero parts in candidate content + the
-		// MALFORMED_FUNCTION_CALL finish reason + usage. Matches the
-		// real-world shape we saw in the DB (1520 prompt tokens, 0
-		// candidate tokens, finish_reason set).
 		evt := `{"candidates":[{"content":{"parts":[]},"finishReason":"MALFORMED_FUNCTION_CALL"}],"usageMetadata":{"promptTokenCount":1520,"totalTokenCount":1520}}`
 		fmt.Fprintf(w, "data: %s\n\n", evt)
 		w.(http.Flusher).Flush()
@@ -87,17 +95,12 @@ func TestSend_MalformedFunctionCallEmitsUsageBeforeError(t *testing.T) {
 		types = append(types, c.Type)
 	}
 
-	// First non-Done chunk must be Usage, NOT Error. Subsequent
-	// chunks can include Error + Done. The exact length isn't pinned
-	// (driver may add more chunks later) but the ordering invariant
-	// is what protects against the retry storm.
 	if len(types) < 2 {
 		t.Fatalf("expected at least Usage + Done; got %v", types)
 	}
 	if types[0] != providers.ChunkUsage {
 		t.Errorf("first chunk must be Usage (so openStreamWithRetry sees success); got %q (full sequence: %v)", types[0], types)
 	}
-	// Error must be present somewhere after usage.
 	sawError := false
 	for _, t := range types {
 		if t == providers.ChunkError {
@@ -106,5 +109,60 @@ func TestSend_MalformedFunctionCallEmitsUsageBeforeError(t *testing.T) {
 	}
 	if !sawError {
 		t.Errorf("expected ChunkError somewhere in the sequence; got %v", types)
+	}
+}
+
+// TestSend_ProhibitedContentEmitsFinishReasonOnly pins the new soft-
+// failure semantics: when Gemini blocks the response under a safety
+// filter (PROHIBITED_CONTENT here), the driver must NOT emit a
+// ChunkError. The finish_reason rides the usage chunk so the message
+// row lands in history with a "Stopped: prohibited_content" hint
+// instead of the red error banner.
+func TestSend_ProhibitedContentEmitsFinishReasonOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Accel-Buffering", "no")
+		evt := `{"candidates":[{"content":{"parts":[]},"finishReason":"PROHIBITED_CONTENT"}],"usageMetadata":{"promptTokenCount":50,"totalTokenCount":50}}`
+		fmt.Fprintf(w, "data: %s\n\n", evt)
+		w.(http.Flusher).Flush()
+	}))
+	defer srv.Close()
+
+	d := newDriverWithBaseURL(t, srv.URL+"/v1beta", providers.Deps{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ch, err := d.Send(ctx, providers.SendRequest{
+		ModelID:  "gemini-test",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	var (
+		types        []providers.ChunkType
+		usageReason  string
+	)
+	for c := range ch {
+		types = append(types, c.Type)
+		if c.Type == providers.ChunkUsage {
+			// Pull the finish_reason out of the usage payload so the
+			// test can assert it survived to the supervisor.
+			var u providers.Usage
+			_ = json.Unmarshal(c.Payload, &u)
+			if u.FinishReason != nil {
+				usageReason = *u.FinishReason
+			}
+		}
+	}
+
+	for _, ty := range types {
+		if ty == providers.ChunkError {
+			t.Errorf("safety-block finish reason must not emit ChunkError; got sequence %v", types)
+		}
+	}
+	if usageReason != "PROHIBITED_CONTENT" {
+		t.Errorf("expected finish_reason=PROHIBITED_CONTENT on the usage chunk; got %q", usageReason)
 	}
 }

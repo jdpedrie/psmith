@@ -377,17 +377,47 @@ func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, thi
 		}
 	case providers.ChunkError:
 		if *seenError == nil {
-			msg := extractDeltaText(ch.Payload)
-			if msg == "" {
-				// Fallback: stringify the raw payload.
-				msg = string(ch.Payload)
-			}
+			// ChunkError payloads carry `.message` (per the provider
+			// driver contract — see internal/providers/google/send.go +
+			// openai/anthropic emit shapes). extractDeltaText looks for
+			// `.text` and would miss the actual error string, leaving
+			// us with the raw JSON stringified into Message — that's
+			// what lands in messages.error_payload and breaks the UI's
+			// errorTextFromPayload extraction.
+			msg := extractErrorMessage(ch.Payload)
 			*seenError = &chunkErrorPayload{
 				Message: msg,
 				Raw:     json.RawMessage(ch.Payload),
 			}
 		}
 	}
+}
+
+// extractErrorMessage pulls the human-readable string out of a ChunkError
+// payload. Drivers emit `{"message":"...", ...}`; we tolerate `.text` and
+// bare strings too so a driver that emitted the wrong shape still surfaces
+// SOMETHING readable rather than stringified JSON.
+func extractErrorMessage(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var withMsg struct {
+		Message string `json:"message"`
+		Text    string `json:"text"`
+	}
+	if err := json.Unmarshal(payload, &withMsg); err == nil {
+		if withMsg.Message != "" {
+			return withMsg.Message
+		}
+		if withMsg.Text != "" {
+			return withMsg.Text
+		}
+	}
+	var s string
+	if err := json.Unmarshal(payload, &s); err == nil && s != "" {
+		return s
+	}
+	return ""
 }
 
 // materializeAssistant inserts an assistant message row capturing the

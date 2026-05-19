@@ -466,12 +466,15 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	if lastUsage != nil {
 		emitUsage(out, *lastUsage, lastUsageRaw, lastFinishReason)
 	}
-	// Surface a failure-shaped finish reason as a ChunkError so the
-	// supervisor marks the resulting message as errored — without this
-	// the bubble lands empty + finish_reason in the DB but no inline
-	// error text, leaving the user staring at a blank assistant turn
-	// with no signal about what went wrong.
-	if msg := geminiFinishReasonErrorMessage(lastFinishReason); msg != "" {
+	// Only "hard" failure-shaped finish reasons (system-level: malformed
+	// tool calls, OTHER) get surfaced as ChunkError so the supervisor
+	// marks the message as errored + offers retry. Safety-block reasons
+	// (SAFETY, RECITATION, BLOCKLIST, PROHIBITED_CONTENT, SPII,
+	// IMAGE_SAFETY) ride finish_reason alone — they're the model's
+	// considered decision not to respond, not a system failure, and the
+	// UI surfaces unexpected finish reasons as a "Stopped: …" hint on
+	// the assistant row without the red error banner / retry chrome.
+	if msg := geminiHardFailureMessage(lastFinishReason); msg != "" {
 		emit(out, providers.ChunkError, map[string]string{
 			"message": msg,
 			"code":    lastFinishReason,
@@ -480,28 +483,17 @@ func (d *Driver) pumpStream(ctx context.Context, body io.ReadCloser, out chan<- 
 	emit(out, providers.ChunkDone, map[string]any{})
 }
 
-// geminiFinishReasonErrorMessage maps a finish reason to a
-// user-facing error string, or "" when the reason is a normal
-// terminator (STOP, MAX_TOKENS — the latter is "complete-but-truncated"
-// and the partial content is still useful). Lists from the GenerateContent
-// API spec; any reason we don't recognise falls through to "" so a
-// new server-side enum value doesn't accidentally start erroring runs.
-func geminiFinishReasonErrorMessage(reason string) string {
+// geminiHardFailureMessage maps a system-level failure finish reason
+// to a user-facing error string. Returns "" for clean stops AND for
+// safety-block reasons (which are the model's deliberate choice not to
+// respond and ride finish_reason alone via the UI's "Stopped: …" hint
+// — see Message.finish_reason rendering). Lists from the GenerateContent
+// API spec; unknown reasons fall through to "" so a new server-side
+// enum value doesn't accidentally start erroring runs.
+func geminiHardFailureMessage(reason string) string {
 	switch reason {
 	case "MALFORMED_FUNCTION_CALL":
 		return "Gemini tried to call a tool but the call was malformed (invalid JSON args or unknown function). Try rephrasing or removing the active tool."
-	case "SAFETY":
-		return "Gemini blocked the response under its safety filters."
-	case "RECITATION":
-		return "Gemini blocked the response under its recitation (training-data overlap) filter."
-	case "BLOCKLIST":
-		return "Gemini blocked a term on the safety blocklist."
-	case "PROHIBITED_CONTENT":
-		return "Gemini blocked the response as prohibited content."
-	case "SPII":
-		return "Gemini blocked the response as containing sensitive personally identifiable information."
-	case "IMAGE_SAFETY":
-		return "Gemini blocked an image output under its safety filters."
 	case "OTHER":
 		return "Gemini stopped with an unspecified failure (finish_reason=OTHER)."
 	}
