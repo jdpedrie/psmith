@@ -130,7 +130,14 @@ struct ProfilesDetail: View {
         } message: {
             Text("Conversations using this profile will keep working but lose its inheritance source.")
         }
-        .task { await model.loadAvailableModels() }
+        // Re-fetch on every appear so server-side edits — by another
+        // client, by MCP, by direct DB tweak — show up next time the
+        // user opens this pane instead of being locked into the
+        // launch-time snapshot.
+        .task {
+            await model.load()
+            await model.loadAvailableModels()
+        }
     }
 }
 

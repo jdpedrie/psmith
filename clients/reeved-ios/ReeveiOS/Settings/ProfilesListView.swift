@@ -63,11 +63,13 @@ struct ProfilesListView: View {
                 .accessibilityLabel("New profile")
             }
         }
-        .task {
-            if profiles.profiles.isEmpty {
-                await profiles.load()
-            }
-        }
+        // Always re-fetch on appear (and on pull-to-refresh) so an
+        // edit made elsewhere — another client, the Reeve Manager via
+        // MCP, a direct DB tweak — shows up the next time the user
+        // opens this list, instead of being locked into whatever
+        // snapshot landed in `profiles.profiles` on first launch.
+        .task { await profiles.load() }
+        .refreshable { await profiles.load() }
         .sheet(isPresented: $creating) {
             ProfileEditSheet(existingProfileID: nil)
         }

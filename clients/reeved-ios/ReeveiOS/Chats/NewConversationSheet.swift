@@ -71,6 +71,13 @@ struct NewConversationSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        // Re-fetch conversations + the shared profile list before the
+        // picker materialises. Without this, a profile changed in
+        // another client / via MCP / via direct DB tweak doesn't show
+        // up here — the user picks a stale snapshot and the new
+        // conversation inherits the wrong defaults. Cheap RPC; cost
+        // is paid only when the sheet opens.
+        .task { await convos.refresh() }
     }
 
     private var profilesForPicker: [ReeveProfile] {
