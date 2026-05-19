@@ -974,6 +974,32 @@ public final class ConversationViewModel {
         await pushPluginOverrides(next)
     }
 
+    /// Upsert a (non-disabled) conversation-level override carrying
+    /// `config` bytes for one plugin. If an override already exists for
+    /// the name, its config is replaced and `disabled` cleared; otherwise
+    /// a fresh row is appended. Used by the plugin-edit / add-new flows
+    /// in the Conversation Settings → Plugins tab.
+    public func upsertConversationPluginOverride(pluginName: String, config: Data) async {
+        var next = conversationPluginOverrides
+        if let i = next.firstIndex(where: { $0.pluginName == pluginName }) {
+            let prev = next[i]
+            next[i] = ReeveConversationPlugin(
+                pluginName: pluginName,
+                ordinal: prev.ordinal,
+                config: config,
+                disabled: false
+            )
+        } else {
+            next.append(ReeveConversationPlugin(
+                pluginName: pluginName,
+                ordinal: Int32(next.count),
+                config: config,
+                disabled: false
+            ))
+        }
+        await pushPluginOverrides(next)
+    }
+
     /// Clear every conversation-level plugin override. Conversation
     /// falls back to the profile-chain pipeline.
     public func clearAllConversationOverrides() async {

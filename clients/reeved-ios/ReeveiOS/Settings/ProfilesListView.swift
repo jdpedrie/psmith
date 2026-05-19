@@ -618,7 +618,11 @@ private struct ProfileEditSheet: View {
                     PluginConfigSubScreen(
                         pluginName: pluginName,
                         pluginType: app.profiles.pluginTypes.first(where: { $0.name == pluginName }),
-                        config: bindingForPluginConfig(localID: localID)
+                        config: bindingForPluginConfig(localID: localID),
+                        availableModels: app.profiles.availableModels,
+                        providerLabels: app.profiles.providerLabels,
+                        providerTypes: app.profiles.providerTypes,
+                        providerPresetIDs: app.profiles.providerPresetIDs
                     )
                 case let .longTextEditor(field):
                     LongTextEditorScreen(
@@ -1146,113 +1150,6 @@ private func anyEqual(_ a: Any, _ b: Any) -> Bool {
         return a == b
     }
     return false
-}
-
-// MARK: - Per-plugin config sub-screen
-
-private struct PluginConfigSubScreen: View {
-    let pluginName: String
-    let pluginType: ReevePluginType?
-    @Binding var config: [String: Any]
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let type = pluginType {
-                    if !type.description.isEmpty {
-                        Text(type.description)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    let fields = type.profileScopedConfigFields
-                    if fields.isEmpty {
-                        Text("This plugin has no per-profile fields. Its global settings live in Settings → Plugins.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        PluginConfigEditor(
-                            pluginName: type.name,
-                            fields: fields,
-                            config: $config,
-                            availableModels: app.profiles.availableModels,
-                            providerLabels: app.profiles.providerLabels,
-                            providerTypes: app.profiles.providerTypes,
-                            providerPresetIDs: app.profiles.providerPresetIDs
-                        )
-                    }
-                } else {
-                    Text("Plugin descriptor not loaded — pull back to refresh, then re-enter.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(16)
-        }
-        .navigationTitle(pluginType?.displayName ?? pluginName)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Add plugin sheet
-
-/// Sheet that lists plugin types not yet attached. Tapping a row
-/// invokes `onPick` and dismisses; the parent appends a fresh
-/// DraftPlugin to its list.
-private struct AddPluginSheet: View {
-    let types: [ReevePluginType]
-    let onPick: (ReevePluginType) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if types.isEmpty {
-                    Text("Every available plugin is already attached.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(types) { type in
-                        Button {
-                            onPick(type)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "puzzlepiece.extension")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 22)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(type.displayName)
-                                        .foregroundStyle(.primary)
-                                    if !type.description.isEmpty {
-                                        Text(type.description)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(2)
-                                    }
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "plus.circle")
-                                    .foregroundStyle(.tint)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Add Plugin")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-    }
 }
 
 // MARK: - Profile call-settings child screen
