@@ -907,6 +907,7 @@ func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
 		Type:        configFieldTypeToProto(f.Type),
 		Required:    f.Required,
 		Global:      f.Global,
+		Merge:       configFieldMergeToProto(f.Merge),
 	}
 	if f.Default != nil {
 		// json.Marshal on a typed value (int, string, bool) is total — the
@@ -935,6 +936,15 @@ func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
 		}
 	}
 	return out
+}
+
+func configFieldMergeToProto(m plugins.ConfigFieldMerge) reevev1.ConfigField_Merge {
+	switch m {
+	case plugins.MergeAppendString:
+		return reevev1.ConfigField_MERGE_APPEND_STRING
+	default:
+		return reevev1.ConfigField_MERGE_REPLACE
+	}
 }
 
 func configFieldTypeToProto(t plugins.ConfigFieldType) reevev1.ConfigField_Type {

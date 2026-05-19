@@ -670,6 +670,14 @@ public nonisolated struct Reeve_V1_ConfigField: Sendable {
   /// pipeline-build time.
   public var global: Bool = false
 
+  /// How this field's value combines across the resolver's layered view
+  /// (root profile → leaf profile → conversation override). Default is
+  /// REPLACE (leaf wins). APPEND_STRING fields concatenate every non-empty
+  /// contribution root-to-leaf, blank-line separated. UIs use this to
+  /// hint the user that their entry will be added on top of whatever
+  /// the chain already contributes, not replace it.
+  public var merge: Reeve_V1_ConfigField.Merge = .unspecified
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum TypeEnum: SwiftProtobuf.Enum, Swift.CaseIterable {
@@ -730,6 +738,46 @@ public nonisolated struct Reeve_V1_ConfigField: Sendable {
       .boolean,
       .select,
       .modelPicker,
+    ]
+
+  }
+
+  public nonisolated enum Merge: SwiftProtobuf.Enum, Swift.CaseIterable {
+    public typealias RawValue = Int
+
+    /// treated as REPLACE
+    case unspecified // = 0
+    case replace // = 1
+    case appendString // = 2
+    case UNRECOGNIZED(Int)
+
+    public init() {
+      self = .unspecified
+    }
+
+    public init?(rawValue: Int) {
+      switch rawValue {
+      case 0: self = .unspecified
+      case 1: self = .replace
+      case 2: self = .appendString
+      default: self = .UNRECOGNIZED(rawValue)
+      }
+    }
+
+    public var rawValue: Int {
+      switch self {
+      case .unspecified: return 0
+      case .replace: return 1
+      case .appendString: return 2
+      case .UNRECOGNIZED(let i): return i
+      }
+    }
+
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    public static let allCases: [Reeve_V1_ConfigField.Merge] = [
+      .unspecified,
+      .replace,
+      .appendString,
     ]
 
   }
@@ -1801,7 +1849,7 @@ nonisolated extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1818,6 +1866,7 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
       case 7: try { try decoder.decodeSingularBoolField(value: &self.required) }()
       case 8: try { try decoder.decodeSingularBoolField(value: &self.global) }()
       case 9: try { try decoder.decodeSingularMessageField(value: &self._modelPickerFilter) }()
+      case 10: try { try decoder.decodeSingularEnumField(value: &self.merge) }()
       default: break
       }
     }
@@ -1855,6 +1904,9 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
     try { if let v = self._modelPickerFilter {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     } }()
+    if self.merge != .unspecified {
+      try visitor.visitSingularEnumField(value: self.merge, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1868,6 +1920,7 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
     if lhs._modelPickerFilter != rhs._modelPickerFilter {return false}
     if lhs.required != rhs.required {return false}
     if lhs.global != rhs.global {return false}
+    if lhs.merge != rhs.merge {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1875,6 +1928,10 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Reeve_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0")
+}
+
+nonisolated extension Reeve_V1_ConfigField.Merge: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MERGE_UNSPECIFIED\0\u{1}MERGE_REPLACE\0\u{1}MERGE_APPEND_STRING\0")
 }
 
 nonisolated extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

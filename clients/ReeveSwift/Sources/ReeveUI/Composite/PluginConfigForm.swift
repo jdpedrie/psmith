@@ -67,6 +67,18 @@ public struct PluginConfigForm: View {
                         .foregroundStyle(unsatisfied ? .red : .secondary)
                         .help("Required")
                 }
+                if field.merge == .appendString {
+                    Text("Appends")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.18))
+                        )
+                        .foregroundStyle(Color.accentColor)
+                        .help("This field concatenates across the profile chain and any conversation override. Your entry is added on top of inherited values, not replacing them.")
+                }
             }
             control(for: field)
             if unsatisfied {

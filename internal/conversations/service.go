@@ -651,10 +651,11 @@ func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.
 		return nil, err
 	}
 
-	// Re-do the merge here (instead of calling resolvePluginPipelineForConversation
-	// + losing source provenance) so we can tag each row with where
-	// its winning config came from.
-	profileRows, _, err := s.mergedProfileChainRows(ctx, conv.ProfileID)
+	// Resolve via the layered path so the bytes the UI sees match what
+	// SendMessage hands to the constructor — including any
+	// MergeAppendString concatenations from the profile chain plus
+	// conversation override layer.
+	final, _, err := s.mergedProfileChainRowsForConversation(ctx, conv)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -664,16 +665,13 @@ func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.
 	}
 	convNames := make(map[string]bool, len(convRows))
 	for _, c := range convRows {
-		convNames[c.PluginName] = true
+		if !c.Disabled {
+			convNames[c.PluginName] = true
+		}
 	}
-	final := mergeConversationOverrides(profileRows, convRows)
 
 	entries := make([]*reevev1.ResolvedPipelineEntry, 0, len(final))
 	for _, r := range final {
-		cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt %s: %w", r.Name, err))
-		}
 		source := reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE
 		if convNames[r.Name] {
 			source = reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION
@@ -681,7 +679,7 @@ func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.
 		entries = append(entries, &reevev1.ResolvedPipelineEntry{
 			PluginName: r.Name,
 			Ordinal:    r.Ordinal,
-			Config:     cfg,
+			Config:     r.Config,
 			Source:     source,
 		})
 	}
@@ -1938,36 +1936,59 @@ func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID
 //   - conv-level row with disabled=TRUE removes the plugin
 //   - sort the final set by ordinal (conv-level rows may reorder)
 func (s *Service) resolvePluginPipelineForConversation(ctx context.Context, conv store.Conversation) (plugins.Pipeline, error) {
-	profileRows, owner, err := s.mergedProfileChainRows(ctx, conv.ProfileID)
+	rows, owner, err := s.mergedProfileChainRowsForConversation(ctx, conv)
 	if err != nil {
 		return nil, err
 	}
-
-	convRows, err := s.queries.ListConversationPlugins(ctx, conv.ID)
-	if err != nil {
-		return nil, fmt.Errorf("list conversation plugins: %w", err)
-	}
-	merged := mergeConversationOverrides(profileRows, convRows)
-	return s.buildPipeline(ctx, merged, owner)
+	return s.buildPipeline(ctx, rows, owner)
 }
 
-// mergedRow holds one resolved entry after the chain walk + dedup.
-// Keeps just the bits buildPipeline needs (name, config bytes,
-// ordinal for the final sort).
+// mergedRow holds one resolved entry after the chain walk + dedup +
+// per-field merge. `Config` carries the FINAL post-merge plaintext
+// bytes ready for the plugin constructor — every contributing layer
+// has already been decrypted and combined via plugins.MergeLayeredConfigs.
 type mergedRow struct {
-	Name            string
-	Ordinal         int32
-	Config          []byte // legacy plaintext column; usually nil
-	ConfigEncrypted []byte
+	Name    string
+	Ordinal int32
+	Config  []byte
+}
+
+// layeredPlugin tracks every contributing config layer for one plugin
+// name as the resolver walks the chain. ConfigLayers are stored in
+// root-to-leaf order (oldest ancestor first, conversation override
+// last). Disabled rows DROP the plugin entirely — once seen anywhere
+// closer to the leaf they wipe out further ancestor contributions.
+type layeredPlugin struct {
+	name    string
+	ordinal int32 // leaf-most non-disabled layer's ordinal wins
+	layers  [][]byte
 }
 
 // mergedProfileChainRows walks the profile parent chain and returns
-// the merged set of plugin rows (first-by-name wins, disabled rows
-// drop the name). Plus the owner user_id for the global-merge step.
+// one row per active plugin, with every contributing layer's config
+// already field-merged via `plugins.MergeLayeredConfigs`. Disabled
+// rows subtract a plugin from the resolver chain. Plus the owner
+// user_id for the global-merge step.
 func (s *Service) mergedProfileChainRows(ctx context.Context, profileID uuid.UUID) ([]mergedRow, uuid.UUID, error) {
+	layered, owner, err := s.layeredProfileChain(ctx, profileID)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	rows, err := flattenLayered(layered)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	return rows, owner, nil
+}
+
+// layeredProfileChain walks leaf → root, accumulating every layer of
+// every plugin's config along the way. Decryption happens per-layer
+// here so the caller only sees plaintext bytes. Returns one
+// `layeredPlugin` per active plugin (disabled rows wipe entries).
+func (s *Service) layeredProfileChain(ctx context.Context, profileID uuid.UUID) (map[string]*layeredPlugin, uuid.UUID, error) {
 	cur := profileID
 	seen := make(map[uuid.UUID]bool)
-	byName := make(map[string]mergedRow)
+	byName := make(map[string]*layeredPlugin)
 	dropped := make(map[string]bool)
 	var owner uuid.UUID
 	for {
@@ -1987,26 +2008,28 @@ func (s *Service) mergedProfileChainRows(ctx context.Context, profileID uuid.UUI
 			return nil, uuid.Nil, fmt.Errorf("list profile plugins: %w", err)
 		}
 		for _, r := range rows {
-			// First-seen wins. Subsequent ancestors with the same
-			// plugin name are ignored — including the case where
-			// an ancestor would enable a name that a closer child
-			// dropped, which we want to honour.
-			if _, ok := byName[r.PluginName]; ok {
-				continue
-			}
 			if dropped[r.PluginName] {
 				continue
 			}
 			if r.Disabled {
 				dropped[r.PluginName] = true
+				delete(byName, r.PluginName)
 				continue
 			}
-			byName[r.PluginName] = mergedRow{
-				Name:            r.PluginName,
-				Ordinal:         r.Ordinal,
-				Config:          r.Config,
-				ConfigEncrypted: r.ConfigEncrypted,
+			cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+			if err != nil {
+				return nil, uuid.Nil, fmt.Errorf("decrypt plugin %s: %w", r.PluginName, err)
 			}
+			entry, ok := byName[r.PluginName]
+			if !ok {
+				// First time we see this name — walking leaf → root
+				// so this is the leaf-most occurrence; its ordinal
+				// wins the final pipeline sort.
+				entry = &layeredPlugin{name: r.PluginName, ordinal: r.Ordinal}
+				byName[r.PluginName] = entry
+			}
+			// Prepending keeps the slice in root-to-leaf order.
+			entry.layers = append([][]byte{cfg}, entry.layers...)
 		}
 
 		if prof.ParentProfileID == nil {
@@ -2014,19 +2037,20 @@ func (s *Service) mergedProfileChainRows(ctx context.Context, profileID uuid.UUI
 		}
 		cur = *prof.ParentProfileID
 	}
-
-	out := make([]mergedRow, 0, len(byName))
-	for _, r := range byName {
-		out = append(out, r)
-	}
-	sortMergedRows(out)
-	return out, owner, nil
+	return byName, owner, nil
 }
 
-// mergeConversationOverrides layers conversation_plugins rows over
-// an already-merged profile-chain set. Conv-level entries always
-// win on the same plugin_name; conv-level disabled removes the
-// inherited plugin.
+// mergeConversationOverrides layers conversation_plugins rows over a
+// resolved-and-merged profile-chain result. Same semantics as before:
+// disabled removes the plugin entirely; non-disabled conv rows
+// contribute a final layer (their config field-merges into the
+// inherited chain via plugins.MergeLayeredConfigs).
+//
+// `profileRows` carries the already-merged config bytes for each
+// inherited plugin. To layer a conv-level config on top we re-enter
+// MergeLayeredConfigs with two layers: the inherited merged result
+// followed by the conv-level bytes. For append-string fields that
+// concatenates correctly; for replace fields the conv layer wins.
 func mergeConversationOverrides(profileRows []mergedRow, convRows []store.ConversationPlugin) []mergedRow {
 	byName := make(map[string]mergedRow, len(profileRows)+len(convRows))
 	for _, r := range profileRows {
@@ -2037,11 +2061,34 @@ func mergeConversationOverrides(profileRows []mergedRow, convRows []store.Conver
 			delete(byName, c.PluginName)
 			continue
 		}
+		// Conv-level config: the encrypted column may carry the bytes,
+		// but at this layer we treat whichever is non-nil as raw JSON
+		// (callers that need real decryption call through the layered
+		// path via mergedProfileChainRowsForConversation instead).
+		convBytes := c.Config
+		if convBytes == nil {
+			convBytes = c.ConfigEncrypted
+		}
+		inherited, ok := byName[c.PluginName]
+		if !ok {
+			// Conv-only plugin — no inherited layer to merge against.
+			byName[c.PluginName] = mergedRow{
+				Name:    c.PluginName,
+				Ordinal: c.Ordinal,
+				Config:  convBytes,
+			}
+			continue
+		}
+		merged, err := plugins.MergeLayeredConfigs(c.PluginName, [][]byte{inherited.Config, convBytes})
+		if err != nil {
+			// Fall back to conv-wins shape; the constructor will
+			// surface any structural problem.
+			merged = convBytes
+		}
 		byName[c.PluginName] = mergedRow{
-			Name:            c.PluginName,
-			Ordinal:         c.Ordinal,
-			Config:          c.Config,
-			ConfigEncrypted: c.ConfigEncrypted,
+			Name:    c.PluginName,
+			Ordinal: c.Ordinal,
+			Config:  merged,
 		}
 	}
 	out := make([]mergedRow, 0, len(byName))
@@ -2050,6 +2097,68 @@ func mergeConversationOverrides(profileRows []mergedRow, convRows []store.Conver
 	}
 	sortMergedRows(out)
 	return out
+}
+
+// mergedProfileChainRowsForConversation walks both the profile chain
+// AND the conversation_plugins override layer in one pass, decrypting
+// every layer before handing them to plugins.MergeLayeredConfigs. This
+// is the path SendMessage uses — same merge semantics as the
+// profile-only path but with the conversation row treated as the
+// leaf-most layer.
+func (s *Service) mergedProfileChainRowsForConversation(ctx context.Context, conv store.Conversation) ([]mergedRow, uuid.UUID, error) {
+	layered, owner, err := s.layeredProfileChain(ctx, conv.ProfileID)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+
+	convRows, err := s.queries.ListConversationPlugins(ctx, conv.ID)
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("list conversation plugins: %w", err)
+	}
+	for _, c := range convRows {
+		if c.Disabled {
+			delete(layered, c.PluginName)
+			continue
+		}
+		cfg, err := crypto.ResolveSecret(s.cipher, c.ConfigEncrypted, c.Config)
+		if err != nil {
+			return nil, uuid.Nil, fmt.Errorf("decrypt conv plugin %s: %w", c.PluginName, err)
+		}
+		entry, ok := layered[c.PluginName]
+		if !ok {
+			entry = &layeredPlugin{name: c.PluginName, ordinal: c.Ordinal}
+			layered[c.PluginName] = entry
+		} else {
+			// Conv-level ordinal wins the final sort.
+			entry.ordinal = c.Ordinal
+		}
+		entry.layers = append(entry.layers, cfg)
+	}
+
+	rows, err := flattenLayered(layered)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	return rows, owner, nil
+}
+
+// flattenLayered runs MergeLayeredConfigs per plugin and returns the
+// sorted final rows.
+func flattenLayered(layered map[string]*layeredPlugin) ([]mergedRow, error) {
+	out := make([]mergedRow, 0, len(layered))
+	for _, e := range layered {
+		merged, err := plugins.MergeLayeredConfigs(e.name, e.layers)
+		if err != nil {
+			return nil, fmt.Errorf("merge layered config for %s: %w", e.name, err)
+		}
+		out = append(out, mergedRow{
+			Name:    e.name,
+			Ordinal: e.ordinal,
+			Config:  merged,
+		})
+	}
+	sortMergedRows(out)
+	return out, nil
 }
 
 // sortMergedRows applies the deterministic final order: by ordinal,
@@ -2063,19 +2172,16 @@ func sortMergedRows(rows []mergedRow) {
 	})
 }
 
-// buildPipeline runs the encryption + globals merge per row, then
-// hands the specs to plugins.Resolve.
+// buildPipeline runs the globals merge per row and hands the specs to
+// plugins.Resolve. Decryption + field-merge already happened upstream
+// in `mergedProfileChainRows` / `mergedProfileChainRowsForConversation`.
 func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uuid.UUID) (plugins.Pipeline, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
 	specs := make([]plugins.Spec, 0, len(rows))
 	for _, r := range rows {
-		cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt plugin %s: %w", r.Name, err)
-		}
-		merged, err := s.mergeGlobalIntoProfileConfig(ctx, owner, r.Name, cfg)
+		merged, err := s.mergeGlobalIntoProfileConfig(ctx, owner, r.Name, r.Config)
 		if err != nil {
 			return nil, fmt.Errorf("merge globals for %q: %w", r.Name, err)
 		}

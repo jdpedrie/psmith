@@ -38,6 +38,17 @@ public enum ReeveConfigFieldType: Sendable, Hashable {
     case number, text, textarea, boolean, select, modelPicker
 }
 
+/// How one field's value combines across the resolver's layered view
+/// (root profile → leaf profile → conversation override). UIs can use
+/// `appendString` to hint that an entry adds to whatever the chain
+/// already contributes rather than replacing it.
+public enum ReeveConfigFieldMerge: Sendable, Hashable {
+    /// Leaf wins — every earlier layer is ignored for the field.
+    case replace
+    /// Each non-empty layer concatenates root-to-leaf, blank-line joined.
+    case appendString
+}
+
 /// Mirror of `reeve.v1.ModelPickerFilter`. Drives which user_models
 /// the chooser surfaces for a `.modelPicker` field. Any flag set to
 /// true is required; flags AND together. Empty = no filter.
@@ -99,6 +110,11 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
     /// which models to surface in the chooser. nil = no filter
     /// (irrelevant on non-`.modelPicker` types).
     public let modelPickerFilter: ReeveModelPickerFilter?
+    /// How this field combines across the resolver's layered view.
+    /// `.replace` (default) keeps the existing leaf-wins behaviour;
+    /// `.appendString` means each layer's non-empty contribution
+    /// concatenates with blank-line separators.
+    public let merge: ReeveConfigFieldMerge
 
     public init(
         name: String,
@@ -109,7 +125,8 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         options: [ReeveConfigOption],
         required: Bool = false,
         global: Bool = false,
-        modelPickerFilter: ReeveModelPickerFilter? = nil
+        modelPickerFilter: ReeveModelPickerFilter? = nil,
+        merge: ReeveConfigFieldMerge = .replace
     ) {
         self.name = name
         self.display = display
@@ -120,6 +137,7 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         self.required = required
         self.global = global
         self.modelPickerFilter = modelPickerFilter
+        self.merge = merge
     }
 
     /// True when `value` is missing or blank for a required field.
@@ -327,6 +345,11 @@ extension ReeveConfigField {
         let filter: ReeveModelPickerFilter? = p.hasModelPickerFilter
             ? ReeveModelPickerFilter(from: p.modelPickerFilter)
             : nil
+        let merge: ReeveConfigFieldMerge
+        switch p.merge {
+        case .appendString: merge = .appendString
+        default:            merge = .replace
+        }
         self.init(
             name: p.name,
             display: p.display,
@@ -336,7 +359,8 @@ extension ReeveConfigField {
             options: p.options.map(ReeveConfigOption.init(from:)),
             required: p.required,
             global: p.global,
-            modelPickerFilter: filter
+            modelPickerFilter: filter,
+            merge: merge
         )
     }
 }

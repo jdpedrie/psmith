@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -128,8 +129,11 @@ func TestPluginMerge_ChildOverridesParentConfig(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row after child-wins merge; got %d", len(rows))
 	}
-	if string(rows[0].ConfigEncrypted) != `{"keep_last_n":7}` {
-		t.Errorf("expected child config to win; got %q", string(rows[0].ConfigEncrypted))
+	// keep_last_n is a number field with the default Replace strategy,
+	// so leaf wins. MergeLayeredConfigs re-encodes the single resolved
+	// key — exact bytes round-trip since there's only one key.
+	if string(rows[0].Config) != `{"keep_last_n":7}` {
+		t.Errorf("expected child config to win; got %q", string(rows[0].Config))
 	}
 }
 
@@ -166,6 +170,87 @@ func TestPluginMerge_ConversationDisabledRemovesInheritedPlugin(t *testing.T) {
 	}
 	if len(pipeline) != 0 {
 		t.Errorf("expected empty pipeline after conv disable; got %d entries", len(pipeline))
+	}
+}
+
+// TestPluginMerge_TextInjectorAppendsAcrossChain pins the append-string
+// behaviour for text_injector. Parent profile sets system_prefix=A,
+// child profile sets system_prefix=B. The resolved config should be
+// "A\n\nB" — both contributions kept, joined with a blank line — not
+// just B winning.
+func TestPluginMerge_TextInjectorAppendsAcrossChain(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	parentID := makeMergeProfile(t, q, user.ID, "parent", nil)
+	insertProfilePlugin(t, q, parentID, 0, plugins.TextInjectorName, `{"system_prefix":"PARENT-SYS","user_head_reminder":"PARENT-REM"}`, false)
+
+	childID := makeMergeProfile(t, q, user.ID, "child", &parentID)
+	insertProfilePlugin(t, q, childID, 0, plugins.TextInjectorName, `{"system_prefix":"CHILD-SYS"}`, false)
+
+	rows, _, err := svc.mergedProfileChainRows(context.Background(), childID)
+	if err != nil {
+		t.Fatalf("mergedProfileChainRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row; got %d", len(rows))
+	}
+
+	var got map[string]string
+	if err := json.Unmarshal(rows[0].Config, &got); err != nil {
+		t.Fatalf("unmarshal merged config: %v", err)
+	}
+	// system_prefix has both layers — root-to-leaf order, blank-line joined.
+	if got["system_prefix"] != "PARENT-SYS\n\nCHILD-SYS" {
+		t.Errorf("expected system_prefix concatenated; got %q", got["system_prefix"])
+	}
+	// user_head_reminder only set at the parent — survives even though
+	// the child didn't mention it (parent layer still contributes).
+	if got["user_head_reminder"] != "PARENT-REM" {
+		t.Errorf("expected parent-only field preserved; got %q", got["user_head_reminder"])
+	}
+}
+
+// TestPluginMerge_TextInjectorConvLayerAppends ensures the conversation
+// override is treated as the leaf-most layer: its text appends after
+// the profile-chain contributions for append-string fields.
+func TestPluginMerge_TextInjectorConvLayerAppends(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	profileID := makeMergeProfile(t, q, user.ID, "p", nil)
+	insertProfilePlugin(t, q, profileID, 0, plugins.TextInjectorName, `{"system_prefix":"PROFILE"}`, false)
+
+	convID := uuid.New()
+	contextID := uuid.New()
+	if _, err := q.CreateConversation(context.Background(), store.CreateConversationParams{
+		ID: convID, UserID: user.ID, ProfileID: profileID,
+	}); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+	if _, err := q.CreateContext(context.Background(), store.CreateContextParams{
+		ID: contextID, ConversationID: convID,
+	}); err != nil {
+		t.Fatalf("CreateContext: %v", err)
+	}
+	insertConversationPlugin(t, q, convID, 0, plugins.TextInjectorName, `{"system_prefix":"CONV"}`, false)
+
+	convRow, _ := q.GetConversationByID(context.Background(), convID)
+	rows, _, err := svc.mergedProfileChainRowsForConversation(context.Background(), convRow)
+	if err != nil {
+		t.Fatalf("mergedProfileChainRowsForConversation: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row; got %d", len(rows))
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rows[0].Config, &got); err != nil {
+		t.Fatalf("unmarshal merged config: %v", err)
+	}
+	if got["system_prefix"] != "PROFILE\n\nCONV" {
+		t.Errorf("expected profile + conv concatenated; got %q", got["system_prefix"])
 	}
 }
 

@@ -69,6 +69,28 @@ const (
 	ConfigFieldModelPicker ConfigFieldType = "model_picker"
 )
 
+// ConfigFieldMerge picks how a field's value combines across the
+// resolver's layered config view (root profile → leaf profile →
+// conversation override). The default is "replace" (leaf wins, the
+// pre-existing behaviour). Plugins opt into accumulation for fields
+// where every layer's contribution adds value rather than supersedes —
+// e.g. text_injector's prefixes/suffixes, where a child profile or
+// per-conversation override should add to the parent's text rather
+// than blow it away.
+type ConfigFieldMerge string
+
+const (
+	// MergeReplace — leaf-most layer with a value wins, every earlier
+	// layer is ignored for this field. Default for any field that
+	// doesn't set Merge explicitly.
+	MergeReplace ConfigFieldMerge = ""
+
+	// MergeAppendString — string fields concatenate every non-empty
+	// layer in root-to-leaf order, joined with a blank line. Use for
+	// prompts / reminders / additive instructions.
+	MergeAppendString ConfigFieldMerge = "append_string"
+)
+
 // ConfigField describes one entry in a plugin's per-instance config shape.
 // The list is flat — there's no nesting. Default is JSON-marshaled when
 // shipped over the wire; nil means "no default."
@@ -99,6 +121,12 @@ type ConfigField struct {
 	// per-key basis. UIs render global fields on a separate "Plugin
 	// settings" surface, NOT in the per-profile plugin form.
 	Global bool
+	// Merge picks how this field combines across the resolver's
+	// root-to-leaf layered view. Unset = MergeReplace (leaf wins).
+	// Set to MergeAppendString on string/textarea fields where each
+	// layer's contribution adds to the parent rather than supersedes
+	// it (text_injector's prefix/suffix/reminder fields).
+	Merge ConfigFieldMerge
 }
 
 // ConfigOption is one entry in a select field's options list.
@@ -959,4 +987,97 @@ func DescribeAll() ([]TypeDescriptor, error) {
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+// MergeLayeredConfigs combines a plugin's config bytes from each layer
+// of the resolver chain (root profile → leaf profile → conversation
+// override) into a single config blob the plugin constructor will see.
+// Each field's merge strategy is read from the plugin's TypeDescriptor:
+//
+//   - MergeReplace (default): the leaf-most layer with a value for that
+//     field wins. Every earlier layer is ignored for the field.
+//   - MergeAppendString: every non-empty string contribution
+//     concatenates in root-to-leaf order, joined with "\n\n".
+//
+// Layers must be valid JSON objects (or empty / nil = "{}"). Returns
+// the merged config as JSON bytes. Plugins without a registered
+// type descriptor fall back to "last layer wins" — same effect as the
+// pre-merge implementation.
+func MergeLayeredConfigs(name string, layers [][]byte) ([]byte, error) {
+	if len(layers) == 0 {
+		return []byte("{}"), nil
+	}
+	if len(layers) == 1 {
+		// Single layer — short-circuit, no field-strategy work needed.
+		if len(layers[0]) == 0 {
+			return []byte("{}"), nil
+		}
+		return layers[0], nil
+	}
+
+	desc, err := Describe(name)
+	if err != nil {
+		// No descriptor — fall back to the legacy "leaf wins" shape.
+		// Plugins that aren't introspectable can't declare append
+		// strategies anyway.
+		last := layers[len(layers)-1]
+		if len(last) == 0 {
+			return []byte("{}"), nil
+		}
+		return last, nil
+	}
+
+	// Build a field metadata map for quick strategy lookup.
+	strategy := make(map[string]ConfigFieldMerge, len(desc.ConfigFields))
+	for _, f := range desc.ConfigFields {
+		strategy[f.Name] = f.Merge
+	}
+
+	// Decode each layer to a generic map. Unknown / unparseable
+	// layers are skipped — same lenient handling as the constructor.
+	decoded := make([]map[string]any, 0, len(layers))
+	for _, raw := range layers {
+		if len(raw) == 0 {
+			decoded = append(decoded, map[string]any{})
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			// Tolerate by skipping — drivers will surface the real
+			// error if the leaf layer is malformed.
+			decoded = append(decoded, map[string]any{})
+			continue
+		}
+		if m == nil {
+			m = map[string]any{}
+		}
+		decoded = append(decoded, m)
+	}
+
+	// Accumulator built in root-to-leaf order: for replace fields the
+	// later layer overwrites; for append-string fields we collect each
+	// layer's non-empty contribution then join at the end.
+	out := map[string]any{}
+	appendBuf := map[string][]string{}
+
+	for _, layer := range decoded {
+		for k, v := range layer {
+			switch strategy[k] {
+			case MergeAppendString:
+				if s, ok := v.(string); ok && s != "" {
+					appendBuf[k] = append(appendBuf[k], s)
+				}
+			default:
+				// MergeReplace (or unknown field name — preserve
+				// it via replace so downstream constructors still
+				// see whatever the leaf wrote).
+				out[k] = v
+			}
+		}
+	}
+	for k, parts := range appendBuf {
+		out[k] = joinNonEmpty(parts, "\n\n")
+	}
+
+	return json.Marshal(out)
 }

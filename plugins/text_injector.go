@@ -95,36 +95,47 @@ func (p *textInjector) Description() string {
 // --- Configurable ---
 
 func (p *textInjector) ConfigFields() []ConfigField {
+	// Every field here is an additive string contribution: a child
+	// profile or per-conversation override should ADD to whatever
+	// the parent already says, not blow it away. Mark them with
+	// `Merge: MergeAppendString` so the resolver concatenates
+	// every non-empty layer's value (root → leaf, blank-line
+	// separated) instead of taking only the leaf-most.
 	return []ConfigField{
 		{
 			Name:        "system_prefix",
 			Display:     "System prepend",
 			Description: "Text prepended to the system message on every send. Composes with other plugins' system contributions.",
 			Type:        ConfigFieldTextarea,
+			Merge:       MergeAppendString,
 		},
 		{
 			Name:        "system_suffix",
 			Display:     "System append",
 			Description: "Text appended to the system message on every send.",
 			Type:        ConfigFieldTextarea,
+			Merge:       MergeAppendString,
 		},
 		{
 			Name:        "user_prefix",
 			Display:     "User prefix (every turn)",
 			Description: "Prepended to every user message in the wire prefix. NOT persisted — your own history view shows your original text.",
 			Type:        ConfigFieldTextarea,
+			Merge:       MergeAppendString,
 		},
 		{
 			Name:        "user_suffix",
 			Display:     "User suffix (every turn)",
 			Description: "Appended to every user message in the wire prefix. Same non-persisted semantics as the prefix.",
 			Type:        ConfigFieldTextarea,
+			Merge:       MergeAppendString,
 		},
 		{
 			Name:        "user_head_reminder",
 			Display:     "User head reminder",
 			Description: "Appended to ONLY the most recent user message in the wire prefix. Re-grounds an instruction near the head of attention without bloating older turns. The lettered_choices [system_reminder] trick, generalised.",
 			Type:        ConfigFieldTextarea,
+			Merge:       MergeAppendString,
 		},
 	}
 }
