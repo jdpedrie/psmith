@@ -48,6 +48,23 @@ public protocol Reeve_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `updateContext`(request: Reeve_V1_UpdateContextRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_UpdateContextResponse>
 
+    /// Per-conversation plugin overrides. Merged on top of the
+    /// profile-chain pipeline at resolve time. Get returns the LITERAL
+    /// stored rows for this conversation (not the merged view); the
+    /// client uses ResolveConversationPipeline for the merged shape if
+    /// it needs to render a preview.
+    @available(iOS 13, *)
+    func `getConversationPlugins`(request: Reeve_V1_GetConversationPluginsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_GetConversationPluginsResponse>
+
+    @available(iOS 13, *)
+    func `setConversationPlugins`(request: Reeve_V1_SetConversationPluginsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_SetConversationPluginsResponse>
+
+    /// Server-resolved merged view: profile chain + conversation
+    /// overrides, with `disabled` rows already applied. Used by the
+    /// conversation-settings UI to show "what's actually running."
+    @available(iOS 13, *)
+    func `resolveConversationPipeline`(request: Reeve_V1_ResolveConversationPipelineRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ResolveConversationPipelineResponse>
+
     /// Messages.
     @available(iOS 13, *)
     func `listMessages`(request: Reeve_V1_ListMessagesRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListMessagesResponse>
@@ -165,6 +182,21 @@ public final class Reeve_V1_ConversationsServiceClient: Reeve_V1_ConversationsSe
     }
 
     @available(iOS 13, *)
+    public func `getConversationPlugins`(request: Reeve_V1_GetConversationPluginsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_GetConversationPluginsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ConversationsService/GetConversationPlugins", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setConversationPlugins`(request: Reeve_V1_SetConversationPluginsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_SetConversationPluginsResponse> {
+        return await self.client.unary(path: "/reeve.v1.ConversationsService/SetConversationPlugins", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `resolveConversationPipeline`(request: Reeve_V1_ResolveConversationPipelineRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ResolveConversationPipelineResponse> {
+        return await self.client.unary(path: "/reeve.v1.ConversationsService/ResolveConversationPipeline", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listMessages`(request: Reeve_V1_ListMessagesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ListMessagesResponse> {
         return await self.client.unary(path: "/reeve.v1.ConversationsService/ListMessages", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -220,6 +252,9 @@ public final class Reeve_V1_ConversationsServiceClient: Reeve_V1_ConversationsSe
             public static let activateContext = Connect.MethodSpec(name: "ActivateContext", service: "reeve.v1.ConversationsService", type: .unary)
             public static let setCurrentLeaf = Connect.MethodSpec(name: "SetCurrentLeaf", service: "reeve.v1.ConversationsService", type: .unary)
             public static let updateContext = Connect.MethodSpec(name: "UpdateContext", service: "reeve.v1.ConversationsService", type: .unary)
+            public static let getConversationPlugins = Connect.MethodSpec(name: "GetConversationPlugins", service: "reeve.v1.ConversationsService", type: .unary)
+            public static let setConversationPlugins = Connect.MethodSpec(name: "SetConversationPlugins", service: "reeve.v1.ConversationsService", type: .unary)
+            public static let resolveConversationPipeline = Connect.MethodSpec(name: "ResolveConversationPipeline", service: "reeve.v1.ConversationsService", type: .unary)
             public static let listMessages = Connect.MethodSpec(name: "ListMessages", service: "reeve.v1.ConversationsService", type: .unary)
             public static let getMessage = Connect.MethodSpec(name: "GetMessage", service: "reeve.v1.ConversationsService", type: .unary)
             public static let editMessage = Connect.MethodSpec(name: "EditMessage", service: "reeve.v1.ConversationsService", type: .unary)

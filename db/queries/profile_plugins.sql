@@ -17,8 +17,11 @@ DELETE FROM profile_plugins WHERE profile_id = $1;
 -- config column is left NULL on every new row. The service layer's
 -- read path decrypts config_encrypted and falls back to the plaintext
 -- column for legacy rows still carrying their pre-rollover JSONB.
-INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config_encrypted)
-VALUES ($1, $2, $3, $4)
+-- $5 is `disabled` — when TRUE the resolver drops any same-named
+-- plugin inherited from this profile's parent chain (the explicit-
+-- subtract escape hatch for the merge resolver).
+INSERT INTO profile_plugins (profile_id, ordinal, plugin_name, config_encrypted, disabled)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdateProfilePluginConfig :exec

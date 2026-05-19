@@ -640,6 +640,7 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[re
 			PluginName: r.PluginName,
 			Ordinal:    r.Ordinal,
 			Config:     cfg,
+			Disabled:   r.Disabled,
 		})
 	}
 	return connect.NewResponse(&reevev1.GetProfilePluginsResponse{Plugins: out}), nil
@@ -707,6 +708,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[re
 			Ordinal:         int32(i),
 			PluginName:      p.PluginName,
 			ConfigEncrypted: encrypted,
+			Disabled:        p.Disabled,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("insert plugins[%d]: %w", i, err))
@@ -718,6 +720,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[re
 			PluginName: row.PluginName,
 			Ordinal:    row.Ordinal,
 			Config:     p.Config,
+			Disabled:   row.Disabled,
 		})
 	}
 	if err := tx.Commit(ctx); err != nil {

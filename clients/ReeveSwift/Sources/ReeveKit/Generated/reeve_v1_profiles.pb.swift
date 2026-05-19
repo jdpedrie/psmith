@@ -796,6 +796,11 @@ public nonisolated struct Reeve_V1_ProfilePlugin: Sendable {
 
   public var config: Data = Data()
 
+  /// When true, the resolver drops any same-named plugin inherited
+  /// from this profile's parent chain. Lets a child profile detach
+  /// an inherited plugin without cloning the parent's whole pipeline.
+  public var disabled: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1964,7 +1969,7 @@ nonisolated extension Reeve_V1_ModelPickerFilter: SwiftProtobuf.Message, SwiftPr
 
 nonisolated extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProfilePlugin"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}ordinal\0\u{1}config\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}ordinal\0\u{1}config\0\u{1}disabled\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1975,6 +1980,7 @@ nonisolated extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtob
       case 1: try { try decoder.decodeSingularStringField(value: &self.pluginName) }()
       case 2: try { try decoder.decodeSingularInt32Field(value: &self.ordinal) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self.config) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.disabled) }()
       default: break
       }
     }
@@ -1990,6 +1996,9 @@ nonisolated extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtob
     if !self.config.isEmpty {
       try visitor.visitSingularBytesField(value: self.config, fieldNumber: 3)
     }
+    if self.disabled != false {
+      try visitor.visitSingularBoolField(value: self.disabled, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1997,6 +2006,7 @@ nonisolated extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtob
     if lhs.pluginName != rhs.pluginName {return false}
     if lhs.ordinal != rhs.ordinal {return false}
     if lhs.config != rhs.config {return false}
+    if lhs.disabled != rhs.disabled {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

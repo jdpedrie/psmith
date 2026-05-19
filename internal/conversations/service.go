@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -519,6 +520,172 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[r
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&reevev1.DeleteConversationResponse{}), nil
+}
+
+// --- Conversation-scoped plugin overrides ---
+
+// GetConversationPlugins returns the LITERAL stored override rows for
+// one conversation. Empty list means "no overrides — falls back to
+// the profile-chain pipeline." For the merged view (what's actually
+// running), call ResolveConversationPipeline.
+func (s *Service) GetConversationPlugins(ctx context.Context, req *connect.Request[reevev1.GetConversationPluginsRequest]) (*connect.Response[reevev1.GetConversationPluginsResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	convID, err := uuid.Parse(req.Msg.ConversationId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+	}
+	if _, err := s.fetchOwnedConversation(ctx, convID, caller.ID); err != nil {
+		return nil, err
+	}
+	rows, err := s.queries.ListConversationPlugins(ctx, convID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*reevev1.ConversationPlugin, 0, len(rows))
+	for i, r := range rows {
+		cfg, dErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+		if dErr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugins[%d]: %w", i, dErr))
+		}
+		out = append(out, &reevev1.ConversationPlugin{
+			PluginName: r.PluginName,
+			Ordinal:    r.Ordinal,
+			Config:     cfg,
+			Disabled:   r.Disabled,
+		})
+	}
+	return connect.NewResponse(&reevev1.GetConversationPluginsResponse{Plugins: out}), nil
+}
+
+// SetConversationPlugins atomically replaces this conversation's
+// override list. Pre-validates every entry by building the plugin
+// against its config so unknown-name / bad-config errors surface as
+// InvalidArgument (matches SetProfilePlugins). Disabled rows are
+// still validated against the registry (the name must exist) so a
+// typo can't silently disable nothing.
+func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Request[reevev1.SetConversationPluginsRequest]) (*connect.Response[reevev1.SetConversationPluginsResponse], error) {
+	if s.pool == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SetConversationPlugins requires pool dependency"))
+	}
+	caller := auth.MustFromContext(ctx)
+	convID, err := uuid.Parse(req.Msg.ConversationId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+	}
+	if _, err := s.fetchOwnedConversation(ctx, convID, caller.ID); err != nil {
+		return nil, err
+	}
+
+	for i, p := range req.Msg.Plugins {
+		if p.PluginName == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d]: empty plugin_name", i))
+		}
+		// Disabled entries get a registry-only check; enabled
+		// entries get a full build against the config so a malformed
+		// blob fails at the API boundary rather than at send time.
+		if p.Disabled {
+			if !plugins.IsRegistered(p.PluginName) {
+				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): unknown plugin name", i, p.PluginName))
+			}
+			continue
+		}
+		if _, err := plugins.Build(p.PluginName, p.Config); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	qtx := s.queries.WithTx(tx)
+
+	if err := qtx.ReplaceConversationPlugins(ctx, convID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear existing: %w", err))
+	}
+	out := make([]*reevev1.ConversationPlugin, 0, len(req.Msg.Plugins))
+	for i, p := range req.Msg.Plugins {
+		var encrypted []byte
+		if p.Config != nil {
+			encrypted, err = s.cipher.Encrypt(p.Config)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encrypt plugins[%d]: %w", i, err))
+			}
+		}
+		row, err := qtx.InsertConversationPlugin(ctx, store.InsertConversationPluginParams{
+			ConversationID:  convID,
+			Ordinal:         int32(i),
+			PluginName:      p.PluginName,
+			ConfigEncrypted: encrypted,
+			Disabled:        p.Disabled,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("insert plugins[%d]: %w", i, err))
+		}
+		out = append(out, &reevev1.ConversationPlugin{
+			PluginName: row.PluginName,
+			Ordinal:    row.Ordinal,
+			Config:     p.Config,
+			Disabled:   row.Disabled,
+		})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
+	}
+	return connect.NewResponse(&reevev1.SetConversationPluginsResponse{Plugins: out}), nil
+}
+
+// ResolveConversationPipeline returns the merged view (profile chain
+// + conversation overrides + disabled subtracts applied), tagged with
+// the source layer for each entry. Drives the conversation-settings
+// UI's "what's actually running" rendering.
+func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.Request[reevev1.ResolveConversationPipelineRequest]) (*connect.Response[reevev1.ResolveConversationPipelineResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	convID, err := uuid.Parse(req.Msg.ConversationId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+	}
+	conv, err := s.fetchOwnedConversation(ctx, convID, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Re-do the merge here (instead of calling resolvePluginPipelineForConversation
+	// + losing source provenance) so we can tag each row with where
+	// its winning config came from.
+	profileRows, _, err := s.mergedProfileChainRows(ctx, conv.ProfileID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	convRows, err := s.queries.ListConversationPlugins(ctx, convID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	convNames := make(map[string]bool, len(convRows))
+	for _, c := range convRows {
+		convNames[c.PluginName] = true
+	}
+	final := mergeConversationOverrides(profileRows, convRows)
+
+	entries := make([]*reevev1.ResolvedPipelineEntry, 0, len(final))
+	for _, r := range final {
+		cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt %s: %w", r.Name, err))
+		}
+		source := reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE
+		if convNames[r.Name] {
+			source = reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION
+		}
+		entries = append(entries, &reevev1.ResolvedPipelineEntry{
+			PluginName: r.Name,
+			Ordinal:    r.Ordinal,
+			Config:     cfg,
+			Source:     source,
+		})
+	}
+	return connect.NewResponse(&reevev1.ResolveConversationPipelineResponse{Entries: entries}), nil
 }
 
 // --- ListContexts ---
@@ -1741,49 +1908,180 @@ var _ = time.Now
 //
 // Cycle-protected: a malformed parent_profile_id loop would otherwise hang;
 // detected cycles return an error rather than infinite-looping.
+//
+// Merge semantics (changed in commit a285c6d9's successor):
+//
+//   - Walk profile parent chain leaf→root. For each plugin row found,
+//     the FIRST occurrence by plugin_name wins (deepest child trumps
+//     ancestors).
+//   - A row with `disabled = TRUE` acts as an explicit subtract: the
+//     plugin is dropped from the merged result even if an ancestor
+//     defines an enabled version. Lets a child detach an inherited
+//     plugin without cloning the parent's whole pipeline.
+//   - Final ordering is by the winner's `ordinal`. Profile defines
+//     its own slot position; collisions break alphabetically by name
+//     for determinism.
+//
+// resolvePluginPipelineForConversation extends this with one extra
+// layer on top (conversation_plugins) — see below.
 func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID) (plugins.Pipeline, error) {
+	rows, owner, err := s.mergedProfileChainRows(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildPipeline(ctx, rows, owner)
+}
+
+// resolvePluginPipelineForConversation merges conversation_plugins
+// rows over the profile-chain merge. Same merge rules:
+//   - conv-level row by plugin_name wins over the profile chain
+//   - conv-level row with disabled=TRUE removes the plugin
+//   - sort the final set by ordinal (conv-level rows may reorder)
+func (s *Service) resolvePluginPipelineForConversation(ctx context.Context, conv store.Conversation) (plugins.Pipeline, error) {
+	profileRows, owner, err := s.mergedProfileChainRows(ctx, conv.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+
+	convRows, err := s.queries.ListConversationPlugins(ctx, conv.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list conversation plugins: %w", err)
+	}
+	merged := mergeConversationOverrides(profileRows, convRows)
+	return s.buildPipeline(ctx, merged, owner)
+}
+
+// mergedRow holds one resolved entry after the chain walk + dedup.
+// Keeps just the bits buildPipeline needs (name, config bytes,
+// ordinal for the final sort).
+type mergedRow struct {
+	Name            string
+	Ordinal         int32
+	Config          []byte // legacy plaintext column; usually nil
+	ConfigEncrypted []byte
+}
+
+// mergedProfileChainRows walks the profile parent chain and returns
+// the merged set of plugin rows (first-by-name wins, disabled rows
+// drop the name). Plus the owner user_id for the global-merge step.
+func (s *Service) mergedProfileChainRows(ctx context.Context, profileID uuid.UUID) ([]mergedRow, uuid.UUID, error) {
 	cur := profileID
 	seen := make(map[uuid.UUID]bool)
+	byName := make(map[string]mergedRow)
+	dropped := make(map[string]bool)
 	var owner uuid.UUID
 	for {
 		if seen[cur] {
-			return nil, fmt.Errorf("plugin resolve: parent-profile cycle at %s", cur)
+			return nil, uuid.Nil, fmt.Errorf("plugin resolve: parent-profile cycle at %s", cur)
 		}
 		seen[cur] = true
 
-		// Cache the profile lookup so we can both check parent_profile_id
-		// (loop continuation) and fish out user_id (global-merge keying).
 		prof, err := s.queries.GetProfileByID(ctx, cur)
 		if err != nil {
-			return nil, fmt.Errorf("get profile %s: %w", cur, err)
+			return nil, uuid.Nil, fmt.Errorf("get profile %s: %w", cur, err)
 		}
 		owner = prof.UserID
 
 		rows, err := s.queries.ListProfilePlugins(ctx, cur)
 		if err != nil {
-			return nil, fmt.Errorf("list profile plugins: %w", err)
+			return nil, uuid.Nil, fmt.Errorf("list profile plugins: %w", err)
 		}
-		if len(rows) > 0 {
-			specs := make([]plugins.Spec, 0, len(rows))
-			for _, r := range rows {
-				profileCfg, dErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
-				if dErr != nil {
-					return nil, fmt.Errorf("decrypt profile_plugins.%s: %w", r.PluginName, dErr)
-				}
-				merged, mErr := s.mergeGlobalIntoProfileConfig(ctx, owner, r.PluginName, profileCfg)
-				if mErr != nil {
-					return nil, fmt.Errorf("merge globals for %q: %w", r.PluginName, mErr)
-				}
-				specs = append(specs, plugins.Spec{Name: r.PluginName, Config: merged})
+		for _, r := range rows {
+			// First-seen wins. Subsequent ancestors with the same
+			// plugin name are ignored — including the case where
+			// an ancestor would enable a name that a closer child
+			// dropped, which we want to honour.
+			if _, ok := byName[r.PluginName]; ok {
+				continue
 			}
-			return plugins.Resolve(specs)
+			if dropped[r.PluginName] {
+				continue
+			}
+			if r.Disabled {
+				dropped[r.PluginName] = true
+				continue
+			}
+			byName[r.PluginName] = mergedRow{
+				Name:            r.PluginName,
+				Ordinal:         r.Ordinal,
+				Config:          r.Config,
+				ConfigEncrypted: r.ConfigEncrypted,
+			}
 		}
 
 		if prof.ParentProfileID == nil {
-			return nil, nil
+			break
 		}
 		cur = *prof.ParentProfileID
 	}
+
+	out := make([]mergedRow, 0, len(byName))
+	for _, r := range byName {
+		out = append(out, r)
+	}
+	sortMergedRows(out)
+	return out, owner, nil
+}
+
+// mergeConversationOverrides layers conversation_plugins rows over
+// an already-merged profile-chain set. Conv-level entries always
+// win on the same plugin_name; conv-level disabled removes the
+// inherited plugin.
+func mergeConversationOverrides(profileRows []mergedRow, convRows []store.ConversationPlugin) []mergedRow {
+	byName := make(map[string]mergedRow, len(profileRows)+len(convRows))
+	for _, r := range profileRows {
+		byName[r.Name] = r
+	}
+	for _, c := range convRows {
+		if c.Disabled {
+			delete(byName, c.PluginName)
+			continue
+		}
+		byName[c.PluginName] = mergedRow{
+			Name:            c.PluginName,
+			Ordinal:         c.Ordinal,
+			Config:          c.Config,
+			ConfigEncrypted: c.ConfigEncrypted,
+		}
+	}
+	out := make([]mergedRow, 0, len(byName))
+	for _, r := range byName {
+		out = append(out, r)
+	}
+	sortMergedRows(out)
+	return out
+}
+
+// sortMergedRows applies the deterministic final order: by ordinal,
+// ties broken alphabetically by name.
+func sortMergedRows(rows []mergedRow) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Ordinal != rows[j].Ordinal {
+			return rows[i].Ordinal < rows[j].Ordinal
+		}
+		return rows[i].Name < rows[j].Name
+	})
+}
+
+// buildPipeline runs the encryption + globals merge per row, then
+// hands the specs to plugins.Resolve.
+func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uuid.UUID) (plugins.Pipeline, error) {
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	specs := make([]plugins.Spec, 0, len(rows))
+	for _, r := range rows {
+		cfg, err := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt plugin %s: %w", r.Name, err)
+		}
+		merged, err := s.mergeGlobalIntoProfileConfig(ctx, owner, r.Name, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("merge globals for %q: %w", r.Name, err)
+		}
+		specs = append(specs, plugins.Spec{Name: r.Name, Config: merged})
+	}
+	return plugins.Resolve(specs)
 }
 
 // mergeGlobalIntoProfileConfig fetches the calling user's global config
@@ -1845,10 +2143,11 @@ func (s *Service) mergeGlobalIntoProfileConfig(ctx context.Context, userID uuid.
 	return out, nil
 }
 
-// resolvePipelineForConversation is a convenience wrapper that fetches the
-// conversation's profile_id and delegates to resolvePluginPipeline.
+// resolvePipelineForConversation is a convenience wrapper. Delegates
+// to resolvePluginPipelineForConversation which merges any
+// conversation-level overrides over the profile-chain pipeline.
 func (s *Service) resolvePipelineForConversation(ctx context.Context, conv store.Conversation) (plugins.Pipeline, error) {
-	return s.resolvePluginPipeline(ctx, conv.ProfileID)
+	return s.resolvePluginPipelineForConversation(ctx, conv)
 }
 
 // ---------------------------------------------------------------------------

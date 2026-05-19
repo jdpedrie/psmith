@@ -29,6 +29,18 @@ service ConversationsService {
   // auto-generated title or set one when auto-titles aren't configured.
   rpc UpdateContext(UpdateContextRequest) returns (UpdateContextResponse);
 
+  // Per-conversation plugin overrides. Merged on top of the
+  // profile-chain pipeline at resolve time. Get returns the LITERAL
+  // stored rows for this conversation (not the merged view); the
+  // client uses ResolveConversationPipeline for the merged shape if
+  // it needs to render a preview.
+  rpc GetConversationPlugins(GetConversationPluginsRequest) returns (GetConversationPluginsResponse);
+  rpc SetConversationPlugins(SetConversationPluginsRequest) returns (SetConversationPluginsResponse);
+  // Server-resolved merged view: profile chain + conversation
+  // overrides, with `disabled` rows already applied. Used by the
+  // conversation-settings UI to show "what's actually running."
+  rpc ResolveConversationPipeline(ResolveConversationPipelineRequest) returns (ResolveConversationPipelineResponse);
+
   // Messages.
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
   rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
@@ -226,6 +238,65 @@ message DeleteMessageRequest {
   bool cascade = 2;
 }
 message DeleteMessageResponse {}
+
+// --- Conversation-scoped plugin overrides ------------------------------
+
+// One plugin row scoped to a single conversation. Shape mirrors
+// ProfilePlugin; `disabled` here means "drop the inherited plugin of
+// this name from the merged pipeline for this conversation only."
+message ConversationPlugin {
+  string plugin_name = 1;
+  int32 ordinal = 2;
+  bytes config = 3;
+  bool disabled = 4;
+}
+
+message GetConversationPluginsRequest {
+  string conversation_id = 1;
+}
+message GetConversationPluginsResponse {
+  repeated ConversationPlugin plugins = 1;
+}
+
+message SetConversationPluginsRequest {
+  string conversation_id = 1;
+  // Replaces the conversation's override list atomically. Pass an
+  // empty list to clear all overrides (the conversation falls back
+  // to the profile-chain pipeline).
+  repeated ConversationPlugin plugins = 2;
+}
+message SetConversationPluginsResponse {
+  repeated ConversationPlugin plugins = 1;
+}
+
+message ResolveConversationPipelineRequest {
+  string conversation_id = 1;
+}
+message ResolveConversationPipelineResponse {
+  // Each entry carries the resolved (post-merge) plugin spec along
+  // with where its config came from, so the UI can mark
+  // inherited-vs-overridden rows.
+  repeated ResolvedPipelineEntry entries = 1;
+}
+
+message ResolvedPipelineEntry {
+  string plugin_name = 1;
+  int32 ordinal = 2;
+  bytes config = 3;
+  // Where this entry's effective config came from: which profile in
+  // the chain, or the conversation override slot.
+  ResolvedPipelineSource source = 4;
+}
+
+enum ResolvedPipelineSource {
+  RESOLVED_PIPELINE_SOURCE_UNSPECIFIED = 0;
+  // Came from a profile in the inheritance chain. The profile_id
+  // field on the entry's source identifies which one (future
+  // addition; for v1 the client only needs the binary "this row
+  // came from the profile chain" vs "from my conversation override").
+  RESOLVED_PIPELINE_SOURCE_PROFILE = 1;
+  RESOLVED_PIPELINE_SOURCE_CONVERSATION = 2;
+}
 
 message PromoteCompactionToNewContextRequest {
   // The id of the compression_summary message to promote. Must live in the

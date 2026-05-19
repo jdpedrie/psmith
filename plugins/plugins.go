@@ -540,6 +540,16 @@ func Build(name string, configBytes json.RawMessage) (Plugin, error) {
 	return ctor(configBytes)
 }
 
+// IsRegistered reports whether a plugin is registered under `name`.
+// Cheaper than Build when callers only need to validate the name
+// (e.g., accepting a disabled = true row whose config is irrelevant).
+func IsRegistered(name string) bool {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	_, ok := reg[name]
+	return ok
+}
+
 // ListRegistered returns the names of all currently-registered plugins, in
 // no particular order.
 func ListRegistered() []string {

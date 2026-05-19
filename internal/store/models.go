@@ -31,6 +31,17 @@ type Conversation struct {
 	UpdatedAt time.Time
 }
 
+type ConversationPlugin struct {
+	ConversationID  uuid.UUID
+	Ordinal         int32
+	PluginName      string
+	Config          []byte
+	ConfigEncrypted []byte
+	Disabled        bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type CostEvent struct {
 	ID         int64
 	ProviderID uuid.UUID
@@ -145,6 +156,7 @@ type ProfilePlugin struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	ConfigEncrypted []byte
+	Disabled        bool
 }
 
 type Session struct {

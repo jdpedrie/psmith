@@ -60,6 +60,15 @@ const (
 	// ConversationsServiceUpdateContextProcedure is the fully-qualified name of the
 	// ConversationsService's UpdateContext RPC.
 	ConversationsServiceUpdateContextProcedure = "/reeve.v1.ConversationsService/UpdateContext"
+	// ConversationsServiceGetConversationPluginsProcedure is the fully-qualified name of the
+	// ConversationsService's GetConversationPlugins RPC.
+	ConversationsServiceGetConversationPluginsProcedure = "/reeve.v1.ConversationsService/GetConversationPlugins"
+	// ConversationsServiceSetConversationPluginsProcedure is the fully-qualified name of the
+	// ConversationsService's SetConversationPlugins RPC.
+	ConversationsServiceSetConversationPluginsProcedure = "/reeve.v1.ConversationsService/SetConversationPlugins"
+	// ConversationsServiceResolveConversationPipelineProcedure is the fully-qualified name of the
+	// ConversationsService's ResolveConversationPipeline RPC.
+	ConversationsServiceResolveConversationPipelineProcedure = "/reeve.v1.ConversationsService/ResolveConversationPipeline"
 	// ConversationsServiceListMessagesProcedure is the fully-qualified name of the
 	// ConversationsService's ListMessages RPC.
 	ConversationsServiceListMessagesProcedure = "/reeve.v1.ConversationsService/ListMessages"
@@ -110,6 +119,17 @@ type ConversationsServiceClient interface {
 	// Edit a context's metadata (currently just title). Used to override the
 	// auto-generated title or set one when auto-titles aren't configured.
 	UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error)
+	// Per-conversation plugin overrides. Merged on top of the
+	// profile-chain pipeline at resolve time. Get returns the LITERAL
+	// stored rows for this conversation (not the merged view); the
+	// client uses ResolveConversationPipeline for the merged shape if
+	// it needs to render a preview.
+	GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error)
+	SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error)
+	// Server-resolved merged view: profile chain + conversation
+	// overrides, with `disabled` rows already applied. Used by the
+	// conversation-settings UI to show "what's actually running."
+	ResolveConversationPipeline(context.Context, *connect.Request[v1.ResolveConversationPipelineRequest]) (*connect.Response[v1.ResolveConversationPipelineResponse], error)
 	// Messages.
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	GetMessage(context.Context, *connect.Request[v1.GetMessageRequest]) (*connect.Response[v1.GetMessageResponse], error)
@@ -223,6 +243,24 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("UpdateContext")),
 			connect.WithClientOptions(opts...),
 		),
+		getConversationPlugins: connect.NewClient[v1.GetConversationPluginsRequest, v1.GetConversationPluginsResponse](
+			httpClient,
+			baseURL+ConversationsServiceGetConversationPluginsProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("GetConversationPlugins")),
+			connect.WithClientOptions(opts...),
+		),
+		setConversationPlugins: connect.NewClient[v1.SetConversationPluginsRequest, v1.SetConversationPluginsResponse](
+			httpClient,
+			baseURL+ConversationsServiceSetConversationPluginsProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("SetConversationPlugins")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveConversationPipeline: connect.NewClient[v1.ResolveConversationPipelineRequest, v1.ResolveConversationPipelineResponse](
+			httpClient,
+			baseURL+ConversationsServiceResolveConversationPipelineProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("ResolveConversationPipeline")),
+			connect.WithClientOptions(opts...),
+		),
 		listMessages: connect.NewClient[v1.ListMessagesRequest, v1.ListMessagesResponse](
 			httpClient,
 			baseURL+ConversationsServiceListMessagesProcedure,
@@ -291,6 +329,9 @@ type conversationsServiceClient struct {
 	activateContext               *connect.Client[v1.ActivateContextRequest, v1.ActivateContextResponse]
 	setCurrentLeaf                *connect.Client[v1.SetCurrentLeafRequest, v1.SetCurrentLeafResponse]
 	updateContext                 *connect.Client[v1.UpdateContextRequest, v1.UpdateContextResponse]
+	getConversationPlugins        *connect.Client[v1.GetConversationPluginsRequest, v1.GetConversationPluginsResponse]
+	setConversationPlugins        *connect.Client[v1.SetConversationPluginsRequest, v1.SetConversationPluginsResponse]
+	resolveConversationPipeline   *connect.Client[v1.ResolveConversationPipelineRequest, v1.ResolveConversationPipelineResponse]
 	listMessages                  *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
 	getMessage                    *connect.Client[v1.GetMessageRequest, v1.GetMessageResponse]
 	editMessage                   *connect.Client[v1.EditMessageRequest, v1.EditMessageResponse]
@@ -345,6 +386,21 @@ func (c *conversationsServiceClient) SetCurrentLeaf(ctx context.Context, req *co
 // UpdateContext calls reeve.v1.ConversationsService.UpdateContext.
 func (c *conversationsServiceClient) UpdateContext(ctx context.Context, req *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error) {
 	return c.updateContext.CallUnary(ctx, req)
+}
+
+// GetConversationPlugins calls reeve.v1.ConversationsService.GetConversationPlugins.
+func (c *conversationsServiceClient) GetConversationPlugins(ctx context.Context, req *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error) {
+	return c.getConversationPlugins.CallUnary(ctx, req)
+}
+
+// SetConversationPlugins calls reeve.v1.ConversationsService.SetConversationPlugins.
+func (c *conversationsServiceClient) SetConversationPlugins(ctx context.Context, req *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error) {
+	return c.setConversationPlugins.CallUnary(ctx, req)
+}
+
+// ResolveConversationPipeline calls reeve.v1.ConversationsService.ResolveConversationPipeline.
+func (c *conversationsServiceClient) ResolveConversationPipeline(ctx context.Context, req *connect.Request[v1.ResolveConversationPipelineRequest]) (*connect.Response[v1.ResolveConversationPipelineResponse], error) {
+	return c.resolveConversationPipeline.CallUnary(ctx, req)
 }
 
 // ListMessages calls reeve.v1.ConversationsService.ListMessages.
@@ -413,6 +469,17 @@ type ConversationsServiceHandler interface {
 	// Edit a context's metadata (currently just title). Used to override the
 	// auto-generated title or set one when auto-titles aren't configured.
 	UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error)
+	// Per-conversation plugin overrides. Merged on top of the
+	// profile-chain pipeline at resolve time. Get returns the LITERAL
+	// stored rows for this conversation (not the merged view); the
+	// client uses ResolveConversationPipeline for the merged shape if
+	// it needs to render a preview.
+	GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error)
+	SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error)
+	// Server-resolved merged view: profile chain + conversation
+	// overrides, with `disabled` rows already applied. Used by the
+	// conversation-settings UI to show "what's actually running."
+	ResolveConversationPipeline(context.Context, *connect.Request[v1.ResolveConversationPipelineRequest]) (*connect.Response[v1.ResolveConversationPipelineResponse], error)
 	// Messages.
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	GetMessage(context.Context, *connect.Request[v1.GetMessageRequest]) (*connect.Response[v1.GetMessageResponse], error)
@@ -522,6 +589,24 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("UpdateContext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServiceGetConversationPluginsHandler := connect.NewUnaryHandler(
+		ConversationsServiceGetConversationPluginsProcedure,
+		svc.GetConversationPlugins,
+		connect.WithSchema(conversationsServiceMethods.ByName("GetConversationPlugins")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceSetConversationPluginsHandler := connect.NewUnaryHandler(
+		ConversationsServiceSetConversationPluginsProcedure,
+		svc.SetConversationPlugins,
+		connect.WithSchema(conversationsServiceMethods.ByName("SetConversationPlugins")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceResolveConversationPipelineHandler := connect.NewUnaryHandler(
+		ConversationsServiceResolveConversationPipelineProcedure,
+		svc.ResolveConversationPipeline,
+		connect.WithSchema(conversationsServiceMethods.ByName("ResolveConversationPipeline")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceListMessagesHandler := connect.NewUnaryHandler(
 		ConversationsServiceListMessagesProcedure,
 		svc.ListMessages,
@@ -596,6 +681,12 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceSetCurrentLeafHandler.ServeHTTP(w, r)
 		case ConversationsServiceUpdateContextProcedure:
 			conversationsServiceUpdateContextHandler.ServeHTTP(w, r)
+		case ConversationsServiceGetConversationPluginsProcedure:
+			conversationsServiceGetConversationPluginsHandler.ServeHTTP(w, r)
+		case ConversationsServiceSetConversationPluginsProcedure:
+			conversationsServiceSetConversationPluginsHandler.ServeHTTP(w, r)
+		case ConversationsServiceResolveConversationPipelineProcedure:
+			conversationsServiceResolveConversationPipelineHandler.ServeHTTP(w, r)
 		case ConversationsServiceListMessagesProcedure:
 			conversationsServiceListMessagesHandler.ServeHTTP(w, r)
 		case ConversationsServiceGetMessageProcedure:
@@ -657,6 +748,18 @@ func (UnimplementedConversationsServiceHandler) SetCurrentLeaf(context.Context, 
 
 func (UnimplementedConversationsServiceHandler) UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.UpdateContext is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.GetConversationPlugins is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.SetConversationPlugins is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) ResolveConversationPipeline(context.Context, *connect.Request[v1.ResolveConversationPipelineRequest]) (*connect.Response[v1.ResolveConversationPipelineResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.ConversationsService.ResolveConversationPipeline is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {

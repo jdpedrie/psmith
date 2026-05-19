@@ -1344,10 +1344,14 @@ func (x *ModelPickerFilter) GetRequiresGeneratesImages() bool {
 // authoritative. On output, `ordinal` reflects the persisted position
 // (0-indexed).
 type ProfilePlugin struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Ordinal       int32                  `protobuf:"varint,2,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
-	Config        []byte                 `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PluginName string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	Ordinal    int32                  `protobuf:"varint,2,opt,name=ordinal,proto3" json:"ordinal,omitempty"`
+	Config     []byte                 `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	// When true, the resolver drops any same-named plugin inherited
+	// from this profile's parent chain. Lets a child profile detach
+	// an inherited plugin without cloning the parent's whole pipeline.
+	Disabled      bool `protobuf:"varint,4,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1401,6 +1405,13 @@ func (x *ProfilePlugin) GetConfig() []byte {
 		return x.Config
 	}
 	return nil
+}
+
+func (x *ProfilePlugin) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
 }
 
 type ListPluginTypesRequest struct {
@@ -2137,12 +2148,13 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\x11requires_tool_use\x18\x03 \x01(\bR\x0frequiresToolUse\x12'\n" +
 	"\x0frequires_vision\x18\x04 \x01(\bR\x0erequiresVision\x126\n" +
 	"\x17requires_prompt_caching\x18\x05 \x01(\bR\x15requiresPromptCaching\x12:\n" +
-	"\x19requires_generates_images\x18\x06 \x01(\bR\x17requiresGeneratesImages\"b\n" +
+	"\x19requires_generates_images\x18\x06 \x01(\bR\x17requiresGeneratesImages\"~\n" +
 	"\rProfilePlugin\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x12\x18\n" +
 	"\aordinal\x18\x02 \x01(\x05R\aordinal\x12\x16\n" +
-	"\x06config\x18\x03 \x01(\fR\x06config\"\x18\n" +
+	"\x06config\x18\x03 \x01(\fR\x06config\x12\x1a\n" +
+	"\bdisabled\x18\x04 \x01(\bR\bdisabled\"\x18\n" +
 	"\x16ListPluginTypesRequest\"R\n" +
 	"\x17ListPluginTypesResponse\x127\n" +
 	"\fplugin_types\x18\x01 \x03(\v2\x14.reeve.v1.PluginTypeR\vpluginTypes\"9\n" +

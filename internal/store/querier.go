@@ -128,6 +128,12 @@ type Querier interface {
 	// in flight (server-side enforcement of the UI's "disabled while streaming"
 	// behavior).
 	HasRunningStreamForConversation(ctx context.Context, conversationID uuid.UUID) (bool, error)
+	// $4 = config_encrypted, $5 = disabled. Legacy plaintext `config`
+	// column stays NULL on every new row; read path decrypts $4 and
+	// falls back to the plaintext column only for the encryption-rollover
+	// legacy case (which doesn't apply to a brand-new table but keeps
+	// the read shape identical to profile_plugins).
+	InsertConversationPlugin(ctx context.Context, arg InsertConversationPluginParams) (ConversationPlugin, error)
 	// Records one cost-incurring event. Called from the stream supervisor on
 	// assistant + compression_summary materialisation when total_cost_usd is
 	// non-null and > 0. Errored runs still log if the provider charged
@@ -137,6 +143,9 @@ type Querier interface {
 	// config column is left NULL on every new row. The service layer's
 	// read path decrypts config_encrypted and falls back to the plaintext
 	// column for legacy rows still carrying their pre-rollover JSONB.
+	// $5 is `disabled` — when TRUE the resolver drops any same-named
+	// plugin inherited from this profile's parent chain (the explicit-
+	// subtract escape hatch for the merge resolver).
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
 	// Live runs for a specific conversation. Used by ConversationViewModel
@@ -166,6 +175,10 @@ type Querier interface {
 	//     the context (NULLs treated as zero). Includes compression_summary
 	//     rows since they carry real cost.
 	ListContextsByConversation(ctx context.Context, conversationID uuid.UUID) ([]ListContextsByConversationRow, error)
+	// Plugin pipeline overrides scoped to one conversation. Merged on
+	// top of the profile-chain plugins at resolve time — see
+	// internal/conversations/service.resolvePluginPipeline.
+	ListConversationPlugins(ctx context.Context, conversationID uuid.UUID) ([]ConversationPlugin, error)
 	ListConversationsByUser(ctx context.Context, userID uuid.UUID) ([]Conversation, error)
 	// Same filters as ListConversationsByUserRecentlyUsed but ordered by the
 	// conversation's own created_at — the freshest creation always wins
@@ -242,6 +255,9 @@ type Querier interface {
 	// makes them roots in the context). Used by DeleteMessage(cascade=false) just
 	// before the DELETE, so the FK's ON DELETE CASCADE has nothing to find.
 	ReparentChildren(ctx context.Context, arg ReparentChildrenParams) error
+	// Atomic-swap pattern matching profile_plugins. Caller wraps this in
+	// a transaction together with per-row InsertConversationPlugin calls.
+	ReplaceConversationPlugins(ctx context.Context, conversationID uuid.UUID) error
 	// Atomically swap the pipeline. Caller wraps this in a transaction along with
 	// the per-row inserts via InsertProfilePlugin (an in-tx loop) — there's no
 	// batch-insert sqlc emit for an arbitrary slice.
