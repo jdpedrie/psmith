@@ -277,6 +277,7 @@ type Querier interface {
 	UpdateProfileFavorite(ctx context.Context, arg UpdateProfileFavoriteParams) error
 	UpdateProfileName(ctx context.Context, arg UpdateProfileNameParams) error
 	UpdateProfileParentOnly(ctx context.Context, arg UpdateProfileParentOnlyParams) error
+	UpdateProfileParentProfileID(ctx context.Context, arg UpdateProfileParentProfileIDParams) error
 	// Overwrite the encrypted config for one plugin entry in a profile's
 	// pipeline. Also clears the legacy plaintext column so a read can't
 	// accidentally fall back to it after an upgrade. Used by the system-

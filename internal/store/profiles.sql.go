@@ -329,6 +329,20 @@ func (q *Queries) UpdateProfileParentOnly(ctx context.Context, arg UpdateProfile
 	return err
 }
 
+const updateProfileParentProfileID = `-- name: UpdateProfileParentProfileID :exec
+UPDATE profiles SET parent_profile_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdateProfileParentProfileIDParams struct {
+	ID              uuid.UUID
+	ParentProfileID *uuid.UUID
+}
+
+func (q *Queries) UpdateProfileParentProfileID(ctx context.Context, arg UpdateProfileParentProfileIDParams) error {
+	_, err := q.db.Exec(ctx, updateProfileParentProfileID, arg.ID, arg.ParentProfileID)
+	return err
+}
+
 const updateProfileSystemMessage = `-- name: UpdateProfileSystemMessage :exec
 UPDATE profiles SET system_message = $2, updated_at = NOW() WHERE id = $1
 `

@@ -554,6 +554,100 @@ func TestService_UpdateProfile_ClearField(t *testing.T) {
 	}
 }
 
+// TestService_UpdateProfile_ReParent pins the bug where setting
+// `parent_profile_id` via UpdateProfile silently no-op'd because the
+// proto field, server handler, DB query, and Swift repo were all
+// missing. Re-parenting now works; clearing reverts to standalone.
+func TestService_UpdateProfile_ReParent(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	parent1Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent-A"}))
+	parent2Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent-B"}))
+	childResp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+		Name:            "child",
+		ParentProfileId: &parent1Resp.Msg.Profile.Id,
+	}))
+	if err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+	if got := childResp.Msg.Profile.ParentProfileId; got == nil || *got != parent1Resp.Msg.Profile.Id {
+		t.Fatalf("initial parent wrong: %+v", got)
+	}
+
+	// Re-parent to parent2 via UpdateProfile.
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+		Id:              childResp.Msg.Profile.Id,
+		ParentProfileId: &parent2Resp.Msg.Profile.Id,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile re-parent: %v", err)
+	}
+	if got := resp.Msg.Profile.ParentProfileId; got == nil || *got != parent2Resp.Msg.Profile.Id {
+		t.Errorf("re-parent didn't take: %+v want %s", got, parent2Resp.Msg.Profile.Id)
+	}
+
+	// Clear to detach via clear_fields.
+	resp, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+		Id:          childResp.Msg.Profile.Id,
+		ClearFields: []string{"parent_profile_id"},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateProfile clear parent: %v", err)
+	}
+	if resp.Msg.Profile.ParentProfileId != nil {
+		t.Errorf("parent should be cleared: %+v", resp.Msg.Profile.ParentProfileId)
+	}
+}
+
+// TestService_UpdateProfile_ReParent_RejectsSelf — setting your own
+// id as parent_profile_id is the trivial cycle. Server must reject.
+func TestService_UpdateProfile_ReParent_RejectsSelf(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	p, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+
+	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+		Id:              p.Msg.Profile.Id,
+		ParentProfileId: &p.Msg.Profile.Id,
+	}))
+	if err == nil {
+		t.Fatal("expected error for self-parent, got nil")
+	}
+}
+
+// TestService_UpdateProfile_ReParent_RejectsCycle — pointing at any
+// ancestor (not just self) would create a loop in the inheritance
+// chain. Server must walk the prospective parent's chain and reject.
+func TestService_UpdateProfile_ReParent_RejectsCycle(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+
+	grandparent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "g"}))
+	parent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+		Name:            "p",
+		ParentProfileId: &grandparent.Msg.Profile.Id,
+	}))
+	child, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+		Name:            "c",
+		ParentProfileId: &parent.Msg.Profile.Id,
+	}))
+
+	// Try to set the GRANDPARENT's parent to the CHILD — completes a
+	// child→parent→grandparent→child loop.
+	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+		Id:              grandparent.Msg.Profile.Id,
+		ParentProfileId: &child.Msg.Profile.Id,
+	}))
+	if err == nil {
+		t.Fatal("expected cycle error, got nil")
+	}
+}
+
 func TestService_UpdateProfile_LeavesUntouchedFieldsAlone(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)

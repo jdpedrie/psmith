@@ -15,7 +15,7 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
@@ -25,7 +25,7 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 /// conversation's contexts, falling back to the conversation's created_at
 /// when there are no messages yet (a brand-new conversation appears at the
 /// top).
-public enum Reeve_V1_ConversationOrder: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_ConversationOrder: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case recentlyUsed // = 1
@@ -63,7 +63,7 @@ public enum Reeve_V1_ConversationOrder: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public struct Reeve_V1_CreateConversationRequest: Sendable {
+public nonisolated struct Reeve_V1_CreateConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -96,7 +96,7 @@ public struct Reeve_V1_CreateConversationRequest: Sendable {
   fileprivate var _settings: Reeve_V1_ConversationSettings? = nil
 }
 
-public struct Reeve_V1_CreateConversationResponse: @unchecked Sendable {
+public nonisolated struct Reeve_V1_CreateConversationResponse: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -132,7 +132,7 @@ public struct Reeve_V1_CreateConversationResponse: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_ListConversationsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListConversationsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -182,7 +182,7 @@ public struct Reeve_V1_ListConversationsRequest: Sendable {
   fileprivate var _profileID: String? = nil
 }
 
-public struct Reeve_V1_ListConversationsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListConversationsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -196,7 +196,7 @@ public struct Reeve_V1_ListConversationsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetConversationRequest: Sendable {
+public nonisolated struct Reeve_V1_GetConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -208,7 +208,7 @@ public struct Reeve_V1_GetConversationRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetConversationResponse: @unchecked Sendable {
+public nonisolated struct Reeve_V1_GetConversationResponse: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -238,7 +238,7 @@ public struct Reeve_V1_GetConversationResponse: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_UpdateConversationRequest: Sendable {
+public nonisolated struct Reeve_V1_UpdateConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -271,7 +271,7 @@ public struct Reeve_V1_UpdateConversationRequest: Sendable {
   fileprivate var _settings: Reeve_V1_ConversationSettings? = nil
 }
 
-public struct Reeve_V1_UpdateConversationResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateConversationResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -292,7 +292,7 @@ public struct Reeve_V1_UpdateConversationResponse: Sendable {
   fileprivate var _conversation: Reeve_V1_Conversation? = nil
 }
 
-public struct Reeve_V1_DeleteConversationRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -304,7 +304,7 @@ public struct Reeve_V1_DeleteConversationRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteConversationResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteConversationResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -314,7 +314,7 @@ public struct Reeve_V1_DeleteConversationResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListContextsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListContextsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -326,7 +326,7 @@ public struct Reeve_V1_ListContextsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListContextsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListContextsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -338,7 +338,7 @@ public struct Reeve_V1_ListContextsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ActivateContextRequest: Sendable {
+public nonisolated struct Reeve_V1_ActivateContextRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -350,7 +350,7 @@ public struct Reeve_V1_ActivateContextRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ActivateContextResponse: Sendable {
+public nonisolated struct Reeve_V1_ActivateContextResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -371,7 +371,7 @@ public struct Reeve_V1_ActivateContextResponse: Sendable {
   fileprivate var _context: Reeve_V1_Context? = nil
 }
 
-public struct Reeve_V1_SetCurrentLeafRequest: Sendable {
+public nonisolated struct Reeve_V1_SetCurrentLeafRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -386,7 +386,7 @@ public struct Reeve_V1_SetCurrentLeafRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_SetCurrentLeafResponse: Sendable {
+public nonisolated struct Reeve_V1_SetCurrentLeafResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -407,7 +407,7 @@ public struct Reeve_V1_SetCurrentLeafResponse: Sendable {
   fileprivate var _context: Reeve_V1_Context? = nil
 }
 
-public struct Reeve_V1_UpdateContextRequest: Sendable {
+public nonisolated struct Reeve_V1_UpdateContextRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -432,7 +432,7 @@ public struct Reeve_V1_UpdateContextRequest: Sendable {
   fileprivate var _title: String? = nil
 }
 
-public struct Reeve_V1_UpdateContextResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateContextResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -453,7 +453,7 @@ public struct Reeve_V1_UpdateContextResponse: Sendable {
   fileprivate var _context: Reeve_V1_Context? = nil
 }
 
-public struct Reeve_V1_ListMessagesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListMessagesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -486,7 +486,7 @@ public struct Reeve_V1_ListMessagesRequest: Sendable {
   fileprivate var _leafMessageID: String? = nil
 }
 
-public struct Reeve_V1_ListMessagesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListMessagesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -498,7 +498,7 @@ public struct Reeve_V1_ListMessagesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetMessageRequest: Sendable {
+public nonisolated struct Reeve_V1_GetMessageRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -510,7 +510,7 @@ public struct Reeve_V1_GetMessageRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetMessageResponse: Sendable {
+public nonisolated struct Reeve_V1_GetMessageResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -531,7 +531,7 @@ public struct Reeve_V1_GetMessageResponse: Sendable {
   fileprivate var _message: Reeve_V1_Message? = nil
 }
 
-public struct Reeve_V1_EditMessageRequest: Sendable {
+public nonisolated struct Reeve_V1_EditMessageRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -559,7 +559,7 @@ public struct Reeve_V1_EditMessageRequest: Sendable {
   fileprivate var _role: Reeve_V1_MessageRole? = nil
 }
 
-public struct Reeve_V1_EditMessageResponse: Sendable {
+public nonisolated struct Reeve_V1_EditMessageResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -580,7 +580,7 @@ public struct Reeve_V1_EditMessageResponse: Sendable {
   fileprivate var _message: Reeve_V1_Message? = nil
 }
 
-public struct Reeve_V1_DeleteMessageRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteMessageRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -596,7 +596,7 @@ public struct Reeve_V1_DeleteMessageRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteMessageResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteMessageResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -606,7 +606,7 @@ public struct Reeve_V1_DeleteMessageResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_PromoteCompactionToNewContextRequest: Sendable {
+public nonisolated struct Reeve_V1_PromoteCompactionToNewContextRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -622,7 +622,7 @@ public struct Reeve_V1_PromoteCompactionToNewContextRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_PromoteCompactionToNewContextResponse: Sendable {
+public nonisolated struct Reeve_V1_PromoteCompactionToNewContextResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -643,7 +643,7 @@ public struct Reeve_V1_PromoteCompactionToNewContextResponse: Sendable {
   fileprivate var _context: Reeve_V1_Context? = nil
 }
 
-public struct Reeve_V1_CreateContextManualRequest: Sendable {
+public nonisolated struct Reeve_V1_CreateContextManualRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -664,7 +664,7 @@ public struct Reeve_V1_CreateContextManualRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CreateContextManualResponse: Sendable {
+public nonisolated struct Reeve_V1_CreateContextManualResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -696,7 +696,7 @@ public struct Reeve_V1_CreateContextManualResponse: Sendable {
   fileprivate var _userMessage: Reeve_V1_Message? = nil
 }
 
-public struct Reeve_V1_SendMessageRequest: Sendable {
+public nonisolated struct Reeve_V1_SendMessageRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -779,7 +779,7 @@ public struct Reeve_V1_SendMessageRequest: Sendable {
   fileprivate var _callSettings: Reeve_V1_CallSettings? = nil
 }
 
-public struct Reeve_V1_SendMessageResponse: Sendable {
+public nonisolated struct Reeve_V1_SendMessageResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -813,7 +813,7 @@ public struct Reeve_V1_SendMessageResponse: Sendable {
   fileprivate var _streamRun: Reeve_V1_StreamRun? = nil
 }
 
-public struct Reeve_V1_CompactRequest: Sendable {
+public nonisolated struct Reeve_V1_CompactRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -860,7 +860,7 @@ public struct Reeve_V1_CompactRequest: Sendable {
   fileprivate var _compressionModelID: String? = nil
 }
 
-public struct Reeve_V1_CompactResponse: Sendable {
+public nonisolated struct Reeve_V1_CompactResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -881,7 +881,7 @@ public struct Reeve_V1_CompactResponse: Sendable {
   fileprivate var _streamRun: Reeve_V1_StreamRun? = nil
 }
 
-public struct Reeve_V1_CountContextTokensRequest: Sendable {
+public nonisolated struct Reeve_V1_CountContextTokensRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -898,7 +898,7 @@ public struct Reeve_V1_CountContextTokensRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CountContextTokensResponse: Sendable {
+public nonisolated struct Reeve_V1_CountContextTokensResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -915,13 +915,13 @@ public struct Reeve_V1_CountContextTokensResponse: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_ConversationOrder: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ConversationOrder: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_ORDER_UNSPECIFIED\0\u{1}CONVERSATION_ORDER_RECENTLY_USED\0\u{1}CONVERSATION_ORDER_RECENTLY_CREATED\0")
 }
 
-extension Reeve_V1_CreateConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateConversationRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0")
 
@@ -965,7 +965,7 @@ extension Reeve_V1_CreateConversationRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_CreateConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0\u{3}initial_context\0\u{3}seed_messages\0")
 
@@ -1049,7 +1049,7 @@ extension Reeve_V1_CreateConversationResponse: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension Reeve_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0\u{1}order\0\u{3}title_query\0\u{3}profile_id\0")
 
@@ -1103,7 +1103,7 @@ extension Reeve_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_ListConversationsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListConversationsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversations\0\u{3}next_page_token\0")
 
@@ -1138,7 +1138,7 @@ extension Reeve_V1_ListConversationsResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_GetConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetConversationRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1168,7 +1168,7 @@ extension Reeve_V1_GetConversationRequest: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_GetConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0\u{3}active_context\0")
 
@@ -1245,7 +1245,7 @@ extension Reeve_V1_GetConversationResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_UpdateConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateConversationRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0\u{1}settings\0")
 
@@ -1289,7 +1289,7 @@ extension Reeve_V1_UpdateConversationRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_UpdateConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0")
 
@@ -1323,7 +1323,7 @@ extension Reeve_V1_UpdateConversationResponse: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension Reeve_V1_DeleteConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteConversationRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1353,7 +1353,7 @@ extension Reeve_V1_DeleteConversationRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_DeleteConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1372,7 +1372,7 @@ extension Reeve_V1_DeleteConversationResponse: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension Reeve_V1_ListContextsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListContextsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListContextsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0")
 
@@ -1402,7 +1402,7 @@ extension Reeve_V1_ListContextsRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_ListContextsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListContextsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListContextsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}contexts\0")
 
@@ -1432,7 +1432,7 @@ extension Reeve_V1_ListContextsResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_ActivateContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ActivateContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ActivateContextRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0")
 
@@ -1462,7 +1462,7 @@ extension Reeve_V1_ActivateContextRequest: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_ActivateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ActivateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ActivateContextResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0")
 
@@ -1496,7 +1496,7 @@ extension Reeve_V1_ActivateContextResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_SetCurrentLeafRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SetCurrentLeafRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetCurrentLeafRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}message_id\0")
 
@@ -1531,7 +1531,7 @@ extension Reeve_V1_SetCurrentLeafRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_SetCurrentLeafResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SetCurrentLeafResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetCurrentLeafResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0")
 
@@ -1565,7 +1565,7 @@ extension Reeve_V1_SetCurrentLeafResponse: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_UpdateContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateContextRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{1}title\0")
 
@@ -1604,7 +1604,7 @@ extension Reeve_V1_UpdateContextRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_UpdateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateContextResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0")
 
@@ -1638,7 +1638,7 @@ extension Reeve_V1_UpdateContextResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListMessagesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}leaf_message_id\0\u{3}full_tree\0")
 
@@ -1682,7 +1682,7 @@ extension Reeve_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_ListMessagesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListMessagesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListMessagesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0")
 
@@ -1712,7 +1712,7 @@ extension Reeve_V1_ListMessagesResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_GetMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetMessageRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1742,7 +1742,7 @@ extension Reeve_V1_GetMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_GetMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetMessageResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}message\0")
 
@@ -1776,7 +1776,7 @@ extension Reeve_V1_GetMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_EditMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_EditMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EditMessageRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}content\0\u{1}role\0")
 
@@ -1820,7 +1820,7 @@ extension Reeve_V1_EditMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_EditMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_EditMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EditMessageResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}message\0")
 
@@ -1854,7 +1854,7 @@ extension Reeve_V1_EditMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_DeleteMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteMessageRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}cascade\0")
 
@@ -1889,7 +1889,7 @@ extension Reeve_V1_DeleteMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_DeleteMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteMessageResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1908,7 +1908,7 @@ extension Reeve_V1_DeleteMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_PromoteCompactionToNewContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_PromoteCompactionToNewContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PromoteCompactionToNewContextRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}message_id\0")
 
@@ -1938,7 +1938,7 @@ extension Reeve_V1_PromoteCompactionToNewContextRequest: SwiftProtobuf.Message, 
   }
 }
 
-extension Reeve_V1_PromoteCompactionToNewContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_PromoteCompactionToNewContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PromoteCompactionToNewContextResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0")
 
@@ -1972,7 +1972,7 @@ extension Reeve_V1_PromoteCompactionToNewContextResponse: SwiftProtobuf.Message,
   }
 }
 
-extension Reeve_V1_CreateContextManualRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateContextManualRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateContextManualRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}initial_user_message\0\u{1}mode\0")
 
@@ -2012,7 +2012,7 @@ extension Reeve_V1_CreateContextManualRequest: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateContextManualResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}context\0\u{3}user_message\0")
 
@@ -2051,7 +2051,7 @@ extension Reeve_V1_CreateContextManualResponse: SwiftProtobuf.Message, SwiftProt
   }
 }
 
-extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0")
 
@@ -2125,7 +2125,7 @@ extension Reeve_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_SendMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SendMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_message\0\u{3}stream_run\0")
 
@@ -2164,7 +2164,7 @@ extension Reeve_V1_SendMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_CompactRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CompactRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CompactRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}compression_guide\0\u{3}compression_provider_id\0\u{3}compression_model_id\0")
 
@@ -2213,7 +2213,7 @@ extension Reeve_V1_CompactRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_CompactResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CompactResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CompactResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stream_run\0")
 
@@ -2247,7 +2247,7 @@ extension Reeve_V1_CompactResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
   }
 }
 
-extension Reeve_V1_CountContextTokensRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CountContextTokensRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CountContextTokensRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}provider_id\0\u{3}model_id\0")
 
@@ -2287,7 +2287,7 @@ extension Reeve_V1_CountContextTokensRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_CountContextTokensResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CountContextTokensResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CountContextTokensResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}token_count\0\u{3}context_window\0")
 

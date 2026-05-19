@@ -41,17 +41,18 @@ func (s *Server) registerProfileTools() {
 	)
 	s.register(
 		"update_profile",
-		"Update a profile by id. Pass only the fields you want to change. Pass `clear_fields: [\"system_message\"]` (etc.) to revert a field to its inherited value.",
+		"Update a profile by id. Pass only the fields you want to change. Pass `clear_fields: [\"system_message\"]` (etc.) to revert a field to its inherited value. To re-parent the profile, pass `parent_profile_id` with the new parent's UUID; pass `\"parent_profile_id\"` in `clear_fields` to detach (standalone).",
 		`{"type":"object","required":["id"],"properties":{`+
 			`"id":{"type":"string","description":"Profile UUID."},`+
 			`"name":{"type":"string"},`+
 			`"description":{"type":"string"},`+
+			`"parent_profile_id":{"type":"string","description":"UUID of a new parent profile to inherit from. Self-reference and cycles rejected. Use clear_fields to detach."},`+
 			`"system_message":{"type":"string"},`+
 			`"default_user_message":{"type":"string"},`+
 			`"compression_guide":{"type":"string"},`+
 			`"favorite":{"type":"boolean"},`+
 			`"parent_only":{"type":"boolean"},`+
-			`"clear_fields":{"type":"array","items":{"type":"string"},"description":"Field names to revert to inherited value (e.g. \"system_message\", \"default_user_message\", \"compression_guide\")."}`+
+			`"clear_fields":{"type":"array","items":{"type":"string"},"description":"Field names to revert to inherited value (e.g. \"system_message\", \"default_user_message\", \"compression_guide\", \"parent_profile_id\")."}`+
 			`},"additionalProperties":false}`,
 		s.toolUpdateProfile,
 	)
@@ -187,6 +188,7 @@ type updateProfileArgs struct {
 	ID                 string   `json:"id"`
 	Name               *string  `json:"name"`
 	Description        *string  `json:"description"`
+	ParentProfileID    *string  `json:"parent_profile_id"`
 	SystemMessage      *string  `json:"system_message"`
 	DefaultUserMessage *string  `json:"default_user_message"`
 	CompressionGuide   *string  `json:"compression_guide"`
@@ -206,6 +208,7 @@ func (s *Server) toolUpdateProfile(ctx context.Context, args json.RawMessage) (T
 	req := &reevev1.UpdateProfileRequest{
 		Id:                 in.ID,
 		Name:               in.Name,
+		ParentProfileId:    in.ParentProfileID,
 		SystemMessage:      in.SystemMessage,
 		DefaultUserMessage: in.DefaultUserMessage,
 		CompressionGuide:   in.CompressionGuide,

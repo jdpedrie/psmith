@@ -15,12 +15,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public struct Reeve_V1_LangfuseConfig: Sendable {
+public nonisolated struct Reeve_V1_LangfuseConfig: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -81,7 +81,7 @@ public struct Reeve_V1_LangfuseConfig: Sendable {
   fileprivate var _lastEmittedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_GetLangfuseConfigRequest: Sendable {
+public nonisolated struct Reeve_V1_GetLangfuseConfigRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -91,7 +91,7 @@ public struct Reeve_V1_GetLangfuseConfigRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetLangfuseConfigResponse: Sendable {
+public nonisolated struct Reeve_V1_GetLangfuseConfigResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -115,7 +115,7 @@ public struct Reeve_V1_GetLangfuseConfigResponse: Sendable {
   fileprivate var _config: Reeve_V1_LangfuseConfig? = nil
 }
 
-public struct Reeve_V1_UpdateLangfuseConfigRequest: Sendable {
+public nonisolated struct Reeve_V1_UpdateLangfuseConfigRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -169,7 +169,7 @@ public struct Reeve_V1_UpdateLangfuseConfigRequest: Sendable {
   fileprivate var _enabled: Bool? = nil
 }
 
-public struct Reeve_V1_UpdateLangfuseConfigResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateLangfuseConfigResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -190,7 +190,7 @@ public struct Reeve_V1_UpdateLangfuseConfigResponse: Sendable {
   fileprivate var _config: Reeve_V1_LangfuseConfig? = nil
 }
 
-public struct Reeve_V1_DeleteLangfuseConfigRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteLangfuseConfigRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -200,7 +200,7 @@ public struct Reeve_V1_DeleteLangfuseConfigRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteLangfuseConfigResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteLangfuseConfigResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -210,7 +210,7 @@ public struct Reeve_V1_DeleteLangfuseConfigResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_TestLangfuseConfigRequest: Sendable {
+public nonisolated struct Reeve_V1_TestLangfuseConfigRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -220,7 +220,7 @@ public struct Reeve_V1_TestLangfuseConfigRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_TestLangfuseConfigResponse: Sendable {
+public nonisolated struct Reeve_V1_TestLangfuseConfigResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -241,9 +241,9 @@ public struct Reeve_V1_TestLangfuseConfigResponse: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LangfuseConfig"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}secret_key_set\0\u{1}enabled\0\u{3}created_at\0\u{3}updated_at\0\u{3}last_emitted_at\0")
 
@@ -307,7 +307,7 @@ extension Reeve_V1_LangfuseConfig: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_GetLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetLangfuseConfigRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -326,7 +326,7 @@ extension Reeve_V1_GetLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_GetLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetLangfuseConfigResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}config\0")
 
@@ -360,7 +360,7 @@ extension Reeve_V1_GetLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_UpdateLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateLangfuseConfigRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}host\0\u{3}public_key\0\u{3}secret_key\0\u{1}enabled\0")
 
@@ -409,7 +409,7 @@ extension Reeve_V1_UpdateLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProt
   }
 }
 
-extension Reeve_V1_UpdateLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateLangfuseConfigResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}config\0")
 
@@ -443,7 +443,7 @@ extension Reeve_V1_UpdateLangfuseConfigResponse: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_DeleteLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteLangfuseConfigRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -462,7 +462,7 @@ extension Reeve_V1_DeleteLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProt
   }
 }
 
-extension Reeve_V1_DeleteLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteLangfuseConfigResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -481,7 +481,7 @@ extension Reeve_V1_DeleteLangfuseConfigResponse: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_TestLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestLangfuseConfigRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -500,7 +500,7 @@ extension Reeve_V1_TestLangfuseConfigRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_TestLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestLangfuseConfigResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestLangfuseConfigResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ok\0\u{3}error_message\0\u{3}latency_ms\0")
 

@@ -20,12 +20,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public enum Reeve_V1_MetadataSource: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_MetadataSource: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case catalog // = 1
@@ -70,7 +70,7 @@ public enum Reeve_V1_MetadataSource: SwiftProtobuf.Enum, Swift.CaseIterable {
 /// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
 /// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
 /// tier costs more to write but persists across longer idle gaps.
-public enum Reeve_V1_CacheTTL: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_CacheTTL: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case cacheTtl5M // = 1
@@ -108,7 +108,7 @@ public enum Reeve_V1_CacheTTL: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_ServiceTier: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_ServiceTier: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case auto // = 1
@@ -150,7 +150,7 @@ public enum Reeve_V1_ServiceTier: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_HarmThreshold: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_HarmThreshold: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case blockNone // = 1
@@ -198,7 +198,7 @@ public enum Reeve_V1_HarmThreshold: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_CompressionMode: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_CompressionMode: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case replace // = 1
@@ -236,7 +236,7 @@ public enum Reeve_V1_CompressionMode: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_MessageRole: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_MessageRole: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case system // = 1
@@ -290,7 +290,7 @@ public enum Reeve_V1_MessageRole: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_StreamRunStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_StreamRunStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case running // = 1
@@ -340,7 +340,7 @@ public enum Reeve_V1_StreamRunStatus: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_StreamRunPurpose: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_StreamRunPurpose: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case assistantResponse // = 1
@@ -378,7 +378,7 @@ public enum Reeve_V1_StreamRunPurpose: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case textDelta // = 1
@@ -476,7 +476,7 @@ public enum Reeve_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseIterable {
 /// value AND client-side gathering code, which are coordinated —
 /// closed-enum keeps that gate explicit instead of a free-form
 /// string map drifting between implementations.
-public enum Reeve_V1_DeviceFactKey: SwiftProtobuf.Enum, Swift.CaseIterable {
+public nonisolated enum Reeve_V1_DeviceFactKey: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
 
@@ -539,7 +539,7 @@ public enum Reeve_V1_DeviceFactKey: SwiftProtobuf.Enum, Swift.CaseIterable {
 
 }
 
-public struct Reeve_V1_User: Sendable {
+public nonisolated struct Reeve_V1_User: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -589,7 +589,7 @@ public struct Reeve_V1_User: Sendable {
 /// A driver type compiled into the server. Set is fixed at build time;
 /// adding a type requires a recompile. UIs consult ListProviderTypes to render
 /// configuration forms.
-public struct Reeve_V1_ProviderType: Sendable {
+public nonisolated struct Reeve_V1_ProviderType: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -611,7 +611,7 @@ public struct Reeve_V1_ProviderType: Sendable {
 }
 
 /// A user-configured instance of a driver type with credentials/endpoint/etc.
-public struct Reeve_V1_UserModelProvider: Sendable {
+public nonisolated struct Reeve_V1_UserModelProvider: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -672,7 +672,7 @@ public struct Reeve_V1_UserModelProvider: Sendable {
 /// One entry the UI surfaces in the "Add provider" picker. Combines the
 /// built-in preset registry (native + openai-compatible) with optional
 /// catalog metadata (env var hints, doc URLs from models.dev).
-public struct Reeve_V1_ProviderTemplate: Sendable {
+public nonisolated struct Reeve_V1_ProviderTemplate: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -751,7 +751,7 @@ public struct Reeve_V1_ProviderTemplate: Sendable {
   fileprivate var _logoSlug: String? = nil
 }
 
-public struct Reeve_V1_ModelCapabilities: Sendable {
+public nonisolated struct Reeve_V1_ModelCapabilities: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -779,7 +779,7 @@ public struct Reeve_V1_ModelCapabilities: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ModelPricing: Sendable {
+public nonisolated struct Reeve_V1_ModelPricing: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -831,7 +831,7 @@ public struct Reeve_V1_ModelPricing: Sendable {
 }
 
 /// Read-only catalog provider entry (refreshed periodically from models.dev).
-public struct Reeve_V1_CatalogModelProvider: Sendable {
+public nonisolated struct Reeve_V1_CatalogModelProvider: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -897,7 +897,7 @@ public struct Reeve_V1_CatalogModelProvider: Sendable {
 }
 
 /// Read-only catalog model entry.
-public struct Reeve_V1_CatalogModel: @unchecked Sendable {
+public nonisolated struct Reeve_V1_CatalogModel: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -986,7 +986,7 @@ public struct Reeve_V1_CatalogModel: @unchecked Sendable {
 
 /// A user-enabled model on a configured provider. Metadata is snapshotted at
 /// enable time and editable thereafter; never auto-mutated by catalog refresh.
-public struct Reeve_V1_UserModel: @unchecked Sendable {
+public nonisolated struct Reeve_V1_UserModel: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1122,7 +1122,7 @@ public struct Reeve_V1_UserModel: @unchecked Sendable {
 /// ModelConstraints carries per-model UI guardrails for CallSettings.
 /// Sparse — any field left empty means "no known constraint." See
 /// internal/modelmeta/constraints.go for the source-of-truth table.
-public struct Reeve_V1_ModelConstraints: Sendable {
+public nonisolated struct Reeve_V1_ModelConstraints: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1156,7 +1156,7 @@ public struct Reeve_V1_ModelConstraints: Sendable {
 /// are inclusive; locked_at overrides both — when set, the only valid
 /// value is exactly locked_at (e.g. OpenAI's o-series + gpt-5 family
 /// lock temperature at 1.0).
-public struct Reeve_V1_Range: Sendable {
+public nonisolated struct Reeve_V1_Range: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1206,7 +1206,7 @@ public struct Reeve_V1_Range: Sendable {
 /// Stored on JSONB columns at four layers (conversation > profile > model >
 /// provider). Resolution merges sparsely — every layer can leave any field
 /// unset to inherit from below; see `internal/profiles/callsettings.go`.
-public struct Reeve_V1_CallSettings: @unchecked Sendable {
+public nonisolated struct Reeve_V1_CallSettings: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1323,7 +1323,7 @@ public struct Reeve_V1_CallSettings: @unchecked Sendable {
 ///   OpenAI Responses    → budget_tokens derives reasoning_effort
 ///                         (<2k → low, 2-8k → medium, >8k → high).
 ///   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
-public struct Reeve_V1_ThinkingSettings: Sendable {
+public nonisolated struct Reeve_V1_ThinkingSettings: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1357,7 +1357,7 @@ public struct Reeve_V1_ThinkingSettings: Sendable {
 /// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
 /// provider common surface. v1 surfaces prompt-cache control; further knobs
 /// will be added as they're needed.
-public struct Reeve_V1_AnthropicExtras: Sendable {
+public nonisolated struct Reeve_V1_AnthropicExtras: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1396,7 +1396,7 @@ public struct Reeve_V1_AnthropicExtras: Sendable {
 
 /// OpenAIExtras carries the per-driver knobs that map to Chat Completions /
 /// Responses but have no analog on Anthropic or Google.
-public struct Reeve_V1_OpenAIExtras: Sendable {
+public nonisolated struct Reeve_V1_OpenAIExtras: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1489,7 +1489,7 @@ public struct Reeve_V1_OpenAIExtras: Sendable {
 ///   text         — plain text output (default; no-op when set).
 ///   json_object  — model is forced to emit a syntactically-valid JSON object.
 ///   json_schema  — model output is constrained to match the embedded schema.
-public struct Reeve_V1_ResponseFormat: Sendable {
+public nonisolated struct Reeve_V1_ResponseFormat: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1522,7 +1522,7 @@ public struct Reeve_V1_ResponseFormat: Sendable {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Kind: Equatable, Sendable {
+  public nonisolated enum OneOf_Kind: Equatable, Sendable {
     case text(Bool)
     case jsonObject(Bool)
     case jsonSchema(Reeve_V1_JsonSchema)
@@ -1532,7 +1532,7 @@ public struct Reeve_V1_ResponseFormat: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_JsonSchema: Sendable {
+public nonisolated struct Reeve_V1_JsonSchema: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1569,7 +1569,7 @@ public struct Reeve_V1_JsonSchema: Sendable {
 }
 
 /// GoogleExtras carries Gemini-specific knobs.
-public struct Reeve_V1_GoogleExtras: Sendable {
+public nonisolated struct Reeve_V1_GoogleExtras: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1623,7 +1623,7 @@ public struct Reeve_V1_GoogleExtras: Sendable {
   fileprivate var _candidateCount: Int32? = nil
 }
 
-public struct Reeve_V1_SafetySettings: Sendable {
+public nonisolated struct Reeve_V1_SafetySettings: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1674,7 +1674,7 @@ public struct Reeve_V1_SafetySettings: Sendable {
   fileprivate var _dangerousContent: Reeve_V1_HarmThreshold? = nil
 }
 
-public struct Reeve_V1_ProfileDefaults: Sendable {
+public nonisolated struct Reeve_V1_ProfileDefaults: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1729,7 +1729,7 @@ public struct Reeve_V1_ProfileDefaults: Sendable {
   fileprivate var _callSettings: Reeve_V1_CallSettings? = nil
 }
 
-public struct Reeve_V1_Profile: @unchecked Sendable {
+public nonisolated struct Reeve_V1_Profile: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1957,7 +1957,7 @@ public struct Reeve_V1_Profile: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_ConversationSettings: Sendable {
+public nonisolated struct Reeve_V1_ConversationSettings: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2011,7 +2011,7 @@ public struct Reeve_V1_ConversationSettings: Sendable {
   fileprivate var _callSettings: Reeve_V1_CallSettings? = nil
 }
 
-public struct Reeve_V1_Conversation: Sendable {
+public nonisolated struct Reeve_V1_Conversation: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2101,7 +2101,7 @@ public struct Reeve_V1_Conversation: Sendable {
 /// the resolved pipeline. Tag format is fixed: `<{name}>...</{name}>`.
 /// Clients scan the streaming text for these tag names and render
 /// completed blocks via the named component renderer.
-public struct Reeve_V1_StreamingComponentTag: Sendable {
+public nonisolated struct Reeve_V1_StreamingComponentTag: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2118,7 +2118,7 @@ public struct Reeve_V1_StreamingComponentTag: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_Context: Sendable {
+public nonisolated struct Reeve_V1_Context: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2206,7 +2206,7 @@ public struct Reeve_V1_Context: Sendable {
   fileprivate var _title: String? = nil
 }
 
-public struct Reeve_V1_Message: @unchecked Sendable {
+public nonisolated struct Reeve_V1_Message: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2440,7 +2440,7 @@ public struct Reeve_V1_Message: @unchecked Sendable {
 /// `props.text`. Mixing text + component fragments in one
 /// `Message.ui_fragments` slice is the supported way to interleave
 /// markdown with structured UI.
-public struct Reeve_V1_UIFragment: Sendable {
+public nonisolated struct Reeve_V1_UIFragment: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2470,7 +2470,7 @@ public struct Reeve_V1_UIFragment: Sendable {
 /// `message_attachments` row joined to its `files` row. The bytes
 /// themselves are NOT carried on the wire — fetch via
 /// FilesService.GetFileURL.
-public struct Reeve_V1_MessageAttachment: Sendable {
+public nonisolated struct Reeve_V1_MessageAttachment: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2521,7 +2521,7 @@ public struct Reeve_V1_MessageAttachment: Sendable {
 /// One tool call recorded on an assistant message — the model's request
 /// (id, name, input) plus the loop's execution result (output OR error,
 /// elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
-public struct Reeve_V1_ToolCall: Sendable {
+public nonisolated struct Reeve_V1_ToolCall: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2566,7 +2566,7 @@ public struct Reeve_V1_ToolCall: Sendable {
 /// MessageUsage records token usage reported by the provider plus the
 /// per-component cost computed at the moment of materialization (using the
 /// pricing snapshotted on user_models when the model was enabled).
-public struct Reeve_V1_MessageUsage: Sendable {
+public nonisolated struct Reeve_V1_MessageUsage: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2714,7 +2714,7 @@ public struct Reeve_V1_MessageUsage: Sendable {
   fileprivate var _toolCostUsd: Double? = nil
 }
 
-public struct Reeve_V1_StreamRun: @unchecked Sendable {
+public nonisolated struct Reeve_V1_StreamRun: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2847,7 +2847,7 @@ public struct Reeve_V1_StreamRun: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_Chunk: Sendable {
+public nonisolated struct Reeve_V1_Chunk: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2866,7 +2866,7 @@ public struct Reeve_V1_Chunk: Sendable {
 /// One device-supplied fact. `value` is intentionally untyped — the
 /// shape varies per key (locale tags, ISO timestamps, free-form
 /// strings) and the consumers (plugins) parse per-key.
-public struct Reeve_V1_DeviceFact: Sendable {
+public nonisolated struct Reeve_V1_DeviceFact: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2882,49 +2882,49 @@ public struct Reeve_V1_DeviceFact: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_MetadataSource: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_MetadataSource: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0METADATA_SOURCE_UNSPECIFIED\0\u{1}METADATA_SOURCE_CATALOG\0\u{1}METADATA_SOURCE_DRIVER\0\u{1}METADATA_SOURCE_MANUAL\0")
 }
 
-extension Reeve_V1_CacheTTL: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CacheTTL: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CACHE_TTL_UNSPECIFIED\0\u{1}CACHE_TTL_5M\0\u{1}CACHE_TTL_1H\0")
 }
 
-extension Reeve_V1_ServiceTier: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ServiceTier: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVICE_TIER_UNSPECIFIED\0\u{1}SERVICE_TIER_AUTO\0\u{1}SERVICE_TIER_STANDARD\0\u{1}SERVICE_TIER_PRIORITY\0")
 }
 
-extension Reeve_V1_HarmThreshold: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_HarmThreshold: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0HARM_THRESHOLD_UNSPECIFIED\0\u{1}HARM_THRESHOLD_BLOCK_NONE\0\u{1}HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE\0\u{1}HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE\0\u{1}HARM_THRESHOLD_BLOCK_ONLY_HIGH\0")
 }
 
-extension Reeve_V1_CompressionMode: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CompressionMode: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0COMPRESSION_MODE_UNSPECIFIED\0\u{1}COMPRESSION_MODE_REPLACE\0\u{1}COMPRESSION_MODE_APPEND\0")
 }
 
-extension Reeve_V1_MessageRole: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_MessageRole: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_ROLE_UNSPECIFIED\0\u{1}MESSAGE_ROLE_SYSTEM\0\u{1}MESSAGE_ROLE_CONTEXT\0\u{1}MESSAGE_ROLE_USER\0\u{1}MESSAGE_ROLE_ASSISTANT\0\u{1}MESSAGE_ROLE_COMPRESSION_SUMMARY\0")
 }
 
-extension Reeve_V1_StreamRunStatus: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_StreamRunStatus: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0STREAM_RUN_STATUS_UNSPECIFIED\0\u{1}STREAM_RUN_STATUS_RUNNING\0\u{1}STREAM_RUN_STATUS_COMPLETED\0\u{1}STREAM_RUN_STATUS_ERRORED\0\u{1}STREAM_RUN_STATUS_CANCELLED\0\u{1}STREAM_RUN_STATUS_INTERRUPTED\0")
 }
 
-extension Reeve_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0STREAM_RUN_PURPOSE_UNSPECIFIED\0\u{1}STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE\0\u{1}STREAM_RUN_PURPOSE_COMPRESSION\0")
 }
 
-extension Reeve_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0\u{1}CHUNK_TYPE_ELICIT\0")
 }
 
-extension Reeve_V1_DeviceFactKey: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeviceFactKey: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DEVICE_FACT_KEY_UNSPECIFIED\0\u{1}DEVICE_FACT_KEY_LOCALE\0\u{1}DEVICE_FACT_KEY_TIMEZONE\0\u{1}DEVICE_FACT_KEY_PLATFORM\0\u{1}DEVICE_FACT_KEY_LOCATION_CITY\0\u{1}DEVICE_FACT_KEY_LOCATION_COORDS\0")
 }
 
-extension Reeve_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".User"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}username\0\u{3}display_name\0\u{3}is_admin\0\u{3}created_at\0\u{3}updated_at\0")
 
@@ -2983,7 +2983,7 @@ extension Reeve_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
   }
 }
 
-extension Reeve_V1_ProviderType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProviderType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProviderType"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}display_name\0\u{1}stateful\0\u{3}config_schema\0")
 
@@ -3028,7 +3028,7 @@ extension Reeve_V1_ProviderType: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModelProvider"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}type\0\u{1}label\0\u{1}config\0\u{3}owner_user_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}default_settings\0")
 
@@ -3097,7 +3097,7 @@ extension Reeve_V1_UserModelProvider: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProviderTemplate"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}catalog_provider_id\0\u{1}name\0\u{3}driver_type\0\u{3}api_base\0\u{3}env_key\0\u{3}doc_url\0\u{3}preset_id\0\u{3}logo_slug\0")
 
@@ -3166,7 +3166,7 @@ extension Reeve_V1_ProviderTemplate: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelCapabilities"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}streaming\0\u{1}thinking\0\u{3}tool_use\0\u{1}vision\0\u{3}prompt_caching\0\u{3}generates_images\0")
 
@@ -3221,7 +3221,7 @@ extension Reeve_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelPricing"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_per_million_tokens\0\u{3}output_per_million_tokens\0\u{3}cache_read_per_million_tokens\0\u{3}cache_write_per_million_tokens\0")
 
@@ -3270,7 +3270,7 @@ extension Reeve_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_CatalogModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CatalogModelProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CatalogModelProvider"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}api_base\0\u{3}env_key\0\u{3}doc_url\0\u{1}npm\0\u{3}fetched_at\0")
 
@@ -3334,7 +3334,7 @@ extension Reeve_V1_CatalogModelProvider: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_CatalogModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CatalogModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CatalogModel"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}fetched_at\0")
 
@@ -3467,7 +3467,7 @@ extension Reeve_V1_CatalogModel: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModel"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}default_settings\0\u{3}metadata_source\0\u{3}metadata_snapshot_at\0\u{3}enabled_at\0\u{1}favorite\0\u{1}constraints\0")
 
@@ -3635,7 +3635,7 @@ extension Reeve_V1_UserModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   }
 }
 
-extension Reeve_V1_ModelConstraints: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ModelConstraints: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelConstraints"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{1}unsupported\0")
 
@@ -3674,7 +3674,7 @@ extension Reeve_V1_ModelConstraints: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_Range: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Range: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Range"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}min\0\u{1}max\0\u{3}locked_at\0")
 
@@ -3718,7 +3718,7 @@ extension Reeve_V1_Range: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   }
 }
 
-extension Reeve_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallSettings"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}temperature\0\u{3}top_p\0\u{3}max_output_tokens\0\u{3}stop_sequences\0\u{3}top_k\0\u{1}thinking\0\u{2}\u{4}anthropic\0\u{1}openai\0\u{1}google\0\u{3}explicit_cache\0")
 
@@ -3851,7 +3851,7 @@ extension Reeve_V1_CallSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ThinkingSettings"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}enabled\0\u{3}budget_tokens\0")
 
@@ -3890,7 +3890,7 @@ extension Reeve_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_AnthropicExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_AnthropicExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AnthropicExtras"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}cache_enabled\0\u{3}cache_ttl\0")
 
@@ -3929,7 +3929,7 @@ extension Reeve_V1_AnthropicExtras: SwiftProtobuf.Message, SwiftProtobuf._Messag
   }
 }
 
-extension Reeve_V1_OpenAIExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_OpenAIExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".OpenAIExtras"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}seed\0\u{3}frequency_penalty\0\u{3}presence_penalty\0\u{3}top_logprobs\0\u{3}parallel_tool_calls\0\u{3}service_tier\0\u{3}response_format\0\u{3}logit_bias\0")
 
@@ -3998,7 +3998,7 @@ extension Reeve_V1_OpenAIExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_ResponseFormat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ResponseFormat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ResponseFormat"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{3}json_object\0\u{3}json_schema\0")
 
@@ -4072,7 +4072,7 @@ extension Reeve_V1_ResponseFormat: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".JsonSchema"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{1}schema\0\u{1}strict\0")
 
@@ -4121,7 +4121,7 @@ extension Reeve_V1_JsonSchema: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   }
 }
 
-extension Reeve_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GoogleExtras"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}safety_settings\0\u{3}response_mime_type\0\u{3}response_schema\0\u{3}candidate_count\0")
 
@@ -4170,7 +4170,7 @@ extension Reeve_V1_GoogleExtras: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_SafetySettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SafetySettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SafetySettings"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}harassment\0\u{3}hate_speech\0\u{3}sexually_explicit\0\u{3}dangerous_content\0")
 
@@ -4219,7 +4219,7 @@ extension Reeve_V1_SafetySettings: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProfileDefaults"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0\u{3}call_settings\0")
 
@@ -4268,7 +4268,7 @@ extension Reeve_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftProtobuf._Messag
   }
 }
 
-extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Profile"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}required_model_capabilities\0\u{3}welcome_message\0")
 
@@ -4485,7 +4485,7 @@ extension Reeve_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   }
 }
 
-extension Reeve_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConversationSettings"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}default_provider_id\0\u{3}default_model_id\0\u{3}include_thinking_in_history\0\u{3}call_settings\0")
 
@@ -4534,7 +4534,7 @@ extension Reeve_V1_ConversationSettings: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0")
 
@@ -4613,7 +4613,7 @@ extension Reeve_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_StreamingComponentTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_StreamingComponentTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".StreamingComponentTag"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}tag\0\u{1}component\0")
 
@@ -4648,7 +4648,7 @@ extension Reeve_V1_StreamingComponentTag: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Context"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}parent_context_id\0\u{3}activation_time\0\u{3}created_at\0\u{3}current_leaf_message_id\0\u{1}title\0\u{3}message_count\0\u{3}last_message_total_tokens\0\u{3}cumulative_cost_usd\0")
 
@@ -4727,7 +4727,7 @@ extension Reeve_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   }
 }
 
-extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0\u{3}ui_fragments\0\u{3}is_welcome\0")
 
@@ -4951,7 +4951,7 @@ extension Reeve_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImpleme
   }
 }
 
-extension Reeve_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UIFragment"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}component\0\u{1}props\0\u{1}key\0")
 
@@ -4991,7 +4991,7 @@ extension Reeve_V1_UIFragment: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   }
 }
 
-extension Reeve_V1_MessageAttachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_MessageAttachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MessageAttachment"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}file_id\0\u{1}kind\0\u{3}mime_type\0\u{1}sha256\0\u{3}original_filename\0\u{3}role_hint\0\u{3}size_bytes\0")
 
@@ -5055,7 +5055,7 @@ extension Reeve_V1_MessageAttachment: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_ToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ToolCall"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}input\0\u{1}output\0\u{1}error\0\u{3}elapsed_ms\0\u{3}provider_opaque\0")
 
@@ -5119,7 +5119,7 @@ extension Reeve_V1_ToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
   }
 }
 
-extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MessageUsage"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}cache_read_tokens\0\u{3}cache_write_tokens\0\u{3}reasoning_tokens\0\u{3}input_cost_usd\0\u{3}output_cost_usd\0\u{3}cache_read_cost_usd\0\u{3}cache_write_cost_usd\0\u{3}total_cost_usd\0\u{3}explicit_cache_attached\0\u{3}tool_cost_usd\0")
 
@@ -5208,7 +5208,7 @@ extension Reeve_V1_MessageUsage: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_StreamRun: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_StreamRun: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".StreamRun"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}context_id\0\u{3}parent_message_id\0\u{3}provider_id\0\u{3}model_id\0\u{1}status\0\u{1}purpose\0\u{3}started_at\0\u{3}ended_at\0\u{3}error_payload\0\u{3}result_message_id\0\u{3}result_context_id\0\u{3}prefix_length\0\u{3}cache_stable_prefix_length\0\u{3}cache_trailing_depth\0")
 
@@ -5383,7 +5383,7 @@ extension Reeve_V1_StreamRun: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   }
 }
 
-extension Reeve_V1_Chunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_Chunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Chunk"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}sequence\0\u{1}type\0\u{1}payload\0")
 
@@ -5423,7 +5423,7 @@ extension Reeve_V1_Chunk: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   }
 }
 
-extension Reeve_V1_DeviceFact: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeviceFact: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeviceFact"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}value\0")
 

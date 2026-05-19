@@ -20,12 +20,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public struct Reeve_V1_UploadFileRequest: Sendable {
+public nonisolated struct Reeve_V1_UploadFileRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -50,7 +50,7 @@ public struct Reeve_V1_UploadFileRequest: Sendable {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Body: Equatable, Sendable {
+  public nonisolated enum OneOf_Body: Equatable, Sendable {
     case header(Reeve_V1_UploadFileHeader)
     case chunk(Data)
 
@@ -59,7 +59,7 @@ public struct Reeve_V1_UploadFileRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_UploadFileHeader: Sendable {
+public nonisolated struct Reeve_V1_UploadFileHeader: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -92,7 +92,7 @@ public struct Reeve_V1_UploadFileHeader: Sendable {
   fileprivate var _originalFilename: String? = nil
 }
 
-public struct Reeve_V1_UploadFileResponse: Sendable {
+public nonisolated struct Reeve_V1_UploadFileResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -135,7 +135,7 @@ public struct Reeve_V1_UploadFileResponse: Sendable {
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_GetFileURLRequest: Sendable {
+public nonisolated struct Reeve_V1_GetFileURLRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -147,7 +147,7 @@ public struct Reeve_V1_GetFileURLRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetFileURLResponse: Sendable {
+public nonisolated struct Reeve_V1_GetFileURLResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -173,7 +173,7 @@ public struct Reeve_V1_GetFileURLResponse: Sendable {
   fileprivate var _expiresAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_ListFilesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListFilesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -194,7 +194,7 @@ public struct Reeve_V1_ListFilesRequest: Sendable {
   fileprivate var _limit: Int32? = nil
 }
 
-public struct Reeve_V1_ListFilesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListFilesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -206,7 +206,7 @@ public struct Reeve_V1_ListFilesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_FileMeta: Sendable {
+public nonisolated struct Reeve_V1_FileMeta: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -247,9 +247,9 @@ public struct Reeve_V1_FileMeta: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_UploadFileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UploadFileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UploadFileRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}header\0\u{1}chunk\0")
 
@@ -311,7 +311,7 @@ extension Reeve_V1_UploadFileRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_UploadFileHeader: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UploadFileHeader: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UploadFileHeader"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}mime_type\0\u{3}size_bytes\0\u{3}original_filename\0")
 
@@ -355,7 +355,7 @@ extension Reeve_V1_UploadFileHeader: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_UploadFileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UploadFileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UploadFileResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}file_id\0\u{1}sha256\0\u{3}mime_type\0\u{3}size_bytes\0\u{3}original_filename\0\u{3}created_at\0")
 
@@ -414,7 +414,7 @@ extension Reeve_V1_UploadFileResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_GetFileURLRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetFileURLRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetFileURLRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}file_id\0")
 
@@ -444,7 +444,7 @@ extension Reeve_V1_GetFileURLRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_GetFileURLResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetFileURLResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetFileURLResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}url\0\u{3}expires_at\0")
 
@@ -483,7 +483,7 @@ extension Reeve_V1_GetFileURLResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_ListFilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListFilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListFilesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}limit\0")
 
@@ -517,7 +517,7 @@ extension Reeve_V1_ListFilesRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_ListFilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListFilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListFilesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}files\0")
 
@@ -547,7 +547,7 @@ extension Reeve_V1_ListFilesResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_FileMeta: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_FileMeta: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FileMeta"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}sha256\0\u{3}mime_type\0\u{3}size_bytes\0\u{3}original_filename\0\u{3}created_at\0")
 

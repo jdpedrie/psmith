@@ -15,12 +15,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public struct Reeve_V1_SubscribeStreamRequest: Sendable {
+public nonisolated struct Reeve_V1_SubscribeStreamRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -35,7 +35,7 @@ public struct Reeve_V1_SubscribeStreamRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_SubscribeStreamResponse: Sendable {
+public nonisolated struct Reeve_V1_SubscribeStreamResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -61,7 +61,7 @@ public struct Reeve_V1_SubscribeStreamResponse: Sendable {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Event: Equatable, Sendable {
+  public nonisolated enum OneOf_Event: Equatable, Sendable {
     case chunk(Reeve_V1_Chunk)
     /// Sent exactly once when the run reaches a terminal status; the stream closes after this.
     case terminal(Reeve_V1_StreamRun)
@@ -71,7 +71,7 @@ public struct Reeve_V1_SubscribeStreamResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CancelStreamRequest: Sendable {
+public nonisolated struct Reeve_V1_CancelStreamRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -83,7 +83,7 @@ public struct Reeve_V1_CancelStreamRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CancelStreamResponse: Sendable {
+public nonisolated struct Reeve_V1_CancelStreamResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -93,7 +93,7 @@ public struct Reeve_V1_CancelStreamResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetStreamRunRequest: Sendable {
+public nonisolated struct Reeve_V1_GetStreamRunRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -105,7 +105,7 @@ public struct Reeve_V1_GetStreamRunRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetStreamRunResponse: Sendable {
+public nonisolated struct Reeve_V1_GetStreamRunResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -126,7 +126,7 @@ public struct Reeve_V1_GetStreamRunResponse: Sendable {
   fileprivate var _streamRun: Reeve_V1_StreamRun? = nil
 }
 
-public struct Reeve_V1_ListActiveRunsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListActiveRunsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -149,7 +149,7 @@ public struct Reeve_V1_ListActiveRunsRequest: Sendable {
   fileprivate var _conversationID: String? = nil
 }
 
-public struct Reeve_V1_ListActiveRunsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListActiveRunsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -163,9 +163,9 @@ public struct Reeve_V1_ListActiveRunsResponse: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_SubscribeStreamRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SubscribeStreamRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SubscribeStreamRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stream_run_id\0\u{3}from_sequence\0")
 
@@ -200,7 +200,7 @@ extension Reeve_V1_SubscribeStreamRequest: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_SubscribeStreamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SubscribeStreamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SubscribeStreamResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}chunk\0\u{1}terminal\0")
 
@@ -267,7 +267,7 @@ extension Reeve_V1_SubscribeStreamResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_CancelStreamRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CancelStreamRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CancelStreamRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stream_run_id\0")
 
@@ -297,7 +297,7 @@ extension Reeve_V1_CancelStreamRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_CancelStreamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CancelStreamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CancelStreamResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -316,7 +316,7 @@ extension Reeve_V1_CancelStreamResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_GetStreamRunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetStreamRunRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetStreamRunRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stream_run_id\0")
 
@@ -346,7 +346,7 @@ extension Reeve_V1_GetStreamRunRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_GetStreamRunResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetStreamRunResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetStreamRunResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}stream_run\0")
 
@@ -380,7 +380,7 @@ extension Reeve_V1_GetStreamRunResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_ListActiveRunsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListActiveRunsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListActiveRunsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0")
 
@@ -414,7 +414,7 @@ extension Reeve_V1_ListActiveRunsRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ListActiveRunsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListActiveRunsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListActiveRunsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}runs\0")
 

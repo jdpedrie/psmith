@@ -20,12 +20,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public struct Reeve_V1_ListProviderTypesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListProviderTypesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -35,7 +35,7 @@ public struct Reeve_V1_ListProviderTypesRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListProviderTypesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListProviderTypesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -47,7 +47,7 @@ public struct Reeve_V1_ListProviderTypesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListProviderTemplatesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListProviderTemplatesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -57,7 +57,7 @@ public struct Reeve_V1_ListProviderTemplatesRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListProviderTemplatesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListProviderTemplatesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -69,7 +69,7 @@ public struct Reeve_V1_ListProviderTemplatesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CreateUserModelProviderRequest: Sendable {
+public nonisolated struct Reeve_V1_CreateUserModelProviderRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -85,7 +85,7 @@ public struct Reeve_V1_CreateUserModelProviderRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CreateUserModelProviderResponse: Sendable {
+public nonisolated struct Reeve_V1_CreateUserModelProviderResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -106,7 +106,7 @@ public struct Reeve_V1_CreateUserModelProviderResponse: Sendable {
   fileprivate var _provider: Reeve_V1_UserModelProvider? = nil
 }
 
-public struct Reeve_V1_ListUserModelProvidersRequest: Sendable {
+public nonisolated struct Reeve_V1_ListUserModelProvidersRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -116,7 +116,7 @@ public struct Reeve_V1_ListUserModelProvidersRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListUserModelProvidersResponse: Sendable {
+public nonisolated struct Reeve_V1_ListUserModelProvidersResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -128,7 +128,7 @@ public struct Reeve_V1_ListUserModelProvidersResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserModelProviderRequest: Sendable {
+public nonisolated struct Reeve_V1_GetUserModelProviderRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -140,7 +140,7 @@ public struct Reeve_V1_GetUserModelProviderRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserModelProviderResponse: Sendable {
+public nonisolated struct Reeve_V1_GetUserModelProviderResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -163,7 +163,7 @@ public struct Reeve_V1_GetUserModelProviderResponse: Sendable {
   fileprivate var _provider: Reeve_V1_UserModelProvider? = nil
 }
 
-public struct Reeve_V1_UpdateUserModelProviderRequest: Sendable {
+public nonisolated struct Reeve_V1_UpdateUserModelProviderRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -208,7 +208,7 @@ public struct Reeve_V1_UpdateUserModelProviderRequest: Sendable {
   fileprivate var _defaultSettings: Reeve_V1_CallSettings? = nil
 }
 
-public struct Reeve_V1_UpdateUserModelProviderResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateUserModelProviderResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -229,7 +229,7 @@ public struct Reeve_V1_UpdateUserModelProviderResponse: Sendable {
   fileprivate var _provider: Reeve_V1_UserModelProvider? = nil
 }
 
-public struct Reeve_V1_DeleteUserModelProviderRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteUserModelProviderRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -241,7 +241,7 @@ public struct Reeve_V1_DeleteUserModelProviderRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteUserModelProviderResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteUserModelProviderResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -251,7 +251,7 @@ public struct Reeve_V1_DeleteUserModelProviderResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DiscoverModelsRequest: Sendable {
+public nonisolated struct Reeve_V1_DiscoverModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -265,7 +265,7 @@ public struct Reeve_V1_DiscoverModelsRequest: Sendable {
 
 /// Discovered models are not persisted by this RPC — they're presented to the
 /// user for selection. Pass the chosen subset to EnableModels.
-public struct Reeve_V1_DiscoverModelsResponse: Sendable {
+public nonisolated struct Reeve_V1_DiscoverModelsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -278,7 +278,7 @@ public struct Reeve_V1_DiscoverModelsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DiscoveredModel: @unchecked Sendable {
+public nonisolated struct Reeve_V1_DiscoveredModel: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -361,7 +361,7 @@ public struct Reeve_V1_DiscoveredModel: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_EnableModelsRequest: Sendable {
+public nonisolated struct Reeve_V1_EnableModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -375,7 +375,7 @@ public struct Reeve_V1_EnableModelsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_EnableModelsResponse: Sendable {
+public nonisolated struct Reeve_V1_EnableModelsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -387,7 +387,7 @@ public struct Reeve_V1_EnableModelsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DisableModelsRequest: Sendable {
+public nonisolated struct Reeve_V1_DisableModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -401,7 +401,7 @@ public struct Reeve_V1_DisableModelsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DisableModelsResponse: Sendable {
+public nonisolated struct Reeve_V1_DisableModelsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -411,7 +411,7 @@ public struct Reeve_V1_DisableModelsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListUserModelsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListUserModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -423,7 +423,7 @@ public struct Reeve_V1_ListUserModelsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListUserModelsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListUserModelsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -435,7 +435,7 @@ public struct Reeve_V1_ListUserModelsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListAllUserModelsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListAllUserModelsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -445,7 +445,7 @@ public struct Reeve_V1_ListAllUserModelsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_UserModelEntry: Sendable {
+public nonisolated struct Reeve_V1_UserModelEntry: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -476,7 +476,7 @@ public struct Reeve_V1_UserModelEntry: Sendable {
   fileprivate var _model: Reeve_V1_UserModel? = nil
 }
 
-public struct Reeve_V1_ListAllUserModelsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListAllUserModelsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -488,7 +488,7 @@ public struct Reeve_V1_ListAllUserModelsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ToggleUserModelFavoriteRequest: Sendable {
+public nonisolated struct Reeve_V1_ToggleUserModelFavoriteRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -504,7 +504,7 @@ public struct Reeve_V1_ToggleUserModelFavoriteRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ToggleUserModelFavoriteResponse: Sendable {
+public nonisolated struct Reeve_V1_ToggleUserModelFavoriteResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -525,7 +525,7 @@ public struct Reeve_V1_ToggleUserModelFavoriteResponse: Sendable {
   fileprivate var _model: Reeve_V1_UserModel? = nil
 }
 
-public struct Reeve_V1_UpdateUserModelRequest: @unchecked Sendable {
+public nonisolated struct Reeve_V1_UpdateUserModelRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -650,7 +650,7 @@ public struct Reeve_V1_UpdateUserModelRequest: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_UpdateUserModelResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateUserModelResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -674,7 +674,7 @@ public struct Reeve_V1_UpdateUserModelResponse: Sendable {
 /// AddManualModelRequest carries every snapshot field. model_id and
 /// display_name are required; metadata is optional and stored verbatim
 /// (server doesn't try to look up catalog defaults for manual models).
-public struct Reeve_V1_AddManualModelRequest: @unchecked Sendable {
+public nonisolated struct Reeve_V1_AddManualModelRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -763,7 +763,7 @@ public struct Reeve_V1_AddManualModelRequest: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_AddManualModelResponse: Sendable {
+public nonisolated struct Reeve_V1_AddManualModelResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -784,7 +784,7 @@ public struct Reeve_V1_AddManualModelResponse: Sendable {
   fileprivate var _userModel: Reeve_V1_UserModel? = nil
 }
 
-public struct Reeve_V1_TestUserModelProviderRequest: Sendable {
+public nonisolated struct Reeve_V1_TestUserModelProviderRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -796,7 +796,7 @@ public struct Reeve_V1_TestUserModelProviderRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_TestUserModelProviderResponse: Sendable {
+public nonisolated struct Reeve_V1_TestUserModelProviderResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -814,7 +814,7 @@ public struct Reeve_V1_TestUserModelProviderResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_TestUserModelRequest: Sendable {
+public nonisolated struct Reeve_V1_TestUserModelRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -845,7 +845,7 @@ public struct Reeve_V1_TestUserModelRequest: Sendable {
   fileprivate var _callSettings: Reeve_V1_CallSettings? = nil
 }
 
-public struct Reeve_V1_TestUserModelResponse: Sendable {
+public nonisolated struct Reeve_V1_TestUserModelResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -867,7 +867,7 @@ public struct Reeve_V1_TestUserModelResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_RefreshModelCatalogRequest: Sendable {
+public nonisolated struct Reeve_V1_RefreshModelCatalogRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -877,7 +877,7 @@ public struct Reeve_V1_RefreshModelCatalogRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_RefreshModelCatalogResponse: Sendable {
+public nonisolated struct Reeve_V1_RefreshModelCatalogResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -902,7 +902,7 @@ public struct Reeve_V1_RefreshModelCatalogResponse: Sendable {
   fileprivate var _fetchedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_GetCatalogStatusRequest: Sendable {
+public nonisolated struct Reeve_V1_GetCatalogStatusRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -912,7 +912,7 @@ public struct Reeve_V1_GetCatalogStatusRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetCatalogStatusResponse: Sendable {
+public nonisolated struct Reeve_V1_GetCatalogStatusResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -937,7 +937,7 @@ public struct Reeve_V1_GetCatalogStatusResponse: Sendable {
   fileprivate var _lastRefreshAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_ListProviderCostsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListProviderCostsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -972,7 +972,7 @@ public struct Reeve_V1_ListProviderCostsRequest: Sendable {
   fileprivate var _until: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-public struct Reeve_V1_ListProviderCostsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListProviderCostsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -989,7 +989,7 @@ public struct Reeve_V1_ListProviderCostsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ProviderCost: Sendable {
+public nonisolated struct Reeve_V1_ProviderCost: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1013,9 +1013,9 @@ public struct Reeve_V1_ProviderCost: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_ListProviderTypesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderTypesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderTypesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1034,7 +1034,7 @@ extension Reeve_V1_ListProviderTypesRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_ListProviderTypesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderTypesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderTypesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}types\0")
 
@@ -1064,7 +1064,7 @@ extension Reeve_V1_ListProviderTypesResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_ListProviderTemplatesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderTemplatesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderTemplatesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1083,7 +1083,7 @@ extension Reeve_V1_ListProviderTemplatesRequest: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_ListProviderTemplatesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderTemplatesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderTemplatesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}templates\0")
 
@@ -1113,7 +1113,7 @@ extension Reeve_V1_ListProviderTemplatesResponse: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-extension Reeve_V1_CreateUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateUserModelProviderRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{1}label\0\u{1}config\0")
 
@@ -1153,7 +1153,7 @@ extension Reeve_V1_CreateUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_CreateUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateUserModelProviderResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0")
 
@@ -1187,7 +1187,7 @@ extension Reeve_V1_CreateUserModelProviderResponse: SwiftProtobuf.Message, Swift
   }
 }
 
-extension Reeve_V1_ListUserModelProvidersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserModelProvidersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserModelProvidersRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1206,7 +1206,7 @@ extension Reeve_V1_ListUserModelProvidersRequest: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-extension Reeve_V1_ListUserModelProvidersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserModelProvidersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserModelProvidersResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}providers\0")
 
@@ -1236,7 +1236,7 @@ extension Reeve_V1_ListUserModelProvidersResponse: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_GetUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserModelProviderRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1266,7 +1266,7 @@ extension Reeve_V1_GetUserModelProviderRequest: SwiftProtobuf.Message, SwiftProt
   }
 }
 
-extension Reeve_V1_GetUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserModelProviderResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{3}enabled_models\0")
 
@@ -1305,7 +1305,7 @@ extension Reeve_V1_GetUserModelProviderResponse: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelProviderRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}label\0\u{1}config\0\u{3}default_settings\0")
 
@@ -1354,7 +1354,7 @@ extension Reeve_V1_UpdateUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_UpdateUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelProviderResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0")
 
@@ -1388,7 +1388,7 @@ extension Reeve_V1_UpdateUserModelProviderResponse: SwiftProtobuf.Message, Swift
   }
 }
 
-extension Reeve_V1_DeleteUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteUserModelProviderRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1418,7 +1418,7 @@ extension Reeve_V1_DeleteUserModelProviderRequest: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_DeleteUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteUserModelProviderResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1437,7 +1437,7 @@ extension Reeve_V1_DeleteUserModelProviderResponse: SwiftProtobuf.Message, Swift
   }
 }
 
-extension Reeve_V1_DiscoverModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DiscoverModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DiscoverModelsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0")
 
@@ -1467,7 +1467,7 @@ extension Reeve_V1_DiscoverModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_DiscoverModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DiscoverModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DiscoverModelsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}models\0")
 
@@ -1497,7 +1497,7 @@ extension Reeve_V1_DiscoverModelsResponse: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_DiscoveredModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DiscoveredModel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DiscoveredModel"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}knowledge_cutoff\0\u{1}modalities\0\u{1}capabilities\0\u{3}metadata_source\0\u{3}already_enabled\0")
 
@@ -1630,7 +1630,7 @@ extension Reeve_V1_DiscoveredModel: SwiftProtobuf.Message, SwiftProtobuf._Messag
   }
 }
 
-extension Reeve_V1_EnableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_EnableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EnableModelsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_ids\0")
 
@@ -1665,7 +1665,7 @@ extension Reeve_V1_EnableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_EnableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_EnableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".EnableModelsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}enabled\0")
 
@@ -1695,7 +1695,7 @@ extension Reeve_V1_EnableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_DisableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DisableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DisableModelsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_ids\0")
 
@@ -1730,7 +1730,7 @@ extension Reeve_V1_DisableModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_DisableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DisableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DisableModelsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1749,7 +1749,7 @@ extension Reeve_V1_DisableModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ListUserModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserModelsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0")
 
@@ -1779,7 +1779,7 @@ extension Reeve_V1_ListUserModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ListUserModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserModelsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}models\0")
 
@@ -1809,7 +1809,7 @@ extension Reeve_V1_ListUserModelsResponse: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_ListAllUserModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListAllUserModelsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListAllUserModelsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1828,7 +1828,7 @@ extension Reeve_V1_ListAllUserModelsRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_UserModelEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UserModelEntry: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserModelEntry"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{1}model\0")
 
@@ -1867,7 +1867,7 @@ extension Reeve_V1_UserModelEntry: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_ListAllUserModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListAllUserModelsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListAllUserModelsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}entries\0")
 
@@ -1897,7 +1897,7 @@ extension Reeve_V1_ListAllUserModelsResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_ToggleUserModelFavoriteRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ToggleUserModelFavoriteRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ToggleUserModelFavoriteRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{1}favorite\0")
 
@@ -1937,7 +1937,7 @@ extension Reeve_V1_ToggleUserModelFavoriteRequest: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_ToggleUserModelFavoriteResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ToggleUserModelFavoriteResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ToggleUserModelFavoriteResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}model\0")
 
@@ -1971,7 +1971,7 @@ extension Reeve_V1_ToggleUserModelFavoriteResponse: SwiftProtobuf.Message, Swift
   }
 }
 
-extension Reeve_V1_UpdateUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}default_settings\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{3}update_modalities\0\u{1}modalities\0\u{1}capabilities\0\u{3}knowledge_cutoff\0\u{3}clear_context_window\0\u{3}clear_max_output_tokens\0\u{3}clear_knowledge_cutoff\0")
 
@@ -2132,7 +2132,7 @@ extension Reeve_V1_UpdateUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_UpdateUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserModelResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model\0")
 
@@ -2166,7 +2166,7 @@ extension Reeve_V1_UpdateUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_AddManualModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_AddManualModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AddManualModelRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}display_name\0\u{3}context_window\0\u{3}max_output_tokens\0\u{1}pricing\0\u{1}modalities\0\u{1}capabilities\0\u{3}knowledge_cutoff\0\u{3}default_settings\0")
 
@@ -2299,7 +2299,7 @@ extension Reeve_V1_AddManualModelRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_AddManualModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_AddManualModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AddManualModelResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model\0")
 
@@ -2333,7 +2333,7 @@ extension Reeve_V1_AddManualModelResponse: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_TestUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestUserModelProviderRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestUserModelProviderRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0")
 
@@ -2363,7 +2363,7 @@ extension Reeve_V1_TestUserModelProviderRequest: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_TestUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestUserModelProviderResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestUserModelProviderResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ok\0\u{3}error_message\0\u{3}model_count\0\u{3}latency_ms\0")
 
@@ -2408,7 +2408,7 @@ extension Reeve_V1_TestUserModelProviderResponse: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-extension Reeve_V1_TestUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestUserModelRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{3}call_settings\0")
 
@@ -2452,7 +2452,7 @@ extension Reeve_V1_TestUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_TestUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_TestUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TestUserModelResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ok\0\u{3}error_message\0\u{3}latency_ms\0\u{3}input_tokens\0\u{3}output_tokens\0\u{3}sample_text\0")
 
@@ -2507,7 +2507,7 @@ extension Reeve_V1_TestUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_RefreshModelCatalogRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_RefreshModelCatalogRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RefreshModelCatalogRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -2526,7 +2526,7 @@ extension Reeve_V1_RefreshModelCatalogRequest: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension Reeve_V1_RefreshModelCatalogResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_RefreshModelCatalogResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RefreshModelCatalogResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}providers_count\0\u{3}models_count\0\u{3}fetched_at\0")
 
@@ -2570,7 +2570,7 @@ extension Reeve_V1_RefreshModelCatalogResponse: SwiftProtobuf.Message, SwiftProt
   }
 }
 
-extension Reeve_V1_GetCatalogStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetCatalogStatusRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetCatalogStatusRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -2589,7 +2589,7 @@ extension Reeve_V1_GetCatalogStatusRequest: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_GetCatalogStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetCatalogStatusResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetCatalogStatusResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}providers_count\0\u{3}models_count\0\u{3}last_refresh_at\0")
 
@@ -2633,7 +2633,7 @@ extension Reeve_V1_GetCatalogStatusResponse: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_ListProviderCostsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderCostsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderCostsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}since\0\u{1}until\0")
 
@@ -2672,7 +2672,7 @@ extension Reeve_V1_ListProviderCostsRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_ListProviderCostsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProviderCostsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderCostsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}providers\0\u{3}grand_total_usd\0")
 
@@ -2707,7 +2707,7 @@ extension Reeve_V1_ListProviderCostsResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_ProviderCost: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProviderCost: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProviderCost"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}provider_label\0\u{3}provider_type\0\u{3}total_cost_usd\0\u{3}event_count\0")
 

@@ -15,7 +15,7 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
@@ -23,7 +23,7 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 /// ProbeRequest is empty — clients call Probe with no arguments to
 /// confirm a candidate URL hosts a reeved. The response shape is the
 /// signal: a successful response means a reeved answered.
-public struct Reeve_V1_ProbeRequest: Sendable {
+public nonisolated struct Reeve_V1_ProbeRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -33,7 +33,7 @@ public struct Reeve_V1_ProbeRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ProbeResponse: Sendable {
+public nonisolated struct Reeve_V1_ProbeResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -53,7 +53,7 @@ public struct Reeve_V1_ProbeResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_LoginRequest: Sendable {
+public nonisolated struct Reeve_V1_LoginRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -80,7 +80,7 @@ public struct Reeve_V1_LoginRequest: Sendable {
   fileprivate var _clientLabel: String? = nil
 }
 
-public struct Reeve_V1_LoginResponse: Sendable {
+public nonisolated struct Reeve_V1_LoginResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -114,7 +114,7 @@ public struct Reeve_V1_LoginResponse: Sendable {
   fileprivate var _user: Reeve_V1_User? = nil
 }
 
-public struct Reeve_V1_LogoutRequest: Sendable {
+public nonisolated struct Reeve_V1_LogoutRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -124,7 +124,7 @@ public struct Reeve_V1_LogoutRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_LogoutResponse: Sendable {
+public nonisolated struct Reeve_V1_LogoutResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -134,7 +134,7 @@ public struct Reeve_V1_LogoutResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_WhoAmIRequest: Sendable {
+public nonisolated struct Reeve_V1_WhoAmIRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -144,7 +144,7 @@ public struct Reeve_V1_WhoAmIRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_WhoAmIResponse: Sendable {
+public nonisolated struct Reeve_V1_WhoAmIResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -165,7 +165,7 @@ public struct Reeve_V1_WhoAmIResponse: Sendable {
   fileprivate var _user: Reeve_V1_User? = nil
 }
 
-public struct Reeve_V1_ChangePasswordRequest: Sendable {
+public nonisolated struct Reeve_V1_ChangePasswordRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -179,7 +179,7 @@ public struct Reeve_V1_ChangePasswordRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ChangePasswordResponse: Sendable {
+public nonisolated struct Reeve_V1_ChangePasswordResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -189,7 +189,7 @@ public struct Reeve_V1_ChangePasswordResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_CreateUserRequest: Sendable {
+public nonisolated struct Reeve_V1_CreateUserRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -216,7 +216,7 @@ public struct Reeve_V1_CreateUserRequest: Sendable {
   fileprivate var _displayName: String? = nil
 }
 
-public struct Reeve_V1_CreateUserResponse: Sendable {
+public nonisolated struct Reeve_V1_CreateUserResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -237,7 +237,7 @@ public struct Reeve_V1_CreateUserResponse: Sendable {
   fileprivate var _user: Reeve_V1_User? = nil
 }
 
-public struct Reeve_V1_ListUsersRequest: Sendable {
+public nonisolated struct Reeve_V1_ListUsersRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -247,7 +247,7 @@ public struct Reeve_V1_ListUsersRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListUsersResponse: Sendable {
+public nonisolated struct Reeve_V1_ListUsersResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -259,7 +259,7 @@ public struct Reeve_V1_ListUsersResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserRequest: Sendable {
+public nonisolated struct Reeve_V1_GetUserRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -271,7 +271,7 @@ public struct Reeve_V1_GetUserRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserResponse: Sendable {
+public nonisolated struct Reeve_V1_GetUserResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -292,7 +292,7 @@ public struct Reeve_V1_GetUserResponse: Sendable {
   fileprivate var _user: Reeve_V1_User? = nil
 }
 
-public struct Reeve_V1_UpdateUserRequest: Sendable {
+public nonisolated struct Reeve_V1_UpdateUserRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -328,7 +328,7 @@ public struct Reeve_V1_UpdateUserRequest: Sendable {
   fileprivate var _isAdmin: Bool? = nil
 }
 
-public struct Reeve_V1_UpdateUserResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateUserResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -349,7 +349,7 @@ public struct Reeve_V1_UpdateUserResponse: Sendable {
   fileprivate var _user: Reeve_V1_User? = nil
 }
 
-public struct Reeve_V1_DeleteUserRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteUserRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -361,7 +361,7 @@ public struct Reeve_V1_DeleteUserRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteUserResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteUserResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -371,7 +371,7 @@ public struct Reeve_V1_DeleteUserResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_AdminResetPasswordRequest: Sendable {
+public nonisolated struct Reeve_V1_AdminResetPasswordRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -385,7 +385,7 @@ public struct Reeve_V1_AdminResetPasswordRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_AdminResetPasswordResponse: Sendable {
+public nonisolated struct Reeve_V1_AdminResetPasswordResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -397,9 +397,9 @@ public struct Reeve_V1_AdminResetPasswordResponse: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_ProbeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProbeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProbeRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -418,7 +418,7 @@ extension Reeve_V1_ProbeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_ProbeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProbeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProbeResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}server\0\u{1}version\0")
 
@@ -453,7 +453,7 @@ extension Reeve_V1_ProbeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension Reeve_V1_LoginRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_LoginRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LoginRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}username\0\u{1}password\0\u{3}client_label\0")
 
@@ -497,7 +497,7 @@ extension Reeve_V1_LoginRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_LoginResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_LoginResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LoginResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_token\0\u{3}expires_at\0\u{1}user\0")
 
@@ -541,7 +541,7 @@ extension Reeve_V1_LoginResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension Reeve_V1_LogoutRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_LogoutRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LogoutRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -560,7 +560,7 @@ extension Reeve_V1_LogoutRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension Reeve_V1_LogoutResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_LogoutResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".LogoutResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -579,7 +579,7 @@ extension Reeve_V1_LogoutResponse: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_WhoAmIRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_WhoAmIRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WhoAmIRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -598,7 +598,7 @@ extension Reeve_V1_WhoAmIRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension Reeve_V1_WhoAmIResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_WhoAmIResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WhoAmIResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
 
@@ -632,7 +632,7 @@ extension Reeve_V1_WhoAmIResponse: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_ChangePasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ChangePasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ChangePasswordRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}old_password\0\u{3}new_password\0")
 
@@ -667,7 +667,7 @@ extension Reeve_V1_ChangePasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ChangePasswordResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ChangePasswordResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ChangePasswordResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -686,7 +686,7 @@ extension Reeve_V1_ChangePasswordResponse: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_CreateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateUserRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}username\0\u{3}display_name\0\u{1}password\0\u{3}is_admin\0")
 
@@ -735,7 +735,7 @@ extension Reeve_V1_CreateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_CreateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateUserResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
 
@@ -769,7 +769,7 @@ extension Reeve_V1_CreateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_ListUsersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUsersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUsersRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -788,7 +788,7 @@ extension Reeve_V1_ListUsersRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension Reeve_V1_ListUsersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUsersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUsersResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}users\0")
 
@@ -818,7 +818,7 @@ extension Reeve_V1_ListUsersResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_GetUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -848,7 +848,7 @@ extension Reeve_V1_GetUserRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension Reeve_V1_GetUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
 
@@ -882,7 +882,7 @@ extension Reeve_V1_GetUserResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
   }
 }
 
-extension Reeve_V1_UpdateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}display_name\0\u{3}is_admin\0\u{3}clear_fields\0")
 
@@ -931,7 +931,7 @@ extension Reeve_V1_UpdateUserRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_UpdateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateUserResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
 
@@ -965,7 +965,7 @@ extension Reeve_V1_UpdateUserResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_DeleteUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteUserRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteUserRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -995,7 +995,7 @@ extension Reeve_V1_DeleteUserRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_DeleteUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteUserResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteUserResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1014,7 +1014,7 @@ extension Reeve_V1_DeleteUserResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_AdminResetPasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_AdminResetPasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AdminResetPasswordRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{3}new_password\0")
 
@@ -1049,7 +1049,7 @@ extension Reeve_V1_AdminResetPasswordRequest: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_AdminResetPasswordResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_AdminResetPasswordResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AdminResetPasswordResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 

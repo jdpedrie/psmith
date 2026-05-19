@@ -72,3 +72,6 @@ UPDATE profiles SET favorite = $2, updated_at = NOW() WHERE id = $1;
 
 -- name: UpdateProfileWelcomeMessage :exec
 UPDATE profiles SET welcome_message = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdateProfileParentProfileID :exec
+UPDATE profiles SET parent_profile_id = $2, updated_at = NOW() WHERE id = $1;

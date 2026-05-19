@@ -44,6 +44,7 @@ const (
 	fieldTitleProviderKind   = "title_provider_kind"
 	fieldDescription         = "description"
 	fieldWelcomeMessage      = "welcome_message"
+	fieldParentProfileID     = "parent_profile_id"
 )
 
 // TitleProviderKindAppleFoundation is the sentinel value of
@@ -330,6 +331,41 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[reevev
 		}
 	} else if req.Msg.WelcomeMessage != nil {
 		if err := s.queries.UpdateProfileWelcomeMessage(ctx, store.UpdateProfileWelcomeMessageParams{ID: id, WelcomeMessage: req.Msg.WelcomeMessage}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+
+	// parent_profile_id
+	if _, ok := clear[fieldParentProfileID]; ok {
+		if err := s.queries.UpdateProfileParentProfileID(ctx, store.UpdateProfileParentProfileIDParams{ID: id, ParentProfileID: nil}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	} else if req.Msg.ParentProfileId != nil {
+		pid, err := uuid.Parse(*req.Msg.ParentProfileId)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_profile_id: %w", err))
+		}
+		if pid == id {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_profile_id cannot reference self"))
+		}
+		// Parent must exist and be owned by the caller. Surface NotFound
+		// for cross-user attempts so we don't leak existence; the form
+		// only shows the user's own profiles anyway, so a parse-and-
+		// resolve here is purely defensive.
+		if _, err := s.fetchOwned(ctx, pid, caller.ID); err != nil {
+			return nil, err
+		}
+		// Cycle check — walk up the prospective parent's chain and
+		// reject if we'd loop back through this profile. The existing
+		// resolvers all have runtime cycle guards, but accepting bad
+		// data here would silently cap inherited fields on every
+		// downstream lookup.
+		if cycles, err := s.parentChainContains(ctx, pid, id); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		} else if cycles {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_profile_id would create a cycle"))
+		}
+		if err := s.queries.UpdateProfileParentProfileID(ctx, store.UpdateProfileParentProfileIDParams{ID: id, ParentProfileID: &pid}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
@@ -903,6 +939,43 @@ func (s *Service) fetchOwned(ctx context.Context, id, userID uuid.UUID) (store.P
 		return store.Profile{}, connect.NewError(connect.CodeNotFound, errors.New("profile not found"))
 	}
 	return row, nil
+}
+
+// parentChainContains walks up from `startID` via parent_profile_id
+// until it reaches a root, hits `needle`, or exceeds the cycle guard
+// (8 hops — same as the runtime resolvers). Returns true when
+// `needle` appears in the chain — i.e., setting `needle.parent_profile_id
+// = startID` would create a cycle. Used at update time to reject
+// circular parenting before it lands in the DB.
+func (s *Service) parentChainContains(ctx context.Context, startID, needle uuid.UUID) (bool, error) {
+	const maxHops = 8
+	cur := startID
+	seen := make(map[uuid.UUID]bool, maxHops)
+	for hops := 0; hops < maxHops; hops++ {
+		if cur == needle {
+			return true, nil
+		}
+		if seen[cur] {
+			// Pre-existing cycle in stored data — not our problem here.
+			// Returning false avoids spuriously rejecting a clean
+			// re-parent just because the EXISTING chain is already
+			// corrupt; the user can untangle that separately.
+			return false, nil
+		}
+		seen[cur] = true
+		row, err := s.queries.GetProfileByID(ctx, cur)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return false, nil
+			}
+			return false, err
+		}
+		if row.ParentProfileID == nil {
+			return false, nil
+		}
+		cur = *row.ParentProfileID
+	}
+	return false, nil
 }
 
 // assertProviderOwned validates that the given provider exists and belongs to

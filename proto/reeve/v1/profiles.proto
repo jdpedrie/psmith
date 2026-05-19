@@ -118,6 +118,11 @@ message UpdateProfileRequest {
   // Opening assistant turn for new conversations. See
   // Profile.welcome_message. Listed in clear_fields to revert.
   optional string welcome_message = 18;
+  // Re-parent the profile. Pass the new parent's UUID to point at a
+  // different parent; list "parent_profile_id" in clear_fields to
+  // detach (the profile becomes standalone). Self-reference and
+  // cycles are rejected with InvalidArgument.
+  optional string parent_profile_id = 19;
 }
 message UpdateProfileResponse {
   Profile profile = 1;

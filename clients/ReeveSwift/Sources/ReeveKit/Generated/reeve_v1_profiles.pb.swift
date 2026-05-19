@@ -20,12 +20,12 @@ import SwiftProtobuf
 // incompatible with the version of SwiftProtobuf to which you are linking.
 // Please ensure that you are building against the same version of the API
 // that was used to generate this file.
-fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
+fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
 
-public struct Reeve_V1_CreateProfileRequest: @unchecked Sendable {
+public nonisolated struct Reeve_V1_CreateProfileRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -181,7 +181,7 @@ public struct Reeve_V1_CreateProfileRequest: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_CreateProfileResponse: Sendable {
+public nonisolated struct Reeve_V1_CreateProfileResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -202,7 +202,7 @@ public struct Reeve_V1_CreateProfileResponse: Sendable {
   fileprivate var _profile: Reeve_V1_Profile? = nil
 }
 
-public struct Reeve_V1_ListProfilesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListProfilesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -212,7 +212,7 @@ public struct Reeve_V1_ListProfilesRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListProfilesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListProfilesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -224,7 +224,7 @@ public struct Reeve_V1_ListProfilesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetProfileRequest: Sendable {
+public nonisolated struct Reeve_V1_GetProfileRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -239,7 +239,7 @@ public struct Reeve_V1_GetProfileRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetProfileResponse: Sendable {
+public nonisolated struct Reeve_V1_GetProfileResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -271,7 +271,7 @@ public struct Reeve_V1_GetProfileResponse: Sendable {
   fileprivate var _resolved: Reeve_V1_Profile? = nil
 }
 
-public struct Reeve_V1_UpdateProfileRequest: @unchecked Sendable {
+public nonisolated struct Reeve_V1_UpdateProfileRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -438,6 +438,19 @@ public struct Reeve_V1_UpdateProfileRequest: @unchecked Sendable {
   /// Clears the value of `welcomeMessage`. Subsequent reads from it will return its default value.
   public mutating func clearWelcomeMessage() {_uniqueStorage()._welcomeMessage = nil}
 
+  /// Re-parent the profile. Pass the new parent's UUID to point at a
+  /// different parent; list "parent_profile_id" in clear_fields to
+  /// detach (the profile becomes standalone). Self-reference and
+  /// cycles are rejected with InvalidArgument.
+  public var parentProfileID: String {
+    get {_storage._parentProfileID ?? String()}
+    set {_uniqueStorage()._parentProfileID = newValue}
+  }
+  /// Returns true if `parentProfileID` has been explicitly set.
+  public var hasParentProfileID: Bool {_storage._parentProfileID != nil}
+  /// Clears the value of `parentProfileID`. Subsequent reads from it will return its default value.
+  public mutating func clearParentProfileID() {_uniqueStorage()._parentProfileID = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -445,7 +458,7 @@ public struct Reeve_V1_UpdateProfileRequest: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Reeve_V1_UpdateProfileResponse: Sendable {
+public nonisolated struct Reeve_V1_UpdateProfileResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -466,7 +479,7 @@ public struct Reeve_V1_UpdateProfileResponse: Sendable {
   fileprivate var _profile: Reeve_V1_Profile? = nil
 }
 
-public struct Reeve_V1_DeleteProfileRequest: Sendable {
+public nonisolated struct Reeve_V1_DeleteProfileRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -478,7 +491,7 @@ public struct Reeve_V1_DeleteProfileRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_DeleteProfileResponse: Sendable {
+public nonisolated struct Reeve_V1_DeleteProfileResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -490,7 +503,7 @@ public struct Reeve_V1_DeleteProfileResponse: Sendable {
 
 /// PluginCapabilities reports which opt-in interfaces a plugin type implements.
 /// UIs use this to decide which config knobs / preview affordances to show.
-public struct Reeve_V1_PluginCapabilities: Sendable {
+public nonisolated struct Reeve_V1_PluginCapabilities: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -535,7 +548,7 @@ public struct Reeve_V1_PluginCapabilities: Sendable {
 }
 
 /// PluginType is one entry in the server's compiled-in plugin registry.
-public struct Reeve_V1_PluginType: @unchecked Sendable {
+public nonisolated struct Reeve_V1_PluginType: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -610,7 +623,7 @@ public struct Reeve_V1_PluginType: @unchecked Sendable {
 /// ConfigField is one entry in a plugin's per-instance config descriptor.
 /// The list is flat — there's no nesting — so a UI can render a form by
 /// walking the array once.
-public struct Reeve_V1_ConfigField: Sendable {
+public nonisolated struct Reeve_V1_ConfigField: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -659,7 +672,7 @@ public struct Reeve_V1_ConfigField: Sendable {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum TypeEnum: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public nonisolated enum TypeEnum: SwiftProtobuf.Enum, Swift.CaseIterable {
     public typealias RawValue = Int
     case unspecified // = 0
     case number // = 1
@@ -727,7 +740,7 @@ public struct Reeve_V1_ConfigField: Sendable {
 }
 
 /// ConfigOption is one entry in a SELECT field's options list.
-public struct Reeve_V1_ConfigOption: Sendable {
+public nonisolated struct Reeve_V1_ConfigOption: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -744,7 +757,7 @@ public struct Reeve_V1_ConfigOption: Sendable {
 /// ModelPickerFilter constrains which user_models a MODEL_PICKER
 /// field surfaces. Any flag set to `true` is a hard requirement;
 /// all flags ANDed together. Empty = surface every user_model.
-public struct Reeve_V1_ModelPickerFilter: Sendable {
+public nonisolated struct Reeve_V1_ModelPickerFilter: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -772,7 +785,7 @@ public struct Reeve_V1_ModelPickerFilter: Sendable {
 /// SetProfilePlugins, `ordinal` is ignored — the request's list order is
 /// authoritative. On output, `ordinal` reflects the persisted position
 /// (0-indexed).
-public struct Reeve_V1_ProfilePlugin: Sendable {
+public nonisolated struct Reeve_V1_ProfilePlugin: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -788,7 +801,7 @@ public struct Reeve_V1_ProfilePlugin: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListPluginTypesRequest: Sendable {
+public nonisolated struct Reeve_V1_ListPluginTypesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -798,7 +811,7 @@ public struct Reeve_V1_ListPluginTypesRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListPluginTypesResponse: Sendable {
+public nonisolated struct Reeve_V1_ListPluginTypesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -810,7 +823,7 @@ public struct Reeve_V1_ListPluginTypesResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetProfilePluginsRequest: Sendable {
+public nonisolated struct Reeve_V1_GetProfilePluginsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -822,7 +835,7 @@ public struct Reeve_V1_GetProfilePluginsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetProfilePluginsResponse: Sendable {
+public nonisolated struct Reeve_V1_GetProfilePluginsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -834,7 +847,7 @@ public struct Reeve_V1_GetProfilePluginsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_SetProfilePluginsRequest: Sendable {
+public nonisolated struct Reeve_V1_SetProfilePluginsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -848,7 +861,7 @@ public struct Reeve_V1_SetProfilePluginsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_SetProfilePluginsResponse: Sendable {
+public nonisolated struct Reeve_V1_SetProfilePluginsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -861,7 +874,7 @@ public struct Reeve_V1_SetProfilePluginsResponse: Sendable {
 }
 
 /// One stored global-config blob for a (calling user, plugin) pair.
-public struct Reeve_V1_UserPluginSettings: Sendable {
+public nonisolated struct Reeve_V1_UserPluginSettings: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -877,7 +890,7 @@ public struct Reeve_V1_UserPluginSettings: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserPluginSettingsRequest: Sendable {
+public nonisolated struct Reeve_V1_GetUserPluginSettingsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -889,7 +902,7 @@ public struct Reeve_V1_GetUserPluginSettingsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_GetUserPluginSettingsResponse: Sendable {
+public nonisolated struct Reeve_V1_GetUserPluginSettingsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -910,7 +923,7 @@ public struct Reeve_V1_GetUserPluginSettingsResponse: Sendable {
   fileprivate var _settings: Reeve_V1_UserPluginSettings? = nil
 }
 
-public struct Reeve_V1_ListUserPluginSettingsRequest: Sendable {
+public nonisolated struct Reeve_V1_ListUserPluginSettingsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -920,7 +933,7 @@ public struct Reeve_V1_ListUserPluginSettingsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_ListUserPluginSettingsResponse: Sendable {
+public nonisolated struct Reeve_V1_ListUserPluginSettingsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -932,7 +945,7 @@ public struct Reeve_V1_ListUserPluginSettingsResponse: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_UpsertUserPluginSettingsRequest: Sendable {
+public nonisolated struct Reeve_V1_UpsertUserPluginSettingsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -946,7 +959,7 @@ public struct Reeve_V1_UpsertUserPluginSettingsRequest: Sendable {
   public init() {}
 }
 
-public struct Reeve_V1_UpsertUserPluginSettingsResponse: Sendable {
+public nonisolated struct Reeve_V1_UpsertUserPluginSettingsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -969,9 +982,9 @@ public struct Reeve_V1_UpsertUserPluginSettingsResponse: Sendable {
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
-fileprivate let _protobuf_package = "reeve.v1"
+fileprivate nonisolated let _protobuf_package = "reeve.v1"
 
-extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateProfileRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}welcome_message\0")
 
@@ -1153,7 +1166,7 @@ extension Reeve_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_CreateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_CreateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateProfileResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profile\0")
 
@@ -1187,7 +1200,7 @@ extension Reeve_V1_CreateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_ListProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProfilesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1206,7 +1219,7 @@ extension Reeve_V1_ListProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension Reeve_V1_ListProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProfilesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profiles\0")
 
@@ -1236,7 +1249,7 @@ extension Reeve_V1_ListProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_GetProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProfileRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}resolve\0")
 
@@ -1271,7 +1284,7 @@ extension Reeve_V1_GetProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_GetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProfileResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profile\0\u{1}resolved\0")
 
@@ -1310,9 +1323,9 @@ extension Reeve_V1_GetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateProfileRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}welcome_message\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}clear_fields\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}welcome_message\0\u{3}parent_profile_id\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -1333,6 +1346,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
     var _favorite: Bool? = nil
     var _titleProviderKind: String? = nil
     var _welcomeMessage: String? = nil
+    var _parentProfileID: String? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1361,6 +1375,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       _favorite = source._favorite
       _titleProviderKind = source._titleProviderKind
       _welcomeMessage = source._welcomeMessage
+      _parentProfileID = source._parentProfileID
     }
   }
 
@@ -1397,6 +1412,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         case 16: try { try decoder.decodeSingularBoolField(value: &_storage._favorite) }()
         case 17: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
         case 18: try { try decoder.decodeSingularStringField(value: &_storage._welcomeMessage) }()
+        case 19: try { try decoder.decodeSingularStringField(value: &_storage._parentProfileID) }()
         default: break
         }
       }
@@ -1463,6 +1479,9 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
       try { if let v = _storage._welcomeMessage {
         try visitor.visitSingularStringField(value: v, fieldNumber: 18)
       } }()
+      try { if let v = _storage._parentProfileID {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 19)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1490,6 +1509,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
         if _storage._favorite != rhs_storage._favorite {return false}
         if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
         if _storage._welcomeMessage != rhs_storage._welcomeMessage {return false}
+        if _storage._parentProfileID != rhs_storage._parentProfileID {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -1499,7 +1519,7 @@ extension Reeve_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_UpdateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpdateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpdateProfileResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profile\0")
 
@@ -1533,7 +1553,7 @@ extension Reeve_V1_UpdateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_DeleteProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteProfileRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
 
@@ -1563,7 +1583,7 @@ extension Reeve_V1_DeleteProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 }
 
-extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteProfileResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -1582,7 +1602,7 @@ extension Reeve_V1_DeleteProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._
   }
 }
 
-extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginCapabilities"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0\u{3}content_renderer\0")
 
@@ -1662,7 +1682,7 @@ extension Reeve_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0\u{3}required_model_capabilities\0")
 
@@ -1774,7 +1794,7 @@ extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   }
 }
 
-extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0")
 
@@ -1848,11 +1868,11 @@ extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 }
 
-extension Reeve_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0")
 }
 
-extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigOption"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}value\0\u{1}label\0")
 
@@ -1887,7 +1907,7 @@ extension Reeve_V1_ConfigOption: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
-extension Reeve_V1_ModelPickerFilter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ModelPickerFilter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelPickerFilter"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}requires_streaming\0\u{3}requires_thinking\0\u{3}requires_tool_use\0\u{3}requires_vision\0\u{3}requires_prompt_caching\0\u{3}requires_generates_images\0")
 
@@ -1942,7 +1962,7 @@ extension Reeve_V1_ModelPickerFilter: SwiftProtobuf.Message, SwiftProtobuf._Mess
   }
 }
 
-extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProfilePlugin"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}ordinal\0\u{1}config\0")
 
@@ -1982,7 +2002,7 @@ extension Reeve_V1_ProfilePlugin: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension Reeve_V1_ListPluginTypesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListPluginTypesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListPluginTypesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -2001,7 +2021,7 @@ extension Reeve_V1_ListPluginTypesRequest: SwiftProtobuf.Message, SwiftProtobuf.
   }
 }
 
-extension Reeve_V1_ListPluginTypesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListPluginTypesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListPluginTypesResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_types\0")
 
@@ -2031,7 +2051,7 @@ extension Reeve_V1_ListPluginTypesResponse: SwiftProtobuf.Message, SwiftProtobuf
   }
 }
 
-extension Reeve_V1_GetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProfilePluginsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_id\0")
 
@@ -2061,7 +2081,7 @@ extension Reeve_V1_GetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_GetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProfilePluginsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}plugins\0")
 
@@ -2091,7 +2111,7 @@ extension Reeve_V1_GetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_SetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetProfilePluginsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_id\0\u{1}plugins\0")
 
@@ -2126,7 +2146,7 @@ extension Reeve_V1_SetProfilePluginsRequest: SwiftProtobuf.Message, SwiftProtobu
   }
 }
 
-extension Reeve_V1_SetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_SetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetProfilePluginsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}plugins\0")
 
@@ -2156,7 +2176,7 @@ extension Reeve_V1_SetProfilePluginsResponse: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension Reeve_V1_UserPluginSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UserPluginSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UserPluginSettings"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}config\0")
 
@@ -2191,7 +2211,7 @@ extension Reeve_V1_UserPluginSettings: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension Reeve_V1_GetUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserPluginSettingsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0")
 
@@ -2221,7 +2241,7 @@ extension Reeve_V1_GetUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftPro
   }
 }
 
-extension Reeve_V1_GetUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_GetUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetUserPluginSettingsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
 
@@ -2255,7 +2275,7 @@ extension Reeve_V1_GetUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-extension Reeve_V1_ListUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserPluginSettingsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
@@ -2274,7 +2294,7 @@ extension Reeve_V1_ListUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-extension Reeve_V1_ListUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_ListUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListUserPluginSettingsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
 
@@ -2304,7 +2324,7 @@ extension Reeve_V1_ListUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftP
   }
 }
 
-extension Reeve_V1_UpsertUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpsertUserPluginSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpsertUserPluginSettingsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}config\0")
 
@@ -2339,7 +2359,7 @@ extension Reeve_V1_UpsertUserPluginSettingsRequest: SwiftProtobuf.Message, Swift
   }
 }
 
-extension Reeve_V1_UpsertUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+nonisolated extension Reeve_V1_UpsertUserPluginSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".UpsertUserPluginSettingsResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
 

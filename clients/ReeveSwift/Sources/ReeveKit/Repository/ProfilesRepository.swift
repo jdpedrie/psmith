@@ -68,6 +68,7 @@ public final class ProfilesRepository: Sendable {
         var req = Reeve_V1_UpdateProfileRequest()
         req.id = id
         if let v = patch.name                  { req.name = v }
+        if let v = patch.parentProfileID       { req.parentProfileID = v }
         if let v = patch.systemMessage         { req.systemMessage = v }
         if let v = patch.defaultUserMessage    { req.defaultUserMessage = v }
         if let v = patch.compressionGuide      { req.compressionGuide = v }
