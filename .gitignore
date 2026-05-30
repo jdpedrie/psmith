@@ -9,6 +9,12 @@
 /reeved
 /reeved-data/
 
+# `cmd/discover-constraints --out auto` dumps per-run JSON here. These
+# files embed verbatim provider error messages which have leaked an API
+# key in the past; keep them out of the repo entirely (review locally,
+# never commit).
+/internal/modelmeta/constraint_probes/
+
 # IDE
 .idea/
 .vscode/

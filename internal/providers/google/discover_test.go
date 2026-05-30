@@ -23,9 +23,15 @@ func modelsHandler(t *testing.T, ids []string, methodsByID map[string][]string) 
 		if r.Method != http.MethodGet {
 			t.Errorf("models: unexpected method %s", r.Method)
 		}
-		// API key arrives via query string (?key=...).
-		if got := r.URL.Query().Get("key"); got == "" {
-			t.Errorf("models: missing key query param")
+		// API key must arrive via the x-goog-api-key header, NEVER as
+		// a query param — query strings end up in error messages /
+		// proxy logs and have leaked a key into a committed test
+		// artifact in the past.
+		if got := r.URL.Query().Get("key"); got != "" {
+			t.Errorf("models: API key leaked into query string (got %q)", got)
+		}
+		if got := r.Header.Get("x-goog-api-key"); got == "" {
+			t.Errorf("models: missing x-goog-api-key header")
 		}
 		var data []geminiModelInfo
 		for _, id := range ids {

@@ -148,9 +148,6 @@ func (d *Driver) CreateCachedContent(ctx context.Context, req CreateCachedConten
 	if err != nil {
 		return nil, fmt.Errorf("google: build cached_content URL: %w", err)
 	}
-	q := u.Query()
-	q.Set("key", d.cfg.APIKey)
-	u.RawQuery = q.Encode()
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(bodyJSON))
 	if err != nil {
@@ -158,6 +155,7 @@ func (d *Driver) CreateCachedContent(ctx context.Context, req CreateCachedConten
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {
@@ -186,15 +184,13 @@ func (d *Driver) GetCachedContent(ctx context.Context, name string) (*CachedCont
 	if err != nil {
 		return nil, fmt.Errorf("google: build cached_content URL: %w", err)
 	}
-	q := u.Query()
-	q.Set("key", d.cfg.APIKey)
-	u.RawQuery = q.Encode()
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("google: build cached_content GET: %w", err)
 	}
 	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {
@@ -224,14 +220,12 @@ func (d *Driver) DeleteCachedContent(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("google: build cached_content URL: %w", err)
 	}
-	q := u.Query()
-	q.Set("key", d.cfg.APIKey)
-	u.RawQuery = q.Encode()
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("google: build cached_content DELETE: %w", err)
 	}
+	httpReq.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {

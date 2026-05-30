@@ -44,8 +44,11 @@ func streamHandler(t *testing.T) http.Handler {
 			if got := r.URL.Query().Get("alt"); got != "sse" {
 				t.Errorf("alt=%q want sse", got)
 			}
-			if got := r.URL.Query().Get("key"); got == "" {
-				t.Errorf("missing key query param")
+			if got := r.URL.Query().Get("key"); got != "" {
+				t.Errorf("API key leaked into query string: %q", got)
+			}
+			if got := r.Header.Get("x-goog-api-key"); got == "" {
+				t.Errorf("missing x-goog-api-key header")
 			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			sseFrame(w, streamEnvelope{

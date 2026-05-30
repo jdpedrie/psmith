@@ -19,8 +19,11 @@ func TestCountTokens(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("method=%s want POST", r.Method)
 			}
-			if got := r.URL.Query().Get("key"); got == "" {
-				t.Errorf("missing key query param")
+			if got := r.URL.Query().Get("key"); got != "" {
+				t.Errorf("API key leaked into query string: %q", got)
+			}
+			if got := r.Header.Get("x-goog-api-key"); got == "" {
+				t.Errorf("missing x-goog-api-key header")
 			}
 			buf := make([]byte, 64*1024)
 			n, _ := r.Body.Read(buf)

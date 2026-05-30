@@ -52,9 +52,6 @@ func (d *Driver) CountTokens(ctx context.Context, modelID string, messages []pro
 	if err != nil {
 		return 0, fmt.Errorf("google: build count_tokens URL: %w", err)
 	}
-	q := u.Query()
-	q.Set("key", d.cfg.APIKey)
-	u.RawQuery = q.Encode()
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(bodyJSON))
 	if err != nil {
@@ -62,6 +59,7 @@ func (d *Driver) CountTokens(ctx context.Context, modelID string, messages []pro
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {

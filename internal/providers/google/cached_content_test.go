@@ -16,7 +16,8 @@ import (
 // fields populated.
 func TestCreateCachedContent_HappyPath(t *testing.T) {
 	var capturedBody string
-	var capturedKey string
+	var capturedKeyHeader string
+	var capturedKeyQuery string
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1beta/cachedContents", func(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +27,8 @@ func TestCreateCachedContent_HappyPath(t *testing.T) {
 		buf := make([]byte, 64*1024)
 		n, _ := r.Body.Read(buf)
 		capturedBody = string(buf[:n])
-		capturedKey = r.URL.Query().Get("key")
+		capturedKeyHeader = r.Header.Get("x-goog-api-key")
+		capturedKeyQuery = r.URL.Query().Get("key")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"name": "cachedContents/abc123",
@@ -56,8 +58,11 @@ func TestCreateCachedContent_HappyPath(t *testing.T) {
 		t.Fatalf("CreateCachedContent: %v", err)
 	}
 
-	if capturedKey != "test-key" {
-		t.Errorf("key query param=%q want test-key", capturedKey)
+	if capturedKeyHeader != "test-key" {
+		t.Errorf("x-goog-api-key header=%q want test-key", capturedKeyHeader)
+	}
+	if capturedKeyQuery != "" {
+		t.Errorf("API key leaked into query string: %q", capturedKeyQuery)
 	}
 
 	// Wire shape: model is "models/<id>", systemInstruction has the seed +

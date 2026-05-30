@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -372,15 +373,38 @@ func capsFromProto(c *reevev1.ModelCapabilities) capabilities {
 	}
 }
 
-// shorten caps an error string at a length friendly for JSON inspection.
+// shorten caps an error string at a length friendly for JSON inspection
+// AND scrubs any URL query-string secrets that may have leaked into the
+// message. The Google Gemini driver used to auth via `?key=...`; a
+// context-deadline failure embedded the full URL — key and all — into
+// error_message which then landed in a committed probe JSON. Auth is
+// now header-only, but third-party tools or future flows may still
+// embed URLs in errors, so we redact every value of every known
+// secret-bearing query param defensively.
 func shorten(s string) string {
 	const limit = 400
-	s = strings.TrimSpace(s)
+	s = redactURLSecrets(strings.TrimSpace(s))
 	if len(s) <= limit {
 		return s
 	}
 	return s[:limit] + "…"
 }
+
+// redactURLSecrets replaces the value of any common secret-bearing
+// query param (`key`, `api_key`, `access_token`, `token`) with
+// "REDACTED" while leaving the rest of the string intact. Operates
+// on the raw text — we don't try to parse out URLs because errors
+// wrap them in various string shapes ("Post \"https://...?key=...\":
+// context deadline exceeded"), and a regex is robust to that variety.
+func redactURLSecrets(s string) string {
+	return secretQueryParamRE.ReplaceAllString(s, "${1}=REDACTED")
+}
+
+// (?i) case-insensitive. Match `<param>=<value>` where the value runs
+// up to the next `&`, whitespace, quote, or end-of-string. The
+// alternation covers the param names; capture-group 1 preserves the
+// original name so we can write it back.
+var secretQueryParamRE = regexp.MustCompile(`(?i)\b(key|api_key|access_token|token)=[^&\s"']+`)
 
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "discover-constraints: "+format+"\n", args...)

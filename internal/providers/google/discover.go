@@ -63,17 +63,17 @@ func (d *Driver) DiscoverModels(ctx context.Context) ([]providers.Model, error) 
 	return out, nil
 }
 
-// listModelsPage fetches a single page of /models. The endpoint takes the
-// API key as a query string argument (and also accepts the x-goog-api-key
-// header — we use the query string to keep the request shape simple and
-// match the SSE endpoint's auth shape).
+// listModelsPage fetches a single page of /models. Auth via the
+// x-goog-api-key header so the key never lands in the URL — wrapped
+// error messages (context deadline, 4xx) and proxy logs include the
+// URL verbatim, so a query-string secret leaks through every failure
+// site.
 func (d *Driver) listModelsPage(ctx context.Context, pageToken string) (*listModelsResponse, error) {
 	u, err := url.Parse(d.baseURL + "/models")
 	if err != nil {
 		return nil, fmt.Errorf("google: parse models URL: %w", err)
 	}
 	q := u.Query()
-	q.Set("key", d.cfg.APIKey)
 	q.Set("pageSize", "1000")
 	if pageToken != "" {
 		q.Set("pageToken", pageToken)
@@ -85,6 +85,7 @@ func (d *Driver) listModelsPage(ctx context.Context, pageToken string) (*listMod
 		return nil, fmt.Errorf("google: build models request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {

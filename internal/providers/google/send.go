@@ -278,6 +278,11 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	// Auth via header, never the URL: ?key= leaks into every error
+	// message that wraps a URL (context-deadline failures, 4xx logs,
+	// upstream proxies). The x-goog-api-key header keeps the secret
+	// off any stringified URL.
+	httpReq.Header.Set("x-goog-api-key", d.cfg.APIKey)
 
 	resp, err := d.httpClient.Do(httpReq)
 	if err != nil {
@@ -307,7 +312,11 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 	return out, nil
 }
 
-// streamEndpoint builds the SSE URL: /v1beta/models/{model}:streamGenerateContent?alt=sse&key=...
+// streamEndpoint builds the SSE URL:
+// /v1beta/models/{model}:streamGenerateContent?alt=sse
+// The API key rides the x-goog-api-key header on the request (set by
+// the caller) — never as a query parameter, since the URL ends up
+// embedded in error messages and proxy logs.
 func (d *Driver) streamEndpoint(modelID string) (string, error) {
 	u, err := url.Parse(d.baseURL + "/models/" + url.PathEscape(modelID) + ":streamGenerateContent")
 	if err != nil {
@@ -315,7 +324,6 @@ func (d *Driver) streamEndpoint(modelID string) (string, error) {
 	}
 	q := u.Query()
 	q.Set("alt", "sse")
-	q.Set("key", d.cfg.APIKey)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
