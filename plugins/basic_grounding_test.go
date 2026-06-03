@@ -287,6 +287,36 @@ func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
 	}
 }
 
+// TestBasicGrounding_LocationRendersByDefault pins the default flip:
+// when the client supplies location facts, the plugin renders the line
+// out of the box — no per-plugin opt-in needed. The device-side
+// Privacy toggle is the actual permission gate.
+func TestBasicGrounding_LocationRendersByDefault(t *testing.T) {
+	t.Parallel()
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyLocationCity:   "Brooklyn, NY",
+		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
+	})
+	if !strings.Contains(out, "Location: Brooklyn, NY (40.6782,-73.9442)") {
+		t.Errorf("location should render under default config when device sent facts; got %q", out)
+	}
+}
+
+// Explicit per-profile opt-out still works — useful for a "work" profile
+// that wants to ignore location even when the device is supplying it.
+func TestBasicGrounding_LocationExplicitOptOut(t *testing.T) {
+	t.Parallel()
+	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":false}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyLocationCity:   "Brooklyn, NY",
+		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
+	})
+	if strings.Contains(out, "Location:") {
+		t.Errorf("explicit include_location=false should suppress the line; got %q", out)
+	}
+}
+
 func TestBasicGrounding_LocationCityOnly(t *testing.T) {
 	t.Parallel()
 	// City present but no coords (e.g. before reverse-geocode finished

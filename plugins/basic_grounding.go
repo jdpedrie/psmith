@@ -82,8 +82,13 @@ type basicGroundingConfig struct {
 	// IncludeLocation renders "Location: Brooklyn, NY" (and/or
 	// the raw coords as a fallback) from the client-supplied
 	// DeviceFactKeyLocationCity / DeviceFactKeyLocationCoords.
-	// Default OFF — opt-in because it triggers an OS-level
-	// location-permission prompt on the client.
+	// Default ON: the device-side Privacy toggle
+	// (LocationFactPreference) is the actual gate — when it's
+	// off the client sends no location facts and this section
+	// silently renders nothing. The per-plugin knob is now just
+	// a profile-level override for users who want one profile
+	// to deliberately skip location even when the device is
+	// supplying it.
 	IncludeLocation bool `json:"include_location"`
 }
 
@@ -93,8 +98,7 @@ func newBasicGrounding(configBytes json.RawMessage) (Plugin, error) {
 		TimeFormat:      "datetime_iso",
 		IncludeLocale:   true,
 		IncludePlatform: true,
-		// IncludeLocation deliberately defaults off — permission
-		// gate on the client.
+		IncludeLocation: true,
 	}
 	if len(configBytes) > 0 {
 		if err := json.Unmarshal(configBytes, &cfg); err != nil {
@@ -172,9 +176,9 @@ func (p *basicGrounding) ConfigFields() []ConfigField {
 		{
 			Name:        "include_location",
 			Display:     "Include current location",
-			Description: "Send the user's current location (city/region; coordinates as fallback). Triggers an OS-level location-permission prompt on the device.",
+			Description: "Render the location section when the device sends location facts. The device-side Privacy toggle is the real permission gate; turning this off here lets one profile skip the section even when other profiles use it.",
 			Type:        ConfigFieldBoolean,
-			Default:     false,
+			Default:     true,
 		},
 	}
 }
