@@ -54,6 +54,16 @@ public final class LocationProvider: NSObject {
     override private init() {
         self.manager = CLLocationManager()
         self.authorization = manager.authorizationStatus
+        // Restore the last fix from UserDefaults so a cold launch
+        // within the TTL can answer `freshFact()` immediately, before
+        // the warmup's async requestLocation() round-trip lands.
+        // freshFact()'s TTL check still applies on read, so stale
+        // disk values are silently ignored.
+        if let cached = Self.loadCachedFix() {
+            self.lastCoords = cached.coords
+            self.lastCity = cached.city
+            self.lastFixAt = cached.at
+        }
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
@@ -142,13 +152,16 @@ extension LocationProvider: CLLocationManagerDelegate {
         guard let loc = locations.last else { return }
         let coords = String(format: "%.4f,%.4f", loc.coordinate.latitude, loc.coordinate.longitude)
         Task { @MainActor in
+            let at = Date()
             self.lastCoords = coords
-            self.lastFixAt = Date()
+            self.lastFixAt = at
+            Self.saveCachedFix(coords: coords, city: self.lastCity, at: at)
             self.geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
                 let city = Self.formatPlace(placemarks?.first)
                 Task { @MainActor in
                     if let city, !city.isEmpty {
                         self.lastCity = city
+                        Self.saveCachedFix(coords: coords, city: city, at: at)
                     }
                 }
             }
@@ -163,7 +176,37 @@ extension LocationProvider: CLLocationManagerDelegate {
         // along on sends until the TTL expires.
     }
 
-    private static func formatPlace(_ p: CLPlacemark?) -> String? {
+    // ---- Disk cache (UserDefaults) -----------------------------------
+    // The in-memory state is lost on app kill; persisting it lets the
+    // very first SendMessage after a relaunch include location (so long
+    // as the cached fix is within freshFact's TTL). Stored under a
+    // single key as a small dict — no Codable types needed.
+    private static let cacheKey = "reeve.location.lastFix"
+
+    private static func loadCachedFix() -> (coords: String, city: String?, at: Date)? {
+        let d = UserDefaults.standard
+        guard
+            let dict = d.dictionary(forKey: cacheKey),
+            let coords = dict["coords"] as? String,
+            let ts = dict["at"] as? TimeInterval
+        else { return nil }
+        let city = dict["city"] as? String
+        return (coords, city, Date(timeIntervalSince1970: ts))
+    }
+
+    private static func saveCachedFix(coords: String, city: String?, at: Date) {
+        var dict: [String: Any] = [
+            "coords": coords,
+            "at": at.timeIntervalSince1970,
+        ]
+        if let city, !city.isEmpty { dict["city"] = city }
+        UserDefaults.standard.set(dict, forKey: cacheKey)
+    }
+
+    // Pure: no actor-isolated state touched. Marked nonisolated so the
+    // CLGeocoder reverse-geocode callback (which runs off-actor) can
+    // call it without warnings.
+    nonisolated private static func formatPlace(_ p: CLPlacemark?) -> String? {
         guard let p else { return nil }
         // Prefer "City, ST" (US-style) when both halves are
         // present. Falls back to country + locality in

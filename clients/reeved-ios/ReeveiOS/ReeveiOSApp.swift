@@ -102,5 +102,19 @@ struct iOSAppShell: View {
                 await active.bootstrap()
             }
         }
+        // Cold-launch location warmup: when the user has opted in
+        // via Privacy, kick a fix request the moment the shell
+        // appears so the first SendMessage has a fresh
+        // `lastCoords/lastFixAt` to read instead of returning nil
+        // from `freshFact()`. Without this, the first send after
+        // every app launch silently dropped location even when the
+        // permission was granted.
+        .task {
+            #if canImport(CoreLocation)
+            if LocationFactPreference.enabled {
+                LocationProvider.shared.requestPermissionAndFix()
+            }
+            #endif
+        }
     }
 }
