@@ -118,6 +118,107 @@ func TestBasicGrounding_DisableSkipsBlock(t *testing.T) {
 	}
 }
 
+func TestBasicGrounding_TimezoneFactUsedWhenConfigEmpty(t *testing.T) {
+	t.Parallel()
+	bg := newFixedClockGrounding(t, ``)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyTimezone: "America/New_York",
+	})
+	// fixedTime is 2026-05-02T14:45:00Z; in NYC that's 10:45 AM EDT
+	// (-04:00).
+	if !strings.Contains(out, "Current time: 2026-05-02T10:45:00-04:00") {
+		t.Errorf("expected NYC-local ISO timestamp, got %q", out)
+	}
+}
+
+func TestBasicGrounding_ConfigTimezoneBeatsFact(t *testing.T) {
+	t.Parallel()
+	// Explicit config wins over the device fact — predictable for users
+	// who deliberately pinned a zone (e.g. a server-side smoke profile).
+	bg := newFixedClockGrounding(t, `{"timezone":"Asia/Tokyo"}`)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyTimezone: "America/New_York",
+	})
+	if !strings.Contains(out, "Current time: 2026-05-02T23:45:00+09:00") {
+		t.Errorf("expected Tokyo-local timestamp, got %q", out)
+	}
+}
+
+func TestBasicGrounding_NoTimezoneFallsBackToUTC(t *testing.T) {
+	t.Parallel()
+	// No config, no fact → UTC (NOT server-local). This is the
+	// whole point of the change: a cloud-hosted clarkd's "local"
+	// time is meaningless to the user.
+	bg := newFixedClockGrounding(t, ``)
+	out := bg.TransformOutgoingUserMessage("hi", nil)
+	if !strings.Contains(out, "Current time: 2026-05-02T14:45:00Z") {
+		t.Errorf("expected UTC timestamp, got %q", out)
+	}
+}
+
+func TestBasicGrounding_BadTimezoneFactFallsBackToUTC(t *testing.T) {
+	t.Parallel()
+	// Malformed device fact must not crash the send; silent fallback
+	// is fine because the constructor already validates user-supplied
+	// config and the device value comes from an untrusted client.
+	bg := newFixedClockGrounding(t, ``)
+	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+		DeviceFactKeyTimezone: "Pluto/Olympus",
+	})
+	if !strings.Contains(out, "Current time: 2026-05-02T14:45:00Z") {
+		t.Errorf("expected UTC fallback, got %q", out)
+	}
+}
+
+func TestBasicGrounding_RequestsTimezoneFactOnlyWhenNeeded(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		config      string
+		wantInList  bool
+		description string
+	}{
+		{
+			name:        "default: requests timezone",
+			config:      ``,
+			wantInList:  true,
+			description: "IncludeDateTime on + no Timezone config → need the fact for fallback",
+		},
+		{
+			name:        "explicit timezone: skips request",
+			config:      `{"timezone":"America/New_York"}`,
+			wantInList:  false,
+			description: "Config pins the zone, so the fact is unused",
+		},
+		{
+			name:        "date_time off: skips request",
+			config:      `{"include_date_time":false}`,
+			wantInList:  false,
+			description: "No timestamp to render, no need for tz",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pl, err := newBasicGrounding(json.RawMessage(tc.config))
+			if err != nil {
+				t.Fatalf("construct: %v", err)
+			}
+			r := pl.(DeviceFactRequester)
+			got := r.RequestedDeviceFacts()
+			has := false
+			for _, k := range got {
+				if k == DeviceFactKeyTimezone {
+					has = true
+					break
+				}
+			}
+			if has != tc.wantInList {
+				t.Errorf("%s: tz-in-requested=%v want %v", tc.description, has, tc.wantInList)
+			}
+		})
+	}
+}
+
 func TestBasicGrounding_TimeFormats(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -235,10 +336,18 @@ func TestBasicGrounding_RequestedFactsReflectsConfig(t *testing.T) {
 		config string
 		want   []string
 	}{
-		{name: "all_off", config: `{"include_locale":false,"include_platform":false,"include_location":false}`, want: nil},
-		{name: "locale_only", config: `{"include_locale":true,"include_platform":false,"include_location":false}`, want: []string{DeviceFactKeyLocale}},
+		// IncludeDateTime defaults on and Timezone defaults empty, so
+		// the timezone fact comes along for the ride whenever the
+		// time-render path is live.
+		{name: "all_off_except_datetime", config: `{"include_locale":false,"include_platform":false,"include_location":false}`,
+			want: []string{DeviceFactKeyTimezone}},
+		{name: "locale_only_with_datetime", config: `{"include_locale":true,"include_platform":false,"include_location":false}`,
+			want: []string{DeviceFactKeyTimezone, DeviceFactKeyLocale}},
 		{name: "all_on", config: `{"include_locale":true,"include_platform":true,"include_location":true}`,
-			want: []string{DeviceFactKeyLocale, DeviceFactKeyPlatform, DeviceFactKeyLocationCity, DeviceFactKeyLocationCoords}},
+			want: []string{DeviceFactKeyTimezone, DeviceFactKeyLocale, DeviceFactKeyPlatform, DeviceFactKeyLocationCity, DeviceFactKeyLocationCoords}},
+		// Timestamp off → no timezone fact requested either.
+		{name: "datetime_off", config: `{"include_date_time":false,"include_locale":false,"include_platform":false,"include_location":false}`,
+			want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

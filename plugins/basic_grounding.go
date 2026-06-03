@@ -60,7 +60,11 @@ type basicGroundingConfig struct {
 	TimeFormat string `json:"time_format"`
 
 	// Timezone is the IANA zone the timestamp renders in (e.g.
-	// "America/New_York"). Empty = the host's local timezone.
+	// "America/New_York"). Empty = use the client-supplied
+	// DeviceFactKeyTimezone fact, or UTC if the client didn't
+	// send one. Server-local time is never used: clarkd often
+	// runs in a different zone from the user (a cloud host's
+	// "local" is meaningless to the model).
 	Timezone string `json:"timezone"`
 
 	// IncludeLocale renders "Locale: en-US" from the client-
@@ -148,7 +152,7 @@ func (p *basicGrounding) ConfigFields() []ConfigField {
 		{
 			Name:        "timezone",
 			Display:     "Timezone (IANA)",
-			Description: "Optional IANA zone for the timestamp (e.g. America/New_York). Empty = host's local zone.",
+			Description: "Optional IANA zone for the timestamp (e.g. America/New_York). Empty = use the device's timezone (falls back to UTC if the device didn't send one).",
 			Type:        ConfigFieldText,
 		},
 		{
@@ -179,6 +183,12 @@ func (p *basicGrounding) ConfigFields() []ConfigField {
 
 func (p *basicGrounding) RequestedDeviceFacts() []string {
 	var keys []string
+	if p.cfg.IncludeDateTime && p.cfg.Timezone == "" {
+		// Only requested when needed for the timestamp fallback —
+		// when the user pinned an explicit Timezone in config, the
+		// device fact is unused, so don't bother asking for it.
+		keys = append(keys, DeviceFactKeyTimezone)
+	}
 	if p.cfg.IncludeLocale {
 		keys = append(keys, DeviceFactKeyLocale)
 	}
@@ -238,7 +248,7 @@ func (p *basicGrounding) TransformForDisplay(content string) string {
 func (p *basicGrounding) factLines(facts map[string]string) []string {
 	var lines []string
 	if p.cfg.IncludeDateTime {
-		lines = append(lines, "Current time: "+p.formatNow())
+		lines = append(lines, "Current time: "+p.formatNow(facts))
 	}
 	if p.cfg.IncludeLocale {
 		if v := facts[DeviceFactKeyLocale]; v != "" {
@@ -269,13 +279,8 @@ func (p *basicGrounding) factLines(facts map[string]string) []string {
 	return lines
 }
 
-func (p *basicGrounding) formatNow() string {
-	t := p.now()
-	if p.cfg.Timezone != "" {
-		if loc, err := time.LoadLocation(p.cfg.Timezone); err == nil {
-			t = t.In(loc)
-		}
-	}
+func (p *basicGrounding) formatNow(facts map[string]string) string {
+	t := p.now().In(p.resolveLocation(facts))
 	switch p.cfg.TimeFormat {
 	case "date_only":
 		return t.Format("2006-01-02")
@@ -285,4 +290,25 @@ func (p *basicGrounding) formatNow() string {
 	default: // datetime_iso
 		return t.Format(time.RFC3339)
 	}
+}
+
+// resolveLocation picks the timezone to render the timestamp in, in
+// priority order: explicit config → device-supplied fact → UTC.
+// Server-local is intentionally absent: clarkd typically runs in a
+// different zone from the user, so falling back to it would render a
+// timestamp the user doesn't recognize.
+func (p *basicGrounding) resolveLocation(facts map[string]string) *time.Location {
+	if p.cfg.Timezone != "" {
+		// Pre-validated in the constructor — LoadLocation here is
+		// only re-resolving the IANA name to a *Location.
+		if loc, err := time.LoadLocation(p.cfg.Timezone); err == nil {
+			return loc
+		}
+	}
+	if tz := facts[DeviceFactKeyTimezone]; tz != "" {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			return loc
+		}
+	}
+	return time.UTC
 }
