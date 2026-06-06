@@ -33,6 +33,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/embeddings"
+	"github.com/jdpedrie/reeve/internal/embeddersvc"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/streamsvc"
 	"github.com/jdpedrie/reeve/plugins"
@@ -105,24 +106,11 @@ func run() error {
 	stopChunkCleanup := stream.StartChunkCleanup(ctx, queries, stream.CleanupConfig{}, slog.Default())
 	defer stopChunkCleanup()
 
-	// Embedding worker + searcher — opt-in via REEVE_EMBEDDER. When
-	// set, the daemon spawns a Worker that polls for unembedded
-	// messages and constructs a Searcher the conversations service
-	// hands to the memory plugin. Empty / unset means search stays
-	// disabled; memory plugin surfaces a "search not configured"
-	// error to the model; no daemon dependency on Ollama being live.
+	// Embedding worker + searcher placeholders. The actual
+	// construction lands below after `cipher` loads, because the
+	// per-user Resolver needs the cipher to decrypt stored api_keys.
 	var embedSearcher *embeddings.Searcher
-	if name := os.Getenv("REEVE_EMBEDDER"); name != "" {
-		embedder, eerr := embeddings.Build(name, []byte(os.Getenv("REEVE_EMBEDDER_CONFIG")))
-		if eerr != nil {
-			return fmt.Errorf("build embedder %q: %w", name, eerr)
-		}
-		resolver := embeddings.StaticResolver{Embedder: embedder}
-		w := embeddings.NewWorker(pool, resolver,
-			embeddings.WorkerConfig{}, slog.Default())
-		go w.Run(ctx)
-		embedSearcher = embeddings.NewSearcher(pool, resolver)
-	}
+	var embedderCachingResolver *embeddings.CachingResolver
 
 	// Load the master encryption key from REEVE_MASTER_KEY (or mint a
 	// throwaway one when REEVE_DEV_AUTOKEY=1). When neither is set the
@@ -133,6 +121,38 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load cipher: %w", err)
 	}
+
+	// Per-user embedder Resolver: prefer the user's stored config
+	// (from EmbedderService writes), falling back to REEVE_EMBEDDER
+	// when set and the user has no row. The CachingResolver memoizes
+	// per-user builds; EmbedderService.invalidateCache drops the
+	// entry on Update/Delete so the next embed pass sees the change
+	// without a process restart.
+	var fallbackEmbedder embeddings.Embedder
+	if name := os.Getenv("REEVE_EMBEDDER"); name != "" {
+		embedder, eerr := embeddings.Build(name, []byte(os.Getenv("REEVE_EMBEDDER_CONFIG")))
+		if eerr != nil {
+			return fmt.Errorf("build fallback embedder %q: %w", name, eerr)
+		}
+		fallbackEmbedder = embedder
+	}
+	dbBuild := embeddersvc.NewDBResolver(queries, cipher)
+	embedderCachingResolver = &embeddings.CachingResolver{
+		Build: func(ctx context.Context, userID uuid.UUID) (embeddings.Embedder, error) {
+			e, err := dbBuild(ctx, userID)
+			if err == nil {
+				return e, nil
+			}
+			if errors.Is(err, embeddings.ErrNoEmbedderForUser) && fallbackEmbedder != nil {
+				return fallbackEmbedder, nil
+			}
+			return nil, err
+		},
+	}
+	w := embeddings.NewWorker(pool, embedderCachingResolver,
+		embeddings.WorkerConfig{}, slog.Default())
+	go w.Run(ctx)
+	embedSearcher = embeddings.NewSearcher(pool, embedderCachingResolver)
 
 	authSvc := auth.NewService(queries)
 	// On every successful login, materialize the system profile
@@ -218,6 +238,9 @@ func run() error {
 		slog.Warn("langfuse: bootstrap load failed", "err", err)
 	}
 
+	embedderSvc := embeddersvc.NewService(queries, cipher,
+		embedderCachingResolver.Invalidate, slog.Default())
+
 	streamsSvc := streamsvc.NewService(queries, supervisor)
 	filesSvc := files.NewService(queries, fileStorage, urlSigningKey, baseURL)
 
@@ -229,6 +252,7 @@ func run() error {
 	mux.Handle(reevev1connect.NewStreamsServiceHandler(streamsSvc, opts))
 	mux.Handle(reevev1connect.NewFilesServiceHandler(filesSvc, opts))
 	mux.Handle(reevev1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
+	mux.Handle(reevev1connect.NewEmbedderServiceHandler(embedderSvc, opts))
 	mux.Handle(reevev1connect.NewEventsServiceHandler(eventsSvc, opts))
 	// Raw-bytes endpoint for signed file URLs. Bypasses Connect framing
 	// so a system image loader can fetch the bytes directly.
