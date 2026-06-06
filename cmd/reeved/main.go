@@ -40,6 +40,9 @@ import (
 	_ "github.com/jdpedrie/reeve/internal/providers/anthropic"
 	_ "github.com/jdpedrie/reeve/internal/providers/google"
 	_ "github.com/jdpedrie/reeve/internal/providers/openai"
+
+	// Embedder packages self-register in init() too.
+	_ "github.com/jdpedrie/reeve/internal/embeddings/ollama"
 )
 
 // stubServices is empty now that all five services have implementations.
