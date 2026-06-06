@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	pgvector "github.com/pgvector/pgvector-go"
 )
 
 type Context struct {
@@ -114,6 +115,9 @@ type Message struct {
 	FinishReason          *string
 	ToolCostUsd           pgtype.Numeric
 	IsWelcome             bool
+	Embedding             *pgvector.Vector
+	EmbeddingModel        *string
+	EmbeddingAt           *time.Time
 }
 
 type MessageAttachment struct {

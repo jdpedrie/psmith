@@ -77,6 +77,18 @@ Flags:
 		return 1
 	}
 
+	// Extension preflight runs BEFORE migrations because CREATE
+	// EXTENSION needs CREATE-on-database privilege the migration
+	// runner may not have (the pgvector extension is untrusted, so
+	// non-superusers can't install it via a plain migration).
+	// Idempotent — `IF NOT EXISTS` means a second install run is a
+	// no-op, and a pre-installed extension surfaces a friendly
+	// "already installed, continuing" path.
+	if err := ensureExtensions(sqlDB); err != nil {
+		fmt.Fprintf(os.Stderr, "reeve install: ensure extensions: %v\n", err)
+		return 1
+	}
+
 	goose.SetBaseFS(db.Migrations)
 	if err := goose.SetDialect("postgres"); err != nil {
 		fmt.Fprintf(os.Stderr, "reeve install: set dialect: %v\n", err)
@@ -167,3 +179,29 @@ func (stdLogger) Printf(format string, v ...any) {
 // the bill; this assertion is just defensive scaffolding for any future
 // "no migrations found" handling we want to special-case.
 var _ = errors.Is
+
+// requiredExtensions are PostgreSQL extensions reeved depends on at
+// runtime. The migration layer is allowed to assume each of these
+// exists in the target database; ensureExtensions installs them
+// before the first migration runs so a fresh install is still one-
+// shot.
+var requiredExtensions = []string{
+	// pgvector — message embeddings + semantic search.
+	"vector",
+}
+
+// ensureExtensions runs `CREATE EXTENSION IF NOT EXISTS` for each
+// required extension. Already-installed extensions are silent no-ops.
+// Returns a descriptive error if the connected user lacks privilege
+// (the operator either flips the user to superuser or pre-installs
+// the extensions via a separate superuser connection).
+func ensureExtensions(db *sql.DB) error {
+	for _, name := range requiredExtensions {
+		if _, err := db.Exec(`CREATE EXTENSION IF NOT EXISTS ` + name); err != nil {
+			return fmt.Errorf(
+				"extension %q: %w (install it once as a superuser, "+
+					"then re-run `reeve install`)", name, err)
+		}
+	}
+	return nil
+}

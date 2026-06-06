@@ -18,6 +18,12 @@ docker run -d --name clark-postgres \
 
 Defaults baked into `Makefile` (`GOOSE_DBSTRING`) and `internal/testutil` (pgtestdb config) point at this instance with credentials `clark:clark`. Override via env vars (`PGTESTDB_HOST/PORT/USER/PASSWORD/DB`) if your setup differs.
 
+**One-time pgvector install in template1** — pgtestdb clones from `template1`, and the `vector` extension is untrusted so individual test DBs can't `CREATE EXTENSION` themselves. Install it once into `template1` so every cloned test DB inherits it:
+
+```bash
+docker exec clark-postgres psql -U clark -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+```
+
 ## Conventions
 
 - **Protos: every RPC has a dedicated request and response message pair.** Never return a domain message (e.g. `Profile`, `Conversation`) directly, and never return `google.protobuf.Empty`. Even no-data responses use `message FooResponse {}`. This preserves wire-compat headroom — fields can be added to any response without breaking the schema.

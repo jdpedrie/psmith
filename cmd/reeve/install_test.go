@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
@@ -16,6 +17,12 @@ import (
 // — pgtestdb.NoopMigrator skips the goose migrator that
 // internal/testutil normally runs, so we land on a blank schema and
 // can exercise the install path's "go from 0 → latest" branch.
+//
+// Before returning, runs the same extension preflight `reeve install`
+// runs in production — via a separate superuser (`clark`) connection
+// because pgtestdb hands out a low-privileged role that can't
+// CREATE EXTENSION for untrusted extensions like `vector`. Mirrors
+// the production install path: extensions first, then migrations.
 func freshDB(t *testing.T) *sql.DB {
 	t.Helper()
 	conf := pgtestdb.Config{
@@ -27,7 +34,27 @@ func freshDB(t *testing.T) *sql.DB {
 		Database:   envOr("PGTESTDB_DB", "clark"),
 		Options:    "sslmode=disable",
 	}
-	return pgtestdb.New(t, conf, pgtestdb.NoopMigrator{})
+	db := pgtestdb.New(t, conf, pgtestdb.NoopMigrator{})
+
+	// Install required extensions as the master user (clark is the
+	// docker-image-default superuser). The test's primary connection
+	// stays on pgtdbuser, which mirrors the typical "migrations run
+	// as the app user, extensions installed once by ops" prod setup.
+	var dbname string
+	if err := db.QueryRow("SELECT current_database()").Scan(&dbname); err != nil {
+		t.Fatalf("get test db name: %v", err)
+	}
+	masterURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		conf.User, conf.Password, conf.Host, conf.Port, dbname)
+	master, err := sql.Open("pgx", masterURL)
+	if err != nil {
+		t.Fatalf("open master conn: %v", err)
+	}
+	defer master.Close()
+	if err := ensureExtensions(master); err != nil {
+		t.Fatalf("ensureExtensions: %v", err)
+	}
+	return db
 }
 
 func envOr(k, d string) string {

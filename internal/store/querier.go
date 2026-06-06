@@ -13,6 +13,14 @@ import (
 
 type Querier interface {
 	AttachFileToMessage(ctx context.Context, arg AttachFileToMessageParams) (MessageAttachment, error)
+	// Reset the triple when a model swap orphans the existing vector.
+	// Backfill picks the row up via ListUnembeddedMessages on the next
+	// pass. CHECK invariant still holds (all three back to NULL).
+	ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
+	// Drives the "X / Y embedded" progress chip in the settings UI.
+	// Cheap even on millions of rows because the partial
+	// messages_unembedded_created_at index is exactly this predicate.
+	CountUnembeddedMessages(ctx context.Context) (int32, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// Used by the stream supervisor at materialization. Allows the assistant turn
 	// (or the compression_summary record) to be inserted with usage + cost
@@ -199,6 +207,11 @@ type Querier interface {
 	// indicators alongside the linear chain.
 	ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([]ListMessageAncestorChainRow, error)
 	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]Message, error)
+	// When the user swaps embedders (different Model() than what's on
+	// existing rows), backfill re-embeds. Returns the rows that need
+	// re-embedding under the new model. Like ListUnembeddedMessages but
+	// the predicate is "wrong model" rather than "no embedding."
+	ListMessagesEmbeddedUnderDifferentModel(ctx context.Context, arg ListMessagesEmbeddedUnderDifferentModelParams) ([]ListMessagesEmbeddedUnderDifferentModelRow, error)
 	// Returns the ordered plugin pipeline for one profile (no inheritance walk;
 	// callers do the walk in code so they can short-circuit on a profile that
 	// defines its own pipeline).
@@ -216,6 +229,11 @@ type Querier interface {
 	// sequence cursor. Used to replay missed chunks for late subscribers.
 	ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error)
 	ListStreamRunsByConversation(ctx context.Context, conversationID uuid.UUID) ([]StreamRun, error)
+	// Backfill worker's hot path. Skips system messages (framing, not
+	// searchable content) and zero-length rows (nothing to embed). Ordered
+	// oldest-first so a partial backfill always makes monotonic progress
+	// against `created_at` — easy for the UI to show "embedded up to YYYY-MM-DD".
+	ListUnembeddedMessages(ctx context.Context, limit int32) ([]ListUnembeddedMessagesRow, error)
 	// IDs of users who haven't had the system profile templates seeded yet.
 	// Drives the server-startup backfill so existing users get the new templates
 	// on next restart without waiting for a login.
@@ -262,6 +280,25 @@ type Querier interface {
 	// the per-row inserts via InsertProfilePlugin (an in-tx loop) — there's no
 	// batch-insert sqlc emit for an arbitrary slice.
 	ReplaceProfilePlugins(ctx context.Context, profileID uuid.UUID) error
+	// Cosine-distance ranked search. Restricts to messages owned by the
+	// caller (via the context→conversation→user chain) and to rows
+	// embedded under the same model as the query vector — mixing models
+	// would compare vectors from different spaces and yield garbage.
+	//
+	// `<=>` is pgvector's cosine-distance operator: 0 = identical
+	// direction, 2 = opposite. Smaller is better. We surface the raw
+	// distance so callers can threshold ("only return matches under 0.4").
+	//
+	// pgvector's HNSW index handles ORDER BY ... LIMIT efficiently even
+	// with the WHERE filter, provided the filter is selective enough to
+	// not prune away most candidates. For a single user that's free; if
+	// we ever scale to many users per Reeve instance the index would
+	// need partitioning, but that's a future-us problem.
+	SearchMessagesByEmbedding(ctx context.Context, arg SearchMessagesByEmbeddingParams) ([]SearchMessagesByEmbeddingRow, error)
+	// Worker writes the embedding triple. Idempotent: the CHECK constraint
+	// enforces all-three-or-none on every row already, so calling with the
+	// same triple over and over is fine.
+	SetMessageEmbedding(ctx context.Context, arg SetMessageEmbeddingParams) error
 	// Records the per-message hashes of the rendered wire-prefix for a run plus
 	// the diagnostics computed against the previous turn (NULL on the first
 	// turn for a context — no comparison possible).

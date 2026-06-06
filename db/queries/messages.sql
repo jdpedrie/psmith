@@ -178,3 +178,92 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        )::INT AS sibling_count
 FROM chain
 ORDER BY depth DESC;
+
+-- name: SetMessageEmbedding :exec
+-- Worker writes the embedding triple. Idempotent: the CHECK constraint
+-- enforces all-three-or-none on every row already, so calling with the
+-- same triple over and over is fine.
+UPDATE messages
+SET embedding       = $2,
+    embedding_model = $3,
+    embedding_at    = $4
+WHERE id = $1;
+
+-- name: ClearMessageEmbedding :exec
+-- Reset the triple when a model swap orphans the existing vector.
+-- Backfill picks the row up via ListUnembeddedMessages on the next
+-- pass. CHECK invariant still holds (all three back to NULL).
+UPDATE messages
+SET embedding       = NULL,
+    embedding_model = NULL,
+    embedding_at    = NULL
+WHERE id = $1;
+
+-- name: ListUnembeddedMessages :many
+-- Backfill worker's hot path. Skips system messages (framing, not
+-- searchable content) and zero-length rows (nothing to embed). Ordered
+-- oldest-first so a partial backfill always makes monotonic progress
+-- against `created_at` — easy for the UI to show "embedded up to YYYY-MM-DD".
+SELECT id, content
+FROM messages
+WHERE embedding IS NULL
+  AND role IN ('user', 'assistant', 'context')
+  AND content <> ''
+ORDER BY created_at ASC
+LIMIT $1;
+
+-- name: CountUnembeddedMessages :one
+-- Drives the "X / Y embedded" progress chip in the settings UI.
+-- Cheap even on millions of rows because the partial
+-- messages_unembedded_created_at index is exactly this predicate.
+SELECT COUNT(*)::INT FROM messages
+WHERE embedding IS NULL
+  AND role IN ('user', 'assistant', 'context')
+  AND content <> '';
+
+-- name: ListMessagesEmbeddedUnderDifferentModel :many
+-- When the user swaps embedders (different Model() than what's on
+-- existing rows), backfill re-embeds. Returns the rows that need
+-- re-embedding under the new model. Like ListUnembeddedMessages but
+-- the predicate is "wrong model" rather than "no embedding."
+SELECT id, content
+FROM messages
+WHERE embedding IS NOT NULL
+  AND embedding_model <> $1
+  AND role IN ('user', 'assistant', 'context')
+  AND content <> ''
+ORDER BY created_at ASC
+LIMIT $2;
+
+-- name: SearchMessagesByEmbedding :many
+-- Cosine-distance ranked search. Restricts to messages owned by the
+-- caller (via the context→conversation→user chain) and to rows
+-- embedded under the same model as the query vector — mixing models
+-- would compare vectors from different spaces and yield garbage.
+--
+-- `<=>` is pgvector's cosine-distance operator: 0 = identical
+-- direction, 2 = opposite. Smaller is better. We surface the raw
+-- distance so callers can threshold ("only return matches under 0.4").
+--
+-- pgvector's HNSW index handles ORDER BY ... LIMIT efficiently even
+-- with the WHERE filter, provided the filter is selective enough to
+-- not prune away most candidates. For a single user that's free; if
+-- we ever scale to many users per Reeve instance the index would
+-- need partitioning, but that's a future-us problem.
+SELECT m.id,
+       m.context_id,
+       m.parent_id,
+       m.role,
+       m.content,
+       m.created_at,
+       c.id   AS conversation_id,
+       c.title AS conversation_title,
+       (m.embedding <=> $1)::FLOAT8 AS distance
+FROM messages m
+JOIN contexts ctx ON ctx.id = m.context_id
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE c.user_id = $2
+  AND m.embedding_model = $3
+  AND m.embedding IS NOT NULL
+ORDER BY m.embedding <=> $1
+LIMIT $4;
