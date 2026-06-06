@@ -62,7 +62,11 @@ swift-test-l2-record:
 swift-test: swift-test-l1 swift-test-l2
 
 mac-build:
-	cd clients/reeved-mac && swift build --target ReeveMac
+	# --product (not --target) so SwiftPM runs the link step and
+	# writes .build/debug/ReeveMac. `--target` alone compiles
+	# without linking, leaving mac-app's cp step looking for a
+	# binary that was never produced.
+	cd clients/reeved-mac && swift build --product ReeveMac
 
 mac-run:
 	cd clients/reeved-mac && swift run ReeveMac
