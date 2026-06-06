@@ -241,6 +241,14 @@ LIMIT $2;
 -- embedded under the same model as the query vector — mixing models
 -- would compare vectors from different spaces and yield garbage.
 --
+-- Returns m.context_id alongside m.id so the memory plugin can drop
+-- hits that are still in the wire prefix. A conversation is a
+-- SEQUENCE of contexts: when compression fires, the old context is
+-- retired and a new one becomes active. The wire prefix is only ever
+-- built from the active context, so messages from old contexts —
+-- even in the SAME conversation as the caller — are exactly the
+-- "no longer in scope" content the memory plugin should surface.
+--
 -- `<=>` is pgvector's cosine-distance operator: 0 = identical
 -- direction, 2 = opposite. Smaller is better. We surface the raw
 -- distance so callers can threshold ("only return matches under 0.4").
@@ -256,7 +264,7 @@ SELECT m.id,
        m.role,
        m.content,
        m.created_at,
-       c.id   AS conversation_id,
+       ctx.conversation_id,
        c.title AS conversation_title,
        (m.embedding <=> $1)::FLOAT8 AS distance
 FROM messages m

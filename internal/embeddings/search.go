@@ -63,8 +63,15 @@ const (
 // is more similar; 0 = identical direction, 2 = opposite. Content
 // is the raw message text (no truncation here; the caller decides
 // how to summarize).
+//
+// ContextID + ConversationID travel together because a conversation
+// is a sequence of contexts (compression retires an old context and
+// opens a new one). The memory plugin uses ContextID to drop hits
+// already in the wire prefix; conversation_id is the human-level
+// grouping for display.
 type Hit struct {
 	MessageID         uuid.UUID
+	ContextID         uuid.UUID
 	ConversationID    uuid.UUID
 	ConversationTitle string
 	Role              string
@@ -129,6 +136,7 @@ func (s *Searcher) Search(ctx context.Context, query string, opts SearchOptions)
 		}
 		out = append(out, Hit{
 			MessageID:         r.ID,
+			ContextID:         r.ContextID,
 			ConversationID:    r.ConversationID,
 			ConversationTitle: title,
 			Role:              r.Role,

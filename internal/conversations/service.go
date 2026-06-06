@@ -68,6 +68,12 @@ type Service struct {
 	// service-instance so test fixtures don't leak elicitations
 	// across runs.
 	elicit *elicitBroker
+	// searcher, when non-nil, is attached to every ExecuteTool ctx
+	// so the memory plugin's search_history tool can run. nil when
+	// REEVE_EMBEDDER isn't configured — memory plugin then surfaces
+	// a clean "search not configured" error. Set via SetSearcher
+	// after construction so existing test fixtures stay one-line.
+	searcher plugins.Searcher
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -107,6 +113,15 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 // live broker.
 func (s *Service) ElicitBroker() *elicitBroker {
 	return s.elicit
+}
+
+// SetSearcher wires the daemon-level Searcher into the tool dispatch
+// path so the memory plugin's search_history tool can run. Pass nil
+// (or skip the call entirely) to leave search disabled — memory
+// plugin then surfaces a clean "search not configured" error to the
+// model instead of crashing. Idempotent; safe to call multiple times.
+func (s *Service) SetSearcher(searcher plugins.Searcher) {
+	s.searcher = searcher
 }
 
 // SetLangfuseEmitter installs the per-user Langfuse emitter the
@@ -1459,7 +1474,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID)
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher)
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)

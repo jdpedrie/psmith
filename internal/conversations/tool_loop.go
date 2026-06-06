@@ -101,8 +101,28 @@ func makeToolLoopSendFunc(
 	// the user response endpoint cross-checks ownership before
 	// delivering. Zero UUID when elicitation is disabled.
 	conversationID uuid.UUID,
+	// userID scopes per-tool work (e.g. memory plugin's semantic
+	// search) so plugins can never see another user's data. Always
+	// the conversation's owner; required.
+	userID uuid.UUID,
+	// activeContextID is the run's active context — the slice of
+	// the conversation currently in the wire prefix. The memory
+	// plugin uses it to drop hits that already are in scope, since
+	// a conversation is a sequence of contexts (compression
+	// retires the old one, opens a new one).
+	activeContextID uuid.UUID,
+	// searcher, when non-nil, is attached to the dispatch context
+	// so the memory plugin can answer search_history calls.
+	// REEVE_EMBEDDER unset → searcher is nil → search_history
+	// surfaces a clean "search not configured" error.
+	searcher plugins.Searcher,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
-	dispatch := buildToolDispatch(pipeline, resolver)
+	dispatch := buildToolDispatch(pipeline, resolver, searcher,
+		plugins.CallerInfo{
+			UserID:          userID,
+			ConversationID:  conversationID,
+			ActiveContextID: activeContextID,
+		})
 
 	return func(ctx context.Context) (<-chan providers.Chunk, error) {
 		out := make(chan providers.Chunk, 32)
@@ -311,9 +331,13 @@ func collectPipelineTools(pipeline plugins.Pipeline) []providers.ToolDef {
 // `resolver` is attached to every dispatch ctx so plugins that need
 // to resolve a user_model id (typically because they hold a
 // MODEL_PICKER config) can do so without a service dependency.
+// `searcher` + `caller` are attached the same way for the memory
+// plugin (and any future plugin needing per-user scoping).
 func buildToolDispatch(
 	pipeline plugins.Pipeline,
 	resolver plugins.ProviderResolver,
+	searcher plugins.Searcher,
+	caller plugins.CallerInfo,
 ) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
 	owners := map[string]plugins.ToolProvider{}
 	for _, pl := range pipeline {
@@ -336,7 +360,10 @@ func buildToolDispatch(
 		if !ok {
 			return plugins.ToolResult{}, fmt.Errorf("no plugin owns tool %q", name)
 		}
-		return owner.ExecuteTool(plugins.WithProviderResolver(ctx, resolver), name, input)
+		ctx = plugins.WithProviderResolver(ctx, resolver)
+		ctx = plugins.WithSearcher(ctx, searcher)
+		ctx = plugins.WithCallerInfo(ctx, caller)
+		return owner.ExecuteTool(ctx, name, input)
 	}
 }
 

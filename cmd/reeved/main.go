@@ -105,11 +105,13 @@ func run() error {
 	stopChunkCleanup := stream.StartChunkCleanup(ctx, queries, stream.CleanupConfig{}, slog.Default())
 	defer stopChunkCleanup()
 
-	// Embedding worker — opt-in via REEVE_EMBEDDER. When set, the
-	// daemon spawns a Worker that polls for unembedded messages and
-	// fills them in via the configured backend. Empty / unset means
-	// search stays disabled; messages don't get embeddings; no
-	// daemon dependency on Ollama (or whichever backend) being live.
+	// Embedding worker + searcher — opt-in via REEVE_EMBEDDER. When
+	// set, the daemon spawns a Worker that polls for unembedded
+	// messages and constructs a Searcher the conversations service
+	// hands to the memory plugin. Empty / unset means search stays
+	// disabled; memory plugin surfaces a "search not configured"
+	// error to the model; no daemon dependency on Ollama being live.
+	var embedSearcher *embeddings.Searcher
 	if name := os.Getenv("REEVE_EMBEDDER"); name != "" {
 		embedder, eerr := embeddings.Build(name, []byte(os.Getenv("REEVE_EMBEDDER_CONFIG")))
 		if eerr != nil {
@@ -117,6 +119,7 @@ func run() error {
 		}
 		w := embeddings.NewWorker(pool, embedder, embeddings.WorkerConfig{}, slog.Default())
 		go w.Run(ctx)
+		embedSearcher = embeddings.NewSearcher(pool, embedder)
 	}
 
 	// Load the master encryption key from REEVE_MASTER_KEY (or mint a
@@ -194,6 +197,9 @@ func run() error {
 	langfuseEmitter := langfuse.NewEmitter(slog.Default(), langfuse.EmitterConfig{})
 	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, fileStorage, slog.Default())
 	conversationsSvc.SetLangfuseEmitter(langfuseEmitter)
+	if embedSearcher != nil {
+		conversationsSvc.SetSearcher(embedSearcher)
+	}
 
 	// Single supervisor hook fans out to title generation +
 	// Langfuse emit. Both run in their own goroutines (see
