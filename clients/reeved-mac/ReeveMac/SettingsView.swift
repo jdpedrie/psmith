@@ -163,6 +163,8 @@ struct SettingsView: View {
             NotificationsMiddleColumn(onBack: onBack, selection: $notificationsSection)
         case .langfuse:
             LangfuseMiddleColumn(onBack: onBack)
+        case .embedder:
+            EmbedderMiddleColumn(onBack: onBack)
         }
     }
 
@@ -183,6 +185,8 @@ struct SettingsView: View {
             NotificationsSettingsView(section: notificationsSection)
         case .langfuse:
             LangfuseSettingsView(client: app.client)
+        case .embedder:
+            EmbedderSettingsView(client: app.client)
         }
     }
 }
@@ -211,6 +215,42 @@ private struct LangfuseMiddleColumn: View {
                     .foregroundStyle(.tertiary)
                     .textCase(.uppercase)
                 Text("Mirror assistant turns into Langfuse for traces, costs, and evaluation.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+}
+
+// MARK: - Embedder middle column
+
+/// Header-only middle column for the Embedder pane. Mirrors
+/// LangfuseMiddleColumn — no sub-sections, just a back chevron + the
+/// category name and a one-line description.
+private struct EmbedderMiddleColumn: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
+                Text("Embedder")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: paneHeaderHeight)
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Per-user search backend")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                Text("Pick the OpenAI-compatible embedder that powers message search and the memory plugin's recall tool.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

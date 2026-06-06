@@ -63,6 +63,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Langfuse", systemImage: "chart.line.uptrend.xyaxis")
                 }
+                NavigationLink {
+                    EmbedderDetailView()
+                } label: {
+                    categoryRow("Embedder", systemImage: "point.3.connected.trianglepath.dotted")
+                }
             }
         }
         .navigationTitle("Settings")
