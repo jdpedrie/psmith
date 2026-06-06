@@ -43,7 +43,7 @@ import (
 	_ "github.com/jdpedrie/reeve/internal/providers/openai"
 
 	// Embedder packages self-register in init() too.
-	_ "github.com/jdpedrie/reeve/internal/embeddings/ollama"
+	_ "github.com/jdpedrie/reeve/internal/embeddings/openai"
 )
 
 // stubServices is empty now that all five services have implementations.
