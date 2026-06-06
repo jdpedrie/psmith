@@ -32,6 +32,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/reeve/internal/embeddings"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/streamsvc"
 	"github.com/jdpedrie/reeve/plugins"
@@ -103,6 +104,20 @@ func run() error {
 	// graceful shutdown so the goroutine exits before main returns.
 	stopChunkCleanup := stream.StartChunkCleanup(ctx, queries, stream.CleanupConfig{}, slog.Default())
 	defer stopChunkCleanup()
+
+	// Embedding worker — opt-in via REEVE_EMBEDDER. When set, the
+	// daemon spawns a Worker that polls for unembedded messages and
+	// fills them in via the configured backend. Empty / unset means
+	// search stays disabled; messages don't get embeddings; no
+	// daemon dependency on Ollama (or whichever backend) being live.
+	if name := os.Getenv("REEVE_EMBEDDER"); name != "" {
+		embedder, eerr := embeddings.Build(name, []byte(os.Getenv("REEVE_EMBEDDER_CONFIG")))
+		if eerr != nil {
+			return fmt.Errorf("build embedder %q: %w", name, eerr)
+		}
+		w := embeddings.NewWorker(pool, embedder, embeddings.WorkerConfig{}, slog.Default())
+		go w.Run(ctx)
+	}
 
 	// Load the master encryption key from REEVE_MASTER_KEY (or mint a
 	// throwaway one when REEVE_DEV_AUTOKEY=1). When neither is set the
