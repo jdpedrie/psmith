@@ -13,21 +13,21 @@ import (
 )
 
 // Searcher embeds a query text and runs cosine-distance vector
-// search against `messages`. Pair of dependencies: an Embedder
-// (turns the text into a vector) and a pool (runs the query).
-// Tied together as one struct so plugins / RPC handlers can take a
-// single Searcher dep and not separately track an Embedder + Queries.
+// search against `messages`. The embedder is chosen per-call via the
+// configured Resolver (so two users on the same instance with
+// different configured embedders both work); the pool is the DB
+// handle.
 type Searcher struct {
 	q        *store.Queries
-	embedder Embedder
+	resolver Resolver
 }
 
-// NewSearcher wires the deps. The embedder must produce vectors of
-// the dimension matching `messages.embedding` (768 today); a
+// NewSearcher wires the deps. The Resolver's Build is responsible
+// for matching the dimension to `messages.embedding` (768 today); a
 // mismatch surfaces at Search time as an `embedder dim mismatch`
 // error.
-func NewSearcher(pool *pgxpool.Pool, embedder Embedder) *Searcher {
-	return &Searcher{q: store.New(pool), embedder: embedder}
+func NewSearcher(pool *pgxpool.Pool, resolver Resolver) *Searcher {
+	return &Searcher{q: store.New(pool), resolver: resolver}
 }
 
 // SearchOptions narrows the search. UserID is required (every
@@ -103,7 +103,11 @@ func (s *Searcher) Search(ctx context.Context, query string, opts SearchOptions)
 		limit = maxLimit
 	}
 
-	vecs, err := s.embedder.Embed(ctx, []string{query})
+	embedder, err := s.resolver.Resolve(ctx, opts.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("search: resolve embedder: %w", err)
+	}
+	vecs, err := embedder.Embed(ctx, []string{query})
 	if err != nil {
 		return nil, fmt.Errorf("search: embed query: %w", err)
 	}
@@ -111,7 +115,7 @@ func (s *Searcher) Search(ctx context.Context, query string, opts SearchOptions)
 		return nil, fmt.Errorf("search: embedder returned %d vectors", len(vecs))
 	}
 	v := pgvector.NewVector(vecs[0])
-	model := s.embedder.Model()
+	model := embedder.Model()
 	rows, err := s.q.SearchMessagesByEmbedding(ctx, store.SearchMessagesByEmbeddingParams{
 		Embedding:      &v,
 		UserID:         opts.UserID,

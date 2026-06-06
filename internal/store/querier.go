@@ -20,7 +20,8 @@ type Querier interface {
 	// Drives the "X / Y embedded" progress chip in the settings UI.
 	// Cheap even on millions of rows because the partial
 	// messages_unembedded_created_at index is exactly this predicate.
-	CountUnembeddedMessages(ctx context.Context) (int32, error)
+	// Scoped to a user so the chip means "MY unembedded messages."
+	CountUnembeddedMessages(ctx context.Context, userID uuid.UUID) (int32, error)
 	CountUsers(ctx context.Context) (int64, error)
 	// Used by the stream supervisor at materialization. Allows the assistant turn
 	// (or the compression_summary record) to be inserted with usage + cost
@@ -67,6 +68,7 @@ type Querier interface {
 	DeleteProfile(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DeleteUserEmbedderConfig(ctx context.Context, userID uuid.UUID) error
 	// Removes the entire row. Drops both credentials and the enabled
 	// toggle in one shot — for users who want to fully sever the
 	// integration rather than just disable it.
@@ -113,6 +115,10 @@ type Querier interface {
 	GetStreamRunByID(ctx context.Context, id uuid.UUID) (StreamRun, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	// Returns the user's embedder config row, if any. pgx ErrNoRows on
+	// missing — callers fall back to the daemon's REEVE_EMBEDDER env var
+	// (server-default mode).
+	GetUserEmbedderConfig(ctx context.Context, userID uuid.UUID) (UserEmbedderConfig, error)
 	// Returns the user's Langfuse config row, if any. pgx ErrNoRows on
 	// absent — service layer maps that to "tracing disabled" rather than
 	// a hard error so the GET RPC can return the default-disabled shape.
@@ -231,13 +237,19 @@ type Querier interface {
 	ListStreamRunsByConversation(ctx context.Context, conversationID uuid.UUID) ([]StreamRun, error)
 	// Backfill worker's hot path. Skips system messages (framing, not
 	// searchable content) and zero-length rows (nothing to embed). Ordered
-	// oldest-first so a partial backfill always makes monotonic progress
-	// against `created_at` — easy for the UI to show "embedded up to YYYY-MM-DD".
+	// by user_id (so the worker can group within a batch and dispatch one
+	// embedder call per user) then oldest-first within the user — partial
+	// backfill makes monotonic progress against `created_at` and the
+	// "embedded up to YYYY-MM-DD" chip stays accurate.
 	ListUnembeddedMessages(ctx context.Context, limit int32) ([]ListUnembeddedMessagesRow, error)
 	// IDs of users who haven't had the system profile templates seeded yet.
 	// Drives the server-startup backfill so existing users get the new templates
 	// on next restart without waiting for a login.
 	ListUnseededUserIDs(ctx context.Context) ([]uuid.UUID, error)
+	// The worker enumerates this to know which users have configured
+	// embedders. Returning all rows in one shot is fine — we'd never
+	// have more than a handful per Reeve instance.
+	ListUserEmbedderConfigs(ctx context.Context) ([]UserEmbedderConfig, error)
 	// Every existing row across all users. Used at server boot to prime
 	// the in-memory emitter cache so tracing works for the very first
 	// assistant turn after a restart, not just after the first
@@ -374,6 +386,10 @@ type Querier interface {
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
+	// Single-row upsert keyed by user_id. Conflict resolves by replacing
+	// every field (no merge semantics) — the UI sends the whole row each
+	// time and "clear my api_key" must work via an empty bytea.
+	UpsertUserEmbedderConfig(ctx context.Context, arg UpsertUserEmbedderConfigParams) (UserEmbedderConfig, error)
 	// Single-call full replace. The service layer reads the existing row
 	// (if any), merges request fields onto it, then calls this — same
 	// pattern as UpdateUserModel. secret_key_encrypted is the only

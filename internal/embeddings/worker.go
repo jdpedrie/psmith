@@ -2,8 +2,10 @@ package embeddings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,27 +14,37 @@ import (
 	"github.com/pgvector/pgvector-go"
 )
 
+// Resolver returns the Embedder configured for a given user, or
+// ErrNoEmbedderForUser if the user hasn't configured one. The Worker
+// uses it to pick the right embedder per message batch; the Searcher
+// uses it for per-query embedding. Caching is the resolver's
+// responsibility — Worker calls Resolve repeatedly during steady
+// state, so a non-cached implementation will hammer the DB.
+type Resolver interface {
+	Resolve(ctx context.Context, userID uuid.UUID) (Embedder, error)
+}
+
+// ErrNoEmbedderForUser is the sentinel a Resolver returns when the
+// user hasn't configured an embedder (no user_embedder_config row,
+// or the row has enabled=false). The worker treats these messages
+// as "skip for now" — they get picked up the next time around if
+// the user configures one.
+var ErrNoEmbedderForUser = errors.New("embeddings: no embedder configured for user")
+
 // Worker runs an embedding loop: it polls `messages` for unembedded
-// rows, hands a batch to the configured Embedder, and writes the
-// resulting vectors back via SetMessageEmbedding.
+// rows, groups them by owner, asks the Resolver for that owner's
+// Embedder, and writes the resulting vectors back.
 //
 // Polling-not-pushed by design — the partial
 // `messages_unembedded_created_at` index makes the lookup query free
-// even on a million-row catalogue, and a single-user dogfood deploy
-// doesn't need the complexity of an in-process queue + nudge channel
-// to absorb stream bursts. The worker idles between polls when there's
-// nothing to do.
-//
-// When the active embedder changes (a different Model()), the
-// model-swap path is symmetric: ListMessagesEmbeddedUnderDifferentModel
-// finds rows still on the old model and re-embeds them under the new
-// one. That's the same `embed-and-write-back` loop pointed at a
-// different query, so callers wire either via the same Worker by
-// changing what FetchBatch returns.
+// even on a million-row catalogue. The Resolver layer means each
+// user can choose their own embedder (real OpenAI for one,
+// nomic-embed-text via Ollama for another) and the worker still
+// fans out from a single goroutine.
 type Worker struct {
 	pool     *pgxpool.Pool
 	q        *store.Queries
-	embedder Embedder
+	resolver Resolver
 	cfg      WorkerConfig
 	log      *slog.Logger
 }
@@ -41,10 +53,11 @@ type Worker struct {
 // defaults so callers can NewWorker with `WorkerConfig{}` and get a
 // working loop.
 type WorkerConfig struct {
-	// BatchSize is the number of messages to embed per Ollama call.
-	// Default 32. Ollama batches efficiently up to a few hundred,
-	// but smaller batches give better cancellation latency and
-	// smoother memory.
+	// BatchSize is the number of messages fetched per poll. The
+	// worker groups them by user; each user-group is then handed
+	// to that user's embedder as one batched Embed call. Default
+	// 32. Larger batches give better throughput but worse
+	// cancellation latency; 32 is a good compromise on CPU.
 	BatchSize int
 
 	// IdleInterval is how long the loop sleeps when there are no
@@ -59,7 +72,7 @@ type WorkerConfig struct {
 
 // NewWorker wires the dependencies. Doesn't start the loop — call
 // Run(ctx) from a goroutine when you want it running.
-func NewWorker(pool *pgxpool.Pool, embedder Embedder, cfg WorkerConfig, log *slog.Logger) *Worker {
+func NewWorker(pool *pgxpool.Pool, resolver Resolver, cfg WorkerConfig, log *slog.Logger) *Worker {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 32
 	}
@@ -78,9 +91,9 @@ func NewWorker(pool *pgxpool.Pool, embedder Embedder, cfg WorkerConfig, log *slo
 	return &Worker{
 		pool:     pool,
 		q:        store.New(pool),
-		embedder: embedder,
+		resolver: resolver,
 		cfg:      cfg,
-		log:      log.With("component", "embeddings.worker", "model", embedder.Model()),
+		log:      log.With("component", "embeddings.worker"),
 	}
 }
 
@@ -100,9 +113,6 @@ func (w *Worker) Run(ctx context.Context) {
 		}
 		n, err := w.RunOnce(ctx)
 		if err != nil {
-			// Polling Postgres or talking to the embedder failed.
-			// Log and sleep; next iteration tries again. Don't
-			// propagate — the daemon stays up.
 			w.log.Warn("embedding batch failed", "error", err)
 			if !sleep(ctx, w.cfg.IdleInterval) {
 				return
@@ -115,8 +125,6 @@ func (w *Worker) Run(ctx context.Context) {
 			}
 			continue
 		}
-		// Made progress; brief yield before the next batch so a heavy
-		// backfill doesn't starve other goroutines on a small box.
 		if !sleep(ctx, w.cfg.BusyInterval) {
 			return
 		}
@@ -124,9 +132,9 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 // RunOnce processes a single batch and returns the count embedded.
-// Returns (0, nil) when there's nothing to do. Exported so tests can
-// drive the worker deterministically without managing the loop, and
-// so an admin RPC could one-shot it.
+// Returns (0, nil) when there's nothing to do or when no user in
+// the batch has an embedder configured. Exported so tests can drive
+// the worker deterministically without managing the loop.
 func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	rows, err := w.q.ListUnembeddedMessages(ctx, int32(w.cfg.BatchSize))
 	if err != nil {
@@ -135,20 +143,58 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	return w.embedBatch(ctx, rows)
+
+	// The query already ORDER BYs user_id, so consecutive rows
+	// with the same owner are adjacent. Walk the slice and
+	// flush per-owner groups as we cross boundaries — saves a
+	// second pass over the rows just to bucket them.
+	written := 0
+	var batch []store.ListUnembeddedMessagesRow
+	var currentUser uuid.UUID
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		got, err := w.embedUserBatch(ctx, currentUser, batch)
+		if err != nil {
+			if errors.Is(err, ErrNoEmbedderForUser) {
+				// Skip silently — this is the steady-state for
+				// users who haven't opted into embeddings yet.
+				return
+			}
+			w.log.Warn("embed batch for user failed; will retry next loop",
+				"user_id", currentUser, "size", len(batch), "error", err)
+			return
+		}
+		written += got
+	}
+	for _, r := range rows {
+		if r.UserID != currentUser {
+			flush()
+			currentUser = r.UserID
+			batch = batch[:0]
+		}
+		batch = append(batch, r)
+	}
+	flush()
+	return written, nil
 }
 
-// embedBatch is shared by RunOnce and the model-swap path. It receives
-// the (id, content) rows to embed, fires one Embedder call, writes
-// each vector back. Returns the count actually written — a partial
-// write-failure is surfaced as the count so the caller can tell how
-// far they got.
-func (w *Worker) embedBatch(ctx context.Context, rows []store.ListUnembeddedMessagesRow) (int, error) {
+// embedUserBatch is the per-owner inner loop. Resolves the user's
+// Embedder, calls it on the group's contents, writes results back.
+func (w *Worker) embedUserBatch(ctx context.Context, userID uuid.UUID, rows []store.ListUnembeddedMessagesRow) (int, error) {
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	embedder, err := w.resolver.Resolve(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
 	inputs := make([]string, len(rows))
 	for i, r := range rows {
 		inputs[i] = r.Content
 	}
-	vectors, err := w.embedder.Embed(ctx, inputs)
+	vectors, err := embedder.Embed(ctx, inputs)
 	if err != nil {
 		return 0, fmt.Errorf("embed: %w", err)
 	}
@@ -156,7 +202,7 @@ func (w *Worker) embedBatch(ctx context.Context, rows []store.ListUnembeddedMess
 		return 0, fmt.Errorf("embedder returned %d vectors for %d inputs",
 			len(vectors), len(rows))
 	}
-	model := w.embedder.Model()
+	model := embedder.Model()
 	now := time.Now().UTC()
 	written := 0
 	for i, r := range rows {
@@ -164,9 +210,6 @@ func (w *Worker) embedBatch(ctx context.Context, rows []store.ListUnembeddedMess
 		if err := w.writeOne(ctx, r.ID, v, model, now); err != nil {
 			w.log.Warn("embedding write failed; will retry on next pass",
 				"message_id", r.ID, "error", err)
-			// Don't bail the whole batch — log this one and keep
-			// going. The unembedded predicate means the failed row
-			// gets picked up again next loop.
 			continue
 		}
 		written++
@@ -174,9 +217,6 @@ func (w *Worker) embedBatch(ctx context.Context, rows []store.ListUnembeddedMess
 	return written, nil
 }
 
-// writeOne writes a single embedding triple. Split out so the caller
-// can swap in a transactional variant later; today the single-row
-// UPDATE is atomic and rollback-free already.
 func (w *Worker) writeOne(ctx context.Context, id uuid.UUID, v pgvector.Vector, model string, at time.Time) error {
 	mdl := model
 	t := at
@@ -202,4 +242,73 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	case <-t.C:
 		return true
 	}
+}
+
+// --- StaticResolver: the simple cache that wraps a single Embedder ---
+
+// StaticResolver returns the same Embedder for every user. Useful
+// when REEVE_EMBEDDER configures a server-wide default — every user
+// shares one embedder instance and there's no per-user lookup.
+// Tests use this too.
+type StaticResolver struct {
+	Embedder Embedder
+}
+
+func (s StaticResolver) Resolve(_ context.Context, _ uuid.UUID) (Embedder, error) {
+	if s.Embedder == nil {
+		return nil, ErrNoEmbedderForUser
+	}
+	return s.Embedder, nil
+}
+
+// --- CachingResolver: per-user with a build function + invalidation ---
+
+// CachingResolver builds embedders on demand and caches them per
+// user. Build is called once per user, and again only after a
+// matching Invalidate call (e.g. the user updated their config). All
+// the database / decrypt machinery lives in the Build closure;
+// CachingResolver itself is sync-primitive housekeeping.
+type CachingResolver struct {
+	// Build constructs the user's Embedder. Return
+	// (nil, ErrNoEmbedderForUser) when the user has no config —
+	// the cache skips populating in that case.
+	Build func(ctx context.Context, userID uuid.UUID) (Embedder, error)
+
+	mu    sync.Mutex
+	cache map[uuid.UUID]Embedder
+}
+
+func (c *CachingResolver) Resolve(ctx context.Context, userID uuid.UUID) (Embedder, error) {
+	c.mu.Lock()
+	if c.cache != nil {
+		if e, ok := c.cache[userID]; ok {
+			c.mu.Unlock()
+			return e, nil
+		}
+	}
+	c.mu.Unlock()
+
+	// Build outside the lock so a slow upstream (Ollama down,
+	// real OpenAI slow) doesn't block other users' Resolves.
+	e, err := c.Build(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cache == nil {
+		c.cache = map[uuid.UUID]Embedder{}
+	}
+	c.cache[userID] = e
+	return e, nil
+}
+
+// Invalidate drops the cached Embedder for a user — call from the
+// SetEmbedderConfig RPC handler so the next batch picks up the new
+// config without a process restart.
+func (c *CachingResolver) Invalidate(userID uuid.UUID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.cache, userID)
 }

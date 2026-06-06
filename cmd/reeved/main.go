@@ -117,9 +117,11 @@ func run() error {
 		if eerr != nil {
 			return fmt.Errorf("build embedder %q: %w", name, eerr)
 		}
-		w := embeddings.NewWorker(pool, embedder, embeddings.WorkerConfig{}, slog.Default())
+		resolver := embeddings.StaticResolver{Embedder: embedder}
+		w := embeddings.NewWorker(pool, resolver,
+			embeddings.WorkerConfig{}, slog.Default())
 		go w.Run(ctx)
-		embedSearcher = embeddings.NewSearcher(pool, embedder)
+		embedSearcher = embeddings.NewSearcher(pool, resolver)
 	}
 
 	// Load the master encryption key from REEVE_MASTER_KEY (or mint a

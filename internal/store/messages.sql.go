@@ -31,17 +31,21 @@ func (q *Queries) ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
 }
 
 const countUnembeddedMessages = `-- name: CountUnembeddedMessages :one
-SELECT COUNT(*)::INT FROM messages
-WHERE embedding IS NULL
-  AND role IN ('user', 'assistant', 'context')
-  AND content <> ''
+SELECT COUNT(*)::INT FROM messages m
+JOIN contexts ctx ON ctx.id = m.context_id
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE m.embedding IS NULL
+  AND m.role IN ('user', 'assistant', 'context')
+  AND m.content <> ''
+  AND c.user_id = $1
 `
 
 // Drives the "X / Y embedded" progress chip in the settings UI.
 // Cheap even on millions of rows because the partial
 // messages_unembedded_created_at index is exactly this predicate.
-func (q *Queries) CountUnembeddedMessages(ctx context.Context) (int32, error) {
-	row := q.db.QueryRow(ctx, countUnembeddedMessages)
+// Scoped to a user so the chip means "MY unembedded messages."
+func (q *Queries) CountUnembeddedMessages(ctx context.Context, userID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countUnembeddedMessages, userID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -808,24 +812,29 @@ func (q *Queries) ListMessagesEmbeddedUnderDifferentModel(ctx context.Context, a
 }
 
 const listUnembeddedMessages = `-- name: ListUnembeddedMessages :many
-SELECT id, content
-FROM messages
-WHERE embedding IS NULL
-  AND role IN ('user', 'assistant', 'context')
-  AND content <> ''
-ORDER BY created_at ASC
+SELECT m.id, m.content, c.user_id
+FROM messages m
+JOIN contexts ctx ON ctx.id = m.context_id
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE m.embedding IS NULL
+  AND m.role IN ('user', 'assistant', 'context')
+  AND m.content <> ''
+ORDER BY c.user_id, m.created_at ASC
 LIMIT $1
 `
 
 type ListUnembeddedMessagesRow struct {
 	ID      uuid.UUID
 	Content string
+	UserID  uuid.UUID
 }
 
 // Backfill worker's hot path. Skips system messages (framing, not
 // searchable content) and zero-length rows (nothing to embed). Ordered
-// oldest-first so a partial backfill always makes monotonic progress
-// against `created_at` — easy for the UI to show "embedded up to YYYY-MM-DD".
+// by user_id (so the worker can group within a batch and dispatch one
+// embedder call per user) then oldest-first within the user — partial
+// backfill makes monotonic progress against `created_at` and the
+// "embedded up to YYYY-MM-DD" chip stays accurate.
 func (q *Queries) ListUnembeddedMessages(ctx context.Context, limit int32) ([]ListUnembeddedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listUnembeddedMessages, limit)
 	if err != nil {
@@ -835,7 +844,7 @@ func (q *Queries) ListUnembeddedMessages(ctx context.Context, limit int32) ([]Li
 	var items []ListUnembeddedMessagesRow
 	for rows.Next() {
 		var i ListUnembeddedMessagesRow
-		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+		if err := rows.Scan(&i.ID, &i.Content, &i.UserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

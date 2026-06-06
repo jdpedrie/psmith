@@ -88,7 +88,7 @@ func TestSearch_FindsRelevantHits(t *testing.T) {
 		}
 	}
 
-	s := embeddings.NewSearcher(f.pool, directionalStub{})
+	s := embeddings.NewSearcher(f.pool, embeddings.StaticResolver{Embedder: directionalStub{}})
 
 	hits, err := s.Search(context.Background(), "tell me about foxes",
 		embeddings.SearchOptions{UserID: f.userID, Limit: 5})
@@ -111,7 +111,7 @@ func TestSearch_FindsRelevantHits(t *testing.T) {
 func TestSearch_EmptyQueryReturnsNil(t *testing.T) {
 	t.Parallel()
 	f, _, _ := newWorkerFixture(t, []string{"x"})
-	s := embeddings.NewSearcher(f.pool, directionalStub{})
+	s := embeddings.NewSearcher(f.pool, embeddings.StaticResolver{Embedder: directionalStub{}})
 	got, err := s.Search(context.Background(), "   ",
 		embeddings.SearchOptions{UserID: f.userID, Limit: 5})
 	if err != nil {
@@ -125,7 +125,7 @@ func TestSearch_EmptyQueryReturnsNil(t *testing.T) {
 func TestSearch_RequiresUserID(t *testing.T) {
 	t.Parallel()
 	f, _, _ := newWorkerFixture(t, []string{"x"})
-	s := embeddings.NewSearcher(f.pool, directionalStub{})
+	s := embeddings.NewSearcher(f.pool, embeddings.StaticResolver{Embedder: directionalStub{}})
 	_, err := s.Search(context.Background(), "anything",
 		embeddings.SearchOptions{Limit: 5})
 	if err == nil || !contains(err.Error(), "UserID is required") {
@@ -154,7 +154,7 @@ func TestSearch_MaxDistanceFilters(t *testing.T) {
 			t.Fatalf("seed [%d]: %v", i, err)
 		}
 	}
-	s := embeddings.NewSearcher(f.pool, directionalStub{})
+	s := embeddings.NewSearcher(f.pool, embeddings.StaticResolver{Embedder: directionalStub{}})
 
 	hits, err := s.Search(context.Background(), "fox query",
 		embeddings.SearchOptions{
@@ -173,7 +173,7 @@ func TestSearch_MaxDistanceFilters(t *testing.T) {
 func TestSearch_LimitClampedAtMax(t *testing.T) {
 	t.Parallel()
 	f, _, _ := newWorkerFixture(t, nil)
-	s := embeddings.NewSearcher(f.pool, directionalStub{})
+	s := embeddings.NewSearcher(f.pool, embeddings.StaticResolver{Embedder: directionalStub{}})
 	// Request 9999 hits; should not error or hang. Empty result is
 	// fine — the assertion is that the clamp doesn't crash the path.
 	hits, err := s.Search(context.Background(), "anything",

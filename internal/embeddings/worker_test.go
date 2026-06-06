@@ -109,7 +109,7 @@ func newWorkerFixture(t *testing.T, contents []string) (*workerFixture, *embeddi
 	}
 
 	stub := newStub("stub-v1")
-	w := embeddings.NewWorker(pool, stub, embeddings.WorkerConfig{
+	w := embeddings.NewWorker(pool, embeddings.StaticResolver{Embedder: stub}, embeddings.WorkerConfig{
 		BatchSize:    16,
 		IdleInterval: 20 * time.Millisecond,
 		BusyInterval: 1 * time.Millisecond,
@@ -164,23 +164,32 @@ func TestWorker_RunOnceNoopWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestWorker_EmbedderErrorPropagates_LoopRecovers(t *testing.T) {
+func TestWorker_EmbedderErrorRecovers_RowsStayUnembedded(t *testing.T) {
 	t.Parallel()
 	f, w, stub := newWorkerFixture(t, []string{"alpha", "beta"})
 
-	// First call fails.
+	// First call fails inside the per-user batch — Worker logs it
+	// and moves on. RunOnce doesn't surface a hard error because
+	// other users' batches might still have succeeded; what
+	// matters is that the failed rows stay in the unembedded
+	// queue for next-loop retry.
 	stub.failNext.Store(true)
-	if _, err := w.RunOnce(context.Background()); err == nil {
-		t.Error("want error on induced failure")
+	if _, err := w.RunOnce(context.Background()); err != nil {
+		t.Errorf("RunOnce should swallow per-user embed errors, got %v", err)
+	}
+	remaining, err := f.q.ListUnembeddedMessages(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("ListUnembedded: %v", err)
+	}
+	if len(remaining) != 2 {
+		t.Errorf("failed embed left %d rows; want 2 (both still pending)", len(remaining))
 	}
 
-	// Second call succeeds — rows are still unembedded so backfill
-	// catches them up.
+	// Second call succeeds.
 	if got, err := w.RunOnce(context.Background()); err != nil || got != 2 {
 		t.Errorf("recovery RunOnce got=%d err=%v want got=2 err=nil", got, err)
 	}
-
-	remaining, _ := f.q.ListUnembeddedMessages(context.Background(), 100)
+	remaining, _ = f.q.ListUnembeddedMessages(context.Background(), 100)
 	if len(remaining) != 0 {
 		t.Errorf("retry left %d unembedded", len(remaining))
 	}
@@ -215,9 +224,8 @@ func TestWorker_BatchSizeRespected(t *testing.T) {
 	// sees the fixture's seeded rows. (Each testutil.Pool(t) is a
 	// fresh isolated DB — passing the fixture's pool keeps the data
 	// visible to both workers.)
-	w := embeddings.NewWorker(f.pool, stub, embeddings.WorkerConfig{
-		BatchSize: 2,
-	}, nil)
+	w := embeddings.NewWorker(f.pool, embeddings.StaticResolver{Embedder: stub},
+		embeddings.WorkerConfig{BatchSize: 2}, nil)
 
 	// First RunOnce → 2 embedded.
 	n, err := w.RunOnce(context.Background())

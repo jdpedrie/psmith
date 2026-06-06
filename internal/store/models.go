@@ -211,6 +211,16 @@ type User struct {
 	SystemProfilesSeeded bool
 }
 
+type UserEmbedderConfig struct {
+	UserID          uuid.UUID
+	Type            string
+	Config          []byte
+	ApiKeyEncrypted []byte
+	Enabled         bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type UserLangfuseConfig struct {
 	UserID             uuid.UUID
 	Host               string

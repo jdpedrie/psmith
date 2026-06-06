@@ -202,24 +202,32 @@ WHERE id = $1;
 -- name: ListUnembeddedMessages :many
 -- Backfill worker's hot path. Skips system messages (framing, not
 -- searchable content) and zero-length rows (nothing to embed). Ordered
--- oldest-first so a partial backfill always makes monotonic progress
--- against `created_at` — easy for the UI to show "embedded up to YYYY-MM-DD".
-SELECT id, content
-FROM messages
-WHERE embedding IS NULL
-  AND role IN ('user', 'assistant', 'context')
-  AND content <> ''
-ORDER BY created_at ASC
+-- by user_id (so the worker can group within a batch and dispatch one
+-- embedder call per user) then oldest-first within the user — partial
+-- backfill makes monotonic progress against `created_at` and the
+-- "embedded up to YYYY-MM-DD" chip stays accurate.
+SELECT m.id, m.content, c.user_id
+FROM messages m
+JOIN contexts ctx ON ctx.id = m.context_id
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE m.embedding IS NULL
+  AND m.role IN ('user', 'assistant', 'context')
+  AND m.content <> ''
+ORDER BY c.user_id, m.created_at ASC
 LIMIT $1;
 
 -- name: CountUnembeddedMessages :one
 -- Drives the "X / Y embedded" progress chip in the settings UI.
 -- Cheap even on millions of rows because the partial
 -- messages_unembedded_created_at index is exactly this predicate.
-SELECT COUNT(*)::INT FROM messages
-WHERE embedding IS NULL
-  AND role IN ('user', 'assistant', 'context')
-  AND content <> '';
+-- Scoped to a user so the chip means "MY unembedded messages."
+SELECT COUNT(*)::INT FROM messages m
+JOIN contexts ctx ON ctx.id = m.context_id
+JOIN conversations c ON c.id = ctx.conversation_id
+WHERE m.embedding IS NULL
+  AND m.role IN ('user', 'assistant', 'context')
+  AND m.content <> ''
+  AND c.user_id = $1;
 
 -- name: ListMessagesEmbeddedUnderDifferentModel :many
 -- When the user swaps embedders (different Model() than what's on

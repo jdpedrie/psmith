@@ -343,7 +343,7 @@ func TestListUnembeddedMessages_SkipsSystemAndEmpty(t *testing.T) {
 		}
 	}
 
-	count, err := f.q.CountUnembeddedMessages(ctx)
+	count, err := f.q.CountUnembeddedMessages(ctx, f.userID)
 	if err != nil {
 		t.Fatalf("CountUnembeddedMessages: %v", err)
 	}
