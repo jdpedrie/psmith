@@ -116,6 +116,12 @@ public final class StreamHub {
     private var tasks: [String /* runID */: Task<Void, Never>] = [:]
     private var terminalHandlers: [String /* conversationID */: (ReeveStreamRun) async -> Void] = [:]
 
+    /// Optional device-tool dispatcher. When non-nil, ChunkDeviceToolUse
+    /// events forward to it for native-API execution + result POST.
+    /// nil = the hub silently ignores device-tool chunks (the model
+    /// will see the call time out server-side, ~60s).
+    public var deviceToolDispatcher: DeviceToolDispatcher?
+
     private let subscriber: StreamSubscriber
 
     /// Backing store for `unseenConversationIDs`. Production passes
@@ -349,6 +355,15 @@ public final class StreamHub {
                     schemaJSON: info.schemaJSON
                 ))
             }
+        case .deviceToolUse:
+            // Forward to the device-tool dispatcher (if wired).
+            // The dispatcher runs the matching handler off-actor
+            // and POSTs the result back via the broker — no hub-
+            // visible state change. ChunkDeviceToolUse is purely
+            // a "tell the device to do work" cue; the result
+            // arrives as a normal ChunkToolResult in the next
+            // round, which the existing case handles.
+            deviceToolDispatcher?.handleChunk(c, conversationID: conversationID)
         default:
             break
         }

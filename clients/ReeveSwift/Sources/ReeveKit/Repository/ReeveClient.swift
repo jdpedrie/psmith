@@ -12,6 +12,7 @@ public final class ReeveClient: Sendable {
     public let files: FilesRepository
     public let langfuse: LangfuseRepository
     public let embedder: EmbedderRepository
+    public let deviceTools: DeviceToolsRepository
     public let events: EventsSubscriber
 
     /// Optional on-device read-through cache. When non-nil,
@@ -80,6 +81,11 @@ public final class ReeveClient: Sendable {
         )
         self.embedder = EmbedderRepository(
             client: Reeve_V1_EmbedderServiceClient(client: protocolClient)
+        )
+        self.deviceTools = DeviceToolsRepository(
+            client: Reeve_V1_DeviceToolsServiceClient(client: protocolClient),
+            host: host,
+            tokenStore: tokenStore
         )
         self.events = EventsSubscriber(
             client: Reeve_V1_EventsServiceClient(client: protocolClient)

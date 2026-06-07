@@ -53,6 +53,15 @@ public final class AppModel {
     /// goes out the moment the server is reachable again.
     public let outboundQueue: OutboundQueue
 
+    /// Device-tools dispatcher — owns the per-platform handler
+    /// registry, registers the supported set with the server on
+    /// bootstrap, and routes incoming ChunkDeviceToolUse events to
+    /// the matching handler. Always present (cheap to hold); the
+    /// platform-specific bootstrap code is what actually
+    /// registers handlers for Calendar / Obsidian / etc. into
+    /// `DeviceToolRegistry.shared`.
+    public let deviceTools: DeviceToolDispatcher
+
     public init(
         host: URL,
         tokenStore: TokenStore,
@@ -86,8 +95,15 @@ public final class AppModel {
         self.profiles = ProfilesViewModel(client: c)
         self.outboundQueue = OutboundQueue()
         self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
-        self.streamHub = StreamHub(subscriber: c.streams)
+        let hub = StreamHub(subscriber: c.streams)
+        self.streamHub = hub
         self.elicitations = ElicitationsRepository(host: host, tokenStore: tokenStore)
+        let dispatcher = DeviceToolDispatcher(client: c)
+        self.deviceTools = dispatcher
+        // Hook the hub's chunk router to the dispatcher so
+        // ChunkDeviceToolUse events flow through native handlers
+        // without each capability module wiring its own observer.
+        hub.deviceToolDispatcher = dispatcher
     }
 
     /// Builds a ReeveCache whose store URL embeds the account id.
@@ -153,6 +169,17 @@ public final class AppModel {
         // interstitial would persist forever for fresh installs.
         if authState.phase == .resolving {
             authState.clear()
+        }
+        // Tell the server which device tools this client can fulfill,
+        // once per session. Runs after the auth restore so the
+        // authenticated DeviceToolsService.RegisterCapabilities call
+        // has a Bearer token. Best-effort: failure logs and the
+        // device-tool catalog stays unfiltered server-side, which
+        // means the model may try to call a tool the device can't
+        // run — the dispatcher reports "no handler" and the model
+        // sees a clean tool error.
+        if authState.phase == .signedIn {
+            await deviceTools.registerWithServer()
         }
         // Register the drain hook BEFORE starting the monitor so
         // the first probe of the session — which can fire online

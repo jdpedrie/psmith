@@ -115,6 +115,30 @@ public struct ReeveChunk: Sendable, Hashable {
         public let message: String
         public let schemaJSON: Data
     }
+
+    /// Decoded `{call_id, tool_name, input, issued_at}` payload for a
+    /// `ChunkDeviceToolUse`. Nil when this isn't a device-tool chunk
+    /// or the payload is malformed. `inputJSON` carries the input
+    /// bytes verbatim so the per-tool handler can decode them with
+    /// its own Codable schema.
+    public var deviceToolUseInfo: DeviceToolUseInfo? {
+        guard type == .deviceToolUse else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let callID = obj["call_id"] as? String,
+              let toolName = obj["tool_name"] as? String
+        else { return nil }
+        var inputData = Data()
+        if let input = obj["input"] {
+            inputData = (try? JSONSerialization.data(withJSONObject: input)) ?? Data()
+        }
+        return DeviceToolUseInfo(callID: callID, toolName: toolName, inputJSON: inputData)
+    }
+
+    public struct DeviceToolUseInfo: Sendable, Hashable {
+        public let callID: String
+        public let toolName: String
+        public let inputJSON: Data
+    }
 }
 
 public enum ReeveChunkType: Sendable, Hashable {
@@ -122,6 +146,7 @@ public enum ReeveChunkType: Sendable, Hashable {
     case toolUseStart, toolUseDelta, toolUseEnd, toolResult
     case thinkingSignature
     case elicit
+    case deviceToolUse
     case error, done, usage, unknown
 
     init(from p: Reeve_V1_ChunkType) {
@@ -134,6 +159,7 @@ public enum ReeveChunkType: Sendable, Hashable {
         case .toolResult: self = .toolResult
         case .thinkingSignature: self = .thinkingSignature
         case .elicit: self = .elicit
+        case .deviceToolUse: self = .deviceToolUse
         case .error: self = .error
         case .done: self = .done
         case .usage: self = .usage
