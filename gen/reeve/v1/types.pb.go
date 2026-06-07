@@ -477,6 +477,17 @@ const (
 	// which unblocks the waiting tool. Not persisted as message content
 	// — purely an in-flight UI cue.
 	ChunkType_CHUNK_TYPE_ELICIT ChunkType = 11
+	// Synthetic — emitted by the conversations-side tool loop when the
+	// model calls a device tool (calendar_list_events, obsidian_read_note,
+	// …). Payload is JSON
+	// `{"call_id":"<uuid>","tool_name":"...","input":{...}}`.
+	// The connected client executes the tool via its native APIs
+	// (EventKit / Contacts / file bookmarks) and POSTs the result to
+	// `/conversations/{id}/device-tools/{call_id}/respond`, which
+	// unblocks the waiting server-side tool dispatch. Not persisted as
+	// message content; the resulting `tool_result` chunk that follows
+	// is the message-visible row.
+	ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE ChunkType = 12
 )
 
 // Enum value maps for ChunkType.
@@ -494,6 +505,7 @@ var (
 		9:  "CHUNK_TYPE_TOOL_RESULT",
 		10: "CHUNK_TYPE_THINKING_SIGNATURE",
 		11: "CHUNK_TYPE_ELICIT",
+		12: "CHUNK_TYPE_DEVICE_TOOL_USE",
 	}
 	ChunkType_value = map[string]int32{
 		"CHUNK_TYPE_UNSPECIFIED":        0,
@@ -508,6 +520,7 @@ var (
 		"CHUNK_TYPE_TOOL_RESULT":        9,
 		"CHUNK_TYPE_THINKING_SIGNATURE": 10,
 		"CHUNK_TYPE_ELICIT":             11,
+		"CHUNK_TYPE_DEVICE_TOOL_USE":    12,
 	}
 )
 
@@ -4541,7 +4554,7 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x10StreamRunPurpose\x12\"\n" +
 	"\x1eSTREAM_RUN_PURPOSE_UNSPECIFIED\x10\x00\x12)\n" +
 	"%STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE\x10\x01\x12\"\n" +
-	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xd3\x02\n" +
+	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xf3\x02\n" +
 	"\tChunkType\x12\x1a\n" +
 	"\x16CHUNK_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CHUNK_TYPE_TEXT_DELTA\x10\x01\x12\x1d\n" +
@@ -4555,7 +4568,8 @@ const file_reeve_v1_types_proto_rawDesc = "" +
 	"\x16CHUNK_TYPE_TOOL_RESULT\x10\t\x12!\n" +
 	"\x1dCHUNK_TYPE_THINKING_SIGNATURE\x10\n" +
 	"\x12\x15\n" +
-	"\x11CHUNK_TYPE_ELICIT\x10\v*\xd0\x01\n" +
+	"\x11CHUNK_TYPE_ELICIT\x10\v\x12\x1e\n" +
+	"\x1aCHUNK_TYPE_DEVICE_TOOL_USE\x10\f*\xd0\x01\n" +
 	"\rDeviceFactKey\x12\x1f\n" +
 	"\x1bDEVICE_FACT_KEY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEVICE_FACT_KEY_LOCALE\x10\x01\x12\x1c\n" +

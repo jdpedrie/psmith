@@ -776,6 +776,17 @@ enum ChunkType {
   // which unblocks the waiting tool. Not persisted as message content
   // — purely an in-flight UI cue.
   CHUNK_TYPE_ELICIT = 11;
+  // Synthetic — emitted by the conversations-side tool loop when the
+  // model calls a device tool (calendar_list_events, obsidian_read_note,
+  // …). Payload is JSON
+  // `{"call_id":"<uuid>","tool_name":"...","input":{...}}`.
+  // The connected client executes the tool via its native APIs
+  // (EventKit / Contacts / file bookmarks) and POSTs the result to
+  // `/conversations/{id}/device-tools/{call_id}/respond`, which
+  // unblocks the waiting server-side tool dispatch. Not persisted as
+  // message content; the resulting `tool_result` chunk that follows
+  // is the message-visible row.
+  CHUNK_TYPE_DEVICE_TOOL_USE = 12;
 }
 
 message Chunk {
