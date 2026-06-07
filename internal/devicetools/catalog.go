@@ -111,51 +111,14 @@ var catalog = []Tool{
 		DefaultEnabled:      false,
 	},
 
-	{
-		Name:                "obsidian_list_notes",
-		DisplayName:         "List Obsidian notes",
-		Category:            "Obsidian",
-		Description:         "List markdown notes in the user's Obsidian vault. Returns relative paths; use obsidian_read_note to fetch contents.",
-		InputSchema:         `{"type":"object","properties":{"folder":{"type":"string","description":"Optional vault-relative folder to scope to."},"recursive":{"type":"boolean","description":"Recurse into subfolders. Default true."}}}`,
-		RequiredPermissions: []string{"files.bookmark:obsidian_vault"},
-		DefaultEnabled:      true,
-	},
-	{
-		Name:                "obsidian_read_note",
-		DisplayName:         "Read Obsidian note",
-		Category:            "Obsidian",
-		Description:         "Read the full contents of a note in the user's Obsidian vault by its vault-relative path.",
-		InputSchema:         `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`,
-		RequiredPermissions: []string{"files.bookmark:obsidian_vault"},
-		DefaultEnabled:      true,
-	},
-	{
-		Name:                "obsidian_append_note",
-		DisplayName:         "Append to Obsidian note",
-		Category:            "Obsidian",
-		Description:         "Append content to the end of an existing note, with a blank line separator. Use for incremental capture (daily logs, scratch notes).",
-		InputSchema:         `{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`,
-		RequiredPermissions: []string{"files.bookmark:obsidian_vault"},
-		DefaultEnabled:      false,
-	},
-	{
-		Name:                "obsidian_create_note",
-		DisplayName:         "Create Obsidian note",
-		Category:            "Obsidian",
-		Description:         "Create a new note at the given vault-relative path. Fails if the file already exists unless overwrite is true.",
-		InputSchema:         `{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"overwrite":{"type":"boolean","description":"Default false."}},"required":["path","content"]}`,
-		RequiredPermissions: []string{"files.bookmark:obsidian_vault"},
-		DefaultEnabled:      false,
-	},
-	{
-		Name:                "obsidian_search_text",
-		DisplayName:         "Search Obsidian vault",
-		Category:            "Obsidian",
-		Description:         "Substring search across the user's Obsidian vault. Returns up to `limit` matches with the note path and a short context excerpt.",
-		InputSchema:         `{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":50,"description":"Max matches. Default 10."}},"required":["query"]}`,
-		RequiredPermissions: []string{"files.bookmark:obsidian_vault"},
-		DefaultEnabled:      true,
-	},
+	// Obsidian intentionally NOT in this catalog — it gets its own
+	// plugin (`obsidian`) with its own tool catalog and per-vault
+	// bookmark management. The shared device-tool broker + dispatch
+	// path still handle wire routing; only the catalog and
+	// per-plugin config are separate. Keeping app_tools focused on
+	// the bundled Apple frameworks (EventKit / Contacts / Health /
+	// generic Files) means each surface gets its own settings page
+	// rather than one massive "every tool" toggle list.
 }
 
 // All returns a name-sorted copy of the catalog. Safe for callers

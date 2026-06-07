@@ -46,6 +46,12 @@ targets:
         # user toggles it on; iOS requires a usage-description
         # string for the prompt to fire at all.
         NSLocationWhenInUseUsageDescription: "Your approximate location can be sent with your messages so models give locale-aware answers (e.g. 'restaurants near me')."
+        # Device tools — EventKit (calendar + reminders). Required
+        # for the model to read/write events via the app_tools
+        # plugin. Prompt fires only when a calendar tool is enabled
+        # in the active profile and the model first invokes it.
+        NSCalendarsUsageDescription: "Reeve can read and write calendar events when the model invokes the calendar tools you've enabled in your profile."
+        NSRemindersUsageDescription: "Reeve can read and create reminders when the model invokes the reminders tools you've enabled in your profile."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS

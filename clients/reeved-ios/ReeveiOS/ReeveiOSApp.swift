@@ -12,6 +12,16 @@ import ReeveUI
 /// "log out → change server → sign back in" doesn't need a relaunch.
 @main
 struct ReeveiOSApp: App {
+    init() {
+        // Device-tool handlers are registered once per process,
+        // before any AppModel boots. Each capability module's
+        // `register()` only seeds DeviceToolRegistry.shared —
+        // EKEventStore + permission prompts stay lazy until the
+        // model actually calls one of these tools.
+        CalendarTools.register()
+        RemindersTools.register()
+    }
+
     @State private var accountManager = AccountManager()
     @State private var urlStore = ServerURLStore.shared
     @State private var themeStore = ThemeStore()

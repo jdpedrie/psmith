@@ -189,14 +189,13 @@ Each handler:
   - `reminders_list(list?, completed?)`
   - `reminders_create({title, due_date?, list?, notes?})`
   - `reminders_complete(id)`
-- **Obsidian** (Files-backed, iOS + Mac)
-  - `obsidian_list_notes(folder?, recursive?)`
-  - `obsidian_read_note(path)`
-  - `obsidian_append_note(path, content)`
-  - `obsidian_create_note(path, content, overwrite?)`
-  - `obsidian_search_text(query, limit?)` — simple substring; if it
-    proves valuable, swap to a Spotlight-backed implementation or
-    an embedding pass against the vault.
+**Note**: Obsidian gets its **own** plugin (`obsidian`) rather than
+riding in `app_tools`. Same device-tool wire mechanism; separate
+catalog + separate per-vault settings (which folder is bookmarked,
+which subfolder is the "scratch" target for `append`, etc.). The
+plugin still uses the shared `DeviceToolBroker` so the
+infrastructure isn't duplicated — only the catalog + the per-plugin
+config UI live separately.
 
 ### Phase 2 (after the bridge proves itself)
 
