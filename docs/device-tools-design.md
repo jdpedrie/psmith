@@ -97,38 +97,53 @@ multi-device scenario (iOS + Mac both connected) is resolved by
 preferring whichever client most recently announced support — the
 profile can override via a per-tool routing config.
 
-## Server-side: `device_tools` plugin
+## Server-side: `app_tools` plugin
 
-One server-side plugin, single source of truth for the catalog.
-Each entry is a hardcoded `ToolDef` plus a "this should be available
-when the client says it supports {name}" gate.
+One server-side plugin — named `app_tools` because "apps on your
+device the model can talk to" reads more naturally to users than
+"device tools." Single source of truth for the catalog; per-profile
+enablement falls out of the existing plugin-config merge chain
+(parent profile → child profile → conversation override) for free.
 
 ```go
-// plugins/device_tools.go
-type deviceTools struct {
-    cfg deviceToolsConfig
+// plugins/app_tools.go
+type appTools struct {
+    cfg appToolsConfig    // Enabled: map[string]bool keyed by tool name
 }
 
-func (p *deviceTools) Tools() []ToolDef {
-    // Filtered by the active CallerInfo's supported_tool_names —
-    // attached to ctx by the conversations service the same way
-    // Searcher / ProviderResolver are.
+func (p *appTools) ConfigFields() []ConfigField {
+    // One boolean per catalog tool. UI renders a per-tool toggle;
+    // user picks which tools their model can call in this profile.
 }
 
-func (p *deviceTools) ExecuteTool(ctx, name, input) (ToolResult, error) {
-    broker := devicetools.BrokerFrom(ctx)        // typed handle, like SearcherFrom
-    return broker.Invoke(ctx, callID, name, input)
+func (p *appTools) Tools() []ToolDef {
+    // Returns (catalog ∩ enabled). The connected-client filter
+    // happens via ToolsForClient at the conversations-side
+    // dispatch point.
+}
+
+func (p *appTools) ExecuteTool(ctx, name, input) (ToolResult, error) {
+    broker := DeviceToolBrokerFrom(ctx)   // typed handle, like SearcherFrom
+    return broker.Invoke(ctx, name, input)
 }
 ```
 
-`broker.Invoke` mirrors `elicit.Client.Elicit`: emit a chunk, register
-a waiter, block on the response endpoint resolving the UUID, return
-the result. Timeout per-tool (default 30s; configurable for slow
-operations like full-vault search).
+`broker.Invoke` mirrors `elicit.Client.Elicit`: emit a
+`CHUNK_TYPE_DEVICE_TOOL_USE` chunk, register a waiter, block on the
+response endpoint resolving the UUID, return the result. 60s default
+timeout; per-tool slow-op timeouts later if anything needs them.
 
-Tool catalog (the JSON schemas + descriptions) lives in code so
-schema changes ship in a clarkd binary, not a client release. The
-client just needs to know how to *execute* each tool name.
+Tool catalog (`internal/devicetools/catalog.go`) lives in code so
+schema + description changes ship in a clarkd binary, not a client
+release. Each entry has `DefaultEnabled` — read-only ops
+(`*_list_*`, `*_read_*`, `*_search_*`) default on; mutating ops
+(`*_create_*`, `*_update_*`, `*_delete_*`, `*_append_*`) default off
+so a fresh profile doesn't grant the model write access without the
+user explicitly flipping a toggle.
+
+Each user picks which tools to enable per profile via the plugin's
+config UI; `Enabled: {"calendar_create_event": true, ...}` rides in
+on the plugin's config JSON like any other.
 
 ## iOS: capability registration + dispatch
 
@@ -219,12 +234,15 @@ Three layers, each independently gating a tool call:
      calendar grant, HealthKit's per-type grants, file-bookmark
      consent. Denials surface as `permission_denied` with a deep
      link the model can offer.
-  2. **Profile config**: `enabled_device_tools` list on the
-     profile, with sensible default-on for Calendar / Reminders /
-     Obsidian once the user has granted OS permission. Lets one
-     profile expose Health to the model and another not.
+  2. **Profile config** (the `app_tools` plugin's per-tool
+     `Enabled` map): the user toggles each tool on or off in the
+     profile editor. Read-only ops default on; mutating ops
+     default off. Inherited via the plugin-config merge chain, so
+     a parent profile can grant `obsidian_read_note` and a child
+     can opt the model out without losing the inheritance for
+     other tools.
   3. **Per-call audit** (optional v2): "always allow" / "ask each
-     time" per tool, like the iOS-system-wide "ask each time" for
+     time" per tool, like iOS's system-wide "ask each time" for
      location. Adds friction but is the right escape hatch for
      paranoid users.
 
@@ -294,17 +312,28 @@ plugin pointed at the device transport.
 
 ## Phased rollout (commits, roughly)
 
-  1. Proto additions: `DeviceToolUse` chunk + `RegisterCapabilities`
-     RPC + `respond` HTTP endpoint. Codegen on both sides.
-  2. `internal/devicetools/`: broker (mirrors elicit broker) +
-     `BrokerFrom(ctx)` helper.
-  3. `plugins/device_tools.go`: catalog + broker dispatch +
-     capability filter.
-  4. iOS: capability registration + dispatcher + JSON-encoded
+  1. ✅ Proto additions: `CHUNK_TYPE_DEVICE_TOOL_USE` + new
+     `DeviceToolsService` (`RegisterCapabilities` +
+     `ListSupportedTools`) + `respond` HTTP endpoint shape.
+     Codegen on both sides.
+  2. ✅ `internal/devicetools/`: Broker (mirrors elicit broker) +
+     Registry (per-(user, conv) supported set) + Catalog (the
+     hand-curated list of tools).
+  3. ✅ `plugins/app_tools.go`: catalog-backed `ToolProvider` with
+     per-tool `Enabled` config; `DeviceToolBroker` ctx-seam for
+     dispatch. Includes `ToolsForClient(supported)` so the
+     conversations side can pre-filter to the connected device.
+  4. Conversations wiring: register the HTTP `respond` endpoint;
+     register the `DeviceToolsService` Connect handler; attach a
+     per-call broker binding to `ExecuteTool`'s ctx; teach
+     `collectPipelineTools` to call `ToolsForClient` when the
+     plugin is `app_tools`.
+  5. iOS: capability registration + dispatcher + JSON-encoded
      result poster. No tools yet — just the bridge.
-  5. iOS: Calendar + Reminders (EventKit) handlers. First real
+  6. iOS: Calendar + Reminders (EventKit) handlers. First real
      tool the model can call.
-  6. iOS: Obsidian vault tools (UIDocumentPicker bookmark +
+  7. iOS: Obsidian vault tools (UIDocumentPicker bookmark +
      filesystem read/write).
-  7. Settings UI: enable/disable per tool, audit log viewer.
-  8. (Phase 2) Contacts, Health, Location-as-tool, generic Files.
+  8. Settings UI: per-tool enable toggles in the profile editor;
+     audit-log viewer.
+  9. (Phase 2) Contacts, Health, Location-as-tool, generic Files.
