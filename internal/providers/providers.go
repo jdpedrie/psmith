@@ -343,9 +343,20 @@ const (
 	// run finishes normally; the assistant's eventual response narrates
 	// what the elicited input produced.
 	ChunkElicit ChunkType = "elicit"
-	ChunkUsage  ChunkType = "usage"
-	ChunkError  ChunkType = "error"
-	ChunkDone   ChunkType = "done"
+	// ChunkDeviceToolUse is synthesized by the conversations-side
+	// tool-loop when the `app_tools` plugin's ExecuteTool fires. It
+	// tells the connected client (iOS / Mac) to run the named
+	// device-side tool via its native APIs (EventKit, Files, etc.)
+	// and POST the structured result to
+	// `/conversations/{id}/device-tools/{call_id}/respond`, which
+	// unblocks the waiting server-side dispatch. Payload:
+	//   {"call_id": "<uuid>", "tool_name": "...", "input": {...}, "issued_at": "..."}
+	// Not persisted as message content; the resulting tool_result
+	// chunk that follows is the message-visible row.
+	ChunkDeviceToolUse ChunkType = "device_tool_use"
+	ChunkUsage         ChunkType = "usage"
+	ChunkError         ChunkType = "error"
+	ChunkDone          ChunkType = "done"
 )
 
 // Usage is the normalized token-usage payload emitted via ChunkUsage.

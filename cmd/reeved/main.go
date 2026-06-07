@@ -253,6 +253,8 @@ func run() error {
 	mux.Handle(reevev1connect.NewFilesServiceHandler(filesSvc, opts))
 	mux.Handle(reevev1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
 	mux.Handle(reevev1connect.NewEmbedderServiceHandler(embedderSvc, opts))
+	mux.Handle(reevev1connect.NewDeviceToolsServiceHandler(
+		conversationsSvc.DeviceToolsService(), opts))
 	mux.Handle(reevev1connect.NewEventsServiceHandler(eventsSvc, opts))
 	// Raw-bytes endpoint for signed file URLs. Bypasses Connect framing
 	// so a system image loader can fetch the bytes directly.
@@ -286,6 +288,12 @@ func run() error {
 	// against the conversation row. See
 	// internal/conversations/elicit_handler.go for the handler.
 	mux.Handle("POST /conversations/{id}/elicitations/{eid}/respond", conversationsSvc.ElicitHandler())
+	// Device-tool response endpoint — the connected client POSTs the
+	// result of a CHUNK_TYPE_DEVICE_TOOL_USE here, which unblocks the
+	// server-side `app_tools` plugin's ExecuteTool. Same auth shape +
+	// convo-ownership check as the elicit endpoint.
+	mux.Handle("POST /conversations/{id}/device-tools/{call_id}/respond",
+		conversationsSvc.DeviceToolsHandler())
 
 	srv := &http.Server{
 		Addr:    addr,

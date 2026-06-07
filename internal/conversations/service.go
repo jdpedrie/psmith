@@ -26,6 +26,7 @@ import (
 	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/crypto"
+	"github.com/jdpedrie/reeve/internal/devicetools"
 	"github.com/jdpedrie/reeve/internal/history"
 	"github.com/jdpedrie/reeve/internal/langfuse"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
@@ -74,6 +75,12 @@ type Service struct {
 	// a clean "search not configured" error. Set via SetSearcher
 	// after construction so existing test fixtures stay one-line.
 	searcher plugins.Searcher
+	// deviceTools brokers calls between the server-side `app_tools`
+	// plugin and the connected client that actually runs each tool
+	// (Calendar / Obsidian / etc. via native APIs). Process-wide and
+	// in-memory; per-service-instance so test fixtures stay isolated.
+	deviceToolBroker   *devicetools.Broker
+	deviceToolRegistry *devicetools.Registry
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -95,14 +102,16 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 		cipher = crypto.Nop{}
 	}
 	return &Service{
-		queries:    queries,
-		pool:       pool,
-		catalog:    catalog,
-		supervisor: supervisor,
-		cipher:     cipher,
-		storage:    st,
-		logger:     logger,
-		elicit:     newElicitBroker(),
+		queries:            queries,
+		pool:               pool,
+		catalog:            catalog,
+		supervisor:         supervisor,
+		cipher:             cipher,
+		storage:            st,
+		logger:             logger,
+		elicit:             newElicitBroker(),
+		deviceToolBroker:   devicetools.NewBroker(),
+		deviceToolRegistry: devicetools.NewRegistry(),
 	}
 }
 
@@ -122,6 +131,23 @@ func (s *Service) ElicitBroker() *elicitBroker {
 // model instead of crashing. Idempotent; safe to call multiple times.
 func (s *Service) SetSearcher(searcher plugins.Searcher) {
 	s.searcher = searcher
+}
+
+// DeviceToolBroker returns the in-memory router for device-tool
+// calls. Exposed so cmd/reeved can mount the matching HTTP
+// `respond` endpoint and the DeviceToolsService Connect handler
+// without each one wiring its own broker. Always non-nil after
+// NewService.
+func (s *Service) DeviceToolBroker() *devicetools.Broker {
+	return s.deviceToolBroker
+}
+
+// DeviceToolRegistry returns the in-memory (user, conversation) →
+// supported-tool-set router. Same exposure rationale as
+// DeviceToolBroker — cmd/reeved mounts the DeviceToolsService
+// Connect handler that calls Register on it.
+func (s *Service) DeviceToolRegistry() *devicetools.Registry {
+	return s.deviceToolRegistry
 }
 
 // SetLangfuseEmitter installs the per-user Langfuse emitter the
@@ -1474,7 +1500,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher)
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher, s.deviceToolBroker, s.deviceToolRegistry)
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)

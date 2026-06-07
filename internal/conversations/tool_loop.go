@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/reeve/internal/devicetools"
 	"github.com/jdpedrie/reeve/internal/elicit"
 	"github.com/jdpedrie/reeve/internal/providers"
 	"github.com/jdpedrie/reeve/plugins"
@@ -116,6 +117,13 @@ func makeToolLoopSendFunc(
 	// REEVE_EMBEDDER unset → searcher is nil → search_history
 	// surfaces a clean "search not configured" error.
 	searcher plugins.Searcher,
+	// deviceToolBroker + deviceToolRegistry power the `app_tools`
+	// plugin's per-call routing to the connected client. Both
+	// nil-tolerant: the plugin reports "no DeviceToolBroker in
+	// context" when missing, which the model sees as an ordinary
+	// tool error.
+	deviceToolBroker   *devicetools.Broker,
+	deviceToolRegistry *devicetools.Registry,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline, resolver, searcher,
 		plugins.CallerInfo{
@@ -149,6 +157,31 @@ func makeToolLoopSendFunc(
 				}
 			}
 			ctx = elicit.WithClient(ctx, newElicitClient(elicitBroker, conversationID, emit))
+		}
+		// Per-call DeviceToolBroker binding — emits a
+		// CHUNK_TYPE_DEVICE_TOOL_USE chunk and blocks on the HTTP
+		// /respond endpoint via the broker. Bound here so emit
+		// can write into `out` directly. Wired even when the
+		// pipeline doesn't include app_tools — cheap, and avoids
+		// surprising "no broker" errors in tests that swap a
+		// fixture plugin late.
+		if deviceToolBroker != nil && deviceToolRegistry != nil {
+			emit := func(req devicetools.Request) {
+				payload, err := json.Marshal(req)
+				if err != nil {
+					return
+				}
+				select {
+				case out <- providers.Chunk{Type: providers.ChunkDeviceToolUse, Payload: payload}:
+				default:
+					// Channel full — drop. Same rationale as
+					// the elicit emit: a disconnected UI
+					// shouldn't block the whole run.
+				}
+			}
+			binding := newDeviceToolBinding(deviceToolBroker, deviceToolRegistry,
+				userID, conversationID, emit)
+			ctx = plugins.WithDeviceToolBroker(ctx, binding)
 		}
 
 		go func() {
