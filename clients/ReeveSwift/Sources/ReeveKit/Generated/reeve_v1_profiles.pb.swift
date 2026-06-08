@@ -678,6 +678,13 @@ public nonisolated struct Reeve_V1_ConfigField: Sendable {
   /// the chain already contributes, not replace it.
   public var merge: Reeve_V1_ConfigField.Merge = .unspecified
 
+  /// Optional grouping header the UI renders above the field.
+  /// Empty = ungrouped (rendered alongside top-level fields).
+  /// Plugins with many fields of the same kind (app_tools'
+  /// per-tool toggles bundled by capability — Calendar /
+  /// Reminders / etc.) populate this to keep the form scannable.
+  public var category: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum TypeEnum: SwiftProtobuf.Enum, Swift.CaseIterable {
@@ -1849,7 +1856,7 @@ nonisolated extension Reeve_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0\u{1}category\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1867,6 +1874,7 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
       case 8: try { try decoder.decodeSingularBoolField(value: &self.global) }()
       case 9: try { try decoder.decodeSingularMessageField(value: &self._modelPickerFilter) }()
       case 10: try { try decoder.decodeSingularEnumField(value: &self.merge) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.category) }()
       default: break
       }
     }
@@ -1907,6 +1915,9 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
     if self.merge != .unspecified {
       try visitor.visitSingularEnumField(value: self.merge, fieldNumber: 10)
     }
+    if !self.category.isEmpty {
+      try visitor.visitSingularStringField(value: self.category, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1921,6 +1932,7 @@ nonisolated extension Reeve_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.required != rhs.required {return false}
     if lhs.global != rhs.global {return false}
     if lhs.merge != rhs.merge {return false}
+    if lhs.category != rhs.category {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

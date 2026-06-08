@@ -47,11 +47,59 @@ public struct PluginConfigForm: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(fields) { field in
-                fieldRow(field)
+        VStack(alignment: .leading, spacing: 18) {
+            // Group fields by Category so plugins with many fields
+            // of the same kind (app_tools' per-tool toggles bundled
+            // by capability) stay scannable. Ungrouped fields
+            // (Category == "") render first, then each named
+            // section in the order it first appears in `fields`.
+            let groups = groupedFields()
+            ForEach(groups, id: \.0) { (category, fieldsInGroup) in
+                if category.isEmpty {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(fieldsInGroup) { f in fieldRow(f) }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(category)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(fieldsInGroup) { f in fieldRow(f) }
+                        }
+                        .padding(12)
+                        .background(Color.primary.opacity(0.03))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
             }
         }
+    }
+
+    /// Stable grouping: empty-category fields first (rendered ungrouped),
+    /// then each named category in the order it first appears so a
+    /// plugin's catalog ordering carries through to the rendered form.
+    private func groupedFields() -> [(String, [ReeveConfigField])] {
+        var order: [String] = []
+        var seen = Set<String>()
+        var buckets: [String: [ReeveConfigField]] = [:]
+        for f in fields {
+            if !seen.contains(f.category) {
+                seen.insert(f.category)
+                order.append(f.category)
+            }
+            buckets[f.category, default: []].append(f)
+        }
+        // Empty category (ungrouped) bubbles to the front; everything
+        // else preserves discovery order.
+        order.sort { (a, b) in
+            if a == b { return false }
+            if a.isEmpty { return true }
+            if b.isEmpty { return false }
+            return false   // stable: relative order of named groups preserved
+        }
+        return order.map { ($0, buckets[$0] ?? []) }
     }
 
     @ViewBuilder

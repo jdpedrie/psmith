@@ -191,11 +191,15 @@ Each handler:
   - `reminders_complete(id)`
 **Note**: Obsidian gets its **own** plugin (`obsidian`) rather than
 riding in `app_tools`. Same device-tool wire mechanism; separate
-catalog + separate per-vault settings (which folder is bookmarked,
-which subfolder is the "scratch" target for `append`, etc.). The
-plugin still uses the shared `DeviceToolBroker` so the
-infrastructure isn't duplicated — only the catalog + the per-plugin
-config UI live separately.
+catalog + separate settings page. The plugin still uses the shared
+`DeviceToolBroker` so the infrastructure isn't duplicated — only the
+catalog + the per-plugin config UI live separately.
+
+The user's bookmarked folder doesn't have to be the vault root — they
+can grant access to any subfolder (`Vault/Reeve/`, a single project
+folder, etc.) via `UIDocumentPicker`. The handlers treat the bookmark
+as "the root" and all paths are relative to it, so scoping
+access tighter is a settings-level choice with no plumbing changes.
 
 ### Phase 2 (after the bridge proves itself)
 
@@ -288,6 +292,28 @@ MCP-on-device is the right destination if device tools become a
 major surface area — refactor later by porting the catalog into iOS
 MCP handlers and swapping the server-side plugin for the `mcp`
 plugin pointed at the device transport.
+
+## Platform gap: Mac is deliberately not wired
+
+`app_tools` and `obsidian` are iOS-only in v1. EventKit + Contacts +
+HealthKit exist on macOS and `UIDocumentPicker` has an `NSOpenPanel`
+analog, so a Mac port would be mostly mechanical — but the iOS app
+is the primary surface for the use cases (mobile calendar capture,
+on-the-go vault notes), so we'd rather validate the bridge with the
+single platform first. When demand lands, the Mac port amounts to:
+
+  - `ReeveMac/DeviceTools/CalendarTools.swift` mirroring
+    `ReeveiOS/DeviceTools/CalendarTools.swift` (same EKEventStore
+    API; only the permission request shape differs slightly).
+  - `ReeveMac/DeviceTools/ObsidianTools.swift` using
+    `NSOpenPanel.runModal` + the same bookmark-resolution flow.
+  - Settings page entries in `ReeveMac/SettingsView.swift`.
+
+Until that lands: a Mac client connects to the server, registers
+an EMPTY capability set, and `app_tools` / `obsidian` plugin tools
+silently disappear from the model's tool list for that
+conversation. The capability handshake makes this graceful — no
+broken-tool errors at the model.
 
 ## Open questions
 

@@ -115,6 +115,11 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
     /// `.appendString` means each layer's non-empty contribution
     /// concatenates with blank-line separators.
     public let merge: ReeveConfigFieldMerge
+    /// Optional section header the UI groups the field under. Empty
+    /// = ungrouped (rendered with the top-level fields). Used by
+    /// plugins with many fields of the same kind — app_tools' per-
+    /// tool toggles bundled by capability (Calendar / Reminders).
+    public let category: String
 
     public init(
         name: String,
@@ -126,7 +131,8 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         required: Bool = false,
         global: Bool = false,
         modelPickerFilter: ReeveModelPickerFilter? = nil,
-        merge: ReeveConfigFieldMerge = .replace
+        merge: ReeveConfigFieldMerge = .replace,
+        category: String = ""
     ) {
         self.name = name
         self.display = display
@@ -138,6 +144,7 @@ public struct ReeveConfigField: Sendable, Hashable, Identifiable {
         self.global = global
         self.modelPickerFilter = modelPickerFilter
         self.merge = merge
+        self.category = category
     }
 
     /// True when `value` is missing or blank for a required field.
@@ -360,7 +367,8 @@ extension ReeveConfigField {
             required: p.required,
             global: p.global,
             modelPickerFilter: filter,
-            merge: merge
+            merge: merge,
+            category: p.category
         )
     }
 }

@@ -908,6 +908,7 @@ func configFieldToProto(f plugins.ConfigField) *reevev1.ConfigField {
 		Required:    f.Required,
 		Global:      f.Global,
 		Merge:       configFieldMergeToProto(f.Merge),
+		Category:    f.Category,
 	}
 	if f.Default != nil {
 		// json.Marshal on a typed value (int, string, bool) is total — the

@@ -249,6 +249,12 @@ message ConfigField {
     MERGE_REPLACE = 1;
     MERGE_APPEND_STRING = 2;
   }
+  // Optional grouping header the UI renders above the field.
+  // Empty = ungrouped (rendered alongside top-level fields).
+  // Plugins with many fields of the same kind (app_tools'
+  // per-tool toggles bundled by capability — Calendar /
+  // Reminders / etc.) populate this to keep the form scannable.
+  string category = 11;
 }
 
 // ConfigOption is one entry in a SELECT field's options list.

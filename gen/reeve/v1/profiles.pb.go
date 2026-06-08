@@ -1155,7 +1155,13 @@ type ConfigField struct {
 	// contribution root-to-leaf, blank-line separated. UIs use this to
 	// hint the user that their entry will be added on top of whatever
 	// the chain already contributes, not replace it.
-	Merge         ConfigField_Merge `protobuf:"varint,10,opt,name=merge,proto3,enum=reeve.v1.ConfigField_Merge" json:"merge,omitempty"`
+	Merge ConfigField_Merge `protobuf:"varint,10,opt,name=merge,proto3,enum=reeve.v1.ConfigField_Merge" json:"merge,omitempty"`
+	// Optional grouping header the UI renders above the field.
+	// Empty = ungrouped (rendered alongside top-level fields).
+	// Plugins with many fields of the same kind (app_tools'
+	// per-tool toggles bundled by capability — Calendar /
+	// Reminders / etc.) populate this to keep the form scannable.
+	Category      string `protobuf:"bytes,11,opt,name=category,proto3" json:"category,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1258,6 +1264,13 @@ func (x *ConfigField) GetMerge() ConfigField_Merge {
 		return x.Merge
 	}
 	return ConfigField_MERGE_UNSPECIFIED
+}
+
+func (x *ConfigField) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
 }
 
 // ConfigOption is one entry in a SELECT field's options list.
@@ -2180,7 +2193,7 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12M\n" +
 	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x17.reeve.v1.DeviceFactKeyR\x14requestedDeviceFacts\x12`\n" +
 	"\x1brequired_model_capabilities\x18\a \x01(\v2\x1b.reeve.v1.ModelCapabilitiesH\x00R\x19requiredModelCapabilities\x88\x01\x01B\x1e\n" +
-	"\x1c_required_model_capabilities\"\xec\x04\n" +
+	"\x1c_required_model_capabilities\"\x88\x05\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
@@ -2192,7 +2205,8 @@ const file_reeve_v1_profiles_proto_rawDesc = "" +
 	"\brequired\x18\a \x01(\bR\brequired\x12\x16\n" +
 	"\x06global\x18\b \x01(\bR\x06global\x121\n" +
 	"\x05merge\x18\n" +
-	" \x01(\x0e2\x1b.reeve.v1.ConfigField.MergeR\x05merge\"k\n" +
+	" \x01(\x0e2\x1b.reeve.v1.ConfigField.MergeR\x05merge\x12\x1a\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\"k\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +

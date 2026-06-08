@@ -127,6 +127,15 @@ type ConfigField struct {
 	// layer's contribution adds to the parent rather than supersedes
 	// it (text_injector's prefix/suffix/reminder fields).
 	Merge ConfigFieldMerge
+	// Category lets a plugin group related fields under a shared
+	// section header in the UI. Empty = ungrouped (rendered with
+	// the other top-level fields). Used today by app_tools and
+	// obsidian to bundle their per-tool toggles by capability
+	// ("Calendar", "Reminders", "Obsidian"); previously every
+	// field rendered as a flat list which got noisy past ~5
+	// entries. Stable strings — adding a new category is a
+	// runtime concern, not a schema change.
+	Category string
 }
 
 // ConfigOption is one entry in a select field's options list.

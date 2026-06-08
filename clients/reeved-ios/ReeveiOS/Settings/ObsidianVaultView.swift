@@ -24,7 +24,7 @@ struct ObsidianVaultView: View {
                 if isBookmarked {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Vault saved")
+                            Text("Folder saved")
                                 .font(.callout.weight(.medium))
                             if let bookmarkedDisplayPath {
                                 Text(bookmarkedDisplayPath)
@@ -38,7 +38,7 @@ struct ObsidianVaultView: View {
                             .foregroundStyle(.green)
                     }
                 } else {
-                    Label("No vault selected", systemImage: "folder.badge.questionmark")
+                    Label("No folder selected", systemImage: "folder.badge.questionmark")
                         .foregroundStyle(.secondary)
                 }
 
@@ -46,13 +46,13 @@ struct ObsidianVaultView: View {
                     pickerError = nil
                     pickingFolder = true
                 } label: {
-                    Label(isBookmarked ? "Change vault folder" : "Pick vault folder",
+                    Label(isBookmarked ? "Change folder" : "Pick folder",
                           systemImage: "folder.badge.plus")
                 }
             } header: {
-                Text("Vault")
+                Text("Folder")
             } footer: {
-                Text("Pick the folder you sync as your Obsidian vault (iCloud Drive or Files). Reeve stores a security-scoped bookmark so it can read and write notes without re-prompting. No Obsidian plugin or local-REST setup required.")
+                Text("Pick the folder you want Reeve to access — your entire Obsidian vault, or a subfolder of it (e.g. \"Vault/Reeve/\"). Reeve stores a security-scoped bookmark so it can read and write notes inside that folder without re-prompting. No Obsidian plugin or local-REST setup required.")
             }
 
             if isBookmarked {
@@ -63,7 +63,7 @@ struct ObsidianVaultView: View {
                         refresh()
                         Task { await app.deviceTools.registerWithServer() }
                     } label: {
-                        Label("Forget vault", systemImage: "trash")
+                        Label("Forget folder", systemImage: "trash")
                     }
                 } footer: {
                     Text("Removes the bookmark from this device. The model will report \"vault not configured\" until you pick a folder again.")

@@ -104,9 +104,11 @@ func (p *obsidian) Name() string        { return ObsidianName }
 func (p *obsidian) DisplayName() string { return "Obsidian" }
 
 func (p *obsidian) Description() string {
-	return "Lets the model read and write notes in your Obsidian vault. " +
-		"Backed by a folder bookmark the iOS / Mac client maintains via " +
-		"the system file picker — no Obsidian plugin or local-REST setup " +
+	return "Lets the model read and write markdown notes in a folder " +
+		"you grant access to — your entire Obsidian vault, or a " +
+		"subfolder of it (e.g. just \"Vault/Reeve/\"). Backed by a " +
+		"security-scoped folder bookmark the client maintains via the " +
+		"system file picker; no Obsidian plugin or local-REST setup " +
 		"required. Tools default to read-only; flip writes on per profile."
 }
 
@@ -121,6 +123,10 @@ func (p *obsidian) ConfigFields() []ConfigField {
 			Description: t.description,
 			Type:        ConfigFieldBoolean,
 			Default:     t.defaultEnabled,
+			// All obsidian tools share one category — keeps the
+			// form structurally consistent with app_tools even
+			// though everything's bundled here.
+			Category: "Vault",
 		})
 	}
 	return out

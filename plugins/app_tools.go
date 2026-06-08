@@ -88,9 +88,10 @@ func (p *appTools) ConfigFields() []ConfigField {
 		out = append(out, ConfigField{
 			Name:        "enabled." + t.Name,
 			Display:     t.DisplayName,
-			Description: fmt.Sprintf("[%s] %s", t.Category, t.Description),
+			Description: t.Description,
 			Type:        ConfigFieldBoolean,
 			Default:     t.DefaultEnabled,
+			Category:    t.Category,
 		})
 	}
 	return out
