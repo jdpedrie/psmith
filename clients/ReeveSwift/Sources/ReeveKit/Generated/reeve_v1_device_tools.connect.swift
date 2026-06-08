@@ -47,6 +47,14 @@ public protocol Reeve_V1_DeviceToolsServiceClientInterface: Sendable {
     /// entirely via the chunk + HTTP-response loop.
     @available(iOS 13, *)
     func `listSupportedTools`(request: Reeve_V1_ListSupportedToolsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListSupportedToolsResponse>
+
+    /// ListDeviceToolCalls returns the calling user's recent device-
+    /// tool calls — every Invoke the broker has logged via the
+    /// completion hook. Paginated by `invoked_at` cursor; sorted
+    /// recent-first. Drives Settings → Device tool activity on the
+    /// client.
+    @available(iOS 13, *)
+    func `listDeviceToolCalls`(request: Reeve_V1_ListDeviceToolCallsRequest, headers: Connect.Headers) async -> ResponseMessage<Reeve_V1_ListDeviceToolCallsResponse>
 }
 
 /// Concrete implementation of `Reeve_V1_DeviceToolsServiceClientInterface`.
@@ -67,10 +75,16 @@ public final class Reeve_V1_DeviceToolsServiceClient: Reeve_V1_DeviceToolsServic
         return await self.client.unary(path: "/reeve.v1.DeviceToolsService/ListSupportedTools", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listDeviceToolCalls`(request: Reeve_V1_ListDeviceToolCallsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Reeve_V1_ListDeviceToolCallsResponse> {
+        return await self.client.unary(path: "/reeve.v1.DeviceToolsService/ListDeviceToolCalls", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let registerCapabilities = Connect.MethodSpec(name: "RegisterCapabilities", service: "reeve.v1.DeviceToolsService", type: .unary)
             public static let listSupportedTools = Connect.MethodSpec(name: "ListSupportedTools", service: "reeve.v1.DeviceToolsService", type: .unary)
+            public static let listDeviceToolCalls = Connect.MethodSpec(name: "ListDeviceToolCalls", service: "reeve.v1.DeviceToolsService", type: .unary)
         }
     }
 }

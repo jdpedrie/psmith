@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package reeve.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/jdpedrie/reeve/gen/reeve/v1;reevev1";
 
 // DeviceToolsService is the per-connection handshake that lets a
@@ -41,6 +43,14 @@ service DeviceToolsService {
   // entirely via the chunk + HTTP-response loop.
   rpc ListSupportedTools(ListSupportedToolsRequest)
       returns (ListSupportedToolsResponse);
+
+  // ListDeviceToolCalls returns the calling user's recent device-
+  // tool calls — every Invoke the broker has logged via the
+  // completion hook. Paginated by `invoked_at` cursor; sorted
+  // recent-first. Drives Settings → Device tool activity on the
+  // client.
+  rpc ListDeviceToolCalls(ListDeviceToolCallsRequest)
+      returns (ListDeviceToolCallsResponse);
 }
 
 message RegisterCapabilitiesRequest {
@@ -64,6 +74,44 @@ message RegisterCapabilitiesResponse {}
 message ListSupportedToolsRequest {}
 message ListSupportedToolsResponse {
   repeated SupportedTool tools = 1;
+}
+
+message ListDeviceToolCallsRequest {
+  // Recent-first cursor — pass the `invoked_at` of the oldest
+  // entry from the previous page. Omit for the first page.
+  optional google.protobuf.Timestamp before = 1;
+  // Default 50; clamped server-side at 100.
+  optional int32 limit = 2;
+  // Optional conversation filter. When set, restricts results to
+  // calls that fired in that conversation. The server still
+  // checks ownership via the user gate, so an attacker can't
+  // probe other users' conversation ids.
+  optional string conversation_id = 3;
+}
+message ListDeviceToolCallsResponse {
+  repeated DeviceToolCall calls = 1;
+}
+
+message DeviceToolCall {
+  string id = 1;
+  string conversation_id = 2;
+  // The materialised assistant message that emitted the tool_use,
+  // when known. Optional because the message isn't always
+  // available when the call lands (the broker logs at completion;
+  // the supervisor materialises after the round). Future audit
+  // backfill could populate this from the OnAssistantMaterialized
+  // hook.
+  optional string message_id = 3;
+  string tool_name = 4;
+  // Raw JSON the model sent + the client returned. Empty on the
+  // output side when status != "ok".
+  bytes input_json = 5;
+  bytes output_json = 6;
+  // "ok" | "error" | "timeout"
+  string status = 7;
+  string error_message = 8;
+  google.protobuf.Timestamp invoked_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
 }
 
 message SupportedTool {

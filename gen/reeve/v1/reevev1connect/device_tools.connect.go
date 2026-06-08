@@ -39,6 +39,9 @@ const (
 	// DeviceToolsServiceListSupportedToolsProcedure is the fully-qualified name of the
 	// DeviceToolsService's ListSupportedTools RPC.
 	DeviceToolsServiceListSupportedToolsProcedure = "/reeve.v1.DeviceToolsService/ListSupportedTools"
+	// DeviceToolsServiceListDeviceToolCallsProcedure is the fully-qualified name of the
+	// DeviceToolsService's ListDeviceToolCalls RPC.
+	DeviceToolsServiceListDeviceToolCallsProcedure = "/reeve.v1.DeviceToolsService/ListDeviceToolCalls"
 )
 
 // DeviceToolsServiceClient is a client for the reeve.v1.DeviceToolsService service.
@@ -50,6 +53,12 @@ type DeviceToolsServiceClient interface {
 	// for documentation / debugging; production dispatch happens
 	// entirely via the chunk + HTTP-response loop.
 	ListSupportedTools(context.Context, *connect.Request[v1.ListSupportedToolsRequest]) (*connect.Response[v1.ListSupportedToolsResponse], error)
+	// ListDeviceToolCalls returns the calling user's recent device-
+	// tool calls — every Invoke the broker has logged via the
+	// completion hook. Paginated by `invoked_at` cursor; sorted
+	// recent-first. Drives Settings → Device tool activity on the
+	// client.
+	ListDeviceToolCalls(context.Context, *connect.Request[v1.ListDeviceToolCallsRequest]) (*connect.Response[v1.ListDeviceToolCallsResponse], error)
 }
 
 // NewDeviceToolsServiceClient constructs a client for the reeve.v1.DeviceToolsService service. By
@@ -75,6 +84,12 @@ func NewDeviceToolsServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(deviceToolsServiceMethods.ByName("ListSupportedTools")),
 			connect.WithClientOptions(opts...),
 		),
+		listDeviceToolCalls: connect.NewClient[v1.ListDeviceToolCallsRequest, v1.ListDeviceToolCallsResponse](
+			httpClient,
+			baseURL+DeviceToolsServiceListDeviceToolCallsProcedure,
+			connect.WithSchema(deviceToolsServiceMethods.ByName("ListDeviceToolCalls")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -82,6 +97,7 @@ func NewDeviceToolsServiceClient(httpClient connect.HTTPClient, baseURL string, 
 type deviceToolsServiceClient struct {
 	registerCapabilities *connect.Client[v1.RegisterCapabilitiesRequest, v1.RegisterCapabilitiesResponse]
 	listSupportedTools   *connect.Client[v1.ListSupportedToolsRequest, v1.ListSupportedToolsResponse]
+	listDeviceToolCalls  *connect.Client[v1.ListDeviceToolCallsRequest, v1.ListDeviceToolCallsResponse]
 }
 
 // RegisterCapabilities calls reeve.v1.DeviceToolsService.RegisterCapabilities.
@@ -94,6 +110,11 @@ func (c *deviceToolsServiceClient) ListSupportedTools(ctx context.Context, req *
 	return c.listSupportedTools.CallUnary(ctx, req)
 }
 
+// ListDeviceToolCalls calls reeve.v1.DeviceToolsService.ListDeviceToolCalls.
+func (c *deviceToolsServiceClient) ListDeviceToolCalls(ctx context.Context, req *connect.Request[v1.ListDeviceToolCallsRequest]) (*connect.Response[v1.ListDeviceToolCallsResponse], error) {
+	return c.listDeviceToolCalls.CallUnary(ctx, req)
+}
+
 // DeviceToolsServiceHandler is an implementation of the reeve.v1.DeviceToolsService service.
 type DeviceToolsServiceHandler interface {
 	RegisterCapabilities(context.Context, *connect.Request[v1.RegisterCapabilitiesRequest]) (*connect.Response[v1.RegisterCapabilitiesResponse], error)
@@ -103,6 +124,12 @@ type DeviceToolsServiceHandler interface {
 	// for documentation / debugging; production dispatch happens
 	// entirely via the chunk + HTTP-response loop.
 	ListSupportedTools(context.Context, *connect.Request[v1.ListSupportedToolsRequest]) (*connect.Response[v1.ListSupportedToolsResponse], error)
+	// ListDeviceToolCalls returns the calling user's recent device-
+	// tool calls — every Invoke the broker has logged via the
+	// completion hook. Paginated by `invoked_at` cursor; sorted
+	// recent-first. Drives Settings → Device tool activity on the
+	// client.
+	ListDeviceToolCalls(context.Context, *connect.Request[v1.ListDeviceToolCallsRequest]) (*connect.Response[v1.ListDeviceToolCallsResponse], error)
 }
 
 // NewDeviceToolsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -124,12 +151,20 @@ func NewDeviceToolsServiceHandler(svc DeviceToolsServiceHandler, opts ...connect
 		connect.WithSchema(deviceToolsServiceMethods.ByName("ListSupportedTools")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deviceToolsServiceListDeviceToolCallsHandler := connect.NewUnaryHandler(
+		DeviceToolsServiceListDeviceToolCallsProcedure,
+		svc.ListDeviceToolCalls,
+		connect.WithSchema(deviceToolsServiceMethods.ByName("ListDeviceToolCalls")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reeve.v1.DeviceToolsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeviceToolsServiceRegisterCapabilitiesProcedure:
 			deviceToolsServiceRegisterCapabilitiesHandler.ServeHTTP(w, r)
 		case DeviceToolsServiceListSupportedToolsProcedure:
 			deviceToolsServiceListSupportedToolsHandler.ServeHTTP(w, r)
+		case DeviceToolsServiceListDeviceToolCallsProcedure:
+			deviceToolsServiceListDeviceToolCallsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -145,4 +180,8 @@ func (UnimplementedDeviceToolsServiceHandler) RegisterCapabilities(context.Conte
 
 func (UnimplementedDeviceToolsServiceHandler) ListSupportedTools(context.Context, *connect.Request[v1.ListSupportedToolsRequest]) (*connect.Response[v1.ListSupportedToolsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.DeviceToolsService.ListSupportedTools is not implemented"))
+}
+
+func (UnimplementedDeviceToolsServiceHandler) ListDeviceToolCalls(context.Context, *connect.Request[v1.ListDeviceToolCallsRequest]) (*connect.Response[v1.ListDeviceToolCallsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reeve.v1.DeviceToolsService.ListDeviceToolCalls is not implemented"))
 }

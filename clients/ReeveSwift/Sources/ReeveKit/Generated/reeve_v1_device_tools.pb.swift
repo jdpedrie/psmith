@@ -83,6 +83,130 @@ public nonisolated struct Reeve_V1_ListSupportedToolsResponse: Sendable {
   public init() {}
 }
 
+public nonisolated struct Reeve_V1_ListDeviceToolCallsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Recent-first cursor — pass the `invoked_at` of the oldest
+  /// entry from the previous page. Omit for the first page.
+  public var before: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_before ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_before = newValue}
+  }
+  /// Returns true if `before` has been explicitly set.
+  public var hasBefore: Bool {self._before != nil}
+  /// Clears the value of `before`. Subsequent reads from it will return its default value.
+  public mutating func clearBefore() {self._before = nil}
+
+  /// Default 50; clamped server-side at 100.
+  public var limit: Int32 {
+    get {_limit ?? 0}
+    set {_limit = newValue}
+  }
+  /// Returns true if `limit` has been explicitly set.
+  public var hasLimit: Bool {self._limit != nil}
+  /// Clears the value of `limit`. Subsequent reads from it will return its default value.
+  public mutating func clearLimit() {self._limit = nil}
+
+  /// Optional conversation filter. When set, restricts results to
+  /// calls that fired in that conversation. The server still
+  /// checks ownership via the user gate, so an attacker can't
+  /// probe other users' conversation ids.
+  public var conversationID: String {
+    get {_conversationID ?? String()}
+    set {_conversationID = newValue}
+  }
+  /// Returns true if `conversationID` has been explicitly set.
+  public var hasConversationID: Bool {self._conversationID != nil}
+  /// Clears the value of `conversationID`. Subsequent reads from it will return its default value.
+  public mutating func clearConversationID() {self._conversationID = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _before: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _limit: Int32? = nil
+  fileprivate var _conversationID: String? = nil
+}
+
+public nonisolated struct Reeve_V1_ListDeviceToolCallsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var calls: [Reeve_V1_DeviceToolCall] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Reeve_V1_DeviceToolCall: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var conversationID: String = String()
+
+  /// The materialised assistant message that emitted the tool_use,
+  /// when known. Optional because the message isn't always
+  /// available when the call lands (the broker logs at completion;
+  /// the supervisor materialises after the round). Future audit
+  /// backfill could populate this from the OnAssistantMaterialized
+  /// hook.
+  public var messageID: String {
+    get {_messageID ?? String()}
+    set {_messageID = newValue}
+  }
+  /// Returns true if `messageID` has been explicitly set.
+  public var hasMessageID: Bool {self._messageID != nil}
+  /// Clears the value of `messageID`. Subsequent reads from it will return its default value.
+  public mutating func clearMessageID() {self._messageID = nil}
+
+  public var toolName: String = String()
+
+  /// Raw JSON the model sent + the client returned. Empty on the
+  /// output side when status != "ok".
+  public var inputJson: Data = Data()
+
+  public var outputJson: Data = Data()
+
+  /// "ok" | "error" | "timeout"
+  public var status: String = String()
+
+  public var errorMessage: String = String()
+
+  public var invokedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_invokedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_invokedAt = newValue}
+  }
+  /// Returns true if `invokedAt` has been explicitly set.
+  public var hasInvokedAt: Bool {self._invokedAt != nil}
+  /// Clears the value of `invokedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearInvokedAt() {self._invokedAt = nil}
+
+  public var completedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_completedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_completedAt = newValue}
+  }
+  /// Returns true if `completedAt` has been explicitly set.
+  public var hasCompletedAt: Bool {self._completedAt != nil}
+  /// Clears the value of `completedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearCompletedAt() {self._completedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _messageID: String? = nil
+  fileprivate var _invokedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _completedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
 public nonisolated struct Reeve_V1_SupportedTool: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -221,6 +345,159 @@ nonisolated extension Reeve_V1_ListSupportedToolsResponse: SwiftProtobuf.Message
 
   public static func ==(lhs: Reeve_V1_ListSupportedToolsResponse, rhs: Reeve_V1_ListSupportedToolsResponse) -> Bool {
     if lhs.tools != rhs.tools {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Reeve_V1_ListDeviceToolCallsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListDeviceToolCallsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}before\0\u{1}limit\0\u{3}conversation_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._before) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self._limit) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._conversationID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._before {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._limit {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._conversationID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListDeviceToolCallsRequest, rhs: Reeve_V1_ListDeviceToolCallsRequest) -> Bool {
+    if lhs._before != rhs._before {return false}
+    if lhs._limit != rhs._limit {return false}
+    if lhs._conversationID != rhs._conversationID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Reeve_V1_ListDeviceToolCallsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListDeviceToolCallsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}calls\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.calls) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.calls.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.calls, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_ListDeviceToolCallsResponse, rhs: Reeve_V1_ListDeviceToolCallsResponse) -> Bool {
+    if lhs.calls != rhs.calls {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Reeve_V1_DeviceToolCall: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeviceToolCall"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}message_id\0\u{3}tool_name\0\u{3}input_json\0\u{3}output_json\0\u{1}status\0\u{3}error_message\0\u{3}invoked_at\0\u{3}completed_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.conversationID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._messageID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.toolName) }()
+      case 5: try { try decoder.decodeSingularBytesField(value: &self.inputJson) }()
+      case 6: try { try decoder.decodeSingularBytesField(value: &self.outputJson) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self.errorMessage) }()
+      case 9: try { try decoder.decodeSingularMessageField(value: &self._invokedAt) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._completedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularStringField(value: self.conversationID, fieldNumber: 2)
+    }
+    try { if let v = self._messageID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    if !self.toolName.isEmpty {
+      try visitor.visitSingularStringField(value: self.toolName, fieldNumber: 4)
+    }
+    if !self.inputJson.isEmpty {
+      try visitor.visitSingularBytesField(value: self.inputJson, fieldNumber: 5)
+    }
+    if !self.outputJson.isEmpty {
+      try visitor.visitSingularBytesField(value: self.outputJson, fieldNumber: 6)
+    }
+    if !self.status.isEmpty {
+      try visitor.visitSingularStringField(value: self.status, fieldNumber: 7)
+    }
+    if !self.errorMessage.isEmpty {
+      try visitor.visitSingularStringField(value: self.errorMessage, fieldNumber: 8)
+    }
+    try { if let v = self._invokedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+    } }()
+    try { if let v = self._completedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Reeve_V1_DeviceToolCall, rhs: Reeve_V1_DeviceToolCall) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.conversationID != rhs.conversationID {return false}
+    if lhs._messageID != rhs._messageID {return false}
+    if lhs.toolName != rhs.toolName {return false}
+    if lhs.inputJson != rhs.inputJson {return false}
+    if lhs.outputJson != rhs.outputJson {return false}
+    if lhs.status != rhs.status {return false}
+    if lhs.errorMessage != rhs.errorMessage {return false}
+    if lhs._invokedAt != rhs._invokedAt {return false}
+    if lhs._completedAt != rhs._completedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

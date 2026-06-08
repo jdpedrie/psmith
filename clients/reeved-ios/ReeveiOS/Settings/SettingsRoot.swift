@@ -73,6 +73,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Obsidian", systemImage: "doc.text.below.ecg")
                 }
+                NavigationLink {
+                    DeviceToolActivityView()
+                } label: {
+                    categoryRow("Device tool activity", systemImage: "clock.arrow.circlepath")
+                }
             }
         }
         .navigationTitle("Settings")

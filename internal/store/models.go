@@ -52,6 +52,20 @@ type CostEvent struct {
 	OccurredAt time.Time
 }
 
+type DeviceToolCall struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	ConversationID uuid.UUID
+	MessageID      *uuid.UUID
+	ToolName       string
+	InputJson      []byte
+	OutputJson     []byte
+	Status         string
+	ErrorMessage   *string
+	InvokedAt      time.Time
+	CompletedAt    time.Time
+}
+
 type ExplicitCach struct {
 	ContextID          uuid.UUID
 	ProviderType       string

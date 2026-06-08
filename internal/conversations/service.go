@@ -101,7 +101,7 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 	if cipher == nil {
 		cipher = crypto.Nop{}
 	}
-	return &Service{
+	s := &Service{
 		queries:            queries,
 		pool:               pool,
 		catalog:            catalog,
@@ -113,6 +113,14 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 		deviceToolBroker:   devicetools.NewBroker(),
 		deviceToolRegistry: devicetools.NewRegistry(),
 	}
+	// Install the audit-log hook so every completed device-tool
+	// call lands in device_tool_calls. The hook lives on the
+	// service (not the broker) because writing the row needs the
+	// queries handle + the user id, which we resolve by joining
+	// the conversation row. Best-effort: hook failures are logged
+	// + dropped — never block the tool dispatch.
+	s.deviceToolBroker.SetCompletionHook(s.recordDeviceToolCompletion)
+	return s
 }
 
 // ElicitBroker exposes the in-memory elicitation router so the HTTP

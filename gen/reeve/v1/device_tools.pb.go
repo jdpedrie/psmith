@@ -9,6 +9,7 @@ package reevev1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -203,6 +204,242 @@ func (x *ListSupportedToolsResponse) GetTools() []*SupportedTool {
 	return nil
 }
 
+type ListDeviceToolCallsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Recent-first cursor — pass the `invoked_at` of the oldest
+	// entry from the previous page. Omit for the first page.
+	Before *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=before,proto3,oneof" json:"before,omitempty"`
+	// Default 50; clamped server-side at 100.
+	Limit *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	// Optional conversation filter. When set, restricts results to
+	// calls that fired in that conversation. The server still
+	// checks ownership via the user gate, so an attacker can't
+	// probe other users' conversation ids.
+	ConversationId *string `protobuf:"bytes,3,opt,name=conversation_id,json=conversationId,proto3,oneof" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListDeviceToolCallsRequest) Reset() {
+	*x = ListDeviceToolCallsRequest{}
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeviceToolCallsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeviceToolCallsRequest) ProtoMessage() {}
+
+func (x *ListDeviceToolCallsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeviceToolCallsRequest.ProtoReflect.Descriptor instead.
+func (*ListDeviceToolCallsRequest) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_device_tools_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListDeviceToolCallsRequest) GetBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Before
+	}
+	return nil
+}
+
+func (x *ListDeviceToolCallsRequest) GetLimit() int32 {
+	if x != nil && x.Limit != nil {
+		return *x.Limit
+	}
+	return 0
+}
+
+func (x *ListDeviceToolCallsRequest) GetConversationId() string {
+	if x != nil && x.ConversationId != nil {
+		return *x.ConversationId
+	}
+	return ""
+}
+
+type ListDeviceToolCallsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Calls         []*DeviceToolCall      `protobuf:"bytes,1,rep,name=calls,proto3" json:"calls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeviceToolCallsResponse) Reset() {
+	*x = ListDeviceToolCallsResponse{}
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeviceToolCallsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeviceToolCallsResponse) ProtoMessage() {}
+
+func (x *ListDeviceToolCallsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeviceToolCallsResponse.ProtoReflect.Descriptor instead.
+func (*ListDeviceToolCallsResponse) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_device_tools_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListDeviceToolCallsResponse) GetCalls() []*DeviceToolCall {
+	if x != nil {
+		return x.Calls
+	}
+	return nil
+}
+
+type DeviceToolCall struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ConversationId string                 `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	// The materialised assistant message that emitted the tool_use,
+	// when known. Optional because the message isn't always
+	// available when the call lands (the broker logs at completion;
+	// the supervisor materialises after the round). Future audit
+	// backfill could populate this from the OnAssistantMaterialized
+	// hook.
+	MessageId *string `protobuf:"bytes,3,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
+	ToolName  string  `protobuf:"bytes,4,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	// Raw JSON the model sent + the client returned. Empty on the
+	// output side when status != "ok".
+	InputJson  []byte `protobuf:"bytes,5,opt,name=input_json,json=inputJson,proto3" json:"input_json,omitempty"`
+	OutputJson []byte `protobuf:"bytes,6,opt,name=output_json,json=outputJson,proto3" json:"output_json,omitempty"`
+	// "ok" | "error" | "timeout"
+	Status        string                 `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,8,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	InvokedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=invoked_at,json=invokedAt,proto3" json:"invoked_at,omitempty"`
+	CompletedAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceToolCall) Reset() {
+	*x = DeviceToolCall{}
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceToolCall) ProtoMessage() {}
+
+func (x *DeviceToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceToolCall.ProtoReflect.Descriptor instead.
+func (*DeviceToolCall) Descriptor() ([]byte, []int) {
+	return file_reeve_v1_device_tools_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeviceToolCall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetMessageId() string {
+	if x != nil && x.MessageId != nil {
+		return *x.MessageId
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetInputJson() []byte {
+	if x != nil {
+		return x.InputJson
+	}
+	return nil
+}
+
+func (x *DeviceToolCall) GetOutputJson() []byte {
+	if x != nil {
+		return x.OutputJson
+	}
+	return nil
+}
+
+func (x *DeviceToolCall) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *DeviceToolCall) GetInvokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InvokedAt
+	}
+	return nil
+}
+
+func (x *DeviceToolCall) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
 type SupportedTool struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Stable identifier — the wire-name the model calls and the
@@ -231,7 +468,7 @@ type SupportedTool struct {
 
 func (x *SupportedTool) Reset() {
 	*x = SupportedTool{}
-	mi := &file_reeve_v1_device_tools_proto_msgTypes[4]
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +480,7 @@ func (x *SupportedTool) String() string {
 func (*SupportedTool) ProtoMessage() {}
 
 func (x *SupportedTool) ProtoReflect() protoreflect.Message {
-	mi := &file_reeve_v1_device_tools_proto_msgTypes[4]
+	mi := &file_reeve_v1_device_tools_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +493,7 @@ func (x *SupportedTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SupportedTool.ProtoReflect.Descriptor instead.
 func (*SupportedTool) Descriptor() ([]byte, []int) {
-	return file_reeve_v1_device_tools_proto_rawDescGZIP(), []int{4}
+	return file_reeve_v1_device_tools_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SupportedTool) GetName() string {
@@ -305,7 +542,7 @@ var File_reeve_v1_device_tools_proto protoreflect.FileDescriptor
 
 const file_reeve_v1_device_tools_proto_rawDesc = "" +
 	"\n" +
-	"\x1breeve/v1/device_tools.proto\x12\breeve.v1\"\xfe\x01\n" +
+	"\x1breeve/v1/device_tools.proto\x12\breeve.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfe\x01\n" +
 	"\x1bRegisterCapabilitiesRequest\x120\n" +
 	"\x14supported_tool_names\x18\x01 \x03(\tR\x12supportedToolNames\x12h\n" +
 	"\x11client_attributes\x18\x02 \x03(\v2;.reeve.v1.RegisterCapabilitiesRequest.ClientAttributesEntryR\x10clientAttributes\x1aC\n" +
@@ -315,17 +552,44 @@ const file_reeve_v1_device_tools_proto_rawDesc = "" +
 	"\x1cRegisterCapabilitiesResponse\"\x1b\n" +
 	"\x19ListSupportedToolsRequest\"K\n" +
 	"\x1aListSupportedToolsResponse\x12-\n" +
-	"\x05tools\x18\x01 \x03(\v2\x17.reeve.v1.SupportedToolR\x05tools\"\xda\x01\n" +
+	"\x05tools\x18\x01 \x03(\v2\x17.reeve.v1.SupportedToolR\x05tools\"\xc7\x01\n" +
+	"\x1aListDeviceToolCallsRequest\x127\n" +
+	"\x06before\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x06before\x88\x01\x01\x12\x19\n" +
+	"\x05limit\x18\x02 \x01(\x05H\x01R\x05limit\x88\x01\x01\x12,\n" +
+	"\x0fconversation_id\x18\x03 \x01(\tH\x02R\x0econversationId\x88\x01\x01B\t\n" +
+	"\a_beforeB\b\n" +
+	"\x06_limitB\x12\n" +
+	"\x10_conversation_id\"M\n" +
+	"\x1bListDeviceToolCallsResponse\x12.\n" +
+	"\x05calls\x18\x01 \x03(\v2\x18.reeve.v1.DeviceToolCallR\x05calls\"\x90\x03\n" +
+	"\x0eDeviceToolCall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
+	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\"\n" +
+	"\n" +
+	"message_id\x18\x03 \x01(\tH\x00R\tmessageId\x88\x01\x01\x12\x1b\n" +
+	"\ttool_name\x18\x04 \x01(\tR\btoolName\x12\x1d\n" +
+	"\n" +
+	"input_json\x18\x05 \x01(\fR\tinputJson\x12\x1f\n" +
+	"\voutput_json\x18\x06 \x01(\fR\n" +
+	"outputJson\x12\x16\n" +
+	"\x06status\x18\a \x01(\tR\x06status\x12#\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage\x129\n" +
+	"\n" +
+	"invoked_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tinvokedAt\x12=\n" +
+	"\fcompleted_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAtB\r\n" +
+	"\v_message_id\"\xda\x01\n" +
 	"\rSupportedTool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12!\n" +
 	"\finput_schema\x18\x04 \x01(\fR\vinputSchema\x12\x1a\n" +
 	"\bcategory\x18\x05 \x01(\tR\bcategory\x121\n" +
-	"\x14required_permissions\x18\x06 \x03(\tR\x13requiredPermissions2\xdc\x01\n" +
+	"\x14required_permissions\x18\x06 \x03(\tR\x13requiredPermissions2\xc0\x02\n" +
 	"\x12DeviceToolsService\x12e\n" +
 	"\x14RegisterCapabilities\x12%.reeve.v1.RegisterCapabilitiesRequest\x1a&.reeve.v1.RegisterCapabilitiesResponse\x12_\n" +
-	"\x12ListSupportedTools\x12#.reeve.v1.ListSupportedToolsRequest\x1a$.reeve.v1.ListSupportedToolsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
+	"\x12ListSupportedTools\x12#.reeve.v1.ListSupportedToolsRequest\x1a$.reeve.v1.ListSupportedToolsResponse\x12b\n" +
+	"\x13ListDeviceToolCalls\x12$.reeve.v1.ListDeviceToolCallsRequest\x1a%.reeve.v1.ListDeviceToolCallsResponseB0Z.github.com/jdpedrie/reeve/gen/reeve/v1;reevev1b\x06proto3"
 
 var (
 	file_reeve_v1_device_tools_proto_rawDescOnce sync.Once
@@ -339,27 +603,37 @@ func file_reeve_v1_device_tools_proto_rawDescGZIP() []byte {
 	return file_reeve_v1_device_tools_proto_rawDescData
 }
 
-var file_reeve_v1_device_tools_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_reeve_v1_device_tools_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_reeve_v1_device_tools_proto_goTypes = []any{
 	(*RegisterCapabilitiesRequest)(nil),  // 0: reeve.v1.RegisterCapabilitiesRequest
 	(*RegisterCapabilitiesResponse)(nil), // 1: reeve.v1.RegisterCapabilitiesResponse
 	(*ListSupportedToolsRequest)(nil),    // 2: reeve.v1.ListSupportedToolsRequest
 	(*ListSupportedToolsResponse)(nil),   // 3: reeve.v1.ListSupportedToolsResponse
-	(*SupportedTool)(nil),                // 4: reeve.v1.SupportedTool
-	nil,                                  // 5: reeve.v1.RegisterCapabilitiesRequest.ClientAttributesEntry
+	(*ListDeviceToolCallsRequest)(nil),   // 4: reeve.v1.ListDeviceToolCallsRequest
+	(*ListDeviceToolCallsResponse)(nil),  // 5: reeve.v1.ListDeviceToolCallsResponse
+	(*DeviceToolCall)(nil),               // 6: reeve.v1.DeviceToolCall
+	(*SupportedTool)(nil),                // 7: reeve.v1.SupportedTool
+	nil,                                  // 8: reeve.v1.RegisterCapabilitiesRequest.ClientAttributesEntry
+	(*timestamppb.Timestamp)(nil),        // 9: google.protobuf.Timestamp
 }
 var file_reeve_v1_device_tools_proto_depIdxs = []int32{
-	5, // 0: reeve.v1.RegisterCapabilitiesRequest.client_attributes:type_name -> reeve.v1.RegisterCapabilitiesRequest.ClientAttributesEntry
-	4, // 1: reeve.v1.ListSupportedToolsResponse.tools:type_name -> reeve.v1.SupportedTool
-	0, // 2: reeve.v1.DeviceToolsService.RegisterCapabilities:input_type -> reeve.v1.RegisterCapabilitiesRequest
-	2, // 3: reeve.v1.DeviceToolsService.ListSupportedTools:input_type -> reeve.v1.ListSupportedToolsRequest
-	1, // 4: reeve.v1.DeviceToolsService.RegisterCapabilities:output_type -> reeve.v1.RegisterCapabilitiesResponse
-	3, // 5: reeve.v1.DeviceToolsService.ListSupportedTools:output_type -> reeve.v1.ListSupportedToolsResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 0: reeve.v1.RegisterCapabilitiesRequest.client_attributes:type_name -> reeve.v1.RegisterCapabilitiesRequest.ClientAttributesEntry
+	7, // 1: reeve.v1.ListSupportedToolsResponse.tools:type_name -> reeve.v1.SupportedTool
+	9, // 2: reeve.v1.ListDeviceToolCallsRequest.before:type_name -> google.protobuf.Timestamp
+	6, // 3: reeve.v1.ListDeviceToolCallsResponse.calls:type_name -> reeve.v1.DeviceToolCall
+	9, // 4: reeve.v1.DeviceToolCall.invoked_at:type_name -> google.protobuf.Timestamp
+	9, // 5: reeve.v1.DeviceToolCall.completed_at:type_name -> google.protobuf.Timestamp
+	0, // 6: reeve.v1.DeviceToolsService.RegisterCapabilities:input_type -> reeve.v1.RegisterCapabilitiesRequest
+	2, // 7: reeve.v1.DeviceToolsService.ListSupportedTools:input_type -> reeve.v1.ListSupportedToolsRequest
+	4, // 8: reeve.v1.DeviceToolsService.ListDeviceToolCalls:input_type -> reeve.v1.ListDeviceToolCallsRequest
+	1, // 9: reeve.v1.DeviceToolsService.RegisterCapabilities:output_type -> reeve.v1.RegisterCapabilitiesResponse
+	3, // 10: reeve.v1.DeviceToolsService.ListSupportedTools:output_type -> reeve.v1.ListSupportedToolsResponse
+	5, // 11: reeve.v1.DeviceToolsService.ListDeviceToolCalls:output_type -> reeve.v1.ListDeviceToolCallsResponse
+	9, // [9:12] is the sub-list for method output_type
+	6, // [6:9] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_reeve_v1_device_tools_proto_init() }
@@ -367,13 +641,15 @@ func file_reeve_v1_device_tools_proto_init() {
 	if File_reeve_v1_device_tools_proto != nil {
 		return
 	}
+	file_reeve_v1_device_tools_proto_msgTypes[4].OneofWrappers = []any{}
+	file_reeve_v1_device_tools_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reeve_v1_device_tools_proto_rawDesc), len(file_reeve_v1_device_tools_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

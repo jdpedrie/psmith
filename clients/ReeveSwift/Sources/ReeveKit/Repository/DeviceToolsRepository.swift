@@ -1,5 +1,6 @@
 import Foundation
 import Connect
+import SwiftProtobuf
 
 /// Server-side catalog metadata for a single device tool. Mirrors
 /// `Reeve_V1_SupportedTool`. Settings UI uses this to render per-
@@ -143,4 +144,57 @@ public enum DeviceToolsError: Error, Sendable {
     case notFound
     case serverError(status: Int, body: String)
     case emptyResponse
+}
+
+/// One audit-log row. Mirrors `Reeve_V1_DeviceToolCall`. Used by
+/// the Settings → Device tool activity scroll on iOS.
+public struct ReeveDeviceToolCall: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let conversationID: String
+    public let messageID: String?
+    public let toolName: String
+    /// Raw input + output JSON bytes; the UI pretty-prints in the
+    /// expanded row. Empty data when the call errored / timed out.
+    public let inputJSON: Data
+    public let outputJSON: Data
+    public let status: String         // "ok" | "error" | "timeout"
+    public let errorMessage: String
+    public let invokedAt: Date
+    public let completedAt: Date
+
+    init(from p: Reeve_V1_DeviceToolCall) {
+        id = p.id
+        conversationID = p.conversationID
+        messageID = p.hasMessageID ? p.messageID : nil
+        toolName = p.toolName
+        inputJSON = p.inputJson
+        outputJSON = p.outputJson
+        status = p.status
+        errorMessage = p.errorMessage
+        invokedAt = p.hasInvokedAt ? p.invokedAt.date : .distantPast
+        completedAt = p.hasCompletedAt ? p.completedAt.date : .distantPast
+    }
+}
+
+public extension DeviceToolsRepository {
+    /// Recent-first paginated list of the calling user's device-
+    /// tool calls. Pass the `invokedAt` of the previous page's
+    /// last entry as `before` to fetch the next page.
+    func listCalls(
+        before: Date? = nil,
+        limit: Int32 = 50,
+        conversationID: String? = nil
+    ) async throws -> [ReeveDeviceToolCall] {
+        var req = Reeve_V1_ListDeviceToolCallsRequest()
+        if let before {
+            req.before = Google_Protobuf_Timestamp(date: before)
+        }
+        req.limit = limit
+        if let conversationID, !conversationID.isEmpty {
+            req.conversationID = conversationID
+        }
+        let resp = await client.listDeviceToolCalls(request: req, headers: [:])
+        if let err = resp.error { throw ReeveError.from(err) }
+        return (resp.message?.calls ?? []).map(ReeveDeviceToolCall.init(from:))
+    }
 }

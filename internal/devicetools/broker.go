@@ -56,10 +56,41 @@ type Response struct {
 	Error  string          `json:"error,omitempty"`
 }
 
+// CompletionEvent is the payload a Broker fires to its
+// CompletionHook after every Invoke returns (success or failure).
+// Used by the conversations service to persist an audit row in
+// device_tool_calls without entangling persistence into the broker
+// itself.
+type CompletionEvent struct {
+	CallID         uuid.UUID
+	ConversationID uuid.UUID
+	ToolName       string
+	Input          json.RawMessage
+	// Output is non-nil + Status == "ok" on success. Both Output
+	// and ErrorMessage may be non-empty when the client returned
+	// a partial output alongside a soft error — the broker
+	// passes both through and lets the hook decide what to log.
+	Output       json.RawMessage
+	Status       string  // "ok" | "error" | "timeout"
+	ErrorMessage string
+	InvokedAt    time.Time
+	CompletedAt  time.Time
+}
+
+// CompletionHook receives every completed tool call. nil = no
+// audit logging. Errors in the hook are the caller's problem —
+// the broker logs nothing itself, just hands the event over.
+type CompletionHook func(CompletionEvent)
+
 // Broker is the in-memory router. Safe for concurrent use.
 type Broker struct {
 	mu      sync.Mutex
 	pending map[uuid.UUID]*pendingCall
+	// hook fires once per completed Invoke (success or failure).
+	// Plain field rather than method-args because the hook is
+	// process-wide; setting it once at startup keeps the call
+	// sites lean.
+	hook CompletionHook
 }
 
 type pendingCall struct {
@@ -72,6 +103,14 @@ type pendingCall struct {
 // NewBroker constructs an empty broker.
 func NewBroker() *Broker {
 	return &Broker{pending: map[uuid.UUID]*pendingCall{}}
+}
+
+// SetCompletionHook installs (or replaces) the post-call hook.
+// Pass nil to drop the existing hook. Safe to call at startup;
+// not safe to call concurrently with Invoke (cheap to set once
+// from cmd/reeved or the conversations service constructor).
+func (b *Broker) SetCompletionHook(h CompletionHook) {
+	b.hook = h
 }
 
 // EmitFunc is the hook the conversations layer passes in to
@@ -120,16 +159,47 @@ func (b *Broker) Invoke(
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	invokedAt := req.IssuedAt
 	select {
 	case resp := <-ch:
+		b.fireHook(CompletionEvent{
+			CallID: id, ConversationID: convoID, ToolName: toolName,
+			Input: input, Output: resp.Output,
+			Status: statusFromResponse(resp), ErrorMessage: resp.Error,
+			InvokedAt: invokedAt, CompletedAt: time.Now().UTC(),
+		})
 		if resp.Error != "" {
 			return nil, fmt.Errorf("device tool %s: %s", toolName, resp.Error)
 		}
 		return resp.Output, nil
 	case <-timeoutCtx.Done():
+		b.fireHook(CompletionEvent{
+			CallID: id, ConversationID: convoID, ToolName: toolName,
+			Input: input,
+			Status: "timeout", ErrorMessage: timeoutCtx.Err().Error(),
+			InvokedAt: invokedAt, CompletedAt: time.Now().UTC(),
+		})
 		return nil, fmt.Errorf("device tool %s (call %s): %w",
 			toolName, id, timeoutCtx.Err())
 	}
+}
+
+// fireHook invokes the completion hook if installed. Wrapped in a
+// recover so a panicking hook can't take down the dispatch path —
+// audit logging is best-effort by design.
+func (b *Broker) fireHook(ev CompletionEvent) {
+	if b.hook == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	b.hook(ev)
+}
+
+func statusFromResponse(r Response) string {
+	if r.Error != "" {
+		return "error"
+	}
+	return "ok"
 }
 
 // Respond delivers a client's response to a waiting Invoke. Returns

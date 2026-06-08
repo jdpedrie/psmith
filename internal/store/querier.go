@@ -17,6 +17,8 @@ type Querier interface {
 	// Backfill picks the row up via ListUnembeddedMessages on the next
 	// pass. CHECK invariant still holds (all three back to NULL).
 	ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
+	// For the "X calls in the last 7 days" chip on settings.
+	CountDeviceToolCallsByUser(ctx context.Context, arg CountDeviceToolCallsByUserParams) (int32, error)
 	// Drives the "X / Y embedded" progress chip in the settings UI.
 	// Cheap even on millions of rows because the partial
 	// messages_unembedded_created_at index is exactly this predicate.
@@ -153,6 +155,10 @@ type Querier interface {
 	// non-null and > 0. Errored runs still log if the provider charged
 	// tokens — the user paid even if the response was junk.
 	InsertCostEvent(ctx context.Context, arg InsertCostEventParams) error
+	// Persist one completed device-tool call. Written by the
+	// conversations service from the broker's completion hook,
+	// right after the matching POST /respond returns.
+	InsertDeviceToolCall(ctx context.Context, arg InsertDeviceToolCallParams) (DeviceToolCall, error)
 	// $4 is config_encrypted (nullable BYTEA); the legacy plaintext
 	// config column is left NULL on every new row. The service layer's
 	// read path decrypts config_encrypted and falls back to the plaintext
@@ -206,6 +212,14 @@ type Querier interface {
 	// skips the filter; conversations with no title are excluded when set);
 	// profile_id (NULL skips the filter).
 	ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error)
+	// Same shape as ListDeviceToolCallsByUser but conversation-scoped
+	// — used by future per-conversation activity affordances. Caller
+	// must have already verified ownership via the conversation row.
+	ListDeviceToolCallsByConversation(ctx context.Context, arg ListDeviceToolCallsByConversationParams) ([]DeviceToolCall, error)
+	// Recent-first paginated list for the Settings → Device tool
+	// activity page. `cursor` is the invoked_at of the last row from
+	// the previous page; pass NULL for the first page.
+	ListDeviceToolCallsByUser(ctx context.Context, arg ListDeviceToolCallsByUserParams) ([]DeviceToolCall, error)
 	ListFilesForUser(ctx context.Context, arg ListFilesForUserParams) ([]File, error)
 	// Walks parent_id from the leaf back to the root, returning rows root-first.
 	// sibling_count: number of OTHER messages sharing this row's parent — i.e.
