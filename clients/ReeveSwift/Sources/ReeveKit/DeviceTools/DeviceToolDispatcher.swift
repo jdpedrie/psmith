@@ -32,6 +32,14 @@ public final class DeviceToolRegistry: @unchecked Sendable {
         handlers[name] = handler
     }
 
+    /// Drop a handler. Used by capabilities that come and go at
+    /// runtime — e.g. Obsidian, which only advertises its tools
+    /// when the user has bookmarked a vault folder.
+    public func unregister(name: String) {
+        lock.lock(); defer { lock.unlock() }
+        handlers.removeValue(forKey: name)
+    }
+
     public func handler(for name: String) -> DeviceToolHandler? {
         lock.lock(); defer { lock.unlock() }
         return handlers[name]

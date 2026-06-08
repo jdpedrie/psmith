@@ -20,6 +20,12 @@ struct ReeveiOSApp: App {
         // model actually calls one of these tools.
         CalendarTools.register()
         RemindersTools.register()
+        // Obsidian registers conditionally: tools advertised to
+        // the server only when a vault bookmark exists. Re-synced
+        // by ObsidianVaultView after pick/clear so the server
+        // sees the new capability set on the next
+        // RegisterCapabilities pass.
+        ObsidianTools.syncRegistration()
     }
 
     @State private var accountManager = AccountManager()

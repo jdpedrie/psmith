@@ -68,6 +68,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Embedder", systemImage: "point.3.connected.trianglepath.dotted")
                 }
+                NavigationLink {
+                    ObsidianVaultView()
+                } label: {
+                    categoryRow("Obsidian", systemImage: "doc.text.below.ecg")
+                }
             }
         }
         .navigationTitle("Settings")
