@@ -212,13 +212,16 @@ type Querier interface {
 	// skips the filter; conversations with no title are excluded when set);
 	// profile_id (NULL skips the filter).
 	ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error)
-	// Same shape as ListDeviceToolCallsByUser but conversation-scoped
-	// — used by future per-conversation activity affordances. Caller
-	// must have already verified ownership via the conversation row.
+	// Same shape as ListDeviceToolCallsByUser, scoped to one
+	// conversation. The handler verifies the caller owns the
+	// conversation before running this — there's no per-row user_id
+	// guard in this query itself.
 	ListDeviceToolCallsByConversation(ctx context.Context, arg ListDeviceToolCallsByConversationParams) ([]DeviceToolCall, error)
 	// Recent-first paginated list for the Settings → Device tool
-	// activity page. `cursor` is the invoked_at of the last row from
-	// the previous page; pass NULL for the first page.
+	// activity page. `before` is the cutoff: pass NOW() for the first
+	// page, the invoked_at of the last row from the previous page for
+	// subsequent pages. Always-set timestamp avoids nullable-param
+	// gymnastics around an optional cursor.
 	ListDeviceToolCallsByUser(ctx context.Context, arg ListDeviceToolCallsByUserParams) ([]DeviceToolCall, error)
 	ListFilesForUser(ctx context.Context, arg ListFilesForUserParams) ([]File, error)
 	// Walks parent_id from the leaf back to the root, returning rows root-first.

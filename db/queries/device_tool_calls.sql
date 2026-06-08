@@ -17,23 +17,26 @@ RETURNING *;
 
 -- name: ListDeviceToolCallsByUser :many
 -- Recent-first paginated list for the Settings → Device tool
--- activity page. `cursor` is the invoked_at of the last row from
--- the previous page; pass NULL for the first page.
+-- activity page. `before` is the cutoff: pass NOW() for the first
+-- page, the invoked_at of the last row from the previous page for
+-- subsequent pages. Always-set timestamp avoids nullable-param
+-- gymnastics around an optional cursor.
 SELECT *
 FROM device_tool_calls
 WHERE user_id = $1
-  AND ($2::TIMESTAMPTZ IS NULL OR invoked_at < $2)
+  AND invoked_at < $2
 ORDER BY invoked_at DESC
 LIMIT $3;
 
 -- name: ListDeviceToolCallsByConversation :many
--- Same shape as ListDeviceToolCallsByUser but conversation-scoped
--- — used by future per-conversation activity affordances. Caller
--- must have already verified ownership via the conversation row.
+-- Same shape as ListDeviceToolCallsByUser, scoped to one
+-- conversation. The handler verifies the caller owns the
+-- conversation before running this — there's no per-row user_id
+-- guard in this query itself.
 SELECT *
 FROM device_tool_calls
 WHERE conversation_id = $1
-  AND ($2::TIMESTAMPTZ IS NULL OR invoked_at < $2)
+  AND invoked_at < $2
 ORDER BY invoked_at DESC
 LIMIT $3;
 

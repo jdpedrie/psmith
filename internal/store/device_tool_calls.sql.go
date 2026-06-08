@@ -100,22 +100,23 @@ const listDeviceToolCallsByConversation = `-- name: ListDeviceToolCallsByConvers
 SELECT id, user_id, conversation_id, message_id, tool_name, input_json, output_json, status, error_message, invoked_at, completed_at
 FROM device_tool_calls
 WHERE conversation_id = $1
-  AND ($2::TIMESTAMPTZ IS NULL OR invoked_at < $2)
+  AND invoked_at < $2
 ORDER BY invoked_at DESC
 LIMIT $3
 `
 
 type ListDeviceToolCallsByConversationParams struct {
 	ConversationID uuid.UUID
-	Column2        time.Time
+	InvokedAt      time.Time
 	Limit          int32
 }
 
-// Same shape as ListDeviceToolCallsByUser but conversation-scoped
-// — used by future per-conversation activity affordances. Caller
-// must have already verified ownership via the conversation row.
+// Same shape as ListDeviceToolCallsByUser, scoped to one
+// conversation. The handler verifies the caller owns the
+// conversation before running this — there's no per-row user_id
+// guard in this query itself.
 func (q *Queries) ListDeviceToolCallsByConversation(ctx context.Context, arg ListDeviceToolCallsByConversationParams) ([]DeviceToolCall, error) {
-	rows, err := q.db.Query(ctx, listDeviceToolCallsByConversation, arg.ConversationID, arg.Column2, arg.Limit)
+	rows, err := q.db.Query(ctx, listDeviceToolCallsByConversation, arg.ConversationID, arg.InvokedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -150,22 +151,24 @@ const listDeviceToolCallsByUser = `-- name: ListDeviceToolCallsByUser :many
 SELECT id, user_id, conversation_id, message_id, tool_name, input_json, output_json, status, error_message, invoked_at, completed_at
 FROM device_tool_calls
 WHERE user_id = $1
-  AND ($2::TIMESTAMPTZ IS NULL OR invoked_at < $2)
+  AND invoked_at < $2
 ORDER BY invoked_at DESC
 LIMIT $3
 `
 
 type ListDeviceToolCallsByUserParams struct {
-	UserID  uuid.UUID
-	Column2 time.Time
-	Limit   int32
+	UserID    uuid.UUID
+	InvokedAt time.Time
+	Limit     int32
 }
 
 // Recent-first paginated list for the Settings → Device tool
-// activity page. `cursor` is the invoked_at of the last row from
-// the previous page; pass NULL for the first page.
+// activity page. `before` is the cutoff: pass NOW() for the first
+// page, the invoked_at of the last row from the previous page for
+// subsequent pages. Always-set timestamp avoids nullable-param
+// gymnastics around an optional cursor.
 func (q *Queries) ListDeviceToolCallsByUser(ctx context.Context, arg ListDeviceToolCallsByUserParams) ([]DeviceToolCall, error) {
-	rows, err := q.db.Query(ctx, listDeviceToolCallsByUser, arg.UserID, arg.Column2, arg.Limit)
+	rows, err := q.db.Query(ctx, listDeviceToolCallsByUser, arg.UserID, arg.InvokedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

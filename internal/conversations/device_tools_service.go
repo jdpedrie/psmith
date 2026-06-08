@@ -118,7 +118,10 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 			limit = 100
 		}
 	}
-	var before time.Time
+	// Cursor: NOW() on first-page calls, the previous page's
+	// last invoked_at on subsequent. Always-set so the SQL stays
+	// a flat range query without nullable-param tricks.
+	before := time.Now().UTC()
 	if req.Msg.Before != nil {
 		before = req.Msg.Before.AsTime()
 	}
@@ -144,7 +147,7 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 		}
 		rows, err := h.queries.ListDeviceToolCallsByConversation(ctx, store.ListDeviceToolCallsByConversationParams{
 			ConversationID: convID,
-			Column2:        before,
+			InvokedAt:      before,
 			Limit:          limit,
 		})
 		if err != nil {
@@ -156,9 +159,9 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 	}
 
 	rows, err := h.queries.ListDeviceToolCallsByUser(ctx, store.ListDeviceToolCallsByUserParams{
-		UserID:  user.ID,
-		Column2: before,
-		Limit:   limit,
+		UserID:    user.ID,
+		InvokedAt: before,
+		Limit:     limit,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
