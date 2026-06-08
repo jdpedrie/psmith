@@ -28,36 +28,145 @@ import ReeveKit
 
 public struct ToolCallLivePill: View {
     let call: LiveToolCall
+    /// Optional binding to make the pill expandable on tap. When nil
+    /// the pill stays Button-free (preserves the original streaming-row
+    /// behaviour for callers that don't need inspect-as-it-happens).
+    /// When bound, the pill renders a chevron and toggles a disclosure
+    /// body showing the streamed input + output so far — the same
+    /// req/resp inspection surface the settled disclosure offers, but
+    /// available mid-stream for debugging.
+    @Binding var isExpanded: Bool
+    private let isExpansionEnabled: Bool
 
     public init(call: LiveToolCall) {
         self.call = call
+        self._isExpanded = .constant(false)
+        self.isExpansionEnabled = false
+    }
+
+    public init(call: LiveToolCall, isExpanded: Binding<Bool>) {
+        self.call = call
+        self._isExpanded = isExpanded
+        self.isExpansionEnabled = true
     }
 
     public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            pillChrome
+            if isExpansionEnabled, isExpanded {
+                liveDisclosureBody
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pillChrome: some View {
         switch call.phase {
         case .generating(let since):
             TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
-                ToolPillChip(
+                wrappedChip(ToolPillChip(
                     iconName: "wrench.and.screwdriver",
                     label: "Using \(call.name) (\(formatSeconds(ctx.date.timeIntervalSince(since))))",
-                    pulsing: true
-                )
+                    pulsing: true,
+                    chevron: chevronStyle
+                ))
             }
         case .executing(let since):
             TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
-                ToolPillChip(
+                wrappedChip(ToolPillChip(
                     iconName: "gearshape.2",
                     label: "Processing \(call.name) result (\(formatSeconds(ctx.date.timeIntervalSince(since))))",
-                    pulsing: true
-                )
+                    pulsing: true,
+                    chevron: chevronStyle
+                ))
             }
         case .done(let dur, let hasError):
-            ToolPillChip(
+            wrappedChip(ToolPillChip(
                 iconName: hasError ? "exclamationmark.triangle" : "checkmark",
                 label: doneLabel(name: call.name, durationSec: dur, hasError: hasError),
                 pulsing: false,
+                chevron: chevronStyle,
                 accentTint: hasError ? .orange : nil
-            )
+            ))
+        }
+    }
+
+    private var chevronStyle: ToolPillChip.Chevron {
+        guard isExpansionEnabled else { return .none }
+        return isExpanded ? .down : .right
+    }
+
+    @ViewBuilder
+    private func wrappedChip<C: View>(_ chip: C) -> some View {
+        if isExpansionEnabled {
+            Button(action: toggle) { chip }
+                .buttonStyle(.plain)
+        } else {
+            chip
+        }
+    }
+
+    private func toggle() {
+        withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+    }
+
+    /// Disclosure body for the live pill — mirrors the settled
+    /// disclosure's layout (Input + Output sections, blockquoted, capped
+    /// height) but reads from `LiveToolCall`'s string input + optional
+    /// output bytes. Sections fall back to "(streaming…)" when bytes
+    /// haven't arrived yet so the user can see *something* the moment
+    /// they expand mid-stream.
+    @ViewBuilder
+    private var liveDisclosureBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                liveSection(title: "Input", body: liveInputText)
+                if let err = call.error {
+                    liveSection(title: "Error", body: err, tint: .orange)
+                } else {
+                    liveSection(title: "Output", body: liveOutputText)
+                }
+            }
+            .padding(.leading, 10)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.primary.opacity(0.18))
+                    .frame(width: 3)
+                    .padding(.vertical, 2)
+            }
+        }
+        .frame(maxHeight: 260)
+    }
+
+    private var liveInputText: String {
+        if call.input.isEmpty { return "(streaming…)" }
+        if let data = call.input.data(using: .utf8) { return prettyJSON(data) }
+        return call.input
+    }
+
+    private var liveOutputText: String {
+        guard let out = call.output else {
+            switch call.phase {
+            case .done: return "(empty)"
+            default:    return "(streaming…)"
+            }
+        }
+        return prettyJSON(out)
+    }
+
+    private func liveSection(title: String, body: String, tint: Color? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+            Text(body)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(tint ?? .secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

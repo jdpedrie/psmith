@@ -35,6 +35,12 @@ public struct StreamingRow: View {
     @Binding var thinkingExpanded: Bool
     /// Tool calls captured on the active stream, in start order.
     let toolCalls: [LiveToolCall]
+    /// Resolver invoked per live tool call to produce a binding for
+    /// its expand/collapse state — lets the ViewModel own the storage
+    /// (typically a Set<String> keyed by callID) so expansion choices
+    /// survive the StreamingRow → MessageRow swap at terminal time.
+    /// When nil, pills render non-interactive (the original behaviour).
+    let toolCallExpansionBinding: ((LiveToolCall) -> Binding<Bool>)?
     /// When true, render with the compression-summary chrome (orange
     /// accent + "Compression summary" header) instead of the regular
     /// assistant bubble. Lets the live row match the materialised
@@ -57,6 +63,7 @@ public struct StreamingRow: View {
         thinkingFinishedAt: Date?,
         thinkingExpanded: Binding<Bool>,
         toolCalls: [LiveToolCall],
+        toolCallExpansionBinding: ((LiveToolCall) -> Binding<Bool>)? = nil,
         isCompression: Bool = false,
         streamingComponents: [ReeveStreamingComponentTag] = []
     ) {
@@ -66,6 +73,7 @@ public struct StreamingRow: View {
         self.thinkingFinishedAt = thinkingFinishedAt
         self._thinkingExpanded = thinkingExpanded
         self.toolCalls = toolCalls
+        self.toolCallExpansionBinding = toolCallExpansionBinding
         self.isCompression = isCompression
         self.streamingComponents = streamingComponents
     }
@@ -142,7 +150,11 @@ public struct StreamingRow: View {
             )
         }
         ForEach(Array(toolCalls.enumerated()), id: \.offset) { _, call in
-            ToolCallLivePill(call: call)
+            if let resolver = toolCallExpansionBinding {
+                ToolCallLivePill(call: call, isExpanded: resolver(call))
+            } else {
+                ToolCallLivePill(call: call)
+            }
         }
         if text.isEmpty {
             if thinkingStartedAt == nil, toolCalls.isEmpty {

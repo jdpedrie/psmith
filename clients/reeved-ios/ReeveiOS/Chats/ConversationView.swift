@@ -732,6 +732,18 @@ private struct StreamingArea: View {
                 thinkingFinishedAt: model.streamingThinkingFinishedAt,
                 thinkingExpanded: $model.streamingThinkingExpanded,
                 toolCalls: model.streamingToolCalls,
+                toolCallExpansionBinding: { call in
+                    Binding(
+                        get: { model.expandedLiveToolCallIDs.contains(call.id) },
+                        set: { newValue in
+                            if newValue {
+                                model.expandedLiveToolCallIDs.insert(call.id)
+                            } else {
+                                model.expandedLiveToolCallIDs.remove(call.id)
+                            }
+                        }
+                    )
+                },
                 isCompression: model.isCompacting,
                 streamingComponents: model.conversation.streamingComponents
             )

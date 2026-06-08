@@ -141,6 +141,16 @@ public final class ConversationViewModel {
     /// per-round id resets cause id collisions.
     public var expandedToolCallKeys: Set<String> = []
 
+    /// Open/closed state for tool-call disclosures on the LIVE stream
+    /// (StreamingRow), keyed by the call's id. Distinct from
+    /// `expandedToolCallKeys` because live calls don't have a parent
+    /// message id yet; the stream owns the id directly until terminal.
+    /// Carries over across re-renders so a mid-stream expansion stays
+    /// open as new chunks arrive. Views construct a Binding<Bool> off
+    /// this set inline at the call site (this VM stays SwiftUI-free so
+    /// it can compile on platforms without UIKit/AppKit).
+    public var expandedLiveToolCallIDs: Set<String> = []
+
     /// Per-message expansion state for system + context message bubbles.
     /// Default behaviour for those roles is collapsed (the bubble shows
     /// just a header strip with the role + first line of the content);

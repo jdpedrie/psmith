@@ -713,4 +713,22 @@ struct ConversationViewModelTests {
         #expect(newActive?.id == other || newActive?.parentID == other,
                 "expected chain to land on or under the chosen sibling")
     }
+
+    // MARK: - Live tool-call expansion state
+
+    @Test("expandedLiveToolCallIDs starts empty and accepts membership mutations")
+    func liveToolCallExpansionState() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "live-tc-expand")
+        #expect(r.vm.expandedLiveToolCallIDs.isEmpty)
+
+        r.vm.expandedLiveToolCallIDs.insert("call-a")
+        #expect(r.vm.expandedLiveToolCallIDs.contains("call-a"))
+
+        r.vm.expandedLiveToolCallIDs.insert("call-b")
+        #expect(r.vm.expandedLiveToolCallIDs.count == 2)
+
+        r.vm.expandedLiveToolCallIDs.remove("call-a")
+        #expect(!r.vm.expandedLiveToolCallIDs.contains("call-a"))
+        #expect(r.vm.expandedLiveToolCallIDs.contains("call-b"))
+    }
 }
