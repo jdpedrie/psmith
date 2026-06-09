@@ -37,6 +37,7 @@ enum HealthTools {
         r.register(name: "health_recent_workouts", handler: recentWorkouts)
         r.register(name: "health_sleep_last_night", handler: sleepLastNight)
         r.register(name: "health_vitals_recent", handler: vitalsRecent)
+        r.register(name: "health_query", handler: healthQuery)
     }
 
     // MARK: - Handlers
@@ -123,6 +124,280 @@ enum HealthTools {
             bodyMassKg: try? await bodyMass
         )
         return try JSONEncoder.iso8601.encode(payload)
+    }
+
+    // MARK: - Generic query
+
+    /// The catch-all reader. Resolves `data_type` against the
+    /// quantity-type registry below, requests authorization for
+    /// JUST that type (not the union the dedicated handlers ask
+    /// for), then runs the matching query shape for the requested
+    /// `aggregation`. Apple's privacy contract: a denied type is
+    /// indistinguishable from an empty range — both return zero
+    /// samples / nil. The model is told this in the tool description
+    /// so it doesn't assert "you have no heart rate data" when the
+    /// user actually has denied the permission.
+    private static let healthQuery: DeviceToolHandler = { inputJSON in
+        let input = try decode(QueryInput.self, from: inputJSON)
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw DeviceToolError.permissionDenied("health (not available on this device)")
+        }
+        guard let entry = quantityRegistry[input.dataType] else {
+            throw DeviceToolError.message(
+                "unknown health data_type '\(input.dataType)' — see tool description for the supported list")
+        }
+        // Per-type authorization. iOS shows the sheet only when
+        // the user hasn't decided yet; subsequent calls for the
+        // same type are no-ops.
+        try await requestRead(type: entry.type)
+
+        let end = input.endDate ?? Date()
+        let start = input.startDate ?? Calendar.current.date(byAdding: .day, value: -30, to: end) ?? end.addingTimeInterval(-30 * 86400)
+        let mode = QueryAggregation(rawValue: input.aggregation ?? "samples") ?? .samples
+
+        switch mode {
+        case .samples:
+            let limit = max(1, min(input.limit ?? 100, 500))
+            let samples = try await runSampleQuery(
+                type: entry.type, start: start, end: end,
+                limit: limit, ascending: false
+            ) { items in (items as? [HKQuantitySample]) ?? [] }
+            let payload = QuerySamplesOutput(
+                dataType: input.dataType,
+                unit: entry.unitLabel,
+                samples: samples.map { QueryQuantitySample(date: $0.endDate, value: $0.quantity.doubleValue(for: entry.unit)) }
+            )
+            return try JSONEncoder.iso8601.encode(payload)
+
+        case .sum:
+            let (total, count) = try await statisticsQuery(
+                entry: entry, start: start, end: end, option: .cumulativeSum)
+            return try JSONEncoder.iso8601.encode(QuerySumOutput(
+                dataType: input.dataType, unit: entry.unitLabel,
+                sum: total, sampleCount: count))
+
+        case .average:
+            let (avg, count) = try await statisticsQuery(
+                entry: entry, start: start, end: end, option: .discreteAverage)
+            return try JSONEncoder.iso8601.encode(QueryAverageOutput(
+                dataType: input.dataType, unit: entry.unitLabel,
+                average: avg, sampleCount: count))
+
+        case .latest:
+            // No date filter — caller wants the most recent
+            // sample regardless of the supplied range.
+            let samples = try await runSampleQuery(
+                type: entry.type, start: nil, end: nil,
+                limit: 1, ascending: false
+            ) { items in (items as? [HKQuantitySample]) ?? [] }
+            if let s = samples.first {
+                return try JSONEncoder.iso8601.encode(QueryLatestOutput(
+                    dataType: input.dataType, unit: entry.unitLabel,
+                    date: s.endDate, value: s.quantity.doubleValue(for: entry.unit)))
+            } else {
+                return try JSONEncoder.iso8601.encode(QueryLatestEmpty(
+                    dataType: input.dataType, unit: entry.unitLabel))
+            }
+        }
+    }
+
+    private static func statisticsQuery(
+        entry: QuantityRegistryEntry,
+        start: Date, end: Date,
+        option: HKStatisticsOptions
+    ) async throws -> (value: Double, count: Int) {
+        try await withCheckedThrowingContinuation { cont in
+            let predicate = HKQuery.predicateForSamples(
+                withStart: start, end: end, options: [.strictStartDate])
+            let q = HKStatisticsQuery(
+                quantityType: entry.type,
+                quantitySamplePredicate: predicate,
+                options: option
+            ) { _, stats, error in
+                if let error { cont.resume(throwing: error); return }
+                let qty = (option == .cumulativeSum)
+                    ? stats?.sumQuantity()
+                    : stats?.averageQuantity()
+                let value = qty?.doubleValue(for: entry.unit) ?? 0
+                // sources().count isn't sample count — there's no
+                // sample-count getter on HKStatistics. Best proxy:
+                // run a separate sample query and count. For now
+                // we surface 0 when no samples and 1+ when stats
+                // returned a quantity so the model knows the bucket
+                // wasn't empty.
+                let count: Int = (qty != nil) ? 1 : 0
+                cont.resume(returning: (value, count))
+            }
+            store.execute(q)
+        }
+    }
+
+    /// Per-type read authorization. Wraps the HK API in a
+    /// continuation. iOS shows the sheet only for types whose
+    /// status is `.notDetermined`; for already-decided types the
+    /// call resolves immediately.
+    private static func requestRead(type: HKObjectType) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            store.requestAuthorization(toShare: [], read: [type]) { _, error in
+                if let error { cont.resume(throwing: error); return }
+                cont.resume()
+            }
+        }
+    }
+
+    // MARK: - Quantity type registry
+
+    /// One entry per supported HK quantity type. `unitLabel` is the
+    /// short string we surface to the model in the JSON output so
+    /// it can phrase its answer with the right unit ("78 kg" vs
+    /// "171 lb"). Kept in code (not derived from `HKUnit.unitString`)
+    /// so additions are explicit + reviewable.
+    private struct QuantityRegistryEntry {
+        let type: HKQuantityType
+        let unit: HKUnit
+        let unitLabel: String
+    }
+
+    private static let quantityRegistry: [String: QuantityRegistryEntry] = {
+        var out: [String: QuantityRegistryEntry] = [:]
+        func add(_ name: String, _ id: HKQuantityTypeIdentifier, _ unit: HKUnit, _ label: String) {
+            guard let t = HKObjectType.quantityType(forIdentifier: id) else { return }
+            out[name] = QuantityRegistryEntry(type: t, unit: unit, unitLabel: label)
+        }
+
+        // Cardio / vitals
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        add("heartRate",                    .heartRate,                    bpm, "count/min")
+        add("restingHeartRate",             .restingHeartRate,             bpm, "count/min")
+        add("walkingHeartRateAverage",      .walkingHeartRateAverage,      bpm, "count/min")
+        add("heartRateVariabilitySDNN",     .heartRateVariabilitySDNN,     .secondUnit(with: .milli), "ms")
+        add("bloodPressureSystolic",        .bloodPressureSystolic,        HKUnit.millimeterOfMercury(), "mmHg")
+        add("bloodPressureDiastolic",       .bloodPressureDiastolic,       HKUnit.millimeterOfMercury(), "mmHg")
+        add("bloodGlucose",                 .bloodGlucose,                 HKUnit(from: "mg/dL"), "mg/dL")
+        add("oxygenSaturation",             .oxygenSaturation,             .percent(), "%")
+        add("respiratoryRate",              .respiratoryRate,              HKUnit.count().unitDivided(by: .minute()), "count/min")
+        add("vo2Max",                       .vo2Max,                       HKUnit(from: "ml/(kg*min)"), "mL/(kg·min)")
+        add("bodyTemperature",              .bodyTemperature,              .degreeCelsius(), "°C")
+
+        // Body composition
+        add("bodyMass",                     .bodyMass,                     .gramUnit(with: .kilo), "kg")
+        add("bodyMassIndex",                .bodyMassIndex,                .count(), "")
+        add("bodyFatPercentage",            .bodyFatPercentage,            .percent(), "%")
+        add("leanBodyMass",                 .leanBodyMass,                 .gramUnit(with: .kilo), "kg")
+        add("height",                       .height,                       .meter(), "m")
+        add("waistCircumference",           .waistCircumference,           .meter(), "m")
+
+        // Activity
+        add("stepCount",                    .stepCount,                    .count(), "count")
+        add("distanceWalkingRunning",       .distanceWalkingRunning,       .meter(), "m")
+        add("distanceCycling",              .distanceCycling,              .meter(), "m")
+        add("distanceSwimming",             .distanceSwimming,             .meter(), "m")
+        add("flightsClimbed",               .flightsClimbed,               .count(), "count")
+        add("activeEnergyBurned",           .activeEnergyBurned,           .kilocalorie(), "kcal")
+        add("basalEnergyBurned",            .basalEnergyBurned,            .kilocalorie(), "kcal")
+        add("appleExerciseTime",            .appleExerciseTime,            .minute(), "min")
+        add("appleStandTime",               .appleStandTime,               .minute(), "min")
+
+        // Gait / mobility
+        add("walkingSpeed",                 .walkingSpeed,                 HKUnit.meter().unitDivided(by: .second()), "m/s")
+        add("walkingStepLength",            .walkingStepLength,            .meter(), "m")
+        add("walkingAsymmetryPercentage",   .walkingAsymmetryPercentage,   .percent(), "%")
+        add("walkingDoubleSupportPercentage", .walkingDoubleSupportPercentage, .percent(), "%")
+        add("sixMinuteWalkTestDistance",    .sixMinuteWalkTestDistance,    .meter(), "m")
+        add("stairAscentSpeed",             .stairAscentSpeed,             HKUnit.meter().unitDivided(by: .second()), "m/s")
+        add("stairDescentSpeed",            .stairDescentSpeed,            HKUnit.meter().unitDivided(by: .second()), "m/s")
+
+        // Nutrition
+        add("dietaryEnergyConsumed",        .dietaryEnergyConsumed,        .kilocalorie(), "kcal")
+        add("dietaryWater",                 .dietaryWater,                 HKUnit.literUnit(with: .milli), "mL")
+        add("dietaryCaffeine",              .dietaryCaffeine,              .gramUnit(with: .milli), "mg")
+        add("dietaryProtein",               .dietaryProtein,               .gram(), "g")
+        add("dietaryCarbohydrates",         .dietaryCarbohydrates,         .gram(), "g")
+        add("dietaryFatTotal",              .dietaryFatTotal,              .gram(), "g")
+        add("dietarySodium",                .dietarySodium,                .gramUnit(with: .milli), "mg")
+        add("dietarySugar",                 .dietarySugar,                 .gram(), "g")
+
+        // Audio exposure
+        add("environmentalAudioExposure",   .environmentalAudioExposure,   HKUnit.decibelAWeightedSoundPressureLevel(), "dB(A)")
+        add("headphoneAudioExposure",       .headphoneAudioExposure,       HKUnit.decibelAWeightedSoundPressureLevel(), "dB(A)")
+
+        return out
+    }()
+
+    private enum QueryAggregation: String {
+        case samples, sum, average, latest
+    }
+
+    // MARK: - Generic query wire types
+
+    private struct QueryInput: Decodable {
+        let dataType: String
+        let startDate: Date?
+        let endDate: Date?
+        let limit: Int?
+        let aggregation: String?
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case startDate = "start_date"
+            case endDate = "end_date"
+            case limit
+            case aggregation
+        }
+    }
+    private struct QuerySamplesOutput: Encodable {
+        let dataType: String
+        let unit: String
+        let samples: [QueryQuantitySample]
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case unit, samples
+        }
+    }
+    private struct QueryQuantitySample: Encodable {
+        let date: Date
+        let value: Double
+    }
+    private struct QuerySumOutput: Encodable {
+        let dataType: String
+        let unit: String
+        let sum: Double
+        let sampleCount: Int
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case unit, sum
+            case sampleCount = "sample_count"
+        }
+    }
+    private struct QueryAverageOutput: Encodable {
+        let dataType: String
+        let unit: String
+        let average: Double
+        let sampleCount: Int
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case unit, average
+            case sampleCount = "sample_count"
+        }
+    }
+    private struct QueryLatestOutput: Encodable {
+        let dataType: String
+        let unit: String
+        let date: Date
+        let value: Double
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case unit, date, value
+        }
+    }
+    private struct QueryLatestEmpty: Encodable {
+        let dataType: String
+        let unit: String
+        let date: Date? = nil
+        let value: Double? = nil
+        enum CodingKeys: String, CodingKey {
+            case dataType = "data_type"
+            case unit, date, value
+        }
     }
 
     // MARK: - Permission

@@ -303,6 +303,7 @@ func TestCatalog_HealthToolsPresent(t *testing.T) {
 		"health_recent_workouts",
 		"health_sleep_last_night",
 		"health_vitals_recent",
+		"health_query",
 	}
 	for _, name := range want {
 		tool := Find(name)
