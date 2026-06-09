@@ -57,7 +57,9 @@ enum HealthTools {
     // MARK: - Handlers
 
     private static let todaySummary: DeviceToolHandler = { _ in
+        log.notice("health_today_summary: enter")
         try await ensureHealthAccess()
+        log.notice("health_today_summary: auth returned, querying")
         let cal = Calendar.current
         let start = cal.startOfDay(for: Date())
         let end = Date()
@@ -82,8 +84,10 @@ enum HealthTools {
     }
 
     private static let recentWorkouts: DeviceToolHandler = { inputJSON in
+        log.notice("health_recent_workouts: enter")
         let input = try decode(WorkoutsInput.self, from: inputJSON)
         try await ensureHealthAccess()
+        log.notice("health_recent_workouts: auth returned, querying")
 
         let limit = max(1, min(input.limit ?? 50, 200))
         let workouts = try await runSampleQuery(
@@ -97,7 +101,9 @@ enum HealthTools {
     }
 
     private static let sleepLastNight: DeviceToolHandler = { _ in
+        log.notice("health_sleep_last_night: enter")
         try await ensureHealthAccess()
+        log.notice("health_sleep_last_night: auth returned, querying")
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             return try JSONEncoder.iso8601.encode(EmptySleep())
         }
@@ -120,8 +126,10 @@ enum HealthTools {
     }
 
     private static let vitalsRecent: DeviceToolHandler = { inputJSON in
+        log.notice("health_vitals_recent: enter")
         let input = try decode(VitalsInput.self, from: inputJSON)
         try await ensureHealthAccess()
+        log.notice("health_vitals_recent: auth returned, querying")
 
         let days = max(1, min(input.days ?? 14, 90))
         let end = Date()

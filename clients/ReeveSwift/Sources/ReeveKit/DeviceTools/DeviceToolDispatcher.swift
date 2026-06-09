@@ -99,7 +99,12 @@ public final class DeviceToolDispatcher {
                 supportedToolNames: names,
                 attributes: attributes
             )
-            log.info("registered \(names.count) device-tool capabilities")
+            // Notice level so this lands in persistent logs — without
+            // confirmation of THIS line, the server's tool-filter
+            // can't know what the device offers. The bullets list
+            // every name we sent so a missing tool stands out.
+            let joined = names.joined(separator: ",")
+            log.notice("registerCapabilities OK: count=\(names.count, privacy: .public) names=[\(joined, privacy: .public)]")
         } catch {
             log.error("registerCapabilities failed: \(String(describing: error))")
         }
@@ -115,6 +120,11 @@ public final class DeviceToolDispatcher {
         guard chunk.type == .deviceToolUse,
               let info = chunk.deviceToolUseInfo
         else { return }
+
+        // Notice-level so it survives the default os_log filter — the
+        // "did the chunk even reach the device?" question is the
+        // first thing we ask when a tool call times out at the broker.
+        log.notice("dispatcher: received chunk for tool=\(info.toolName, privacy: .public) call=\(info.callID, privacy: .public)")
 
         let handler = registry.handler(for: info.toolName)
         // Move off the main actor for the handler invocation +
