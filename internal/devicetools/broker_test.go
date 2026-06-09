@@ -292,3 +292,33 @@ func TestCatalog_NamesUseSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalog_HealthToolsPresent(t *testing.T) {
+	t.Parallel()
+	// Pin the HealthKit catalog surface: four read tools, all
+	// gated on the "health" permission, all defaulted on (they're
+	// read-only and useful as soon as the user grants access).
+	want := []string{
+		"health_today_summary",
+		"health_recent_workouts",
+		"health_sleep_last_night",
+		"health_vitals_recent",
+	}
+	for _, name := range want {
+		tool := Find(name)
+		if tool == nil {
+			t.Errorf("%s missing from catalog", name)
+			continue
+		}
+		if tool.Category != "Health" {
+			t.Errorf("%s.Category=%q want Health", name, tool.Category)
+		}
+		if len(tool.RequiredPermissions) != 1 || tool.RequiredPermissions[0] != "health" {
+			t.Errorf("%s.RequiredPermissions=%v want [health]",
+				name, tool.RequiredPermissions)
+		}
+		if !tool.DefaultEnabled {
+			t.Errorf("%s should default to enabled (read-only)", name)
+		}
+	}
+}

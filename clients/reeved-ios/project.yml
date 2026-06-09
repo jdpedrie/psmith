@@ -52,6 +52,20 @@ targets:
         # in the active profile and the model first invokes it.
         NSCalendarsUsageDescription: "Reeve can read and write calendar events when the model invokes the calendar tools you've enabled in your profile."
         NSRemindersUsageDescription: "Reeve can read and create reminders when the model invokes the reminders tools you've enabled in your profile."
+        # HealthKit — read-only access to activity, workouts, sleep,
+        # vitals. The framework itself is entitlement-gated (see the
+        # CODE_SIGN_ENTITLEMENTS setting below); this string is what
+        # the user sees the first time a `health_*` tool runs and
+        # the permission sheet appears.
+        NSHealthShareUsageDescription: "Reeve can read activity, workouts, sleep, and vitals from the Health app when the model invokes the health tools you've enabled in your profile."
+    entitlements:
+      path: ReeveiOS/ReeveiOS.entitlements
+      properties:
+        # HealthKit entitlement — required for the HealthKit framework
+        # to even link. No "access" sub-entitlement (clinical records
+        # etc.) — we only read the standard non-clinical types.
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jdpedrie.ReeveiOS

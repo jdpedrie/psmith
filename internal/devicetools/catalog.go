@@ -111,6 +111,43 @@ var catalog = []Tool{
 		DefaultEnabled:      false,
 	},
 
+	{
+		Name:                "health_today_summary",
+		DisplayName:         "Today's activity summary",
+		Category:            "Health",
+		Description:         "Summarise the user's activity for today: steps, active energy (kcal), exercise minutes, stand hours. Mirrors the Activity-rings metrics on Apple Watch. Use to answer questions like 'how active have I been today?'.",
+		InputSchema:         `{"type":"object","properties":{}}`,
+		RequiredPermissions: []string{"health"},
+		DefaultEnabled:      true,
+	},
+	{
+		Name:                "health_recent_workouts",
+		DisplayName:         "Recent workouts",
+		Category:            "Health",
+		Description:         "List workouts completed in a date range. Returns activity type, start/end, duration (minutes), active energy (kcal), distance (meters when applicable). Use for 'what workouts did I do this week?'.",
+		InputSchema:         `{"type":"object","properties":{"start_date":{"type":"string","description":"ISO-8601 timestamp; workouts ending on or after this are included."},"end_date":{"type":"string","description":"ISO-8601 timestamp; workouts starting on or before this are included."},"limit":{"type":"integer","description":"Cap on rows returned; defaults to 50, max 200."}},"required":["start_date","end_date"]}`,
+		RequiredPermissions: []string{"health"},
+		DefaultEnabled:      true,
+	},
+	{
+		Name:                "health_sleep_last_night",
+		DisplayName:         "Last night's sleep",
+		Category:            "Health",
+		Description:         "Summarise the user's most recent sleep session — bedtime, wake time, time-in-bed, time asleep, and per-stage breakdown (REM, core, deep, awake) when the source watches recorded it. Returns null when no recent sleep was logged.",
+		InputSchema:         `{"type":"object","properties":{}}`,
+		RequiredPermissions: []string{"health"},
+		DefaultEnabled:      true,
+	},
+	{
+		Name:                "health_vitals_recent",
+		DisplayName:         "Recent vital signs",
+		Category:            "Health",
+		Description:         "Return recent samples for resting heart rate, heart rate variability (SDNN, ms), and the most recent body mass (kg) on file. Useful when the user asks 'how's my resting HR trending?' or 'what's my recent HRV?'. Returns the most recent N samples (default 14 days).",
+		InputSchema:         `{"type":"object","properties":{"days":{"type":"integer","description":"Window in days back from now; defaults to 14, max 90."}}}`,
+		RequiredPermissions: []string{"health"},
+		DefaultEnabled:      true,
+	},
+
 	// Obsidian intentionally NOT in this catalog — it gets its own
 	// plugin (`obsidian`) with its own tool catalog and per-vault
 	// bookmark management. The shared device-tool broker + dispatch

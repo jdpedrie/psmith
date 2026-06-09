@@ -20,6 +20,12 @@ struct ReeveiOSApp: App {
         // model actually calls one of these tools.
         CalendarTools.register()
         RemindersTools.register()
+        // HealthKit registration is no-op on devices where the
+        // framework isn't available (iPad without Health). When
+        // available, the handlers are registered eagerly; the
+        // permission sheet only fires on the first actual tool
+        // call (ensureHealthAccess inside the handler).
+        HealthTools.register()
         // Obsidian registers conditionally: tools advertised to
         // the server only when a vault bookmark exists. Re-synced
         // by ObsidianVaultView after pick/clear so the server

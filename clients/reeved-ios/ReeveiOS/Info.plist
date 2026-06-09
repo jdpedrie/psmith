@@ -29,6 +29,8 @@
 	<string>Reeve can read and write calendar events when the model invokes the calendar tools you've enabled in your profile.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach to your conversation.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Reeve can read activity, workouts, sleep, and vitals from the Health app when the model invokes the health tools you've enabled in your profile.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your approximate location can be sent with your messages so models give locale-aware answers (e.g. 'restaurants near me').</string>
 	<key>NSRemindersUsageDescription</key>
