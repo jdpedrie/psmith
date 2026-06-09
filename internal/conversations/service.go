@@ -1365,6 +1365,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[reevev1.
 		Plugins:          pipeline,
 		UserID:           user.ID,
 		Attachments:      s.storage,
+		Logger:           s.logger,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
@@ -2623,6 +2624,7 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[r
 		IncludeThinking:  includeThinking,
 		UserID:           user.ID,
 		Attachments:      s.storage,
+		Logger:           s.logger,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))

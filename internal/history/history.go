@@ -14,10 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/plugins"
 )
@@ -125,6 +127,15 @@ type Params struct {
 	// drivers will see empty Attachment lists. Tests that don't
 	// exercise attachments leave this nil.
 	Attachments AttachmentReader
+
+	// Logger, when non-nil, receives warnings for non-fatal
+	// problems encountered during history assembly — most notably
+	// attachment rows whose underlying bytes have vanished from
+	// storage. Build still returns successfully in that case so a
+	// missing image doesn't brick the whole conversation; the
+	// affected message just goes to the provider without the
+	// attachment. Nil means silent.
+	Logger *slog.Logger
 }
 
 // Build returns the wire-shaped message list for the prefix that ends at the
@@ -192,6 +203,18 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		for _, r := range rows {
 			rc, gerr := params.Attachments.Get(ctx, params.UserID, r.Sha256)
 			if gerr != nil {
+				// A missing object in storage shouldn't brick the
+				// conversation. The row exists but its bytes are
+				// gone (FS wipe, backend swap, partial restore).
+				// Log and drop the attachment from the wire; the
+				// model sees the rest of the message intact.
+				if errors.Is(gerr, storage.ErrNotFound) {
+					if params.Logger != nil {
+						params.Logger.Warn("history: attachment missing from storage; skipping",
+							"file_id", r.FileID, "sha256", r.Sha256, "message_id", r.MessageID)
+					}
+					continue
+				}
 				return nil, fmt.Errorf("history: read attachment %s: %w", r.FileID, gerr)
 			}
 			data, rerr := io.ReadAll(rc)
