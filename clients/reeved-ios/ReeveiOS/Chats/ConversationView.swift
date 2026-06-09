@@ -162,6 +162,26 @@ private struct ConversationBody: View {
     /// doesn't pop the moment the user reads past the last message.
     private let scrollToBottomThreshold: CGFloat = 200
 
+    /// Cold-entry history window: only the newest N messages render on
+    /// first appearance; the rest backfill a beat later (see
+    /// `expandHistoryWindow`). nil = full history.
+    ///
+    /// This is the fix for the long-standing "cold entry into a long
+    /// chat lands in blank space past the messages" bug. Root cause
+    /// (device-confirmed): handing LazyVStack 200+ messages in one
+    /// shot makes it realize rows from the TOP while the total content
+    /// size stays estimated — all the estimate error accumulates at
+    /// the BOTTOM as phantom blank space, and the bottom anchor seeks
+    /// into it (the scrollbar showed ~5 screens of desert below the
+    /// last message; once rows realized, the phantom collapsed and the
+    /// region became unreachable). A ~dozen-row tail realizes fully in
+    /// one pass, so the content size is exact and the anchor lands on
+    /// the real last message. The subsequent full-history prepend
+    /// happens ABOVE the viewport while the bottom edge is anchor-
+    /// pinned over already-realized rows, so the estimate error for
+    /// older rows lives above the viewport where it can't strand us.
+    @State private var historyWindow: Int? = 12
+
     var body: some View {
         VStack(spacing: 0) {
             statusStrip
@@ -411,7 +431,7 @@ private struct ConversationBody: View {
                     // LazyVStack content closure — running ForEach over
                     // N messages and constructing N MessageRow values
                     // per chunk, even though none of them changed.
-                    ChatHistoryArea(model: model)
+                    ChatHistoryArea(model: model, window: historyWindow)
                     // Pending user is its own subview for the same
                     // reason — observes only pendingUserText, not the
                     // chunk-rate streaming state.
@@ -603,10 +623,48 @@ private struct ConversationBody: View {
             // simulator that the system fires .tracking/.decelerating
             // during cold-entry settle of a long chat with NO touch
             // input — any phase-based disengage misreads that as a
-            // user drag and strands the viewport mid-realization. The
-            // DragGesture on the scroll content (above) is the sole
-            // disengage signal for user scrolling.
+            // user drag and strands the viewport mid-realization.
             .scrollDismissesKeyboard(.interactively)
+            .task {
+                // Backfill the full history once the tail window has
+                // landed. Wait out the initial load (cold entry
+                // constructs the VM and loads async), then give the
+                // anchor a beat to settle the ~dozen realized rows
+                // before prepending the rest.
+                while model.loading {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+                expandHistoryWindow()
+            }
+    }
+
+    /// Swap the tail window for the full history. While the bottom
+    /// anchor is engaged the prepend is invisible — content grows
+    /// above the viewport and the anchor holds the bottom edge over
+    /// rows that are already realized. If the user started scrolling
+    /// during the settle beat (anchor detached), re-pin the viewport
+    /// to the row they were looking at so the prepend doesn't shove
+    /// their reading position.
+    private func expandHistoryWindow() {
+        guard let w = historyWindow else { return }
+        guard model.messages.count > w else {
+            historyWindow = nil
+            return
+        }
+        var t = Transaction()
+        t.disablesAnimations = true
+        if autoFollow {
+            withTransaction(t) { historyWindow = nil }
+        } else {
+            let anchorID = model.messages.suffix(w).first?.id
+            withTransaction(t) {
+                historyWindow = nil
+                if let anchorID {
+                    scrollPosition.scrollTo(id: anchorID, anchor: .top)
+                }
+            }
+        }
     }
 
 }
@@ -632,11 +690,22 @@ private struct ScrollMetrics: Equatable, Sendable {
 
 /// Renders the settled message + compression-summary timeline. Observes
 /// only `model.messages`; immune to streaming state churn.
+///
+/// `window` limits rendering to the newest N messages during the
+/// cold-entry settle (see `historyWindow` on ConversationBody); nil
+/// renders everything. Message ids are stable, so the window→full
+/// transition is a pure prepend in ForEach's diff.
 private struct ChatHistoryArea: View {
     @Bindable var model: ConversationViewModel
+    let window: Int?
+
+    private var visibleMessages: [ReeveMessage] {
+        guard let window else { return model.messages }
+        return Array(model.messages.suffix(window))
+    }
 
     var body: some View {
-        ForEach(model.messages) { msg in
+        ForEach(visibleMessages) { msg in
             if msg.role == .compressionSummary {
                 CompressionSummaryCard(message: msg, model: model)
                     .id(msg.id)
