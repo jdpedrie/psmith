@@ -51,7 +51,7 @@ enum HealthTools {
         r.register(name: "health_sleep_last_night", handler: sleepLastNight)
         r.register(name: "health_vitals_recent", handler: vitalsRecent)
         r.register(name: "health_query", handler: healthQuery)
-        log.info("registered 5 HealthKit device-tool handlers")
+        log.notice("registered 5 HealthKit device-tool handlers")
     }
 
     // MARK: - Handlers
@@ -153,7 +153,7 @@ enum HealthTools {
     /// user actually has denied the permission.
     private static let healthQuery: DeviceToolHandler = { inputJSON in
         let input = try decode(QueryInput.self, from: inputJSON)
-        log.info("health_query: enter data_type=\(input.dataType, privacy: .public) aggregation=\(input.aggregation ?? "samples", privacy: .public)")
+        log.notice("health_query: enter data_type=\(input.dataType, privacy: .public) aggregation=\(input.aggregation ?? "samples", privacy: .public)")
         guard HKHealthStore.isHealthDataAvailable() else {
             log.warning("health_query: HKHealthStore not available")
             throw DeviceToolError.permissionDenied("health (not available on this device)")
@@ -163,12 +163,22 @@ enum HealthTools {
             throw DeviceToolError.message(
                 "unknown health data_type '\(input.dataType)' — see tool description for the supported list")
         }
-        log.info("health_query: requesting auth for \(input.dataType, privacy: .public)")
+        // Pre-auth status check — surfaces the per-type
+        // authorization state BEFORE we issue requestAuthorization.
+        // iOS's HealthKit privacy contract returns "not determined"
+        // even for types the user has explicitly read-denied (so
+        // the app can't tell whether the user said no vs hasn't
+        // been asked yet); but a status of `.sharingDenied` here
+        // is unambiguous and rare — most "no sheet appeared"
+        // reports trace back to either the entitlement not being
+        // signed into the build, or the request landing off-main.
+        let preStatus = store.authorizationStatus(for: entry.type)
+        log.notice("health_query: requesting auth for \(input.dataType, privacy: .public) (pre-status raw=\(preStatus.rawValue, privacy: .public))")
         // Per-type authorization. iOS shows the sheet only when
         // the user hasn't decided yet; subsequent calls for the
         // same type are no-ops.
         try await requestRead(type: entry.type)
-        log.info("health_query: auth request returned for \(input.dataType, privacy: .public)")
+        log.notice("health_query: auth request returned for \(input.dataType, privacy: .public)")
 
         let end = input.endDate ?? Date()
         let start = input.startDate ?? Calendar.current.date(byAdding: .day, value: -30, to: end) ?? end.addingTimeInterval(-30 * 86400)
