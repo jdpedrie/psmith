@@ -319,7 +319,7 @@ public final class AuthRepository: Sendable {
         guard let token = try? tokenStore.load(), !token.isEmpty else { return nil }
         _ = token
         do {
-            return try await withTimeout(seconds: 8) { [self] in
+            return try await withRPCTimeout(seconds: 8) { [self] in
                 try await whoAmI()
             }
         } catch {
@@ -344,33 +344,6 @@ public final class AuthRepository: Sendable {
                 return cached
             }
             return nil
-        }
-    }
-
-    /// Race `operation` against a sleep; whichever finishes first wins.
-    /// On timeout, throws a deadline-exceeded ReeveError so restore's
-    /// catch block treats it as a transport failure (cache fallback or
-    /// signed-out) rather than wedging on the URLSession default.
-    private func withTimeout<T: Sendable>(
-        seconds: TimeInterval,
-        _ operation: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw ReeveError.rpc(
-                    code: .deadlineExceeded,
-                    message: "operation timed out after \(Int(seconds))s"
-                )
-            }
-            defer { group.cancelAll() }
-            // First completion wins (whether success or throw); the
-            // other branch is cancelled. `group.next()` on a non-empty
-            // group never returns nil, so the force-unwrap is safe.
-            return try await group.next()!
         }
     }
 

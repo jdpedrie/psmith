@@ -40,7 +40,12 @@ struct ChatsRoot: View {
 
     var body: some View {
         NavigationStack(path: $conversationPath) {
-            contentList
+            VStack(spacing: 0) {
+                if app.connectivity.state == .offline {
+                    offlineBanner
+                }
+                contentList
+            }
                 .navigationTitle("Chats")
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: ReeveConversation.self) { conversation in
@@ -423,6 +428,27 @@ struct ChatsRoot: View {
     /// section already names, so listing it again would be noise.
     private var otherAccounts: [Account] {
         accountManager.accounts.filter { $0.id != accountManager.activeAccountID }
+    }
+
+    /// Strip rendered above the list when the connectivity monitor
+    /// reports the server is unreachable. The list below shows
+    /// whatever the cache last saw, so the user has context but knows
+    /// they're not seeing live state. Visually mirrors the composer's
+    /// offline banner inside a conversation for consistency.
+    private var offlineBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.caption2)
+            Text("Server unavailable — showing cached chats")
+                .font(.caption2)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
     }
 }
 

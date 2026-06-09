@@ -26,8 +26,13 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func list() async throws -> [ReeveUserModelProvider] {
-        let resp = await client.listUserModelProviders(request: .init(), headers: [:])
-        if let msg = resp.message {
+        // Bounded timeout so a dead server falls through to cache
+        // quickly instead of pinning the launch splash for the
+        // URLSession default (~60s). See RPCTimeout.swift.
+        let resp = try? await withRPCTimeout(seconds: 6) { [client] in
+            await client.listUserModelProviders(request: .init(), headers: [:])
+        }
+        if let msg = resp?.message {
             let items = msg.providers.map(ReeveUserModelProvider.init(from:))
             if let cache {
                 try? await cache.set(items, kind: CacheKind.providers, id: "all", capBytes: CachePreferences.capBytes)
@@ -38,7 +43,7 @@ public final class ModelProvidersRepository: Sendable {
            let cached: [ReeveUserModelProvider] = await cache.get([ReeveUserModelProvider].self, kind: CacheKind.providers, id: "all") {
             return cached
         }
-        throw resp.error.map(ReeveError.from) ?? .missingPayload("list providers")
+        throw resp?.error.map(ReeveError.from) ?? .missingPayload("list providers")
     }
 
     public func get(id: String) async throws -> (ReeveUserModelProvider, [ReeveUserModel]) {

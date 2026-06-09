@@ -11,8 +11,14 @@ public final class ProfilesRepository: Sendable {
     }
 
     public func list() async throws -> [ReeveProfile] {
-        let resp = await client.listProfiles(request: Reeve_V1_ListProfilesRequest(), headers: [:])
-        if let msg = resp.message {
+        // Bounded timeout — see RPCTimeout.swift. ConversationsModel
+        // fires this alongside listConversations at launch; without
+        // the timeout an unreachable server pins the splash on
+        // URLSession's default (~60s).
+        let resp = try? await withRPCTimeout(seconds: 6) { [client] in
+            await client.listProfiles(request: Reeve_V1_ListProfilesRequest(), headers: [:])
+        }
+        if let msg = resp?.message {
             let items = msg.profiles.map(ReeveProfile.init(from:))
             if let cache {
                 try? await cache.set(items, kind: CacheKind.profiles, id: "all", capBytes: CachePreferences.capBytes)
@@ -23,7 +29,7 @@ public final class ProfilesRepository: Sendable {
            let cached: [ReeveProfile] = await cache.get([ReeveProfile].self, kind: CacheKind.profiles, id: "all") {
             return cached
         }
-        throw resp.error.map(ReeveError.from) ?? .missingPayload("list profiles")
+        throw resp?.error.map(ReeveError.from) ?? .missingPayload("list profiles")
     }
 
     public func get(id: String, resolve: Bool = false) async throws -> (ReeveProfile, ReeveProfile?) {

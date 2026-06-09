@@ -27,8 +27,15 @@ public final class ConversationsRepository: Sendable {
         if let titleQuery, !titleQuery.isEmpty { req.titleQuery = titleQuery }
         if let profileID { req.profileID = profileID }
 
-        let resp = await client.listConversations(request: req, headers: [:])
-        if let msg = resp.message {
+        // Bounded by a short timeout: on a dead server the default
+        // URLSession wait is ~60s, which pins the launch spinner.
+        // The cache fallback below absorbs the failure (timeout
+        // included) so the user lands on cached data instead.
+        let frozenReq = req
+        let resp = try? await withRPCTimeout(seconds: 6) { [client] in
+            await client.listConversations(request: frozenReq, headers: [:])
+        }
+        if let msg = resp?.message {
             let items = msg.conversations.map(ReeveConversation.init(from:))
             // Cache only the unfiltered first page — that's what
             // ChatsRoot loads on launch, and it's the version that
@@ -40,15 +47,15 @@ public final class ConversationsRepository: Sendable {
             }
             return (items, msg.nextPageToken.isEmpty ? nil : msg.nextPageToken)
         }
-        // Server failed. If this is the unfiltered first-page call,
-        // try the cache before re-throwing so the user lands on a
-        // populated list rather than an error screen.
+        // Server failed (or timed out). If this is the unfiltered
+        // first-page call, try the cache before re-throwing so the
+        // user lands on a populated list rather than an error screen.
         if pageToken == nil && titleQuery == nil && profileID == nil,
            let cache,
            let cached: [ReeveConversation] = await cache.get([ReeveConversation].self, kind: CacheKind.conversationsList, id: "all") {
             return (cached, nil)
         }
-        throw resp.error.map(ReeveError.from) ?? .missingPayload("list conversations")
+        throw resp?.error.map(ReeveError.from) ?? .missingPayload("list conversations")
     }
 
     public func get(id: String) async throws -> (ReeveConversation, ReeveContext) {
