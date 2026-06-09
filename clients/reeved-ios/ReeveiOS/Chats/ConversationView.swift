@@ -162,6 +162,12 @@ private struct ConversationBody: View {
     /// doesn't pop the moment the user reads past the last message.
     private let scrollToBottomThreshold: CGFloat = 200
 
+    /// Current scroll phase, tracked ONLY to time the past-bottom
+    /// clamp (see the geometry handler). Never used to disengage
+    /// auto-follow — phases fire for system motion too, which is the
+    /// misread that caused the original stranding bug.
+    @State private var scrollPhase: ScrollPhase = .idle
+
     /// Cold-entry history window: only the newest N messages render on
     /// first appearance; the rest backfill a beat later (see
     /// `expandHistoryWindow`). nil = full history.
@@ -498,6 +504,29 @@ private struct ConversationBody: View {
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
 
+                // Past-bottom clamp: when the viewport extends BELOW
+                // the content bottom while follow is engaged, re-pin.
+                // This is the keyboard-dismissal-on-submit case: the
+                // send path scrolls to the keyboard-up bottom, then
+                // the keyboard dismisses and the viewport grows ~300pt
+                // — parking the offset past the content end with an
+                // empty band below the last message. The sizeChanges
+                // anchor doesn't cover it because the CONTAINER grew,
+                // not the content. Guards: `.idle` so we don't stutter
+                // the send path's own scroll animation mid-flight, and
+                // `!isPositionedByUser` so a user's at-bottom rubber-
+                // band (also briefly negative) is never fought.
+                if autoFollow, distance < -1,
+                   scrollPhase == .idle,
+                   !scrollPosition.isPositionedByUser {
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
+                    return
+                }
+
                 // Disengage follow ONLY for user-driven motion.
                 // `ScrollPosition.isPositionedByUser` tracks position
                 // provenance: true after a finger drag, false after
@@ -619,11 +648,17 @@ private struct ConversationBody: View {
                     autoFollow = false
                 }
             }
-            // NOTE: no .onScrollPhaseChange disengage. Verified in the
-            // simulator that the system fires .tracking/.decelerating
-            // during cold-entry settle of a long chat with NO touch
-            // input — any phase-based disengage misreads that as a
-            // user drag and strands the viewport mid-realization.
+            // Phase TRACKING only — deliberately no disengage here.
+            // Verified in the simulator that the system fires
+            // .tracking/.decelerating during cold-entry settle of a
+            // long chat with NO touch input — any phase-based
+            // disengage misreads that as a user drag and strands the
+            // viewport mid-realization. The phase feeds the
+            // past-bottom clamp's "don't stutter an in-flight
+            // animation" guard in the geometry handler.
+            .onScrollPhaseChange { _, newPhase in
+                scrollPhase = newPhase
+            }
             .scrollDismissesKeyboard(.interactively)
             .task {
                 // Backfill the full history once the tail window has
