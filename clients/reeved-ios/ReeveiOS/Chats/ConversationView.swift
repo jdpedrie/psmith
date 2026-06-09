@@ -128,8 +128,10 @@ private struct ConversationBody: View {
     /// row's bottom in view *until* its height reaches the viewport's
     /// height — at which point we stop following so the user can read
     /// the top of a long response without it being scrolled away.
-    /// Touching the scroll surface disengages follow forever (see
-    /// `.onScrollPhaseChange`).
+    /// User-driven scrolling disengages follow — detected via
+    /// `scrollPosition.isPositionedByUser` in the geometry handler
+    /// (deliberately NOT scroll-phase or gesture based; see the
+    /// comments in `paneScrollBody`).
     @State private var autoFollow = true
     /// Scroll handle for the explicit `scrollTo(edge: .bottom)` jumps
     /// (send, scroll-to-bottom pill). The continuous bottom-pin while
@@ -436,6 +438,13 @@ private struct ConversationBody: View {
                         )
                     }
                 )
+                // NOTE: no DragGesture here for user-scroll detection.
+                // A simultaneous DragGesture on the scroll content
+                // blocks ScrollView's pan entirely on iOS 26 (verified
+                // in the simulator: neither finger drags nor scroll
+                // wheel moved the content). User-scroll detection
+                // lives in onScrollGeometryChange below, keyed off
+                // `scrollPosition.isPositionedByUser`.
             }
             .scrollPosition($scrollPosition)
             // Auto-follow is delegated to the SYSTEM bottom anchor, not
@@ -466,11 +475,29 @@ private struct ConversationBody: View {
                     viewportHeight: geometry.containerSize.height
                 )
             } action: { _, m in
-                // Pill visibility only — gated to avoid churn during
-                // follow (while anchored, distance hovers near zero).
-                guard !autoFollow else { return }
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
+
+                // Disengage follow ONLY for user-driven motion.
+                // `ScrollPosition.isPositionedByUser` tracks position
+                // provenance: true after a finger drag, false after
+                // programmatic scrolls and the system anchor's own
+                // repositioning. Every signal we tried before
+                // misattributed system motion to the user —
+                // onScrollPhaseChange reports .tracking/.decelerating
+                // for clamp-back bounces during cold-entry settle of a
+                // long chat (verified in the sim with no touch input),
+                // and a simultaneous DragGesture blocks ScrollView's
+                // pan outright. The small distance floor keeps
+                // at-bottom overscroll rubber-banding from counting as
+                // "scrolled away."
+                if autoFollow, scrollPosition.isPositionedByUser, distance > 4 {
+                    autoFollow = false
+                }
+
+                // Pill visibility — only meaningful once follow is off
+                // (while anchored, distance hovers near zero).
+                guard !autoFollow else { return }
                 let newFar = distance > scrollToBottomThreshold
                 if newFar != isFarFromBottom {
                     withAnimation(.easeInOut(duration: 0.22)) {
@@ -572,21 +599,13 @@ private struct ConversationBody: View {
                     autoFollow = false
                 }
             }
-            .onScrollPhaseChange { _, newPhase in
-                // Only user-driven phases disengage follow. With the
-                // pin handled by the system anchor there are no more
-                // programmatic clamp-bounces masquerading as
-                // `.decelerating`, so these phases now reliably mean
-                // "the user grabbed the scroll view."
-                switch newPhase {
-                case .tracking, .interacting, .decelerating:
-                    autoFollow = false
-                case .idle, .animating:
-                    break
-                @unknown default:
-                    break
-                }
-            }
+            // NOTE: no .onScrollPhaseChange disengage. Verified in the
+            // simulator that the system fires .tracking/.decelerating
+            // during cold-entry settle of a long chat with NO touch
+            // input — any phase-based disengage misreads that as a
+            // user drag and strands the viewport mid-realization. The
+            // DragGesture on the scroll content (above) is the sole
+            // disengage signal for user scrolling.
             .scrollDismissesKeyboard(.interactively)
     }
 
