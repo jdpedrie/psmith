@@ -552,10 +552,14 @@ func TestChunkTypeToProto(t *testing.T) {
 		providers.ChunkToolUseStart: reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
 		providers.ChunkToolUseDelta: reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA,
 		providers.ChunkToolUseEnd:   reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
-		providers.ChunkUsage:        reevev1.ChunkType_CHUNK_TYPE_USAGE,
-		providers.ChunkError:        reevev1.ChunkType_CHUNK_TYPE_ERROR,
-		providers.ChunkDone:         reevev1.ChunkType_CHUNK_TYPE_DONE,
-		providers.ChunkType("???"):  reevev1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
+		providers.ChunkUsage:             reevev1.ChunkType_CHUNK_TYPE_USAGE,
+		providers.ChunkError:             reevev1.ChunkType_CHUNK_TYPE_ERROR,
+		providers.ChunkDone:              reevev1.ChunkType_CHUNK_TYPE_DONE,
+		providers.ChunkToolResult:        reevev1.ChunkType_CHUNK_TYPE_TOOL_RESULT,
+		providers.ChunkThinkingSignature: reevev1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE,
+		providers.ChunkElicit:            reevev1.ChunkType_CHUNK_TYPE_ELICIT,
+		providers.ChunkDeviceToolUse:     reevev1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE,
+		providers.ChunkType("???"):       reevev1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := chunkTypeToProto(in); got != want {
