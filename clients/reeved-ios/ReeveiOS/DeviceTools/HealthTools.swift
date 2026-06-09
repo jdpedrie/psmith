@@ -232,17 +232,25 @@ enum HealthTools {
         }
     }
 
-    /// Per-type read authorization. Wraps the HK API in a
-    /// continuation. iOS shows the sheet only for types whose
-    /// status is `.notDetermined`; for already-decided types the
-    /// call resolves immediately.
+    /// Per-type read authorization.
+    ///
+    /// **Main-thread hop.** Apple's docs say
+    /// `requestAuthorization` is safe from any thread, but in
+    /// practice the permission sheet only surfaces reliably when
+    /// the request originates from the main actor — calls
+    /// dispatched off-main were silently failing for the user
+    /// (60s broker timeout with no sheet shown). The dispatcher
+    /// runs handlers on a detached Task; we hop to MainActor to
+    /// fire the request so the system has somewhere to present
+    /// the sheet from.
+    ///
+    /// Uses the iOS 15.4+ async `requestAuthorization` to avoid
+    /// the continuation dance (and to side-step the Swift 6
+    /// region-isolation analysis getting confused about
+    /// MainActor-isolated continuations).
+    @MainActor
     private static func requestRead(type: HKObjectType) async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            store.requestAuthorization(toShare: [], read: [type]) { _, error in
-                if let error { cont.resume(throwing: error); return }
-                cont.resume()
-            }
-        }
+        try await store.requestAuthorization(toShare: [], read: [type])
     }
 
     // MARK: - Quantity type registry
@@ -409,16 +417,15 @@ enum HealthTools {
     /// even a denial returns "success" here — the actual read
     /// returns empty data instead. We surface no error in that
     /// case so the model gets data-or-nothing on every call.
+    @MainActor
     private static func ensureHealthAccess() async throws {
         guard HKHealthStore.isHealthDataAvailable() else {
             throw DeviceToolError.permissionDenied("health (not available on this device)")
         }
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            store.requestAuthorization(toShare: [], read: readTypes) { _, error in
-                if let error { cont.resume(throwing: error); return }
-                cont.resume()
-            }
-        }
+        // Hop to MainActor — see requestRead's comment. The async
+        // `requestAuthorization` is iOS 15.4+; the project's
+        // deployment target is 26.0 so it's always available here.
+        try await store.requestAuthorization(toShare: [], read: readTypes)
     }
 
     /// The union of types every handler in this file reads. Kept
