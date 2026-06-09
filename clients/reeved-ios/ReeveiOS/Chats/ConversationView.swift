@@ -168,9 +168,10 @@ private struct ConversationBody: View {
     /// misread that caused the original stranding bug.
     @State private var scrollPhase: ScrollPhase = .idle
 
-    /// Cold-entry history window: only the newest N messages render on
-    /// first appearance; the rest backfill a beat later (see
-    /// `expandHistoryWindow`). nil = full history.
+    /// History window: only the newest N messages render around any
+    /// bottom-seek — first appearance AND each send — with the rest
+    /// backfilling a beat later (see `expandHistoryWindow`). nil =
+    /// full history.
     ///
     /// This is the fix for the long-standing "cold entry into a long
     /// chat lands in blank space past the messages" bug. Root cause
@@ -600,19 +601,37 @@ private struct ConversationBody: View {
                 if text != nil {
                     autoFollow = true
                     streamingRowHeight = 0
-                    // Scroll the just-sent message to the BOTTOM of the
-                    // viewport, not the top. The old "anchor: .top"
-                    // approach landed the pending row at the scroll
-                    // view's top edge, which sits under the inline
-                    // nav bar + status strip — making the user's
-                    // message invisible until they scrolled. Pinning
-                    // to bottom keeps it visible regardless of where
-                    // the header overlay actually lands, and once
-                    // streaming begins, auto-follow takes over
-                    // naturally (the spec's "scroll down with
-                    // generation" rule covers the rest).
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    // Re-apply the tail window for the send-time
+                    // bottom seek. Submit interleaves an animated
+                    // scroll, keyboard dismissal (container growth),
+                    // the pending→real row swap, and the streaming
+                    // row's arrival — and with the full history
+                    // mounted, any of those can re-derive the scroll
+                    // target from LazyVStack's ESTIMATED content size
+                    // and park the viewport past the real content end
+                    // (the after-submit flavor of the cold-entry
+                    // phantom desert; reproduced on-device). Shrinking
+                    // to the newest 12 rows makes the content size
+                    // exact at the moment of the seek — there is
+                    // nothing left to mis-estimate. The full history
+                    // backfills via the same anchored-prepend path
+                    // cold entry uses, which is invisible while the
+                    // bottom is pinned.
+                    //
+                    // Non-animated deliberately: the animated variant
+                    // captured a target offset that the concurrent
+                    // keyboard/content changes invalidated mid-flight.
+                    // The pending bubble's insertion provides its own
+                    // motion; the seek itself should be exact.
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
+                        historyWindow = 12
                         scrollPosition.scrollTo(edge: .bottom)
+                    }
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(700))
+                        expandHistoryWindow()
                     }
                 }
             }
