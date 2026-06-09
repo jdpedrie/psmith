@@ -1,6 +1,16 @@
 import Foundation
 import HealthKit
+import os.log
 import ReeveKit
+
+/// Diagnostic logger for the HealthKit device tools. Visible in
+/// Console.app on macOS by filtering on
+/// `subsystem:dev.jdpedrie.reeve category:HealthTools`. Surfaces
+/// permission-request entry / exit so you can tell whether the
+/// system actually presented the sheet, since silent off-main
+/// failures looked identical to "user hasn't tapped yet" from the
+/// outside.
+private let log = Logger(subsystem: "dev.jdpedrie.reeve", category: "HealthTools")
 
 /// Handlers + registration for the HealthKit-backed device tools:
 /// `health_today_summary`, `health_recent_workouts`,
@@ -31,13 +41,17 @@ enum HealthTools {
     /// Health app); handlers won't be advertised in capabilities
     /// in that case.
     static func register() {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard HKHealthStore.isHealthDataAvailable() else {
+            log.warning("HKHealthStore not available on this device; health_* handlers will NOT be registered")
+            return
+        }
         let r = DeviceToolRegistry.shared
         r.register(name: "health_today_summary", handler: todaySummary)
         r.register(name: "health_recent_workouts", handler: recentWorkouts)
         r.register(name: "health_sleep_last_night", handler: sleepLastNight)
         r.register(name: "health_vitals_recent", handler: vitalsRecent)
         r.register(name: "health_query", handler: healthQuery)
+        log.info("registered 5 HealthKit device-tool handlers")
     }
 
     // MARK: - Handlers
@@ -139,17 +153,22 @@ enum HealthTools {
     /// user actually has denied the permission.
     private static let healthQuery: DeviceToolHandler = { inputJSON in
         let input = try decode(QueryInput.self, from: inputJSON)
+        log.info("health_query: enter data_type=\(input.dataType, privacy: .public) aggregation=\(input.aggregation ?? "samples", privacy: .public)")
         guard HKHealthStore.isHealthDataAvailable() else {
+            log.warning("health_query: HKHealthStore not available")
             throw DeviceToolError.permissionDenied("health (not available on this device)")
         }
         guard let entry = quantityRegistry[input.dataType] else {
+            log.warning("health_query: unknown data_type=\(input.dataType, privacy: .public)")
             throw DeviceToolError.message(
                 "unknown health data_type '\(input.dataType)' — see tool description for the supported list")
         }
+        log.info("health_query: requesting auth for \(input.dataType, privacy: .public)")
         // Per-type authorization. iOS shows the sheet only when
         // the user hasn't decided yet; subsequent calls for the
         // same type are no-ops.
         try await requestRead(type: entry.type)
+        log.info("health_query: auth request returned for \(input.dataType, privacy: .public)")
 
         let end = input.endDate ?? Date()
         let start = input.startDate ?? Calendar.current.date(byAdding: .day, value: -30, to: end) ?? end.addingTimeInterval(-30 * 86400)
