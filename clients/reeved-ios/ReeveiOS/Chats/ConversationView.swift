@@ -131,16 +131,13 @@ private struct ConversationBody: View {
     /// Touching the scroll surface disengages follow forever (see
     /// `.onScrollPhaseChange`).
     @State private var autoFollow = true
-    /// Real-geometry scroll position. Driving the bottom-pin scroll
-    /// through `ScrollPosition.scrollTo(point:)` with a Y computed
-    /// from `onScrollGeometryChange`'s reported contentSize uses the
-    /// actual ScrollView geometry rather than LazyVStack's row-offset
-    /// estimates — the latter over-inflate in long chats (especially
-    /// for unrealised rows above the viewport with variable-height
-    /// markdown) and cause the auto-follow to land past the actual
-    /// content end. Symptom: viewport jerks down to blank space
-    /// mid-stream, then snaps back at terminal when the scroll-view
-    /// clamps the out-of-bounds offset.
+    /// Scroll handle for the explicit `scrollTo(edge: .bottom)` jumps
+    /// (send, scroll-to-bottom pill). The continuous bottom-pin while
+    /// streaming is NOT driven through this — it's delegated to
+    /// `defaultScrollAnchor(.bottom, for: .sizeChanges)`, which pins
+    /// inside the scroll view's own layout pass. See the comment on
+    /// that modifier in `paneScrollBody` for why every hand-computed
+    /// alternative overshot into blank space.
     @State private var scrollPosition = ScrollPosition()
     @State private var showingMissingCostInfo = false
     /// Live height of the in-flight streaming bubble. Updated via
@@ -403,7 +400,6 @@ private struct ConversationBody: View {
 
     @ViewBuilder
     private var paneScrollBody: some View {
-        ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     // Settled history is its own subview that observes
@@ -442,6 +438,27 @@ private struct ConversationBody: View {
                 )
             }
             .scrollPosition($scrollPosition)
+            // Auto-follow is delegated to the SYSTEM bottom anchor, not
+            // hand-computed scrollTo(point:) math. Every prior attempt
+            // (sentinel anchors, delta scrolls, "real geometry" pins)
+            // overshot into blank space for the same root reason:
+            // LazyVStack's contentSize is an ESTIMATE while rows above
+            // the viewport are unrealised, so any target computed from
+            // it can land past the real content end. Worse, the
+            // overshoot's clamp-back bounce reported as `.decelerating`
+            // to onScrollPhaseChange, which read it as a user drag and
+            // killed autoFollow — stranding the viewport in the blank
+            // band below the last message.
+            //
+            // `defaultScrollAnchor(.bottom, for: .sizeChanges)` pins
+            // the bottom edge from INSIDE the scroll view's layout
+            // pass, after row realisation, so there is no estimate to
+            // overshoot and no programmatic scroll for the phase
+            // handler to misread. Passing nil detaches the anchor when
+            // follow is disengaged (user dragged, or the streaming
+            // bubble outgrew the viewport).
+            .defaultScrollAnchor(.bottom)
+            .defaultScrollAnchor(autoFollow ? .bottom : nil, for: .sizeChanges)
             .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
                 ScrollMetrics(
                     contentHeight: geometry.contentSize.height,
@@ -449,51 +466,16 @@ private struct ConversationBody: View {
                     viewportHeight: geometry.containerSize.height
                 )
             } action: { _, m in
-                // Single pass over the actual scroll geometry handles
-                // both jobs: pill visibility and auto-follow scrolling.
-                // Driving auto-follow from here (rather than from
-                // every streamingRowHeight @State change) means we
-                // fire only on real layout shifts — drastically
-                // fewer @State mutations to scrollPosition, which is
-                // what was causing the lag.
+                // Pill visibility only — gated to avoid churn during
+                // follow (while anchored, distance hovers near zero).
+                guard !autoFollow else { return }
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
-
-                // Pill visibility — gated to avoid churn during follow.
-                if !autoFollow {
-                    let newFar = distance > scrollToBottomThreshold
-                    if newFar != isFarFromBottom {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            isFarFromBottom = newFar
-                        }
+                let newFar = distance > scrollToBottomThreshold
+                if newFar != isFarFromBottom {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isFarFromBottom = newFar
                     }
-                }
-
-                // Auto-follow: pin the viewport bottom to the
-                // content bottom whenever follow is engaged. We
-                // correct in BOTH directions, not just downward:
-                // the keyboard-dismissal-on-submit case parks the
-                // viewport past the content bottom (scrollTo(.bottom)
-                // lands at the keyboard-up bottom, then the keyboard
-                // dismisses and the viewport grows — leaving
-                // m.offset > targetY and an empty band below the
-                // last message). A "down only" guard would leave
-                // that wedge in place forever; correcting upward
-                // when autoFollow is true closes it.
-                //
-                // It's safe to correct upward because
-                // onScrollPhaseChange disables autoFollow the
-                // moment the user actually drags — so this only
-                // ever fires when we're in pin-mode and the
-                // viewport / content geometry has drifted out of
-                // alignment on its own.
-                guard autoFollow else { return }
-                let targetY = max(0, m.contentHeight - m.viewportHeight)
-                guard abs(m.offset - targetY) > 0.5 else { return }
-                var t = Transaction()
-                t.disablesAnimations = true
-                withTransaction(t) {
-                    scrollPosition.scrollTo(point: CGPoint(x: 0, y: targetY))
                 }
             }
             // Pill is always-rendered with opacity, not conditional view
@@ -528,14 +510,11 @@ private struct ConversationBody: View {
                 .accessibilityLabel("Scroll to bottom of conversation")
                 .accessibilityHidden(!isFarFromBottom)
             }
-            .onAppear {
-                // Initial position: pin to the actual content bottom
-                // via real geometry. The previous "scrollTo(lastID,
-                // anchor: .top)" used LazyVStack estimates that
-                // mis-land on first appear when not every row is
-                // realised yet.
-                scrollPosition.scrollTo(edge: .bottom)
-            }
+            // Initial position comes from `defaultScrollAnchor(.bottom)`
+            // above — no onAppear scrollTo needed. The anchor applies
+            // during the first layout pass, so there's no
+            // empty-then-jump flash while load() populates messages.
+            //
             // Intentionally NOT scrolling on `model.messages.count` —
             // that handler used to fire on stream end (streaming row
             // → settled assistant message bumps count by 1) and on
@@ -576,10 +555,9 @@ private struct ConversationBody: View {
                 }
             }
             .onChange(of: streamingRowHeight) { _, newHeight in
-                // streamingRowHeight is now used only for the disengage
-                // check, not for driving scrolls. The scroll itself
-                // happens in onScrollGeometryChange (real layout signal,
-                // no @State-mutation lag spiral).
+                // streamingRowHeight is used only for the disengage
+                // check, not for driving scrolls — the bottom pin is
+                // the system anchor's job.
                 //
                 // Disengage once the streaming row's measured height
                 // reaches viewport height — by then the top of the
@@ -595,6 +573,11 @@ private struct ConversationBody: View {
                 }
             }
             .onScrollPhaseChange { _, newPhase in
+                // Only user-driven phases disengage follow. With the
+                // pin handled by the system anchor there are no more
+                // programmatic clamp-bounces masquerading as
+                // `.decelerating`, so these phases now reliably mean
+                // "the user grabbed the scroll view."
                 switch newPhase {
                 case .tracking, .interacting, .decelerating:
                     autoFollow = false
@@ -605,16 +588,15 @@ private struct ConversationBody: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-        }
     }
 
 }
 
-/// Snapshot of the bits of `ScrollGeometry` the auto-follow handler
-/// needs. Equatable + Sendable so `onScrollGeometryChange(for:_:action:)`
-/// can deliver it through its diff machinery; we only re-fire the
-/// action when one of these three values actually moves, not on
-/// every layout pass.
+/// Snapshot of the bits of `ScrollGeometry` the scroll-to-bottom-pill
+/// handler needs. Equatable + Sendable so
+/// `onScrollGeometryChange(for:_:action:)` can deliver it through its
+/// diff machinery; we only re-fire the action when one of these three
+/// values actually moves, not on every layout pass.
 private struct ScrollMetrics: Equatable, Sendable {
     var contentHeight: CGFloat
     var offset: CGFloat
