@@ -460,6 +460,21 @@ private struct ConversationBody: View {
     private var paneScrollBody: some View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
+                    // While the tail window is active and hides older
+                    // messages, surface an explicit reveal control at
+                    // the top of the visible history. Deliberately
+                    // user-initiated rather than an automatic
+                    // scroll-position-preserving backfill: the timed
+                    // backfill used to race the user's first touch,
+                    // and its preserve-seek resolved through hundreds
+                    // of unrealized rows' estimates — landing
+                    // half-a-conversation away with no discernible
+                    // pattern (the on-device "jumps far up" reports).
+                    if historyWindow != nil, hiddenHistoryCount > 0 {
+                        ShowEarlierRow(count: hiddenHistoryCount) {
+                            revealEarlierHistory()
+                        }
+                    }
                     // Settled history is its own subview that observes
                     // only `model.messages`. Without this split, every
                     // streaming chunk (which mutates streamingText on the
@@ -596,6 +611,19 @@ private struct ConversationBody: View {
                 // "scrolled away."
                 if autoFollow, scrollPosition.isPositionedByUser, distance > 4 {
                     autoFollow = false
+                }
+
+                // Release the mid-stream park the moment the user
+                // takes over. The id-pin is STICKY — the scroll view
+                // re-applies it on every arriving chunk, which
+                // snapped the viewport back against the user's drag
+                // (verified: repeated drags barely moved while a
+                // stream was parked). Replacing the binding while the
+                // user's gesture owns the viewport breaks the pin
+                // without the at-rest one-viewport rewind.
+                if parkedMessageID != nil, scrollPosition.isPositionedByUser {
+                    parkedMessageID = nil
+                    scrollPosition = ScrollPosition()
                 }
 
                 // Pill visibility — only meaningful once follow is off
@@ -875,14 +903,52 @@ private struct ConversationBody: View {
         }
     }
 
+    /// Number of older messages currently hidden by the tail window.
+    private var hiddenHistoryCount: Int {
+        guard let w = historyWindow else { return 0 }
+        return max(0, model.messages.count - w)
+    }
+
+    /// User-initiated reveal of the windowed-out history (the
+    /// "Show earlier messages" row). Expands to the full chain and
+    /// re-pins the viewport to the message that was previously first
+    /// — the two-pass id-seek can still land imperfectly over the
+    /// freshly-prepended estimates, but because the user explicitly
+    /// asked for the expansion, an imperfect landing reads as "the
+    /// list moved to older messages", not as a random mid-read jump.
+    private func revealEarlierHistory() {
+        guard let w = historyWindow else { return }
+        let anchorID = model.messages.suffix(w).first?.id
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            historyWindow = nil
+            if let anchorID {
+                scrollPosition.scrollTo(id: anchorID, anchor: .top)
+            }
+        }
+        if let anchorID {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                guard historyWindow == nil else { return }
+                var t2 = Transaction()
+                t2.disablesAnimations = true
+                withTransaction(t2) {
+                    scrollPosition.scrollTo(id: anchorID, anchor: .top)
+                }
+            }
+        }
+    }
+
     /// Swap the tail window for the full history — but ONLY while the
     /// bottom anchor is engaged, where the prepend is invisible
     /// (content grows above the viewport; the anchor holds the bottom
     /// edge over already-realized rows). When the user has scrolled
     /// away or the stream parked, expansion is DEFERRED to the next
     /// bottom-anchored moment (pill tap, next send, terminal-at-
-    /// bottom, or conversation re-entry). There is no safe way to
-    /// prepend under a detached position: a raw offset slides when
+    /// bottom, conversation re-entry) or to an explicit tap on the
+    /// "Show earlier messages" row. There is no safe way to prepend
+    /// SILENTLY under a detached position: a raw offset slides when
     /// LazyVStack re-estimates the new mass, and scrollTo(id:) solves
     /// against those same estimates — both verified landing a screen
     /// off in the simulator.
@@ -906,6 +972,37 @@ private struct ConversationBody: View {
 /// to SwiftUI). Read once per park.
 final class LiveOffsetBox {
     var y: CGFloat = 0
+}
+
+/// Inline control at the top of the windowed history that reveals the
+/// older messages. Mirrors the scroll-to-bottom pill's chrome so the
+/// two affordances read as a pair.
+private struct ShowEarlierRow: View {
+    let count: Int
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.up")
+                        .font(.caption.weight(.semibold))
+                    Text("Show \(count) earlier message\(count == 1 ? "" : "s")")
+                        .font(.caption.weight(.medium))
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.thinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show \(count) earlier messages")
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
 }
 
 /// Snapshot of the bits of `ScrollGeometry` the scroll-to-bottom-pill
