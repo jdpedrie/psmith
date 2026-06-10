@@ -35,6 +35,10 @@ public final class ProfilesViewModel {
     /// each section header. Empty for native drivers and pre-preset
     /// custom configs.
     public var providerPresetIDs: [String: String] = [:]
+    /// Provider-level default CallSettings keyed by provider ID —
+    /// bottom layer of the resolution chain. Feeds the profile
+    /// editor's inherit-preview so it matches send-time resolution.
+    public var providerDefaultSettings: [String: ReeveCallSettings] = [:]
 
     /// Server's compiled-in plugin registry. Loaded lazily by
     /// `loadPluginTypes()`. Sorted by display name.
@@ -91,6 +95,9 @@ public final class ProfilesViewModel {
             providerTypes = types
             providerPresetIDs = Dictionary(uniqueKeysWithValues:
                 providers.compactMap { p in p.presetID.map { (p.id, $0) } }
+            )
+            providerDefaultSettings = Dictionary(uniqueKeysWithValues:
+                providers.compactMap { p in p.defaultSettings.map { (p.id, $0) } }
             )
             availableModels = models
         } catch {

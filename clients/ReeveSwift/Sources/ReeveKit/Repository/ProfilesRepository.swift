@@ -61,6 +61,7 @@ public final class ProfilesRepository: Sendable {
         if let v = patch.description           { req.description_p = v }
         if let v = patch.parentOnly            { req.parentOnly = v }
         if let v = patch.favorite              { req.favorite = v }
+        if let v = patch.welcomeMessage        { req.welcomeMessage = v }
         let resp = await client.createProfile(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("create profile") }
         return ReeveProfile(from: msg.profile)
@@ -89,6 +90,7 @@ public final class ProfilesRepository: Sendable {
         if let v = patch.description           { req.description_p = v }
         if let v = patch.parentOnly            { req.parentOnly = v }
         if let v = patch.favorite              { req.favorite = v }
+        if let v = patch.welcomeMessage        { req.welcomeMessage = v }
         req.clearFields_p = clearFields
         let resp = await client.updateProfile(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(ReeveError.from) ?? .missingPayload("update profile") }
@@ -175,6 +177,10 @@ public struct ReeveProfilePatch: Sendable {
     public var description: String?
     public var parentOnly: Bool?
     public var favorite: Bool?
+    /// Profile.welcome_message — rendered as the synthetic first
+    /// assistant bubble in fresh conversations. Pass `clearFields:
+    /// ["welcome_message"]` to remove.
+    public var welcomeMessage: String?
 
     public init(
         name: String? = nil,
@@ -192,7 +198,8 @@ public struct ReeveProfilePatch: Sendable {
         titleProviderKind: String? = nil,
         description: String? = nil,
         parentOnly: Bool? = nil,
-        favorite: Bool? = nil
+        favorite: Bool? = nil,
+        welcomeMessage: String? = nil
     ) {
         self.name = name
         self.parentProfileID = parentProfileID
@@ -210,6 +217,7 @@ public struct ReeveProfilePatch: Sendable {
         self.description = description
         self.parentOnly = parentOnly
         self.favorite = favorite
+        self.welcomeMessage = welcomeMessage
     }
 }
 

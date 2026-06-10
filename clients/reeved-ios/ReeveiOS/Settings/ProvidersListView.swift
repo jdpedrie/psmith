@@ -88,6 +88,18 @@ struct ProvidersListView: View {
             AddProviderSheet(template: nil)
         }
         .alert(
+            "Provider error",
+            isPresented: Binding(
+                get: { providers.error != nil },
+                set: { if !$0 { providers.error = nil } }
+            ),
+            presenting: providers.error
+        ) { _ in
+            Button("OK") { providers.error = nil }
+        } message: { msg in
+            Text(msg)
+        }
+        .alert(
             "Delete provider?",
             isPresented: Binding(
                 get: { deleteCandidate != nil },
@@ -179,8 +191,23 @@ struct ProvidersListView: View {
 // MARK: - Provider detail (push)
 
 private struct ProviderDetailView: View {
-    let provider: ReeveUserModelProvider
+    /// Push-time snapshot — used only as a fallback while the live
+    /// row loads. Always read `provider` (the live lookup) below.
+    let initialProvider: ReeveUserModelProvider
     @Environment(AppModel.self) private var app
+
+    init(provider: ReeveUserModelProvider) {
+        self.initialProvider = provider
+    }
+
+    /// Live row from the shared providers list — reflects label /
+    /// base-URL / default-settings edits made while this screen is
+    /// up. The frozen push-time value caused the Default Settings
+    /// screen to re-seed from stale data and auto-save it back,
+    /// silently reverting just-saved provider defaults.
+    private var provider: ReeveUserModelProvider {
+        app.providers.providers.first(where: { $0.id == initialProvider.id }) ?? initialProvider
+    }
     @State private var editing: Bool = false
     @State private var modelSettingsTarget: ReeveUserModel?
     @State private var testResultMessage: String?
@@ -387,8 +414,16 @@ private struct ProviderDetailView: View {
 // MARK: - Provider default-settings screen
 
 private struct ProviderDefaultSettingsScreen: View {
-    let provider: ReeveUserModelProvider
+    let initialProvider: ReeveUserModelProvider
     @Environment(AppModel.self) private var app
+
+    init(provider: ReeveUserModelProvider) {
+        self.initialProvider = provider
+    }
+
+    private var provider: ReeveUserModelProvider {
+        app.providers.providers.first(where: { $0.id == initialProvider.id }) ?? initialProvider
+    }
     @State private var draft: ReeveCallSettings = ReeveCallSettings()
     @State private var seeded = false
     @State private var saving = false
@@ -442,7 +477,10 @@ private struct ProviderDefaultSettingsScreen: View {
                 settings: draft
             )
         } catch let err {
-            error = ReeveError.display(err)
+            // This save fires on disappear — the local error label is
+            // already off-screen. Surface through the shared VM error
+            // so the providers list's alert shows it.
+            app.providers.error = "Saving provider defaults failed: \(ReeveError.display(err))"
         }
     }
 }
@@ -450,9 +488,18 @@ private struct ProviderDefaultSettingsScreen: View {
 // MARK: - Per-model default-settings sheet
 
 private struct ModelDefaultSettingsSheet: View {
-    let provider: ReeveUserModelProvider
+    let initialProvider: ReeveUserModelProvider
     let model: ReeveUserModel
     @Environment(AppModel.self) private var app
+
+    init(provider: ReeveUserModelProvider, model: ReeveUserModel) {
+        self.initialProvider = provider
+        self.model = model
+    }
+
+    private var provider: ReeveUserModelProvider {
+        app.providers.providers.first(where: { $0.id == initialProvider.id }) ?? initialProvider
+    }
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ReeveCallSettings = ReeveCallSettings()
     @State private var seeded = false

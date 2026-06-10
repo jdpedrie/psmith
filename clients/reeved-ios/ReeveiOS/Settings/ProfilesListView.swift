@@ -231,6 +231,18 @@ private struct ProfileViewerScreen: View {
                                 .textSelection(.enabled)
                         }
                     }
+                    if let welcome = p.welcomeMessage, !welcome.isEmpty {
+                        Section("Welcome message") {
+                            Text(welcome)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    if let cs = p.defaultSettings?.callSettings, !cs.isEmpty {
+                        Section("Call settings") {
+                            row("Overrides", callSettingsSummary(cs))
+                        }
+                    }
                 }
                 .navigationTitle(p.name)
                 .navigationBarTitleDisplayMode(.inline)
@@ -275,6 +287,24 @@ private struct ProfileViewerScreen: View {
         }
     }
 
+    /// One-line readout of which call-settings fields the profile
+    /// overrides — enough for the read-only viewer; the editor's
+    /// Call settings screen shows full values.
+    private func callSettingsSummary(_ cs: ReeveCallSettings) -> String {
+        var parts: [String] = []
+        if let t = cs.temperature      { parts.append("temp \(String(format: "%.2f", t))") }
+        if let p = cs.topP             { parts.append("top-p \(String(format: "%.2f", p))") }
+        if let m = cs.maxOutputTokens  { parts.append("max \(m)") }
+        if let k = cs.topK             { parts.append("top-k \(k)") }
+        if !cs.stopSequences.isEmpty   { parts.append("\(cs.stopSequences.count) stop seq") }
+        if cs.thinking?.isEmpty == false  { parts.append("thinking") }
+        if cs.explicitCache != nil     { parts.append("caching") }
+        if cs.anthropic?.isEmpty == false { parts.append("anthropic") }
+        if cs.openai?.isEmpty == false    { parts.append("openai") }
+        if cs.google?.isEmpty == false    { parts.append("google") }
+        return parts.isEmpty ? "Customised" : parts.joined(separator: " · ")
+    }
+
     /// "<Provider Label> <Model Display Name>" with graceful fallbacks.
     /// Returns nil when neither id is set; raw provider id + model id
     /// when the lookup tables are empty (cold-open, network error).
@@ -308,6 +338,7 @@ private struct ProfileEditSheet: View {
     // Prompt
     @State private var systemMessage: String = ""
     @State private var defaultUserMessage: String = ""
+    @State private var welcomeMessage: String = ""
     // Compression
     @State private var compressionMode: ReeveCompressionMode? = nil
     @State private var compressionProviderID: String?
@@ -390,7 +421,7 @@ private struct ProfileEditSheet: View {
                     NavigationLink {
                         ProfileCallSettingsScreen(
                             settings: $callSettingsDraft,
-                            inheritedSettings: nil,
+                            inheritedSettings: inheritedCallSettings,
                             driverType: defaultDriverType,
                             modelCapabilities: defaultModelCapabilities
                         )
@@ -418,6 +449,10 @@ private struct ProfileEditSheet: View {
                                       preview: defaultUserMessage,
                                       placeholder: "Optional — pre-fills the first user turn",
                                       destination: .longTextEditor(field: .defaultUserMessage))
+                    LongTextEditorRow(label: "Welcome message",
+                                      preview: welcomeMessage,
+                                      placeholder: "Optional — first assistant bubble in new conversations",
+                                      destination: .longTextEditor(field: .welcomeMessage))
                 }
 
                 Section("Compression") {
@@ -738,9 +773,7 @@ private struct ProfileEditSheet: View {
             }
         }
         let draft = DraftPlugin(pluginName: pluginType.name, config: initial)
-        NSLog("REEVE-DEBUG attachPlugin BEFORE draft=\(pluginsDraft.map { $0.pluginName })")
         pluginsDraft.append(draft)
-        NSLog("REEVE-DEBUG attachPlugin AFTER draft=\(pluginsDraft.map { $0.pluginName })")
         // Immediately drill into the new plugin's config screen
         // when it has any per-profile fields. Saves the user a
         // second tap on the row chevron and makes "fill in the
@@ -763,6 +796,8 @@ private struct ProfileEditSheet: View {
             return Binding(get: { systemMessage },      set: { systemMessage = $0 })
         case .defaultUserMessage:
             return Binding(get: { defaultUserMessage }, set: { defaultUserMessage = $0 })
+        case .welcomeMessage:
+            return Binding(get: { welcomeMessage },     set: { welcomeMessage = $0 })
         case .compressionGuide:
             return Binding(get: { compressionGuide },   set: { compressionGuide = $0 })
         case .titleGuide:
@@ -794,10 +829,7 @@ private struct ProfileEditSheet: View {
         // is mid-edit, or a re-task on view re-mount) wipes
         // freshly-added drafts and the plugin "vanishes" from the
         // list after a navigation pop.
-        guard !pluginsLoaded else {
-            NSLog("REEVE-DEBUG loadPlugins SKIP (already loaded)")
-            return
-        }
+        guard !pluginsLoaded else { return }
         // Need the catalog (plugin descriptors) before the rows can
         // render fields. Load only if not already cached on the VM.
         if app.profiles.pluginTypes.isEmpty {
@@ -818,7 +850,6 @@ private struct ProfileEditSheet: View {
             }
         }
         pluginsLoaded = true
-        NSLog("REEVE-DEBUG loadPlugins DONE draft=\(pluginsDraft.map { $0.pluginName })")
     }
 
     private var pluginsAreDirty: Bool {
@@ -848,6 +879,8 @@ private struct ProfileEditSheet: View {
                 || !description.isEmpty
                 || !systemMessage.isEmpty
                 || !defaultUserMessage.isEmpty
+                || !welcomeMessage.isEmpty
+                || !callSettingsDraft.isEmpty
                 || defaultProviderID != nil
                 || defaultModelID != nil
                 || parentProfileID != nil
@@ -867,6 +900,8 @@ private struct ProfileEditSheet: View {
             || parentProfileID != p.parentProfileID
             || systemMessage != (p.systemMessage ?? "")
             || defaultUserMessage != (p.defaultUserMessage ?? "")
+            || welcomeMessage != (p.welcomeMessage ?? "")
+            || callSettingsDraft != (p.defaultSettings?.callSettings ?? ReeveCallSettings())
             || defaultProviderID != p.defaultSettings?.defaultProviderID
             || defaultModelID != p.defaultSettings?.defaultModelID
             || compressionMode != p.compressionMode
@@ -929,6 +964,63 @@ private struct ProfileEditSheet: View {
         .buttonStyle(.plain)
     }
 
+    /// Resolved-from-below snapshot for the call-settings inherit
+    /// previews: parent-profile chain (nearest ancestor wins) layered
+    /// over the effective default model's defaults over its provider's
+    /// defaults — the same order the server resolves below this
+    /// profile at send time. nil when nothing below contributes.
+    private var inheritedCallSettings: ReeveCallSettings? {
+        var resolved = ReeveCallSettings()
+        var ancestorID = parentProfileID
+        var hops = 0
+        while let id = ancestorID, hops < 10,
+              let ancestor = app.profiles.profiles.first(where: { $0.id == id }) {
+            if let cs = ancestor.defaultSettings?.callSettings {
+                resolved = CallSettingsMerge.merge(higher: resolved, lower: cs)
+            }
+            ancestorID = ancestor.parentProfileID
+            hops += 1
+        }
+        if let pid = effectiveInheritProviderID, let mid = effectiveInheritModelID {
+            if let model = app.profiles.availableModels.first(where: { $0.providerID == pid && $0.modelID == mid }),
+               let modelDefaults = model.defaultSettings {
+                resolved = CallSettingsMerge.merge(higher: resolved, lower: modelDefaults)
+            }
+            if let providerDefaults = app.profiles.providerDefaultSettings[pid] {
+                resolved = CallSettingsMerge.merge(higher: resolved, lower: providerDefaults)
+            }
+        }
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    /// The (provider, model) whose defaults sit under this profile:
+    /// the form's picked default model, else the nearest ancestor's.
+    private var effectiveInheritProviderID: String? {
+        if let pid = defaultProviderID { return pid }
+        var ancestorID = parentProfileID
+        var hops = 0
+        while let id = ancestorID, hops < 10,
+              let ancestor = app.profiles.profiles.first(where: { $0.id == id }) {
+            if let pid = ancestor.defaultSettings?.defaultProviderID { return pid }
+            ancestorID = ancestor.parentProfileID
+            hops += 1
+        }
+        return nil
+    }
+
+    private var effectiveInheritModelID: String? {
+        if let mid = defaultModelID { return mid }
+        var ancestorID = parentProfileID
+        var hops = 0
+        while let id = ancestorID, hops < 10,
+              let ancestor = app.profiles.profiles.first(where: { $0.id == id }) {
+            if let mid = ancestor.defaultSettings?.defaultModelID { return mid }
+            ancestorID = ancestor.parentProfileID
+            hops += 1
+        }
+        return nil
+    }
+
     /// Driver type for the default model — drives which extras section
     /// CallSettingsForm renders. Falls back to "anthropic" when no
     /// model is picked yet (safe choice; that branch shows only the
@@ -960,6 +1052,7 @@ private struct ProfileEditSheet: View {
             defaultModelID = p.defaultSettings?.defaultModelID
             systemMessage = p.systemMessage ?? ""
             defaultUserMessage = p.defaultUserMessage ?? ""
+            welcomeMessage = p.welcomeMessage ?? ""
             compressionMode = p.compressionMode
             compressionProviderID = p.compressionProviderID
             compressionModelID = p.compressionModelID
@@ -986,6 +1079,7 @@ private struct ProfileEditSheet: View {
         // model + provider layers at send time.
         let trimmedSystem = systemMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDefaultUser = defaultUserMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedWelcome = welcomeMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCompressionGuide = compressionGuide.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTitleGuide = titleGuide.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1011,7 +1105,8 @@ private struct ProfileEditSheet: View {
             titleProviderKind: titleProviderKind,
             description: description.trimmingCharacters(in: .whitespaces),
             parentOnly: parentOnly,
-            favorite: favorite
+            favorite: favorite,
+            welcomeMessage: trimmedWelcome.isEmpty ? nil : trimmedWelcome
         )
 
         // Build the explicit-clear list. Server-side, the proto patch
@@ -1030,6 +1125,7 @@ private struct ProfileEditSheet: View {
         if titleModelID == nil             { clearFields.append("title_model_id") }
         if trimmedTitleGuide.isEmpty       { clearFields.append("title_guide") }
         if titleProviderKind == nil        { clearFields.append("title_provider_kind") }
+        if trimmedWelcome.isEmpty          { clearFields.append("welcome_message") }
 
         do {
             // Step 1 — create / update the profile so we have an id
@@ -1105,6 +1201,7 @@ private enum ProfileSubScreen: Hashable {
 private enum ProfileLongTextField: String, Hashable {
     case systemMessage
     case defaultUserMessage
+    case welcomeMessage
     case compressionGuide
     case titleGuide
 
@@ -1112,6 +1209,7 @@ private enum ProfileLongTextField: String, Hashable {
         switch self {
         case .systemMessage:      return "System Message"
         case .defaultUserMessage: return "Default User Message"
+        case .welcomeMessage:     return "Welcome Message"
         case .compressionGuide:   return "Compression Guide"
         case .titleGuide:         return "Title Guide"
         }
@@ -1121,6 +1219,7 @@ private enum ProfileLongTextField: String, Hashable {
         switch self {
         case .systemMessage:      return "Optional — sent at the top of every conversation"
         case .defaultUserMessage: return "Optional — pre-fills the first user turn"
+        case .welcomeMessage:     return "Optional — shown as the first assistant bubble in new conversations"
         case .compressionGuide:   return "Optional extra instruction for the summariser"
         case .titleGuide:         return "Optional — e.g. \"prefer technical phrasing\""
         }

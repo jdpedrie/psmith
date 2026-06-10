@@ -30,7 +30,8 @@ struct ProfilesViewModelTests {
         let vm = ProfilesViewModel(client: client)
         await vm.load()
 
-        #expect(vm.profiles.count == 2)
+        // 2 created here + the 2 seeded onboarding profiles.
+        #expect(vm.profiles.count == 4)
         #expect(vm.error == nil)
         #expect(!vm.isLoading)
         // load() auto-selects the first profile when nothing was selected.

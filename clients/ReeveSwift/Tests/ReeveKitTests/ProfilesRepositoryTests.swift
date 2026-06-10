@@ -24,11 +24,37 @@ struct ProfilesRepositoryTests {
         self.server = try TestReevedServer.shared()
     }
 
-    @Test("list is empty for a fresh user")
-    func listEmpty() async throws {
+    @Test("fresh user starts with exactly the seeded profiles")
+    func listSeededOnly() async throws {
+        // Registration seeds the onboarding profiles (Personal
+        // Assistant + Reeve Manager) — a fresh user is never empty.
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "prof-list")
         let profiles = try await client.profiles.list()
-        #expect(profiles.isEmpty)
+        let names = Set(profiles.map(\.name))
+        #expect(names == ["Personal Assistant", "Reeve Manager"])
+    }
+
+    @Test("welcomeMessage round-trips through create, update, and clear")
+    func welcomeMessageRoundTrip() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "prof-welcome")
+        var patch = Fixtures.minimalProfilePatch(name: "Welcomer")
+        patch.welcomeMessage = "Hi there — ready when you are."
+        let created = try await client.profiles.create(patch)
+        #expect(created.welcomeMessage == "Hi there — ready when you are.")
+
+        // Update replaces the message.
+        var update = ReeveProfilePatch()
+        update.welcomeMessage = "New greeting."
+        let updated = try await client.profiles.update(id: created.id, patch: update)
+        #expect(updated.welcomeMessage == "New greeting.")
+
+        // clear_fields removes it.
+        let cleared = try await client.profiles.update(
+            id: created.id,
+            patch: ReeveProfilePatch(),
+            clearFields: ["welcome_message"]
+        )
+        #expect(cleared.welcomeMessage == nil)
     }
 
     @Test("create with minimum patch returns the new profile")
@@ -40,10 +66,9 @@ struct ProfilesRepositoryTests {
         #expect(created.name == "Hello")
         #expect(!created.id.isEmpty)
 
-        // Should now be visible in list().
+        // Should now be visible in list() alongside the seeded pair.
         let listed = try await client.profiles.list()
-        #expect(listed.count == 1)
-        #expect(listed.first?.id == created.id)
+        #expect(listed.contains { $0.id == created.id })
     }
 
     @Test("listPluginTypes returns at least lettered_choices")
@@ -64,16 +89,14 @@ struct ProfilesRepositoryTests {
         }
         // Schema (see plugins/lettered_choices.go ConfigFields()):
         //   keep_last_n                 — number
-        //   open_tag                    — text
-        //   close_tag                   — text
         //   system_instruction_override — textarea
-        #expect(lettered.configFields.count == 4)
+        //   output_mode                 — select
+        #expect(lettered.configFields.count == 3)
 
         let byName = Dictionary(uniqueKeysWithValues: lettered.configFields.map { ($0.name, $0) })
         #expect(byName["keep_last_n"]?.type == .number)
-        #expect(byName["open_tag"]?.type == .text)
-        #expect(byName["close_tag"]?.type == .text)
         #expect(byName["system_instruction_override"]?.type == .textarea)
+        #expect(byName["output_mode"]?.type == .select)
     }
 
     @Test("getProfilePlugins is empty for a brand-new profile")
