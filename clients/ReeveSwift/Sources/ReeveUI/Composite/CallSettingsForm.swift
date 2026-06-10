@@ -6,15 +6,20 @@ import ReeveKit
 /// in-conversation settings page) so the field set + validation lives once.
 ///
 /// Layout:
-///   - Universal "Common" section (always visible).
-///   - Top K row visible only for anthropic / google drivers.
-///   - Thinking section visible only when `modelCapabilities?.thinking == true`.
-///   - One driver-specific extras section based on `driverType`:
-///       "anthropic" → empty placeholder (none in v1).
-///       "openai-compatible" → seed / penalties / logprobs / response format /
-///                              service tier / parallel tools / logit bias.
-///       "google" → safety thresholds / response MIME / response schema /
-///                  candidate count.
+///   - Universal "Common" section (always visible; includes Top K with a
+///     note that only Anthropic/Google honour it).
+///   - "Thinking" section (always visible; annotated when the selected
+///     model doesn't support thinking).
+///   - "Caching" section (always visible).
+///   - Provider extras: by default ALL THREE provider sections are
+///     reachable through a tab control (Anthropic | OpenAI | Google) with
+///     the tab pre-selected from `driverType` — settings persist for every
+///     provider regardless of what's currently selected, so hiding the
+///     other providers' knobs just made them impossible to see or clear.
+///     Provider-scoped entry points (a provider's own defaults page, a
+///     model gear) pass `showAllProviderSections: false` to render only
+///     their own section — the other providers' extras can never apply
+///     at those layers.
 ///
 /// Each field renders an "Inherit (X)" mute hint when unset and the resolved
 /// snapshot has a value for that field. A small ↺ button next to set fields
@@ -53,46 +58,104 @@ public struct CallSettingsForm: View {
     /// heuristics. Source-of-truth lives in
     /// `internal/modelmeta/constraints.go`.
     let modelConstraints: ReeveModelConstraints?
+    /// When true (default), every provider's extras section is reachable
+    /// through the tab control below, pre-selected by `driverType`.
+    /// Provider-scoped entry points pass false to show only their own.
+    let showAllProviderSections: Bool
+
+    /// Provider-extras tab. Stable identity across driverType changes —
+    /// seeded once at init so a mid-edit model switch doesn't yank the
+    /// user off the tab they're reading.
+    @State private var extrasTab: ProviderExtrasTab
+
+    enum ProviderExtrasTab: String, CaseIterable, Identifiable {
+        case anthropic = "Anthropic"
+        case openai    = "OpenAI"
+        case google    = "Google"
+        var id: String { rawValue }
+
+        init(driverType: String) {
+            switch driverType {
+            case "openai-compatible": self = .openai
+            case "google":            self = .google
+            default:                  self = .anthropic
+            }
+        }
+    }
 
     public init(
         settings: Binding<ReeveCallSettings>,
         inheritedSettings: ReeveCallSettings?,
         driverType: String,
         modelCapabilities: ReeveModelCapabilities?,
-        modelConstraints: ReeveModelConstraints? = nil
+        modelConstraints: ReeveModelConstraints? = nil,
+        showAllProviderSections: Bool = true
     ) {
         self._settings = settings
         self.inheritedSettings = inheritedSettings
         self.driverType = driverType
         self.modelCapabilities = modelCapabilities
         self.modelConstraints = modelConstraints
-    }
-
-    private var showsTopK: Bool {
-        driverType == "anthropic" || driverType == "google"
-    }
-
-    private var showsThinking: Bool {
-        modelCapabilities?.thinking == true
+        self.showAllProviderSections = showAllProviderSections
+        self._extrasTab = State(initialValue: ProviderExtrasTab(driverType: driverType))
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             commonSection
-            if showsTopK { topKRow }
-            if showsThinking { thinkingSection }
+            thinkingSection
             cachingSection
-            switch driverType {
-            case "anthropic":
-                anthropicSection
-            case "openai-compatible":
-                openaiSection
-            case "google":
-                googleSection
-            default:
-                EmptyView()
+            if showAllProviderSections {
+                tabbedProviderExtras
+            } else {
+                switch driverType {
+                case "anthropic":         anthropicSection
+                case "openai-compatible": openaiSection
+                case "google":            googleSection
+                default:                  EmptyView()
+                }
             }
         }
+    }
+
+    // MARK: - Provider extras tabs
+
+    @ViewBuilder
+    private var tabbedProviderExtras: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("PROVIDER EXTRAS")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Picker("Provider extras", selection: $extrasTab) {
+                ForEach(ProviderExtrasTab.allCases) { t in
+                    Text(t.rawValue).tag(t)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(extrasTabCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            switch extrasTab {
+            case .anthropic: anthropicSectionBody
+            case .openai:    openaiSectionBody
+            case .google:    googleSectionBody
+            }
+        }
+    }
+
+    /// Whether the visible extras tab matches the provider the next
+    /// send will actually use — drives the "these don't apply" hint.
+    private var extrasTabIsActiveProvider: Bool {
+        ProviderExtrasTab(driverType: driverType) == extrasTab
+    }
+
+    private var extrasTabCaption: String {
+        if extrasTabIsActiveProvider {
+            return "Applies to the currently selected model's provider."
+        }
+        return "Saved, but only used when running on \(extrasTab.rawValue)."
     }
 
     // MARK: - Caching (cross-cutting)
@@ -151,6 +214,20 @@ public struct CallSettingsForm: View {
                 upperBound: 200_000
             )
 
+            // Top K — always visible. Only Anthropic + Google honour
+            // it, but the value persists across model switches, so
+            // hiding it on OpenAI made an inherited/overridden value
+            // invisible and impossible to clear.
+            int32StepperRow(
+                title: "Top K",
+                description: "Limit sampling to the top K tokens. Honoured by Anthropic and Google; other providers ignore it.",
+                value: $settings.topK,
+                inherited: inheritedSettings?.topK,
+                step: 1,
+                lowerBound: 1,
+                upperBound: 500
+            )
+
             // Stop sequences
             stopSequencesRow
         }
@@ -200,20 +277,6 @@ public struct CallSettingsForm: View {
     /// — collapses the slider to a static read-out.
     private var temperatureLocked: Bool {
         modelConstraints?.temperature?.lockedAt != nil
-    }
-
-    private var topKRow: some View {
-        formSection("Top K") {
-            int32StepperRow(
-                title: "Top K",
-                description: "Limit sampling to the top K tokens. Anthropic + Google only.",
-                value: $settings.topK,
-                inherited: inheritedSettings?.topK,
-                step: 1,
-                lowerBound: 1,
-                upperBound: 500
-            )
-        }
     }
 
     @ViewBuilder
@@ -274,6 +337,17 @@ public struct CallSettingsForm: View {
     @ViewBuilder
     private var thinkingSection: some View {
         formSection("Thinking") {
+            // Always visible — the values persist across model
+            // switches, so hiding the section on a non-thinking model
+            // hid live settings. Annotate inapplicability instead.
+            if modelCapabilities?.thinking == false {
+                Label(
+                    "The selected model doesn't support thinking — these are saved but ignored until you switch to one that does.",
+                    systemImage: "info.circle"
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
             // Enabled toggle
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -336,8 +410,13 @@ public struct CallSettingsForm: View {
 
     private var anthropicSection: some View {
         formSection("Anthropic extras") {
-            cachingControls
+            anthropicSectionBody
         }
+    }
+
+    @ViewBuilder
+    private var anthropicSectionBody: some View {
+        cachingControls
     }
 
     /// Picks `Inherit / On / Off` for prompt caching, plus the TTL segmented
@@ -450,6 +529,13 @@ public struct CallSettingsForm: View {
     @ViewBuilder
     private var openaiSection: some View {
         formSection("OpenAI extras") {
+            openaiSectionBody
+        }
+    }
+
+    @ViewBuilder
+    private var openaiSectionBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
             int32StepperRow(
                 title: "Seed",
                 description: "Reproducibility seed. Set to make outputs deterministic across calls.",
@@ -752,6 +838,13 @@ public struct CallSettingsForm: View {
     @ViewBuilder
     private var googleSection: some View {
         formSection("Google extras") {
+            googleSectionBody
+        }
+    }
+
+    @ViewBuilder
+    private var googleSectionBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
             safetyThresholdRow(
                 title: "Harassment",
                 value: googleSafetyBinding(\.harassment),
@@ -845,7 +938,9 @@ public struct CallSettingsForm: View {
                 get: { value.wrappedValue ?? inherited ?? false },
                 set: { value.wrappedValue = $0 }
             )) {
-                Text(value.wrappedValue == nil ? "Inherit (\(inherited?.description ?? "off"))" : (value.wrappedValue! ? "Enabled" : "Disabled"))
+                Text(value.wrappedValue == nil
+                     ? "Inherit (\((inherited ?? false) ? "On" : "Off"))"
+                     : (value.wrappedValue! ? "Enabled" : "Disabled"))
                     .font(.callout)
             }
             .toggleStyle(.switch)
@@ -1131,6 +1226,7 @@ private struct JSONTextEditor: View {
     let onChange: (String) -> Void
 
     @State private var text: String = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1142,6 +1238,7 @@ private struct JSONTextEditor: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .frame(minHeight: 80, maxHeight: 240)
+                .focused($focused)
                 .onChange(of: text) { _, newValue in onChange(newValue) }
             if !text.isEmpty, !isValidJSON(text) {
                 Label("Doesn't parse as JSON.", systemImage: "exclamationmark.triangle")
@@ -1150,6 +1247,12 @@ private struct JSONTextEditor: View {
             }
         }
         .onAppear { text = initial }
+        // External changes (e.g. the field's ↺ reset clearing the value)
+        // must reflect in the editor — but only while it isn't focused,
+        // so typing never fights the parent's re-serialized round-trip.
+        .onChange(of: initial) { _, newValue in
+            if !focused, text != newValue { text = newValue }
+        }
     }
 
     private func isValidJSON(_ s: String) -> Bool {

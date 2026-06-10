@@ -249,6 +249,12 @@ public final class ConversationViewModel {
     /// (see ConversationView's logoSlug helper). Drives the input
     /// composer's model chip rendering + the new ConversationModelPicker.
     public var providerPresetIDs: [String: String] = [:]
+    /// Provider-level default CallSettings keyed by provider ID — the
+    /// bottom layer of the resolution chain. Populated by
+    /// `loadAvailableModels`; used by `prepareSettingsView` so the
+    /// settings form's inherit-preview matches what the server will
+    /// actually resolve at SendMessage time.
+    public var providerDefaultSettings: [String: ReeveCallSettings] = [:]
     public var selectedProviderID: String?
     public var selectedModelID: String?
     /// Active profile's resolved required model capabilities. Populated by
@@ -416,14 +422,24 @@ public final class ConversationViewModel {
         // Build the full settings blob (UpdateConversation replaces, doesn't
         // merge). Start from the existing snapshot so we don't accidentally
         // wipe call_settings / include_thinking on a model swap.
-        var s = conversation.settings ?? ReeveConversationSettings()
-        s.defaultProviderID = providerID
-        s.defaultModelID    = modelID
         do {
-            _ = try await client.conversations.updateSettings(
+            // Fresh read-modify-write — UpdateConversation replaces the
+            // whole settings blob, and the in-memory snapshot races the
+            // settings page's save (the view model is recreated when
+            // navigating back, and its load() can read the row BEFORE
+            // that save commits). Building from the live row means a
+            // model pick can never wipe freshly-saved call settings.
+            let (live, _) = try await client.conversations.get(id: conversation.id)
+            var s = live.settings ?? ReeveConversationSettings()
+            s.defaultProviderID = providerID
+            s.defaultModelID    = modelID
+            let updated = try await client.conversations.updateSettings(
                 id: conversation.id,
                 settings: s
             )
+            // Adopt the server's view so a later saveCallSettings
+            // doesn't rebuild from a snapshot that predates this pick.
+            conversation = updated
         } catch {
             // Don't roll back the in-memory selection — the user picked it
             // and should be able to continue using it for this turn even
@@ -541,6 +557,9 @@ public final class ConversationViewModel {
             providerTypes  = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.type) })
             providerPresetIDs = Dictionary(uniqueKeysWithValues:
                 providers.compactMap { p in p.presetID.map { (p.id, $0) } }
+            )
+            providerDefaultSettings = Dictionary(uniqueKeysWithValues:
+                providers.compactMap { p in p.defaultSettings.map { (p.id, $0) } }
             )
             async let modelsTask: [ReeveUserModel] = withThrowingTaskGroup(of: [ReeveUserModel].self) { group in
                 for p in providers {
@@ -910,17 +929,33 @@ public final class ConversationViewModel {
         defer { preparingSettingsView = false }
 
         // Always re-fetch the live conversation so we pick up settings
-        // that another path may have written.
+        // that another path may have written — and ADOPT it as the
+        // current snapshot. saveCallSettings / selectModel build their
+        // full settings blob from `conversation.settings` (the server
+        // replaces, not merges), so a stale snapshot here meant one
+        // write path silently wiped the other's fields (pick a model →
+        // edit call settings → the model pick reverted server-side).
         let liveConvo: ReeveConversation
         do {
             (liveConvo, _) = try await client.conversations.get(id: conversation.id)
         } catch {
             return
         }
+        conversation = liveConvo
         conversationCallSettingsDraft = liveConvo.settings?.callSettings ?? ReeveCallSettings()
 
-        // Resolve the profile through the parent chain so we can render
-        // the inheritance preview against the profile's effective settings.
+        // The preview + extras-tab preselect need the model/provider
+        // catalog; on a fast path into Settings it may not be loaded
+        // yet (ConversationView fires loadAvailableModels in parallel
+        // with the first load).
+        if availableModels.isEmpty {
+            await loadAvailableModels()
+        }
+
+        // Resolve the inherit-preview the same way the server resolves
+        // at SendMessage time: profile (parent-chain resolved) over
+        // model defaults over provider defaults. Any layer that's
+        // missing contributes nothing.
         var resolved: ReeveCallSettings = ReeveCallSettings()
         if let (_, resolvedProfile) = try? await client.profiles.get(id: liveConvo.profileID, resolve: true),
            let resolvedProfile {
@@ -928,15 +963,15 @@ public final class ConversationViewModel {
             if let cs = resolvedProfile.defaultSettings?.callSettings {
                 resolved = cs
             }
-            // Layer the resolved profile's default model defaults *under*
-            // the profile's own callSettings — model is lower precedence.
-            // We don't know the per-model defaults until we look the model
-            // up in the available-models list.
-            if let pid = liveConvo.settings?.defaultProviderID ?? resolvedProfile.defaultSettings?.defaultProviderID,
-               let mid = liveConvo.settings?.defaultModelID    ?? resolvedProfile.defaultSettings?.defaultModelID,
-               let model = availableModels.first(where: { $0.providerID == pid && $0.modelID == mid }),
+        }
+        if let pid = liveConvo.settings?.defaultProviderID ?? settingsResolvedProfile?.defaultSettings?.defaultProviderID,
+           let mid = liveConvo.settings?.defaultModelID    ?? settingsResolvedProfile?.defaultSettings?.defaultModelID {
+            if let model = availableModels.first(where: { $0.providerID == pid && $0.modelID == mid }),
                let modelDefaults = model.defaultSettings {
                 resolved = mergeCallSettings(higher: resolved, lower: modelDefaults)
+            }
+            if let providerDefaults = providerDefaultSettings[pid] {
+                resolved = mergeCallSettings(higher: resolved, lower: providerDefaults)
             }
         }
         resolvedCallSettings = resolved
@@ -1032,34 +1067,30 @@ public final class ConversationViewModel {
     /// existing settings (default provider/model, include-thinking flag).
     /// Called on dismiss of the in-conversation Settings page.
     public func saveCallSettings() async {
-        var settings = conversation.settings ?? ReeveConversationSettings()
-        settings.callSettings = conversationCallSettingsDraft.isEmpty ? nil : conversationCallSettingsDraft
         do {
-            _ = try await client.conversations.updateSettings(
+            // UpdateConversation REPLACES the settings blob, so build
+            // from a fresh read of the live row, not the in-memory
+            // snapshot — concurrent writers (the model picker, another
+            // device, a parallel load()) make any snapshot stale, and
+            // a stale base silently wipes the other writer's fields.
+            let (live, _) = try await client.conversations.get(id: conversation.id)
+            var settings = live.settings ?? ReeveConversationSettings()
+            settings.callSettings = conversationCallSettingsDraft.isEmpty ? nil : conversationCallSettingsDraft
+            let updated = try await client.conversations.updateSettings(
                 id: conversation.id,
                 settings: settings
             )
+            // Adopt the server's view so later writes start from what
+            // was actually persisted.
+            conversation = updated
         } catch {
             loadError = ReeveError.display(error)
         }
     }
 
-    /// Sparse merge — `higher` wins when set, otherwise `lower` field is
-    /// adopted. Mirrors the server-side `mergeCallSettings` in
-    /// `internal/profiles/callsettings.go`. Used for the inherit-preview.
+    /// Sparse merge for the inherit-preview — see `CallSettingsMerge`.
     private func mergeCallSettings(higher: ReeveCallSettings, lower: ReeveCallSettings) -> ReeveCallSettings {
-        var out = higher
-        if out.temperature == nil      { out.temperature = lower.temperature }
-        if out.topP == nil             { out.topP = lower.topP }
-        if out.maxOutputTokens == nil  { out.maxOutputTokens = lower.maxOutputTokens }
-        if out.stopSequences.isEmpty   { out.stopSequences = lower.stopSequences }
-        if out.topK == nil             { out.topK = lower.topK }
-        // Thinking / extras: take whichever is non-nil; no nested merge in v1.
-        if out.thinking == nil  || (out.thinking?.isEmpty ?? true)  { out.thinking  = lower.thinking }
-        if out.anthropic == nil || (out.anthropic?.isEmpty ?? true) { out.anthropic = lower.anthropic }
-        if out.openai == nil    || (out.openai?.isEmpty ?? true)    { out.openai    = lower.openai }
-        if out.google == nil    || (out.google?.isEmpty ?? true)    { out.google    = lower.google }
-        return out
+        CallSettingsMerge.merge(higher: higher, lower: lower)
     }
 
     /// Trigger compaction, optionally with per-call overrides for prompt

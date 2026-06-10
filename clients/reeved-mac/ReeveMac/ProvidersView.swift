@@ -1302,7 +1302,8 @@ private struct ProviderDefaultSettingsTab: View {
                     settings: $draft,
                     inheritedSettings: nil,
                     driverType: provider.type,
-                    modelCapabilities: nil
+                    modelCapabilities: nil,
+                    showAllProviderSections: false
                 )
             }
             // Generous leading padding clears the macOS scroll indicator
@@ -1628,7 +1629,8 @@ private struct ModelEditForm: View {
                         inheritedSettings: nil,
                         driverType: providerType,
                         modelCapabilities: capabilitiesValue,
-                        modelConstraints: formMode.existingModel?.constraints
+                        modelConstraints: formMode.existingModel?.constraints,
+                        showAllProviderSections: false
                     )
                     .padding(.top, 8)
                 } else {
@@ -1638,7 +1640,8 @@ private struct ModelEditForm: View {
                             inheritedSettings: nil,
                             driverType: providerType,
                             modelCapabilities: capabilitiesValue,
-                            modelConstraints: formMode.existingModel?.constraints
+                            modelConstraints: formMode.existingModel?.constraints,
+                            showAllProviderSections: false
                         )
                         .padding(.top, 8)
                     } label: {

@@ -65,6 +65,20 @@ struct ConversationView: View {
             }
         }
         .task(id: conversation.id) {
+            // `.task` re-runs every time this view re-appears —
+            // including returning from a pushed screen (Settings,
+            // Contexts). Recreating the view model on those returns
+            // raced the settings page's onDisappear save (the fresh
+            // VM's load() could read the conversation BEFORE the save
+            // committed, and the next model pick then wrote the stale
+            // settings back, wiping the just-saved call settings). It
+            // also re-cleared the markdown cache and re-fetched
+            // everything for a simple back-navigation. Reuse the
+            // existing VM and just refresh the chain.
+            if let m = model, m.conversation.id == conversation.id {
+                await m.load()
+                return
+            }
             // Drop stale parsed-markdown entries from the previous
             // conversation so the cache doesn't accumulate forever
             // across long sessions. Each conversation's entries land

@@ -334,12 +334,20 @@ struct ConversationSettingsView: View {
         return "anthropic"
     }
 
+    /// Provider the NEXT SEND will actually use, in precedence order:
+    /// the composer's live selection (what the model chip shows),
+    /// then the conversation default, then the profile default. The
+    /// old conversation-default-first order ignored the composer
+    /// selection the user was looking at, so the extras tab and the
+    /// temperature range tracked the wrong provider.
     private var effectiveProviderID: String? {
+        if let pid = model.selectedProviderID, !pid.isEmpty { return pid }
         if let pid = model.conversation.settings?.defaultProviderID, !pid.isEmpty { return pid }
         return model.settingsResolvedProfile?.defaultSettings?.defaultProviderID
     }
 
     private var effectiveModelID: String? {
+        if let mid = model.selectedModelID, !mid.isEmpty { return mid }
         if let mid = model.conversation.settings?.defaultModelID, !mid.isEmpty { return mid }
         return model.settingsResolvedProfile?.defaultSettings?.defaultModelID
     }

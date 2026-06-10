@@ -406,7 +406,8 @@ private struct ProviderDefaultSettingsScreen: View {
                     settings: $draft,
                     inheritedSettings: nil,
                     driverType: provider.type,
-                    modelCapabilities: nil
+                    modelCapabilities: nil,
+                    showAllProviderSections: false
                 )
 
                 if let error {
@@ -481,7 +482,8 @@ private struct ModelDefaultSettingsSheet: View {
                         settings: $draft,
                         inheritedSettings: provider.defaultSettings,
                         driverType: provider.type,
-                        modelCapabilities: model.capabilities
+                        modelCapabilities: model.capabilities,
+                        showAllProviderSections: false
                     )
 
                     if let error {

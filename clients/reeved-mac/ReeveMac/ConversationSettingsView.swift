@@ -276,12 +276,18 @@ struct ConversationSettingsView: View {
         return "anthropic"
     }
 
+    /// Provider the NEXT SEND will actually use — composer selection
+    /// first (what the model chip shows), then conversation default,
+    /// then profile default. Keeps the extras-tab preselect and the
+    /// temperature heuristics tracking the provider the user sees.
     private var effectiveProviderID: String? {
+        if let pid = model.selectedProviderID, !pid.isEmpty { return pid }
         if let pid = model.conversation.settings?.defaultProviderID, !pid.isEmpty { return pid }
         return model.settingsResolvedProfile?.defaultSettings?.defaultProviderID
     }
 
     private var effectiveModelID: String? {
+        if let mid = model.selectedModelID, !mid.isEmpty { return mid }
         if let mid = model.conversation.settings?.defaultModelID, !mid.isEmpty { return mid }
         return model.settingsResolvedProfile?.defaultSettings?.defaultModelID
     }
