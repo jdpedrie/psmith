@@ -1,6 +1,13 @@
 import SwiftUI
 import ReeveKit
 import ReeveUI
+import os.log
+
+/// Diagnostic logger for the auto-follow state machine. Notice-level
+/// so entries survive into `log show` — these breadcrumbs exist
+/// because the follow/park interactions are only observable on a live
+/// stream and have burned multiple debugging rounds.
+private let scrollLog = Logger(subsystem: "dev.jdpedrie.reeve", category: "ChatScroll")
 
 /// iOS conversation surface. Constructs `ConversationViewModel` against
 /// the live `reeved`, then renders the status strip + message scroll.
@@ -167,6 +174,28 @@ private struct ConversationBody: View {
     /// auto-follow — phases fire for system motion too, which is the
     /// misread that caused the original stranding bug.
     @State private var scrollPhase: ScrollPhase = .idle
+
+    /// Latest scroll offset, stored OUTSIDE SwiftUI invalidation (a
+    /// reference-type box mutated from the geometry handler at tick
+    /// rate without re-rendering anything). Read exactly once per
+    /// park to freeze the viewport at its current offset.
+    @State private var liveOffset = LiveOffsetBox()
+
+    /// The message id the mid-stream park pinned at the viewport top.
+    /// Used to RE-ASSERT the pin across the terminal reload — the
+    /// content swap at stream end re-triggers the scroll position and
+    /// yanked a parked viewport to the response bottom (simulator-
+    /// verified: park held for 15s of streaming, then jumped at
+    /// terminal). Cleared on any user scroll / new send.
+    @State private var parkedMessageID: String?
+
+    /// Arms the sent-message-top cutoff. The preference reporter
+    /// emits garbage during the send-time relayout (logged minY=-458
+    /// on the first frame of a stream, which parked follow at t=0),
+    /// so the cutoff only honors a top-crossing after at least one
+    /// sane on-screen reading (minY comfortably below the viewport
+    /// top) has been observed for the current stream.
+    @State private var cutoffArmed = false
 
     /// History window: only the newest N messages render around any
     /// bottom-seek — first appearance AND each send — with the rest
@@ -472,6 +501,11 @@ private struct ConversationBody: View {
                 // wheel moved the content). User-scroll detection
                 // lives in onScrollGeometryChange below, keyed off
                 // `scrollPosition.isPositionedByUser`.
+                //
+                // scrollTargetLayout exposes row identities so the
+                // park's `scrollTo(id:anchor:)` can pin the sent
+                // message at the viewport top (see disengageFollow).
+                .scrollTargetLayout()
             }
             .scrollPosition($scrollPosition)
             // Auto-follow is delegated to the SYSTEM bottom anchor, not
@@ -493,8 +527,26 @@ private struct ConversationBody: View {
             // handler to misread. Passing nil detaches the anchor when
             // follow is disengaged (user dragged, or the streaming
             // bubble outgrew the viewport).
-            .defaultScrollAnchor(.bottom)
+            // ONLY the role-specific sizeChanges anchor — deliberately
+            // no all-roles `defaultScrollAnchor(.bottom)`. The
+            // all-roles variant covers sizeChanges too, and its
+            // composition with the conditional override below is
+            // ambiguous: logging showed the view still bottom-pinning
+            // after the override flipped to nil. Initial placement
+            // comes from the onAppear edge seek below instead (the
+            // sizeChanges anchor does NOT cover the empty→loaded
+            // transition — verified: cold entry landed at the top
+            // without it).
             .defaultScrollAnchor(autoFollow ? .bottom : nil, for: .sizeChanges)
+            .onAppear {
+                // Sticky bottom-edge position for cold entry: holds
+                // the bottom through load + tail-window settle +
+                // backfill. The stickiness is exactly the follow
+                // behavior we want while autoFollow is true; it is
+                // explicitly broken at park (disengageFollow resets
+                // the binding) and replaced by any user drag.
+                scrollPosition.scrollTo(edge: .bottom)
+            }
             .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
                 ScrollMetrics(
                     contentHeight: geometry.contentSize.height,
@@ -502,6 +554,7 @@ private struct ConversationBody: View {
                     viewportHeight: geometry.containerSize.height
                 )
             } action: { _, m in
+                liveOffset.y = m.offset
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
 
@@ -566,6 +619,10 @@ private struct ConversationBody: View {
                     withAnimation(.easeInOut(duration: 0.22)) {
                         scrollPosition.scrollTo(edge: .bottom)
                     }
+                    // Back at the bottom = safe to backfill any
+                    // history still deferred from a mid-stream park
+                    // (prepend is invisible while bottom-pinned).
+                    expandHistoryWindow()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down")
@@ -601,6 +658,8 @@ private struct ConversationBody: View {
                 if text != nil {
                     autoFollow = true
                     streamingRowHeight = 0
+                    cutoffArmed = false
+                    parkedMessageID = nil
                     // Re-apply the tail window for the send-time
                     // bottom seek. Submit interleaves an animated
                     // scroll, keyboard dismissal (container growth),
@@ -623,15 +682,18 @@ private struct ConversationBody: View {
                     // keyboard/content changes invalidated mid-flight.
                     // The pending bubble's insertion provides its own
                     // motion; the seek itself should be exact.
+                    //
+                    // The window stays at 12 for the WHOLE stream —
+                    // the disengage park is a raw offset freeze, and
+                    // it is only stable while the mounted history is
+                    // small (see disengageFollow). Expansion happens
+                    // at the next bottom-anchored moment: terminal,
+                    // pill tap, or conversation re-entry.
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) {
                         historyWindow = 12
                         scrollPosition.scrollTo(edge: .bottom)
-                    }
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(700))
-                        expandHistoryWindow()
                     }
                 }
             }
@@ -641,30 +703,87 @@ private struct ConversationBody: View {
                     streamingRowHeight = 0
                 } else if wasStreaming && !isStreaming {
                     // Terminal edge: reset the streaming-row bookkeeping.
-                    // We deliberately don't scroll here — iOS's natural
-                    // contentSize-change handling snaps the viewport into
-                    // valid bounds without an animated bounce, and the
-                    // during-stream auto-follow has kept us at the real
-                    // bottom throughout, so no further work is needed.
+                    // When we followed to the end, break the send-path's
+                    // sticky edge position (so post-terminal content
+                    // changes don't yank the viewport) and backfill the
+                    // history — the prepend is invisible while the
+                    // bottom anchor holds. When parked mid-response,
+                    // leave both the park and the window alone; the
+                    // backfill happens on the next pill tap / send /
+                    // re-entry instead.
                     streamingRowHeight = 0
+                    if autoFollow {
+                        // Keep the sticky bottom edge — it holds the
+                        // viewport through the terminal reload + this
+                        // backfill. (Replacing the binding here would
+                        // rewind a viewport; see disengageFollow.)
+                        expandHistoryWindow()
+                    } else if let parkedID = parkedMessageID {
+                        // Parked mid-response: the terminal content
+                        // swap re-fires the scroll position and yanks
+                        // the viewport to the bottom. Re-assert the
+                        // pin now and once more after the reload
+                        // settles.
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            scrollPosition.scrollTo(id: parkedID, anchor: .top)
+                        }
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !autoFollow, parkedMessageID == parkedID else { return }
+                            var t2 = Transaction()
+                            t2.disablesAnimations = true
+                            withTransaction(t2) {
+                                scrollPosition.scrollTo(id: parkedID, anchor: .top)
+                            }
+                        }
+                    }
+                }
+            }
+            // Primary streaming stop condition: follow the growing
+            // response until the just-sent USER message reaches the
+            // top of the viewport, then park — the question stays
+            // visible while the answer keeps writing below (the pill
+            // appears once the bottom runs away). The preference is
+            // emitted only while a streaming turn is active, by the
+            // last (user) row in ChatHistoryArea; minY is in the
+            // scroll view's visible space, so <= threshold means the
+            // row's top is at/above the viewport top.
+            .onPreferenceChange(SentMessageTopPreferenceKey.self) { minY in
+                guard let minY else { return }
+                Task { @MainActor in
+                    guard model.isStreaming else { return }
+                    if !cutoffArmed {
+                        // Arm only on a sane reading: the row top
+                        // visibly below the viewport top. Filters the
+                        // relayout garbage at stream start.
+                        if minY > 60 {
+                            cutoffArmed = true
+                            scrollLog.notice("cutoff armed (minY=\(Int(minY)))")
+                        }
+                        return
+                    }
+                    guard autoFollow, minY <= 8 else { return }
+                    scrollLog.notice("park: sent message reached top (minY=\(Int(minY)))")
+                    disengageFollow()
                 }
             }
             .onChange(of: streamingRowHeight) { _, newHeight in
-                // streamingRowHeight is used only for the disengage
-                // check, not for driving scrolls — the bottom pin is
-                // the system anchor's job.
-                //
-                // Disengage once the streaming row's measured height
-                // reaches viewport height — by then the top of the
-                // streaming message is at (or past) the top of the
-                // viewport, which matches the spec's stop condition.
-                // Setting autoFollow=false implements the "do nothing
-                // else, ever" half of the contract.
+                // Backstop stop condition: the streaming row alone
+                // outgrew the viewport. Normally the sent-message-top
+                // preference (above) fires first — this covers turns
+                // where the preference can't (forked sends where the
+                // last row isn't the watched user message, a row that
+                // dematerialized, etc.). streamingRowHeight is used
+                // only for this check, not for driving scrolls — the
+                // bottom pin is the system anchor's job.
                 guard model.isStreaming, newHeight > 0 else { return }
                 let buffer: CGFloat = 24
                 let usableViewport = max(0, viewportHeight - buffer)
-                if usableViewport > 0, newHeight >= usableViewport {
-                    autoFollow = false
+                if usableViewport > 0, newHeight >= usableViewport, autoFollow {
+                    scrollLog.notice("park: streaming row outgrew viewport (h=\(Int(newHeight)))")
+                    disengageFollow()
                 }
             }
             // Phase TRACKING only — deliberately no disengage here.
@@ -693,34 +812,100 @@ private struct ConversationBody: View {
             }
     }
 
-    /// Swap the tail window for the full history. While the bottom
-    /// anchor is engaged the prepend is invisible — content grows
-    /// above the viewport and the anchor holds the bottom edge over
-    /// rows that are already realized. If the user started scrolling
-    /// during the settle beat (anchor detached), re-pin the viewport
-    /// to the row they were looking at so the prepend doesn't shove
-    /// their reading position.
+    /// Stop following the stream and PARK the viewport where it is.
+    /// Four simulator-verified traps shape this:
+    ///
+    ///   1. Flipping `autoFollow` alone is not enough — the send
+    ///      path's `scrollTo(edge: .bottom)` leaves ScrollPosition
+    ///      holding a STICKY edge position that the scroll view keeps
+    ///      re-honoring on every content change, so the view chased
+    ///      the stream all the way to terminal.
+    ///   2. Replacing the binding with an empty ScrollPosition() to
+    ///      break the stickiness REWINDS the offset by exactly one
+    ///      viewport (logged park at minY=-4, frame showed the
+    ///      previous screenful).
+    ///   3. An offset park is only stable when the mounted history is
+    ///      SMALL: with the full chain mounted, LazyVStack's estimate
+    ///      churn for the unrealized mass above slid the parked
+    ///      viewport a full screen off.
+    ///   4. `scrollTo(id:anchor:)` is no better — it solves the
+    ///      target position from those same estimates and landed a
+    ///      screen above the row.
+    ///
+    /// So: overwrite the sticky edge with an ID-pin on the sent
+    /// message, anchored at the viewport top — which is also exactly
+    /// the desired UX (the question stays put while the answer keeps
+    /// writing below). Trap (4) doesn't apply here because the
+    /// send-time tail window (kept at 12 for the whole stream) keeps
+    /// every mounted row realized, so the id solve is exact; an
+    /// explicit point-park was tried too and `scrollTo(point:)`
+    /// landed a viewport off (its point is not a raw content offset).
+    /// History re-expands at the next bottom-anchored moment
+    /// (terminal / pill / re-entry), where the prepend is invisible.
+    private func disengageFollow() {
+        autoFollow = false
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            if let last = model.messages.last, last.role == .user {
+                parkedMessageID = last.id
+                scrollPosition.scrollTo(id: last.id, anchor: .top)
+            } else {
+                // Compaction / no watched row: freeze at the current
+                // offset as a best effort.
+                scrollPosition.scrollTo(point: CGPoint(x: 0, y: liveOffset.y))
+            }
+        }
+        // Second pass: the first scrollTo(id:) solves against row
+        // ESTIMATES when tall rows in the window aren't realized and
+        // can land up to a screen off; by the time this fires, the
+        // first pass has realized the target's neighborhood and the
+        // re-solve is exact. (Same two-pass trick as the terminal
+        // re-assert.)
+        if let parkedID = parkedMessageID {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !autoFollow, parkedMessageID == parkedID else { return }
+                var t2 = Transaction()
+                t2.disablesAnimations = true
+                withTransaction(t2) {
+                    scrollPosition.scrollTo(id: parkedID, anchor: .top)
+                }
+            }
+        }
+    }
+
+    /// Swap the tail window for the full history — but ONLY while the
+    /// bottom anchor is engaged, where the prepend is invisible
+    /// (content grows above the viewport; the anchor holds the bottom
+    /// edge over already-realized rows). When the user has scrolled
+    /// away or the stream parked, expansion is DEFERRED to the next
+    /// bottom-anchored moment (pill tap, next send, terminal-at-
+    /// bottom, or conversation re-entry). There is no safe way to
+    /// prepend under a detached position: a raw offset slides when
+    /// LazyVStack re-estimates the new mass, and scrollTo(id:) solves
+    /// against those same estimates — both verified landing a screen
+    /// off in the simulator.
     private func expandHistoryWindow() {
         guard let w = historyWindow else { return }
         guard model.messages.count > w else {
             historyWindow = nil
             return
         }
+        guard autoFollow else { return }
         var t = Transaction()
         t.disablesAnimations = true
-        if autoFollow {
-            withTransaction(t) { historyWindow = nil }
-        } else {
-            let anchorID = model.messages.suffix(w).first?.id
-            withTransaction(t) {
-                historyWindow = nil
-                if let anchorID {
-                    scrollPosition.scrollTo(id: anchorID, anchor: .top)
-                }
-            }
-        }
+        withTransaction(t) { historyWindow = nil }
     }
 
+}
+
+/// Reference-type holder for the live scroll offset. Mutated from the
+/// geometry handler every tick WITHOUT invalidating any view (it's a
+/// class held in @State — stable identity, field writes are invisible
+/// to SwiftUI). Read once per park.
+final class LiveOffsetBox {
+    var y: CGFloat = 0
 }
 
 /// Snapshot of the bits of `ScrollGeometry` the scroll-to-bottom-pill
@@ -742,8 +927,26 @@ private struct ScrollMetrics: Equatable, Sendable {
 // 20-50× per second does NOT re-eval ChatHistoryArea's body and run
 // ForEach over hundreds of messages.
 
+/// Reports the just-sent user message's top edge in the scroll view's
+/// visible coordinate space while a response streams. ConversationBody
+/// watches this to stop auto-follow the moment the sent message
+/// reaches the viewport top — so the user's question stays on screen
+/// while the answer keeps writing below.
+///
+/// A preference (not a callback prop on ChatHistoryArea) so the
+/// history subview's stored properties stay equatable — a closure
+/// prop would defeat SwiftUI's body-skip and re-run the 500-message
+/// ForEach on every chunk-rate parent re-eval.
+struct SentMessageTopPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
+    }
+}
+
 /// Renders the settled message + compression-summary timeline. Observes
-/// only `model.messages`; immune to streaming state churn.
+/// only `model.messages` (plus the rare isStreaming flip for the
+/// follow-cutoff reporter); immune to streaming-text churn.
 ///
 /// `window` limits rendering to the newest N messages during the
 /// cold-entry settle (see `historyWindow` on ConversationBody); nil
@@ -758,7 +961,20 @@ private struct ChatHistoryArea: View {
         return Array(model.messages.suffix(window))
     }
 
+    /// The message whose top edge gates auto-follow: the just-sent
+    /// user message, which is the LAST row in the chain for the
+    /// whole duration of a streaming turn (the assistant row only
+    /// materializes at terminal). nil outside streaming — the
+    /// geometry reporter detaches entirely.
+    private var followCutoffMessageID: String? {
+        guard model.isStreaming, !model.isCompacting,
+              let last = model.messages.last, last.role == .user
+        else { return nil }
+        return last.id
+    }
+
     var body: some View {
+        let cutoffID = followCutoffMessageID
         ForEach(visibleMessages) { msg in
             if msg.role == .compressionSummary {
                 CompressionSummaryCard(message: msg, model: model)
@@ -766,6 +982,16 @@ private struct ChatHistoryArea: View {
             } else {
                 MessageRow(message: msg, model: model)
                     .id(msg.id)
+                    .background {
+                        if msg.id == cutoffID {
+                            GeometryReader { g in
+                                Color.clear.preference(
+                                    key: SentMessageTopPreferenceKey.self,
+                                    value: g.frame(in: .scrollView).minY
+                                )
+                            }
+                        }
+                    }
             }
         }
     }
