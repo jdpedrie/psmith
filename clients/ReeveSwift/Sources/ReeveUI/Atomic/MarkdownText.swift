@@ -172,15 +172,25 @@ extension MarkdownUI.Theme {
             BackgroundColor(.secondary.opacity(0.18))
         }
         .codeBlock { configuration in
-            configuration.label
-                .padding(10)
-                .markdownTextStyle {
-                    FontFamilyVariant(.monospaced)
-                    FontSize(.em(0.88))
-                }
-                .background(Color.secondary.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .markdownMargin(top: .em(0.5), bottom: .em(0.5))
+            // Code lines don't wrap — a wide line would otherwise
+            // stretch the whole message (and, via the chat pane's
+            // maxWidth: .infinity rows, the entire conversation)
+            // beyond the viewport. Give the code its OWN horizontal
+            // scroller so wide code stays readable AND contained: the
+            // outer chat pane stays exactly viewport-wide and never
+            // pans sideways. `.scrollClipDisabled(false)` keeps the
+            // overflow inside the rounded background.
+            ScrollView(.horizontal, showsIndicators: false) {
+                configuration.label
+                    .padding(10)
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.88))
+                    }
+            }
+            .background(Color.secondary.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .markdownMargin(top: .em(0.5), bottom: .em(0.5))
         }
         .blockquote { configuration in
             HStack(spacing: 0) {

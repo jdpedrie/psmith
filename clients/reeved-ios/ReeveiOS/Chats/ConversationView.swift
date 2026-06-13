@@ -163,11 +163,21 @@ private struct ConversationBody: View {
     /// `.onGeometryChange` on the StreamingRow. Used to decide when
     /// to stop auto-follow.
     @State private var streamingRowHeight: CGFloat = 0
-    /// Viewport height of the message scroll, captured from the
-    /// outer GeometryReader. Used as the cap above which auto-follow
+    /// Viewport height of the message scroll, measured via
+    /// `onGeometryChange`. Used as the cap above which auto-follow
     /// disengages so a long response stops scrolling once the bubble
     /// fills the screen.
     @State private var viewportHeight: CGFloat = 0
+    /// Width of the message pane, measured via `onGeometryChange` and
+    /// injected as `chatPaneWidth` for bubble width caps. Measured
+    /// WITHOUT wrapping the ScrollView in a layout-owning
+    /// GeometryReader — that wrapper made the scroll content lose its
+    /// horizontal padding (content slammed to the screen edges) the
+    /// instant the keyboard appeared or a send fired, snapping back
+    /// only on the next interaction. `onGeometryChange` measures the
+    /// view in place, so the ScrollView keeps normal keyboard
+    /// avoidance + insets.
+    @State private var paneWidth: CGFloat = 0
     /// True when the scroll position is more than `scrollToBottomThreshold`
     /// points away from the bottom of the message list. Drives the
     /// "Scroll to bottom" pill that slides down from below the status
@@ -207,38 +217,42 @@ private struct ConversationBody: View {
     /// top) has been observed for the current stream.
     @State private var cutoffArmed = false
 
-    /// Which prefix of the history stays UNMOUNTED. This is the fix
-    /// for the long-standing "cold entry into a long chat lands in
-    /// blank space past the messages" bug. Root cause (device-
-    /// confirmed): handing LazyVStack 200+ messages in one shot makes
-    /// it realize rows from the TOP while the total content size stays
-    /// estimated — all the estimate error accumulates at the BOTTOM as
-    /// phantom blank space, and the bottom anchor seeks into it (the
-    /// scrollbar showed ~5 screens of desert below the last message).
-    /// A ~dozen-row tail realizes fully in one pass, so the content
-    /// size is exact and the anchor lands on the real last message.
+    /// Whether the FULL history is mounted, or only the newest tail.
     ///
-    /// CRITICAL INVARIANT — the mounted set only ever changes by
-    /// EXPLICIT USER ACTION (the "Show earlier" capsule). The previous
-    /// design cycled the window automatically: re-trim to the newest
-    /// 12 on every send, silently re-expand at terminal / pill-tap /
-    /// a 500ms timer. Every transition was a structural relayout of
-    /// hundreds of rows, and each one had a way to glitch — sends
-    /// visibly unloaded the history above, terminal expansion
-    /// re-introduced estimate inflation and stranded the viewport
-    /// below the conversation, and the whole layout could lurch
-    /// during the swap (all user-reported on device). The boundary
-    /// freezes once per entry instead:
+    /// This is the fix for the long-standing "cold entry into a long
+    /// chat lands in blank space past the messages" bug. Root cause
+    /// (device-confirmed): handing LazyVStack 200+ messages in one shot
+    /// makes it realize rows from the TOP while the total content size
+    /// stays estimated — all the estimate error accumulates at the
+    /// BOTTOM as phantom blank space, and the bottom anchor seeks into
+    /// it (the scrollbar showed ~5 screens of desert below the last
+    /// message). A ~dozen-row tail realizes fully in one pass, so the
+    /// content size is exact and the anchor lands on the real last
+    /// message.
     ///
-    ///   .settling     — initial load in flight; mount the newest 12.
-    ///   .cutoff(id)   — boundary frozen at the message that was 12th-
-    ///                   from-last when the load finished. New
-    ///                   messages append BELOW the boundary, so
-    ///                   nothing ever unloads; the hidden prefix never
-    ///                   regrows.
-    ///   .full         — user tapped "Show earlier" (or the chain was
-    ///                   short to begin with).
-    @State private var historyMount: HistoryMount = .settling
+    /// Lifecycle (fully transparent — no buttons, no unload):
+    ///   false → cold entry mounts only the newest `coldEntryTail`
+    ///           rows so the bottom seek lands true.
+    ///   true  → the instant we OBSERVE the viewport settled at the
+    ///           bottom (so the seek has already landed on the small
+    ///           window), the rest of the history is mounted in one
+    ///           shot. Because the bottom edge is anchor-pinned over
+    ///           realized rows, the prepend lands entirely ABOVE the
+    ///           viewport where its estimate error can't strand
+    ///           anything — the expansion is invisible. From then on
+    ///           everything is mounted, so scrolling up is seamless
+    ///           and new sends just append.
+    ///
+    /// The earlier "Show earlier messages" capsule + frozen-cutoff
+    /// design is gone: the v5.1 variant that re-trimmed on every send
+    /// and re-expanded at terminal caused the across-the-board
+    /// regressions (history visibly unloading, viewport stranded below
+    /// the conversation at stream close). Expanding ONCE, only while
+    /// idle-at-bottom, and never re-trimming is the safe combination.
+    @State private var historyExpanded = false
+    /// Rows kept mounted before the one-shot expansion. Enough to fill
+    /// any phone viewport so the cold-entry bottom seek is exact.
+    private let coldEntryTail = 12
 
     var body: some View {
         VStack(spacing: 0) {
@@ -469,12 +483,14 @@ private struct ConversationBody: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            GeometryReader { geo in
-                paneScrollBody
-                    .environment(\.chatPaneWidth, geo.size.width)
-                    .onAppear { viewportHeight = geo.size.height }
-                    .onChange(of: geo.size.height) { _, new in viewportHeight = new }
-            }
+            paneScrollBody
+                .environment(\.chatPaneWidth, paneWidth)
+                .onGeometryChange(for: CGSize.self) { proxy in
+                    proxy.size
+                } action: { size in
+                    paneWidth = size.width
+                    viewportHeight = size.height
+                }
         }
     }
 
@@ -482,21 +498,6 @@ private struct ConversationBody: View {
     private var paneScrollBody: some View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    // While the tail window is active and hides older
-                    // messages, surface an explicit reveal control at
-                    // the top of the visible history. Deliberately
-                    // user-initiated rather than an automatic
-                    // scroll-position-preserving backfill: the timed
-                    // backfill used to race the user's first touch,
-                    // and its preserve-seek resolved through hundreds
-                    // of unrealized rows' estimates — landing
-                    // half-a-conversation away with no discernible
-                    // pattern (the on-device "jumps far up" reports).
-                    if hiddenHistoryCount > 0 {
-                        ShowEarlierRow(count: hiddenHistoryCount) {
-                            revealEarlierHistory()
-                        }
-                    }
                     // Settled history is its own subview that observes
                     // only `model.messages`. Without this split, every
                     // streaming chunk (which mutates streamingText on the
@@ -504,7 +505,7 @@ private struct ConversationBody: View {
                     // LazyVStack content closure — running ForEach over
                     // N messages and constructing N MessageRow values
                     // per chunk, even though none of them changed.
-                    ChatHistoryArea(model: model, mount: historyMount)
+                    ChatHistoryArea(model: model, expanded: historyExpanded, tail: coldEntryTail)
                     // Pending user is its own subview for the same
                     // reason — observes only pendingUserText, not the
                     // chunk-rate streaming state.
@@ -515,6 +516,25 @@ private struct ConversationBody: View {
                     )
                 }
                 .padding()
+                // HARD width clamp on the scroll content — THE fix for
+                // the "content slams to the screen edges / shifts left
+                // under the edge, snaps back on interaction" bug. A
+                // single non-wrapping wide child (a long URL, a wide
+                // code block or markdown table) makes the assistant
+                // message — and through `maxWidth: .infinity` every
+                // sibling row — lay out wider than the viewport. That
+                // turned the vertical ScrollView's content oversized;
+                // a keyboard show or send re-pinned it and the whole
+                // pane appeared to lose its margins. Capping the
+                // padded content at the measured pane width means no
+                // child can ever widen the pane: long inline tokens
+                // character-wrap, and genuinely-wide blocks (code)
+                // scroll inside their own horizontal scroller (see
+                // `.clarkChat` codeBlock theme) instead of dragging
+                // the conversation sideways. Gated on a real
+                // measurement so the first pre-layout frame isn't
+                // collapsed to zero width.
+                .frame(maxWidth: paneWidth > 0 ? paneWidth : .infinity)
                 // Tap-to-dismiss for the composer keyboard.
                 // `scrollDismissesKeyboard(.interactively)` (below)
                 // alone needs actual scroll motion to fire — on a
@@ -595,6 +615,21 @@ private struct ConversationBody: View {
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
 
+                // One-shot silent expansion: the moment we observe the
+                // viewport settled at the bottom of the cold-entry tail
+                // window (the seek has landed on the small, fully-
+                // realized set), mount the rest of the history. The
+                // bottom edge is anchor-pinned over realized rows, so
+                // the prepend lands entirely above the viewport and is
+                // invisible. After this, everything is mounted —
+                // scroll-up is seamless, no "show earlier" button, and
+                // sends just append. Gated on autoFollow so we only
+                // expand while genuinely bottom-pinned, never mid-
+                // scroll.
+                if !historyExpanded, autoFollow, distance < 8 {
+                    historyExpanded = true
+                }
+
                 // Past-bottom clamp: when the viewport extends BELOW
                 // the content bottom while follow is engaged, re-pin.
                 // This is the keyboard-dismissal-on-submit case: the
@@ -661,12 +696,11 @@ private struct ConversationBody: View {
             // Pill is always-rendered with opacity, not conditional view
             // insertion, so SwiftUI doesn't tear down and rebuild the
             // overlay subtree per state change. Hit testing is gated so
-            // a hidden pill can't intercept taps. Anchored at the
-            // BOTTOM (just above the composer) — it used to share the
-            // top with the "Show earlier" capsule and covered it
-            // whenever the user scrolled to the top of the mounted
-            // history.
-            .overlay(alignment: .bottom) {
+            // a hidden pill can't intercept taps. Anchored at the TOP
+            // (just under the status strip) — the "Show earlier" capsule
+            // it used to collide with is gone (history auto-expands), so
+            // it's back in its original spot.
+            .overlay(alignment: .top) {
                 Button {
                     Haptics.impact(.light)
                     autoFollow = true
@@ -687,7 +721,7 @@ private struct ConversationBody: View {
                     .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 10)
+                .padding(.top, 8)
                 .opacity(isFarFromBottom && !autoFollow ? 1 : 0)
                 .allowsHitTesting(isFarFromBottom && !autoFollow)
                 .animation(.easeInOut(duration: 0.22), value: isFarFromBottom)
@@ -838,26 +872,18 @@ private struct ConversationBody: View {
                 scrollPhase = newPhase
             }
             .scrollDismissesKeyboard(.interactively)
+            // No initial-load task needed for the mount: the geometry
+            // handler flips `historyExpanded` the instant it observes
+            // the viewport settled at the bottom of the cold-entry
+            // tail. As a backstop for the rare case where a chat is
+            // short enough that it never reports a distinct "settled at
+            // bottom" frame, expand once the load finishes too.
             .task {
-                // Freeze the mount boundary once the initial load
-                // lands. This is pure bookkeeping — the mounted set is
-                // IDENTICAL before and after (the newest 12 either
-                // way), so nothing relayouts; it just switches the
-                // semantics from "newest 12 by count" (which would
-                // slide as new messages append, unloading old rows) to
-                // "everything after this fixed message". No timed
-                // full-history backfill follows — that silent
-                // expansion was the source of the stream-close /
-                // post-settle phantom desert.
                 while model.loading {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
-                guard case .settling = historyMount else { return }
-                let msgs = model.messages
-                if msgs.count > 12 {
-                    historyMount = .cutoff(id: msgs[msgs.count - 12].id)
-                } else {
-                    historyMount = .full
+                if model.messages.count <= coldEntryTail {
+                    historyExpanded = true
                 }
             }
     }
@@ -923,70 +949,6 @@ private struct ConversationBody: View {
         }
     }
 
-    /// Number of older messages currently hidden above the mount
-    /// boundary.
-    private var hiddenHistoryCount: Int {
-        switch historyMount {
-        case .full:
-            return 0
-        case .settling:
-            return max(0, model.messages.count - 12)
-        case .cutoff(let id):
-            return model.messages.firstIndex(where: { $0.id == id }) ?? 0
-        }
-    }
-
-    /// User-initiated reveal of the hidden history prefix (the
-    /// "Show earlier messages" capsule) — the ONLY path that mounts
-    /// more rows. Expands to the full chain and re-pins the viewport
-    /// to the message that was previously first — the two-pass
-    /// id-seek can still land imperfectly over the freshly-prepended
-    /// estimates, but because the user explicitly asked for the
-    /// expansion, an imperfect landing reads as "the list moved to
-    /// older messages", not as a random mid-read jump.
-    private func revealEarlierHistory() {
-        let anchorID: String?
-        switch historyMount {
-        case .full:
-            return
-        case .settling:
-            anchorID = model.messages.suffix(12).first?.id
-        case .cutoff(let id):
-            anchorID = id
-        }
-        var t = Transaction()
-        t.disablesAnimations = true
-        withTransaction(t) {
-            historyMount = .full
-            if let anchorID {
-                scrollPosition.scrollTo(id: anchorID, anchor: .top)
-            }
-        }
-        if let anchorID {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(250))
-                guard historyMount == .full else { return }
-                var t2 = Transaction()
-                t2.disablesAnimations = true
-                withTransaction(t2) {
-                    scrollPosition.scrollTo(id: anchorID, anchor: .top)
-                }
-            }
-        }
-    }
-
-}
-
-/// Mount state for the conversation history — see `historyMount`.
-enum HistoryMount: Equatable {
-    /// Initial load in flight; mount the newest 12 by count.
-    case settling
-    /// Boundary frozen: mount `id` and everything after it. New
-    /// messages append below the boundary; the hidden prefix never
-    /// regrows.
-    case cutoff(id: String)
-    /// Everything mounted (explicit reveal, or a short chain).
-    case full
 }
 
 /// Reference-type holder for the live scroll offset. Mutated from the
@@ -995,37 +957,6 @@ enum HistoryMount: Equatable {
 /// to SwiftUI). Read once per park.
 final class LiveOffsetBox {
     var y: CGFloat = 0
-}
-
-/// Inline control at the top of the windowed history that reveals the
-/// older messages. Mirrors the scroll-to-bottom pill's chrome so the
-/// two affordances read as a pair.
-private struct ShowEarlierRow: View {
-    let count: Int
-    let action: () -> Void
-
-    var body: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button(action: action) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up")
-                        .font(.caption.weight(.semibold))
-                    Text("Show \(count) earlier message\(count == 1 ? "" : "s")")
-                        .font(.caption.weight(.medium))
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.thinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Show \(count) earlier messages")
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-    }
 }
 
 /// Snapshot of the bits of `ScrollGeometry` the scroll-to-bottom-pill
@@ -1068,28 +999,20 @@ struct SentMessageTopPreferenceKey: PreferenceKey {
 /// only `model.messages` (plus the rare isStreaming flip for the
 /// follow-cutoff reporter); immune to streaming-text churn.
 ///
-/// `mount` limits rendering to the tail after the frozen boundary
-/// (see `historyMount` on ConversationBody). Message ids are stable,
-/// so the cutoff→full transition is a pure prepend in ForEach's diff.
+/// `expanded` controls whether the full chain renders or only the
+/// newest `tail` rows (the cold-entry window; see `historyExpanded` on
+/// ConversationBody). Message ids are stable, so the tail→full
+/// transition is a pure prepend in ForEach's diff.
 private struct ChatHistoryArea: View {
     @Bindable var model: ConversationViewModel
-    let mount: HistoryMount
+    let expanded: Bool
+    let tail: Int
 
     private var visibleMessages: [ReeveMessage] {
-        switch mount {
-        case .full:
+        if expanded || model.messages.count <= tail {
             return model.messages
-        case .settling:
-            return Array(model.messages.suffix(12))
-        case .cutoff(let id):
-            // Boundary message deleted (edit/fork/compaction) →
-            // fall back to the full chain rather than hiding
-            // everything.
-            guard let idx = model.messages.firstIndex(where: { $0.id == id }) else {
-                return model.messages
-            }
-            return Array(model.messages[idx...])
         }
+        return Array(model.messages.suffix(tail))
     }
 
     /// The message whose top edge gates auto-follow: the just-sent
