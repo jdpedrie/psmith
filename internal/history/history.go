@@ -324,6 +324,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 			pos := plugins.HistoryPos{
 				FromHead:         (n - 1) - i,
 				FromHeadSameRole: samePos[i],
+				DestProviderType: params.DestProviderType,
 			}
 			asm[i].wm = params.Plugins.TransformHistoryMessage(asm[i].wm, pos)
 		}

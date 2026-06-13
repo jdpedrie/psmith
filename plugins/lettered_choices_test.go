@@ -145,6 +145,37 @@ func TestLetteredChoices_HistoryTransformer_StripOlder(t *testing.T) {
 	}
 }
 
+func TestLetteredChoices_HistoryTransformer_AnthropicNeverStrips(t *testing.T) {
+	t.Parallel()
+	lc := buildLetteredChoices(t, `{"keep_last_n": 1}`)
+
+	msg := providers.WireMessage{
+		Role:    "assistant",
+		Content: "Body text.\n\n<choices>\nA) Yes\nB) No\n</choices>",
+	}
+	// An older assistant turn that would normally be stripped — but on
+	// Anthropic the choice block is kept intact so the prompt-cache
+	// prefix stays byte-stable.
+	got := lc.TransformHistoryMessage(msg, HistoryPos{
+		FromHead:         3,
+		FromHeadSameRole: 1,
+		DestProviderType: "anthropic",
+	})
+	if got.Content != msg.Content {
+		t.Errorf("Anthropic should never strip; got %q want unchanged", got.Content)
+	}
+
+	// Same position on a non-Anthropic provider still strips.
+	got = lc.TransformHistoryMessage(msg, HistoryPos{
+		FromHead:         3,
+		FromHeadSameRole: 1,
+		DestProviderType: "openai-compatible",
+	})
+	if got.Content != "Body text." {
+		t.Errorf("non-Anthropic strip = %q want %q", got.Content, "Body text.")
+	}
+}
+
 func TestLetteredChoices_HistoryTransformer_KeepLastN_2KeepsTwo(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"keep_last_n": 2}`)

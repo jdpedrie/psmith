@@ -234,6 +234,11 @@ const (
 type HistoryPos struct {
 	FromHead         int
 	FromHeadSameRole int
+	// DestProviderType is the driver the prefix is being built for
+	// ("anthropic", "openai-compatible", "google"). Lets a transform
+	// vary by provider — e.g. a history rewrite that would break
+	// Anthropic's prompt-cache prefix can be skipped on that provider.
+	DestProviderType string
 }
 
 // HistoryTransformer mutates a history message at prefix-build time.

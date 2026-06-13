@@ -117,9 +117,12 @@ Wrap the choices in ` + lcOpenTag + `...` + lcCloseTag + `. The body MUST be a s
 //   - DisplayTransformer: strips just the tag delimiters (keeps content) so
 //     the user sees clean choice text in the UI.
 //
-// CacheStable: not declared. The system observes empirically (see
-// "Cache observability" in the architecture doc) — KeepLastN=1 trails the
-// hit zone by 2 instead of 1, which is bounded and reported as such.
+// CacheStable: not declared. On non-Anthropic providers the strip
+// trails the cache hit zone by 2 instead of 1 (bounded; see "Cache
+// observability" in the architecture doc). On Anthropic the strip is
+// skipped entirely (TransformHistoryMessage), keeping the prefix
+// byte-stable so the implicit prompt cache stays warm — the choice
+// blocks ride along in the cached region at ~0.1x read cost.
 type letteredChoices struct {
 	cfg letteredChoicesConfig
 }
@@ -259,6 +262,22 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 		return out
 	}
 	if msg.Role != "assistant" {
+		return msg
+	}
+	// Anthropic prompt-cache preservation. Anthropic places its single
+	// cache breakpoint on the last assistant turn, so the cached prefix
+	// includes recent assistant messages verbatim. Stripping a choice
+	// block from an assistant message that was intact on a prior send
+	// (the most-recent turn becomes the second-most-recent next turn and
+	// then gets stripped) mutates a message INSIDE the cached prefix —
+	// busting the cache from that point and reprocessing the whole tail
+	// at full price every turn. The choice block is a handful of lines;
+	// keeping it intact is far cheaper than the cache miss it would
+	// cause (cache reads bill at ~0.1x input). So on Anthropic we never
+	// strip — history stays byte-stable turn-over-turn and the cache
+	// stays warm. Other providers (no implicit prefix cache keyed on
+	// exact bytes the same way) keep the token-saving strip.
+	if pos.DestProviderType == "anthropic" {
 		return msg
 	}
 	// FromHeadSameRole counts only assistant messages back from the head:

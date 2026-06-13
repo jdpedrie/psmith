@@ -123,8 +123,12 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	}
 
 	// (2) The MORE RECENT assistant turn (a2) keeps its choices intact.
-	// (3) The OLDER assistant turn (a1) had its choices stripped.
-	var sawRecentWithTags, sawOlderStripped bool
+	// (3) The OLDER assistant turn (a1) ALSO keeps its choices intact —
+	// this provider is Anthropic, and stripping a message inside the
+	// cached prefix would bust the prompt cache every turn. The strip is
+	// suppressed on Anthropic (see lettered_choices.TransformHistoryMessage);
+	// the openai-compatible strip path is covered by the plugin unit tests.
+	var sawRecentWithTags, sawOlderWithTags bool
 	for _, c := range contentByOrder {
 		if strings.Contains(c, "X) other") {
 			if !strings.Contains(c, "<choices>") {
@@ -134,16 +138,16 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 			}
 		}
 		if strings.HasPrefix(c, "a1 body") {
-			if strings.Contains(c, "<choices>") || strings.Contains(c, "A) one") {
-				t.Errorf("older assistant should have been stripped; got %q", c)
+			if !strings.Contains(c, "<choices>") || !strings.Contains(c, "A) one") {
+				t.Errorf("older assistant choices should be PRESERVED on Anthropic (cache); got %q", c)
 			}
-			sawOlderStripped = true
+			sawOlderWithTags = true
 		}
 	}
 	if !sawRecentWithTags {
 		t.Errorf("did not find the recent-assistant message with intact tags; messages=%v", contentByOrder)
 	}
-	if !sawOlderStripped {
+	if !sawOlderWithTags {
 		t.Errorf("did not find the older-assistant message; messages=%v", contentByOrder)
 	}
 
