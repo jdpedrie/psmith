@@ -790,7 +790,10 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 	enabled := true
 	budget := 6000 // medium effort
 	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
-		ModelID:        "gpt-5",
+		// Non-reasoning model: temperature / top_p are sent. (gpt-5
+		// would now correctly omit them — see
+		// TestSend_ReasoningModel_OmitsSampling.)
+		ModelID:        "gpt-4o",
 		ConversationID: "conv-abc",
 		Messages: []providers.WireMessage{
 			{Role: "system", Content: "be brief"},
@@ -890,6 +893,105 @@ func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
 				t.Errorf("budget=%d expected effort=%s; body=%s", tc.budget, tc.effort, *captured)
 			}
 		})
+	}
+}
+
+// TestSend_ReasoningModel_OmitsSampling verifies that reasoning models
+// (gpt-5 family, o-series) never send explicit temperature / top_p —
+// OpenAI 400s on those ("unsupported parameter: temperature"). Covers
+// both the Responses path (reasoning models route here) and, for
+// completeness, the chat-completions path.
+func TestSend_ReasoningModel_OmitsSampling(t *testing.T) {
+	cases := []struct {
+		name           string
+		modelID        string
+		forceResponses bool
+		wantOmitted    bool
+	}{
+		{"gpt-5 omits", "gpt-5-mini", true, true},
+		{"o3 omits", "o3", true, true},
+		{"gpt-4o sends", "gpt-4o", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, captured := captureRequest(t, "/v1/responses",
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
+			p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			p = forceResponsesAPI(t, p)
+			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+				ModelID:  tc.modelID,
+				Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+				Settings: providers.CallSettings{
+					Temperature: f64Ptr(0.5),
+					TopP:        f64Ptr(0.9),
+				},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+			hasTemp := strings.Contains(*captured, `"temperature"`)
+			hasTopP := strings.Contains(*captured, `"top_p"`)
+			if tc.wantOmitted && (hasTemp || hasTopP) {
+				t.Errorf("%s: expected temperature/top_p omitted; body=%s", tc.modelID, *captured)
+			}
+			if !tc.wantOmitted && (!hasTemp || !hasTopP) {
+				t.Errorf("%s: expected temperature/top_p present; body=%s", tc.modelID, *captured)
+			}
+		})
+	}
+}
+
+// TestSend_Responses_ToolHistory verifies the Responses path translates
+// prior tool calls + results from history into function_call /
+// function_call_output input items. Before the fix this path silently
+// dropped them, so reasoning models lost all tool-calling history
+// (including tools that a previous Anthropic turn had run).
+func TestSend_Responses_ToolHistory(t *testing.T) {
+	srv, captured := captureRequest(t, "/v1/responses",
+		"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
+	p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	p = forceResponsesAPI(t, p)
+
+	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+		ModelID: "gpt-5",
+		Messages: []providers.WireMessage{
+			{Role: "user", Content: "weather?"},
+			// Assistant turn that called a tool (no prose).
+			{Role: "assistant", ToolUses: []providers.ToolUseBlock{
+				{ID: "call_1", Name: "get_weather", Input: json.RawMessage(`{"city":"SF"}`)},
+			}},
+			// Synthetic tool-result user message (history-builder shape).
+			{Role: "user", ToolResults: []providers.ToolResultBlock{
+				{ToolUseID: "call_1", Output: json.RawMessage(`{"temp":62}`)},
+			}},
+			{Role: "user", Content: "thanks"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	for range ch {
+	}
+
+	body := *captured
+	for _, fragment := range []string{
+		`"type":"function_call"`,
+		`"call_id":"call_1"`,
+		`"name":"get_weather"`,
+		`"type":"function_call_output"`,
+		`\"temp\":62`, // tool output, JSON-escaped inside the output string
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Errorf("Responses tool history missing %s; body=%s", fragment, body)
+		}
 	}
 }
 

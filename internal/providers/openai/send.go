@@ -14,8 +14,21 @@ import (
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 
+	"github.com/jdpedrie/reeve/internal/modelmeta"
 	"github.com/jdpedrie/reeve/internal/providers"
 )
+
+// locksSampling reports whether the target model rejects explicit
+// sampling parameters (temperature and top_p). OpenAI's reasoning
+// models — the o-series and the gpt-5 family — lock temperature at its
+// default and return 400 "unsupported parameter: temperature" (and the
+// same for top_p) on any explicit value. modelmeta encodes that as a
+// LockedAt temperature constraint, so we reuse it as the single source
+// of truth rather than re-listing model prefixes here.
+func locksSampling(modelID string) bool {
+	c := modelmeta.ConstraintsFor("openai-compatible", modelID)
+	return c.Temperature != nil && c.Temperature.LockedAt != nil
+}
 
 // Send dispatches a turn through the Responses API and translates the
 // upstream SSE event stream into the normalized chunk vocabulary defined
@@ -407,11 +420,16 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 			params.Tools = append(params.Tools, openai.ChatCompletionToolParam{Function: fn})
 		}
 	}
-	if req.Settings.Temperature != nil {
-		params.Temperature = param.NewOpt(*req.Settings.Temperature)
-	}
-	if req.Settings.TopP != nil {
-		params.TopP = param.NewOpt(*req.Settings.TopP)
+	// Reasoning models (o-series, gpt-5 family) reject explicit
+	// temperature / top_p — omit them rather than 400. The user's
+	// stored override still resolves; it just can't be sent here.
+	if !locksSampling(req.ModelID) {
+		if req.Settings.Temperature != nil {
+			params.Temperature = param.NewOpt(*req.Settings.Temperature)
+		}
+		if req.Settings.TopP != nil {
+			params.TopP = param.NewOpt(*req.Settings.TopP)
+		}
 	}
 	if req.Settings.MaxOutputTokens != nil {
 		params.MaxCompletionTokens = param.NewOpt(int64(*req.Settings.MaxOutputTokens))
@@ -755,6 +773,27 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 				),
 			)
 		case "user":
+			// Tool results arrive as a synthetic user wire message
+			// (history builder splits the assistant's tool_calls into
+			// assistant.ToolUses + a following user.ToolResults). Emit
+			// them as function_call_output items so the Responses-API
+			// model sees the tool outputs — previously dropped, which
+			// is why reasoning models lost all tool history. The
+			// callID matches the function_call's (tu.ID == tr.ToolUseID).
+			if len(m.ToolResults) > 0 {
+				for _, tr := range m.ToolResults {
+					inputs = append(inputs,
+						responses.ResponseInputItemParamOfFunctionCallOutput(
+							tr.ToolUseID, chatToolResultContent(tr),
+						),
+					)
+				}
+				// The synthetic tool-result message carries no prose;
+				// nothing else to emit for it.
+				if m.Content == "" {
+					continue
+				}
+			}
 			// Image attachments → multi-part Content array. The
 			// `input_image` part carries either a URL or a base64
 			// data URL — we use the latter (v1 inlines bytes;
@@ -800,12 +839,31 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 					responses.ResponseInputItemUnionParam{OfReasoning: reasoningParam},
 				)
 			}
-			inputs = append(inputs,
-				responses.ResponseInputItemParamOfMessage(
-					m.Content,
-					responses.EasyInputMessageRoleAssistant,
-				),
-			)
+			// Only emit a text item when there's actual prose — an
+			// assistant turn that ONLY called tools has empty content,
+			// and an empty Responses message item is wasteful/odd.
+			if m.Content != "" {
+				inputs = append(inputs,
+					responses.ResponseInputItemParamOfMessage(
+						m.Content,
+						responses.EasyInputMessageRoleAssistant,
+					),
+				)
+			}
+			// Tool calls the assistant made. Without these, a model on
+			// the Responses API (every reasoning model) never sees the
+			// tool-calling history — the chat-completions path handled
+			// it but this one silently dropped it, so e.g. a gpt-5 turn
+			// that followed Anthropic tool use saw none of it.
+			for _, tu := range m.ToolUses {
+				args := string(tu.Input)
+				if args == "" {
+					args = "{}"
+				}
+				inputs = append(inputs,
+					responses.ResponseInputItemParamOfFunctionCall(args, tu.ID, tu.Name),
+				)
+			}
 		default:
 			return responses.ResponseNewParams{},
 				fmt.Errorf("unsupported wire role %q", m.Role)
@@ -815,12 +873,15 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 		OfInputItemList: inputs,
 	}
 
-	// CallSettings.
-	if req.Settings.Temperature != nil {
-		params.Temperature = param.NewOpt(*req.Settings.Temperature)
-	}
-	if req.Settings.TopP != nil {
-		params.TopP = param.NewOpt(*req.Settings.TopP)
+	// CallSettings. Reasoning models reject explicit temperature /
+	// top_p (see locksSampling) — omit them on those models.
+	if !locksSampling(req.ModelID) {
+		if req.Settings.Temperature != nil {
+			params.Temperature = param.NewOpt(*req.Settings.Temperature)
+		}
+		if req.Settings.TopP != nil {
+			params.TopP = param.NewOpt(*req.Settings.TopP)
+		}
 	}
 	if req.Settings.MaxOutputTokens != nil {
 		params.MaxOutputTokens = param.NewOpt(int64(*req.Settings.MaxOutputTokens))

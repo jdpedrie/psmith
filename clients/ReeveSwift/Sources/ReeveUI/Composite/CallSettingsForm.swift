@@ -1068,15 +1068,35 @@ public struct CallSettingsForm: View {
             Text(description)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            Slider(
-                value: Binding(
-                    get: { value.wrappedValue ?? inherited ?? range.lowerBound },
-                    set: { value.wrappedValue = $0 }
-                ),
-                in: range,
-                step: step
-            )
-            .disabled(disabled)
+            // A SwiftUI Slider FATAL-ERRORS when its bounds aren't
+            // strictly increasing (zero-width range). That happens for
+            // a locked-at constraint (range collapses to value...value
+            // — e.g. OpenAI reasoning models lock temperature at 1.0),
+            // which crashed the conversation settings sheet whenever a
+            // gpt-5 / o-series model was selected. Render the locked
+            // value as a static read-out instead of a degenerate
+            // slider; the value + description above already convey it.
+            if range.upperBound > range.lowerBound {
+                Slider(
+                    value: Binding(
+                        get: { value.wrappedValue ?? inherited ?? range.lowerBound },
+                        set: { value.wrappedValue = $0 }
+                    ),
+                    in: range,
+                    step: step
+                )
+                .disabled(disabled)
+            } else {
+                HStack {
+                    Text(format(range.lowerBound))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text("locked")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                }
+            }
         }
     }
 
