@@ -35,10 +35,11 @@ Working today, exercised daily by the author:
 - Per-conversation overrides for `temperature`, `max_output_tokens`, thinking budget, etc., with 4-layer resolution (conversation → profile → model → provider).
 - **macOS** client (SwiftUI, Liquid Glass) and **iOS** client (SwiftUI, iOS 26) sharing repositories, view models, domain types, and most views via the `ReeveSwift` package. The iOS app handles ScenePhase backgrounding by reattaching to in-flight server streams from the last received chunk on resume.
 - **Offline-tolerant iOS** — SwiftData read-through cache means recent conversations stay readable when reeved is unreachable. A `/healthz` probe flips a connectivity banner + disables Send. Composer drafts persist per conversation across navigation and app kills. User-tunable cache cap (default 100 MB) under Settings → General.
+- **Tool use, end to end** — server-side tool plugins (web search, memory, image generation) and on-device tools the model calls mid-turn (Calendar, Reminders, Health, Obsidian vault on iOS), with results fed back into the stream, an audit log, and a per-call permission model. Mid-call elicitation lets a tool ask the user for input without that input entering the model's context.
+- **Semantic history search, MCP, tracing** — opt-in message embeddings power a `search_history` context tool; a `/mcp` endpoint exposes a curated subset of the API as MCP tools; per-user Langfuse config emits traces.
 
 Deferred:
 
-- Tool use (the plugin interface is settled; the wire-translation work is tracked in `docs/todo.md`).
 - Web client.
 - APNs push notifications on iOS — local UNUserNotifications fire while the app is in memory; full background pushes need a paid Apple Developer account.
 - Stateful subprocess providers (Claude Code, Codex) — interface is sketched.
