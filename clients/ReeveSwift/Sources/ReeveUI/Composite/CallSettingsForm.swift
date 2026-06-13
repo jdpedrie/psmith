@@ -354,19 +354,14 @@ public struct CallSettingsForm: View {
                     fieldLabel("Enabled")
                     Spacer()
                     Picker("Enabled", selection: thinkingEnabledBinding) {
-                        Text("Inherit").tag(Bool?.none)
+                        Text(inheritPickerLabel(inheritedSettings?.thinking?.enabled) { $0 ? "On" : "Off" })
+                            .tag(Bool?.none)
                         Text("On").tag(Bool?.some(true))
                         Text("Off").tag(Bool?.some(false))
                     }
                     .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
-                }
-                if (settings.thinking?.enabled ?? nil) == nil,
-                   let inherited = inheritedSettings?.thinking?.enabled {
-                    Text("Inherits \(inherited ? "On" : "Off")")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -431,7 +426,9 @@ public struct CallSettingsForm: View {
                 fieldLabel("Prompt caching")
                 Spacer()
                 Picker("Prompt caching", selection: cacheEnabledBinding) {
-                    Text("Inherit").tag(Bool?.none)
+                    // Caching defaults to On when nothing is inherited.
+                    Text("Inherit (\(inheritedSettings?.anthropic?.cacheEnabled.map { $0 ? "On" : "Off" } ?? "On, default"))")
+                        .tag(Bool?.none)
                     Text("On").tag(Bool?.some(true))
                     Text("Off").tag(Bool?.some(false))
                 }
@@ -442,12 +439,6 @@ public struct CallSettingsForm: View {
             Text("When off, no cache_control marker is sent — useful for one-off conversations or privacy.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            if settings.anthropic?.cacheEnabled == nil {
-                let inherited = inheritedSettings?.anthropic?.cacheEnabled
-                Text(inheritedCacheEnabledLabel(inherited))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
         }
 
         // Cache TTL
@@ -456,7 +447,9 @@ public struct CallSettingsForm: View {
                 fieldLabel("Cache TTL")
                 Spacer()
                 Picker("Cache TTL", selection: cacheTTLBinding) {
-                    Text("Inherit").tag(ReeveCacheTTL?.none)
+                    // TTL defaults to 5 min when nothing is inherited.
+                    Text("Inherit (\(inheritedSettings?.anthropic?.cacheTTL.map(cacheTTLShort) ?? "5 min, default"))")
+                        .tag(ReeveCacheTTL?.none)
                     Text("5 min").tag(ReeveCacheTTL?.some(.fiveMinutes))
                     Text("1 hour").tag(ReeveCacheTTL?.some(.oneHour))
                 }
@@ -467,12 +460,6 @@ public struct CallSettingsForm: View {
             Text("1 hour costs more to write but survives stop-and-resume workflows.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            if settings.anthropic?.cacheTTL == nil {
-                let inherited = inheritedSettings?.anthropic?.cacheTTL
-                Text(inheritedCacheTTLLabel(inherited))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
         }
         .opacity(cacheTTLDisabled ? 0.45 : 1.0)
         .allowsHitTesting(!cacheTTLDisabled)
@@ -508,20 +495,20 @@ public struct CallSettingsForm: View {
         )
     }
 
-    private func inheritedCacheEnabledLabel(_ v: Bool?) -> String {
+    private func cacheTTLShort(_ v: ReeveCacheTTL) -> String {
         switch v {
-        case .some(true):  return "Inherits On"
-        case .some(false): return "Inherits Off"
-        case .none:        return "Inherits On (default)"
+        case .fiveMinutes: return "5 min"
+        case .oneHour:     return "1 hour"
         }
     }
 
-    private func inheritedCacheTTLLabel(_ v: ReeveCacheTTL?) -> String {
-        switch v {
-        case .some(.fiveMinutes): return "Inherits 5 min"
-        case .some(.oneHour):     return "Inherits 1 hour"
-        case .none:               return "Inherits 5 min (default)"
-        }
+    /// Label for a Picker's "Inherit" option that surfaces what
+    /// inheriting currently resolves to — e.g. "Inherit (On)" — so the
+    /// collapsed control shows the effective value instead of a bare
+    /// "Inherit". A nil inherited value (nothing set below) → plain
+    /// "Inherit", since there's nothing concrete to preview.
+    private func inheritPickerLabel<T>(_ inherited: T?, _ format: (T) -> String) -> String {
+        inherited.map { "Inherit (\(format($0)))" } ?? "Inherit"
     }
 
     // MARK: - OpenAI extras
@@ -582,19 +569,14 @@ public struct CallSettingsForm: View {
                     fieldLabel("Parallel tool calls")
                     Spacer()
                     Picker("Parallel tool calls", selection: openaiBinding(\.parallelToolCalls)) {
-                        Text("Inherit").tag(Bool?.none)
+                        Text(inheritPickerLabel(inheritedSettings?.openai?.parallelToolCalls) { $0 ? "On" : "Off" })
+                            .tag(Bool?.none)
                         Text("On").tag(Bool?.some(true))
                         Text("Off").tag(Bool?.some(false))
                     }
                     .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
-                }
-                if settings.openai?.parallelToolCalls == nil,
-                   let inherited = inheritedSettings?.openai?.parallelToolCalls {
-                    Text("Inherits \(inherited ? "On" : "Off")")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -604,7 +586,8 @@ public struct CallSettingsForm: View {
                     fieldLabel("Service tier")
                     Spacer()
                     Picker("Service tier", selection: serviceTierBinding) {
-                        Text("Inherit").tag(ReeveServiceTier?.none)
+                        Text(inheritPickerLabel(inheritedSettings?.openai?.serviceTier, serviceTierLabel))
+                            .tag(ReeveServiceTier?.none)
                         Text("Auto").tag(ReeveServiceTier?.some(.auto))
                         Text("Standard").tag(ReeveServiceTier?.some(.standard))
                         Text("Priority").tag(ReeveServiceTier?.some(.priority))
@@ -612,12 +595,6 @@ public struct CallSettingsForm: View {
                     .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
-                }
-                if settings.openai?.serviceTier == nil,
-                   let inherited = inheritedSettings?.openai?.serviceTier {
-                    Text("Inherits \(serviceTierLabel(inherited))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -663,7 +640,8 @@ public struct CallSettingsForm: View {
                 fieldLabel("Response format")
                 Spacer()
                 Picker("Response format", selection: responseFormatKindBinding) {
-                    Text("Inherit").tag(ResponseFormatKind.inherit)
+                    Text(inheritPickerLabel(inheritedSettings?.openai?.responseFormat, responseFormatLabel))
+                        .tag(ResponseFormatKind.inherit)
                     Text("Text").tag(ResponseFormatKind.text)
                     Text("JSON object").tag(ResponseFormatKind.jsonObject)
                     Text("JSON schema").tag(ResponseFormatKind.jsonSchema)
@@ -674,12 +652,6 @@ public struct CallSettingsForm: View {
             }
             if case .jsonSchema = settings.openai?.responseFormat {
                 jsonSchemaEditor
-            }
-            if settings.openai?.responseFormat == nil,
-               let inherited = inheritedSettings?.openai?.responseFormat {
-                Text("Inherits \(responseFormatLabel(inherited))")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -938,14 +910,22 @@ public struct CallSettingsForm: View {
                 get: { value.wrappedValue ?? inherited ?? false },
                 set: { value.wrappedValue = $0 }
             )) {
-                Text(value.wrappedValue == nil
-                     ? "Inherit (\((inherited ?? false) ? "On" : "Off"))"
-                     : (value.wrappedValue! ? "Enabled" : "Disabled"))
+                Text(boolToggleLabel(value: value.wrappedValue, inherited: inherited))
                     .font(.callout)
             }
             .toggleStyle(.switch)
             .controlSize(.small)
         }
+    }
+
+    /// Switch label: an explicit override reads as its plain state; an
+    /// inheriting field surfaces the resolved value with an "(Inherited)"
+    /// marker ("Enabled (Inherited)") so the effective value is visible,
+    /// not hidden behind a bare "Inherit".
+    private func boolToggleLabel(value: Bool?, inherited: Bool?) -> String {
+        if let v = value { return v ? "Enabled" : "Disabled" }
+        if let i = inherited { return i ? "Enabled (Inherited)" : "Disabled (Inherited)" }
+        return "Inherit"
     }
 
     /// Binding for a top-level Bool? setting — used by the
@@ -1003,7 +983,7 @@ public struct CallSettingsForm: View {
                 fieldLabel(title)
                 Spacer()
                 Picker(title, selection: value) {
-                    Text("Inherit").tag(ReeveHarmThreshold?.none)
+                    Text(inheritPickerLabel(inherited, harmLabel)).tag(ReeveHarmThreshold?.none)
                     Text("None").tag(ReeveHarmThreshold?.some(.blockNone))
                     Text("Low+").tag(ReeveHarmThreshold?.some(.blockLowAndAbove))
                     Text("Med+").tag(ReeveHarmThreshold?.some(.blockMediumAndAbove))
@@ -1012,11 +992,6 @@ public struct CallSettingsForm: View {
                 .adaptivePickerStyle()
                 .labelsHidden()
                 .fixedSize()
-            }
-            if value.wrappedValue == nil, let inherited {
-                Text("Inherits \(harmLabel(inherited))")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -1051,7 +1026,7 @@ public struct CallSettingsForm: View {
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.primary)
                 } else if let inherited {
-                    Text("\(format(inherited)) (inherited)")
+                    Text("\(format(inherited)) (Inherited)")
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                 } else {
@@ -1119,7 +1094,7 @@ public struct CallSettingsForm: View {
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.primary)
                 } else if let inherited {
-                    Text("\(inherited.formatted()) (inherited)")
+                    Text("\(inherited.formatted()) (Inherited)")
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                 } else {
