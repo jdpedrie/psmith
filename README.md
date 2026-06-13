@@ -48,7 +48,7 @@ Deferred:
 
 ## Architecture
 
-The full design — provider model, conversation/context/message data model, streaming subsystem, plugin interface, threat tiers — lives in [`docs/architecture.md`](docs/architecture.md). Read it before working in the repo.
+The full documentation lives under [`docs/`](docs/README.md): system design (one document per subsystem), the API and database references, installation and deployment, and the client spec. Start at [`docs/README.md`](docs/README.md), or jump straight to [`docs/design/overview.md`](docs/design/overview.md). Read it before working in the repo.
 
 ```
 ┌──────────────┐    ┌────────────────────────┐    ┌──────────────┐

@@ -1,0 +1,41 @@
+# Compression
+
+A long conversation eventually outgrows the model's context window, and even before that the wire prefix gets slow and expensive to re-send every turn. Compression solves it by summarizing the conversation so far and starting a fresh context from that summary, while keeping every original message on disk. The design is two-stage and user-reviewable on purpose: the model proposes a summary, the user reads and edits it, and only then does it become the seed of a new context. Nothing is destroyed and nothing happens behind the user's back.
+
+## Why two stages
+
+A one-shot "compact now" that immediately swapped in a model-written summary would be unsafe. The summary is lossy by definition, and if the model dropped something important the user would have no recourse. So compaction splits in two:
+
+1. **Compact** produces a `compression_summary` message in the current context. It is just a message: visible, durable, and editable. Nothing about the conversation's active context changes yet.
+2. **Promote** takes that summary (possibly after the user has edited it) and creates a new context seeded from it. This is the step that actually rolls the conversation forward.
+
+Between the two steps the user reviews. If the summary is wrong, they edit the message before promoting, or they do not promote at all.
+
+## Stage one: Compact
+
+`Compact` resolves the compression model, guide, and mode from the profile inheritance chain, with per-call overrides allowed on the request so the client's compact screen can pick a model and prompt for a single invocation without persisting to the profile. All three (a provider, a model, and a guide) must resolve to something, or the call fails with `FailedPrecondition`; the per-call override also covers the case where the profile points at a model the user has since disabled.
+
+It renders the active chain (the linear walk from the current leaf back to root, not every row in the context, so forks do not pollute the summary with sibling turns the user cannot see) into a transcript, builds the compression prompt from the guide, and hands it to the supervisor with a compression purpose. It returns the run id immediately and streams like any other turn. On the terminal handler, the supervisor writes the `compression_summary` message into the original context, with its own usage and cost recorded, and a Langfuse trace tagged `compression` in the same session.
+
+A context can hold only one pending compression summary at a time. `Compact` and `SendMessage` both refuse to proceed when the active context already has an un-promoted summary, which is what keeps the two-stage flow honest: you finish reviewing and promoting before the conversation moves on.
+
+## Stage two: Promote
+
+`PromoteCompactionToNewContext` takes the summary message id, verifies it is actually a `compression_summary` and owned by the caller, and creates a new context whose parent is the source context, whose activation time is now (making it the active context), and whose leaf is initially null. It seeds that context with a single `context`-role message computed from the summary.
+
+How the seed is computed depends on the resolved compression mode:
+
+- **REPLACE** (the default): the new context's seed is the summary as-is. The new prefix starts from the summary and forgets the prior framing.
+- **APPEND**: the new seed is the prior context's framing message concatenated with the new summary. This accumulates framing across compactions rather than replacing it, for conversations that carry standing context that should survive every compaction.
+
+The whole promote runs in a single transaction so the new context and its seeded message land atomically.
+
+Promote is deliberately not idempotent. Calling it twice creates two new contexts from the same summary, each becoming active in turn, which is a usable "compact and branch into two directions" move rather than a bug to guard against.
+
+## What happens to the old context
+
+Nothing destructive. The source context keeps all its messages and its compression summary; it is simply no longer the active context once a newer one exists (active is defined as the context with the newest activation time, see [data-model.md](data-model.md)). The history builder walks only the active context, so from the next turn on the wire prefix starts at the new context's seed and is short again. But the old context is fully readable on demand, and semantic search reaches into it, which is exactly what lets the model recover a compressed-out passage later with `search_history` ([embeddings-and-search.md](embeddings-and-search.md)).
+
+## How it shows up elsewhere
+
+Compression-summary rows are audit records, not real turns, so the conversation listing and similar surfaces skip them where they would otherwise be counted as content. The cost of a compaction lands on the summary message like any other turn's cost and flows into the ledger ([titles-cost-observability.md](titles-cost-observability.md)). The summary's own auto-title path is suppressed; compaction never triggers conversation titling. And because the summary is a normal editable message until promoted, the client can present it in a review screen where the user reads, tweaks, and confirms before the context rolls over.

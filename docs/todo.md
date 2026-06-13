@@ -12,7 +12,7 @@ Ordered by impact on getting Reeve to a "useful for sustained personal chat" sta
 
 ### Architecture-flagship features not yet built
 
-- **Stateful harness drivers (Claude Code, Codex, pi.dev)** — entirely missing. Two parts: (a) per-harness Layer-1 implementations (subprocess management, NDJSON event parsing, session lifecycle), (b) Layer-2 abstraction + the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class; was a stated original motivator (mixing cloud APIs with local agentic CLIs). Detailed phasing + per-harness cheat sheet + data model + UX in [`harness-plan.md`](harness-plan.md).
+- **Stateful harness drivers (Claude Code, Codex, pi.dev)** — entirely missing. Two parts: (a) per-harness Layer-1 implementations (subprocess management, NDJSON event parsing, session lifecycle), (b) Layer-2 abstraction + the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class; was a stated original motivator (mixing cloud APIs with local agentic CLIs). The `StatefulProvider` interface exists (`internal/providers/providers.go`) but has no implementation and no `SendMessage` code path; see the stateless-vs-stateful section of [design/providers.md](design/providers.md).
 
 ### Nice-to-have
 
