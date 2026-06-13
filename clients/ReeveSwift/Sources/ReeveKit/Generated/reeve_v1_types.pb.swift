@@ -2820,7 +2820,7 @@ public nonisolated struct Reeve_V1_StreamRun: @unchecked Sendable {
   public mutating func clearResultContextID() {_uniqueStorage()._resultContextID = nil}
 
   /// Cache observability for the chat-plugin pipeline. See
-  /// "Chat plugins → Cache observability" in docs/architecture.md.
+  /// docs/design/history-builder.md and docs/design/streaming.md.
   ///
   /// prefix_length: number of messages in the rendered wire-prefix.
   /// cache_stable_prefix_length: positions whose hash matched the previous

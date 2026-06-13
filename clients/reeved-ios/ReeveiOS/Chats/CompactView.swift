@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS compact form — sheet (`.large` detent) per
-/// `docs/ios-screens.md` §2.7. Inside: NavigationStack with title
+/// `docs/clients/ios-reference.md` Inside: NavigationStack with title
 /// "Compact", leading "Cancel" + trailing "Compact" buttons. Body =
 /// prompt textarea + model picker (via shared ModelPickerList).
 struct CompactView: View {

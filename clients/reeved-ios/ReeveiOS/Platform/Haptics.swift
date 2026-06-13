@@ -4,7 +4,7 @@ import UIKit
 /// import point so call sites read like `Haptics.impact()` instead of
 /// recreating a generator each time.
 ///
-/// Per `docs/ios-screens.md` §1.11 — sites that get haptics today:
+/// Per `docs/clients/ios-reference.md` — sites that get haptics today:
 ///   - send button press (`.light` impact)
 ///   - delete confirmed (`.warning` notification)
 ///   - login success (`.success` notification)

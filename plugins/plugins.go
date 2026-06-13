@@ -9,7 +9,7 @@
 // at the call sites that care. A plugin implements as many sub-interfaces
 // as it needs.
 //
-// See "Chat plugins" in docs/architecture.md for the full design.
+// See docs/design/plugins.md for the full design.
 package plugins
 
 import (

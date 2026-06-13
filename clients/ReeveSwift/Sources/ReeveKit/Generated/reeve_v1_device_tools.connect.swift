@@ -20,7 +20,7 @@ import SwiftProtobuf
 /// StreamSubscriber connection (re-fires on reconnect). The server
 /// keeps the last-published set per (user, conversation) in-memory
 /// and prefers the most-recently-registered client when a tool fires
-/// — see docs/device-tools-design.md "Multi-client routing."
+/// — see docs/design/tools.md "Device tools."
 ///
 /// The actual tool dispatch goes through the existing chunk + HTTP-
 /// response loop:

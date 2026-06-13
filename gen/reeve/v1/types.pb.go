@@ -3771,7 +3771,7 @@ type StreamRun struct {
 	ResultMessageId *string                `protobuf:"bytes,12,opt,name=result_message_id,json=resultMessageId,proto3,oneof" json:"result_message_id,omitempty"`
 	ResultContextId *string                `protobuf:"bytes,13,opt,name=result_context_id,json=resultContextId,proto3,oneof" json:"result_context_id,omitempty"`
 	// Cache observability for the chat-plugin pipeline. See
-	// "Chat plugins → Cache observability" in docs/architecture.md.
+	// docs/design/history-builder.md and docs/design/streaming.md.
 	//
 	// prefix_length: number of messages in the rendered wire-prefix.
 	// cache_stable_prefix_length: positions whose hash matched the previous

@@ -5,7 +5,7 @@ import ReeveUI
 /// Root of the Chats tab. Hosts the conversation list (search + mode
 /// picker + sectioned list) plus the toolbar account/new chrome.
 ///
-/// Per `docs/ios-screens.md` §2.4: `.searchable` for search, segmented
+/// Per `docs/clients/ios-reference.md`: `.searchable` for search, segmented
 /// `Picker` for All Chats / By Profile, swipe-to-delete on rows,
 /// long-press context menu, pull-to-refresh.
 struct ChatsRoot: View {

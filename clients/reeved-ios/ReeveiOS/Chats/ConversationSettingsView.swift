@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS conversation-settings — pushed onto the conversation's
-/// NavigationStack per `docs/ios-screens.md` §2.8. Two segmented tabs:
+/// NavigationStack per `docs/clients/ios-reference.md` Two segmented tabs:
 /// **Call Settings** (the shared CallSettingsForm) and **Plugins** (a
 /// per-row view of the merged pipeline with inheritance badges +
 /// per-row disable/restore + per-row edit + add-new-override against

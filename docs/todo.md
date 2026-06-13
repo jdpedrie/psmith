@@ -64,9 +64,9 @@ Ordered by impact on getting Reeve to a "useful for sustained personal chat" sta
 
 ---
 
-## Strategic deferrals (also in architecture.md "Open threads")
+## Strategic deferrals
 
-Recorded here for grep-ability; the canonical discussion is in [architecture.md](architecture.md):
+Recorded here for grep-ability; the canonical discussion lives in the relevant design docs under [design/](README.md#design):
 
 - **Resource sharing model** — v1 is per-user-only. Add `visibility = {private, shared}` on `user_model_providers` when a second user actually exists.
 - **Encryption Tier B** — per-user keys derived from the password (envelope wrapping). Tier A (column at rest via `internal/crypto`) is shipped on `user_model_providers.config_encrypted` and `user_langfuse_config.secret_key_encrypted`; Tier B is the next step if the threat model grows past "operator with logical DB access shouldn't see plaintext."
@@ -319,4 +319,4 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 
 When you defer something, add a one-bullet entry here with: package/file, what was skipped, why, and (if known) when to revisit. When you complete an item, delete it.
 
-Companion to [architecture.md](architecture.md): strategic threads stay in the architecture doc's "Open threads"; tactical implementation TODOs live here.
+Companion to the [design docs](README.md#design): strategic threads are discussed in the relevant subsystem doc; tactical implementation TODOs live here.

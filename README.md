@@ -44,7 +44,7 @@ Deferred:
 - APNs push notifications on iOS — local UNUserNotifications fire while the app is in memory; full background pushes need a paid Apple Developer account.
 - Stateful subprocess providers (Claude Code, Codex) — interface is sketched.
 - Multi-user sharing — `provider`/`profile`/`conversation` are per-user only.
-- Encryption-at-rest beyond host-level disk encryption (sketched in `docs/architecture.md`).
+- Encryption-at-rest beyond host-level disk encryption (sketched in `docs/design/encryption.md`).
 
 ## Architecture
 
@@ -97,9 +97,12 @@ clients/
   reeved-mac/             # macOS app + snapshot tests
   reeved-ios/             # iOS app (xcodegen-driven; project.yml is canonical)
 docs/
-  architecture.md         # design decisions
-  ios-plan.md             # iOS architecture skeleton + phasing
-  ios-screens.md          # per-screen iOS UX treatment
+  README.md               # documentation index
+  design/                 # one doc per subsystem
+  api/                    # the wire contract
+  schema/                 # database schema + migration history
+  operations/             # install, configure, build
+  clients/                # client spec + iOS reference
   testing-plan.md         # Swift L1+L2 testing strategy
   todo.md                 # tactical follow-ups
   screenshots/
@@ -281,7 +284,7 @@ Implement `providers.Provider` plus either `StatelessProvider.Send` (full prefix
 
 ### Adding a chat plugin
 
-Plugins live in `plugins/`. The required interface is just `Name()` + `Description()`; every behavior is an opt-in interface (`SystemPrompter`, `OutgoingUserTransformer`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `ToolProvider`). See [`plugins/lettered_choices.go`](plugins/lettered_choices.go) for a working example that uses three of those interfaces at once. The full plugin contract — including the cache-observability story for plugins that mutate prefix bytes — is in `docs/architecture.md`.
+Plugins live in `plugins/`. The required interface is just `Name()` + `Description()`; every behavior is an opt-in interface (`SystemPrompter`, `OutgoingUserTransformer`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `ToolProvider`). See [`plugins/lettered_choices.go`](plugins/lettered_choices.go) for a working example that uses three of those interfaces at once. The full plugin contract is in [`docs/design/plugins.md`](docs/design/plugins.md).
 
 ## Authentication
 

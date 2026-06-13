@@ -4,7 +4,7 @@ Reeve is a self-hosted AI chat orchestrator: one Go server owns every conversati
 
 Start with [design/overview.md](design/overview.md). It explains what Reeve is, what it optimizes for, and how a turn flows end to end, then points into the rest.
 
-This tree is the authoritative documentation. The older single-file planning and design notes have been retired; `architecture.md`, `ios-screens.md`, `device-tools-design.md`, and `clients/architecture.md` are now short redirects into this tree.
+This tree is the authoritative documentation. The older single-file planning and design notes (`architecture.md`, `ios-plan.md`, `ios-screens.md`, `harness-plan.md`, `multimodal-plan.md`, `conformance.md`, `device-tools-design.md`) have been removed; their content lives here now, reorganized by subsystem.
 
 ## Design
 

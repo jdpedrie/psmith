@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS message-usage sheet — `.medium`/`.large` detents per
-/// `docs/ios-screens.md` §2.13. Renders the same Model / Tokens /
+/// `docs/clients/ios-reference.md` Renders the same Model / Tokens /
 /// Cache / Cost breakdown the Mac shows in its popover, just stacked
 /// for a phone-shaped sheet.
 struct MessageUsageSheet: View {

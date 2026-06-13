@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS Profiles list. Push from SettingsRoot. Per
-/// `docs/ios-screens.md` §2.16: list with parent-chain captions, tap
+/// `docs/clients/ios-reference.md`: list with parent-chain captions, tap
 /// to push viewer; "+" toolbar opens a creation sheet.
 ///
 /// Phase 7c ships the moderate scope: list + viewer + edit-name/

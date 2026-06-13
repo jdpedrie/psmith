@@ -4,8 +4,9 @@
 // The library is pure mechanics — no policy decisions about whether thinking
 // should be included, no transform application, no compression. Callers
 // resolve those concerns and pass the results in via Params. See
-// docs/architecture.md → "Data model: Conversation/Context/Message",
-// "Message roles", and "Thinking handling".
+// docs/design/history-builder.md for the full mechanism and
+// docs/design/data-model.md for the conversation/context/message model,
+// message roles, and thinking handling.
 package history
 
 import (
@@ -111,8 +112,8 @@ type Params struct {
 	// HistoryTransformer mutates user/assistant messages with position
 	// relative to the head. Other plugin capabilities (chunk, display,
 	// outgoing-user, tools) are not consumed here — they run elsewhere in
-	// the pipeline. See "Chat plugins → Where each capability runs" in
-	// docs/architecture.md.
+	// the pipeline. See "Where each capability runs" in
+	// docs/design/plugins.md.
 	Plugins plugins.Pipeline
 
 	// UserID owns the conversation. Used to scope attachment reads
@@ -460,7 +461,7 @@ func walkParentChain(byID map[uuid.UUID]store.Message, leafID uuid.UUID) ([]stor
 // toWireMessage maps one stored Message to its wire representation, applying
 // role rewriting and the thinking-inclusion rules.
 //
-// Cross-provider thinking: per docs/architecture.md the future behaviour is
+// Cross-provider thinking: per docs/design/providers.md the future behaviour is
 // to inject thinking_rendered_text into the assistant turn's content. That is
 // deferred until Round 3+; for now cross-provider thinking is omitted, the
 // same outcome as IncludeThinking=false.

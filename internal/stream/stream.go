@@ -1,5 +1,5 @@
 // Package stream implements the producer-consumer stream supervisor described
-// in docs/architecture.md ("Streaming subsystem"). Each in-flight LLM stream
+// in docs/design/streaming.md. Each in-flight LLM stream
 // is owned by a goroutine that consumes the upstream provider channel,
 // persists chunks in batches to Postgres, fans them out to in-process
 // subscribers, and materializes a final assistant message when the stream

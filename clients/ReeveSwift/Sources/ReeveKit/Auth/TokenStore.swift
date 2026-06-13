@@ -14,7 +14,7 @@ public enum TokenStoreError: Error {
 
 /// Keychain-backed token store. Uses kSecAttrAccessibleAfterFirstUnlock so the
 /// token survives reboots but isn't accessible when the device is locked first
-/// boot — matches the doc'd posture in clients/architecture.md.
+/// boot — matches the doc'd posture in docs/clients/client-spec.md.
 public final class KeychainTokenStore: TokenStore {
     private let service: String
     private let account: String

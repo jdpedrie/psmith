@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS Providers list. Push from SettingsRoot. Per
-/// `docs/ios-screens.md` §2.15: Configured + Available sections,
+/// `docs/clients/ios-reference.md`: Configured + Available sections,
 /// `+` toolbar opens a custom AddProviderSheet.
 ///
 /// Phase 7b ships the moderate scope: list + per-provider detail with

@@ -5,7 +5,7 @@ import ReeveUI
 /// iOS root surface. Auth gate, then `TabView` shell with two tabs:
 /// **Chats** (the main workflow) and **Settings** (configuration).
 ///
-/// Per `docs/ios-screens.md` §1.1: two tabs over single-stack-with-drawer
+/// Per `docs/clients/ios-reference.md`: two tabs over single-stack-with-drawer
 /// because Settings is many sub-screens; over three+ tabs because Account
 /// is one screen and lives off the Chats toolbar avatar.
 struct RootView: View {

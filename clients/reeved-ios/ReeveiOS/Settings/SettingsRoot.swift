@@ -5,7 +5,7 @@ import ReeveUI
 /// iOS Settings tab root — list of categories grouped into "Data"
 /// (the user's configured providers / profiles / plugins) and
 /// "Settings" (app-level preferences). Each row pushes its detail
-/// screen onto the NavigationStack. Per `docs/ios-screens.md` §2.14.
+/// screen onto the NavigationStack. Per `docs/clients/ios-reference.md`
 ///
 /// Account switching (add / switch / sign out) lives on the chats
 /// toolbar's account menu, not here — the menu surfaces the active

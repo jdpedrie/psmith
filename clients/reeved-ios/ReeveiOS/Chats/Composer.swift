@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import ReeveKit
 import ReeveUI
 
-/// iOS composer. Two-row layout per `docs/ios-screens.md` §2.23
+/// iOS composer. Two-row layout per `docs/clients/ios-reference.md`
 /// (revised after Phase 5d shipped):
 ///
 ///   Top row: model chip — provider logo + model name. Always

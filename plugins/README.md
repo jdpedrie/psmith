@@ -2,7 +2,7 @@
 
 Compiled-in extension points for Reeve's conversation pipeline. Plugins observe and shape the lifecycle of a turn — system prompts, outgoing user content, history rewrites, inbound chunks, persisted assistant text, displayed text, tool calls, and post-write events.
 
-This README is the orientation guide. The canonical design lives in `docs/architecture.md` ("Chat plugins" section); deferred ideas in `docs/todo.md` ("Plugin hook ideas").
+This README is the orientation guide. The canonical design lives in `docs/design/plugins.md`; deferred ideas in `docs/todo.md` ("Plugin hook ideas").
 
 ---
 
@@ -282,7 +282,7 @@ The same procedure applies in reverse for deprecating one — but consider wheth
 
 ## Architecture references
 
-- `docs/architecture.md` — Chat plugins section: the design rationale for capability-interface composition, all-or-nothing inheritance, parent-chain resolution.
+- `docs/design/plugins.md` — the design rationale for capability-interface composition, all-or-nothing inheritance, parent-chain resolution.
 - `docs/todo.md` — "Plugin hook ideas" section: hooks designed but not yet shipped (`PreSendContextInjector`, `ContentRenderer`, etc.) plus deferred ones with rationale.
 - `internal/conversations/service.go` — pipeline resolution + invocation in the SendMessage path.
 - `internal/stream/consume.go` — supervisor-side invocation (AssistantContentTransformer, FireMessagePersisted).

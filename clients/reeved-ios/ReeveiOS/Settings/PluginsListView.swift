@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS Plugins list. Push from SettingsRoot. Per
-/// `docs/ios-screens.md` §2.17: lists every plugin (warning icon
+/// `docs/clients/ios-reference.md`: lists every plugin (warning icon
 /// trailing if required globals unset). Tap → push
 /// `PluginSettingsView` containing the shared `PluginConfigForm`.
 struct PluginsListView: View {

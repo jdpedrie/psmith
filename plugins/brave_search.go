@@ -26,7 +26,7 @@ const (
 //
 // Wiring requirement: the server-side supervisor must collect Tools() into
 // the outbound wire request and dispatch tool_use chunks back to
-// ExecuteTool. That lift is tracked in docs/architecture.md as deferred
+// ExecuteTool. That lift is tracked in docs/todo.md as deferred
 // work; this plugin is fully functional in isolation (the HTTP call works,
 // ExecuteTool produces a usable JSON result) but won't fire end-to-end
 // until the supervisor learns about ToolProvider.

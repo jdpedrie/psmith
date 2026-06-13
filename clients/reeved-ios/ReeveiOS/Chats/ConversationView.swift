@@ -11,7 +11,7 @@ private let scrollLog = Logger(subsystem: "dev.jdpedrie.reeve", category: "ChatS
 
 /// iOS conversation surface. Constructs `ConversationViewModel` against
 /// the live `reeved`, then renders the status strip + message scroll.
-/// Per `docs/ios-screens.md` §2.5: composer arrives in Phase 5d, the
+/// Per `docs/clients/ios-reference.md`: composer arrives in Phase 5d, the
 /// page-replace alternates (Compact / Contexts / Settings / Model
 /// Picker) become push/sheet destinations in Phase 5g.
 struct ConversationView: View {
@@ -49,7 +49,7 @@ struct ConversationView: View {
             ElicitSheet(conversationID: conversation.id, pending: pending)
         }
         .onChange(of: scenePhase) { _, newPhase in
-            // Per `docs/ios-screens.md` §1.8 + §4.1: cancel the live
+            // Per `docs/clients/ios-reference.md`: cancel the live
             // SSE on background, re-subscribe from the last seen
             // sequence on foreground. Supervisor keeps streaming the
             // whole time and persists chunks to stream_chunks; replay

@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS model picker — sheet (`.medium`/`.large` detents) per
-/// `docs/ios-screens.md` §2.9. Wraps the shared `ModelPickerList`.
+/// `docs/clients/ios-reference.md` Wraps the shared `ModelPickerList`.
 /// Tapping a model selects it on the view-model and dismisses.
 struct ModelPickerSheet: View {
     @Bindable var model: ConversationViewModel

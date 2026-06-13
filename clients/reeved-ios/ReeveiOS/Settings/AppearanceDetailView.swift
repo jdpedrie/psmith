@@ -2,7 +2,7 @@ import SwiftUI
 import ReeveUI
 
 /// iOS Appearance — adaptive grid of `ThemeCard` tiles per
-/// `docs/ios-screens.md` §2.18. Skips the one-section middle list
+/// `docs/clients/ios-reference.md` Skips the one-section middle list
 /// (only Theme today) and pushes straight from SettingsRoot to this
 /// detail. Tap a card → instant theme apply via `ThemeStore`.
 struct AppearanceDetailView: View {

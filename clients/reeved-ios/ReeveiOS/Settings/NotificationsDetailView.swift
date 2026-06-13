@@ -3,7 +3,7 @@ import UserNotifications
 import ReeveKit
 import ReeveUI
 
-/// iOS Notifications — single Toggle per `docs/ios-screens.md` §2.19.
+/// iOS Notifications — single Toggle per `docs/clients/ios-reference.md`
 /// Uses iOS Form styling (rounded sections + separators) for the
 /// iOS-Settings-app feel. Toggle-on requests notification permission
 /// upfront so the system dialog appears immediately rather than at

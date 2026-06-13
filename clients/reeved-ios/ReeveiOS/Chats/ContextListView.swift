@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// iOS contexts list — pushed onto the conversation's NavigationStack
-/// per `docs/ios-screens.md` §2.6. Tapping a row activates that
+/// per `docs/clients/ios-reference.md` Tapping a row activates that
 /// context and **pops back** to the conversation (one-shot
 /// select-and-return: the user came here to switch, dropping them
 /// back on the conversation immediately confirms the switch).

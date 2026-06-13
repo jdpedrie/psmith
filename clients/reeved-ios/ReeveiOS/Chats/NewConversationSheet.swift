@@ -3,7 +3,7 @@ import ReeveKit
 import ReeveUI
 
 /// Compose-new-conversation sheet — `.large` detent per
-/// `docs/ios-screens.md` §2.10. Sheet because compose is a discrete
+/// `docs/clients/ios-reference.md` Sheet because compose is a discrete
 /// modal action; nav-bar Cancel + Start commit pattern matches iOS
 /// Mail's compose flow.
 ///

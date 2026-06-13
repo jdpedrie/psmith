@@ -4,10 +4,10 @@
 // column today. The package is intentionally narrow: AES-256-GCM with
 // a single master key, no per-row key derivation, no envelope wrapping.
 // Tier B (per-user keys derived from the password) is sketched in
-// docs/architecture.md and is the next step if the threat model grows
+// docs/design/encryption.md and is the next step if the threat model grows
 // past "operator with logical DB access shouldn't see plaintext".
 //
-// See docs/architecture.md "Encryption" for the full threat-model
+// See docs/design/encryption.md for the full threat-model
 // rationale and the decision to defer encrypting message bodies.
 package crypto
 
