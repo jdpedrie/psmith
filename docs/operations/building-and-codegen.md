@@ -57,7 +57,7 @@ Override the test database connection with the `PGTESTDB_*` variables in [config
 
 ### The fake LLM
 
-`fakellm` (under `fakellm/`) is an `httptest.Server` that speaks the three upstream wire formats: Anthropic Messages, OpenAI Chat Completions, and OpenAI Responses. Tests enqueue scripted completions, point a driver's base URL at `fake.URL()`, and exercise the real SDK, driver, supervisor, and database path without reaching a real provider. This is how the streaming, retry, and tool-loop tests run deterministically. It is the right tool when a test needs the wire parsing to actually happen rather than a stubbed driver.
+`fakellm` (under `fakellm/`) is an `httptest.Server` that speaks the three upstream wire formats: Anthropic Messages, OpenAI Chat Completions, and OpenAI Responses. Tests enqueue scripted completions, point a driver's base URL at `fake.URL()`, and exercise the real SDK, driver, supervisor, and database path without reaching a real provider. This is how the streaming, retry, and tool-loop tests run deterministically. It is the right tool when a test needs the wire parsing to actually happen rather than a stubbed driver. The full reference (the script model, the server API, the flavor differences, and the gotchas) is in [fakellm.md](fakellm.md).
 
 ### Swift
 

@@ -42,6 +42,7 @@ Running it.
 - [operations/installation.md](operations/installation.md) — prerequisites, Postgres, migrations, bootstrap, running, Docker.
 - [operations/configuration.md](operations/configuration.md) — every environment variable.
 - [operations/building-and-codegen.md](operations/building-and-codegen.md) — building, buf and sqlc codegen, the test layers, the fake LLM.
+- [operations/fakellm.md](operations/fakellm.md) — the fake-LLM test harness: flavors, the script model, the server API, gotchas.
 
 ## Clients
 
