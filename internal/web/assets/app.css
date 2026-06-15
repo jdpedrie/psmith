@@ -707,6 +707,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .plugin-removes { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
 .plugin-removes form { margin: 0; }
 
+/* rich "add plugin" chooser */
+.add-plugin { margin-top: 4px; }
+.add-plugin > summary { list-style: none; width: fit-content; }
+.add-plugin > summary::-webkit-details-marker { display: none; }
+.add-plugin[open] > summary { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.add-plugin-list { margin-top: 12px; }
+.add-plugin-list form { margin: 0; }
+.add-plugin-plus { font-size: 18px; color: var(--accent); font-weight: 500; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 760px) {
 	.app { grid-template-columns: 1fr; }

@@ -515,7 +515,7 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 
 	for name, t := range types {
 		if !present[name] {
-			addable = append(addable, pluginOptVM{Name: name, DisplayName: orName(t.GetDisplayName(), name)})
+			addable = append(addable, pluginOptVM{Name: name, DisplayName: orName(t.GetDisplayName(), name), Description: t.GetDescription()})
 		}
 	}
 	sort.Slice(addable, func(i, j int) bool { return addable[i].DisplayName < addable[j].DisplayName })

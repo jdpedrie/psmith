@@ -181,6 +181,8 @@ templ sicon(name string) {
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 14l4-4 3 3 5-6"></path></svg>
 		case "cost":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M14.5 9.2c-.6-.7-1.5-1-2.5-1-1.4 0-2.5.7-2.5 1.9 0 2.7 5 1.4 5 4 0 1.2-1.1 2-2.5 2-1 0-1.9-.3-2.5-1"></path></svg>
+		case "plugin":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v3a2 2 0 0 0 4 0V3h4v4h-3a2 2 0 0 0 0 4h3v4a2 2 0 0 1-2 2h-4v-3a2 2 0 0 0-4 0v3H5a2 2 0 0 1-2-2v-4h3a2 2 0 0 0 0-4H3V3z"></path></svg>
 		default:
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg>
 	}
@@ -632,14 +634,9 @@ templ profilePluginsPage(profileID, profileName string, rows []pluginRowVM, type
 				}
 			</div>
 		}
-		<form class="form-inline" method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/add") }>
-			<select name="plugin_name">
-				for _, t := range types {
-					<option value={ t.Name }>{ t.DisplayName }</option>
-				}
-			</select>
-			<button class="btn-soft" type="submit">+ Add plugin</button>
-		</form>
+		if len(types) > 0 {
+			@addPluginPicker(types, "/settings/profiles/"+profileID+"/plugins/add", false, "Add plugin")
+		}
 	}
 }
 
@@ -1194,16 +1191,40 @@ templ convPluginsTab(vm convSettingsVM) {
 		</div>
 	</div>
 	if len(vm.Addable) > 0 {
-		<form class="form-inline" method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
-			<input type="hidden" name="action" value="add"/>
-			<select name="plugin_name">
-				for _, t := range vm.Addable {
-					<option value={ t.Name }>{ t.DisplayName }</option>
-				}
-			</select>
-			<button class="btn-soft" type="submit">+ Add plugin override</button>
-		</form>
+		@addPluginPicker(vm.Addable, "/c/"+vm.ConvID+"/plugins/override", true, "Add plugin override")
 	}
+}
+
+// addPluginPicker is the rich plugin chooser: a disclosure that opens a card of
+// icon rows (one per addable plugin type), each a one-click add. Works without
+// JS (native <details>). action is the POST target; withAction adds the
+// conversation override marker.
+templ addPluginPicker(types []pluginOptVM, action string, withAction bool, label string) {
+	<details class="add-plugin">
+		<summary class="btn-soft">+ { label }</summary>
+		<div class="sgroup-card add-plugin-list">
+			for _, t := range types {
+				<form method="post" action={ templ.SafeURL(action) }>
+					if withAction {
+						<input type="hidden" name="action" value="add"/>
+					}
+					<input type="hidden" name="plugin_name" value={ t.Name }/>
+					<button class="srow" type="submit">
+						<span class="srow-icon">
+							@sicon("plugin")
+						</span>
+						<span class="srow-body">
+							<span class="srow-title">{ t.DisplayName }</span>
+							if t.Description != "" {
+								<span class="srow-desc">{ t.Description }</span>
+							}
+						</span>
+						<span class="srow-trail add-plugin-plus">+</span>
+					</button>
+				</form>
+			}
+		</div>
+	</details>
 }
 
 // pluginConfigFields renders the form a plugin declares via its ConfigFields,
