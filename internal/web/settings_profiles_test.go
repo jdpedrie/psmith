@@ -28,7 +28,7 @@ func TestProfilesSettings(t *testing.T) {
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 	prof := profiles.NewService(q, pool, crypto.Nop{})
-	h := New(q, auth.NewService(q), nil, nil, prof, nil, slog.Default())
+	h := New(Deps{Queries: q, Auth: auth.NewService(q), Profiles: prof, Logger: slog.Default()})
 
 	ctx := context.Background()
 	uid, _ := uuid.NewV7()

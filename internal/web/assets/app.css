@@ -400,6 +400,8 @@ a.settings-item:hover { border-color: var(--accent); }
 
 .form { display: flex; flex-direction: column; gap: 14px; max-width: 460px; }
 .form label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.form label.check { flex-direction: row; align-items: center; gap: 8px; }
+.form label.check input { width: auto; }
 .form input, .form select {
 	font: inherit;
 	color: var(--text);

@@ -29,7 +29,7 @@ func TestProvidersSettings(t *testing.T) {
 	q := store.New(pool)
 	cat := modelmeta.NewLiveCatalog(nil)
 	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
-	h := New(q, auth.NewService(q), nil, models, nil, nil, slog.Default())
+	h := New(Deps{Queries: q, Auth: auth.NewService(q), Models: models, Logger: slog.Default()})
 
 	ctx := context.Background()
 	uid, _ := uuid.NewV7()

@@ -130,10 +130,14 @@ templ settingsPage() {
 				<span class="settings-item-name">Profiles</span>
 				<span class="settings-item-desc">Personas: system prompt and defaults.</span>
 			</a>
-			<span class="settings-item disabled">
-				<span class="settings-item-name">Embedder &amp; Langfuse</span>
-				<span class="settings-item-desc">Coming soon.</span>
-			</span>
+			<a class="settings-item" href="/settings/embedder">
+				<span class="settings-item-name">Embedder</span>
+				<span class="settings-item-desc">Backend for semantic history search.</span>
+			</a>
+			<a class="settings-item" href="/settings/langfuse">
+				<span class="settings-item-name">Langfuse</span>
+				<span class="settings-item-desc">Optional tracing of model calls.</span>
+			</a>
 		</nav>
 	}
 }
@@ -254,6 +258,92 @@ templ providerDetailPage(prov providerVM, enabled []enabledModelVM, discovered [
 				}
 			</section>
 		}
+	}
+}
+
+templ resultBanner(r *testVM) {
+	if r != nil {
+		if r.OK {
+			<p class="ok">Connection OK.</p>
+		} else {
+			<p class="error">{ orDefault(r.Message, "Failed.") }</p>
+		}
+	}
+}
+
+templ embedderPage(vm embedderVM) {
+	@settingsShell("Embedder") {
+		<h1>Embedder</h1>
+		<p class="muted">Powers semantic history search. Point it at an embeddings backend (for example a local Ollama).</p>
+		@resultBanner(vm.Result)
+		<form class="form" method="post" action="/settings/embedder">
+			<label class="check"><input type="checkbox" name="enabled" checked?={ vm.Enabled }/> Enabled</label>
+			<label>
+				Type
+				<select name="type">
+					if len(vm.Types) == 0 {
+						<option value={ vm.Type }>{ orDefault(vm.Type, "openai") }</option>
+					}
+					for _, t := range vm.Types {
+						<option value={ t } selected?={ t == vm.Type }>{ t }</option>
+					}
+				</select>
+			</label>
+			<label>
+				Base URL
+				<input name="base_url" value={ vm.BaseURL } placeholder="http://localhost:11434/v1" autocomplete="off"/>
+			</label>
+			<label>
+				Model
+				<input name="model" value={ vm.Model } placeholder="nomic-embed-text" autocomplete="off"/>
+			</label>
+			<label>
+				Dimensions
+				<input name="dimensions" type="number" value={ itoa(vm.Dimensions) }/>
+			</label>
+			<label>
+				API key <span class="muted">{ keyHint(vm.APIKeySet) }</span>
+				<input name="api_key" type="password" autocomplete="off"/>
+			</label>
+			<div class="form-actions">
+				<button type="submit">Save</button>
+			</div>
+		</form>
+		<div class="settings-actions">
+			<form method="post" action="/settings/embedder/test"><button class="btn-secondary" type="submit">Test</button></form>
+			<form method="post" action="/settings/embedder/delete" onsubmit="return confirm('Delete embedder config?')"><button class="btn-danger" type="submit">Delete</button></form>
+		</div>
+		<p class="muted">Unembedded messages: { itoa(vm.UnembeddedCount) } · worker { workerState(vm.WorkerActive) }</p>
+	}
+}
+
+templ langfusePage(vm langfuseVM) {
+	@settingsShell("Langfuse") {
+		<h1>Langfuse</h1>
+		<p class="muted">Optional tracing of model calls. Off unless configured and enabled.</p>
+		@resultBanner(vm.Result)
+		<form class="form" method="post" action="/settings/langfuse">
+			<label class="check"><input type="checkbox" name="enabled" checked?={ vm.Enabled }/> Enabled</label>
+			<label>
+				Host
+				<input name="host" value={ vm.Host } placeholder="https://us.cloud.langfuse.com" autocomplete="off"/>
+			</label>
+			<label>
+				Public key
+				<input name="public_key" value={ vm.PublicKey } autocomplete="off"/>
+			</label>
+			<label>
+				Secret key <span class="muted">{ keyHint(vm.SecretKeySet) }</span>
+				<input name="secret_key" type="password" autocomplete="off"/>
+			</label>
+			<div class="form-actions">
+				<button type="submit">Save</button>
+			</div>
+		</form>
+		<div class="settings-actions">
+			<form method="post" action="/settings/langfuse/test"><button class="btn-secondary" type="submit">Test</button></form>
+			<form method="post" action="/settings/langfuse/delete" onsubmit="return confirm('Delete Langfuse config?')"><button class="btn-danger" type="submit">Delete</button></form>
+		</div>
 	}
 }
 

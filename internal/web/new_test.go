@@ -34,7 +34,7 @@ func TestNewConversationFlow(t *testing.T) {
 	sup := stream.New(q, slog.Default())
 	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
 	prof := profiles.NewService(q, pool, crypto.Nop{})
-	h := New(q, auth.NewService(q), convos, nil, prof, sup, slog.Default())
+	h := New(Deps{Queries: q, Auth: auth.NewService(q), Conversations: convos, Profiles: prof, Supervisor: sup, Logger: slog.Default()})
 
 	ctx := context.Background()
 	uid, _ := uuid.NewV7()

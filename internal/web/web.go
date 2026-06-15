@@ -19,6 +19,8 @@ import (
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
+	"github.com/jdpedrie/reeve/internal/embeddersvc"
+	"github.com/jdpedrie/reeve/internal/langfusesvc"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/store"
@@ -28,25 +30,50 @@ import (
 //go:embed assets
 var assetsFS embed.FS
 
-// Handler serves the web UI. It holds the same dependencies the ConnectRPC
-// services were built from so it can call them in-process.
+// Deps are the services the web handler calls in-process. Pass the same
+// instances main() built for the ConnectRPC handlers. Fields a given page
+// does not touch may be nil (handy in tests).
+type Deps struct {
+	Queries       *store.Queries
+	Auth          *auth.Service
+	Conversations *conversations.Service
+	Models        *modelproviders.Service
+	Profiles      *profiles.Service
+	Embedder      *embeddersvc.Service
+	Langfuse      *langfusesvc.Service
+	Supervisor    *stream.Supervisor
+	Logger        *slog.Logger
+}
+
+// Handler serves the web UI.
 type Handler struct {
 	queries    *store.Queries
 	auth       *auth.Service
 	convos     *conversations.Service
 	models     *modelproviders.Service
 	profiles   *profiles.Service
+	embedder   *embeddersvc.Service
+	langfuse   *langfusesvc.Service
 	supervisor *stream.Supervisor
 	logger     *slog.Logger
 }
 
-// New constructs the web handler. Pass the same services main() built for the
-// ConnectRPC handlers so the web layer calls them in-process.
-func New(queries *store.Queries, authSvc *auth.Service, convos *conversations.Service, models *modelproviders.Service, profilesSvc *profiles.Service, supervisor *stream.Supervisor, logger *slog.Logger) *Handler {
-	if logger == nil {
-		logger = slog.Default()
+// New constructs the web handler from its dependencies.
+func New(d Deps) *Handler {
+	if d.Logger == nil {
+		d.Logger = slog.Default()
 	}
-	return &Handler{queries: queries, auth: authSvc, convos: convos, models: models, profiles: profilesSvc, supervisor: supervisor, logger: logger}
+	return &Handler{
+		queries:    d.Queries,
+		auth:       d.Auth,
+		convos:     d.Conversations,
+		models:     d.Models,
+		profiles:   d.Profiles,
+		embedder:   d.Embedder,
+		langfuse:   d.Langfuse,
+		supervisor: d.Supervisor,
+		logger:     d.Logger,
+	}
 }
 
 // Mount registers the web routes on mux. The paths are distinct from the
@@ -82,6 +109,16 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings/profiles/{id}", h.requireUser(h.handleProfileEdit))
 	mux.HandleFunc("POST /settings/profiles/{id}", h.requireUser(h.handleProfileUpdate))
 	mux.HandleFunc("POST /settings/profiles/{id}/delete", h.requireUser(h.handleProfileDelete))
+
+	mux.HandleFunc("GET /settings/embedder", h.requireUser(h.handleEmbedder))
+	mux.HandleFunc("POST /settings/embedder", h.requireUser(h.handleEmbedderSave))
+	mux.HandleFunc("POST /settings/embedder/test", h.requireUser(h.handleEmbedderTest))
+	mux.HandleFunc("POST /settings/embedder/delete", h.requireUser(h.handleEmbedderDelete))
+
+	mux.HandleFunc("GET /settings/langfuse", h.requireUser(h.handleLangfuse))
+	mux.HandleFunc("POST /settings/langfuse", h.requireUser(h.handleLangfuseSave))
+	mux.HandleFunc("POST /settings/langfuse/test", h.requireUser(h.handleLangfuseTest))
+	mux.HandleFunc("POST /settings/langfuse/delete", h.requireUser(h.handleLangfuseDelete))
 }
 
 func cacheControl(next http.Handler) http.Handler {
