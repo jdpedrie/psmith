@@ -68,12 +68,8 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	convos, _ := h.listConvos(r.Context(), id)
-	models := h.listModels(r.Context(), "")
-	current := currentModelValue(conv, models)
-	for i := range models {
-		models[i].Selected = models[i].Value == current
-	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, models, current, r.URL.Query().Get("run")))
+	pick := h.modelPicker(r.Context(), id, currentSettingsModel(conv), capsVM{})
+	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, pick.Current, r.URL.Query().Get("run")))
 }
 
 // handleSend sends a user turn. For htmx requests it returns an HTML fragment

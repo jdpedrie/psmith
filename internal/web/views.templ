@@ -1,5 +1,7 @@
 package web
 
+import "strings"
+
 // layout is the base HTML shell. htmx (plus its SSE extension) progressively
 // enhances the page; without JS it still works (forms POST, links navigate).
 templ layout(title string) {
@@ -733,7 +735,7 @@ templ assistantStream(convID, runID string) {
 	</div>
 }
 
-templ composer(convID string, models []modelVM, currentModel string) {
+templ composer(convID string, current pickerModelVM) {
 	<form
 		id="composer"
 		class="composer"
@@ -760,19 +762,34 @@ templ composer(convID string, models []modelVM, currentModel string) {
 				</svg>
 			</button>
 		</div>
-		if len(models) > 0 {
-			<div class="composer-tools">
-				<select name="model" class="model-select">
-					for _, m := range models {
-						<option value={ m.Value } selected?={ m.Selected }>{ m.Label }</option>
-					}
-				</select>
-			</div>
-		}
+		<div class="composer-tools">
+			@modelChip(convID, current)
+		</div>
 	</form>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []modelVM, currentModel, runID string) {
+// modelChip is the composer's current-model button. It opens the rich picker
+// overlay (htmx → #modal); without JS it links to the standalone picker page.
+templ modelChip(convID string, m pickerModelVM) {
+	<button
+		type="button"
+		id="composer-model-chip"
+		class="model-chip"
+		hx-get={ "/c/" + convID + "/model" }
+		hx-target="#modal"
+		hx-swap="innerHTML"
+	>
+		if m.Value == "" {
+			<span class="model-chip-name">No models</span>
+		} else {
+			<span class="model-chip-name">{ m.DisplayName }</span>
+			@capBadges(m.Caps)
+		}
+		<svg class="model-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+	</button>
+}
+
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string) {
 	@layout(conv.Title + " — Reeve") {
 		<div class="app">
 			@sidebar(convos)
@@ -780,6 +797,7 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 				<header class="conv-head">
 					<span class="conv-title">{ conv.Title }</span>
 					<span class="conv-actions">
+						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/settings") }>Settings</a>
 						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/compact") }>Compact</a>
 						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>Contexts</a>
 					</span>
@@ -792,8 +810,272 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 						@assistantStream(conv.ID, runID)
 					}
 				</div>
-				@composer(conv.ID, models, currentModel)
+				@composer(conv.ID, current)
 			</main>
+		</div>
+		<div id="modal"></div>
+	}
+}
+
+// capBadges renders the compact capability glyphs used on chips and rows.
+templ capBadges(c capsVM) {
+	<span class="cap-badges">
+		if c.Thinking {
+			<span class="cap cap-thinking" title="Thinking">◆</span>
+		}
+		if c.Vision {
+			<span class="cap cap-vision" title="Vision">●</span>
+		}
+		if c.ToolUse {
+			<span class="cap cap-tools" title="Tool use">⚒</span>
+		}
+		if c.PromptCaching {
+			<span class="cap cap-cache" title="Prompt caching">⚡</span>
+		}
+	</span>
+}
+
+// modelMetaStrip is the per-row metadata line: context window, cost bucket,
+// knowledge cutoff, and capability badges.
+templ modelMetaStrip(m pickerModelVM) {
+	<span class="meta-strip">
+		if m.ContextLabel != "" {
+			<span class="meta-chip" title="Context window">{ m.ContextLabel }</span>
+		}
+		if m.CostBucket != "" {
+			<span class="meta-chip meta-cost" title={ m.CostHint }>{ m.CostBucket }</span>
+		}
+		if m.Cutoff != "" {
+			<span class="meta-chip" title="Knowledge cutoff">{ m.Cutoff }</span>
+		}
+		@capBadges(m.Caps)
+	</span>
+}
+
+// modelRow is one selectable model. It posts the selection; htmx swaps the
+// composer chip and dismisses the overlay, while no-JS submits and redirects.
+templ modelRow(convID string, m pickerModelVM) {
+	<form
+		method="post"
+		action={ templ.SafeURL("/c/" + convID + "/model") }
+		hx-post={ "/c/" + convID + "/model" }
+		hx-target="#composer-model-chip"
+		hx-swap="outerHTML"
+		class="model-row-form"
+	>
+		<input type="hidden" name="model" value={ m.Value }/>
+		<button type="submit" class={ "model-row", templ.KV("selected", m.Selected), templ.KV("disabled", m.Disabled) } disabled?={ m.Disabled }>
+			<span class="model-row-head">
+				<span class="model-row-name">{ m.DisplayName }</span>
+				if m.Selected {
+					<svg class="model-row-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+				}
+			</span>
+			@modelMetaStrip(m)
+			if m.Disabled {
+				<span class="model-row-needs">Needs: { strings.Join(m.Missing, ", ") }</span>
+			}
+		</button>
+	</form>
+}
+
+// modelPickerList is the grouped body shared by the overlay and the no-JS page.
+templ modelPickerList(data pickerData) {
+	if data.Total == 0 {
+		<p class="muted pad">No models enabled. Add a provider and enable models under <a href="/settings/providers">Settings → Providers</a>.</p>
+	}
+	for _, g := range data.Groups {
+		<section class="model-group">
+			<header class="model-group-head">{ g.Label }</header>
+			<div class="model-group-rows">
+				for _, m := range g.Models {
+					@modelRow(data.ConvID, m)
+				}
+			</div>
+		</section>
+	}
+}
+
+// modelPickerModal is the htmx overlay. Clicking the backdrop or the close
+// button empties #modal (the overlay host) to dismiss it.
+templ modelPickerModal(data pickerData) {
+	<div class="modal-backdrop" onclick="document.getElementById('modal').innerHTML=''">
+		<div class="modal-panel model-picker" onclick="event.stopPropagation()">
+			<header class="modal-head">
+				<span class="modal-title">Model</span>
+				<span class="muted">{ itoa(int32(data.Total)) } across { itoa(int32(len(data.Groups))) } providers</span>
+				<button type="button" class="modal-close" onclick="document.getElementById('modal').innerHTML=''" aria-label="Close">✕</button>
+			</header>
+			<div class="modal-body">
+				@modelPickerList(data)
+			</div>
+		</div>
+	</div>
+}
+
+// --- conversation settings ---
+
+templ convSettingsPage(vm convSettingsVM) {
+	@layout(vm.Title + " — settings") {
+		<div class="settings">
+			<header class="settings-head">
+				<a class="brand" href={ templ.SafeURL("/c/" + vm.ConvID) }>← Back to chat</a>
+			</header>
+			<div class="settings-body">
+				<h1>Conversation settings</h1>
+				<p class="muted">{ vm.Title }</p>
+				<nav class="tabs">
+					<a class={ "tab", templ.KV("active", vm.Tab == "call") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=call") }>Call settings</a>
+					<a class={ "tab", templ.KV("active", vm.Tab == "plugins") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=plugins") }>Plugins</a>
+				</nav>
+				if vm.Tab == "plugins" {
+					@convPluginsTab(vm)
+				} else {
+					@convCallTab(vm)
+				}
+			</div>
+		</div>
+	}
+}
+
+templ convCallTab(vm convSettingsVM) {
+	<p class="muted settings-note">Any field left blank inherits from the profile (and below). The placeholder shows the value it inherits.</p>
+	<form class="form" method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/settings") }>
+		<h2>Sampling</h2>
+		@numField("Temperature", vm.Temperature, "0.01")
+		@numField("Top P", vm.TopP, "0.01")
+		@numField("Max output tokens", vm.MaxOutputTokens, "1")
+		@numField("Top K", vm.TopK, "1")
+		<label>
+			Stop sequences <span class="muted">(comma-separated)</span>
+			<input name={ vm.StopSequences.Name } value={ vm.StopSequences.Value } placeholder={ vm.StopSequences.Inherited } autocomplete="off"/>
+		</label>
+		<h2>Thinking</h2>
+		@triSelect("Enabled", vm.ThinkingEnabled)
+		@numField("Budget tokens", vm.ThinkingBudget, "256")
+		<h2>Caching</h2>
+		@triSelect("Explicit cache", vm.ExplicitCache)
+		<h2>History</h2>
+		@triSelect("Include thinking in history", vm.IncludeThinking)
+		if vm.DriverType == "anthropic" {
+			<h2>Anthropic</h2>
+			@triSelect("Prompt cache enabled", vm.AnthCacheEnabled)
+		}
+		if vm.DriverType == "openai-compatible" {
+			<h2>OpenAI</h2>
+			@numField("Seed", vm.OAISeed, "1")
+			@numField("Frequency penalty", vm.OAIFreqPenalty, "0.1")
+			@numField("Presence penalty", vm.OAIPresPenalty, "0.1")
+			@triSelect("Parallel tool calls", vm.OAIParallelTools)
+		}
+		if vm.DriverType == "google" {
+			<h2>Google</h2>
+			@numField("Candidate count", vm.GoogCandidates, "1")
+		}
+		<div class="form-actions">
+			<button type="submit">Save</button>
+			<a class="btn-link" href={ templ.SafeURL("/c/" + vm.ConvID) }>Back to chat</a>
+		</div>
+	</form>
+}
+
+templ numField(label string, f callFieldVM, step string) {
+	<label>
+		{ label }
+		if f.Inherited != "" {
+			<span class="muted">(inherits { f.Inherited })</span>
+		}
+		<input type="number" step={ step } name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off"/>
+	</label>
+}
+
+templ triSelect(label string, f triFieldVM) {
+	<label>
+		{ label }
+		<select name={ f.Name }>
+			<option value="" selected?={ f.State == "" }>Inherit{ triInheritLabel(f.Inherited) }</option>
+			<option value="on" selected?={ f.State == "on" }>On</option>
+			<option value="off" selected?={ f.State == "off" }>Off</option>
+		</select>
+	</label>
+}
+
+templ convPluginsTab(vm convSettingsVM) {
+	<p class="muted settings-note">The merged pipeline runs in order. Inherited plugins come from the profile; you can disable them here or add conversation-only overrides.</p>
+	<div class="card-list">
+		if len(vm.Plugins) == 0 {
+			<p class="muted">No plugins in the pipeline.</p>
+		}
+		for _, p := range vm.Plugins {
+			<div class="plugin-row">
+				<div class="plugin-head">
+					<strong class={ templ.KV("strike", p.Disabled) }>{ p.Display }</strong>
+					if p.Source == "Override" {
+						<span class="badge badge-override">override</span>
+					} else {
+						<span class="badge">inherited</span>
+					}
+					if p.Disabled {
+						<span class="badge badge-warn">disabled</span>
+					}
+				</div>
+				<code class="plugin-name">{ p.Name }</code>
+				if !p.Disabled {
+					<details class="plugin-config">
+						<summary>Config</summary>
+						<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
+							<input type="hidden" name="action" value="config"/>
+							<input type="hidden" name="plugin_name" value={ p.Name }/>
+							<textarea name="config" rows="4" spellcheck="false" placeholder="{}">{ p.ConfigJSON }</textarea>
+							<button class="btn-secondary" type="submit">Save config</button>
+						</form>
+					</details>
+				}
+				<div class="plugin-actions">
+					if p.Disabled {
+						@pluginActionForm(vm.ConvID, "restore", p.Name, "Restore")
+					} else if p.Source == "Override" {
+						@pluginActionForm(vm.ConvID, "remove", p.Name, "Remove override")
+					} else {
+						@pluginActionForm(vm.ConvID, "disable", p.Name, "Disable here")
+					}
+				</div>
+			</div>
+		}
+	</div>
+	if len(vm.Addable) > 0 {
+		<h2>Add conversation plugin</h2>
+		<form class="form-inline" method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
+			<input type="hidden" name="action" value="add"/>
+			<select name="plugin_name">
+				for _, t := range vm.Addable {
+					<option value={ t.Name }>{ t.DisplayName }</option>
+				}
+			</select>
+			<button type="submit">Add</button>
+		</form>
+	}
+}
+
+templ pluginActionForm(convID, action, name, label string) {
+	<form method="post" action={ templ.SafeURL("/c/" + convID + "/plugins/override") }>
+		<input type="hidden" name="action" value={ action }/>
+		<input type="hidden" name="plugin_name" value={ name }/>
+		<button class="msg-action" type="submit">{ label }</button>
+	</form>
+}
+
+// modelPickerPage is the no-JS standalone picker.
+templ modelPickerPage(data pickerData) {
+	@layout("Model — Reeve") {
+		<div class="settings">
+			<header class="settings-head">
+				<a class="brand" href={ templ.SafeURL("/c/" + data.ConvID) }>← Back to chat</a>
+			</header>
+			<div class="settings-body">
+				<h1>Model</h1>
+				@modelPickerList(data)
+			</div>
 		</div>
 	}
 }

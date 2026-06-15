@@ -109,6 +109,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
 	mux.HandleFunc("POST /c/{id}/elicit/{eid}", h.requireUser(h.handleElicitRespond))
+	mux.HandleFunc("GET /c/{id}/model", h.requireUser(h.handleModelPicker))
+	mux.HandleFunc("POST /c/{id}/model", h.requireUser(h.handleSetModel))
+	mux.HandleFunc("GET /c/{id}/settings", h.requireUser(h.handleConvSettings))
+	mux.HandleFunc("POST /c/{id}/settings", h.requireUser(h.handleConvSettingsSave))
+	mux.HandleFunc("POST /c/{id}/plugins/override", h.requireUser(h.handleConvPluginOverride))
 
 	mux.HandleFunc("GET /settings", h.requireUser(h.handleSettings))
 	mux.HandleFunc("GET /settings/providers", h.requireUser(h.handleProviders))
@@ -296,16 +301,4 @@ func (h *Handler) listProfiles(ctx context.Context) []profileVM {
 		out = append(out, profileVM{ID: p.GetId(), Name: p.GetName(), Description: p.GetDescription()})
 	}
 	return out
-}
-
-// currentModelValue resolves the conversation's selected model: its stored
-// default if set, else the first available model (favoring favorites).
-func currentModelValue(conv *reevev1.Conversation, models []modelVM) string {
-	if s := conv.GetSettings(); s != nil && s.GetDefaultProviderId() != "" && s.GetDefaultModelId() != "" {
-		return modelValue(s.GetDefaultProviderId(), s.GetDefaultModelId())
-	}
-	if len(models) > 0 {
-		return models[0].Value
-	}
-	return ""
 }
