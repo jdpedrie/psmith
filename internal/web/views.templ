@@ -46,6 +46,7 @@ templ sidebar(convos []convoVM) {
 			<a class="brand" href="/chats">Reeve</a>
 			<div class="sidebar-actions">
 				<a class="new-chat" href="/new">+ New</a>
+				<a class="link" href="/settings">Settings</a>
 				<form method="post" action="/logout">
 					<button class="link" type="submit">Sign out</button>
 				</form>
@@ -99,6 +100,160 @@ templ newConversationPage(convos []convoVM, profiles []profileVM) {
 				</div>
 			</main>
 		</div>
+	}
+}
+
+// settingsShell wraps the settings pages with a header that links back to the
+// chats and to the settings home.
+templ settingsShell(title string) {
+	@layout(title + " — Reeve") {
+		<div class="settings">
+			<header class="settings-head">
+				<a class="brand" href="/chats">← Chats</a>
+				<a class="settings-title" href="/settings">Settings</a>
+			</header>
+			<div class="settings-body">
+				{ children... }
+			</div>
+		</div>
+	}
+}
+
+templ settingsPage() {
+	@settingsShell("Settings") {
+		<nav class="settings-nav">
+			<a class="settings-item" href="/settings/providers">
+				<span class="settings-item-name">Providers &amp; models</span>
+				<span class="settings-item-desc">Connect an LLM provider and enable models.</span>
+			</a>
+			<span class="settings-item disabled">
+				<span class="settings-item-name">Profiles</span>
+				<span class="settings-item-desc">Coming soon.</span>
+			</span>
+			<span class="settings-item disabled">
+				<span class="settings-item-name">Embedder &amp; Langfuse</span>
+				<span class="settings-item-desc">Coming soon.</span>
+			</span>
+		</nav>
+	}
+}
+
+templ providersPage(provs []providerVM) {
+	@settingsShell("Providers") {
+		<div class="settings-section-head">
+			<h1>Providers</h1>
+			<a class="btn" href="/settings/providers/new">Add provider</a>
+		</div>
+		<div class="card-list">
+			if len(provs) == 0 {
+				<p class="muted">No providers yet. Add one to enable models.</p>
+			}
+			for _, p := range provs {
+				<a class="row-card" href={ templ.SafeURL("/settings/providers/" + p.ID) }>
+					<span class="row-card-title">{ p.Label }</span>
+					<span class="row-card-sub">{ p.Type }</span>
+				</a>
+			}
+		</div>
+	}
+}
+
+templ providerNewPage(types []providerTypeVM, errMsg string) {
+	@settingsShell("Add provider") {
+		<h1>Add provider</h1>
+		if errMsg != "" {
+			<p class="error">{ errMsg }</p>
+		}
+		<form class="form" method="post" action="/settings/providers">
+			<label>
+				Type
+				<select name="type">
+					for _, t := range types {
+						<option value={ t.Name }>{ t.DisplayName }</option>
+					}
+				</select>
+			</label>
+			<label>
+				Label
+				<input name="label" placeholder="e.g. Anthropic" autocomplete="off"/>
+			</label>
+			<label>
+				Base URL <span class="muted">(optional; required for OpenAI-compatible endpoints)</span>
+				<input name="base_url" placeholder="https://api.example.com/v1" autocomplete="off"/>
+			</label>
+			<label>
+				API key <span class="muted">(stored encrypted)</span>
+				<input name="api_key" type="password" autocomplete="off"/>
+			</label>
+			<div class="form-actions">
+				<button type="submit">Create</button>
+				<a class="btn-link" href="/settings/providers">Cancel</a>
+			</div>
+		</form>
+	}
+}
+
+templ providerDetailPage(prov providerVM, enabled []enabledModelVM, discovered []discoveredVM, test *testVM) {
+	@settingsShell(prov.Label) {
+		<div class="settings-section-head">
+			<h1>{ prov.Label }</h1>
+			<span class="muted">{ prov.Type }</span>
+		</div>
+		if test != nil {
+			if test.OK {
+				<p class="ok">Connection OK. { itoa(test.ModelCount) } models available.</p>
+			} else {
+				<p class="error">{ orDefault(test.Message, "Connection failed.") }</p>
+			}
+		}
+		<div class="settings-actions">
+			<form method="post" action={ templ.SafeURL("/settings/providers/" + prov.ID + "/discover") }>
+				<button type="submit">Discover models</button>
+			</form>
+			<form method="post" action={ templ.SafeURL("/settings/providers/" + prov.ID + "/test") }>
+				<button class="btn-secondary" type="submit">Test connection</button>
+			</form>
+			<form method="post" action={ templ.SafeURL("/settings/providers/" + prov.ID + "/delete") } onsubmit="return confirm('Delete this provider?')">
+				<button class="btn-danger" type="submit">Delete</button>
+			</form>
+		</div>
+		<section>
+			<h2>Enabled models</h2>
+			if len(enabled) == 0 {
+				<p class="muted">No models enabled yet. Discover models to enable some.</p>
+			} else {
+				<ul class="model-list">
+					for _, m := range enabled {
+						<li><span class="model-name">{ m.DisplayName }</span> <code>{ m.ModelID }</code></li>
+					}
+				</ul>
+			}
+		</section>
+		if discovered != nil {
+			<section>
+				<h2>Discovered models</h2>
+				if len(discovered) == 0 {
+					<p class="muted">The provider returned no models.</p>
+				} else {
+					<form method="post" action={ templ.SafeURL("/settings/providers/" + prov.ID + "/enable") }>
+						<ul class="model-list checks">
+							for _, d := range discovered {
+								<li>
+									<label>
+										<input type="checkbox" name="model_ids" value={ d.ModelID } disabled?={ d.Enabled } checked?={ d.Enabled }/>
+										<span class="model-name">{ d.DisplayName }</span> <code>{ d.ModelID }</code>
+										if d.Enabled {
+											<span class="muted">enabled</span>
+										}
+									</label>
+								</li>
+							}
+						</ul>
+						<button type="submit">Enable selected</button>
+					</form>
+				}
+			</section>
+		}
 	}
 }
 

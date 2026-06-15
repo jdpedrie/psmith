@@ -2,7 +2,7 @@
 
 The web client is a server-rendered UI built into `reeved` itself. It is not a separate app talking over the RPC API; it is a presentation layer in the Go process that calls the same services in-process and renders HTML. The page works as plain HTML (forms POST, links navigate) and is progressively enhanced with [Datastar](https://data-star.dev): the conversation streams live over SSE. This document describes the approach and the current state.
 
-Status: early but functional. Working today: cookie auth, the chats list, creating a conversation (pick a profile), a conversation that sends and streams end to end, a per-conversation model picker (populated from the user's enabled models, remembered on the conversation), and markdown rendering of message content. Not built yet: the settings/providers/profiles management surface, branching, compaction, contexts, cost, and the elicitation UI. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
+Status: early but functional. Working today: cookie auth, the chats list, creating a conversation (pick a profile), a conversation that sends and streams end to end, a per-conversation model picker (populated from the user's enabled models, remembered on the conversation), markdown rendering of message content, and provider management under Settings (add a provider, discover and enable models, test the connection, delete). Not built yet: profile and embedder/langfuse management, branching, compaction, contexts, cost, and the elicitation UI. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
 
 ## Why server-rendered
 

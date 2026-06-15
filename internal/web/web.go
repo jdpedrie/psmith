@@ -65,6 +65,16 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
+
+	mux.HandleFunc("GET /settings", h.requireUser(h.handleSettings))
+	mux.HandleFunc("GET /settings/providers", h.requireUser(h.handleProviders))
+	mux.HandleFunc("GET /settings/providers/new", h.requireUser(h.handleProviderNew))
+	mux.HandleFunc("POST /settings/providers", h.requireUser(h.handleProviderCreate))
+	mux.HandleFunc("GET /settings/providers/{id}", h.requireUser(h.handleProvider))
+	mux.HandleFunc("POST /settings/providers/{id}/discover", h.requireUser(h.handleProviderDiscover))
+	mux.HandleFunc("POST /settings/providers/{id}/enable", h.requireUser(h.handleProviderEnable))
+	mux.HandleFunc("POST /settings/providers/{id}/test", h.requireUser(h.handleProviderTest))
+	mux.HandleFunc("POST /settings/providers/{id}/delete", h.requireUser(h.handleProviderDelete))
 }
 
 func cacheControl(next http.Handler) http.Handler {
