@@ -62,10 +62,11 @@ func TestElicitFormRender(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		"Enter your key",
-		`data-bind="elicit.api_key"`,
+		`name="field_api_key"`,
 		`type="password"`,
-		"/c/conv1/elicit/eid1?action=accept",
-		"/c/conv1/elicit/eid1?action=decline",
+		`hx-post="/c/conv1/elicit/eid1"`,
+		`name="action" value="accept"`,
+		`name="action" value="decline"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("elicit form missing %q\ngot: %s", want, out)

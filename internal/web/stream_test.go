@@ -27,8 +27,8 @@ import (
 
 // TestHandleStream_E2E proves the spike's risky surface: a real assistant run
 // (anthropic driver → fakellm → supervisor → durable chunks) is translated by
-// the web stream handler into Datastar SSE patches that carry the streamed
-// text and a finalizing replace of the placeholder.
+// the web stream handler into named SSE events (`message` carrying the rendered
+// markdown, `done` closing the stream) for htmx's SSE extension to consume.
 func TestHandleStream_E2E(t *testing.T) {
 	t.Parallel()
 
@@ -80,15 +80,12 @@ func TestHandleStream_E2E(t *testing.T) {
 	if !strings.Contains(body, "Hello, world!") {
 		t.Fatalf("stream SSE missing assembled text; body:\n%s", body)
 	}
-	if !strings.Contains(body, "datastar-patch-elements") {
-		t.Errorf("stream SSE missing patch-elements events; body:\n%s", body)
+	if !strings.Contains(body, "event: message") {
+		t.Errorf("stream SSE missing message events; body:\n%s", body)
 	}
-	if !strings.Contains(body, `id="stream-md"`) {
-		t.Errorf("stream SSE missing #stream-md morph target; body:\n%s", body)
-	}
-	// The finalize step replaces #stream with a plain bubble (no streaming id).
-	if !strings.Contains(body, `class="msg assistant"`) {
-		t.Errorf("stream SSE missing finalized assistant bubble; body:\n%s", body)
+	// The terminal event closes the htmx SSE connection.
+	if !strings.Contains(body, "event: done") {
+		t.Errorf("stream SSE missing done event; body:\n%s", body)
 	}
 }
 

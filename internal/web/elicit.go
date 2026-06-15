@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/starfederation/datastar-go/datastar"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/elicit"
@@ -86,35 +86,26 @@ func (h *Handler) handleElicitRespond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enhanced := r.Header.Get("Datastar-Request") != ""
+	enhanced := r.Header.Get("HX-Request") != ""
+	_ = r.ParseForm()
 	action := r.URL.Query().Get("action")
+	if action == "" {
+		action = r.PostFormValue("action")
+	}
 
 	var contentJSON json.RawMessage
-	if enhanced {
-		// Elicit fields are bound under the `elicit` signal namespace so they
-		// don't collide with the composer's message/model signals.
-		var sig struct {
-			Elicit map[string]json.RawMessage `json:"elicit"`
-		}
-		_ = datastar.ReadSignals(r, &sig)
-		if action == "accept" && len(sig.Elicit) > 0 {
-			contentJSON, _ = json.Marshal(sig.Elicit)
-		}
-	} else {
-		_ = r.ParseForm()
-		if action == "" {
-			action = r.PostFormValue("action")
-		}
-		if action == "accept" {
-			content := map[string]string{}
-			for k, vs := range r.PostForm {
-				if k == "action" || len(vs) == 0 {
-					continue
-				}
-				content[k] = vs[0]
+	if action == "accept" {
+		// Field inputs are named field_<name> so they can't collide with the
+		// action button; strip the prefix to rebuild the response object.
+		content := map[string]string{}
+		for k, vs := range r.PostForm {
+			name, ok := strings.CutPrefix(k, "field_")
+			if !ok || len(vs) == 0 {
+				continue
 			}
-			contentJSON, _ = json.Marshal(content)
+			content[name] = vs[0]
 		}
+		contentJSON, _ = json.Marshal(content)
 	}
 	if action == "" {
 		action = string(elicit.ActionCancel)
@@ -128,8 +119,9 @@ func (h *Handler) handleElicitRespond(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if enhanced {
-		sse := datastar.NewSSE(w, r)
-		_ = sse.PatchElements(`<div id="elicit"></div>`)
+		// Empty body + outerHTML swap on the form removes the prompt; the
+		// waiting tool unblocks and the turn resumes on the open SSE stream.
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)

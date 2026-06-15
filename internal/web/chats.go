@@ -11,7 +11,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/starfederation/datastar-go/datastar"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/auth"
@@ -77,13 +76,14 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, models, current, r.URL.Query().Get("run")))
 }
 
-// handleSend sends a user turn and, for enhanced (Datastar) requests, returns
-// the SSE patches that append the user bubble plus an assistant placeholder
-// whose data-on-load opens the live stream. Without JS it falls back to a
-// redirect; the run still completes server-side and the reply shows on reload.
+// handleSend sends a user turn. For htmx requests it returns an HTML fragment
+// (the user bubble plus an assistant element that opens the live SSE stream),
+// appended to #messages. Without JS it redirects to the conversation with the
+// run id so the page renders the same streaming element on load; either way the
+// run completes server-side and the reply persists.
 func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	enhanced := r.Header.Get("Datastar-Request") != ""
+	enhanced := r.Header.Get("HX-Request") != ""
 
 	text, modelVal := h.readCompose(r)
 	attachIDs, attachImages := h.uploadComposeFiles(r)
@@ -105,10 +105,8 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	sendResp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
 		if enhanced {
-			sse := datastar.NewSSE(w, r)
-			_ = sse.PatchElements(
-				`<div class="msg error"><div class="md">`+html.EscapeString(err.Error())+`</div></div>`,
-				datastar.WithSelectorID("messages"), datastar.WithModeAppend())
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, `<div class="msg error"><div class="md">`+html.EscapeString(err.Error())+`</div></div>`)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -123,20 +121,14 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	userMsg := sendResp.Msg.GetUserMessage()
 
 	if !enhanced {
-		http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+convID+"?run="+runID, http.StatusSeeOther)
 		return
 	}
 
-	sse := datastar.NewSSE(w, r)
-	_ = sse.PatchElementTempl(
-		messageBubble(msgVM{ID: userMsg.GetId(), ConvID: convID, Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}, true),
-		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
-	_ = sse.PatchElementTempl(
-		assistantPlaceholder(convID, runID),
-		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
-	_ = sse.PatchSignals([]byte(`{"message":""}`))
-	// Clear the file input so the attachment isn't resent on the next turn.
-	_ = sse.PatchElements(`<input id="composer-file" type="file" name="file" accept="image/*"/>`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	user := messageBubble(msgVM{ID: userMsg.GetId(), ConvID: convID, Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}, true)
+	_, _ = io.WriteString(w, renderComp(r.Context(), user))
+	_, _ = io.WriteString(w, renderComp(r.Context(), assistantStream(convID, runID)))
 }
 
 // uploadComposeFiles stores any attached files and returns their ids plus
@@ -204,9 +196,11 @@ func (h *Handler) persistModel(ctx context.Context, convID, modelVal string) {
 	}
 }
 
-// handleStream subscribes to a run and streams its assistant output as live
-// DOM patches. Subscribe replays persisted chunks from `from` then live-tails
-// to the terminal event, so passing the last seen sequence resumes cleanly.
+// handleStream subscribes to a run and streams its assistant output as named
+// SSE events for htmx's SSE extension: `message` carries the rendered markdown
+// (swapped into the .md element), `elicit` carries an inline prompt, and `done`
+// closes the connection. Subscribe replays persisted chunks from `from` then
+// live-tails to the terminal event, so passing the last seen sequence resumes.
 func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	runID, err := uuid.Parse(r.URL.Query().Get("run"))
@@ -225,7 +219,11 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sse := datastar.NewSSE(w, r)
+	sse, ok := newSSE(w)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
 	var buf strings.Builder
 	for ev := range events {
 		if ev.Chunk != nil {
@@ -236,14 +234,14 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 				}
 				_ = json.Unmarshal(ev.Chunk.Payload, &p)
 				buf.WriteString(p.Text)
-				_ = sse.PatchElements(streamMD(buf.String()))
+				sse.event("message", renderMarkdown(buf.String()))
 			case providers.ChunkError:
 				var p struct {
 					Message string `json:"message"`
 				}
 				_ = json.Unmarshal(ev.Chunk.Payload, &p)
 				buf.WriteString("\n\n[error: " + p.Message + "]")
-				_ = sse.PatchElements(streamMD(buf.String()))
+				sse.event("message", renderMarkdown(buf.String()))
 			case providers.ChunkElicit:
 				var p struct {
 					ElicitationID   string          `json:"elicitation_id"`
@@ -251,32 +249,21 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 					RequestedSchema json.RawMessage `json:"requested_schema"`
 				}
 				if json.Unmarshal(ev.Chunk.Payload, &p) == nil {
-					_ = sse.PatchElementTempl(
-						elicitForm(convID, p.ElicitationID, p.Message, parseElicitFields(p.RequestedSchema)),
-						datastar.WithSelectorID("elicit"), datastar.WithModeInner())
+					sse.event("elicit", renderComp(r.Context(), elicitForm(convID, p.ElicitationID, p.Message, parseElicitFields(p.RequestedSchema))))
 				}
 			}
 		}
 		if ev.Terminal != nil {
-			// Finalize: replace #stream with a plain bubble (dropping the
-			// streaming id) so the next turn's placeholder can reuse it.
-			final := `<div class="msg assistant"><div class="md">` + renderMarkdown(buf.String()) + `</div></div>`
-			_ = sse.PatchElements(final, datastar.WithSelectorID("stream"), datastar.WithModeReplace())
+			sse.event("done", "")
 			return
 		}
 	}
 }
 
-// readCompose pulls the message text and selected model from the request,
-// from Datastar signals on enhanced requests and from form fields otherwise.
 // readCompose reads the message and selected model from the composer. The
-// composer posts as a form (Datastar contentType: "form") so files ride along,
-// which means both the enhanced and no-JS paths parse the same way.
+// composer posts as multipart (htmx hx-encoding) so files ride along, which
+// means both the enhanced and no-JS paths parse the same way.
 func (h *Handler) readCompose(r *http.Request) (text, model string) {
 	_ = r.ParseMultipartForm(12 << 20) // 12 MiB in memory; larger spills to temp files
 	return strings.TrimSpace(r.FormValue("message")), r.FormValue("model")
-}
-
-func streamMD(text string) string {
-	return `<div id="stream-md" class="md">` + renderMarkdown(text) + `</div>`
 }

@@ -60,7 +60,7 @@ func TestSend_WithAttachment(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/send", &body).WithContext(userCtx)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("Datastar-Request", "true")
+	req.Header.Set("HX-Request", "true")
 	req.SetPathValue("id", fx.convID.String())
 
 	rec := do(h.handleSend, req)

@@ -1,7 +1,7 @@
 package web
 
-// layout is the base HTML shell. Datastar is loaded as a module; the page
-// works without it (forms POST, links navigate) and is enhanced when it runs.
+// layout is the base HTML shell. htmx (plus its SSE extension) progressively
+// enhances the page; without JS it still works (forms POST, links navigate).
 templ layout(title string) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -10,7 +10,8 @@ templ layout(title string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title }</title>
 			<link rel="stylesheet" href="/web-assets/app.css"/>
-			<script type="module" src="/web-assets/datastar.js"></script>
+			<script src="/web-assets/htmx.min.js"></script>
+			<script src="/web-assets/sse.js"></script>
 		</head>
 		<body>
 			{ children... }
@@ -335,17 +336,37 @@ templ contextViewPage(conv convoVM, msgs []msgVM) {
 }
 
 // promoteForm shows a reviewed compaction summary and a button to roll it into
-// a new active context.
+// a new active context. Used on reload when a summary is already pending.
 templ promoteForm(convID, messageID, summaryHTML string) {
-	<div id="compact-out" class="compact-out">
+	<div class="compact-out">
 		<h2>Summary</h2>
 		<div class="md compact-summary">
 			@templ.Raw(summaryHTML)
 		</div>
-		<form method="post" action={ templ.SafeURL("/c/" + convID + "/promote") }>
-			<input type="hidden" name="message_id" value={ messageID }/>
-			<button type="submit">Start fresh context from this summary</button>
-		</form>
+		@promoteButton(convID, messageID)
+	</div>
+}
+
+templ promoteButton(convID, messageID string) {
+	<form method="post" action={ templ.SafeURL("/c/" + convID + "/promote") }>
+		<input type="hidden" name="message_id" value={ messageID }/>
+		<button type="submit">Start fresh context from this summary</button>
+	</form>
+}
+
+// compactStream opens the compaction run's SSE stream: `message` events morph
+// the summary as it streams, `promote` swaps in the promote button bound to the
+// new summary message, and `done` closes the connection.
+templ compactStream(convID, runID string) {
+	<div
+		class="compact-out streaming"
+		hx-ext="sse"
+		sse-connect={ "/c/" + convID + "/compact/stream?run=" + runID }
+		sse-close="done"
+	>
+		<h2>Summary</h2>
+		<div class="md compact-summary" sse-swap="message"></div>
+		<div class="compact-promote" sse-swap="promote"></div>
 	</div>
 }
 
@@ -365,7 +386,13 @@ templ compactPage(conv convoVM, pending *summaryVM) {
 					if pending != nil {
 						@promoteForm(conv.ID, pending.MessageID, pending.HTML)
 					} else {
-						<form data-on-submit__prevent={ "@post('/c/" + conv.ID + "/compact')" } method="post" action={ templ.SafeURL("/c/" + conv.ID + "/compact") }>
+						<form
+							method="post"
+							action={ templ.SafeURL("/c/" + conv.ID + "/compact") }
+							hx-post={ "/c/" + conv.ID + "/compact" }
+							hx-target="#compact-out"
+							hx-swap="outerHTML"
+						>
 							<button type="submit">Run compaction</button>
 						</form>
 						<div id="compact-out"></div>
@@ -614,24 +641,35 @@ templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 	}
 }
 
-// elicitForm renders an MCP elicitation prompt mid-stream. Fields bind under
-// the `elicit` signal namespace so they don't collide with the composer's
-// signals; the action is passed in the request URL. Patched into #elicit while
-// the run is paused; cleared on response, after which the stream resumes.
+// elicitForm renders an MCP elicitation prompt mid-stream. Field inputs are
+// named field_<name> so they don't collide with the action button; the chosen
+// action rides the submit button's value. htmx posts it and swaps the form away
+// (empty response, outerHTML), after which the paused run resumes on the open
+// SSE stream. Without JS the form POSTs and redirects back to the chat.
 templ elicitForm(convID, eid, message string, fields []elicitField) {
-	<div class="elicit-card" data-signals="{elicit: {}}">
+	<form
+		class="elicit-card"
+		method="post"
+		action={ templ.SafeURL("/c/" + convID + "/elicit/" + eid) }
+		hx-post={ "/c/" + convID + "/elicit/" + eid }
+		hx-swap="outerHTML"
+	>
 		<p class="elicit-msg">{ message }</p>
 		for _, f := range fields {
 			<label class={ templ.KV("check", f.Type == "checkbox") }>
 				{ f.Label }
-				<input type={ f.Type } data-bind={ "elicit." + f.Name } autocomplete="off"/>
+				if f.Type == "checkbox" {
+					<input type="checkbox" name={ "field_" + f.Name } value="true"/>
+				} else {
+					<input type={ f.Type } name={ "field_" + f.Name } autocomplete="off"/>
+				}
 			</label>
 		}
 		<div class="elicit-actions">
-			<button type="button" data-on-click={ "@post('/c/" + convID + "/elicit/" + eid + "?action=accept')" }>Submit</button>
-			<button type="button" class="btn-secondary" data-on-click={ "@post('/c/" + convID + "/elicit/" + eid + "?action=decline')" }>Decline</button>
+			<button type="submit" name="action" value="accept">Submit</button>
+			<button type="submit" class="btn-secondary" name="action" value="decline">Decline</button>
 		</div>
-	</div>
+	</form>
 }
 
 templ messageBubble(m msgVM, showActions bool) {
@@ -679,12 +717,19 @@ templ editMessagePage(convID, mid, content string) {
 	}
 }
 
-// assistantPlaceholder is appended after a send. Its data-on-load opens the
-// SSE stream for the run, which morphs #stream-md as deltas arrive and
-// finally replaces #stream with a plain bubble.
-templ assistantPlaceholder(convID, runID string) {
-	<div id="stream" class="msg assistant streaming" data-on-load={ "@get('/c/" + convID + "/stream?run=" + runID + "')" }>
-		<div id="stream-md" class="md"></div>
+// assistantStream is appended after a send (and rendered on a no-JS reload with
+// ?run set). It opens the run's SSE stream via htmx: `message` events morph the
+// .md element as deltas arrive, `elicit` events drop an inline prompt into the
+// host, and `done` closes the connection.
+templ assistantStream(convID, runID string) {
+	<div
+		class="msg assistant streaming"
+		hx-ext="sse"
+		sse-connect={ "/c/" + convID + "/stream?run=" + runID }
+		sse-close="done"
+	>
+		<div class="md" sse-swap="message"></div>
+		<div class="elicit-host" sse-swap="elicit"></div>
 	</div>
 }
 
@@ -695,8 +740,11 @@ templ composer(convID string, models []modelVM, currentModel string) {
 		method="post"
 		enctype="multipart/form-data"
 		action={ templ.SafeURL("/c/" + convID + "/send") }
-		data-signals={ "{message: '', model: '" + currentModel + "'}" }
-		data-on-submit__prevent={ "@post('/c/" + convID + "/send', {contentType: 'form'})" }
+		hx-post={ "/c/" + convID + "/send" }
+		hx-target="#messages"
+		hx-swap="beforeend"
+		hx-encoding="multipart/form-data"
+		hx-on::after-request="this.reset()"
 	>
 		<div class="composer-box">
 			<label class="composer-attach" title="Attach image" aria-label="Attach image">
@@ -705,7 +753,7 @@ templ composer(convID string, models []modelVM, currentModel string) {
 				</svg>
 				<input id="composer-file" type="file" name="file" accept="image/*"/>
 			</label>
-			<textarea name="message" data-bind-message rows="1" placeholder="Message Reeve…"></textarea>
+			<textarea name="message" rows="1" placeholder="Message Reeve…"></textarea>
 			<button class="composer-send" type="submit" title="Send" aria-label="Send">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
 					<path d="M12 19V5M5 12l7-7 7 7"></path>
@@ -714,7 +762,7 @@ templ composer(convID string, models []modelVM, currentModel string) {
 		</div>
 		if len(models) > 0 {
 			<div class="composer-tools">
-				<select name="model" data-bind-model class="model-select">
+				<select name="model" class="model-select">
 					for _, m := range models {
 						<option value={ m.Value } selected?={ m.Selected }>{ m.Label }</option>
 					}
@@ -741,10 +789,9 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 						@messageBubble(m, true)
 					}
 					if runID != "" {
-						@assistantPlaceholder(conv.ID, runID)
+						@assistantStream(conv.ID, runID)
 					}
 				</div>
-				<div id="elicit"></div>
 				@composer(conv.ID, models, currentModel)
 			</main>
 		</div>

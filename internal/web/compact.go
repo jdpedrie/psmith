@@ -3,12 +3,12 @@ package web
 import (
 	"encoding/json"
 	"html"
+	"io"
 	"net/http"
 	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/starfederation/datastar-go/datastar"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
 	"github.com/jdpedrie/reeve/internal/providers"
@@ -46,25 +46,23 @@ type summaryVM struct {
 	HTML      string
 }
 
-// handleCompactRun starts a compaction run and streams its summary, the same
-// placeholder + data-on-load pattern as sending a message.
+// handleCompactRun starts a compaction run and returns the streaming container
+// (an htmx SSE element that opens the summary stream), swapped into #compact-out.
 func (h *Handler) handleCompactRun(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	resp, err := h.convos.Compact(r.Context(), connect.NewRequest(&reevev1.CompactRequest{ConversationId: convID}))
 	if err != nil {
-		sse := datastar.NewSSE(w, r)
-		_ = sse.PatchElements(
-			`<div id="compact-out"><p class="error">` + html.EscapeString(err.Error()) + `</p></div>`)
+		_, _ = io.WriteString(w, `<p class="error">`+html.EscapeString(err.Error())+`</p>`)
 		return
 	}
 	runID := resp.Msg.GetStreamRun().GetId()
-	sse := datastar.NewSSE(w, r)
-	_ = sse.PatchElements(
-		`<div id="compact-out" class="compact-out streaming" data-on-load="@get('/c/` + convID + `/compact/stream?run=` + runID + `')"><div id="compact-md" class="md"></div></div>`)
+	_, _ = io.WriteString(w, renderComp(r.Context(), compactStream(convID, runID)))
 }
 
-// handleCompactStream renders the streaming summary, then swaps in a Promote
-// form bound to the freshly-created summary message.
+// handleCompactStream streams the summary as named SSE events: `message`
+// carries the rendered markdown; `promote` swaps in the Promote form bound to
+// the freshly-created summary message; `done` closes the connection.
 func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	runID, err := uuid.Parse(r.URL.Query().Get("run"))
@@ -77,7 +75,11 @@ func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	sse := datastar.NewSSE(w, r)
+	sse, ok := newSSE(w)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
 	var buf strings.Builder
 	for ev := range events {
 		if ev.Chunk != nil && ev.Chunk.Type == providers.ChunkText {
@@ -86,16 +88,16 @@ func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = json.Unmarshal(ev.Chunk.Payload, &p)
 			buf.WriteString(p.Text)
-			_ = sse.PatchElements(`<div id="compact-md" class="md">` + renderMarkdown(buf.String()) + `</div>`)
+			sse.event("message", renderMarkdown(buf.String()))
 		}
 		if ev.Terminal != nil {
 			if ev.Terminal.Status != "completed" || ev.Terminal.ResultMessageID == nil {
-				_ = sse.PatchElements(`<div id="compact-out"><p class="error">Compaction did not complete.</p></div>`)
+				sse.event("promote", `<p class="error">Compaction did not complete.</p>`)
+				sse.event("done", "")
 				return
 			}
-			_ = sse.PatchElementTempl(
-				promoteForm(convID, ev.Terminal.ResultMessageID.String(), renderMarkdown(buf.String())),
-				datastar.WithSelectorID("compact-out"), datastar.WithModeOuter())
+			sse.event("promote", renderComp(r.Context(), promoteForm(convID, ev.Terminal.ResultMessageID.String(), renderMarkdown(buf.String()))))
+			sse.event("done", "")
 			return
 		}
 	}
