@@ -299,7 +299,15 @@ button.link:hover { color: var(--text); filter: none; }
 	max-height: 200px;
 }
 .composer textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
-.composer-tools { display: flex; gap: 8px; }
+.composer-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.composer-tools input[type="file"] { font-size: 12px; color: var(--muted); max-width: 220px; }
+.attachment {
+	display: block;
+	max-width: min(320px, 100%);
+	max-height: 320px;
+	border-radius: 10px;
+	margin-bottom: 8px;
+}
 .model-select {
 	font: inherit;
 	font-size: 13px;

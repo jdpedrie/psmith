@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/starfederation/datastar-go/datastar"
 
 	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/providers"
 )
 
@@ -55,7 +57,15 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		if dc := m.GetDisplayContent(); dc != "" {
 			content = dc
 		}
-		msgs = append(msgs, msgVM{ID: m.GetId(), Role: role, HTML: renderMarkdown(content)})
+		var images []string
+		for _, a := range m.GetAttachments() {
+			if a.GetKind() == "image" {
+				if url := h.signedImageURL(r.Context(), a.GetFileId()); url != "" {
+					images = append(images, url)
+				}
+			}
+		}
+		msgs = append(msgs, msgVM{ID: m.GetId(), Role: role, HTML: renderMarkdown(content), Images: images})
 	}
 
 	convos, _ := h.listConvos(r.Context(), id)
@@ -75,8 +85,10 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	enhanced := r.Header.Get("Datastar-Request") != ""
 
-	text, modelVal := h.readCompose(r, enhanced)
-	if text == "" {
+	text, modelVal := h.readCompose(r)
+	attachIDs, attachImages := h.uploadComposeFiles(r)
+
+	if text == "" && len(attachIDs) == 0 {
 		if enhanced {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -85,7 +97,7 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := &reevev1.SendMessageRequest{ConversationId: convID, Content: text}
+	req := &reevev1.SendMessageRequest{ConversationId: convID, Content: text, AttachmentFileIds: attachIDs}
 	if pid, mid, ok := splitModelValue(modelVal); ok {
 		req.ProviderId, req.ModelId = &pid, &mid
 	}
@@ -117,12 +129,51 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	sse := datastar.NewSSE(w, r)
 	_ = sse.PatchElementTempl(
-		messageBubble(msgVM{ID: userMsg.GetId(), Role: "user", HTML: renderMarkdown(userMsg.GetContent())}),
+		messageBubble(msgVM{ID: userMsg.GetId(), Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}),
 		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
 	_ = sse.PatchElementTempl(
 		assistantPlaceholder(convID, runID),
 		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
 	_ = sse.PatchSignals([]byte(`{"message":""}`))
+	// Clear the file input so the attachment isn't resent on the next turn.
+	_ = sse.PatchElements(`<input id="composer-file" type="file" name="file" accept="image/*"/>`)
+}
+
+// uploadComposeFiles stores any attached files and returns their ids plus
+// signed URLs for immediate rendering. Best-effort: an upload failure is logged
+// and skipped rather than failing the whole send.
+func (h *Handler) uploadComposeFiles(r *http.Request) (ids, imageURLs []string) {
+	if h.files == nil || r.MultipartForm == nil {
+		return nil, nil
+	}
+	user := auth.MustFromContext(r.Context())
+	for _, fh := range r.MultipartForm.File["file"] {
+		f, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(f)
+		_ = f.Close()
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		mime := fh.Header.Get("Content-Type")
+		if mime == "" {
+			mime = http.DetectContentType(data)
+		}
+		id, err := h.files.Store(r.Context(), user.ID, mime, fh.Filename, data)
+		if err != nil {
+			h.logger.Warn("web: file store failed", "err", err)
+			continue
+		}
+		ids = append(ids, id)
+		if strings.HasPrefix(mime, "image/") {
+			if url := h.signedImageURL(r.Context(), id); url != "" {
+				imageURLs = append(imageURLs, url)
+			}
+		}
+	}
+	return ids, imageURLs
 }
 
 // persistModel records the chosen model as the conversation's default,
@@ -218,19 +269,12 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 
 // readCompose pulls the message text and selected model from the request,
 // from Datastar signals on enhanced requests and from form fields otherwise.
-func (h *Handler) readCompose(r *http.Request, enhanced bool) (text, model string) {
-	if enhanced {
-		var sig struct {
-			Message string `json:"message"`
-			Model   string `json:"model"`
-		}
-		if err := datastar.ReadSignals(r, &sig); err == nil {
-			return strings.TrimSpace(sig.Message), sig.Model
-		}
-		return "", ""
-	}
-	_ = r.ParseForm()
-	return strings.TrimSpace(r.PostFormValue("message")), r.PostFormValue("model")
+// readCompose reads the message and selected model from the composer. The
+// composer posts as a form (Datastar contentType: "form") so files ride along,
+// which means both the enhanced and no-JS paths parse the same way.
+func (h *Handler) readCompose(r *http.Request) (text, model string) {
+	_ = r.ParseMultipartForm(12 << 20) // 12 MiB in memory; larger spills to temp files
+	return strings.TrimSpace(r.FormValue("message")), r.FormValue("model")
 }
 
 func streamMD(text string) string {

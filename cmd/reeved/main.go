@@ -308,6 +308,7 @@ func run() error {
 		Profiles:      profilesSvc,
 		Embedder:      embedderSvc,
 		Langfuse:      langfuseSvc,
+		Files:         filesSvc,
 		Supervisor:    supervisor,
 		Logger:        slog.Default(),
 	}).Mount(mux)

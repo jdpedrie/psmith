@@ -169,6 +169,41 @@ func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[r
 	}), nil
 }
 
+// Store persists raw bytes as a file owned by userID and returns the new
+// file's id. It is the non-streaming counterpart to UploadFile, for callers
+// that already hold the whole blob in memory (the web client, which cannot
+// drive the client-streaming RPC from a browser). Same size cap and the same
+// storage-first, row-second ordering as UploadFile.
+func (s *Service) Store(ctx context.Context, userID uuid.UUID, mime, filename string, data []byte) (string, error) {
+	if mime == "" {
+		return "", fmt.Errorf("mime_type required")
+	}
+	if int64(len(data)) > MaxUploadSize {
+		return "", fmt.Errorf("upload exceeds %d byte cap", MaxUploadSize)
+	}
+	h := sha256.Sum256(data)
+	sum := hex.EncodeToString(h[:])
+	if err := s.store.Put(ctx, userID, sum, mime, bytes.NewReader(data)); err != nil {
+		return "", fmt.Errorf("storage put: %w", err)
+	}
+	var fn *string
+	if filename != "" {
+		fn = &filename
+	}
+	row, err := s.queries.CreateFile(ctx, store.CreateFileParams{
+		ID:               uuid.New(),
+		UserID:           userID,
+		Sha256:           sum,
+		MimeType:         mime,
+		SizeBytes:        int64(len(data)),
+		OriginalFilename: fn,
+	})
+	if err != nil {
+		return "", fmt.Errorf("create file row: %w", err)
+	}
+	return row.ID.String(), nil
+}
+
 // GetFileURL mints a short-lived signed URL for the given file. The
 // caller must own the file.
 func (s *Service) GetFileURL(ctx context.Context, req *connect.Request[reevev1.GetFileURLRequest]) (*connect.Response[reevev1.GetFileURLResponse], error) {

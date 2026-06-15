@@ -20,6 +20,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/embeddersvc"
+	"github.com/jdpedrie/reeve/internal/files"
 	"github.com/jdpedrie/reeve/internal/langfusesvc"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
 	"github.com/jdpedrie/reeve/internal/profiles"
@@ -41,6 +42,7 @@ type Deps struct {
 	Profiles      *profiles.Service
 	Embedder      *embeddersvc.Service
 	Langfuse      *langfusesvc.Service
+	Files         *files.Service
 	Supervisor    *stream.Supervisor
 	Logger        *slog.Logger
 }
@@ -54,6 +56,7 @@ type Handler struct {
 	profiles   *profiles.Service
 	embedder   *embeddersvc.Service
 	langfuse   *langfusesvc.Service
+	files      *files.Service
 	supervisor *stream.Supervisor
 	logger     *slog.Logger
 }
@@ -71,9 +74,22 @@ func New(d Deps) *Handler {
 		profiles:   d.Profiles,
 		embedder:   d.Embedder,
 		langfuse:   d.Langfuse,
+		files:      d.Files,
 		supervisor: d.Supervisor,
 		logger:     d.Logger,
 	}
+}
+
+// signedImageURL mints a short-lived signed URL for a file, or "" on failure.
+func (h *Handler) signedImageURL(ctx context.Context, fileID string) string {
+	if h.files == nil {
+		return ""
+	}
+	resp, err := h.files.GetFileURL(ctx, connect.NewRequest(&reevev1.GetFileURLRequest{FileId: fileID}))
+	if err != nil {
+		return ""
+	}
+	return resp.Msg.GetUrl()
 }
 
 // Mount registers the web routes on mux. The paths are distinct from the
@@ -138,9 +154,10 @@ type convoVM struct {
 }
 
 type msgVM struct {
-	ID   string
-	Role string
-	HTML string // rendered, sanitized message HTML
+	ID     string
+	Role   string
+	HTML   string   // rendered, sanitized message HTML
+	Images []string // signed URLs for image attachments
 }
 
 type modelVM struct {

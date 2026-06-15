@@ -432,6 +432,9 @@ templ elicitForm(convID, eid, message string, fields []elicitField) {
 templ messageBubble(m msgVM) {
 	<div class={ "msg", m.Role }>
 		<div class="md">
+			for _, src := range m.Images {
+				<img class="attachment" src={ src } alt="attachment" loading="lazy"/>
+			}
 			@templ.Raw(m.HTML)
 		</div>
 	</div>
@@ -451,23 +454,25 @@ templ composer(convID string, models []modelVM, currentModel string) {
 		id="composer"
 		class="composer"
 		method="post"
+		enctype="multipart/form-data"
 		action={ templ.SafeURL("/c/" + convID + "/send") }
 		data-signals={ "{message: '', model: '" + currentModel + "'}" }
-		data-on-submit__prevent={ "@post('/c/" + convID + "/send')" }
+		data-on-submit__prevent={ "@post('/c/" + convID + "/send', {contentType: 'form'})" }
 	>
 		<div class="composer-row">
 			<textarea name="message" data-bind-message rows="1" placeholder="Message Reeve…"></textarea>
 			<button type="submit">Send</button>
 		</div>
-		if len(models) > 0 {
-			<div class="composer-tools">
+		<div class="composer-tools">
+			if len(models) > 0 {
 				<select name="model" data-bind-model class="model-select">
 					for _, m := range models {
 						<option value={ m.Value } selected?={ m.Selected }>{ m.Label }</option>
 					}
 				</select>
-			</div>
-		}
+			}
+			<input id="composer-file" type="file" name="file" accept="image/*"/>
+		</div>
 	</form>
 }
 
