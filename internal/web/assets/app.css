@@ -493,6 +493,38 @@ a.settings-item:hover { border-color: var(--accent); }
 .form textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .form-actions { display: flex; gap: 10px; align-items: center; }
 .danger-zone { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
+.plugin-row {
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 12px 14px;
+	margin-bottom: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	background: var(--bg-elev);
+}
+.plugin-head { display: flex; align-items: center; justify-content: space-between; }
+.plugin-row textarea {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	color: var(--text);
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	resize: vertical;
+}
+.plugin-remove { margin: 0 0 6px; }
+.form-inline { display: flex; gap: 10px; align-items: center; }
+.form-inline select {
+	font: inherit;
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 9px 12px;
+}
+
 .badge {
 	display: inline-block;
 	font-size: 11px;

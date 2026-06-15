@@ -126,6 +126,10 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings/profiles/{id}", h.requireUser(h.handleProfileEdit))
 	mux.HandleFunc("POST /settings/profiles/{id}", h.requireUser(h.handleProfileUpdate))
 	mux.HandleFunc("POST /settings/profiles/{id}/delete", h.requireUser(h.handleProfileDelete))
+	mux.HandleFunc("GET /settings/profiles/{id}/plugins", h.requireUser(h.handlePluginsPage))
+	mux.HandleFunc("POST /settings/profiles/{id}/plugins", h.requireUser(h.handlePluginsSave))
+	mux.HandleFunc("POST /settings/profiles/{id}/plugins/add", h.requireUser(h.handlePluginAdd))
+	mux.HandleFunc("POST /settings/profiles/{id}/plugins/remove", h.requireUser(h.handlePluginRemove))
 
 	mux.HandleFunc("GET /settings/embedder", h.requireUser(h.handleEmbedder))
 	mux.HandleFunc("POST /settings/embedder", h.requireUser(h.handleEmbedderSave))

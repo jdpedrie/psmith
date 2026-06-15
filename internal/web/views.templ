@@ -498,9 +498,57 @@ templ modelSelect(name, current string, models []modelVM) {
 	</select>
 }
 
+templ profilePluginsPage(profileID, profileName string, rows []pluginRowVM, types []pluginOptVM) {
+	@settingsShell("Plugins") {
+		<div class="settings-section-head">
+			<h1>Plugins</h1>
+			<a class="btn-link" href={ templ.SafeURL("/settings/profiles/" + profileID) }>Back to profile</a>
+		</div>
+		<p class="muted">{ profileName } — pipeline runs in order. Config is JSON.</p>
+		<form class="form" method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins") }>
+			if len(rows) == 0 {
+				<p class="muted">No plugins attached.</p>
+			}
+			for i, row := range rows {
+				<div class="plugin-row">
+					<div class="plugin-head">
+						<strong>{ row.Name }</strong>
+						<label class="check"><input type="checkbox" name={ "pdisabled_" + itoa(int32(i)) } checked?={ row.Disabled }/> disabled</label>
+					</div>
+					<input type="hidden" name={ "pname_" + itoa(int32(i)) } value={ row.Name }/>
+					<textarea name={ "pconfig_" + itoa(int32(i)) } rows="3" spellcheck="false">{ row.ConfigJSON }</textarea>
+				</div>
+			}
+			if len(rows) > 0 {
+				<div class="form-actions"><button type="submit">Save pipeline</button></div>
+			}
+		</form>
+		for i, row := range rows {
+			<form method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/remove") } class="plugin-remove">
+				<input type="hidden" name="ordinal" value={ itoa(int32(i)) }/>
+				<button class="msg-action" type="submit">Remove { row.Name }</button>
+			</form>
+		}
+		<h2>Add plugin</h2>
+		<form class="form-inline" method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/add") }>
+			<select name="plugin_name">
+				for _, t := range types {
+					<option value={ t.Name }>{ t.DisplayName }</option>
+				}
+			</select>
+			<button type="submit">Add</button>
+		</form>
+	}
+}
+
 templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 	@settingsShell(title) {
-		<h1>{ title }</h1>
+		<div class="settings-section-head">
+			<h1>{ title }</h1>
+			if !isNew {
+				<a class="btn-link" href={ templ.SafeURL("/settings/profiles/" + p.ID + "/plugins") }>Plugins</a>
+			}
+		</div>
 		<form class="form" method="post" action={ templ.SafeURL(action) }>
 			<label>
 				Name
