@@ -300,7 +300,7 @@ func run() error {
 	// called in-process, served from this mux on distinct paths (/login,
 	// /chats, /c/{id}, /web-assets). Cookie sessions reuse the bearer
 	// session table; the conversation streams over SSE.
-	web.New(queries, authSvc, conversationsSvc, supervisor, slog.Default()).Mount(mux)
+	web.New(queries, authSvc, conversationsSvc, modelProvidersSvc, supervisor, slog.Default()).Mount(mux)
 
 	srv := &http.Server{
 		Addr:    addr,

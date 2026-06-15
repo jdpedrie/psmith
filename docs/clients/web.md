@@ -2,7 +2,7 @@
 
 The web client is a server-rendered UI built into `reeved` itself. It is not a separate app talking over the RPC API; it is a presentation layer in the Go process that calls the same services in-process and renders HTML. The page works as plain HTML (forms POST, links navigate) and is progressively enhanced with [Datastar](https://data-star.dev): the conversation streams live over SSE. This document describes the approach and the current state.
 
-Status: early. The first vertical slice is in place (cookie auth, the chats list, a conversation that sends and streams end to end). The full settings, providers, and profiles surface is not built yet. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
+Status: early but functional. Working today: cookie auth, the chats list, a conversation that sends and streams end to end, a per-conversation model picker (populated from the user's enabled models, remembered on the conversation), and markdown rendering of message content. Not built yet: creating conversations from the web, the settings/providers/profiles surface, branching, compaction, contexts, cost, and the elicitation UI. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
 
 ## Why server-rendered
 
@@ -31,6 +31,8 @@ Cookie sessions, layered on the existing sessions table with no new auth code. L
 The conversation page renders the materialized messages server-side, so it reads with JS off. When enhanced, sending a message posts to `/c/{id}/send`, which calls `SendMessage`, appends the user bubble and an assistant placeholder via SSE patches, and clears the composer. The placeholder's `data-on-load` opens `GET /c/{id}/stream?run=...`, a long-lived SSE response that subscribes to the run through the stream supervisor, morphs the assistant element as text deltas arrive, and replaces the placeholder with a final bubble on the terminal event. Because `Subscribe` replays persisted chunks from a sequence before live-tailing, the stream endpoint takes a `from` cursor and resume is a re-request with the last sequence (resume wiring on the client side is a fan-out item).
 
 Without JS, the send form POSTs normally and redirects back to the conversation; the run still completes server-side (that is the whole resilience design) and the reply appears on the next load.
+
+The composer carries a model picker. Its value is a `providerID|modelID` pair; sending passes it as the per-turn provider and model override, and the choice is written back to the conversation's default model so the picker remembers it. Message content (live deltas, stored messages, and the finalized turn) is rendered as markdown with goldmark and then sanitized with bluemonday, because the content is model-generated.
 
 ## The device-tools gap
 

@@ -74,7 +74,9 @@ templ chatsPage(convos []convoVM) {
 
 templ messageBubble(m msgVM) {
 	<div class={ "msg", m.Role }>
-		<div class="md">{ m.Content }</div>
+		<div class="md">
+			@templ.Raw(m.HTML)
+		</div>
 	</div>
 }
 
@@ -87,21 +89,32 @@ templ assistantPlaceholder(convID, runID string) {
 	</div>
 }
 
-templ composer(convID string) {
+templ composer(convID string, models []modelVM, currentModel string) {
 	<form
 		id="composer"
 		class="composer"
 		method="post"
 		action={ templ.SafeURL("/c/" + convID + "/send") }
-		data-signals="{message: ''}"
+		data-signals={ "{message: '', model: '" + currentModel + "'}" }
 		data-on-submit__prevent={ "@post('/c/" + convID + "/send')" }
 	>
-		<textarea name="message" data-bind-message rows="1" placeholder="Message Reeve…"></textarea>
-		<button type="submit">Send</button>
+		<div class="composer-row">
+			<textarea name="message" data-bind-message rows="1" placeholder="Message Reeve…"></textarea>
+			<button type="submit">Send</button>
+		</div>
+		if len(models) > 0 {
+			<div class="composer-tools">
+				<select name="model" data-bind-model class="model-select">
+					for _, m := range models {
+						<option value={ m.Value } selected?={ m.Selected }>{ m.Label }</option>
+					}
+				</select>
+			</div>
+		}
 	</form>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM) {
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []modelVM, currentModel string) {
 	@layout(conv.Title + " — Reeve") {
 		<div class="app">
 			@sidebar(convos)
@@ -112,7 +125,7 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM) {
 						@messageBubble(m)
 					}
 				</div>
-				@composer(conv.ID)
+				@composer(conv.ID, models, currentModel)
 			</main>
 		</div>
 	}

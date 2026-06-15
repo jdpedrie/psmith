@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -54,11 +55,16 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		if dc := m.GetDisplayContent(); dc != "" {
 			content = dc
 		}
-		msgs = append(msgs, msgVM{ID: m.GetId(), Role: role, Content: content})
+		msgs = append(msgs, msgVM{ID: m.GetId(), Role: role, HTML: renderMarkdown(content)})
 	}
 
 	convos, _ := h.listConvos(r.Context(), id)
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs))
+	models := h.listModels(r.Context(), "")
+	current := currentModelValue(conv, models)
+	for i := range models {
+		models[i].Selected = models[i].Value == current
+	}
+	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, models, current))
 }
 
 // handleSend sends a user turn and, for enhanced (Datastar) requests, returns
@@ -69,7 +75,7 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	enhanced := r.Header.Get("Datastar-Request") != ""
 
-	text := h.readMessage(r, enhanced)
+	text, modelVal := h.readCompose(r, enhanced)
 	if text == "" {
 		if enhanced {
 			w.WriteHeader(http.StatusNoContent)
@@ -79,10 +85,12 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendResp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&reevev1.SendMessageRequest{
-		ConversationId: convID,
-		Content:        text,
-	}))
+	req := &reevev1.SendMessageRequest{ConversationId: convID, Content: text}
+	if pid, mid, ok := splitModelValue(modelVal); ok {
+		req.ProviderId, req.ModelId = &pid, &mid
+	}
+
+	sendResp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
 		if enhanced {
 			sse := datastar.NewSSE(w, r)
@@ -95,6 +103,10 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Remember the model choice on the conversation so the picker defaults to
+	// it next time. Best-effort; never blocks the turn.
+	h.persistModel(r.Context(), convID, modelVal)
+
 	runID := sendResp.Msg.GetStreamRun().GetId()
 	userMsg := sendResp.Msg.GetUserMessage()
 
@@ -105,12 +117,40 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	sse := datastar.NewSSE(w, r)
 	_ = sse.PatchElementTempl(
-		messageBubble(msgVM{ID: userMsg.GetId(), Role: "user", Content: userMsg.GetContent()}),
+		messageBubble(msgVM{ID: userMsg.GetId(), Role: "user", HTML: renderMarkdown(userMsg.GetContent())}),
 		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
 	_ = sse.PatchElementTempl(
 		assistantPlaceholder(convID, runID),
 		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
 	_ = sse.PatchSignals([]byte(`{"message":""}`))
+}
+
+// persistModel records the chosen model as the conversation's default,
+// preserving any other settings. Best-effort.
+func (h *Handler) persistModel(ctx context.Context, convID, modelVal string) {
+	pid, mid, ok := splitModelValue(modelVal)
+	if !ok {
+		return
+	}
+	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	if err != nil {
+		return
+	}
+	settings := getResp.Msg.GetConversation().GetSettings()
+	if settings == nil {
+		settings = &reevev1.ConversationSettings{}
+	}
+	if settings.GetDefaultProviderId() == pid && settings.GetDefaultModelId() == mid {
+		return // unchanged
+	}
+	settings.DefaultProviderId = &pid
+	settings.DefaultModelId = &mid
+	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&reevev1.UpdateConversationRequest{
+		Id:       convID,
+		Settings: settings,
+	})); err != nil {
+		h.logger.Warn("web: persist model failed", "err", err)
+	}
 }
 
 // handleStream subscribes to a run and streams its assistant output as live
@@ -157,27 +197,30 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 		if ev.Terminal != nil {
 			// Finalize: replace #stream with a plain bubble (dropping the
 			// streaming id) so the next turn's placeholder can reuse it.
-			final := `<div class="msg assistant"><div class="md">` + html.EscapeString(buf.String()) + `</div></div>`
+			final := `<div class="msg assistant"><div class="md">` + renderMarkdown(buf.String()) + `</div></div>`
 			_ = sse.PatchElements(final, datastar.WithSelectorID("stream"), datastar.WithModeReplace())
 			return
 		}
 	}
 }
 
-func (h *Handler) readMessage(r *http.Request, enhanced bool) string {
+// readCompose pulls the message text and selected model from the request,
+// from Datastar signals on enhanced requests and from form fields otherwise.
+func (h *Handler) readCompose(r *http.Request, enhanced bool) (text, model string) {
 	if enhanced {
 		var sig struct {
 			Message string `json:"message"`
+			Model   string `json:"model"`
 		}
 		if err := datastar.ReadSignals(r, &sig); err == nil {
-			return strings.TrimSpace(sig.Message)
+			return strings.TrimSpace(sig.Message), sig.Model
 		}
-		return ""
+		return "", ""
 	}
 	_ = r.ParseForm()
-	return strings.TrimSpace(r.PostFormValue("message"))
+	return strings.TrimSpace(r.PostFormValue("message")), r.PostFormValue("model")
 }
 
 func streamMD(text string) string {
-	return `<div id="stream-md" class="md">` + html.EscapeString(text) + `</div>`
+	return `<div id="stream-md" class="md">` + renderMarkdown(text) + `</div>`
 }

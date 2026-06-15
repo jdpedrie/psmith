@@ -18,6 +18,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/crypto"
 	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/reeve/internal/modelproviders"
 	_ "github.com/jdpedrie/reeve/internal/providers/anthropic" // register the real driver
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
@@ -45,7 +46,8 @@ func TestHandleStream_E2E(t *testing.T) {
 	cat := modelmeta.NewLiveCatalog(nil)
 	sup := stream.New(q, slog.Default())
 	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
-	h := New(q, auth.NewService(q), convos, sup, slog.Default())
+	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
+	h := New(q, auth.NewService(q), convos, models, sup, slog.Default())
 
 	fx := seedSendable(t, q, fake.URL())
 	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "webtest"})
@@ -87,6 +89,39 @@ func TestHandleStream_E2E(t *testing.T) {
 	// The finalize step replaces #stream with a plain bubble (no streaming id).
 	if !strings.Contains(body, `class="msg assistant"`) {
 		t.Errorf("stream SSE missing finalized assistant bubble; body:\n%s", body)
+	}
+}
+
+// TestHandleConversation_RendersComposer proves the conversation page renders
+// with the model picker populated from the user's enabled models.
+func TestHandleConversation_RendersComposer(t *testing.T) {
+	t.Parallel()
+
+	pool := testutil.Pool(t)
+	q := store.New(pool)
+	cat := modelmeta.NewLiveCatalog(nil)
+	sup := stream.New(q, slog.Default())
+	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
+	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
+	h := New(q, auth.NewService(q), convos, models, sup, slog.Default())
+
+	fx := seedSendable(t, q, "http://unused")
+	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "webtest"})
+
+	req := httptest.NewRequest("GET", "/c/"+fx.convID.String(), nil).WithContext(userCtx)
+	req.SetPathValue("id", fx.convID.String())
+	rec := httptest.NewRecorder()
+
+	h.handleConversation(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status=%d want 200; body:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`id="composer"`, `id="messages"`, "<select", "Claude Fake", `name="model"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("conversation page missing %q", want)
+		}
 	}
 }
 
