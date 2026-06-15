@@ -141,6 +141,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /c/{id}/contexts", h.requireUser(h.handleContexts))
 	mux.HandleFunc("GET /c/{id}/context/{cid}", h.requireUser(h.handleContextView))
+
+	mux.HandleFunc("GET /c/{id}/compact", h.requireUser(h.handleCompactPage))
+	mux.HandleFunc("POST /c/{id}/compact", h.requireUser(h.handleCompactRun))
+	mux.HandleFunc("GET /c/{id}/compact/stream", h.requireUser(h.handleCompactStream))
+	mux.HandleFunc("POST /c/{id}/promote", h.requireUser(h.handleCompactPromote))
 }
 
 func cacheControl(next http.Handler) http.Handler {

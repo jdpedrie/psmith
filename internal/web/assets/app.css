@@ -213,8 +213,20 @@ button.link:hover { color: var(--text); filter: none; }
 	font-weight: 600;
 }
 .conv-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-actions { display: flex; gap: 14px; }
 .conv-link { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; white-space: nowrap; }
 .conv-link:hover { text-decoration: underline; }
+
+.compact-body { padding: 24px 20px; max-width: 760px; overflow-y: auto; }
+.compact-body h2 { margin: 18px 0 8px; font-size: 15px; color: var(--muted); }
+.compact-out.streaming .md::after { content: "▍"; color: var(--muted); animation: blink 1s steps(2, start) infinite; }
+.compact-summary {
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 14px 16px;
+	margin-bottom: 14px;
+}
 
 .cost-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .cost-table th, .cost-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }

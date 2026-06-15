@@ -334,6 +334,48 @@ templ contextViewPage(conv convoVM, msgs []msgVM) {
 	}
 }
 
+// promoteForm shows a reviewed compaction summary and a button to roll it into
+// a new active context.
+templ promoteForm(convID, messageID, summaryHTML string) {
+	<div id="compact-out" class="compact-out">
+		<h2>Summary</h2>
+		<div class="md compact-summary">
+			@templ.Raw(summaryHTML)
+		</div>
+		<form method="post" action={ templ.SafeURL("/c/" + convID + "/promote") }>
+			<input type="hidden" name="message_id" value={ messageID }/>
+			<button type="submit">Start fresh context from this summary</button>
+		</form>
+	</div>
+}
+
+templ compactPage(conv convoVM, pending *summaryVM) {
+	@layout(conv.Title + " — compact") {
+		<div class="app">
+			<main class="main">
+				<header class="conv-head">
+					<a class="btn-link" href={ templ.SafeURL("/c/" + conv.ID) }>← Back</a>
+					<span class="conv-title">Compact: { conv.Title }</span>
+				</header>
+				<div class="compact-body">
+					<p class="muted">
+						Compaction summarizes the current context and starts a fresh one from the summary.
+						The original messages are kept and remain viewable under Contexts.
+					</p>
+					if pending != nil {
+						@promoteForm(conv.ID, pending.MessageID, pending.HTML)
+					} else {
+						<form data-on-submit__prevent={ "@post('/c/" + conv.ID + "/compact')" } method="post" action={ templ.SafeURL("/c/" + conv.ID + "/compact") }>
+							<button type="submit">Run compaction</button>
+						</form>
+						<div id="compact-out"></div>
+					}
+				</div>
+			</main>
+		</div>
+	}
+}
+
 templ resultBanner(r *testVM) {
 	if r != nil {
 		if r.OK {
@@ -556,7 +598,10 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 			<main class="main">
 				<header class="conv-head">
 					<span class="conv-title">{ conv.Title }</span>
-					<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>Contexts</a>
+					<span class="conv-actions">
+						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/compact") }>Compact</a>
+						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>Contexts</a>
+					</span>
 				</header>
 				<div id="messages" class="messages">
 					for _, m := range msgs {
