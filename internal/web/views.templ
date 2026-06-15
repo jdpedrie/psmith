@@ -138,6 +138,10 @@ templ settingsPage() {
 				<span class="settings-item-name">Langfuse</span>
 				<span class="settings-item-desc">Optional tracing of model calls.</span>
 			</a>
+			<a class="settings-item" href="/settings/cost">
+				<span class="settings-item-name">Cost</span>
+				<span class="settings-item-desc">Recorded model spend per provider.</span>
+			</a>
 		</nav>
 	}
 }
@@ -258,6 +262,75 @@ templ providerDetailPage(prov providerVM, enabled []enabledModelVM, discovered [
 				}
 			</section>
 		}
+	}
+}
+
+templ costPage(rows []costRowVM, grand string) {
+	@settingsShell("Cost") {
+		<h1>Cost</h1>
+		<p class="muted">Recorded model spend per provider (since cost tracking began).</p>
+		<table class="cost-table">
+			<thead>
+				<tr><th>Provider</th><th>Type</th><th class="num">Events</th><th class="num">Total</th></tr>
+			</thead>
+			<tbody>
+				if len(rows) == 0 {
+					<tr><td colspan="4" class="muted">No spend recorded yet.</td></tr>
+				}
+				for _, c := range rows {
+					<tr>
+						<td>{ c.Label }</td>
+						<td class="muted">{ c.Type }</td>
+						<td class="num">{ itoa64(c.Events) }</td>
+						<td class="num">{ c.Total }</td>
+					</tr>
+				}
+			</tbody>
+			<tfoot>
+				<tr><td colspan="3">Total</td><td class="num">{ grand }</td></tr>
+			</tfoot>
+		</table>
+	}
+}
+
+templ contextsPage(conv convoVM, rows []contextRowVM) {
+	@settingsShell("Contexts") {
+		<div class="settings-section-head">
+			<h1>Contexts</h1>
+			<a class="btn-link" href={ templ.SafeURL("/c/" + conv.ID) }>Back to chat</a>
+		</div>
+		<p class="muted">{ conv.Title }</p>
+		<div class="card-list">
+			for _, c := range rows {
+				<a class="row-card" href={ templ.SafeURL("/c/" + conv.ID + "/context/" + c.ID) }>
+					<span class="row-card-title">
+						{ c.Title }
+						if c.Active {
+							<span class="badge">active</span>
+						}
+					</span>
+					<span class="row-card-sub">{ itoa(c.MessageCount) } messages · { c.Cost }</span>
+				</a>
+			}
+		</div>
+	}
+}
+
+templ contextViewPage(conv convoVM, msgs []msgVM) {
+	@layout(conv.Title + " — context") {
+		<div class="app">
+			<main class="main">
+				<header class="conv-head">
+					<a class="btn-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>← Contexts</a>
+					<span>{ conv.Title }</span>
+				</header>
+				<div class="messages">
+					for _, m := range msgs {
+						@messageBubble(m)
+					}
+				</div>
+			</main>
+		</div>
 	}
 }
 
@@ -481,7 +554,10 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 		<div class="app">
 			@sidebar(convos)
 			<main class="main">
-				<header class="conv-head">{ conv.Title }</header>
+				<header class="conv-head">
+					<span class="conv-title">{ conv.Title }</span>
+					<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>Contexts</a>
+				</header>
 				<div id="messages" class="messages">
 					for _, m := range msgs {
 						@messageBubble(m)

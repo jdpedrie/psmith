@@ -12,7 +12,8 @@ import (
 )
 
 // itoa and orDefault are small helpers used by the settings templates.
-func itoa(n int32) string { return strconv.Itoa(int(n)) }
+func itoa(n int32) string   { return strconv.Itoa(int(n)) }
+func itoa64(n int64) string { return strconv.FormatInt(n, 10) }
 
 func orDefault(s, def string) string {
 	if strings.TrimSpace(s) == "" {

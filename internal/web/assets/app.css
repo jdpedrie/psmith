@@ -204,13 +204,23 @@ button.link:hover { color: var(--text); filter: none; }
 }
 .main.empty { place-content: center; place-items: center; }
 .conv-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 	padding: 14px 20px;
 	border-bottom: 1px solid var(--border);
 	font-weight: 600;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
+.conv-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-link { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.conv-link:hover { text-decoration: underline; }
+
+.cost-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cost-table th, .cost-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.cost-table th { color: var(--muted); font-weight: 600; }
+.cost-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cost-table tfoot td { font-weight: 600; border-bottom: none; }
 
 /* --- messages --- */
 .messages {

@@ -136,6 +136,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/langfuse", h.requireUser(h.handleLangfuseSave))
 	mux.HandleFunc("POST /settings/langfuse/test", h.requireUser(h.handleLangfuseTest))
 	mux.HandleFunc("POST /settings/langfuse/delete", h.requireUser(h.handleLangfuseDelete))
+
+	mux.HandleFunc("GET /settings/cost", h.requireUser(h.handleCost))
+
+	mux.HandleFunc("GET /c/{id}/contexts", h.requireUser(h.handleContexts))
+	mux.HandleFunc("GET /c/{id}/context/{cid}", h.requireUser(h.handleContextView))
 }
 
 func cacheControl(next http.Handler) http.Handler {
