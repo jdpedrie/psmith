@@ -51,6 +51,20 @@ type testVM struct {
 	ModelCount int32
 }
 
+type profileRowVM struct {
+	ID          string
+	Name        string
+	Description string
+	Template    bool
+}
+
+type profileFormVM struct {
+	ID            string
+	Name          string
+	SystemMessage string
+	Description   string
+}
+
 // --- settings home ---
 
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {

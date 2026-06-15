@@ -126,10 +126,10 @@ templ settingsPage() {
 				<span class="settings-item-name">Providers &amp; models</span>
 				<span class="settings-item-desc">Connect an LLM provider and enable models.</span>
 			</a>
-			<span class="settings-item disabled">
+			<a class="settings-item" href="/settings/profiles">
 				<span class="settings-item-name">Profiles</span>
-				<span class="settings-item-desc">Coming soon.</span>
-			</span>
+				<span class="settings-item-desc">Personas: system prompt and defaults.</span>
+			</a>
 			<span class="settings-item disabled">
 				<span class="settings-item-name">Embedder &amp; Langfuse</span>
 				<span class="settings-item-desc">Coming soon.</span>
@@ -253,6 +253,68 @@ templ providerDetailPage(prov providerVM, enabled []enabledModelVM, discovered [
 					</form>
 				}
 			</section>
+		}
+	}
+}
+
+templ profilesPage(rows []profileRowVM) {
+	@settingsShell("Profiles") {
+		<div class="settings-section-head">
+			<h1>Profiles</h1>
+			<a class="btn" href="/settings/profiles/new">New profile</a>
+		</div>
+		<div class="card-list">
+			if len(rows) == 0 {
+				<p class="muted">No profiles yet.</p>
+			}
+			for _, p := range rows {
+				<a class="row-card" href={ templ.SafeURL("/settings/profiles/" + p.ID) }>
+					<span class="row-card-title">
+						{ p.Name }
+						if p.Template {
+							<span class="badge">template</span>
+						}
+					</span>
+					if p.Description != "" {
+						<span class="row-card-sub">{ p.Description }</span>
+					}
+				</a>
+			}
+		</div>
+	}
+}
+
+templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
+	@settingsShell(title) {
+		<h1>{ title }</h1>
+		<form class="form" method="post" action={ templ.SafeURL(action) }>
+			<label>
+				Name
+				<input name="name" value={ p.Name } autocomplete="off"/>
+			</label>
+			<label>
+				Description <span class="muted">(optional)</span>
+				<input name="description" value={ p.Description } autocomplete="off"/>
+			</label>
+			<label>
+				System prompt
+				<textarea name="system_message" rows="10">{ p.SystemMessage }</textarea>
+			</label>
+			<div class="form-actions">
+				<button type="submit">
+					if isNew {
+						Create
+					} else {
+						Save
+					}
+				</button>
+				<a class="btn-link" href="/settings/profiles">Cancel</a>
+			</div>
+		</form>
+		if !isNew {
+			<form class="danger-zone" method="post" action={ templ.SafeURL("/settings/profiles/" + p.ID + "/delete") } onsubmit="return confirm('Delete this profile?')">
+				<button class="btn-danger" type="submit">Delete profile</button>
+			</form>
 		}
 	}
 }

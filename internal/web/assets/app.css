@@ -409,7 +409,31 @@ a.settings-item:hover { border-color: var(--accent); }
 	padding: 10px 12px;
 }
 .form input:focus, .form select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.form textarea {
+	font: inherit;
+	color: var(--text);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 10px 12px;
+	resize: vertical;
+	min-height: 120px;
+}
+.form textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .form-actions { display: flex; gap: 10px; align-items: center; }
+.danger-zone { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
+.badge {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--muted);
+	background: var(--bg-sink);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 1px 6px;
+	margin-left: 6px;
+	vertical-align: middle;
+}
 
 .model-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .model-list code { font-size: 12px; color: var(--muted); }

@@ -75,6 +75,13 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/providers/{id}/enable", h.requireUser(h.handleProviderEnable))
 	mux.HandleFunc("POST /settings/providers/{id}/test", h.requireUser(h.handleProviderTest))
 	mux.HandleFunc("POST /settings/providers/{id}/delete", h.requireUser(h.handleProviderDelete))
+
+	mux.HandleFunc("GET /settings/profiles", h.requireUser(h.handleProfiles))
+	mux.HandleFunc("GET /settings/profiles/new", h.requireUser(h.handleProfileNew))
+	mux.HandleFunc("POST /settings/profiles", h.requireUser(h.handleProfileCreate))
+	mux.HandleFunc("GET /settings/profiles/{id}", h.requireUser(h.handleProfileEdit))
+	mux.HandleFunc("POST /settings/profiles/{id}", h.requireUser(h.handleProfileUpdate))
+	mux.HandleFunc("POST /settings/profiles/{id}/delete", h.requireUser(h.handleProfileDelete))
 }
 
 func cacheControl(next http.Handler) http.Handler {
