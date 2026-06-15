@@ -248,6 +248,31 @@ button.link:hover { color: var(--text); filter: none; }
 .msg.error .md { background: color-mix(in srgb, #c0392b 14%, transparent); }
 @keyframes blink { to { visibility: hidden; } }
 
+/* --- elicitation prompt --- */
+.elicit-card {
+	margin: 0 20px 12px;
+	padding: 14px 16px;
+	border: 1px solid var(--accent);
+	border-radius: 12px;
+	background: var(--bg-elev);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.elicit-msg { margin: 0; font-weight: 500; }
+.elicit-card label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
+.elicit-card label.check { flex-direction: row; align-items: center; gap: 8px; }
+.elicit-card input {
+	font: inherit;
+	color: var(--text);
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px;
+}
+.elicit-card input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.elicit-actions { display: flex; gap: 8px; }
+
 /* --- composer --- */
 .composer {
 	display: flex;

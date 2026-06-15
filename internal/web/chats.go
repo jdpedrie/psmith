@@ -157,6 +157,7 @@ func (h *Handler) persistModel(ctx context.Context, convID, modelVal string) {
 // DOM patches. Subscribe replays persisted chunks from `from` then live-tails
 // to the terminal event, so passing the last seen sequence resumes cleanly.
 func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
 	runID, err := uuid.Parse(r.URL.Query().Get("run"))
 	if err != nil {
 		http.Error(w, "bad run id", http.StatusBadRequest)
@@ -192,6 +193,17 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 				_ = json.Unmarshal(ev.Chunk.Payload, &p)
 				buf.WriteString("\n\n[error: " + p.Message + "]")
 				_ = sse.PatchElements(streamMD(buf.String()))
+			case providers.ChunkElicit:
+				var p struct {
+					ElicitationID   string          `json:"elicitation_id"`
+					Message         string          `json:"message"`
+					RequestedSchema json.RawMessage `json:"requested_schema"`
+				}
+				if json.Unmarshal(ev.Chunk.Payload, &p) == nil {
+					_ = sse.PatchElementTempl(
+						elicitForm(convID, p.ElicitationID, p.Message, parseElicitFields(p.RequestedSchema)),
+						datastar.WithSelectorID("elicit"), datastar.WithModeInner())
+				}
 			}
 		}
 		if ev.Terminal != nil {

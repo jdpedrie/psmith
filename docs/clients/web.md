@@ -2,7 +2,7 @@
 
 The web client is a server-rendered UI built into `reeved` itself. It is not a separate app talking over the RPC API; it is a presentation layer in the Go process that calls the same services in-process and renders HTML. The page works as plain HTML (forms POST, links navigate) and is progressively enhanced with [Datastar](https://data-star.dev): the conversation streams live over SSE. This document describes the approach and the current state.
 
-Status: early but functional. Working today: cookie auth, the chats list, creating a conversation (pick a profile), a conversation that sends and streams end to end, a per-conversation model picker (populated from the user's enabled models, remembered on the conversation), markdown rendering of message content, provider management under Settings (add a provider, discover and enable models, test the connection, delete), and profile management (create, edit name/system prompt/description, delete), and embedder and Langfuse config (save, test, delete). Not built yet: deeper profile config (defaults, plugins, compression), branching, compaction, contexts, cost, and the elicitation UI. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
+Status: early but functional. Working today: cookie auth, the chats list, creating a conversation (pick a profile), a conversation that sends and streams end to end, a per-conversation model picker (populated from the user's enabled models, remembered on the conversation), markdown rendering of message content, provider management under Settings (add a provider, discover and enable models, test the connection, delete), and profile management (create, edit name/system prompt/description, delete), embedder and Langfuse config (save, test, delete), and the elicitation prompt (MCP secret-input mid-stream). Not built yet: file attachments, deeper profile config (defaults, plugins, compression), branching, compaction, contexts, and cost. The parity target is the [client spec](client-spec.md) and the [iOS reference](ios-reference.md).
 
 ## Why server-rendered
 
@@ -36,7 +36,11 @@ The composer carries a model picker. Its value is a `providerID|modelID` pair; s
 
 ## The device-tools gap
 
-Calendar, Reminders, Health, and Obsidian are device-native (EventKit, HealthKit, file bookmarks) and a browser cannot run them, so the web client registers no device-tool capabilities. The server already handles that: the model gets a clean "not supported by the connected device" result. Elicitation, by contrast, works fully (render the schema as a form, POST to the respond endpoint). Web-equivalent integrations (for example Google Calendar over OAuth) would be a later, separate effort.
+Calendar, Reminders, Health, and Obsidian are device-native (EventKit, HealthKit, file bookmarks) and a browser cannot run them, so the web client registers no device-tool capabilities. The server already handles that: the model gets a clean "not supported by the connected device" result. Elicitation, by contrast, works (see below). Web-equivalent integrations (for example Google Calendar over OAuth) would be a later, separate effort.
+
+## Elicitation
+
+When a tool elicits input mid-run, the stream handler patches a form into the conversation built from the request's JSON Schema (string, password, number, and boolean fields). The fields bind under an `elicit` signal namespace so they do not collide with the composer's signals, and the action (accept / decline) is carried in the request URL. Submitting posts to a cookie-authenticated web route that delivers the response to the same elicit broker the bearer endpoint uses, then clears the form. The stream stays open throughout, so the waiting tool unblocks and the assistant turn resumes on the same SSE connection. The secret never enters the transcript.
 
 ## Building and running
 

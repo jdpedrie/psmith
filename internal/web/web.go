@@ -92,6 +92,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
+	mux.HandleFunc("POST /c/{id}/elicit/{eid}", h.requireUser(h.handleElicitRespond))
 
 	mux.HandleFunc("GET /settings", h.requireUser(h.handleSettings))
 	mux.HandleFunc("GET /settings/providers", h.requireUser(h.handleProviders))

@@ -409,6 +409,26 @@ templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 	}
 }
 
+// elicitForm renders an MCP elicitation prompt mid-stream. Fields bind under
+// the `elicit` signal namespace so they don't collide with the composer's
+// signals; the action is passed in the request URL. Patched into #elicit while
+// the run is paused; cleared on response, after which the stream resumes.
+templ elicitForm(convID, eid, message string, fields []elicitField) {
+	<div class="elicit-card" data-signals="{elicit: {}}">
+		<p class="elicit-msg">{ message }</p>
+		for _, f := range fields {
+			<label class={ templ.KV("check", f.Type == "checkbox") }>
+				{ f.Label }
+				<input type={ f.Type } data-bind={ "elicit." + f.Name } autocomplete="off"/>
+			</label>
+		}
+		<div class="elicit-actions">
+			<button type="button" data-on-click={ "@post('/c/" + convID + "/elicit/" + eid + "?action=accept')" }>Submit</button>
+			<button type="button" class="btn-secondary" data-on-click={ "@post('/c/" + convID + "/elicit/" + eid + "?action=decline')" }>Decline</button>
+		</div>
+	</div>
+}
+
 templ messageBubble(m msgVM) {
 	<div class={ "msg", m.Role }>
 		<div class="md">
@@ -462,6 +482,7 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 						@messageBubble(m)
 					}
 				</div>
+				<div id="elicit"></div>
 				@composer(conv.ID, models, currentModel)
 			</main>
 		</div>
