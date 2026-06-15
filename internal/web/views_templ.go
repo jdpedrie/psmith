@@ -151,7 +151,7 @@ func sidebar(convos []convoVM) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<aside class=\"sidebar\"><header class=\"sidebar-head\"><a class=\"brand\" href=\"/chats\">Reeve</a><form method=\"post\" action=\"/logout\"><button class=\"link\" type=\"submit\">Sign out</button></form></header><nav class=\"convo-list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<aside class=\"sidebar\"><header class=\"sidebar-head\"><a class=\"brand\" href=\"/chats\">Reeve</a><div class=\"sidebar-actions\"><a class=\"new-chat\" href=\"/new\">+ New</a><form method=\"post\" action=\"/logout\"><button class=\"link\" type=\"submit\">Sign out</button></form></div></header><nav class=\"convo-list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -181,7 +181,7 @@ func sidebar(convos []convoVM) templ.Component {
 			var templ_7745c5c3_Var9 templ.SafeURL
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/c/" + c.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 53, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 56, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -194,7 +194,7 @@ func sidebar(convos []convoVM) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(c.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 54, Col: 14}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 57, Col: 14}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -260,13 +260,133 @@ func chatsPage(convos []convoVM) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<main class=\"main empty\"><p class=\"muted\">Select a conversation.</p></main></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<main class=\"main empty\"><p class=\"muted\">Select a conversation, or <a href=\"/new\">start a new one</a>.</p></main></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
 		templ_7745c5c3_Err = layout("Chats — Reeve").Render(templ.WithChildren(ctx, templ_7745c5c3_Var12), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func newConversationPage(convos []convoVM, profiles []profileVM) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var14 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"app\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = sidebar(convos).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<main class=\"main\"><header class=\"conv-head\">New chat</header><div class=\"new-list\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if len(profiles) == 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<p class=\"muted pad\">No profiles available. Create one in the iOS app or via the API.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			for _, p := range profiles {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form method=\"post\" action=\"/new\"><input type=\"hidden\" name=\"profile_id\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var15 string
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.ID)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 90, Col: 58}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\"> <button type=\"submit\" class=\"profile-pick\"><span class=\"profile-name\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var16 string
+				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 92, Col: 43}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</span> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if p.Description != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span class=\"profile-desc\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var17 string
+					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(p.Description)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 94, Col: 51}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</button></form>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div></main></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = layout("New chat — Reeve").Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -290,30 +410,30 @@ func messageBubble(m msgVM) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var13 == nil {
-			templ_7745c5c3_Var13 = templ.NopComponent
+		templ_7745c5c3_Var18 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var18 == nil {
+			templ_7745c5c3_Var18 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var14 = []any{"msg", m.Role}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var14...)
+		var templ_7745c5c3_Var19 = []any{"msg", m.Role}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var19...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var15 string
-		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var14).String())
+		var templ_7745c5c3_Var20 string
+		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var19).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\"><div class=\"md\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\"><div class=\"md\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -321,7 +441,7 @@ func messageBubble(m msgVM) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -348,25 +468,25 @@ func assistantPlaceholder(convID, runID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var16 == nil {
-			templ_7745c5c3_Var16 = templ.NopComponent
+		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var21 == nil {
+			templ_7745c5c3_Var21 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div id=\"stream\" class=\"msg assistant streaming\" data-on-load=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div id=\"stream\" class=\"msg assistant streaming\" data-on-load=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var17 string
-		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('/c/" + convID + "/stream?run=" + runID + "')")
+		var templ_7745c5c3_Var22 string
+		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('/c/" + convID + "/stream?run=" + runID + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 87, Col: 117}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 117, Col: 117}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\"><div id=\"stream-md\" class=\"md\"></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"><div id=\"stream-md\" class=\"md\"></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -390,107 +510,107 @@ func composer(convID string, models []modelVM, currentModel string) templ.Compon
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var18 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var18 == nil {
-			templ_7745c5c3_Var18 = templ.NopComponent
+		templ_7745c5c3_Var23 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var23 == nil {
+			templ_7745c5c3_Var23 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<form id=\"composer\" class=\"composer\" method=\"post\" action=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<form id=\"composer\" class=\"composer\" method=\"post\" action=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var19 templ.SafeURL
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/c/" + convID + "/send"))
+		var templ_7745c5c3_Var24 templ.SafeURL
+		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/c/" + convID + "/send"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 97, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 127, Col: 50}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\" data-signals=\"")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var20 string
-		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue("{message: '', model: '" + currentModel + "'}")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 98, Col: 63}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" data-signals=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "\" data-on-submit__prevent=\"")
+		var templ_7745c5c3_Var25 string
+		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue("{message: '', model: '" + currentModel + "'}")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 128, Col: 63}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var21 string
-		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/c/" + convID + "/send')")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 99, Col: 61}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" data-on-submit__prevent=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\"><div class=\"composer-row\"><textarea name=\"message\" data-bind-message rows=\"1\" placeholder=\"Message Reeve…\"></textarea> <button type=\"submit\">Send</button></div>")
+		var templ_7745c5c3_Var26 string
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/c/" + convID + "/send')")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 129, Col: 61}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\"><div class=\"composer-row\"><textarea name=\"message\" data-bind-message rows=\"1\" placeholder=\"Message Reeve…\"></textarea> <button type=\"submit\">Send</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(models) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<div class=\"composer-tools\"><select name=\"model\" data-bind-model class=\"model-select\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<div class=\"composer-tools\"><select name=\"model\" data-bind-model class=\"model-select\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, m := range models {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<option value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<option value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var22 string
-				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Value)
+				var templ_7745c5c3_Var27 string
+				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 109, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 139, Col: 29}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if m.Selected {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " selected")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, ">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, ">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var23 string
-				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(m.Label)
+				var templ_7745c5c3_Var28 string
+				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(m.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 109, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 139, Col: 66}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</option>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</option>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</select></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</select></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -514,12 +634,12 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mod
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var24 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var24 == nil {
-			templ_7745c5c3_Var24 = templ.NopComponent
+		templ_7745c5c3_Var29 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var29 == nil {
+			templ_7745c5c3_Var29 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var25 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var30 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -531,7 +651,7 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mod
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"app\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"app\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -539,20 +659,20 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mod
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<main class=\"main\"><header class=\"conv-head\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<main class=\"main\"><header class=\"conv-head\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(conv.Title)
+			var templ_7745c5c3_Var31 string
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(conv.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 122, Col: 42}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 152, Col: 42}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</header><div id=\"messages\" class=\"messages\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "</header><div id=\"messages\" class=\"messages\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -562,7 +682,7 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mod
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -570,13 +690,13 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mod
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</main></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</main></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(conv.Title+" — Reeve").Render(templ.WithChildren(ctx, templ_7745c5c3_Var25), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(conv.Title+" — Reeve").Render(templ.WithChildren(ctx, templ_7745c5c3_Var30), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -47,7 +47,7 @@ func TestHandleStream_E2E(t *testing.T) {
 	sup := stream.New(q, slog.Default())
 	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
 	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
-	h := New(q, auth.NewService(q), convos, models, sup, slog.Default())
+	h := New(q, auth.NewService(q), convos, models, nil, sup, slog.Default())
 
 	fx := seedSendable(t, q, fake.URL())
 	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "webtest"})
@@ -103,7 +103,7 @@ func TestHandleConversation_RendersComposer(t *testing.T) {
 	sup := stream.New(q, slog.Default())
 	convos := conversations.NewService(q, pool, cat, sup, crypto.Nop{}, nil, slog.Default())
 	models := modelproviders.NewService(q, cat, crypto.Nop{}, slog.Default())
-	h := New(q, auth.NewService(q), convos, models, sup, slog.Default())
+	h := New(q, auth.NewService(q), convos, models, nil, sup, slog.Default())
 
 	fx := seedSendable(t, q, "http://unused")
 	userCtx := auth.ContextWithUser(context.Background(), auth.User{ID: fx.userID, Username: "webtest"})

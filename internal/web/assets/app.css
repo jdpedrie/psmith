@@ -161,6 +161,42 @@ button.link:hover { color: var(--text); filter: none; }
 .convo:hover { background: var(--bg-sink); }
 .convo.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); }
 
+.sidebar-actions { display: flex; align-items: center; gap: 12px; }
+.new-chat {
+	color: var(--accent);
+	text-decoration: none;
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.new-chat:hover { text-decoration: underline; }
+
+/* --- new conversation --- */
+.new-list {
+	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-width: 640px;
+	overflow-y: auto;
+}
+.profile-pick {
+	width: 100%;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	background: var(--bg-elev);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 14px 16px;
+	font-weight: 500;
+}
+.profile-pick:hover { border-color: var(--accent); filter: none; }
+.profile-name { font-weight: 600; }
+.profile-desc { font-size: 13px; color: var(--muted); }
+
 .main {
 	display: flex;
 	flex-direction: column;

@@ -20,6 +20,7 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/modelproviders"
+	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/store"
 	"github.com/jdpedrie/reeve/internal/stream"
 )
@@ -34,17 +35,18 @@ type Handler struct {
 	auth       *auth.Service
 	convos     *conversations.Service
 	models     *modelproviders.Service
+	profiles   *profiles.Service
 	supervisor *stream.Supervisor
 	logger     *slog.Logger
 }
 
 // New constructs the web handler. Pass the same services main() built for the
 // ConnectRPC handlers so the web layer calls them in-process.
-func New(queries *store.Queries, authSvc *auth.Service, convos *conversations.Service, models *modelproviders.Service, supervisor *stream.Supervisor, logger *slog.Logger) *Handler {
+func New(queries *store.Queries, authSvc *auth.Service, convos *conversations.Service, models *modelproviders.Service, profilesSvc *profiles.Service, supervisor *stream.Supervisor, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{queries: queries, auth: authSvc, convos: convos, models: models, supervisor: supervisor, logger: logger}
+	return &Handler{queries: queries, auth: authSvc, convos: convos, models: models, profiles: profilesSvc, supervisor: supervisor, logger: logger}
 }
 
 // Mount registers the web routes on mux. The paths are distinct from the
@@ -58,6 +60,8 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /login", h.handleLogin)
 	mux.HandleFunc("POST /logout", h.handleLogout)
 	mux.HandleFunc("GET /chats", h.requireUser(h.handleChats))
+	mux.HandleFunc("GET /new", h.requireUser(h.handleNewForm))
+	mux.HandleFunc("POST /new", h.requireUser(h.handleNewCreate))
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
@@ -88,6 +92,12 @@ type modelVM struct {
 	Value    string // "providerID|modelID"
 	Label    string
 	Selected bool
+}
+
+type profileVM struct {
+	ID          string
+	Name        string
+	Description string
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, c templ.Component) {
@@ -170,6 +180,28 @@ func (h *Handler) listModels(ctx context.Context, selected string) []modelVM {
 			label = label + " (" + pl + ")"
 		}
 		out = append(out, modelVM{Value: val, Label: label, Selected: val == selected})
+	}
+	return out
+}
+
+// listProfiles returns the caller's directly-usable profiles for the
+// new-conversation picker. Parent-only profiles are templates, not chat
+// personas, so they are excluded.
+func (h *Handler) listProfiles(ctx context.Context) []profileVM {
+	if h.profiles == nil {
+		return nil
+	}
+	resp, err := h.profiles.ListProfiles(ctx, connect.NewRequest(&reevev1.ListProfilesRequest{}))
+	if err != nil {
+		h.logger.Warn("web: list profiles failed", "err", err)
+		return nil
+	}
+	out := make([]profileVM, 0, len(resp.Msg.GetProfiles()))
+	for _, p := range resp.Msg.GetProfiles() {
+		if p.GetParentOnly() {
+			continue
+		}
+		out = append(out, profileVM{ID: p.GetId(), Name: p.GetName(), Description: p.GetDescription()})
 	}
 	return out
 }

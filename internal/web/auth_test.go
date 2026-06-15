@@ -26,7 +26,7 @@ func TestCookieAuth(t *testing.T) {
 
 	pool := testutil.Pool(t)
 	q := store.New(pool)
-	h := New(q, auth.NewService(q), nil, nil, nil, slog.Default())
+	h := New(q, auth.NewService(q), nil, nil, nil, nil, slog.Default())
 
 	hash, err := bcrypt.GenerateFromPassword([]byte("s3cret"), bcrypt.DefaultCost)
 	if err != nil {

@@ -44,9 +44,12 @@ templ sidebar(convos []convoVM) {
 	<aside class="sidebar">
 		<header class="sidebar-head">
 			<a class="brand" href="/chats">Reeve</a>
-			<form method="post" action="/logout">
-				<button class="link" type="submit">Sign out</button>
-			</form>
+			<div class="sidebar-actions">
+				<a class="new-chat" href="/new">+ New</a>
+				<form method="post" action="/logout">
+					<button class="link" type="submit">Sign out</button>
+				</form>
+			</div>
 		</header>
 		<nav class="convo-list">
 			for _, c := range convos {
@@ -66,7 +69,34 @@ templ chatsPage(convos []convoVM) {
 		<div class="app">
 			@sidebar(convos)
 			<main class="main empty">
-				<p class="muted">Select a conversation.</p>
+				<p class="muted">Select a conversation, or <a href="/new">start a new one</a>.</p>
+			</main>
+		</div>
+	}
+}
+
+templ newConversationPage(convos []convoVM, profiles []profileVM) {
+	@layout("New chat — Reeve") {
+		<div class="app">
+			@sidebar(convos)
+			<main class="main">
+				<header class="conv-head">New chat</header>
+				<div class="new-list">
+					if len(profiles) == 0 {
+						<p class="muted pad">No profiles available. Create one in the iOS app or via the API.</p>
+					}
+					for _, p := range profiles {
+						<form method="post" action="/new">
+							<input type="hidden" name="profile_id" value={ p.ID }/>
+							<button type="submit" class="profile-pick">
+								<span class="profile-name">{ p.Name }</span>
+								if p.Description != "" {
+									<span class="profile-desc">{ p.Description }</span>
+								}
+							</button>
+						</form>
+					}
+				</div>
 			</main>
 		</div>
 	}
