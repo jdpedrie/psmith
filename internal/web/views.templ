@@ -1,0 +1,119 @@
+package web
+
+// layout is the base HTML shell. Datastar is loaded as a module; the page
+// works without it (forms POST, links navigate) and is enhanced when it runs.
+templ layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/web-assets/app.css"/>
+			<script type="module" src="/web-assets/datastar.js"></script>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+templ loginPage(errMsg string) {
+	@layout("Sign in — Reeve") {
+		<main class="auth">
+			<form class="card" method="post" action="/login">
+				<h1 class="brand">Reeve</h1>
+				if errMsg != "" {
+					<p class="error">{ errMsg }</p>
+				}
+				<label>
+					Username
+					<input name="username" autocomplete="username" autofocus/>
+				</label>
+				<label>
+					Password
+					<input name="password" type="password" autocomplete="current-password"/>
+				</label>
+				<button type="submit">Sign in</button>
+			</form>
+		</main>
+	}
+}
+
+templ sidebar(convos []convoVM) {
+	<aside class="sidebar">
+		<header class="sidebar-head">
+			<a class="brand" href="/chats">Reeve</a>
+			<form method="post" action="/logout">
+				<button class="link" type="submit">Sign out</button>
+			</form>
+		</header>
+		<nav class="convo-list">
+			for _, c := range convos {
+				<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
+					{ c.Title }
+				</a>
+			}
+			if len(convos) == 0 {
+				<p class="muted pad">No conversations yet.</p>
+			}
+		</nav>
+	</aside>
+}
+
+templ chatsPage(convos []convoVM) {
+	@layout("Chats — Reeve") {
+		<div class="app">
+			@sidebar(convos)
+			<main class="main empty">
+				<p class="muted">Select a conversation.</p>
+			</main>
+		</div>
+	}
+}
+
+templ messageBubble(m msgVM) {
+	<div class={ "msg", m.Role }>
+		<div class="md">{ m.Content }</div>
+	</div>
+}
+
+// assistantPlaceholder is appended after a send. Its data-on-load opens the
+// SSE stream for the run, which morphs #stream-md as deltas arrive and
+// finally replaces #stream with a plain bubble.
+templ assistantPlaceholder(convID, runID string) {
+	<div id="stream" class="msg assistant streaming" data-on-load={ "@get('/c/" + convID + "/stream?run=" + runID + "')" }>
+		<div id="stream-md" class="md"></div>
+	</div>
+}
+
+templ composer(convID string) {
+	<form
+		id="composer"
+		class="composer"
+		method="post"
+		action={ templ.SafeURL("/c/" + convID + "/send") }
+		data-signals="{message: ''}"
+		data-on-submit__prevent={ "@post('/c/" + convID + "/send')" }
+	>
+		<textarea name="message" data-bind-message rows="1" placeholder="Message Reeve…"></textarea>
+		<button type="submit">Send</button>
+	</form>
+}
+
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM) {
+	@layout(conv.Title + " — Reeve") {
+		<div class="app">
+			@sidebar(convos)
+			<main class="main">
+				<header class="conv-head">{ conv.Title }</header>
+				<div id="messages" class="messages">
+					for _, m := range msgs {
+						@messageBubble(m)
+					}
+				</div>
+				@composer(conv.ID)
+			</main>
+		</div>
+	}
+}

@@ -22,6 +22,8 @@ import (
 	"github.com/jdpedrie/reeve/internal/auth"
 	"github.com/jdpedrie/reeve/internal/conversations"
 	"github.com/jdpedrie/reeve/internal/crypto"
+	"github.com/jdpedrie/reeve/internal/embeddersvc"
+	"github.com/jdpedrie/reeve/internal/embeddings"
 	"github.com/jdpedrie/reeve/internal/events"
 	"github.com/jdpedrie/reeve/internal/files"
 	"github.com/jdpedrie/reeve/internal/langfuse"
@@ -32,10 +34,9 @@ import (
 	"github.com/jdpedrie/reeve/internal/profiles"
 	"github.com/jdpedrie/reeve/internal/storage"
 	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/embeddings"
-	"github.com/jdpedrie/reeve/internal/embeddersvc"
 	"github.com/jdpedrie/reeve/internal/stream"
 	"github.com/jdpedrie/reeve/internal/streamsvc"
+	"github.com/jdpedrie/reeve/internal/web"
 	"github.com/jdpedrie/reeve/plugins"
 
 	// Driver packages self-register their provider type in init().
@@ -295,6 +296,12 @@ func run() error {
 	mux.Handle("POST /conversations/{id}/device-tools/{call_id}/respond",
 		conversationsSvc.DeviceToolsHandler())
 
+	// Server-rendered web UI. A presentation layer over the same services,
+	// called in-process, served from this mux on distinct paths (/login,
+	// /chats, /c/{id}, /web-assets). Cookie sessions reuse the bearer
+	// session table; the conversation streams over SSE.
+	web.New(queries, authSvc, conversationsSvc, supervisor, slog.Default()).Mount(mux)
+
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: h2c.NewHandler(mux, &http2.Server{}),
@@ -339,11 +346,11 @@ func envOr(k, d string) string {
 //
 //   - REEVE_MASTER_KEY set     → AES-256-GCM with that key.
 //   - REEVE_DEV_AUTOKEY=1       → AES-256-GCM with an ephemeral key
-//                                 (loud warning; data won't survive a
-//                                 restart). Local-dev convenience.
+//     (loud warning; data won't survive a
+//     restart). Local-dev convenience.
 //   - neither set               → crypto.Nop{} (passthrough). Config
-//                                 blobs land in plaintext; loud
-//                                 warning on boot.
+//     blobs land in plaintext; loud
+//     warning on boot.
 //
 // Returns a non-nil Cipher so service constructors don't have to
 // special-case nil. Errors only on a malformed REEVE_MASTER_KEY (bad

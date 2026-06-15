@@ -1,4 +1,6 @@
-.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png
+.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test web-generate swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png
+
+TEMPL_VERSION ?= v0.3.1020
 
 GOOSE_DRIVER ?= postgres
 GOOSE_DBSTRING ?= postgres://clark:clark@localhost:5433/clark?sslmode=disable
@@ -22,6 +24,11 @@ tidy:
 
 sqlc:
 	sqlc generate
+
+# Regenerate the web client's templ templates (internal/web/*.templ -> *_templ.go).
+# Run after editing any .templ file; the generated files are checked in.
+web-generate:
+	go run github.com/a-h/templ/cmd/templ@$(TEMPL_VERSION) generate ./internal/web/
 
 migrate-up:
 	GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING="$(GOOSE_DBSTRING)" GOOSE_MIGRATION_DIR=$(GOOSE_MIGRATION_DIR) goose up
