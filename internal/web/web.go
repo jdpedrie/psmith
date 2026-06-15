@@ -142,6 +142,10 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /c/{id}/contexts", h.requireUser(h.handleContexts))
 	mux.HandleFunc("GET /c/{id}/context/{cid}", h.requireUser(h.handleContextView))
 
+	mux.HandleFunc("GET /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditForm))
+	mux.HandleFunc("POST /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditSave))
+	mux.HandleFunc("POST /c/{id}/regenerate", h.requireUser(h.handleRegenerate))
+
 	mux.HandleFunc("GET /c/{id}/compact", h.requireUser(h.handleCompactPage))
 	mux.HandleFunc("POST /c/{id}/compact", h.requireUser(h.handleCompactRun))
 	mux.HandleFunc("GET /c/{id}/compact/stream", h.requireUser(h.handleCompactStream))
@@ -164,10 +168,12 @@ type convoVM struct {
 }
 
 type msgVM struct {
-	ID     string
-	Role   string
-	HTML   string   // rendered, sanitized message HTML
-	Images []string // signed URLs for image attachments
+	ID       string
+	ConvID   string
+	ParentID string
+	Role     string
+	HTML     string   // rendered, sanitized message HTML
+	Images   []string // signed URLs for image attachments
 }
 
 type modelVM struct {

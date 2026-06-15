@@ -65,7 +65,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		msgs = append(msgs, msgVM{ID: m.GetId(), Role: role, HTML: renderMarkdown(content), Images: images})
+		msgs = append(msgs, msgVM{ID: m.GetId(), ConvID: id, ParentID: m.GetParentId(), Role: role, HTML: renderMarkdown(content), Images: images})
 	}
 
 	convos, _ := h.listConvos(r.Context(), id)
@@ -74,7 +74,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	for i := range models {
 		models[i].Selected = models[i].Value == current
 	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, models, current))
+	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, models, current, r.URL.Query().Get("run")))
 }
 
 // handleSend sends a user turn and, for enhanced (Datastar) requests, returns
@@ -129,7 +129,7 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	sse := datastar.NewSSE(w, r)
 	_ = sse.PatchElementTempl(
-		messageBubble(msgVM{ID: userMsg.GetId(), Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}),
+		messageBubble(msgVM{ID: userMsg.GetId(), ConvID: convID, Role: "user", HTML: renderMarkdown(userMsg.GetContent()), Images: attachImages}, true),
 		datastar.WithSelectorID("messages"), datastar.WithModeAppend())
 	_ = sse.PatchElementTempl(
 		assistantPlaceholder(convID, runID),

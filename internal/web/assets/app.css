@@ -268,6 +268,20 @@ button.link:hover { color: var(--text); filter: none; }
 	animation: blink 1s steps(2, start) infinite;
 }
 .msg.error .md { background: color-mix(in srgb, #c0392b 14%, transparent); }
+.msg-actions { display: flex; gap: 10px; align-items: center; margin-top: 3px; opacity: 0; transition: opacity .12s ease; }
+.msg:hover .msg-actions { opacity: 1; }
+.msg.user .msg-actions { justify-content: flex-end; }
+.msg-action {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	font-size: 12px;
+	color: var(--muted);
+	cursor: pointer;
+	text-decoration: none;
+}
+.msg-action:hover { color: var(--text); filter: none; }
 @keyframes blink { to { visibility: hidden; } }
 
 /* --- elicitation prompt --- */

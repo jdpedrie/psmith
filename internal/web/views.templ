@@ -326,7 +326,7 @@ templ contextViewPage(conv convoVM, msgs []msgVM) {
 				</header>
 				<div class="messages">
 					for _, m := range msgs {
-						@messageBubble(m)
+						@messageBubble(m, false)
 					}
 				</div>
 			</main>
@@ -586,7 +586,7 @@ templ elicitForm(convID, eid, message string, fields []elicitField) {
 	</div>
 }
 
-templ messageBubble(m msgVM) {
+templ messageBubble(m msgVM, showActions bool) {
 	<div class={ "msg", m.Role }>
 		<div class="md">
 			for _, src := range m.Images {
@@ -594,7 +594,41 @@ templ messageBubble(m msgVM) {
 			}
 			@templ.Raw(m.HTML)
 		</div>
+		if showActions {
+			<div class="msg-actions">
+				<a class="msg-action" href={ templ.SafeURL("/c/" + m.ConvID + "/message/" + m.ID + "/edit") }>Edit</a>
+				if m.Role == "assistant" && m.ParentID != "" {
+					<form method="post" action={ templ.SafeURL("/c/" + m.ConvID + "/regenerate") }>
+						<input type="hidden" name="parent_message_id" value={ m.ParentID }/>
+						<button class="msg-action" type="submit">Regenerate</button>
+					</form>
+				}
+			</div>
+		}
 	</div>
+}
+
+templ editMessagePage(convID, mid, content string) {
+	@layout("Edit message — Reeve") {
+		<div class="settings">
+			<header class="settings-head">
+				<a class="brand" href={ templ.SafeURL("/c/" + convID) }>← Back to chat</a>
+			</header>
+			<div class="settings-body">
+				<h1>Edit message</h1>
+				<form class="form" method="post" action={ templ.SafeURL("/c/" + convID + "/message/" + mid + "/edit") }>
+					<label>
+						Content
+						<textarea name="content" rows="12">{ content }</textarea>
+					</label>
+					<div class="form-actions">
+						<button type="submit">Save</button>
+						<a class="btn-link" href={ templ.SafeURL("/c/" + convID) }>Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
 }
 
 // assistantPlaceholder is appended after a send. Its data-on-load opens the
@@ -633,7 +667,7 @@ templ composer(convID string, models []modelVM, currentModel string) {
 	</form>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []modelVM, currentModel string) {
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []modelVM, currentModel, runID string) {
 	@layout(conv.Title + " — Reeve") {
 		<div class="app">
 			@sidebar(convos)
@@ -647,7 +681,10 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, models []mo
 				</header>
 				<div id="messages" class="messages">
 					for _, m := range msgs {
-						@messageBubble(m)
+						@messageBubble(m, true)
+					}
+					if runID != "" {
+						@assistantPlaceholder(conv.ID, runID)
 					}
 				</div>
 				<div id="elicit"></div>
