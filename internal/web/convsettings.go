@@ -63,13 +63,12 @@ type convSettingsVM struct {
 }
 
 type convPluginRowVM struct {
-	Name       string
-	Display    string
-	Ordinal    int32
-	Source     string // "Inherited" | "Override"
-	Disabled   bool
-	ConfigJSON string
-	HasConfig  bool
+	Name     string
+	Display  string
+	Ordinal  int32
+	Source   string // "Inherited" | "Override"
+	Disabled bool
+	Form     pluginConfigForm
 }
 
 // handleConvSettings renders the conversation settings page (call settings or
@@ -475,7 +474,14 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 	if err != nil {
 		return nil, nil
 	}
-	display := h.pluginDisplayNames(ctx)
+	types := h.pluginTypesByName(ctx)
+	models := h.listModels(ctx, "")
+	display := func(name string) string {
+		if t := types[name]; t != nil {
+			return orName(t.GetDisplayName(), name)
+		}
+		return name
+	}
 	present := map[string]bool{}
 	for _, e := range pipe.Msg.GetEntries() {
 		present[e.GetPluginName()] = true
@@ -484,12 +490,11 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 			src = "Override"
 		}
 		rows = append(rows, convPluginRowVM{
-			Name:       e.GetPluginName(),
-			Display:    orName(display[e.GetPluginName()], e.GetPluginName()),
-			Ordinal:    e.GetOrdinal(),
-			Source:     src,
-			ConfigJSON: prettyJSON(e.GetConfig()),
-			HasConfig:  len(e.GetConfig()) > 0,
+			Name:    e.GetPluginName(),
+			Display: display(e.GetPluginName()),
+			Ordinal: e.GetOrdinal(),
+			Source:  src,
+			Form:    h.buildPluginForm(ctx, types[e.GetPluginName()], e.GetConfig(), models),
 		})
 	}
 	// Conversation overrides that disable an inherited plugin don't appear in the
@@ -499,7 +504,7 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 			if p.GetDisabled() {
 				rows = append(rows, convPluginRowVM{
 					Name:     p.GetPluginName(),
-					Display:  orName(display[p.GetPluginName()], p.GetPluginName()),
+					Display:  display(p.GetPluginName()),
 					Source:   "Override",
 					Disabled: true,
 				})
@@ -508,28 +513,13 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Ordinal < rows[j].Ordinal })
 
-	for name, disp := range display {
+	for name, t := range types {
 		if !present[name] {
-			addable = append(addable, pluginOptVM{Name: name, DisplayName: disp})
+			addable = append(addable, pluginOptVM{Name: name, DisplayName: orName(t.GetDisplayName(), name)})
 		}
 	}
 	sort.Slice(addable, func(i, j int) bool { return addable[i].DisplayName < addable[j].DisplayName })
 	return rows, addable
-}
-
-func (h *Handler) pluginDisplayNames(ctx context.Context) map[string]string {
-	out := map[string]string{}
-	if h.profiles == nil {
-		return out
-	}
-	types, err := h.profiles.ListPluginTypes(ctx, connect.NewRequest(&reevev1.ListPluginTypesRequest{}))
-	if err != nil {
-		return out
-	}
-	for _, t := range types.Msg.GetPluginTypes() {
-		out[t.GetName()] = orName(t.GetDisplayName(), t.GetName())
-	}
-	return out
 }
 
 // handleConvPluginOverride upserts a conversation plugin override (config edit,
@@ -558,8 +548,15 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 	case "disable":
 		plugins = upsertPlugin(plugins, name, nil, true)
 	case "config", "add":
+		t := h.pluginTypesByName(r.Context())[name]
 		var cfg []byte
-		if raw := strings.TrimSpace(r.FormValue("config")); raw != "" {
+		if pluginHasForm(t) {
+			// Build the config JSON from the declared fields (cfg_<field>),
+			// starting from the override's current config so unknown keys survive.
+			cfg, _ = assemblePluginConfig(t, currentConfigFor(plugins, name), func(field string) string {
+				return r.FormValue("cfg_" + field)
+			})
+		} else if raw := strings.TrimSpace(r.FormValue("config")); raw != "" {
 			if !json.Valid([]byte(raw)) {
 				http.Error(w, "config is not valid JSON", http.StatusBadRequest)
 				return
@@ -579,6 +576,16 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, "/c/"+convID+"/settings?tab=plugins", http.StatusSeeOther)
+}
+
+// currentConfigFor returns the existing override config for a plugin, or nil.
+func currentConfigFor(plugins []*reevev1.ConversationPlugin, name string) []byte {
+	for _, p := range plugins {
+		if p.GetPluginName() == name {
+			return p.GetConfig()
+		}
+	}
+	return nil
 }
 
 func dropPlugin(plugins []*reevev1.ConversationPlugin, name string) []*reevev1.ConversationPlugin {

@@ -661,25 +661,51 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .segmented .seg.active { color: var(--text); background: var(--bg-elev); box-shadow: var(--shadow-sm); }
 
 /* plugin rows inside a settings card */
-.prow { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); }
+.prow { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); }
 .prow:first-child { border-top: none; }
+.prow-top { display: flex; align-items: flex-start; gap: 12px; }
 .prow-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .prow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .prow-name { font-size: 15px; font-weight: 540; }
 .prow-id { font-size: 12px; color: var(--muted); }
 .prow-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .prow-actions form { margin: 0; }
-.plugin-config { position: relative; }
-.plugin-config > summary { list-style: none; }
-.plugin-config > summary::-webkit-details-marker { display: none; }
-.plugin-config[open] > summary { background: color-mix(in srgb, var(--accent) 26%, transparent); }
-.plugin-config form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; min-width: 280px; }
-.plugin-config textarea {
+
+/* per-plugin config: collapsible (conversation) or always-shown (profile) */
+.prow-config { width: 100%; }
+.prow-config > summary { list-style: none; width: fit-content; }
+.prow-config > summary::-webkit-details-marker { display: none; }
+.prow-config[open] > summary { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.prow-config > form, .prow-config-static {
+	display: flex; flex-direction: column; gap: 12px; margin-top: 12px;
+	padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.prow-config-static { align-items: stretch; }
+.prow-config textarea, .prow-config-static textarea {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
-	color: var(--text); background: var(--bg); border: 1px solid var(--border-strong);
+	color: var(--text); background: var(--bg-elev); border: 1px solid var(--border-strong);
 	border-radius: 9px; padding: 9px 11px; resize: vertical; width: 100%;
 }
+.prow-config > form > button[type="submit"], .prow-config-static > button[type="submit"] { align-self: flex-start; }
 .pad { padding: 14px 16px; }
+
+/* generated plugin config form (from declared ConfigFields) */
+.cfg-fields { display: flex; flex-direction: column; gap: 14px; }
+.cfg-field { display: flex; flex-direction: column; gap: 5px; }
+.cfg-label { font-size: 13px; font-weight: 540; color: var(--text-dim); }
+.cfg-label .req { color: var(--danger); margin-left: 2px; }
+.cfg-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.cfg-check { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+.cfg-check input { width: auto; }
+.cfg-field input, .cfg-field textarea, .cfg-field select {
+	font: inherit; color: var(--text); background: var(--bg);
+	border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 11px; width: 100%;
+}
+.cfg-field input[type="checkbox"] { width: auto; padding: 0; }
+.cfg-field textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; resize: vertical; }
+.cfg-field input:focus, .cfg-field textarea:focus, .cfg-field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.plugin-removes { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+.plugin-removes form { margin: 0; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 760px) {

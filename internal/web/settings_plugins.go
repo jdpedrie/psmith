@@ -1,8 +1,10 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -12,9 +14,10 @@ import (
 )
 
 type pluginRowVM struct {
-	Name       string
-	ConfigJSON string
-	Disabled   bool
+	Name     string
+	Display  string
+	Disabled bool
+	Form     pluginConfigForm
 }
 
 type pluginOptVM struct {
@@ -35,28 +38,24 @@ func (h *Handler) handlePluginsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	catalog := h.pluginTypesByName(r.Context())
+	models := h.listModels(r.Context(), "")
 	var rows []pluginRowVM
 	for _, p := range plugResp.Msg.GetPlugins() {
-		cfg := string(p.GetConfig())
-		if strings.TrimSpace(cfg) == "" {
-			cfg = "{}"
-		}
-		rows = append(rows, pluginRowVM{Name: p.GetPluginName(), ConfigJSON: cfg, Disabled: p.GetDisabled()})
+		t := catalog[p.GetPluginName()]
+		rows = append(rows, pluginRowVM{
+			Name:     p.GetPluginName(),
+			Display:  orName(displayName(t), p.GetPluginName()),
+			Disabled: p.GetDisabled(),
+			Form:     h.buildPluginForm(r.Context(), t, p.GetConfig(), models),
+		})
 	}
 
-	typesResp, err := h.profiles.ListPluginTypes(r.Context(), connect.NewRequest(&reevev1.ListPluginTypesRequest{}))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	var types []pluginOptVM
-	for _, tpe := range typesResp.Msg.GetPluginTypes() {
-		name := tpe.GetDisplayName()
-		if name == "" {
-			name = tpe.GetName()
-		}
-		types = append(types, pluginOptVM{Name: tpe.GetName(), DisplayName: name, Description: tpe.GetDescription()})
+	for _, tpe := range catalog {
+		types = append(types, pluginOptVM{Name: tpe.GetName(), DisplayName: orName(tpe.GetDisplayName(), tpe.GetName()), Description: tpe.GetDescription()})
 	}
+	sort.Slice(types, func(i, j int) bool { return types[i].DisplayName < types[j].DisplayName })
 	h.render(w, r, http.StatusOK, profilePluginsPage(profileID, prof.Msg.GetProfile().GetName(), rows, types))
 }
 
@@ -67,20 +66,40 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	catalog := h.pluginTypesByName(r.Context())
+	existing := map[string][]byte{}
+	for _, p := range h.currentPlugins(r, profileID) {
+		existing[p.GetPluginName()] = p.GetConfig()
+	}
 	var plugins []*reevev1.ProfilePlugin
 	for i := 0; ; i++ {
 		name := r.PostFormValue(fmt.Sprintf("pname_%d", i))
 		if name == "" {
 			break
 		}
-		cfg := strings.TrimSpace(r.PostFormValue(fmt.Sprintf("pconfig_%d", i)))
-		if cfg == "" {
-			cfg = "{}"
+		t := catalog[name]
+		var cfg []byte
+		if pluginHasForm(t) {
+			// Assemble from the declared fields (p{i}_cfg_<field>), starting from
+			// the current stored config so unknown keys survive.
+			prefix := fmt.Sprintf("p%d_cfg_", i)
+			cfg, _ = assemblePluginConfig(t, existing[name], func(field string) string {
+				return r.PostFormValue(prefix + field)
+			})
+		} else {
+			raw := strings.TrimSpace(r.PostFormValue(fmt.Sprintf("pconfig_%d", i)))
+			if raw == "" {
+				raw = "{}"
+			} else if !json.Valid([]byte(raw)) {
+				http.Error(w, "config is not valid JSON", http.StatusBadRequest)
+				return
+			}
+			cfg = []byte(raw)
 		}
 		plugins = append(plugins, &reevev1.ProfilePlugin{
 			PluginName: name,
 			Ordinal:    int32(i),
-			Config:     []byte(cfg),
+			Config:     cfg,
 			Disabled:   r.PostFormValue(fmt.Sprintf("pdisabled_%d", i)) != "",
 		})
 	}

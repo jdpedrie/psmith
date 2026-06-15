@@ -584,43 +584,61 @@ templ modelSelect(name, current string, models []modelVM) {
 
 templ profilePluginsPage(profileID, profileName string, rows []pluginRowVM, types []pluginOptVM) {
 	@settingsShell("Plugins") {
-		<div class="settings-section-head">
-			<h1>Plugins</h1>
+		<div class="page-head">
+			<div>
+				<h1 class="page-title">Plugins</h1>
+				<p class="page-sub">{ profileName } — the pipeline runs in order.</p>
+			</div>
 			<a class="btn-link" href={ templ.SafeURL("/settings/profiles/" + profileID) }>Back to profile</a>
 		</div>
-		<p class="muted">{ profileName } — pipeline runs in order. Config is JSON.</p>
-		<form class="form" method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins") }>
-			if len(rows) == 0 {
-				<p class="muted">No plugins attached.</p>
-			}
-			for i, row := range rows {
-				<div class="plugin-row">
-					<div class="plugin-head">
-						<strong>{ row.Name }</strong>
-						<label class="check"><input type="checkbox" name={ "pdisabled_" + itoa(int32(i)) } checked?={ row.Disabled }/> disabled</label>
-					</div>
-					<input type="hidden" name={ "pname_" + itoa(int32(i)) } value={ row.Name }/>
-					<textarea name={ "pconfig_" + itoa(int32(i)) } rows="3" spellcheck="false">{ row.ConfigJSON }</textarea>
+		<form method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins") }>
+			<div class="sgroup">
+				<div class="sgroup-card">
+					if len(rows) == 0 {
+						<p class="muted pad">No plugins attached.</p>
+					}
+					for i, row := range rows {
+						<div class="prow">
+							<div class="prow-top">
+								<div class="prow-main">
+									<div class="prow-head">
+										<span class="prow-name">{ row.Display }</span>
+									</div>
+									<code class="prow-id">{ row.Name }</code>
+								</div>
+								<div class="prow-actions">
+									<label class="cfg-check"><input type="checkbox" name={ "pdisabled_" + itoa(int32(i)) } checked?={ row.Disabled }/> <span>Disabled</span></label>
+								</div>
+							</div>
+							<input type="hidden" name={ "pname_" + itoa(int32(i)) } value={ row.Name }/>
+							<div class="prow-config-static">
+								@pluginConfigFields(row.Form, "p"+itoa(int32(i))+"_cfg_", "pconfig_"+itoa(int32(i)))
+							</div>
+						</div>
+					}
 				</div>
-			}
+			</div>
 			if len(rows) > 0 {
 				<div class="form-actions"><button type="submit">Save pipeline</button></div>
 			}
 		</form>
-		for i, row := range rows {
-			<form method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/remove") } class="plugin-remove">
-				<input type="hidden" name="ordinal" value={ itoa(int32(i)) }/>
-				<button class="msg-action" type="submit">Remove { row.Name }</button>
-			</form>
+		if len(rows) > 0 {
+			<div class="plugin-removes">
+				for i, row := range rows {
+					<form method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/remove") }>
+						<input type="hidden" name="ordinal" value={ itoa(int32(i)) }/>
+						<button class="btn-soft danger" type="submit">Remove { row.Display }</button>
+					</form>
+				}
+			</div>
 		}
-		<h2>Add plugin</h2>
 		<form class="form-inline" method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins/add") }>
 			<select name="plugin_name">
 				for _, t := range types {
 					<option value={ t.Name }>{ t.DisplayName }</option>
 				}
 			</select>
-			<button type="submit">Add</button>
+			<button class="btn-soft" type="submit">+ Add plugin</button>
 		</form>
 	}
 }
@@ -1135,40 +1153,42 @@ templ convPluginsTab(vm convSettingsVM) {
 			}
 			for _, p := range vm.Plugins {
 				<div class="prow">
-					<div class="prow-main">
-						<div class="prow-head">
-							<span class={ "prow-name", templ.KV("strike", p.Disabled) }>{ p.Display }</span>
-							if p.Source == "Override" {
-								<span class="badge badge-override">override</span>
-							} else {
-								<span class="badge">inherited</span>
-							}
+					<div class="prow-top">
+						<div class="prow-main">
+							<div class="prow-head">
+								<span class={ "prow-name", templ.KV("strike", p.Disabled) }>{ p.Display }</span>
+								if p.Source == "Override" {
+									<span class="badge badge-override">override</span>
+								} else {
+									<span class="badge">inherited</span>
+								}
+								if p.Disabled {
+									<span class="badge badge-warn">disabled</span>
+								}
+							</div>
+							<code class="prow-id">{ p.Name }</code>
+						</div>
+						<div class="prow-actions">
 							if p.Disabled {
-								<span class="badge badge-warn">disabled</span>
+								@pluginAction(vm.ConvID, "restore", p.Name, "Restore", false)
+							} else if p.Source == "Override" {
+								@pluginAction(vm.ConvID, "remove", p.Name, "Remove override", true)
+							} else {
+								@pluginAction(vm.ConvID, "disable", p.Name, "Disable here", true)
 							}
 						</div>
-						<code class="prow-id">{ p.Name }</code>
 					</div>
-					<div class="prow-actions">
-						if !p.Disabled {
-							<details class="plugin-config">
-								<summary class="btn-soft">Edit config</summary>
-								<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
-									<input type="hidden" name="action" value="config"/>
-									<input type="hidden" name="plugin_name" value={ p.Name }/>
-									<textarea name="config" rows="4" spellcheck="false" placeholder="{}">{ p.ConfigJSON }</textarea>
-									<button class="btn-soft" type="submit">Save config</button>
-								</form>
-							</details>
-						}
-						if p.Disabled {
-							@pluginAction(vm.ConvID, "restore", p.Name, "Restore", false)
-						} else if p.Source == "Override" {
-							@pluginAction(vm.ConvID, "remove", p.Name, "Remove override", true)
-						} else {
-							@pluginAction(vm.ConvID, "disable", p.Name, "Disable here", true)
-						}
-					</div>
+					if !p.Disabled {
+						<details class="prow-config">
+							<summary class="btn-soft">Edit config</summary>
+							<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
+								<input type="hidden" name="action" value="config"/>
+								<input type="hidden" name="plugin_name" value={ p.Name }/>
+								@pluginConfigFields(p.Form, "cfg_", "config")
+								<button class="btn-soft" type="submit">Save config</button>
+							</form>
+						</details>
+					}
 				</div>
 			}
 		</div>
@@ -1184,6 +1204,64 @@ templ convPluginsTab(vm convSettingsVM) {
 			<button class="btn-soft" type="submit">+ Add plugin override</button>
 		</form>
 	}
+}
+
+// pluginConfigFields renders the form a plugin declares via its ConfigFields,
+// or a raw JSON editor when the plugin has no flat fields (or uses a custom
+// editor on the native clients).
+// pluginConfigFields renders the form a plugin declares via its ConfigFields.
+// Inputs are named prefix+field; the raw JSON fallback (for plugins with no
+// flat fields or a custom native editor) uses rawName.
+templ pluginConfigFields(form pluginConfigForm, prefix, rawName string) {
+	if form.HasForm {
+		<div class="cfg-fields">
+			for _, f := range form.Fields {
+				@configFieldControl(f, prefix)
+			}
+		</div>
+	} else {
+		<textarea name={ rawName } rows="5" spellcheck="false" placeholder="{}">{ form.RawJSON }</textarea>
+	}
+}
+
+templ configFieldControl(f configFieldVM, prefix string) {
+	<div class="cfg-field">
+		if f.Type == "boolean" {
+			<label class="cfg-check">
+				<input type="checkbox" name={ prefix + f.Name } value="true" checked?={ f.Checked }/>
+				<span class="cfg-label">
+					{ f.Display }
+					if f.Required {
+						<span class="req">*</span>
+					}
+				</span>
+			</label>
+		} else {
+			<label class="cfg-label">
+				{ f.Display }
+				if f.Required {
+					<span class="req">*</span>
+				}
+			</label>
+			switch f.Type {
+				case "textarea":
+					<textarea name={ prefix + f.Name } rows="3" spellcheck="false">{ f.Value }</textarea>
+				case "number":
+					<input type="number" name={ prefix + f.Name } value={ f.Value } autocomplete="off"/>
+				case "select", "model":
+					<select name={ prefix + f.Name }>
+						for _, o := range f.Options {
+							<option value={ o.Value } selected?={ o.Value == f.Value }>{ o.Label }</option>
+						}
+					</select>
+				default:
+					<input type="text" name={ prefix + f.Name } value={ f.Value } autocomplete="off"/>
+			}
+		}
+		if f.Description != "" {
+			<span class="cfg-desc">{ f.Description }</span>
+		}
+	</div>
 }
 
 templ pluginAction(convID, action, name, label string, danger bool) {
