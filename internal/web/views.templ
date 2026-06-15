@@ -489,6 +489,15 @@ templ profilesPage(rows []profileRowVM) {
 	}
 }
 
+templ modelSelect(name, current string, models []modelVM) {
+	<select name={ name }>
+		<option value="" selected?={ current == "" }>(inherit / none)</option>
+		for _, m := range models {
+			<option value={ m.Value } selected?={ m.Value == current }>{ m.Label }</option>
+		}
+	</select>
+}
+
 templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 	@settingsShell(title) {
 		<h1>{ title }</h1>
@@ -505,6 +514,39 @@ templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 				System prompt
 				<textarea name="system_message" rows="10">{ p.SystemMessage }</textarea>
 			</label>
+			if !isNew {
+				<h2>Default model</h2>
+				<label>
+					Model new conversations use
+					@modelSelect("default_model", p.DefaultModel, p.Models)
+				</label>
+				<h2>Compaction</h2>
+				<label>
+					Model
+					@modelSelect("compression_model", p.CompressionModel, p.Models)
+				</label>
+				<label>
+					Mode
+					<select name="compression_mode">
+						<option value="" selected?={ p.CompressionMode == "" }>(default)</option>
+						<option value="REPLACE" selected?={ p.CompressionMode == "REPLACE" }>Replace</option>
+						<option value="APPEND" selected?={ p.CompressionMode == "APPEND" }>Append</option>
+					</select>
+				</label>
+				<label>
+					Guide <span class="muted">(prompt for the summary)</span>
+					<textarea name="compression_guide" rows="3">{ p.CompressionGuide }</textarea>
+				</label>
+				<h2>Auto-title</h2>
+				<label>
+					Model
+					@modelSelect("title_model", p.TitleModel, p.Models)
+				</label>
+				<label>
+					Guide
+					<textarea name="title_guide" rows="2">{ p.TitleGuide }</textarea>
+				</label>
+			}
 			<div class="form-actions">
 				<button type="submit">
 					if isNew {

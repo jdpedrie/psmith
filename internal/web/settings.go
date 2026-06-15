@@ -64,6 +64,14 @@ type profileFormVM struct {
 	Name          string
 	SystemMessage string
 	Description   string
+	// Advanced (edit only). Model values are "providerID|modelID".
+	DefaultModel     string
+	CompressionModel string
+	CompressionGuide string
+	CompressionMode  string // REPLACE | APPEND | ""
+	TitleModel       string
+	TitleGuide       string
+	Models           []modelVM // picker options
 }
 
 // --- settings home ---

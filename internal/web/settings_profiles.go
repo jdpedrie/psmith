@@ -62,11 +62,37 @@ func (h *Handler) handleProfileEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := resp.Msg.GetProfile()
+	var defaultModel string
+	if d := p.GetDefaultSettings(); d != nil && d.GetDefaultProviderId() != "" && d.GetDefaultModelId() != "" {
+		defaultModel = modelValue(d.GetDefaultProviderId(), d.GetDefaultModelId())
+	}
+	var compModel string
+	if p.GetCompressionProviderId() != "" && p.GetCompressionModelId() != "" {
+		compModel = modelValue(p.GetCompressionProviderId(), p.GetCompressionModelId())
+	}
+	var titleModel string
+	if p.GetTitleProviderId() != "" && p.GetTitleModelId() != "" {
+		titleModel = modelValue(p.GetTitleProviderId(), p.GetTitleModelId())
+	}
+	mode := ""
+	switch p.GetCompressionMode() {
+	case reevev1.CompressionMode_COMPRESSION_MODE_REPLACE:
+		mode = "REPLACE"
+	case reevev1.CompressionMode_COMPRESSION_MODE_APPEND:
+		mode = "APPEND"
+	}
 	h.render(w, r, http.StatusOK, profileFormPage("Edit profile", "/settings/profiles/"+id, profileFormVM{
-		ID:            id,
-		Name:          p.GetName(),
-		SystemMessage: p.GetSystemMessage(),
-		Description:   p.GetDescription(),
+		ID:               id,
+		Name:             p.GetName(),
+		SystemMessage:    p.GetSystemMessage(),
+		Description:      p.GetDescription(),
+		DefaultModel:     defaultModel,
+		CompressionModel: compModel,
+		CompressionGuide: p.GetCompressionGuide(),
+		CompressionMode:  mode,
+		TitleModel:       titleModel,
+		TitleGuide:       p.GetTitleGuide(),
+		Models:           h.listModels(r.Context(), ""),
 	}, false))
 }
 
@@ -83,12 +109,68 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	sm := r.PostFormValue("system_message")
 	desc := r.PostFormValue("description")
-	if _, err := h.profiles.UpdateProfile(r.Context(), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	req := &reevev1.UpdateProfileRequest{
 		Id:            id,
 		Name:          &name,
 		SystemMessage: &sm,
 		Description:   &desc,
-	})); err != nil {
+	}
+	var clear []string
+
+	// Default model lives inside default_settings; preserve the rest of that
+	// message (include-thinking, call settings) by reading the current value.
+	cur, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&reevev1.GetProfileRequest{Id: id}))
+	if err != nil {
+		http.Error(w, "profile not found", http.StatusNotFound)
+		return
+	}
+	defaults := cur.Msg.GetProfile().GetDefaultSettings()
+	if defaults == nil {
+		defaults = &reevev1.ProfileDefaults{}
+	}
+	if pid, mid, ok := splitModelValue(r.PostFormValue("default_model")); ok {
+		defaults.DefaultProviderId, defaults.DefaultModelId = &pid, &mid
+	} else {
+		defaults.DefaultProviderId, defaults.DefaultModelId = nil, nil
+	}
+	req.DefaultSettings = defaults
+
+	// Compression model + guide + mode.
+	if pid, mid, ok := splitModelValue(r.PostFormValue("compression_model")); ok {
+		req.CompressionProviderId, req.CompressionModelId = &pid, &mid
+	} else {
+		clear = append(clear, "compression_provider_id", "compression_model_id")
+	}
+	if g := strings.TrimSpace(r.PostFormValue("compression_guide")); g != "" {
+		req.CompressionGuide = &g
+	} else {
+		clear = append(clear, "compression_guide")
+	}
+	switch r.PostFormValue("compression_mode") {
+	case "REPLACE":
+		m := reevev1.CompressionMode_COMPRESSION_MODE_REPLACE
+		req.CompressionMode = &m
+	case "APPEND":
+		m := reevev1.CompressionMode_COMPRESSION_MODE_APPEND
+		req.CompressionMode = &m
+	default:
+		clear = append(clear, "compression_mode")
+	}
+
+	// Title model + guide.
+	if pid, mid, ok := splitModelValue(r.PostFormValue("title_model")); ok {
+		req.TitleProviderId, req.TitleModelId = &pid, &mid
+	} else {
+		clear = append(clear, "title_provider_id", "title_model_id")
+	}
+	if g := strings.TrimSpace(r.PostFormValue("title_guide")); g != "" {
+		req.TitleGuide = &g
+	} else {
+		clear = append(clear, "title_guide")
+	}
+
+	req.ClearFields = clear
+	if _, err := h.profiles.UpdateProfile(r.Context(), connect.NewRequest(req)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
