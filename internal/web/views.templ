@@ -586,13 +586,12 @@ templ modelSelect(name, current string, models []modelVM) {
 
 templ profilePluginsPage(profileID, profileName string, rows []pluginRowVM, types []pluginOptVM) {
 	@settingsShell("Plugins") {
-		<div class="page-head">
-			<div>
-				<h1 class="page-title">Plugins</h1>
-				<p class="page-sub">{ profileName } — the pipeline runs in order.</p>
-			</div>
-			<a class="btn-link" href={ templ.SafeURL("/settings/profiles/" + profileID) }>Back to profile</a>
-		</div>
+		<h1 class="page-title">{ profileName }</h1>
+		<nav class="segmented">
+			<a class="seg" href={ templ.SafeURL("/settings/profiles/" + profileID) }>Profile</a>
+			<a class="seg active" href={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins") }>Plugins</a>
+		</nav>
+		<p class="page-sub">The pipeline runs in order. Inherited from the profile chain; add or configure plugins here.</p>
 		<form method="post" action={ templ.SafeURL("/settings/profiles/" + profileID + "/plugins") }>
 			<div class="sgroup">
 				<div class="sgroup-card">
@@ -642,12 +641,13 @@ templ profilePluginsPage(profileID, profileName string, rows []pluginRowVM, type
 
 templ profileFormPage(title, action string, p profileFormVM, isNew bool) {
 	@settingsShell(title) {
-		<div class="settings-section-head">
-			<h1>{ title }</h1>
-			if !isNew {
-				<a class="btn-link" href={ templ.SafeURL("/settings/profiles/" + p.ID + "/plugins") }>Plugins</a>
-			}
-		</div>
+		<h1 class="page-title">{ title }</h1>
+		if !isNew {
+			<nav class="segmented">
+				<a class="seg active" href={ templ.SafeURL("/settings/profiles/" + p.ID) }>Profile</a>
+				<a class="seg" href={ templ.SafeURL("/settings/profiles/" + p.ID + "/plugins") }>Plugins</a>
+			</nav>
+		}
 		<form class="form" method="post" action={ templ.SafeURL(action) }>
 			<label>
 				Name

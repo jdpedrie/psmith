@@ -40,8 +40,10 @@ func (h *Handler) handlePluginsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	catalog := h.pluginTypesByName(r.Context())
 	models := h.listModels(r.Context(), "")
+	attached := map[string]bool{}
 	var rows []pluginRowVM
 	for _, p := range plugResp.Msg.GetPlugins() {
+		attached[p.GetPluginName()] = true
 		t := catalog[p.GetPluginName()]
 		rows = append(rows, pluginRowVM{
 			Name:     p.GetPluginName(),
@@ -51,8 +53,12 @@ func (h *Handler) handlePluginsPage(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Offer only plugins not already attached.
 	var types []pluginOptVM
 	for _, tpe := range catalog {
+		if attached[tpe.GetName()] {
+			continue
+		}
 		types = append(types, pluginOptVM{Name: tpe.GetName(), DisplayName: orName(tpe.GetDisplayName(), tpe.GetName()), Description: tpe.GetDescription()})
 	}
 	sort.Slice(types, func(i, j int) bool { return types[i].DisplayName < types[j].DisplayName })
