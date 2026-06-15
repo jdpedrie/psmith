@@ -124,47 +124,93 @@ templ settingsShell(title string) {
 
 templ settingsPage() {
 	@settingsShell("Settings") {
-		<nav class="settings-nav">
-			<a class="settings-item" href="/settings/providers">
-				<span class="settings-item-name">Providers &amp; models</span>
-				<span class="settings-item-desc">Connect an LLM provider and enable models.</span>
-			</a>
-			<a class="settings-item" href="/settings/profiles">
-				<span class="settings-item-name">Profiles</span>
-				<span class="settings-item-desc">Personas: system prompt and defaults.</span>
-			</a>
-			<a class="settings-item" href="/settings/embedder">
-				<span class="settings-item-name">Embedder</span>
-				<span class="settings-item-desc">Backend for semantic history search.</span>
-			</a>
-			<a class="settings-item" href="/settings/langfuse">
-				<span class="settings-item-name">Langfuse</span>
-				<span class="settings-item-desc">Optional tracing of model calls.</span>
-			</a>
-			<a class="settings-item" href="/settings/cost">
-				<span class="settings-item-name">Cost</span>
-				<span class="settings-item-desc">Recorded model spend per provider.</span>
-			</a>
-		</nav>
+		<h1 class="page-title">Settings</h1>
+		<p class="page-sub">Configure providers, personas, and integrations.</p>
+		<section class="sgroup">
+			<header class="sgroup-head">Data</header>
+			<div class="sgroup-card">
+				@settingsRow("/settings/providers", "providers", "Providers & models", "Connect an LLM provider and enable models.")
+				@settingsRow("/settings/profiles", "profiles", "Profiles", "Personas: system prompt and defaults.")
+			</div>
+		</section>
+		<section class="sgroup">
+			<header class="sgroup-head">Integrations</header>
+			<div class="sgroup-card">
+				@settingsRow("/settings/embedder", "embedder", "Embedder", "Backend for semantic history search.")
+				@settingsRow("/settings/langfuse", "langfuse", "Langfuse", "Optional tracing of model calls.")
+			</div>
+		</section>
+		<section class="sgroup">
+			<header class="sgroup-head">Usage</header>
+			<div class="sgroup-card">
+				@settingsRow("/settings/cost", "cost", "Cost", "Recorded model spend per provider.")
+			</div>
+		</section>
+	}
+}
+
+templ settingsRow(href, icon, title, desc string) {
+	<a class="srow" href={ templ.SafeURL(href) }>
+		<span class="srow-icon">
+			@sicon(icon)
+		</span>
+		<span class="srow-body">
+			<span class="srow-title">{ title }</span>
+			<span class="srow-desc">{ desc }</span>
+		</span>
+		<span class="srow-trail">
+			@chevron()
+		</span>
+	</a>
+}
+
+templ chevron() {
+	<svg class="srow-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+}
+
+// sicon renders a small stroke icon for settings rows.
+templ sicon(name string) {
+	switch name {
+		case "providers":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>
+		case "profiles":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
+		case "embedder":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.4"></circle><circle cx="18" cy="6" r="2.4"></circle><circle cx="18" cy="18" r="2.4"></circle><path d="M8.2 11l7.6-4M8.2 13l7.6 4"></path></svg>
+		case "langfuse":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 14l4-4 3 3 5-6"></path></svg>
+		case "cost":
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M14.5 9.2c-.6-.7-1.5-1-2.5-1-1.4 0-2.5.7-2.5 1.9 0 2.7 5 1.4 5 4 0 1.2-1.1 2-2.5 2-1 0-1.9-.3-2.5-1"></path></svg>
+		default:
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg>
 	}
 }
 
 templ providersPage(provs []providerVM) {
 	@settingsShell("Providers") {
-		<div class="settings-section-head">
-			<h1>Providers</h1>
+		<div class="page-head">
+			<div>
+				<h1 class="page-title">Providers</h1>
+				<p class="page-sub">Connect an LLM provider and enable its models.</p>
+			</div>
 			<a class="btn" href="/settings/providers/new">Add provider</a>
 		</div>
-		<div class="card-list">
-			if len(provs) == 0 {
-				<p class="muted">No providers yet. Add one to enable models.</p>
-			}
-			for _, p := range provs {
-				<a class="row-card" href={ templ.SafeURL("/settings/providers/" + p.ID) }>
-					<span class="row-card-title">{ p.Label }</span>
-					<span class="row-card-sub">{ p.Type }</span>
-				</a>
-			}
+		<div class="sgroup">
+			<div class="sgroup-card">
+				if len(provs) == 0 {
+					<p class="muted pad">No providers yet. Add one to enable models.</p>
+				}
+				for _, p := range provs {
+					<a class="srow" href={ templ.SafeURL("/settings/providers/" + p.ID) }>
+						<span class="srow-icon">@sicon("providers")</span>
+						<span class="srow-body">
+							<span class="srow-title">{ p.Label }</span>
+							<span class="srow-desc">{ p.Type }</span>
+						</span>
+						<span class="srow-trail">@chevron()</span>
+					</a>
+				}
+			</div>
 		</div>
 	}
 }
@@ -493,27 +539,36 @@ templ langfusePage(vm langfuseVM) {
 
 templ profilesPage(rows []profileRowVM) {
 	@settingsShell("Profiles") {
-		<div class="settings-section-head">
-			<h1>Profiles</h1>
+		<div class="page-head">
+			<div>
+				<h1 class="page-title">Profiles</h1>
+				<p class="page-sub">Personas: system prompt, default model, and call settings.</p>
+			</div>
 			<a class="btn" href="/settings/profiles/new">New profile</a>
 		</div>
-		<div class="card-list">
-			if len(rows) == 0 {
-				<p class="muted">No profiles yet.</p>
-			}
-			for _, p := range rows {
-				<a class="row-card" href={ templ.SafeURL("/settings/profiles/" + p.ID) }>
-					<span class="row-card-title">
-						{ p.Name }
-						if p.Template {
-							<span class="badge">template</span>
-						}
-					</span>
-					if p.Description != "" {
-						<span class="row-card-sub">{ p.Description }</span>
-					}
-				</a>
-			}
+		<div class="sgroup">
+			<div class="sgroup-card">
+				if len(rows) == 0 {
+					<p class="muted pad">No profiles yet.</p>
+				}
+				for _, p := range rows {
+					<a class="srow" href={ templ.SafeURL("/settings/profiles/" + p.ID) }>
+						<span class="srow-icon">@sicon("profiles")</span>
+						<span class="srow-body">
+							<span class="srow-title">
+								{ p.Name }
+								if p.Template {
+									<span class="badge">template</span>
+								}
+							</span>
+							if p.Description != "" {
+								<span class="srow-desc">{ p.Description }</span>
+							}
+						</span>
+						<span class="srow-trail">@chevron()</span>
+					</a>
+				}
+			</div>
 		</div>
 	}
 }
@@ -922,11 +977,11 @@ templ convSettingsPage(vm convSettingsVM) {
 				<a class="brand" href={ templ.SafeURL("/c/" + vm.ConvID) }>← Back to chat</a>
 			</header>
 			<div class="settings-body">
-				<h1>Conversation settings</h1>
-				<p class="muted">{ vm.Title }</p>
-				<nav class="tabs">
-					<a class={ "tab", templ.KV("active", vm.Tab == "call") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=call") }>Call settings</a>
-					<a class={ "tab", templ.KV("active", vm.Tab == "plugins") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=plugins") }>Plugins</a>
+				<h1 class="page-title">Conversation settings</h1>
+				<p class="page-sub">{ vm.Title }</p>
+				<nav class="segmented">
+					<a class={ "seg", templ.KV("active", vm.Tab == "call") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=call") }>Call settings</a>
+					<a class={ "seg", templ.KV("active", vm.Tab == "plugins") } href={ templ.SafeURL("/c/" + vm.ConvID + "/settings?tab=plugins") }>Plugins</a>
 				</nav>
 				if vm.Tab == "plugins" {
 					@convPluginsTab(vm)
@@ -939,38 +994,58 @@ templ convSettingsPage(vm convSettingsVM) {
 }
 
 templ convCallTab(vm convSettingsVM) {
-	<p class="muted settings-note">Any field left blank inherits from the profile (and below). The placeholder shows the value it inherits.</p>
-	<form class="form" method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/settings") }>
-		<h2>Sampling</h2>
-		@numField("Temperature", vm.Temperature, "0.01")
-		@numField("Top P", vm.TopP, "0.01")
-		@numField("Max output tokens", vm.MaxOutputTokens, "1")
-		@numField("Top K", vm.TopK, "1")
-		<label>
-			Stop sequences <span class="muted">(comma-separated)</span>
-			<input name={ vm.StopSequences.Name } value={ vm.StopSequences.Value } placeholder={ vm.StopSequences.Inherited } autocomplete="off"/>
-		</label>
-		<h2>Thinking</h2>
-		@triSelect("Enabled", vm.ThinkingEnabled)
-		@numField("Budget tokens", vm.ThinkingBudget, "256")
-		<h2>Caching</h2>
-		@triSelect("Explicit cache", vm.ExplicitCache)
-		<h2>History</h2>
-		@triSelect("Include thinking in history", vm.IncludeThinking)
+	<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/settings") }>
+		<p class="page-sub">Conversation overrides. Any field left unset inherits from the profile (and below).</p>
+		<section class="sgroup">
+			<header class="sgroup-head">Common</header>
+			<div class="sgroup-card">
+				@sliderField("Temperature", vm.Temperature, "0", "2", "0.01", "Sampling temperature. Anthropic clamps to [0, 1].")
+				@sliderField("Top P", vm.TopP, "0", "1", "0.01", "Nucleus sampling cutoff. Lower keeps generation focused.")
+				@numField("Max output tokens", vm.MaxOutputTokens, "1", "Hard cap on tokens the model generates in one turn.")
+				@numField("Top K", vm.TopK, "1", "Limit sampling to the top K tokens. Honoured by Anthropic and Google.")
+				@textField("Stop sequences", vm.StopSequences, "Comma-separated strings that end the response.")
+			</div>
+		</section>
+		<section class="sgroup">
+			<header class="sgroup-head">Thinking</header>
+			<div class="sgroup-card">
+				@triField("Enabled", vm.ThinkingEnabled, "Let the model spend hidden reasoning tokens.")
+				@numField("Budget tokens", vm.ThinkingBudget, "256", "How many tokens the model may spend on hidden reasoning.")
+			</div>
+		</section>
+		<section class="sgroup">
+			<header class="sgroup-head">Caching &amp; history</header>
+			<div class="sgroup-card">
+				@triField("Explicit cache", vm.ExplicitCache, "Reuse cached prompt prefixes where supported.")
+				@triField("Include thinking in history", vm.IncludeThinking, "Keep prior reasoning in the context window.")
+			</div>
+		</section>
 		if vm.DriverType == "anthropic" {
-			<h2>Anthropic</h2>
-			@triSelect("Prompt cache enabled", vm.AnthCacheEnabled)
+			<section class="sgroup">
+				<header class="sgroup-head">Anthropic</header>
+				<div class="sgroup-card">
+					@triField("Prompt cache enabled", vm.AnthCacheEnabled, "Send cache_control breakpoints on the request.")
+				</div>
+			</section>
 		}
 		if vm.DriverType == "openai-compatible" {
-			<h2>OpenAI</h2>
-			@numField("Seed", vm.OAISeed, "1")
-			@numField("Frequency penalty", vm.OAIFreqPenalty, "0.1")
-			@numField("Presence penalty", vm.OAIPresPenalty, "0.1")
-			@triSelect("Parallel tool calls", vm.OAIParallelTools)
+			<section class="sgroup">
+				<header class="sgroup-head">OpenAI</header>
+				<div class="sgroup-card">
+					@numField("Seed", vm.OAISeed, "1", "Deterministic sampling seed.")
+					@numField("Frequency penalty", vm.OAIFreqPenalty, "0.1", "Penalise tokens by how often they've appeared. [-2, 2].")
+					@numField("Presence penalty", vm.OAIPresPenalty, "0.1", "Penalise tokens that have appeared at all. [-2, 2].")
+					@triField("Parallel tool calls", vm.OAIParallelTools, "Allow the model to call multiple tools at once.")
+				</div>
+			</section>
 		}
 		if vm.DriverType == "google" {
-			<h2>Google</h2>
-			@numField("Candidate count", vm.GoogCandidates, "1")
+			<section class="sgroup">
+				<header class="sgroup-head">Google</header>
+				<div class="sgroup-card">
+					@numField("Candidate count", vm.GoogCandidates, "1", "How many response candidates to generate.")
+				</div>
+			</section>
 		}
 		<div class="form-actions">
 			<button type="submit">Save</button>
@@ -979,72 +1054,126 @@ templ convCallTab(vm convSettingsVM) {
 	</form>
 }
 
-templ numField(label string, f callFieldVM, step string) {
-	<label>
-		{ label }
-		if f.Inherited != "" {
-			<span class="muted">(inherits { f.Inherited })</span>
-		}
-		<input type="number" step={ step } name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off"/>
-	</label>
+// fieldValue renders the right-aligned indicator: the override if set, else the
+// inherited value, else a dash.
+templ fieldValue(f callFieldVM) {
+	if f.Value != "" {
+		<span class="field-value">{ f.Value }</span>
+	} else if f.Inherited != "" {
+		<span class="field-value">inherits { f.Inherited }</span>
+	} else {
+		<span class="field-value">—</span>
+	}
 }
 
-templ triSelect(label string, f triFieldVM) {
-	<label>
-		{ label }
-		<select name={ f.Name }>
-			<option value="" selected?={ f.State == "" }>Inherit{ triInheritLabel(f.Inherited) }</option>
-			<option value="on" selected?={ f.State == "on" }>On</option>
-			<option value="off" selected?={ f.State == "off" }>Off</option>
-		</select>
-	</label>
+templ numField(label string, f callFieldVM, step, desc string) {
+	<div class="field">
+		<div class="field-row">
+			<span class="field-label">{ label }</span>
+			@fieldValue(f)
+		</div>
+		<span class="field-desc">{ desc }</span>
+		<div class="field-control compact">
+			<input type="number" step={ step } name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off"/>
+		</div>
+	</div>
+}
+
+// sliderField pairs a range with a number input; the range is a JS enhancement
+// that drives the number (the authoritative, blank-means-inherit field).
+templ sliderField(label string, f callFieldVM, min, max, step, desc string) {
+	<div class="field">
+		<div class="field-row">
+			<span class="field-label">{ label }</span>
+			@fieldValue(f)
+		</div>
+		<span class="field-desc">{ desc }</span>
+		<div class="field-control">
+			<input
+				type="range"
+				min={ min }
+				max={ max }
+				step={ step }
+				value={ sliderStart(f, min, max) }
+				oninput="this.nextElementSibling.value=this.value"
+			/>
+			<input type="number" step={ step } name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off" style="width:90px" oninput="this.previousElementSibling.value=this.value"/>
+		</div>
+	</div>
+}
+
+templ textField(label string, f callFieldVM, desc string) {
+	<div class="field">
+		<div class="field-row"><span class="field-label">{ label }</span></div>
+		<span class="field-desc">{ desc }</span>
+		<div class="field-control">
+			<input type="text" name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off"/>
+		</div>
+	</div>
+}
+
+templ triField(label string, f triFieldVM, desc string) {
+	<div class="field">
+		<div class="field-row"><span class="field-label">{ label }</span></div>
+		<span class="field-desc">{ desc }</span>
+		<div class="field-control tri">
+			<select name={ f.Name }>
+				<option value="" selected?={ f.State == "" }>Inherit{ triInheritLabel(f.Inherited) }</option>
+				<option value="on" selected?={ f.State == "on" }>On</option>
+				<option value="off" selected?={ f.State == "off" }>Off</option>
+			</select>
+		</div>
+	</div>
 }
 
 templ convPluginsTab(vm convSettingsVM) {
-	<p class="muted settings-note">The merged pipeline runs in order. Inherited plugins come from the profile; you can disable them here or add conversation-only overrides.</p>
-	<div class="card-list">
-		if len(vm.Plugins) == 0 {
-			<p class="muted">No plugins in the pipeline.</p>
-		}
-		for _, p := range vm.Plugins {
-			<div class="plugin-row">
-				<div class="plugin-head">
-					<strong class={ templ.KV("strike", p.Disabled) }>{ p.Display }</strong>
-					if p.Source == "Override" {
-						<span class="badge badge-override">override</span>
-					} else {
-						<span class="badge">inherited</span>
-					}
-					if p.Disabled {
-						<span class="badge badge-warn">disabled</span>
-					}
+	<p class="page-sub">The merged pipeline runs in order. Inherited plugins come from the profile; disable them here or add conversation-only overrides.</p>
+	<div class="sgroup">
+		<div class="sgroup-card">
+			if len(vm.Plugins) == 0 {
+				<p class="muted pad">No plugins in the pipeline.</p>
+			}
+			for _, p := range vm.Plugins {
+				<div class="prow">
+					<div class="prow-main">
+						<div class="prow-head">
+							<span class={ "prow-name", templ.KV("strike", p.Disabled) }>{ p.Display }</span>
+							if p.Source == "Override" {
+								<span class="badge badge-override">override</span>
+							} else {
+								<span class="badge">inherited</span>
+							}
+							if p.Disabled {
+								<span class="badge badge-warn">disabled</span>
+							}
+						</div>
+						<code class="prow-id">{ p.Name }</code>
+					</div>
+					<div class="prow-actions">
+						if !p.Disabled {
+							<details class="plugin-config">
+								<summary class="btn-soft">Edit config</summary>
+								<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
+									<input type="hidden" name="action" value="config"/>
+									<input type="hidden" name="plugin_name" value={ p.Name }/>
+									<textarea name="config" rows="4" spellcheck="false" placeholder="{}">{ p.ConfigJSON }</textarea>
+									<button class="btn-soft" type="submit">Save config</button>
+								</form>
+							</details>
+						}
+						if p.Disabled {
+							@pluginAction(vm.ConvID, "restore", p.Name, "Restore", false)
+						} else if p.Source == "Override" {
+							@pluginAction(vm.ConvID, "remove", p.Name, "Remove override", true)
+						} else {
+							@pluginAction(vm.ConvID, "disable", p.Name, "Disable here", true)
+						}
+					</div>
 				</div>
-				<code class="plugin-name">{ p.Name }</code>
-				if !p.Disabled {
-					<details class="plugin-config">
-						<summary>Config</summary>
-						<form method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
-							<input type="hidden" name="action" value="config"/>
-							<input type="hidden" name="plugin_name" value={ p.Name }/>
-							<textarea name="config" rows="4" spellcheck="false" placeholder="{}">{ p.ConfigJSON }</textarea>
-							<button class="btn-secondary" type="submit">Save config</button>
-						</form>
-					</details>
-				}
-				<div class="plugin-actions">
-					if p.Disabled {
-						@pluginActionForm(vm.ConvID, "restore", p.Name, "Restore")
-					} else if p.Source == "Override" {
-						@pluginActionForm(vm.ConvID, "remove", p.Name, "Remove override")
-					} else {
-						@pluginActionForm(vm.ConvID, "disable", p.Name, "Disable here")
-					}
-				</div>
-			</div>
-		}
+			}
+		</div>
 	</div>
 	if len(vm.Addable) > 0 {
-		<h2>Add conversation plugin</h2>
 		<form class="form-inline" method="post" action={ templ.SafeURL("/c/" + vm.ConvID + "/plugins/override") }>
 			<input type="hidden" name="action" value="add"/>
 			<select name="plugin_name">
@@ -1052,16 +1181,16 @@ templ convPluginsTab(vm convSettingsVM) {
 					<option value={ t.Name }>{ t.DisplayName }</option>
 				}
 			</select>
-			<button type="submit">Add</button>
+			<button class="btn-soft" type="submit">+ Add plugin override</button>
 		</form>
 	}
 }
 
-templ pluginActionForm(convID, action, name, label string) {
+templ pluginAction(convID, action, name, label string, danger bool) {
 	<form method="post" action={ templ.SafeURL("/c/" + convID + "/plugins/override") }>
 		<input type="hidden" name="action" value={ action }/>
 		<input type="hidden" name="plugin_name" value={ name }/>
-		<button class="msg-action" type="submit">{ label }</button>
+		<button class={ "btn-soft", templ.KV("danger", danger) } type="submit">{ label }</button>
 	</form>
 }
 

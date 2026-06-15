@@ -108,18 +108,18 @@ func fillCallFields(vm *convSettingsVM, own, inh *reevev1.CallSettings, ownConv,
 	vm.StopSequences = callFieldVM{Name: "stop_sequences", Value: strings.Join(own.GetStopSequences(), ", "), Inherited: strings.Join(inh.GetStopSequences(), ", ")}
 
 	ownT, inhT := own.GetThinking(), inh.GetThinking()
-	vm.ThinkingEnabled = triField("thinking_enabled", thinkEnabled(ownT), thinkEnabled(inhT))
+	vm.ThinkingEnabled = makeTri("thinking_enabled", thinkEnabled(ownT), thinkEnabled(inhT))
 	vm.ThinkingBudget = intField("thinking_budget", ownT.GetBudgetTokens(), ownT != nil && ownT.BudgetTokens != nil, inhT.GetBudgetTokens(), inhT != nil && inhT.BudgetTokens != nil)
-	vm.ExplicitCache = triField("explicit_cache", explicitCache(own), explicitCache(inh))
-	vm.IncludeThinking = triField("include_thinking_in_history", includeThinking(ownConv), includeThinking(inhConv))
+	vm.ExplicitCache = makeTri("explicit_cache", explicitCache(own), explicitCache(inh))
+	vm.IncludeThinking = makeTri("include_thinking_in_history", includeThinking(ownConv), includeThinking(inhConv))
 
 	ownA, inhA := own.GetAnthropic(), inh.GetAnthropic()
-	vm.AnthCacheEnabled = triField("anth_cache_enabled", anthCache(ownA), anthCache(inhA))
+	vm.AnthCacheEnabled = makeTri("anth_cache_enabled", anthCache(ownA), anthCache(inhA))
 	ownO, inhO := own.GetOpenai(), inh.GetOpenai()
 	vm.OAISeed = intField("oai_seed", ownO.GetSeed(), ownO != nil && ownO.Seed != nil, inhO.GetSeed(), inhO != nil && inhO.Seed != nil)
 	vm.OAIFreqPenalty = floatField("oai_frequency_penalty", ownO.GetFrequencyPenalty(), ownO != nil && ownO.FrequencyPenalty != nil, inhO.GetFrequencyPenalty(), inhO != nil && inhO.FrequencyPenalty != nil)
 	vm.OAIPresPenalty = floatField("oai_presence_penalty", ownO.GetPresencePenalty(), ownO != nil && ownO.PresencePenalty != nil, inhO.GetPresencePenalty(), inhO != nil && inhO.PresencePenalty != nil)
-	vm.OAIParallelTools = triField("oai_parallel_tool_calls", oaiParallel(ownO), oaiParallel(inhO))
+	vm.OAIParallelTools = makeTri("oai_parallel_tool_calls", oaiParallel(ownO), oaiParallel(inhO))
 	ownG, inhG := own.GetGoogle(), inh.GetGoogle()
 	vm.GoogCandidates = intField("goog_candidate_count", ownG.GetCandidateCount(), ownG != nil && ownG.CandidateCount != nil, inhG.GetCandidateCount(), inhG != nil && inhG.CandidateCount != nil)
 }
@@ -179,7 +179,7 @@ func intField(name string, v int32, set bool, inh int32, inhSet bool) callFieldV
 	return f
 }
 
-func triField(name string, own, inh *bool) triFieldVM {
+func makeTri(name string, own, inh *bool) triFieldVM {
 	f := triFieldVM{Name: name}
 	if own != nil {
 		f.State = boolWord(*own)
@@ -633,6 +633,23 @@ func orPlaceholder(inherited string) string {
 		return inherited
 	}
 	return "—"
+}
+
+// sliderStart picks the range input's initial position: the override if set,
+// else the inherited value, else the midpoint of [min, max].
+func sliderStart(f callFieldVM, min, max string) string {
+	if f.Value != "" {
+		return f.Value
+	}
+	if f.Inherited != "" {
+		return f.Inherited
+	}
+	lo, err1 := strconv.ParseFloat(min, 64)
+	hi, err2 := strconv.ParseFloat(max, 64)
+	if err1 != nil || err2 != nil {
+		return min
+	}
+	return strconv.FormatFloat((lo+hi)/2, 'f', -1, 64)
 }
 
 // triInheritLabel annotates the Inherit option with the resolved value.
