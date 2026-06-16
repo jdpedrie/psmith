@@ -128,6 +128,26 @@ Notes:
 - `GET /healthz` returns `{"ok":true}` with no auth and no database hit. Use it for orchestrator liveness probes.
 - The build context is filtered by `.dockerignore` to skip the Swift clients and editor caches.
 
+## Docker Compose
+
+For a self-contained single-host deployment, `docker-compose.yml` runs Postgres (pgvector) plus reeved together. It builds the image from the local Dockerfile, waits for the database to pass its healthcheck, and persists both the database and the file-storage volume.
+
+```bash
+cp .env.example .env
+# edit .env: set POSTGRES_PASSWORD and REEVE_MASTER_KEY
+#   REEVE_MASTER_KEY=$(openssl rand -base64 32)
+docker compose up -d
+docker compose exec reeved reeve useradd -u alice   # prompts for a password
+# open http://localhost:8080
+```
+
+reeved self-migrates on every start (the entrypoint runs `reeve install`, which creates the pgvector extension and applies the embedded migrations), so there is no separate migration step. Configuration is environment-only, sourced from `.env`:
+
+- `POSTGRES_PASSWORD` and `REEVE_MASTER_KEY` are required; the database refuses to start without a password and reeved refuses to start without the key. The master key is base64-encoded 32 bytes and immutable: lose or change it and existing encrypted rows (provider API keys, plugin secrets) can't be decrypted.
+- Optional: `REEVE_PORT` (host port, default 8080), `REEVE_PUBLIC_BASE_URL` (your public origin behind a proxy), and `REEVE_BOOTSTRAP_ADMIN_USERNAME`/`REEVE_BOOTSTRAP_ADMIN_PASSWORD` to auto-create an admin on first boot.
+
+The compose database does not publish a host port (reeved reaches it over the private compose network); add a `ports:` mapping only if you need direct psql access. TLS is meant to be terminated at a reverse proxy in front of reeved.
+
 ## Clients
 
 The macOS and iOS apps share a Swift package, `ReeveSwift`, that ships `ReeveKit` (repositories, view models, domain types, the Connect client) and `ReeveUI` (cross-platform SwiftUI views). The iOS app is the reference client.

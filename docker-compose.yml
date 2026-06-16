@@ -1,0 +1,74 @@
+# Reeve — single-host deployment: Postgres (pgvector) + the reeved server.
+#
+# Quick start:
+#   1. cp .env.example .env
+#   2. edit .env: set POSTGRES_PASSWORD and REEVE_MASTER_KEY
+#      (generate a key with: openssl rand -base64 32)
+#   3. docker compose up -d
+#   4. create the first user (reeved has no signup) — you'll be prompted
+#      for a password, or pass -p:
+#      docker compose exec reeved reeve useradd -u <name>
+#   5. open http://localhost:8080
+#
+# reeved self-migrates on every start: the entrypoint runs `reeve install`,
+# which creates the pgvector extension and applies the embedded schema
+# migrations (idempotent). No separate migration step.
+#
+# Run with `docker compose -p reeve up -d` to name the project "reeve".
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: reeve
+      # Required — set in .env. Postgres refuses to start if blank.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: reeve
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # reeved waits for this before starting (depends_on: service_healthy).
+      test: ["CMD-SHELL", "pg_isready -U reeve -d reeve"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  reeved:
+    build: .
+    image: reeve:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Talk to the db service over the compose network. sslmode=disable is
+      # fine on the private network; terminate TLS at a reverse proxy.
+      REEVE_DSN: postgres://reeve:${POSTGRES_PASSWORD}@db:5432/reeve?sslmode=disable
+      REEVE_ADDR: ":8080"
+      # At-rest encryption key for provider API keys etc. REQUIRED (set in
+      # .env) and immutable: lose or change it and existing encrypted rows
+      # can't be decrypted. reeved refuses to start if blank. Generate once
+      # with `openssl rand -base64 32`.
+      REEVE_MASTER_KEY: ${REEVE_MASTER_KEY}
+      REEVE_DATA_DIR: /data
+      # Absolute base URL clients prepend to signed file URLs. Set to your
+      # public origin when behind a proxy (e.g. https://reeve.example.com).
+      REEVE_PUBLIC_BASE_URL: ${REEVE_PUBLIC_BASE_URL:-}
+      # Optional: auto-create an admin on first boot against an empty DB.
+      REEVE_BOOTSTRAP_ADMIN_USERNAME: ${REEVE_BOOTSTRAP_ADMIN_USERNAME:-}
+      REEVE_BOOTSTRAP_ADMIN_PASSWORD: ${REEVE_BOOTSTRAP_ADMIN_PASSWORD:-}
+    ports:
+      - "${REEVE_PORT:-8080}:8080"
+    volumes:
+      - reeve-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  reeve-data:

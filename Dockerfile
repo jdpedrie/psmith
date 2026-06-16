@@ -45,6 +45,11 @@ COPY --from=build /out/reeved /usr/local/bin/reeved
 COPY --from=build /out/reeve  /usr/local/bin/reeve
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
+# Default file-storage root (attachments). Created here owned by the
+# runtime user so a fresh named volume mounted at /data inherits that
+# ownership — Docker seeds a new volume from the mountpoint's perms.
+RUN mkdir -p /data && chown reeve:reeve /data
+
 USER reeve
 WORKDIR /home/reeve
 
