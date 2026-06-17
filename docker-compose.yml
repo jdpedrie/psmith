@@ -1,4 +1,4 @@
-# Reeve — single-host deployment: Postgres (pgvector) + the reeved server.
+# Reeve single-host deployment: Postgres (pgvector) + the reeved server.
 #
 # Quick start (full walkthrough in docs/operations/installation.md):
 #   1. cp .env.example .env
@@ -21,7 +21,7 @@ services:
     image: pgvector/pgvector:pg18
     environment:
       POSTGRES_USER: reeve
-      # Required — set in .env. Postgres refuses to start if blank.
+      # Required: set in .env. Postgres refuses to start if blank.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: reeve
     volumes:
