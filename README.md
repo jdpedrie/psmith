@@ -8,7 +8,9 @@ It's a personal project. The roadmap, scope, and tradeoffs are biased toward "on
 >
 > Reeve was built to scratch an itch. It's entirely vibe-coded, but I use it frequently and it works well. It's "ChatGPT with any model and provider and a lot of configuration". I make no claims as to the code quality, because I didn't write it, but I did do my best to constrain the architectural path to something which seemed sane to me.
 
-![Conversation view](docs/screenshots/capital.png)
+<p align="center">
+  <img src="docs/screenshots/ios-conversation.png" alt="A conversation in the Reeve iOS app" width="340">
+</p>
 
 ## Why this exists
 
@@ -36,9 +38,8 @@ A personal project, exercised daily by the author. Working today:
 Deferred: APNs push on iOS, stateful subprocess providers (Claude Code, Codex), multi-user sharing, and encryption-at-rest beyond host disk encryption. See [`docs/`](docs/README.md) for the full picture.
 
 <p align="left">
-  <img src="docs/screenshots/ios-chats.png" alt="iOS chats list" width="240">
-  <img src="docs/screenshots/ios-conversation.png" alt="iOS conversation view" width="240">
-  <img src="docs/screenshots/ios-providers.png" alt="iOS providers settings" width="240">
+  <img src="docs/screenshots/ios-chats.png" alt="iOS chats list" width="270">
+  <img src="docs/screenshots/ios-providers.png" alt="iOS providers and presets" width="270">
 </p>
 
 ## Architecture
