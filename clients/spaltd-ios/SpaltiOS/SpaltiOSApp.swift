@@ -1,0 +1,142 @@
+import SwiftUI
+import SpaltKit
+import SpaltUI
+
+/// iOS entry point. Mirrors `SpaltMacApp`'s shape — single
+/// `WindowGroup` hosting `RootView`, with the same env-injected
+/// platform glue (`Theme`, `Clipboard`) as the Mac build.
+///
+/// `urlStore` is held as `@State` so the App scene observes the
+/// active server URL; on change we mint a fresh `AppModel` against
+/// the new host. Same live-swap pattern the Mac uses, so
+/// "log out → change server → sign back in" doesn't need a relaunch.
+@main
+struct SpaltiOSApp: App {
+    init() {
+        // Device-tool handlers are registered once per process,
+        // before any AppModel boots. Each capability module's
+        // `register()` only seeds DeviceToolRegistry.shared —
+        // EKEventStore + permission prompts stay lazy until the
+        // model actually calls one of these tools.
+        CalendarTools.register()
+        RemindersTools.register()
+        // HealthKit registration is no-op on devices where the
+        // framework isn't available (iPad without Health). When
+        // available, the handlers are registered eagerly; the
+        // permission sheet only fires on the first actual tool
+        // call (ensureHealthAccess inside the handler).
+        HealthTools.register()
+        // Obsidian registers conditionally: tools advertised to
+        // the server only when a vault bookmark exists. Re-synced
+        // by ObsidianVaultView after pick/clear so the server
+        // sees the new capability set on the next
+        // RegisterCapabilities pass.
+        ObsidianTools.syncRegistration()
+    }
+
+    @State private var accountManager = AccountManager()
+    @State private var urlStore = ServerURLStore.shared
+    @State private var themeStore = ThemeStore()
+    @State private var prefs = sharedAppPreferences
+    @State private var navigator = sharedIOSNavigator
+    /// Extends background execution while StreamHub has at least one
+    /// active run. See `BackgroundTaskKeeper` for the iOS contract +
+    /// the explicit limits (this buys ~30s, not unlimited).
+    @State private var bgKeeper = BackgroundTaskKeeper()
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some Scene {
+        WindowGroup {
+            iOSAppShell(accountManager: accountManager)
+                .environment(accountManager)
+                .environment(themeStore)
+                .environment(prefs)
+                .environment(navigator)
+                .environment(\.theme, themeStore.current)
+                .environment(\.clipboard, UIKitClipboard())
+                .environment(\.notifier, sharedIOSNotifier)
+                .tint(themeStore.current.accent)
+                // Bootstrap is driven by `iOSAppShell`'s
+                // `.task(id: activeAccountID)` so it re-fires on
+                // every account switch, not just first launch.
+                .onChange(of: scenePhase) { _, newPhase in
+                    handleScenePhase(newPhase)
+                }
+                // Two-way bg-keeper bookkeeping driven by stream
+                // start/end events. Reads through the active
+                // account's StreamHub so a switched-away account
+                // doesn't influence background extension.
+                .onChange(of: accountManager.active?.streamHub.activeConversationIDs.isEmpty ?? true) { _, isEmpty in
+                    if isEmpty {
+                        bgKeeper.end()
+                    } else if scenePhase != .active {
+                        bgKeeper.extend()
+                    }
+                }
+        }
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .background, .inactive:
+            if let app = accountManager.active,
+               !app.streamHub.activeConversationIDs.isEmpty {
+                bgKeeper.extend()
+            }
+        case .active:
+            bgKeeper.end()
+        @unknown default:
+            break
+        }
+    }
+}
+
+/// iOS root shell — picks RootView when an active account exists,
+/// LoginView (cold-start variant) otherwise. Mirrors the Mac AppShell.
+struct iOSAppShell: View {
+    @Bindable var accountManager: AccountManager
+
+    var body: some View {
+        Group {
+            if let app = accountManager.active {
+                RootView()
+                    .environment(app)
+                    .id(app.accountID ?? UUID())
+            } else {
+                // Cold start: no account configured. LoginView with
+                // no preselected host walks the user through server
+                // probe + credentials and calls
+                // `accountManager.addAccount`, which becomes the
+                // first persisted account and makes itself active.
+                LoginView()
+            }
+        }
+        // Re-fire on every active-account swap so an account that
+        // hasn't been bootstrapped yet (its AuthState is still
+        // `.resolving`) gets `restoreSession` called and flips to
+        // either `.signedIn` or `.signedOut`. Without this, switching
+        // into a freshly-constructed AppModel leaves the user staring
+        // at AuthInterstitialView forever — looking like the app has
+        // hung. The bootstrap is now guarded internally to be
+        // once-only per AppModel, so re-firing is cheap.
+        .task(id: accountManager.activeAccountID) {
+            if let active = accountManager.active {
+                await active.bootstrap()
+            }
+        }
+        // Cold-launch location warmup: when the user has opted in
+        // via Privacy, kick a fix request the moment the shell
+        // appears so the first SendMessage has a fresh
+        // `lastCoords/lastFixAt` to read instead of returning nil
+        // from `freshFact()`. Without this, the first send after
+        // every app launch silently dropped location even when the
+        // permission was granted.
+        .task {
+            #if canImport(CoreLocation)
+            if LocationFactPreference.enabled {
+                LocationProvider.shared.requestPermissionAndFix()
+            }
+            #endif
+        }
+    }
+}
