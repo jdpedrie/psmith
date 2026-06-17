@@ -48,7 +48,8 @@ Running it.
 
 - [clients/client-spec.md](clients/client-spec.md) — the provider-agnostic contract any client must honor: auth, the RPC flows, streaming and reconnection, offline behavior, device tools, elicitation, file upload, ordering and idempotency.
 - [clients/ios-reference.md](clients/ios-reference.md) — the iOS reference implementation: SpaltKit and SpaltUI layering, the stream hub, repositories, view models, account switching, the offline queue, the cache, device-tool dispatch, the screens.
-- [clients/web.md](clients/web.md) — the server-rendered web client: templ + Datastar, in-process service calls, cookie sessions, SSE streaming. Early; first vertical slice in place.
+- [clients/building-ios.md](clients/building-ios.md) — building and running the iOS app: prerequisites, the simulator loop, the make targets, running on a physical device, signing, troubleshooting.
+- [clients/web.md](clients/web.md) — the server-rendered web client: templ + htmx (with the SSE extension), in-process service calls, cookie sessions, SSE streaming. Early but functional.
 
 ## Project notes
 

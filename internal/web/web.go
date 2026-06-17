@@ -2,7 +2,7 @@
 // presentation layer over the same services the ConnectRPC handlers expose,
 // called in-process, and is served from spaltd's own mux. The UI works as
 // plain HTML (forms POST, links navigate) and is progressively enhanced with
-// Datastar: the conversation streams live over SSE.
+// htmx (plus its SSE extension): the conversation streams live over SSE.
 package web
 
 import (

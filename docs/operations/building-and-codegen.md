@@ -87,3 +87,5 @@ make ios-app-run      # xcodegen, build, install, launch on the simulator
 ```
 
 The iOS Xcode project is generated; `clients/spaltd-ios/project.yml` is the source of truth, not the `.xcodeproj`. The provider-logo SVGs are converted to PNGs during the iOS build because iOS cannot decode raw SVG bytes from arbitrary file URLs.
+
+For the iOS app specifically (prerequisites, the simulator loop, running on a physical device, signing, and troubleshooting) see [../clients/building-ios.md](../clients/building-ios.md).

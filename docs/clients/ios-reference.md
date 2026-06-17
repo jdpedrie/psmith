@@ -2,6 +2,8 @@
 
 The iOS app is the reference implementation of the [client spec](client-spec.md). It dogfoods the whole contract, so when the spec and the iOS code disagree, the iOS code is what actually ships and the spec is the thing to fix. This document maps the spec's concepts to concrete Swift types and explains the layering, so you can read the spec and then find the code that implements each part. The Mac app shares the same `SpaltKit` and `SpaltUI` packages but is knowingly behind on parity; treat iOS as the reference.
 
+To build and run the app (prerequisites, the simulator loop, running on a device), see [building-ios.md](building-ios.md). This document is about how it works internally.
+
 ## Package layout
 
 The Swift code is three targets:

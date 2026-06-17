@@ -187,4 +187,4 @@ make ios-app-run    # xcodegen, build for the simulator, install, launch
 
 `make ios-app-run` defaults to the `iPhone 17 Pro` simulator; override with `IOS_SIMULATOR='iPhone 16'`. On first launch the client asks for the spaltd URL (the simulator can hit `http://localhost:8080` directly), probes it, then asks for credentials. To run on a physical device, open `clients/spaltd-ios/SpaltiOS.xcodeproj` in Xcode after `make ios-project` and let Xcode sign with a Personal Team.
 
-See [../clients/ios-reference.md](../clients/ios-reference.md) for the client architecture.
+For the full iOS build-and-run guide (prerequisites, the make targets, device signing, troubleshooting) see [../clients/building-ios.md](../clients/building-ios.md), and [../clients/ios-reference.md](../clients/ios-reference.md) for the client architecture.
