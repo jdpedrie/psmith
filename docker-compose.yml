@@ -1,31 +1,31 @@
 # Reeve — single-host deployment: Postgres (pgvector) + the reeved server.
 #
-# Quick start:
+# Quick start (full walkthrough in docs/operations/installation.md):
 #   1. cp .env.example .env
 #   2. edit .env: set POSTGRES_PASSWORD and REEVE_MASTER_KEY
 #      (generate a key with: openssl rand -base64 32)
-#   3. docker compose up -d
-#   4. create the first user (reeved has no signup) — you'll be prompted
-#      for a password, or pass -p:
-#      docker compose exec reeved reeve useradd -u <name>
+#   3. docker compose -p reeve up -d
+#   4. create the first user (reeved has no signup); prompts for a password:
+#      docker compose -p reeve exec reeved reeve useradd -u <name>
 #   5. open http://localhost:8080
 #
 # reeved self-migrates on every start: the entrypoint runs `reeve install`,
 # which creates the pgvector extension and applies the embedded schema
 # migrations (idempotent). No separate migration step.
 #
-# Run with `docker compose -p reeve up -d` to name the project "reeve".
+# The -p reeve flag names the compose project "reeve" (otherwise it takes
+# the directory name). Use the same -p on every command.
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     environment:
       POSTGRES_USER: reeve
       # Required — set in .env. Postgres refuses to start if blank.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: reeve
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql
     healthcheck:
       # reeved waits for this before starting (depends_on: service_healthy).
       test: ["CMD-SHELL", "pg_isready -U reeve -d reeve"]
@@ -45,10 +45,11 @@ services:
       # fine on the private network; terminate TLS at a reverse proxy.
       REEVE_DSN: postgres://reeve:${POSTGRES_PASSWORD}@db:5432/reeve?sslmode=disable
       REEVE_ADDR: ":8080"
-      # At-rest encryption key for provider API keys etc. REQUIRED (set in
-      # .env) and immutable: lose or change it and existing encrypted rows
-      # can't be decrypted. reeved refuses to start if blank. Generate once
-      # with `openssl rand -base64 32`.
+      # At-rest encryption key for provider API keys etc. Strongly
+      # recommended and immutable: lose or change it and existing encrypted
+      # rows can't be decrypted. Without it reeved still starts but stores
+      # secrets in plaintext (loud warning). Generate once, set in .env:
+      #   openssl rand -base64 32
       REEVE_MASTER_KEY: ${REEVE_MASTER_KEY}
       REEVE_DATA_DIR: /data
       # Absolute base URL clients prepend to signed file URLs. Set to your

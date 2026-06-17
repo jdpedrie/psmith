@@ -1,156 +1,184 @@
-# Installation and deployment
+# Installation
 
-Reeve is one Go server (`reeved`) plus one Postgres database. There is a second binary, the `reeve` operator CLI, that applies migrations, creates users, and mints encryption keys. Both binaries ship in the Docker image and land on `PATH`.
+Reeve is one Go server (`reeved`) and one Postgres database (with the pgvector extension). A second binary, the `reeve` operator CLI, applies migrations, creates users, and mints encryption keys. Both binaries ship in the Docker image and land on `PATH`.
 
-This document covers a fresh install, local development, and Docker deployment. For the full env-var list see [configuration.md](configuration.md). For codegen and tests see [building-and-codegen.md](building-and-codegen.md).
+There are three ways to run it, from least to most setup:
 
-## Prerequisites
+1. [Docker Compose](#1-docker-compose-recommended): the server and database together, one command. Recommended for a real deployment.
+2. [Docker](#2-docker-single-container): the server container against a Postgres you run yourself.
+3. [From source](#3-from-source-go-build): `go build` / `go run`, for development or hosts without Docker.
 
-- Go 1.25 (the Docker build uses `golang:1.25-alpine`; the go.mod toolchain pins the version).
-- Postgres 14 or newer with the pgvector extension available. The dev setup uses the `pgvector/pgvector:pg16` image.
-- For the clients: macOS 26 and Xcode 17. For the iOS client, `xcodegen` (`brew install xcodegen`) and `librsvg` (`brew install librsvg`).
-- Only if you regenerate code: `buf` and `sqlc`. Only for the dev migration loop: `goose`.
+Every path needs the same two things: an [encryption key](#encryption-key) and a [first user](#first-user). Each walkthrough sets them up inline; the [shared concepts](#shared-concepts) section at the end explains them in depth. For the full environment-variable list see [configuration.md](configuration.md).
 
-## One required decision before first run
+## 1. Docker Compose (recommended)
 
-Reeve encrypts provider credentials and plugin secrets at rest with AES-256-GCM. The key comes from `REEVE_MASTER_KEY` (base64 of 32 bytes). Mint one once per environment and keep it safe:
+`docker-compose.yml` runs Postgres (pgvector) and reeved together. It builds the image from the local Dockerfile, waits for the database to pass its healthcheck, and persists both the database and the file-storage volume. reeved self-migrates on every start, so there is no separate migration step.
 
 ```bash
-export REEVE_MASTER_KEY=$(go run ./cmd/reeve genkey)
+cp .env.example .env
+# edit .env: at minimum set POSTGRES_PASSWORD and REEVE_MASTER_KEY.
+# generate a key with:
+#   openssl rand -base64 32
+docker compose -p reeve up -d
+docker compose -p reeve exec reeved reeve useradd -u alice   # prompts for a password
+# open http://localhost:8080
 ```
 
-If you do not set it, the server still starts, but it logs a loud warning and writes config blobs in plaintext through a no-op cipher. Losing the key after rows are encrypted means losing the ability to read those rows. There is a dev-only escape hatch, `REEVE_DEV_AUTOKEY=1`, that mints a throwaway key per process; data written under it is unreadable after a restart. See [encryption.md](../design/encryption.md).
+Configuration is environment-only, read from `.env`:
 
-## Postgres
+- `POSTGRES_PASSWORD` is required: the Postgres image refuses to start without it.
+- `REEVE_MASTER_KEY` is the at-rest encryption key. The server runs without it but stores provider API keys and plugin secrets in plaintext (see [encryption key](#encryption-key)). Set it before adding any provider.
+- Optional: `REEVE_PORT` (host port, default 8080), `REEVE_PUBLIC_BASE_URL` (your public origin when behind a proxy), and `REEVE_BOOTSTRAP_ADMIN_USERNAME` / `REEVE_BOOTSTRAP_ADMIN_PASSWORD` to auto-create an admin on first boot instead of running `useradd`.
 
-The `Makefile` and the test harness assume Postgres on port 5433 with credentials `clark:clark` and database `clark`. The port is off the default 5432 to avoid clashing with other local databases. The `clark` naming predates the project rename and is kept for the container and credentials only.
+The database does not publish a host port (reeved reaches it over the private compose network). Add a `ports:` mapping to the `db` service only if you want direct `psql` access. The data lives in two named volumes (`db-data`, `reeve-data`); `docker compose -p reeve down` keeps them, `down -v` deletes them.
+
+Common operations:
+
+```bash
+docker compose -p reeve logs -f reeved        # follow server logs
+docker compose -p reeve exec reeved reeve install -status   # migration status
+docker compose -p reeve pull && docker compose -p reeve up -d --build   # upgrade
+```
+
+## 2. Docker (single container)
+
+The repo's multi-stage Dockerfile builds both binaries into one Alpine image (around 45 MB) that runs as a non-root `reeve` user and exposes 8080. Use this when you already run Postgres elsewhere.
+
+```bash
+docker build -t reeve .
+
+docker run -d --name reeved -p 8080:8080 \
+  -e REEVE_DSN='postgres://USER:PASS@host.docker.internal:5432/reeve?sslmode=disable' \
+  -e REEVE_MASTER_KEY="$(openssl rand -base64 32)" \
+  -e REEVE_BOOTSTRAP_ADMIN_USERNAME=alice \
+  -e REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme \
+  reeve
+```
+
+The entrypoint runs `reeve install` before starting `reeved` whenever `REEVE_DSN` is set, so a plain `docker run` creates the pgvector extension, applies migrations, then serves. (It passes the DSN to the CLI explicitly because `reeve install` reads `-db` or `DATABASE_URL`, not `REEVE_DSN`.) For non-`reeved` commands the entrypoint skips the install step, so `docker run --rm reeve reeve genkey` just runs the CLI.
+
+Operator commands against a running container:
+
+```bash
+docker exec -it reeved reeve useradd -u bob       # add another user
+docker exec -it reeved reeve install -status      # migration status
+```
+
+Notes:
+
+- `host.docker.internal` reaches the host's Postgres on macOS and Windows. On Linux use `--network=host` with `localhost`, or point the DSN at the bridge IP.
+- The connecting Postgres role needs permission to run `CREATE EXTENSION vector` (the preflight in `reeve install` does this). A superuser or database owner works.
+- Mount a volume at `/data` to persist file attachments across container replacements: `-v reeve-data:/data` (the image creates `/data` owned by the runtime user). reeved writes there by default.
+- `GET /healthz` returns `{"ok":true}` with no auth and no database hit. Use it for orchestrator liveness probes.
+
+## 3. From source (`go build`)
+
+For development, or a host where you would rather not run the server in Docker. You still need a Postgres with pgvector somewhere; the quickest is a container.
+
+### Prerequisites
+
+- Go 1.25 (the go.mod toolchain pins the version).
+- Postgres 14 or newer with the pgvector extension available.
+- Only if you regenerate code: `buf` and `sqlc`. Only for the dev migration loop: `goose`.
+
+### Postgres
+
+The `Makefile` and the test harness default to a Postgres on port 5433 with credentials `clark:clark` and database `clark`. The port is off 5432 to avoid clashing with other local databases; the `clark` naming predates the project rename and is kept for the dev container and credentials only.
 
 ```bash
 docker run -d --name clark-postgres \
   -e POSTGRES_USER=clark -e POSTGRES_PASSWORD=clark -e POSTGRES_DB=clark \
-  -p 5433:5432 pgvector/pgvector:pg16
+  -p 5433:5432 pgvector/pgvector:pg18
 ```
 
-### pgvector and template1
-
-Message embeddings use a `vector(768)` column, so the `vector` extension must exist in the target database. The extension is untrusted, which means a non-superuser cannot install it, and the migrations deliberately do not try. Two paths handle this:
-
-- `reeve install` runs `CREATE EXTENSION IF NOT EXISTS vector` as a preflight before applying migrations, so a normal install works if the connecting role can create the extension.
-- The test harness clones each test database from `template1`. Install the extension once into `template1` so every cloned database inherits it:
+Message embeddings use a `vector(768)` column, so the `vector` extension must exist in the target database. `reeve install` runs `CREATE EXTENSION IF NOT EXISTS vector` as a preflight, so a normal install handles it if the connecting role can create extensions. The test harness additionally needs the extension in `template1` (it clones each test DB from there):
 
 ```bash
 docker exec clark-postgres psql -U clark -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector"
 ```
 
-If migration 00034 fails with a missing-extension error, this is why.
-
-## Apply the schema
-
-`reeve install` applies the goose migrations baked into the binary. No source tree and no separate goose install are needed. This is the recommended path for any real deployment.
+### Build, migrate, run
 
 ```bash
-go run ./cmd/reeve install                      # uses the local dev DSN
-go run ./cmd/reeve install -db <postgres-url>   # against any reachable database
-go run ./cmd/reeve install -status              # show what is applied, change nothing
-go run ./cmd/reeve install -target 30           # migrate up to a specific version
-```
+# build both binaries (or use `go run ./cmd/...` directly)
+go build -o reeved ./cmd/reeved
+go build -o reeve  ./cmd/reeve
 
-DSN resolution order for the CLI: the `-db` flag, then `REEVE_DSN`, then `DATABASE_URL`, then the local dev default `postgres://clark:clark@localhost:5433/clark?sslmode=disable`.
+# apply the schema (migrations are baked into the binary)
+./reeve install -db 'postgres://clark:clark@localhost:5433/clark?sslmode=disable'
 
-For iterating on a new migration file during development, `make migrate-up` and `make migrate-down` use the external `goose` CLI against `db/migrations` with `GOOSE_DBSTRING` defaulting to the local dev DSN.
-
-## Create the first user
-
-Reeve always requires auth. There is no single-user bypass. There are two ways to get the first account.
-
-Bootstrap from env vars on first run. If no users exist and both `REEVE_BOOTSTRAP_ADMIN_USERNAME` and `REEVE_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates that admin on startup. If no users exist and the bootstrap vars are not set, the server still starts, but every authenticated RPC rejects until a user exists.
-
-Or create one directly with the CLI, which works against a fresh database without a running server:
-
-```bash
-go run ./cmd/reeve useradd -u john          # prompts for the password, no echo
-go run ./cmd/reeve useradd -u alice -no-admin
-```
-
-`useradd` defaults to creating an admin. Pass `-no-admin` for a regular user. It writes the row directly, so it does not need the server or an existing admin.
-
-## Run the server
-
-The server requires `REEVE_DSN`. A minimal run:
-
-```bash
+# run the server
 export REEVE_DSN='postgres://clark:clark@localhost:5433/clark?sslmode=disable'
-export REEVE_MASTER_KEY=$(go run ./cmd/reeve genkey)
-export REEVE_BOOTSTRAP_ADMIN_USERNAME=john
+export REEVE_MASTER_KEY="$(./reeve genkey)"
+export REEVE_BOOTSTRAP_ADMIN_USERNAME=alice
 export REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme
-make run
+./reeved
 # reeved listening addr=:8080
 ```
 
-The server listens on `REEVE_ADDR` (default `:8080`) using cleartext HTTP/2 (h2c). It does not terminate TLS. For anything beyond localhost, run it behind a TLS-terminating reverse proxy.
+The DSN resolution order for the CLI is the `-db` flag, then `REEVE_DSN`, then `DATABASE_URL`, then the local dev default (`postgres://clark:clark@localhost:5433/clark?sslmode=disable`). Because the dev default matches the container above, `./reeve install` and `make run` work with no flags during development.
 
-### What happens on startup
-
-In order: connect to Postgres and ping; bootstrap the admin if no users exist; build the in-memory model catalog (lazy, no fetch yet); start the stream supervisor and flip any `running` stream runs left by a crash to `interrupted`; start the chunk-cleanup goroutine; load the encryption cipher; start the embeddings worker and resolver; register the post-login profile-seeding hook and backfill system profiles; build the auth interceptor with the `Login` and `Probe` procedures exempt; create the file storage directory; derive the file-URL signing key; build every service; register the Connect handlers plus the plain-HTTP endpoints (`/healthz`, `/files/{id}`, `/mcp`, the elicitation and device-tool respond endpoints); and listen. Shutdown on SIGINT or SIGTERM drains the Langfuse buffer and stops the HTTP server with a 10 second timeout.
-
-Migrations are not run at server startup. Apply them with `reeve install` (the Docker entrypoint does this automatically; see below).
-
-## Docker
-
-The repo ships a multi-stage Dockerfile that builds both binaries into one Alpine image (around 45 MB). The image runs as a non-root `reeve` user and exposes 8080.
+Useful make targets for the dev loop:
 
 ```bash
-docker build -t reeve .
-
-# Apply migrations once (the entrypoint also does this for `reeved`, see note)
-docker run --rm \
-  -e REEVE_DSN='postgres://clark:clark@host.docker.internal:5433/clark?sslmode=disable' \
-  --entrypoint reeve reeve install
-
-# Run the server
-docker run -d --name reeved -p 8080:8080 \
-  -e REEVE_DSN='postgres://clark:clark@host.docker.internal:5433/clark?sslmode=disable' \
-  -e REEVE_MASTER_KEY=<your key> \
-  -e REEVE_BOOTSTRAP_ADMIN_USERNAME=john \
-  -e REEVE_BOOTSTRAP_ADMIN_PASSWORD=changeme \
-  reeve
-
-# Operator commands against the running container
-docker exec -it reeved reeve useradd alice
-docker exec -it reeved reeve install -status
+make run            # go run ./cmd/reeved with the dev DSN
+make migrate-up     # external goose against db/migrations (for iterating on a new migration)
+make migrate-down
+make test           # full Go test suite (each DB test gets a fresh migrated database)
 ```
 
-The entrypoint script runs `reeve install` automatically before starting `reeved` when `REEVE_DSN` is set, so a plain `docker run` migrates then serves. It passes the DSN explicitly because the CLI reads `-db` or `DATABASE_URL`, not `REEVE_DSN`. For non-`reeved` commands (for example `docker run reeve reeve genkey`) it skips the migration step.
+Unlike the Docker paths, running `reeved` from source does **not** apply migrations on startup. Run `reeve install` yourself first (the Docker entrypoint is what automates it in those paths).
 
-Notes:
+## Shared concepts
 
-- `host.docker.internal` reaches the host's Postgres on macOS and Windows. On Linux use `--network=host` with `localhost`, or point the DSN at the bridge IP.
-- `GET /healthz` returns `{"ok":true}` with no auth and no database hit. Use it for orchestrator liveness probes.
-- The build context is filtered by `.dockerignore` to skip the Swift clients and editor caches.
+### Encryption key
 
-## Docker Compose
-
-For a self-contained single-host deployment, `docker-compose.yml` runs Postgres (pgvector) plus reeved together. It builds the image from the local Dockerfile, waits for the database to pass its healthcheck, and persists both the database and the file-storage volume.
+Reeve encrypts provider credentials and plugin secrets at rest with AES-256-GCM. The key comes from `REEVE_MASTER_KEY`, the base64 encoding of 32 random bytes. Mint one once per environment and keep it safe:
 
 ```bash
-cp .env.example .env
-# edit .env: set POSTGRES_PASSWORD and REEVE_MASTER_KEY
-#   REEVE_MASTER_KEY=$(openssl rand -base64 32)
-docker compose up -d
-docker compose exec reeved reeve useradd -u alice   # prompts for a password
-# open http://localhost:8080
+openssl rand -base64 32        # or: reeve genkey  (or: go run ./cmd/reeve genkey)
 ```
 
-reeved self-migrates on every start (the entrypoint runs `reeve install`, which creates the pgvector extension and applies the embedded migrations), so there is no separate migration step. Configuration is environment-only, sourced from `.env`:
+If the key is unset the server still starts, but it logs a loud warning and writes config blobs in plaintext through a no-op cipher. The key is effectively immutable: once rows are encrypted under it, losing or changing it means losing the ability to read them. Set it before you add any provider. There is a dev-only escape hatch, `REEVE_DEV_AUTOKEY=1`, that mints a throwaway key per process; data written under it is unreadable after a restart. See [encryption.md](../design/encryption.md).
 
-- `POSTGRES_PASSWORD` and `REEVE_MASTER_KEY` are required; the database refuses to start without a password and reeved refuses to start without the key. The master key is base64-encoded 32 bytes and immutable: lose or change it and existing encrypted rows (provider API keys, plugin secrets) can't be decrypted.
-- Optional: `REEVE_PORT` (host port, default 8080), `REEVE_PUBLIC_BASE_URL` (your public origin behind a proxy), and `REEVE_BOOTSTRAP_ADMIN_USERNAME`/`REEVE_BOOTSTRAP_ADMIN_PASSWORD` to auto-create an admin on first boot.
+### First user
 
-The compose database does not publish a host port (reeved reaches it over the private compose network); add a `ports:` mapping only if you need direct psql access. TLS is meant to be terminated at a reverse proxy in front of reeved.
+Reeve always requires auth; there is no single-user bypass and no signup. Get the first account one of two ways.
+
+Bootstrap from env on first run: if no users exist and both `REEVE_BOOTSTRAP_ADMIN_USERNAME` and `REEVE_BOOTSTRAP_ADMIN_PASSWORD` are set, the server creates that admin on startup. If no users exist and those vars are unset, the server still runs but every authenticated RPC rejects until a user exists.
+
+Or create one with the CLI, which writes the row directly and works against a fresh database without a running server (or admin):
+
+```bash
+reeve useradd -u alice              # prompts for the password, no echo
+reeve useradd -u bob -p hunter2     # password inline
+reeve useradd -u guest -no-admin    # regular (non-admin) user
+```
+
+`useradd` defaults to creating an admin; pass `-no-admin` for a regular user. In Docker, prefix with `docker compose -p reeve exec reeved` or `docker exec -it reeved`.
+
+### Schema migrations
+
+`reeve install` applies the goose migrations baked into the binary. No source tree and no separate goose install is needed. It is the recommended path for any deployment, and the Docker entrypoint runs it automatically before `reeved`.
+
+```bash
+reeve install                 # apply everything (uses DSN resolution above)
+reeve install -db <url>       # against a specific database
+reeve install -status         # show what is applied, change nothing
+reeve install -target 30      # migrate up to a specific version
+```
+
+### Configuration
+
+The server reads `REEVE_DSN` (required) and listens on `REEVE_ADDR` (default `:8080`). The full list of environment variables, with defaults and effects, is in [configuration.md](configuration.md).
+
+### Behind a reverse proxy
+
+reeved serves cleartext HTTP/2 (h2c) and does not terminate TLS. For anything beyond localhost, run it behind a TLS-terminating reverse proxy and set `REEVE_PUBLIC_BASE_URL` to the public origin (for example `https://reeve.example.com`) so signed file URLs resolve. The proxy must support HTTP/2 to the upstream for streaming responses to flow.
 
 ## Clients
 
-The macOS and iOS apps share a Swift package, `ReeveSwift`, that ships `ReeveKit` (repositories, view models, domain types, the Connect client) and `ReeveUI` (cross-platform SwiftUI views). The iOS app is the reference client.
+The macOS and iOS apps share a Swift package, `ReeveSwift`, that ships `ReeveKit` (repositories, view models, domain types, the Connect client) and `ReeveUI` (cross-platform SwiftUI views). The iOS app is the reference client. There is also a server-rendered web client built into reeved (see [../clients/web.md](../clients/web.md)).
 
 ```bash
 make mac-app-run    # build the package, wrap it in ReeveMac.app, launch
