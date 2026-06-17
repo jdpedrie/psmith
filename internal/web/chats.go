@@ -101,8 +101,13 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 	sendResp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(req))
 	if err != nil {
 		if enhanced {
+			// Echo the attempted message so it isn't lost, then the error.
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = io.WriteString(w, `<div class="msg error"><div class="md">`+html.EscapeString(err.Error())+`</div></div>`)
+			if text != "" || len(attachImages) > 0 {
+				echo := messageBubble(msgVM{ConvID: convID, Role: "user", HTML: renderMarkdown(text), Images: attachImages}, false)
+				_, _ = io.WriteString(w, renderComp(r.Context(), echo))
+			}
+			_, _ = io.WriteString(w, `<div class="msg error"><div class="md">`+html.EscapeString(friendlyError(err))+`</div></div>`)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -262,4 +267,17 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) readCompose(r *http.Request) (text, model string) {
 	_ = r.ParseMultipartForm(12 << 20) // 12 MiB in memory; larger spills to temp files
 	return strings.TrimSpace(r.FormValue("message")), r.FormValue("model")
+}
+
+// friendlyError strips the connect error-code prefix ("invalid_argument: …")
+// so the transcript shows just the human-readable message.
+func friendlyError(err error) string {
+	msg := err.Error()
+	if i := strings.Index(msg, ": "); i > 0 && i < 24 && !strings.ContainsAny(msg[:i], " ") {
+		msg = msg[i+2:]
+	}
+	if strings.TrimSpace(msg) == "" {
+		return "Something went wrong. Please try again."
+	}
+	return msg
 }

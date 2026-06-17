@@ -8,10 +8,12 @@ package web
 import (
 	"context"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/a-h/templ"
@@ -171,9 +173,11 @@ func cacheControl(next http.Handler) http.Handler {
 // --- view models (decouple templ from the proto types) ---
 
 type convoVM struct {
-	ID     string
-	Title  string
-	Active bool
+	ID      string
+	Title   string
+	Active  bool
+	RelTime string // short relative time, e.g. "3h", "Apr 2"
+	Group   string // date bucket header for the sidebar, e.g. "Today"
 }
 
 type msgVM struct {
@@ -214,11 +218,60 @@ func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, e
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	out := make([]convoVM, 0, len(resp.Msg.GetConversations()))
+	var lastGroup string
 	for _, c := range resp.Msg.GetConversations() {
-		out = append(out, convoVM{ID: c.GetId(), Title: convoTitle(c), Active: c.GetId() == activeID})
+		vm := convoVM{ID: c.GetId(), Title: convoTitle(c), Active: c.GetId() == activeID}
+		if ts := c.GetUpdatedAt(); ts != nil {
+			t := ts.AsTime()
+			vm.RelTime = relTime(now, t)
+			if g := dateGroup(now, t); g != lastGroup {
+				vm.Group = g
+				lastGroup = g
+			}
+		}
+		out = append(out, vm)
 	}
 	return out, nil
+}
+
+// relTime renders a compact "time since" label for the sidebar: minutes/hours
+// within a day, "d" within a week, then an absolute month/day.
+func relTime(now, t time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	case t.Year() == now.Year():
+		return t.Format("Jan 2")
+	default:
+		return t.Format("Jan 2006")
+	}
+}
+
+// dateGroup buckets a conversation's last-activity time into a sidebar section
+// header. Conversations arrive newest-first, so equal buckets stay contiguous.
+func dateGroup(now, t time.Time) string {
+	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	switch {
+	case !t.Before(startOfToday):
+		return "Today"
+	case !t.Before(startOfToday.AddDate(0, 0, -1)):
+		return "Yesterday"
+	case !t.Before(startOfToday.AddDate(0, 0, -7)):
+		return "Previous 7 days"
+	case !t.Before(startOfToday.AddDate(0, 0, -30)):
+		return "Previous 30 days"
+	default:
+		return "Older"
+	}
 }
 
 func convoTitle(c *spaltv1.Conversation) string {

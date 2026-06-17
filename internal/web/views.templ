@@ -47,24 +47,39 @@ templ sidebar(convos []convoVM) {
 	<aside class="sidebar">
 		<header class="sidebar-head">
 			<a class="brand" href="/chats">Spalt</a>
-			<div class="sidebar-actions">
-				<a class="new-chat" href="/new">+ New</a>
-				<a class="link" href="/settings">Settings</a>
-				<form method="post" action="/logout">
-					<button class="link" type="submit">Sign out</button>
-				</form>
-			</div>
 		</header>
+		<a class="new-chat" href="/new">
+			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+			New chat
+		</a>
 		<nav class="convo-list">
 			for _, c := range convos {
+				if c.Group != "" {
+					<div class="convo-group">{ c.Group }</div>
+				}
 				<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
-					{ c.Title }
+					<span class="convo-title-text">{ c.Title }</span>
+					if c.RelTime != "" {
+						<span class="convo-time">{ c.RelTime }</span>
+					}
 				</a>
 			}
 			if len(convos) == 0 {
-				<p class="muted pad">No conversations yet.</p>
+				<p class="convo-empty">No conversations yet.</p>
 			}
 		</nav>
+		<footer class="sidebar-foot">
+			<a class="sidebar-foot-link" href="/settings">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+				Settings
+			</a>
+			<form method="post" action="/logout">
+				<button class="sidebar-foot-link" type="submit">
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+					Sign out
+				</button>
+			</form>
+		</footer>
 	</aside>
 }
 
@@ -276,18 +291,23 @@ templ providerDetailPage(prov providerVM, enabled []enabledModelVM, discovered [
 				<button class="btn-danger" type="submit">Delete</button>
 			</form>
 		</div>
-		<section>
-			<h2>Enabled models</h2>
+		<div class="sgroup">
+			<div class="sgroup-head">Enabled models</div>
 			if len(enabled) == 0 {
-				<p class="muted">No models enabled yet. Discover models to enable some.</p>
+				<div class="sgroup-card"><div class="srow"><span class="muted">No models enabled yet. Discover models to enable some.</span></div></div>
 			} else {
-				<ul class="model-list">
+				<div class="sgroup-card">
 					for _, m := range enabled {
-						<li><span class="model-name">{ m.DisplayName }</span> <code>{ m.ModelID }</code></li>
+						<div class="srow">
+							<div class="srow-body">
+								<span class="srow-title">{ m.DisplayName }</span>
+								<code class="srow-mono">{ m.ModelID }</code>
+							</div>
+						</div>
 					}
-				</ul>
+				</div>
 			}
-		</section>
+		</div>
 		if discovered != nil {
 			<section>
 				<h2>Discovered models</h2>
@@ -816,8 +836,8 @@ templ composer(convID string, current pickerModelVM) {
 		hx-target="#messages"
 		hx-swap="beforeend"
 		hx-encoding="multipart/form-data"
-		hx-on::after-request="this.reset()"
 	>
+		<input type="hidden" id="composer-model" name="model" value={ current.Value }/>
 		<div class="composer-box">
 			<label class="composer-attach" title="Attach image" aria-label="Attach image">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -845,6 +865,7 @@ templ modelChip(convID string, m pickerModelVM) {
 		type="button"
 		id="composer-model-chip"
 		class="model-chip"
+		data-model={ m.Value }
 		hx-get={ "/c/" + convID + "/model" }
 		hx-target="#modal"
 		hx-swap="innerHTML"
@@ -884,6 +905,7 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pic
 			</main>
 		</div>
 		<div id="modal"></div>
+		<script src="/web-assets/chat.js"></script>
 	}
 }
 
