@@ -25,8 +25,8 @@ func TestRenderMarkdown(t *testing.T) {
 		},
 		{
 			name: "links are allowed",
-			in:   "[reeve](https://example.com)",
-			want: []string{`href="https://example.com"`, ">reeve</a>"},
+			in:   "[spalt](https://example.com)",
+			want: []string{`href="https://example.com"`, ">spalt</a>"},
 		},
 		{
 			name: "script tag is stripped",

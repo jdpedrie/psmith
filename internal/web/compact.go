@@ -10,8 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/providers"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // handleCompactPage shows the compaction screen. If the active context already
@@ -19,7 +19,7 @@ import (
 // to run a new compaction.
 func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -27,14 +27,14 @@ func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
 	conv := getResp.Msg.GetConversation()
 	ctxID := getResp.Msg.GetActiveContext().GetId()
 
-	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&reevev1.ListMessagesRequest{ContextId: ctxID}))
+	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&spaltv1.ListMessagesRequest{ContextId: ctxID}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var pending *summaryVM
 	for _, m := range msgsResp.Msg.GetMessages() {
-		if m.GetRole() == reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY {
+		if m.GetRole() == spaltv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY {
 			pending = &summaryVM{MessageID: m.GetId(), HTML: renderMarkdown(m.GetContent())}
 		}
 	}
@@ -51,7 +51,7 @@ type summaryVM struct {
 func (h *Handler) handleCompactRun(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	resp, err := h.convos.Compact(r.Context(), connect.NewRequest(&reevev1.CompactRequest{ConversationId: convID}))
+	resp, err := h.convos.Compact(r.Context(), connect.NewRequest(&spaltv1.CompactRequest{ConversationId: convID}))
 	if err != nil {
 		_, _ = io.WriteString(w, `<p class="error">`+html.EscapeString(err.Error())+`</p>`)
 		return
@@ -115,7 +115,7 @@ func (h *Handler) handleCompactPromote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message_id required", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.convos.PromoteCompactionToNewContext(r.Context(), connect.NewRequest(&reevev1.PromoteCompactionToNewContextRequest{
+	if _, err := h.convos.PromoteCompactionToNewContext(r.Context(), connect.NewRequest(&spaltv1.PromoteCompactionToNewContextRequest{
 		MessageId: mid,
 	})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -6,14 +6,14 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
 )
 
 // sessionCookie carries the same opaque session token the RPC clients send as
 // a bearer header. The web layer just delivers it via an httpOnly cookie and
 // validates it through the identical auth path.
-const sessionCookie = "reeve_session"
+const sessionCookie = "spalt_session"
 
 // currentUser resolves the session cookie to a user, or reports not-authed.
 func (h *Handler) currentUser(r *http.Request) (auth.User, bool) {
@@ -63,7 +63,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, http.StatusBadRequest, loginPage("Bad request."))
 		return
 	}
-	resp, err := h.auth.Login(r.Context(), connect.NewRequest(&reevev1.LoginRequest{
+	resp, err := h.auth.Login(r.Context(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: r.PostFormValue("username"),
 		Password: r.PostFormValue("password"),
 	}))

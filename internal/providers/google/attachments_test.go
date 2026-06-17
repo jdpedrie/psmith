@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // TestSend_AllAttachmentKinds_TranslateToInlineData verifies that

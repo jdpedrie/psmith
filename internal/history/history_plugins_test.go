@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // --- Test plugins ----------------------------------------------------------
@@ -16,11 +16,11 @@ import (
 
 type prependSysPlugin struct{ pre, post string }
 
-func (p *prependSysPlugin) Name() string                  { return "test-sysprompt" }
-func (p *prependSysPlugin) DisplayName() string           { return "Test Sysprompt" }
-func (p *prependSysPlugin) Description() string           { return "test" }
-func (p *prependSysPlugin) PrependSystemMessage() string  { return p.pre }
-func (p *prependSysPlugin) AppendSystemMessage() string   { return p.post }
+func (p *prependSysPlugin) Name() string                 { return "test-sysprompt" }
+func (p *prependSysPlugin) DisplayName() string          { return "Test Sysprompt" }
+func (p *prependSysPlugin) Description() string          { return "test" }
+func (p *prependSysPlugin) PrependSystemMessage() string { return p.pre }
+func (p *prependSysPlugin) AppendSystemMessage() string  { return p.post }
 
 type stripAfterNPlugin struct {
 	keepLast int

@@ -352,11 +352,11 @@ func TestMCP_PoolReapsIdleServers(t *testing.T) {
 // request body so tests can assert on session-id echoing, custom
 // headers, etc.
 type fakeHTTPMCPServer struct {
-	srv         *httptest.Server
-	mu          sync.Mutex
-	gotHeaders  []http.Header
-	sessionID   string  // sent on initialize, expected on subsequent
-	useSSE      bool    // when true, respond with text/event-stream
+	srv        *httptest.Server
+	mu         sync.Mutex
+	gotHeaders []http.Header
+	sessionID  string // sent on initialize, expected on subsequent
+	useSSE     bool   // when true, respond with text/event-stream
 }
 
 func newFakeHTTPMCP(useSSE bool) *fakeHTTPMCPServer {

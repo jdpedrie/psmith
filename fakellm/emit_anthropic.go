@@ -36,9 +36,9 @@ func emitAnthropic(ctx context.Context, w io.Writer, flusher http.Flusher, scrip
 	// message_start with input usage (so the driver's MessageStartEvent path
 	// captures input_tokens). Output counts come on message_delta.
 	startUsage := map[string]any{
-		"input_tokens":               0,
-		"output_tokens":              1,
-		"cache_read_input_tokens":    0,
+		"input_tokens":                0,
+		"output_tokens":               1,
+		"cache_read_input_tokens":     0,
 		"cache_creation_input_tokens": 0,
 	}
 	if script.Usage != nil {
@@ -90,7 +90,7 @@ func emitAnthropic(ctx context.Context, w io.Writer, flusher http.Flusher, scrip
 	}
 
 	// message_delta carries final output_tokens (and reasoning/cache reads
-	// in newer API versions). The Reeve driver reads this for terminal usage.
+	// in newer API versions). The Spalt driver reads this for terminal usage.
 	deltaUsage := map[string]any{"output_tokens": 0}
 	if script.Usage != nil {
 		deltaUsage["output_tokens"] = script.Usage.OutputTokens

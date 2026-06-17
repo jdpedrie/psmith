@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // fakeLoader is an in-memory parentLoader keyed by profile ID.
@@ -35,8 +35,8 @@ func newLoader(profiles ...store.Profile) *fakeLoader {
 	return &fakeLoader{rows: m}
 }
 
-func strPtr(s string) *string  { return &s }
-func boolPtr(b bool) *bool     { return &b }
+func strPtr(s string) *string        { return &s }
+func boolPtr(b bool) *bool           { return &b }
 func uuidPtr(u uuid.UUID) *uuid.UUID { return &u }
 
 // makeProfile builds a minimal store.Profile for tests. nil parent means root.
@@ -323,7 +323,7 @@ func TestResolve_FirstNonNullWins_OverThreeLevels(t *testing.T) {
 
 // withCallSettingsBlob writes a default_settings JSONB blob carrying just
 // the call_settings sub-object. Other defaultsStorage fields stay unset.
-func withCallSettingsBlob(t *testing.T, p store.Profile, cs *reevev1.CallSettings) store.Profile {
+func withCallSettingsBlob(t *testing.T, p store.Profile, cs *spaltv1.CallSettings) store.Profile {
 	t.Helper()
 	raw, err := MarshalCallSettings(cs)
 	if err != nil {
@@ -343,7 +343,7 @@ func withCallSettingsBlob(t *testing.T, p store.Profile, cs *reevev1.CallSetting
 // callSettingsFromResolved decodes the call_settings sub-object out of a
 // resolved profile's default_settings — same shape Resolve produces after
 // re-encoding the merged result.
-func callSettingsFromResolved(t *testing.T, p store.Profile) *reevev1.CallSettings {
+func callSettingsFromResolved(t *testing.T, p store.Profile) *spaltv1.CallSettings {
 	t.Helper()
 	if len(p.DefaultSettings) == 0 {
 		return nil
@@ -370,13 +370,13 @@ func TestResolve_CallSettings_ChildOverridesParentPerField(t *testing.T) {
 	// Parent sets temperature + top_p; child sets temperature only.
 	// Resolved should combine: child's temperature, parent's top_p.
 	parent := makeProfile("parent", nil)
-	parent = withCallSettingsBlob(t, parent, &reevev1.CallSettings{
+	parent = withCallSettingsBlob(t, parent, &spaltv1.CallSettings{
 		Temperature: f64(0.2),
 		TopP:        f64(0.85),
 	})
 
 	child := makeProfile("child", &parent.ID)
-	child = withCallSettingsBlob(t, child, &reevev1.CallSettings{
+	child = withCallSettingsBlob(t, child, &spaltv1.CallSettings{
 		Temperature: f64(0.7),
 	})
 
@@ -403,7 +403,7 @@ func TestResolve_CallSettings_ChainAcrossThreeLevels(t *testing.T) {
 	// Resolved leaf should carry leaf's temperature + grandparent's top_k,
 	// inherited through the silent middle layer.
 	gp := makeProfile("gp", nil)
-	gp = withCallSettingsBlob(t, gp, &reevev1.CallSettings{
+	gp = withCallSettingsBlob(t, gp, &spaltv1.CallSettings{
 		TopK: i32(40),
 	})
 
@@ -411,7 +411,7 @@ func TestResolve_CallSettings_ChainAcrossThreeLevels(t *testing.T) {
 	// mid has no default_settings at all.
 
 	leaf := makeProfile("leaf", &mid.ID)
-	leaf = withCallSettingsBlob(t, leaf, &reevev1.CallSettings{
+	leaf = withCallSettingsBlob(t, leaf, &spaltv1.CallSettings{
 		Temperature: f64(0.9),
 	})
 
@@ -438,13 +438,13 @@ func TestResolve_CallSettings_NestedThinkingMergesAcrossChain(t *testing.T) {
 	// override only (no enabled flag). Resolved: enabled=true (parent),
 	// budget=8000 (child).
 	parent := makeProfile("parent", nil)
-	parent = withCallSettingsBlob(t, parent, &reevev1.CallSettings{
-		Thinking: &reevev1.ThinkingSettings{Enabled: boolPtr(true), BudgetTokens: i32(2000)},
+	parent = withCallSettingsBlob(t, parent, &spaltv1.CallSettings{
+		Thinking: &spaltv1.ThinkingSettings{Enabled: boolPtr(true), BudgetTokens: i32(2000)},
 	})
 
 	child := makeProfile("child", &parent.ID)
-	child = withCallSettingsBlob(t, child, &reevev1.CallSettings{
-		Thinking: &reevev1.ThinkingSettings{BudgetTokens: i32(8000)},
+	child = withCallSettingsBlob(t, child, &spaltv1.CallSettings{
+		Thinking: &spaltv1.ThinkingSettings{BudgetTokens: i32(8000)},
 	})
 
 	got, err := Resolve(context.Background(), newLoader(parent, child), child)

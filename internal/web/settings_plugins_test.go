@@ -12,12 +12,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/profiles"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // TestPluginPipeline proves attaching and removing a plugin on a profile.
@@ -56,7 +56,7 @@ func TestPluginPipeline(t *testing.T) {
 	if rec := do(h.handlePluginAdd, addReq); rec.Code != http.StatusSeeOther {
 		t.Fatalf("add status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
-	got, err := prof.GetProfilePlugins(userCtx, connect.NewRequest(&reevev1.GetProfilePluginsRequest{ProfileId: profileID}))
+	got, err := prof.GetProfilePlugins(userCtx, connect.NewRequest(&spaltv1.GetProfilePluginsRequest{ProfileId: profileID}))
 	if err != nil {
 		t.Fatalf("GetProfilePlugins: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestPluginPipeline(t *testing.T) {
 	if rec := do(h.handlePluginRemove, rmReq); rec.Code != http.StatusSeeOther {
 		t.Fatalf("remove status=%d", rec.Code)
 	}
-	got2, _ := prof.GetProfilePlugins(userCtx, connect.NewRequest(&reevev1.GetProfilePluginsRequest{ProfileId: profileID}))
+	got2, _ := prof.GetProfilePlugins(userCtx, connect.NewRequest(&spaltv1.GetProfilePluginsRequest{ProfileId: profileID}))
 	if len(got2.Msg.GetPlugins()) != 0 {
 		t.Errorf("after remove, plugins=%d want 0", len(got2.Msg.GetPlugins()))
 	}

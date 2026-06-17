@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
 // itoa and orDefault are small helpers used by the settings templates.
@@ -83,7 +83,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 // --- providers ---
 
 func (h *Handler) handleProviders(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.models.ListUserModelProviders(r.Context(), connect.NewRequest(&reevev1.ListUserModelProvidersRequest{}))
+	resp, err := h.models.ListUserModelProviders(r.Context(), connect.NewRequest(&spaltv1.ListUserModelProvidersRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -96,7 +96,7 @@ func (h *Handler) handleProviders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleProviderNew(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.models.ListProviderTypes(r.Context(), connect.NewRequest(&reevev1.ListProviderTypesRequest{}))
+	resp, err := h.models.ListProviderTypes(r.Context(), connect.NewRequest(&spaltv1.ListProviderTypesRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -128,7 +128,7 @@ func (h *Handler) handleProviderCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	cfgJSON, _ := json.Marshal(cfg)
 
-	resp, err := h.models.CreateUserModelProvider(r.Context(), connect.NewRequest(&reevev1.CreateUserModelProviderRequest{
+	resp, err := h.models.CreateUserModelProvider(r.Context(), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
 		Type:   typ,
 		Label:  label,
 		Config: cfgJSON,
@@ -146,7 +146,7 @@ func (h *Handler) handleProvider(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleProviderDiscover(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	resp, err := h.models.DiscoverModels(r.Context(), connect.NewRequest(&reevev1.DiscoverModelsRequest{
+	resp, err := h.models.DiscoverModels(r.Context(), connect.NewRequest(&spaltv1.DiscoverModelsRequest{
 		UserModelProviderId: id,
 	}))
 	if err != nil {
@@ -172,7 +172,7 @@ func (h *Handler) handleProviderEnable(w http.ResponseWriter, r *http.Request) {
 	}
 	ids := r.PostForm["model_ids"]
 	if len(ids) > 0 {
-		if _, err := h.models.EnableModels(r.Context(), connect.NewRequest(&reevev1.EnableModelsRequest{
+		if _, err := h.models.EnableModels(r.Context(), connect.NewRequest(&spaltv1.EnableModelsRequest{
 			UserModelProviderId: id,
 			ModelIds:            ids,
 		})); err != nil {
@@ -185,7 +185,7 @@ func (h *Handler) handleProviderEnable(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	resp, err := h.models.TestUserModelProvider(r.Context(), connect.NewRequest(&reevev1.TestUserModelProviderRequest{
+	resp, err := h.models.TestUserModelProvider(r.Context(), connect.NewRequest(&spaltv1.TestUserModelProviderRequest{
 		UserModelProviderId: id,
 	}))
 	result := &testVM{}
@@ -201,7 +201,7 @@ func (h *Handler) handleProviderTest(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := h.models.DeleteUserModelProvider(r.Context(), connect.NewRequest(&reevev1.DeleteUserModelProviderRequest{
+	if _, err := h.models.DeleteUserModelProvider(r.Context(), connect.NewRequest(&spaltv1.DeleteUserModelProviderRequest{
 		Id: id,
 	})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -214,7 +214,7 @@ func (h *Handler) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 // detail page, optionally with a freshly-discovered model list and/or a test
 // result banner.
 func (h *Handler) renderProviderDetail(w http.ResponseWriter, r *http.Request, status int, id string, discovered []discoveredVM, test *testVM) {
-	resp, err := h.models.GetUserModelProvider(r.Context(), connect.NewRequest(&reevev1.GetUserModelProviderRequest{Id: id}))
+	resp, err := h.models.GetUserModelProvider(r.Context(), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{Id: id}))
 	if err != nil {
 		http.Error(w, "provider not found", http.StatusNotFound)
 		return

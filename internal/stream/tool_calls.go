@@ -3,7 +3,7 @@ package stream
 import (
 	"encoding/json"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // toolCallAggregator builds the JSONB shape stored on

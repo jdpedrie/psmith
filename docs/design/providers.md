@@ -1,6 +1,6 @@
 # Providers
 
-A provider is how Reeve talks to a model backend. There are three layers to keep straight: the **driver** is compiled-in Go code that speaks one backend's wire format; a **provider instance** is a user's configured connection to a backend (a base URL and a credential); and an **enabled model** is a snapshot of one model the user has turned on under an instance. The driver is code, the instance and the model are rows. This document covers all three, the model-metadata catalog, the stateless-versus-stateful split, and the per-driver behavior.
+A provider is how Spalt talks to a model backend. There are three layers to keep straight: the **driver** is compiled-in Go code that speaks one backend's wire format; a **provider instance** is a user's configured connection to a backend (a base URL and a credential); and an **enabled model** is a snapshot of one model the user has turned on under an instance. The driver is code, the instance and the model are rows. This document covers all three, the model-metadata catalog, the stateless-versus-stateful split, and the per-driver behavior.
 
 ## Drivers
 
@@ -34,7 +34,7 @@ Separately, `ConstraintsFor(providerType, modelID)` returns hard constraints a m
 
 The interface splits on who owns history.
 
-A **stateless** provider implements `Send(ctx, SendRequest)` and gets the full wire prefix every turn. The server owns history, builds the prefix from the message tree ([history-builder.md](history-builder.md)), and sends it whole. All three shipped drivers are stateless. This is the model that makes Reeve's stream resilience work: because the server holds the authoritative history and re-sends it, a turn does not depend on any provider-side session surviving.
+A **stateless** provider implements `Send(ctx, SendRequest)` and gets the full wire prefix every turn. The server owns history, builds the prefix from the message tree ([history-builder.md](history-builder.md)), and sends it whole. All three shipped drivers are stateless. This is the model that makes Spalt's stream resilience work: because the server holds the authoritative history and re-sends it, a turn does not depend on any provider-side session surviving.
 
 A **stateful** provider would implement `StartSession` / `SendInSession` / `TerminateSession` and get only the newest message, with the backend holding the running session. The interface exists for a harness-style backend, but no stateful driver is implemented today. `Stateful()` returns false for everything shipped.
 
@@ -56,4 +56,4 @@ Extended thinking is provider-specific on the wire. Anthropic emits signed think
 
 ## Adding a provider
 
-The `/reeve-add-provider` skill scaffolds a new driver. The shape is always the same: a subpackage with a `Driver` type implementing `Provider` and `StatelessProvider`, an `init()` that registers the type string, a config struct unmarshaled from the instance's JSON, a `DiscoverModels` that lists and enriches models, and a `Send` that translates the backend's stream into the common chunk vocabulary. Tests point the driver's base URL at the fake LLM ([building-and-codegen.md](../operations/building-and-codegen.md)) and exercise the real parsing path.
+The `/spalt-add-provider` skill scaffolds a new driver. The shape is always the same: a subpackage with a `Driver` type implementing `Provider` and `StatelessProvider`, an `init()` that registers the type string, a config struct unmarshaled from the instance's JSON, a `DiscoverModels` that lists and enriches models, and a `Send` that translates the backend's stream into the common chunk vocabulary. Tests point the driver's base URL at the fake LLM ([building-and-codegen.md](../operations/building-and-codegen.md)) and exercise the real parsing path.

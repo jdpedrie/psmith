@@ -1,8 +1,8 @@
-# Reeve documentation
+# Spalt documentation
 
-Reeve is a self-hosted AI chat orchestrator: one Go server owns every conversation and provider credential, and thin clients render state and stream output without losing work when they disconnect. The iOS app is the reference client.
+Spalt is a self-hosted AI chat orchestrator: one Go server owns every conversation and provider credential, and thin clients render state and stream output without losing work when they disconnect. The iOS app is the reference client.
 
-Start with [design/overview.md](design/overview.md). It explains what Reeve is, what it optimizes for, and how a turn flows end to end, then points into the rest.
+Start with [design/overview.md](design/overview.md). It explains what Spalt is, what it optimizes for, and how a turn flows end to end, then points into the rest.
 
 This tree is the authoritative documentation. The older single-file planning and design notes (`architecture.md`, `ios-plan.md`, `ios-screens.md`, `harness-plan.md`, `multimodal-plan.md`, `conformance.md`, `device-tools-design.md`) have been removed; their content lives here now, reorganized by subsystem.
 
@@ -10,7 +10,7 @@ This tree is the authoritative documentation. The older single-file planning and
 
 How the system works, one subsystem per document.
 
-- [design/overview.md](design/overview.md) — what Reeve is, goals, topology, stack, the shape of a turn.
+- [design/overview.md](design/overview.md) — what Spalt is, goals, topology, stack, the shape of a turn.
 - [design/data-model.md](design/data-model.md) — conversation, context, the message tree, roles, profiles, inheritance, editing, branching.
 - [design/providers.md](design/providers.md) — drivers, provider instances, enabled models, the live catalog, stateless vs stateful, per-driver behavior.
 - [design/history-builder.md](design/history-builder.md) — building the wire prefix: walking the tree, role mapping, thinking, tool history, attachments, plugin contributions.
@@ -39,7 +39,7 @@ The wire contract.
 
 Running it.
 
-- [operations/installation.md](operations/installation.md) — the three ways to run Reeve (Docker Compose, Docker, from source), the encryption key, the first user, and migrations.
+- [operations/installation.md](operations/installation.md) — the three ways to run Spalt (Docker Compose, Docker, from source), the encryption key, the first user, and migrations.
 - [operations/configuration.md](operations/configuration.md) — every environment variable.
 - [operations/building-and-codegen.md](operations/building-and-codegen.md) — building, buf and sqlc codegen, the test layers, the fake LLM.
 - [operations/fakellm.md](operations/fakellm.md) — the fake-LLM test harness: flavors, the script model, the server API, gotchas.
@@ -47,7 +47,7 @@ Running it.
 ## Clients
 
 - [clients/client-spec.md](clients/client-spec.md) — the provider-agnostic contract any client must honor: auth, the RPC flows, streaming and reconnection, offline behavior, device tools, elicitation, file upload, ordering and idempotency.
-- [clients/ios-reference.md](clients/ios-reference.md) — the iOS reference implementation: ReeveKit and ReeveUI layering, the stream hub, repositories, view models, account switching, the offline queue, the cache, device-tool dispatch, the screens.
+- [clients/ios-reference.md](clients/ios-reference.md) — the iOS reference implementation: SpaltKit and SpaltUI layering, the stream hub, repositories, view models, account switching, the offline queue, the cache, device-tool dispatch, the screens.
 - [clients/web.md](clients/web.md) — the server-rendered web client: templ + Datastar, in-process service calls, cookie sessions, SSE streaming. Early; first vertical slice in place.
 
 ## Project notes

@@ -10,8 +10,8 @@ import (
 
 type fakeProvider struct{ name string }
 
-func (f *fakeProvider) Type() string                                 { return f.name }
-func (f *fakeProvider) Stateful() bool                               { return false }
+func (f *fakeProvider) Type() string   { return f.name }
+func (f *fakeProvider) Stateful() bool { return false }
 func (f *fakeProvider) DiscoverModels(_ context.Context) ([]Model, error) {
 	return nil, nil
 }

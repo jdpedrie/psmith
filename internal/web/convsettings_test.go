@@ -10,23 +10,23 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/modelproviders"
-	"github.com/jdpedrie/reeve/internal/profiles"
-	_ "github.com/jdpedrie/reeve/internal/providers/anthropic"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/modelproviders"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	_ "github.com/jdpedrie/spalt/internal/providers/anthropic"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 func TestMergeCall_HigherWins(t *testing.T) {
 	t.Parallel()
 	hi, lo := 0.2, 0.9
-	out := mergeCall(&reevev1.CallSettings{Temperature: &hi}, &reevev1.CallSettings{Temperature: &lo, TopP: &lo})
+	out := mergeCall(&spaltv1.CallSettings{Temperature: &hi}, &spaltv1.CallSettings{Temperature: &lo, TopP: &lo})
 	if out.GetTemperature() != hi {
 		t.Errorf("temperature = %v want %v (higher wins)", out.GetTemperature(), hi)
 	}
@@ -69,7 +69,7 @@ func TestConvSettings_SaveCallSettings(t *testing.T) {
 		t.Fatalf("save status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 
-	got, err := convos.GetConversation(userCtx, connect.NewRequest(&reevev1.GetConversationRequest{Id: fx.convID.String()}))
+	got, err := convos.GetConversation(userCtx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: fx.convID.String()}))
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestConvSettings_PluginOverride(t *testing.T) {
 	if rec := do(h.handleConvPluginOverride, addReq); rec.Code != 303 {
 		t.Fatalf("add status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
-	got, _ := convos.GetConversationPlugins(userCtx, connect.NewRequest(&reevev1.GetConversationPluginsRequest{ConversationId: fx.convID.String()}))
+	got, _ := convos.GetConversationPlugins(userCtx, connect.NewRequest(&spaltv1.GetConversationPluginsRequest{ConversationId: fx.convID.String()}))
 	if len(got.Msg.GetPlugins()) != 1 || got.Msg.GetPlugins()[0].GetPluginName() != "basic_grounding" {
 		t.Fatalf("after add: %+v", got.Msg.GetPlugins())
 	}
@@ -120,7 +120,7 @@ func TestConvSettings_PluginOverride(t *testing.T) {
 	if rec := do(h.handleConvPluginOverride, rmReq); rec.Code != 303 {
 		t.Fatalf("remove status=%d", rec.Code)
 	}
-	got2, _ := convos.GetConversationPlugins(userCtx, connect.NewRequest(&reevev1.GetConversationPluginsRequest{ConversationId: fx.convID.String()}))
+	got2, _ := convos.GetConversationPlugins(userCtx, connect.NewRequest(&spaltv1.GetConversationPluginsRequest{ConversationId: fx.convID.String()}))
 	if len(got2.Msg.GetPlugins()) != 0 {
 		t.Errorf("after remove: %d plugins want 0", len(got2.Msg.GetPlugins()))
 	}

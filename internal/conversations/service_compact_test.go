@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // TestCompact_ProfileOnly — profile fully configures compression, no overrides
@@ -51,7 +51,7 @@ func TestCompact_ProfileOnly(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
 
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -80,7 +80,7 @@ func TestCompact_OverrideOnly(t *testing.T) {
 	guide := "From override."
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &guide,
 		CompressionProviderId: &pid,
@@ -155,11 +155,11 @@ func TestCompact_OverrideWinsOverProfile(t *testing.T) {
 	// Create a second provider for the override, with its own enabled model.
 	overrideProvID, _ := uuid.NewV7()
 	overrideProv, err := q.CreateUserModelProvider(bg, store.CreateUserModelProviderParams{
-		ID:     overrideProvID,
-		UserID: f.user.ID,
-		Type:   overrideDriver,
-		Label:  "override",
-		ConfigEncrypted:    []byte("{}"),
+		ID:              overrideProvID,
+		UserID:          f.user.ID,
+		Type:            overrideDriver,
+		Label:           "override",
+		ConfigEncrypted: []byte("{}"),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider(override): %v", err)
@@ -177,7 +177,7 @@ func TestCompact_OverrideWinsOverProfile(t *testing.T) {
 
 	overrideGuide := "From override guide."
 	pidStr := overrideProv.ID.String()
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &overrideGuide,
 		CompressionProviderId: &pidStr,
@@ -223,7 +223,7 @@ func TestCompact_OverrideToDisabledModel(t *testing.T) {
 	guide := "From override."
 	pidStr := f.provider.ID.String()
 	disabledModel := "definitely-not-enabled"
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionGuide:      &guide,
 		CompressionProviderId: &pidStr,
@@ -275,7 +275,7 @@ func TestCompact_OverrideProviderWithoutModel_Mixed(t *testing.T) {
 
 	// Override only the guide, leave provider/model to the profile.
 	overrideGuide := "Different guide for this run."
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:   f.conv.ID.String(),
 		CompressionGuide: &overrideGuide,
 	}))
@@ -307,7 +307,7 @@ func TestCompact_NoConfigAtAll(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
 
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
@@ -324,7 +324,7 @@ func TestCompact_InvalidOverrideProviderID(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 
 	bogus := "not-a-uuid"
-	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	_, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:        f.conv.ID.String(),
 		CompressionProviderId: &bogus,
 	}))
@@ -402,7 +402,7 @@ func TestCompact_TranscriptUsesActiveChainOnly(t *testing.T) {
 		t.Fatalf("UpdateContextCurrentLeaf: %v", err)
 	}
 
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&reevev1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {

@@ -264,7 +264,7 @@ LIMIT $2;
 -- pgvector's HNSW index handles ORDER BY ... LIMIT efficiently even
 -- with the WHERE filter, provided the filter is selective enough to
 -- not prune away most candidates. For a single user that's free; if
--- we ever scale to many users per Reeve instance the index would
+-- we ever scale to many users per Spalt instance the index would
 -- need partitioning, but that's a future-us problem.
 SELECT m.id,
        m.context_id,

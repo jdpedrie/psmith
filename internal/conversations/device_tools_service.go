@@ -9,31 +9,31 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/devicetools"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/devicetools"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // DeviceToolsService implements the connect handler for the
 // per-connection capability handshake. Lives on the conversations
 // Service so it shares the broker + registry; constructed via
-// `s.DeviceToolsService()` and mounted by cmd/reeved.
+// `s.DeviceToolsService()` and mounted by cmd/spaltd.
 //
 // Two RPCs:
 //
-//   RegisterCapabilities — client → server: "this is the set of
-//                          device-tool names I can fulfill right
-//                          now." Scoped by the calling user; the
-//                          conversation context comes from the
-//                          stream subscriber, not this call, so the
-//                          handler currently registers per-user
-//                          with conversation = nil — see TODO below.
+//	RegisterCapabilities — client → server: "this is the set of
+//	                       device-tool names I can fulfill right
+//	                       now." Scoped by the calling user; the
+//	                       conversation context comes from the
+//	                       stream subscriber, not this call, so the
+//	                       handler currently registers per-user
+//	                       with conversation = nil — see TODO below.
 //
-//   ListSupportedTools   — server → client: the full server-side
-//                          catalog of tools, with JSON schemas, so
-//                          the client can render documentation and
-//                          pre-validate inputs before POSTing them.
+//	ListSupportedTools   — server → client: the full server-side
+//	                       catalog of tools, with JSON schemas, so
+//	                       the client can render documentation and
+//	                       pre-validate inputs before POSTing them.
 //
 // TODO(device-tools): conversation scoping. The registry is keyed by
 // (user, conversation) so multiple conversations can have different
@@ -51,8 +51,8 @@ type deviceToolsServiceHandler struct {
 }
 
 // DeviceToolsService returns a Connect handler suitable for
-// reevev1connect.NewDeviceToolsServiceHandler. Mounted by
-// cmd/reeved alongside the other service handlers.
+// spaltv1connect.NewDeviceToolsServiceHandler. Mounted by
+// cmd/spaltd alongside the other service handlers.
 func (s *Service) DeviceToolsService() *deviceToolsServiceHandler {
 	return &deviceToolsServiceHandler{
 		broker:   s.deviceToolBroker,
@@ -63,8 +63,8 @@ func (s *Service) DeviceToolsService() *deviceToolsServiceHandler {
 
 func (h *deviceToolsServiceHandler) RegisterCapabilities(
 	ctx context.Context,
-	req *connect.Request[reevev1.RegisterCapabilitiesRequest],
-) (*connect.Response[reevev1.RegisterCapabilitiesResponse], error) {
+	req *connect.Request[spaltv1.RegisterCapabilitiesRequest],
+) (*connect.Response[spaltv1.RegisterCapabilitiesResponse], error) {
 	user, ok := auth.FromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("not authenticated"))
@@ -81,17 +81,17 @@ func (h *deviceToolsServiceHandler) RegisterCapabilities(
 	// per-call broker binding's SupportedTools.
 	h.registry.Register(user.ID, uuid.Nil,
 		req.Msg.SupportedToolNames, req.Msg.ClientAttributes)
-	return connect.NewResponse(&reevev1.RegisterCapabilitiesResponse{}), nil
+	return connect.NewResponse(&spaltv1.RegisterCapabilitiesResponse{}), nil
 }
 
 func (h *deviceToolsServiceHandler) ListSupportedTools(
 	_ context.Context,
-	_ *connect.Request[reevev1.ListSupportedToolsRequest],
-) (*connect.Response[reevev1.ListSupportedToolsResponse], error) {
+	_ *connect.Request[spaltv1.ListSupportedToolsRequest],
+) (*connect.Response[spaltv1.ListSupportedToolsResponse], error) {
 	tools := devicetools.All()
-	out := make([]*reevev1.SupportedTool, 0, len(tools))
+	out := make([]*spaltv1.SupportedTool, 0, len(tools))
 	for _, t := range tools {
-		out = append(out, &reevev1.SupportedTool{
+		out = append(out, &spaltv1.SupportedTool{
 			Name:                t.Name,
 			DisplayName:         t.DisplayName,
 			Description:         t.Description,
@@ -100,13 +100,13 @@ func (h *deviceToolsServiceHandler) ListSupportedTools(
 			RequiredPermissions: append([]string(nil), t.RequiredPermissions...),
 		})
 	}
-	return connect.NewResponse(&reevev1.ListSupportedToolsResponse{Tools: out}), nil
+	return connect.NewResponse(&spaltv1.ListSupportedToolsResponse{Tools: out}), nil
 }
 
 func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 	ctx context.Context,
-	req *connect.Request[reevev1.ListDeviceToolCallsRequest],
-) (*connect.Response[reevev1.ListDeviceToolCallsResponse], error) {
+	req *connect.Request[spaltv1.ListDeviceToolCallsRequest],
+) (*connect.Response[spaltv1.ListDeviceToolCallsResponse], error) {
 	user, ok := auth.FromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("not authenticated"))
@@ -153,7 +153,7 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		return connect.NewResponse(&reevev1.ListDeviceToolCallsResponse{
+		return connect.NewResponse(&spaltv1.ListDeviceToolCallsResponse{
 			Calls: callsToProto(rows),
 		}), nil
 	}
@@ -166,15 +166,15 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.ListDeviceToolCallsResponse{
+	return connect.NewResponse(&spaltv1.ListDeviceToolCallsResponse{
 		Calls: callsToProto(rows),
 	}), nil
 }
 
-func callsToProto(rows []store.DeviceToolCall) []*reevev1.DeviceToolCall {
-	out := make([]*reevev1.DeviceToolCall, 0, len(rows))
+func callsToProto(rows []store.DeviceToolCall) []*spaltv1.DeviceToolCall {
+	out := make([]*spaltv1.DeviceToolCall, 0, len(rows))
 	for _, r := range rows {
-		c := &reevev1.DeviceToolCall{
+		c := &spaltv1.DeviceToolCall{
 			Id:             r.ID.String(),
 			ConversationId: r.ConversationID.String(),
 			ToolName:       r.ToolName,

@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // makeProfilePlain creates a profile with the minimum required fields. Used
@@ -42,11 +42,11 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestSvc(t)
 	user := mustCreateUser(t, q(t), "alice")
-	resp, err := svc.ListPluginTypes(ctxAs(user), connect.NewRequest(&reevev1.ListPluginTypesRequest{}))
+	resp, err := svc.ListPluginTypes(ctxAs(user), connect.NewRequest(&spaltv1.ListPluginTypesRequest{}))
 	if err != nil {
 		t.Fatalf("ListPluginTypes: %v", err)
 	}
-	var got *reevev1.PluginType
+	var got *spaltv1.PluginType
 	for _, pt := range resp.Msg.PluginTypes {
 		if pt.Name == plugins.LetteredChoicesName {
 			got = pt
@@ -63,7 +63,7 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 		t.Errorf("config_fields len = %d want 3", len(got.ConfigFields))
 	}
 	// Spot-check keep_last_n: NUMBER type with default JSON-encoded "1".
-	var keepLastN, sysOverride *reevev1.ConfigField
+	var keepLastN, sysOverride *spaltv1.ConfigField
 	for _, f := range got.ConfigFields {
 		switch f.Name {
 		case "keep_last_n":
@@ -75,7 +75,7 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	if keepLastN == nil {
 		t.Fatal("keep_last_n field missing")
 	}
-	if keepLastN.Type != reevev1.ConfigField_NUMBER {
+	if keepLastN.Type != spaltv1.ConfigField_NUMBER {
 		t.Errorf("keep_last_n type = %v want NUMBER", keepLastN.Type)
 	}
 	if keepLastN.DefaultJson != "1" {
@@ -84,7 +84,7 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	if sysOverride == nil {
 		t.Fatal("system_instruction_override field missing")
 	}
-	if sysOverride.Type != reevev1.ConfigField_TEXTAREA {
+	if sysOverride.Type != spaltv1.ConfigField_TEXTAREA {
 		t.Errorf("system_instruction_override type = %v want TEXTAREA", sysOverride.Type)
 	}
 	// system_instruction_override carries the default prose instruction so
@@ -124,7 +124,7 @@ func TestGetProfilePlugins_EmptyByDefault(t *testing.T) {
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
 
-	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -147,7 +147,7 @@ func TestGetProfilePlugins_ReturnsRowsInOrder(t *testing.T) {
 			t.Fatalf("InsertProfilePlugin %d: %v", i, err)
 		}
 	}
-	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -176,7 +176,7 @@ func TestGetProfilePlugins_DoesNotWalkParentChain(t *testing.T) {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}
 
-	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	resp, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: child.ID.String(),
 	}))
 	if err != nil {
@@ -194,7 +194,7 @@ func TestGetProfilePlugins_CrossUserNotFound(t *testing.T) {
 	bob := mustCreateUser(t, qs, "bob")
 	prof := makeProfilePlain(t, qs, alice.ID, nil)
 
-	_, err := svc.GetProfilePlugins(ctxAs(bob), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	_, err := svc.GetProfilePlugins(ctxAs(bob), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	assertConnectCode(t, err, connect.CodeNotFound)
@@ -204,7 +204,7 @@ func TestGetProfilePlugins_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	svc, qs := newTestSvc(t)
 	user := mustCreateUser(t, qs, "alice")
-	_, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	_, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: "not-a-uuid",
 	}))
 	assertConnectCode(t, err, connect.CodeInvalidArgument)
@@ -218,9 +218,9 @@ func TestSetProfilePlugins_HappyPath(t *testing.T) {
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
 
-	resp, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	resp, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins: []*reevev1.ProfilePlugin{
+		Plugins: []*spaltv1.ProfilePlugin{
 			{PluginName: plugins.LetteredChoicesName, Config: []byte(`{"keep_last_n": 2}`)},
 			{PluginName: plugins.LetteredChoicesName, Config: nil},
 		},
@@ -241,7 +241,7 @@ func TestSetProfilePlugins_HappyPath(t *testing.T) {
 	// the GetProfilePlugins decrypt bug ship: Set wrote encrypted,
 	// Get returned the unrelated plaintext column (NULL for fresh
 	// rows), and the count was right while every field was empty.
-	got, _ := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	got, _ := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if len(got.Msg.Plugins) != 2 {
@@ -281,14 +281,14 @@ func TestSetProfilePlugins_ConfigRoundTripsAfterEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins:   []*reevev1.ProfilePlugin{{PluginName: plugins.TextInjectorName, Config: encoded}},
+		Plugins:   []*spaltv1.ProfilePlugin{{PluginName: plugins.TextInjectorName, Config: encoded}},
 	})); err != nil {
 		t.Fatalf("SetProfilePlugins: %v", err)
 	}
 
-	got, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	got, err := svc.GetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -321,9 +321,9 @@ func TestSetProfilePlugins_AtomicReplace(t *testing.T) {
 		})
 	}
 	// Replace with 1 row.
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins: []*reevev1.ProfilePlugin{
+		Plugins: []*spaltv1.ProfilePlugin{
 			{PluginName: plugins.LetteredChoicesName},
 		},
 	}))
@@ -348,7 +348,7 @@ func TestSetProfilePlugins_EmptyListClearsPipeline(t *testing.T) {
 		ProfileID: prof.ID, Ordinal: 0, PluginName: plugins.LetteredChoicesName,
 	})
 
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 		Plugins:   nil,
 	}))
@@ -373,9 +373,9 @@ func TestSetProfilePlugins_UnknownPluginRejected(t *testing.T) {
 		t.Fatalf("seed insert: %v", err)
 	}
 
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins: []*reevev1.ProfilePlugin{
+		Plugins: []*spaltv1.ProfilePlugin{
 			{PluginName: "definitely-not-a-real-plugin"},
 		},
 	}))
@@ -394,9 +394,9 @@ func TestSetProfilePlugins_BadConfigRejected(t *testing.T) {
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
 
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins: []*reevev1.ProfilePlugin{
+		Plugins: []*spaltv1.ProfilePlugin{
 			{PluginName: plugins.LetteredChoicesName, Config: []byte(`{not json`)},
 		},
 	}))
@@ -408,9 +408,9 @@ func TestSetProfilePlugins_EmptyPluginNameRejected(t *testing.T) {
 	svc, qs := newTestSvc(t)
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins: []*reevev1.ProfilePlugin{
+		Plugins: []*spaltv1.ProfilePlugin{
 			{PluginName: ""},
 		},
 	}))
@@ -423,7 +423,7 @@ func TestSetProfilePlugins_CrossUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, qs, "alice")
 	bob := mustCreateUser(t, qs, "bob")
 	prof := makeProfilePlain(t, qs, alice.ID, nil)
-	_, err := svc.SetProfilePlugins(ctxAs(bob), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(bob), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	assertConnectCode(t, err, connect.CodeNotFound)
@@ -435,7 +435,7 @@ func TestSetProfilePlugins_InvalidUUID(t *testing.T) {
 	user := mustCreateUser(t, qs, "alice")
 	_ = user
 	_ = qs
-	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: "not-a-uuid",
 	}))
 	assertConnectCode(t, err, connect.CodeInvalidArgument)
@@ -452,7 +452,7 @@ func q(t *testing.T) *store.Queries {
 	return qs
 }
 
-func names(types []*reevev1.PluginType) []string {
+func names(types []*spaltv1.PluginType) []string {
 	out := make([]string, 0, len(types))
 	for _, t := range types {
 		out = append(out, t.Name)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // Default cleanup parameters. Retention is the safety window AFTER a

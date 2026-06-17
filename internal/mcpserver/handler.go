@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // Handler returns the http.Handler that serves the MCP JSON-RPC
@@ -19,7 +19,7 @@ import (
 // SSE responses — every tool here completes synchronously, no
 // long-lived streams. Clients that prefer SSE still negotiate via
 // `Accept: text/event-stream`; we ignore the preference and return
-// `application/json` regardless. Reeve's own mcp client handles both
+// `application/json` regardless. Spalt's own mcp client handles both
 // shapes (see plugins/mcp.go::readRPCResponse).
 //
 // Notifications (no `id`) get 202 Accepted with an empty body, per

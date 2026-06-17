@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // ComponentBuilderName is the registered name for the
@@ -148,7 +148,7 @@ func (p *componentBuilder) Description() string {
 // ConfigFields exposes the on-disk shape for documentation and
 // for the server-side validation path. The Mac/iOS clients
 // dispatch to a custom form for this plugin (see
-// PluginConfigEditor in ReeveUI) that builds the structured
+// PluginConfigEditor in SpaltUI) that builds the structured
 // `components` array directly — they don't render this field.
 //
 // Returning a single textarea here means the standard form

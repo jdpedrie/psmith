@@ -11,11 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // numericValue is a small test helper for building pgtype.Numeric from a float
@@ -115,7 +115,7 @@ func TestService_CreateConversation_BothSeedMessages(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, user.ID, strPtr("system-text"), strPtr("default-user-text"), nil)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 		Title:     strPtr("hello world"),
 	}))
@@ -145,7 +145,7 @@ func TestService_CreateConversation_BothSeedMessages(t *testing.T) {
 	}
 	sys := resp.Msg.SeedMessages[0]
 	usr := resp.Msg.SeedMessages[1]
-	if sys.Role != reevev1.MessageRole_MESSAGE_ROLE_SYSTEM {
+	if sys.Role != spaltv1.MessageRole_MESSAGE_ROLE_SYSTEM {
 		t.Errorf("sys role: %v", sys.Role)
 	}
 	if sys.Content != "system-text" {
@@ -154,7 +154,7 @@ func TestService_CreateConversation_BothSeedMessages(t *testing.T) {
 	if sys.ParentId != nil {
 		t.Errorf("sys parent should be nil: %+v", sys.ParentId)
 	}
-	if usr.Role != reevev1.MessageRole_MESSAGE_ROLE_CONTEXT {
+	if usr.Role != spaltv1.MessageRole_MESSAGE_ROLE_CONTEXT {
 		t.Errorf("user-msg role: %v", usr.Role)
 	}
 	if usr.Content != "default-user-text" {
@@ -171,7 +171,7 @@ func TestService_CreateConversation_SystemOnly(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, user.ID, strPtr("system-only"), nil, nil)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -180,7 +180,7 @@ func TestService_CreateConversation_SystemOnly(t *testing.T) {
 	if len(resp.Msg.SeedMessages) != 1 {
 		t.Fatalf("seeds: got %d want 1", len(resp.Msg.SeedMessages))
 	}
-	if resp.Msg.SeedMessages[0].Role != reevev1.MessageRole_MESSAGE_ROLE_SYSTEM {
+	if resp.Msg.SeedMessages[0].Role != spaltv1.MessageRole_MESSAGE_ROLE_SYSTEM {
 		t.Errorf("role: %v", resp.Msg.SeedMessages[0].Role)
 	}
 }
@@ -191,7 +191,7 @@ func TestService_CreateConversation_NoSeedMessages(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, user.ID, nil, nil, nil)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -212,7 +212,7 @@ func TestService_CreateConversation_DefaultUserMessageWithoutSystem(t *testing.T
 	user := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, user.ID, nil, strPtr("only-user"), nil)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -222,7 +222,7 @@ func TestService_CreateConversation_DefaultUserMessageWithoutSystem(t *testing.T
 		t.Fatalf("seeds: got %d want 1", len(resp.Msg.SeedMessages))
 	}
 	m := resp.Msg.SeedMessages[0]
-	if m.Role != reevev1.MessageRole_MESSAGE_ROLE_CONTEXT {
+	if m.Role != spaltv1.MessageRole_MESSAGE_ROLE_CONTEXT {
 		t.Errorf("role: %v", m.Role)
 	}
 	if m.ParentId != nil {
@@ -238,7 +238,7 @@ func TestService_CreateConversation_ProfileInheritance(t *testing.T) {
 	// Child overrides nothing — should inherit parent's system_message.
 	child := makeProfile(t, q, user.ID, nil, strPtr("child-default-user"), &parent.ID)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: child.ID.String(),
 	}))
 	if err != nil {
@@ -260,7 +260,7 @@ func TestService_CreateConversation_ChildOverridesParent(t *testing.T) {
 	parent := makeProfile(t, q, user.ID, strPtr("parent-system"), nil, nil)
 	child := makeProfile(t, q, user.ID, strPtr("child-system"), nil, &parent.ID)
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: child.ID.String(),
 	}))
 	if err != nil {
@@ -281,7 +281,7 @@ func TestService_CreateConversation_OtherUserProfile(t *testing.T) {
 	bob := mustCreateUser(t, q, "bob")
 	bobProf := makeProfile(t, q, bob.ID, nil, nil, nil)
 
-	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: bobProf.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -292,7 +292,7 @@ func TestService_CreateConversation_ProfileNotFound(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -303,7 +303,7 @@ func TestService_CreateConversation_InvalidProfileID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	_, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -316,9 +316,9 @@ func TestService_CreateConversation_WithSettings(t *testing.T) {
 	prof := makeProfile(t, q, user.ID, nil, nil, nil)
 	include := true
 
-	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&reevev1.CreateConversationRequest{
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
-		Settings: &reevev1.ConversationSettings{
+		Settings: &spaltv1.ConversationSettings{
 			DefaultModelId:           strPtr("gpt-x"),
 			IncludeThinkingInHistory: &include,
 		},
@@ -348,19 +348,19 @@ func TestService_ListConversations_PerUser(t *testing.T) {
 	bProf := makeProfile(t, q, bob.ID, nil, nil, nil)
 
 	for i := 0; i < 3; i++ {
-		if _, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+		if _, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 			ProfileId: aProf.ID.String(),
 		})); err != nil {
 			t.Fatalf("seed alice: %v", err)
 		}
 	}
-	if _, err := svc.CreateConversation(ctxAs(bob), connect.NewRequest(&reevev1.CreateConversationRequest{
+	if _, err := svc.CreateConversation(ctxAs(bob), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: bProf.ID.String(),
 	})); err != nil {
 		t.Fatalf("seed bob: %v", err)
 	}
 
-	aResp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&reevev1.ListConversationsRequest{}))
+	aResp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&spaltv1.ListConversationsRequest{}))
 	if err != nil {
 		t.Fatalf("ListConversations alice: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestService_ListConversations_PerUser(t *testing.T) {
 		}
 	}
 
-	bResp, err := svc.ListConversations(ctxAs(bob), connect.NewRequest(&reevev1.ListConversationsRequest{}))
+	bResp, err := svc.ListConversations(ctxAs(bob), connect.NewRequest(&spaltv1.ListConversationsRequest{}))
 	if err != nil {
 		t.Fatalf("ListConversations bob: %v", err)
 	}
@@ -388,13 +388,13 @@ func TestService_ListConversations_PageSizeCap(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
 	for i := 0; i < 5; i++ {
-		if _, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+		if _, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 			ProfileId: prof.ID.String(),
 		})); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	resp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&reevev1.ListConversationsRequest{
+	resp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&spaltv1.ListConversationsRequest{
 		PageSize: 2,
 	}))
 	if err != nil {
@@ -412,13 +412,13 @@ func TestService_GetConversation_ReturnsActiveContext(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	resp, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	resp, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -438,13 +438,13 @@ func TestService_GetConversation_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.GetConversation(ctxAs(bob), connect.NewRequest(&reevev1.GetConversationRequest{
+	_, err = svc.GetConversation(ctxAs(bob), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -454,7 +454,7 @@ func TestService_GetConversation_NotFound(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	_, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -464,7 +464,7 @@ func TestService_GetConversation_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	_, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -477,17 +477,17 @@ func TestService_UpdateConversation_TitleAndSettings(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	include := true
-	resp, err := svc.UpdateConversation(ctxAs(alice), connect.NewRequest(&reevev1.UpdateConversationRequest{
+	resp, err := svc.UpdateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateConversationRequest{
 		Id:    created.Msg.Conversation.Id,
 		Title: strPtr("renamed"),
-		Settings: &reevev1.ConversationSettings{
+		Settings: &spaltv1.ConversationSettings{
 			IncludeThinkingInHistory: &include,
 		},
 	}))
@@ -509,13 +509,13 @@ func TestService_UpdateConversation_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.UpdateConversation(ctxAs(bob), connect.NewRequest(&reevev1.UpdateConversationRequest{
+	_, err = svc.UpdateConversation(ctxAs(bob), connect.NewRequest(&spaltv1.UpdateConversationRequest{
 		Id:    created.Msg.Conversation.Id,
 		Title: strPtr("hijack"),
 	}))
@@ -526,7 +526,7 @@ func TestService_UpdateConversation_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.UpdateConversation(ctxAs(alice), connect.NewRequest(&reevev1.UpdateConversationRequest{
+	_, err := svc.UpdateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateConversationRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -539,19 +539,19 @@ func TestService_DeleteConversation_Success(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, strPtr("sys"), nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := svc.DeleteConversation(ctxAs(alice), connect.NewRequest(&reevev1.DeleteConversationRequest{
+	if _, err := svc.DeleteConversation(ctxAs(alice), connect.NewRequest(&spaltv1.DeleteConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	})); err != nil {
 		t.Fatalf("DeleteConversation: %v", err)
 	}
 	// Verify cascade: subsequent get returns NotFound.
-	_, err = svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	_, err = svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -563,13 +563,13 @@ func TestService_DeleteConversation_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.DeleteConversation(ctxAs(bob), connect.NewRequest(&reevev1.DeleteConversationRequest{
+	_, err = svc.DeleteConversation(ctxAs(bob), connect.NewRequest(&spaltv1.DeleteConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -579,7 +579,7 @@ func TestService_DeleteConversation_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.DeleteConversation(ctxAs(alice), connect.NewRequest(&reevev1.DeleteConversationRequest{
+	_, err := svc.DeleteConversation(ctxAs(alice), connect.NewRequest(&spaltv1.DeleteConversationRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -592,7 +592,7 @@ func TestService_ListContexts_AllForConversation(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -611,7 +611,7 @@ func TestService_ListContexts_AllForConversation(t *testing.T) {
 		t.Fatalf("seed second context: %v", err)
 	}
 
-	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&reevev1.ListContextsRequest{
+	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&spaltv1.ListContextsRequest{
 		ConversationId: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -633,7 +633,7 @@ func TestService_ListContexts_MessageCount(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -665,7 +665,7 @@ func TestService_ListContexts_MessageCount(t *testing.T) {
 		t.Fatalf("seed second context: %v", err)
 	}
 
-	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&reevev1.ListContextsRequest{
+	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&spaltv1.ListContextsRequest{
 		ConversationId: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -675,7 +675,7 @@ func TestService_ListContexts_MessageCount(t *testing.T) {
 		t.Fatalf("contexts: got %d want 2", len(resp.Msg.Contexts))
 	}
 
-	byID := map[string]*reevev1.Context{}
+	byID := map[string]*spaltv1.Context{}
 	for _, c := range resp.Msg.Contexts {
 		byID[c.Id] = c
 	}
@@ -698,7 +698,7 @@ func TestService_ListContexts_TokenAndCostAggregates(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -787,7 +787,7 @@ func TestService_ListContexts_TokenAndCostAggregates(t *testing.T) {
 		t.Fatalf("assistant no usage: %v", err)
 	}
 
-	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&reevev1.ListContextsRequest{
+	resp, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&spaltv1.ListContextsRequest{
 		ConversationId: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -797,7 +797,7 @@ func TestService_ListContexts_TokenAndCostAggregates(t *testing.T) {
 		t.Fatalf("contexts: got %d want 3", len(resp.Msg.Contexts))
 	}
 
-	byID := map[string]*reevev1.Context{}
+	byID := map[string]*spaltv1.Context{}
 	for _, c := range resp.Msg.Contexts {
 		byID[c.Id] = c
 	}
@@ -837,13 +837,13 @@ func TestService_ListContexts_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.ListContexts(ctxAs(bob), connect.NewRequest(&reevev1.ListContextsRequest{
+	_, err = svc.ListContexts(ctxAs(bob), connect.NewRequest(&spaltv1.ListContextsRequest{
 		ConversationId: created.Msg.Conversation.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -853,7 +853,7 @@ func TestService_ListContexts_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&reevev1.ListContextsRequest{
+	_, err := svc.ListContexts(ctxAs(alice), connect.NewRequest(&spaltv1.ListContextsRequest{
 		ConversationId: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -866,7 +866,7 @@ func TestService_ActivateContext_FlipsActive(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -887,7 +887,7 @@ func TestService_ActivateContext_FlipsActive(t *testing.T) {
 	}
 
 	// Confirm initial active is the one created with the conversation.
-	getResp, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	getResp, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -899,7 +899,7 @@ func TestService_ActivateContext_FlipsActive(t *testing.T) {
 
 	// Activate the older one.
 	beforeT := getResp.Msg.ActiveContext.ActivationTime.AsTime()
-	actResp, err := svc.ActivateContext(ctxAs(alice), connect.NewRequest(&reevev1.ActivateContextRequest{
+	actResp, err := svc.ActivateContext(ctxAs(alice), connect.NewRequest(&spaltv1.ActivateContextRequest{
 		ContextId: olderID.String(),
 	}))
 	if err != nil {
@@ -914,7 +914,7 @@ func TestService_ActivateContext_FlipsActive(t *testing.T) {
 	}
 
 	// And now GetConversation should report the older one as active.
-	getResp2, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&reevev1.GetConversationRequest{
+	getResp2, err := svc.GetConversation(ctxAs(alice), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: created.Msg.Conversation.Id,
 	}))
 	if err != nil {
@@ -931,13 +931,13 @@ func TestService_ActivateContext_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.ActivateContext(ctxAs(bob), connect.NewRequest(&reevev1.ActivateContextRequest{
+	_, err = svc.ActivateContext(ctxAs(bob), connect.NewRequest(&spaltv1.ActivateContextRequest{
 		ContextId: created.Msg.InitialContext.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -947,7 +947,7 @@ func TestService_ActivateContext_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.ActivateContext(ctxAs(alice), connect.NewRequest(&reevev1.ActivateContextRequest{
+	_, err := svc.ActivateContext(ctxAs(alice), connect.NewRequest(&spaltv1.ActivateContextRequest{
 		ContextId: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -960,13 +960,13 @@ func TestService_ListMessages_FullTree(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, strPtr("sys"), strPtr("seed-user"), nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	resp, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&reevev1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: created.Msg.InitialContext.Id,
 	}))
 	if err != nil {
@@ -982,7 +982,7 @@ func TestService_ListMessages_LeafChain(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -1016,7 +1016,7 @@ func TestService_ListMessages_LeafChain(t *testing.T) {
 	_ = mk(&root.ID, "assistant", "B")
 
 	leaf := grandA.ID.String()
-	resp, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&reevev1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId:     created.Msg.InitialContext.Id,
 		LeafMessageId: &leaf,
 	}))
@@ -1042,13 +1042,13 @@ func TestService_ListMessages_LeafFromDifferentContext(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	c1, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	c1, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("c1: %v", err)
 	}
-	c2, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	c2, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -1066,7 +1066,7 @@ func TestService_ListMessages_LeafFromDifferentContext(t *testing.T) {
 		t.Fatalf("seed alien: %v", err)
 	}
 	leaf := m.ID.String()
-	_, err = svc.ListMessages(ctxAs(alice), connect.NewRequest(&reevev1.ListMessagesRequest{
+	_, err = svc.ListMessages(ctxAs(alice), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId:     c1.Msg.InitialContext.Id,
 		LeafMessageId: &leaf,
 	}))
@@ -1079,13 +1079,13 @@ func TestService_ListMessages_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err = svc.ListMessages(ctxAs(bob), connect.NewRequest(&reevev1.ListMessagesRequest{
+	_, err = svc.ListMessages(ctxAs(bob), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: created.Msg.InitialContext.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -1095,7 +1095,7 @@ func TestService_ListMessages_InvalidContextID(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&reevev1.ListMessagesRequest{
+	_, err := svc.ListMessages(ctxAs(alice), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -1106,14 +1106,14 @@ func TestService_ListMessages_LeafNotFound(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	leaf := uuid.New().String()
-	_, err = svc.ListMessages(ctxAs(alice), connect.NewRequest(&reevev1.ListMessagesRequest{
+	_, err = svc.ListMessages(ctxAs(alice), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId:     created.Msg.InitialContext.Id,
 		LeafMessageId: &leaf,
 	}))
@@ -1127,7 +1127,7 @@ func TestService_GetMessage_Found(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	prof := makeProfile(t, q, alice.ID, strPtr("sys"), nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
@@ -1137,7 +1137,7 @@ func TestService_GetMessage_Found(t *testing.T) {
 		t.Fatalf("seeds: got %d want 1", len(created.Msg.SeedMessages))
 	}
 	mid := created.Msg.SeedMessages[0].Id
-	resp, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&reevev1.GetMessageRequest{Id: mid}))
+	resp, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&spaltv1.GetMessageRequest{Id: mid}))
 	if err != nil {
 		t.Fatalf("GetMessage: %v", err)
 	}
@@ -1155,14 +1155,14 @@ func TestService_GetMessage_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 	prof := makeProfile(t, q, alice.ID, strPtr("sys"), nil, nil)
-	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&reevev1.CreateConversationRequest{
+	created, err := svc.CreateConversation(ctxAs(alice), connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: prof.ID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	mid := created.Msg.SeedMessages[0].Id
-	_, err = svc.GetMessage(ctxAs(bob), connect.NewRequest(&reevev1.GetMessageRequest{Id: mid}))
+	_, err = svc.GetMessage(ctxAs(bob), connect.NewRequest(&spaltv1.GetMessageRequest{Id: mid}))
 	assertCode(t, err, connect.CodeNotFound)
 }
 
@@ -1170,7 +1170,7 @@ func TestService_GetMessage_NotFound(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
-	_, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&reevev1.GetMessageRequest{
+	_, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&spaltv1.GetMessageRequest{
 		Id: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -1181,9 +1181,8 @@ func TestService_GetMessage_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 	_ = q
-	_, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&reevev1.GetMessageRequest{
+	_, err := svc.GetMessage(ctxAs(alice), connect.NewRequest(&spaltv1.GetMessageRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
 }
-

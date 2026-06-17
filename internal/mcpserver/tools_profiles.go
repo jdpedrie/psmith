@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/elicit"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/elicit"
 )
 
 func (s *Server) registerProfileTools() {
@@ -58,7 +58,7 @@ func (s *Server) registerProfileTools() {
 	)
 	s.register(
 		"registered_plugins",
-		"REQUIRED before any work on a profile's plugin pipeline. Returns every plugin compiled into this Reeve build with its machine name, display name, description, capabilities (which interfaces it implements), and config_fields (the typed schema for its per-instance config). Without calling this you don't know which plugins exist or what shape their config takes — set_profile_plugins will fail with bad_argument if you guess. Re-call after a Reeve restart in case the build changed.",
+		"REQUIRED before any work on a profile's plugin pipeline. Returns every plugin compiled into this Spalt build with its machine name, display name, description, capabilities (which interfaces it implements), and config_fields (the typed schema for its per-instance config). Without calling this you don't know which plugins exist or what shape their config takes — set_profile_plugins will fail with bad_argument if you guess. Re-call after a Spalt restart in case the build changed.",
 		`{"type":"object","properties":{},"additionalProperties":false}`,
 		s.toolListPluginTypes,
 	)
@@ -104,7 +104,7 @@ func (s *Server) registerProfileTools() {
 // --- list_profiles -------------------------------------------------------
 
 func (s *Server) toolListProfiles(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
-	resp, err := s.profilesSvc.ListProfiles(ctx, connect.NewRequest(&reevev1.ListProfilesRequest{}))
+	resp, err := s.profilesSvc.ListProfiles(ctx, connect.NewRequest(&spaltv1.ListProfilesRequest{}))
 	if err != nil {
 		return errorResult(err.Error()), nil
 	}
@@ -130,7 +130,7 @@ func (s *Server) toolGetProfile(ctx context.Context, args json.RawMessage) (Tool
 	if in.ID == "" {
 		return errorResult("id is required"), nil
 	}
-	resp, err := s.profilesSvc.GetProfile(ctx, connect.NewRequest(&reevev1.GetProfileRequest{
+	resp, err := s.profilesSvc.GetProfile(ctx, connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id:      in.ID,
 		Resolve: in.Resolve,
 	}))
@@ -165,7 +165,7 @@ func (s *Server) toolCreateProfile(ctx context.Context, args json.RawMessage) (T
 	if in.Name == "" {
 		return errorResult("name is required"), nil
 	}
-	req := &reevev1.CreateProfileRequest{
+	req := &spaltv1.CreateProfileRequest{
 		Name:               in.Name,
 		Description:        in.Description,
 		ParentProfileId:    in.ParentProfileID,
@@ -205,7 +205,7 @@ func (s *Server) toolUpdateProfile(ctx context.Context, args json.RawMessage) (T
 	if in.ID == "" {
 		return errorResult("id is required"), nil
 	}
-	req := &reevev1.UpdateProfileRequest{
+	req := &spaltv1.UpdateProfileRequest{
 		Id:                 in.ID,
 		Name:               in.Name,
 		ParentProfileId:    in.ParentProfileID,
@@ -227,7 +227,7 @@ func (s *Server) toolUpdateProfile(ctx context.Context, args json.RawMessage) (T
 // --- list_plugin_types ---------------------------------------------------
 
 func (s *Server) toolListPluginTypes(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
-	resp, err := s.profilesSvc.ListPluginTypes(ctx, connect.NewRequest(&reevev1.ListPluginTypesRequest{}))
+	resp, err := s.profilesSvc.ListPluginTypes(ctx, connect.NewRequest(&spaltv1.ListPluginTypesRequest{}))
 	if err != nil {
 		return errorResult(err.Error()), nil
 	}
@@ -252,7 +252,7 @@ func (s *Server) toolGetProfilePlugins(ctx context.Context, args json.RawMessage
 	if in.ProfileID == "" {
 		return errorResult("profile_id is required"), nil
 	}
-	resp, err := s.profilesSvc.GetProfilePlugins(ctx, connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	resp, err := s.profilesSvc.GetProfilePlugins(ctx, connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: in.ProfileID,
 	}))
 	if err != nil {
@@ -279,7 +279,7 @@ func (s *Server) toolGetUserPluginSettings(ctx context.Context, args json.RawMes
 	if in.PluginName == "" {
 		return errorResult("plugin_name is required"), nil
 	}
-	resp, err := s.profilesSvc.GetUserPluginSettings(ctx, connect.NewRequest(&reevev1.GetUserPluginSettingsRequest{
+	resp, err := s.profilesSvc.GetUserPluginSettings(ctx, connect.NewRequest(&spaltv1.GetUserPluginSettingsRequest{
 		PluginName: in.PluginName,
 	}))
 	if err != nil {
@@ -354,7 +354,7 @@ func (s *Server) toolUpsertUserPluginSettings(ctx context.Context, args json.Raw
 			// secret. Clients render `format: password` as SecureField.
 			schema := []byte(`{"type":"object","required":["` + sf.Field + `"],"properties":{"` + sf.Field + `":{"type":"string","format":"password","description":"` + jsonEscape(prompt) + `"}},"additionalProperties":false}`)
 			resp, err := ec.Elicit(ctx, elicit.Request{
-				Message:         prompt + " — stored encrypted on this Reeve instance, never sent to the LLM provider.",
+				Message:         prompt + " — stored encrypted on this Spalt instance, never sent to the LLM provider.",
 				RequestedSchema: schema,
 			})
 			if err != nil {
@@ -380,7 +380,7 @@ func (s *Server) toolUpsertUserPluginSettings(ctx context.Context, args json.Raw
 		return errorResult("re-encode merged config: " + err.Error()), nil
 	}
 
-	if _, err := s.profilesSvc.UpsertUserPluginSettings(ctx, connect.NewRequest(&reevev1.UpsertUserPluginSettingsRequest{
+	if _, err := s.profilesSvc.UpsertUserPluginSettings(ctx, connect.NewRequest(&spaltv1.UpsertUserPluginSettingsRequest{
 		PluginName: in.PluginName,
 		Config:     merged,
 	})); err != nil {
@@ -437,7 +437,7 @@ func (s *Server) toolSetProfilePlugins(ctx context.Context, args json.RawMessage
 	if in.ProfileID == "" {
 		return errorResult("profile_id is required"), nil
 	}
-	plugins := make([]*reevev1.ProfilePlugin, 0, len(in.Plugins))
+	plugins := make([]*spaltv1.ProfilePlugin, 0, len(in.Plugins))
 	for i, p := range in.Plugins {
 		if p.PluginName == "" {
 			return errorResult(fmt.Sprintf("plugins[%d].plugin_name is required", i)), nil
@@ -453,12 +453,12 @@ func (s *Server) toolSetProfilePlugins(ctx context.Context, args json.RawMessage
 		if !json.Valid([]byte(cfgStr)) {
 			return errorResult(fmt.Sprintf("plugins[%d].config_json is not valid JSON: %q", i, cfgStr)), nil
 		}
-		plugins = append(plugins, &reevev1.ProfilePlugin{
+		plugins = append(plugins, &spaltv1.ProfilePlugin{
 			PluginName: p.PluginName,
 			Config:     []byte(cfgStr),
 		})
 	}
-	resp, err := s.profilesSvc.SetProfilePlugins(ctx, connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	resp, err := s.profilesSvc.SetProfilePlugins(ctx, connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: in.ProfileID,
 		Plugins:   plugins,
 	}))
@@ -477,7 +477,7 @@ func (s *Server) toolSetProfilePlugins(ctx context.Context, args json.RawMessage
 // profileSummary is the shape returned by list_profiles — kept lean so
 // the assistant can scan it without burning context. Detail fields
 // (system message, plugin pipeline, etc.) come from get_profile.
-func profileSummary(p *reevev1.Profile) map[string]any {
+func profileSummary(p *spaltv1.Profile) map[string]any {
 	return map[string]any{
 		"id":          p.GetId(),
 		"name":        p.GetName(),
@@ -491,7 +491,7 @@ func profileSummary(p *reevev1.Profile) map[string]any {
 // update_profile — every user-editable field flattened to JSON-friendly
 // types. Server-managed timestamps + owner_user_id are omitted (the
 // caller already knows it's the current user).
-func profileDetail(p *reevev1.Profile) map[string]any {
+func profileDetail(p *spaltv1.Profile) map[string]any {
 	out := map[string]any{
 		"id":          p.GetId(),
 		"name":        p.GetName(),
@@ -532,7 +532,7 @@ func profileDetail(p *reevev1.Profile) map[string]any {
 // pluginTypeDetail is the shape returned by list_plugin_types — full
 // fidelity so the assistant can construct config blobs that match the
 // plugin's expectations on the first try.
-func pluginTypeDetail(pt *reevev1.PluginType) map[string]any {
+func pluginTypeDetail(pt *spaltv1.PluginType) map[string]any {
 	out := map[string]any{
 		"name":         pt.GetName(),
 		"display_name": pt.GetDisplayName(),
@@ -540,17 +540,17 @@ func pluginTypeDetail(pt *reevev1.PluginType) map[string]any {
 	}
 	if c := pt.GetCapabilities(); c != nil {
 		out["capabilities"] = map[string]any{
-			"configurable":                   c.GetConfigurable(),
-			"system_prompter":                c.GetSystemPrompter(),
-			"outgoing_user_transformer":      c.GetOutgoingUserTransformer(),
-			"history_transformer":            c.GetHistoryTransformer(),
-			"chunk_transformer":              c.GetChunkTransformer(),
-			"display_transformer":            c.GetDisplayTransformer(),
-			"tool_provider":                  c.GetToolProvider(),
-			"assistant_content_transformer":  c.GetAssistantContentTransformer(),
-			"message_lifecycle_hook":         c.GetMessageLifecycleHook(),
-			"device_fact_requester":          c.GetDeviceFactRequester(),
-			"content_renderer":               c.GetContentRenderer(),
+			"configurable":                  c.GetConfigurable(),
+			"system_prompter":               c.GetSystemPrompter(),
+			"outgoing_user_transformer":     c.GetOutgoingUserTransformer(),
+			"history_transformer":           c.GetHistoryTransformer(),
+			"chunk_transformer":             c.GetChunkTransformer(),
+			"display_transformer":           c.GetDisplayTransformer(),
+			"tool_provider":                 c.GetToolProvider(),
+			"assistant_content_transformer": c.GetAssistantContentTransformer(),
+			"message_lifecycle_hook":        c.GetMessageLifecycleHook(),
+			"device_fact_requester":         c.GetDeviceFactRequester(),
+			"content_renderer":              c.GetContentRenderer(),
 		}
 	}
 	fields := make([]map[string]any, 0, len(pt.GetConfigFields()))
@@ -584,7 +584,7 @@ func pluginTypeDetail(pt *reevev1.PluginType) map[string]any {
 // back to a base64-encoded shape only if the bytes aren't valid JSON
 // (which would indicate a plugin storing non-JSON config — unusual
 // but allowed by the proto).
-func profilePluginDetail(p *reevev1.ProfilePlugin) map[string]any {
+func profilePluginDetail(p *spaltv1.ProfilePlugin) map[string]any {
 	out := map[string]any{
 		"plugin_name": p.GetPluginName(),
 		"ordinal":     p.GetOrdinal(),

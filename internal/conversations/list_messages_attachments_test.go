@@ -6,9 +6,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // Regression: confirms ListMessages (BOTH chain mode and full-tree)
@@ -33,7 +33,7 @@ func TestService_ListMessages_PopulatesAttachments(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctx, connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctx, connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId:    f.conv.ID.String(),
 		Content:           "look",
 		ProviderId:        &pid,
@@ -58,15 +58,15 @@ func TestService_ListMessages_PopulatesAttachments(t *testing.T) {
 
 	// 2. ListMessages chain mode (the path iOS uses for history) MUST
 	// also carry attachments.
-	listResp, err := svc.ListMessages(ctx, connect.NewRequest(&reevev1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctx, connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
 		t.Fatalf("ListMessages chain: %v", err)
 	}
-	var userMsg *reevev1.Message
+	var userMsg *spaltv1.Message
 	for _, m := range listResp.Msg.Messages {
-		if m.Role == reevev1.MessageRole_MESSAGE_ROLE_USER && m.Content == "look" {
+		if m.Role == spaltv1.MessageRole_MESSAGE_ROLE_USER && m.Content == "look" {
 			userMsg = m
 			break
 		}
@@ -85,7 +85,7 @@ func TestService_ListMessages_PopulatesAttachments(t *testing.T) {
 	}
 
 	// 3. ListMessages full_tree mode (used by the branch switcher).
-	listResp, err = svc.ListMessages(ctx, connect.NewRequest(&reevev1.ListMessagesRequest{
+	listResp, err = svc.ListMessages(ctx, connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 		FullTree:  true,
 	}))
@@ -94,7 +94,7 @@ func TestService_ListMessages_PopulatesAttachments(t *testing.T) {
 	}
 	userMsg = nil
 	for _, m := range listResp.Msg.Messages {
-		if m.Role == reevev1.MessageRole_MESSAGE_ROLE_USER && m.Content == "look" {
+		if m.Role == spaltv1.MessageRole_MESSAGE_ROLE_USER && m.Content == "look" {
 			userMsg = m
 			break
 		}

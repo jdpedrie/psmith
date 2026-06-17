@@ -9,8 +9,8 @@
 package protoconv
 
 import (
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/providers"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // CallSettings converts the proto wire shape into the internal
@@ -18,7 +18,7 @@ import (
 // to a zero-value output (every field unset). Used at every site
 // that turns a SendMessageRequest / TestUserModelRequest /
 // CompactRequest into a driver dispatch.
-func CallSettings(s *reevev1.CallSettings) providers.CallSettings {
+func CallSettings(s *spaltv1.CallSettings) providers.CallSettings {
 	if s == nil {
 		return providers.CallSettings{}
 	}
@@ -105,46 +105,46 @@ func CallSettings(s *reevev1.CallSettings) providers.CallSettings {
 }
 
 // CacheTTL converts the Anthropic cache-TTL enum.
-func CacheTTL(in *reevev1.CacheTTL) providers.CacheTTL {
+func CacheTTL(in *spaltv1.CacheTTL) providers.CacheTTL {
 	if in == nil {
 		return providers.CacheTTLUnspecified
 	}
 	switch *in {
-	case reevev1.CacheTTL_CACHE_TTL_5M:
+	case spaltv1.CacheTTL_CACHE_TTL_5M:
 		return providers.CacheTTL5m
-	case reevev1.CacheTTL_CACHE_TTL_1H:
+	case spaltv1.CacheTTL_CACHE_TTL_1H:
 		return providers.CacheTTL1h
 	}
 	return providers.CacheTTLUnspecified
 }
 
 // ServiceTier converts the OpenAI service-tier enum.
-func ServiceTier(in reevev1.ServiceTier) providers.ServiceTier {
+func ServiceTier(in spaltv1.ServiceTier) providers.ServiceTier {
 	switch in {
-	case reevev1.ServiceTier_SERVICE_TIER_AUTO:
+	case spaltv1.ServiceTier_SERVICE_TIER_AUTO:
 		return providers.ServiceTierAuto
-	case reevev1.ServiceTier_SERVICE_TIER_STANDARD:
+	case spaltv1.ServiceTier_SERVICE_TIER_STANDARD:
 		return providers.ServiceTierStandard
-	case reevev1.ServiceTier_SERVICE_TIER_PRIORITY:
+	case spaltv1.ServiceTier_SERVICE_TIER_PRIORITY:
 		return providers.ServiceTierPriority
 	}
 	return providers.ServiceTierUnspecified
 }
 
 // ResponseFormat converts the OpenAI structured-output oneof.
-func ResponseFormat(rf *reevev1.ResponseFormat) *providers.ResponseFormat {
+func ResponseFormat(rf *spaltv1.ResponseFormat) *providers.ResponseFormat {
 	if rf == nil {
 		return nil
 	}
 	out := &providers.ResponseFormat{}
 	switch k := rf.Kind.(type) {
-	case *reevev1.ResponseFormat_Text:
+	case *spaltv1.ResponseFormat_Text:
 		v := k.Text
 		out.Text = &v
-	case *reevev1.ResponseFormat_JsonObject:
+	case *spaltv1.ResponseFormat_JsonObject:
 		v := k.JsonObject
 		out.JSONObject = &v
-	case *reevev1.ResponseFormat_JsonSchema:
+	case *spaltv1.ResponseFormat_JsonSchema:
 		if k.JsonSchema != nil {
 			out.JSONSchema = &providers.JSONSchema{
 				Name:        k.JsonSchema.Name,
@@ -160,19 +160,19 @@ func ResponseFormat(rf *reevev1.ResponseFormat) *providers.ResponseFormat {
 }
 
 // HarmThreshold converts the Google safety-threshold enum.
-func HarmThreshold(in *reevev1.HarmThreshold) *providers.HarmThreshold {
+func HarmThreshold(in *spaltv1.HarmThreshold) *providers.HarmThreshold {
 	if in == nil {
 		return nil
 	}
 	var v providers.HarmThreshold
 	switch *in {
-	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE:
+	case spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE:
 		v = providers.HarmThresholdBlockNone
-	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE:
+	case spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE:
 		v = providers.HarmThresholdBlockLowAndAbove
-	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE:
+	case spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE:
 		v = providers.HarmThresholdBlockMediumAndAbove
-	case reevev1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH:
+	case spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH:
 		v = providers.HarmThresholdBlockOnlyHigh
 	default:
 		v = providers.HarmThresholdUnspecified

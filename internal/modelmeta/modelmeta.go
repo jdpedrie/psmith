@@ -56,9 +56,9 @@ type Pricing struct {
 }
 
 type Capabilities struct {
-	Streaming     bool
-	Thinking      bool
-	ToolUse       bool
+	Streaming bool
+	Thinking  bool
+	ToolUse   bool
 	// Vision is the input modality — model accepts image
 	// attachments in user messages.
 	Vision        bool

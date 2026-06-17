@@ -195,8 +195,8 @@ type capProbe struct {
 	name string
 }
 
-func (c *capProbe) Name() string                                       { return c.name }
-func (c *capProbe) DisplayName() string                                { return c.name }
-func (c *capProbe) Description() string                                { return "test" }
-func (c *capProbe) TransformAssistantContent(s string) string          { return s }
+func (c *capProbe) Name() string                                         { return c.name }
+func (c *capProbe) DisplayName() string                                  { return c.name }
+func (c *capProbe) Description() string                                  { return "test" }
+func (c *capProbe) TransformAssistantContent(s string) string            { return s }
 func (c *capProbe) OnMessagePersisted(context.Context, PersistedMessage) {}

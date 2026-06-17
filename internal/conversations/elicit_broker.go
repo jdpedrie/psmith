@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/elicit"
+	"github.com/jdpedrie/spalt/internal/elicit"
 )
 
 // elicitTimeout is how long a tool's Elicit call waits for the user's
@@ -38,8 +38,8 @@ const elicitTimeout = 5 * time.Minute
 // worse than the request already being lost — the assistant's tool
 // call also dies on restart.
 type elicitBroker struct {
-	mu       sync.Mutex
-	pending  map[uuid.UUID]*pendingElicit
+	mu      sync.Mutex
+	pending map[uuid.UUID]*pendingElicit
 }
 
 type pendingElicit struct {
@@ -55,11 +55,11 @@ type pendingElicit struct {
 // used by the live-stream path — that pushes the request via the
 // stream chunk directly.
 type PendingElicitSnapshot struct {
-	ID             uuid.UUID
-	ConversationID uuid.UUID
-	Message        string
+	ID              uuid.UUID
+	ConversationID  uuid.UUID
+	Message         string
 	RequestedSchema json.RawMessage
-	CreatedAt      time.Time
+	CreatedAt       time.Time
 }
 
 func newElicitBroker() *elicitBroker {
@@ -164,9 +164,9 @@ var ErrElicitationCrossConversation = errors.New("elicitation: conversation mism
 // dispatch gets a fresh instance via newElicitClient so the chunk
 // channel matches the right run.
 type elicitClientImpl struct {
-	broker        *elicitBroker
-	convoID       uuid.UUID
-	emitChunk     func(elicitID uuid.UUID, req elicit.Request)
+	broker    *elicitBroker
+	convoID   uuid.UUID
+	emitChunk func(elicitID uuid.UUID, req elicit.Request)
 }
 
 // newElicitClient binds a client to one run. `emitChunk` is the hook

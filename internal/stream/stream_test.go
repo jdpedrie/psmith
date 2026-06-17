@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // --- Fixtures --------------------------------------------------------------
@@ -51,11 +51,11 @@ func newFixture(t *testing.T) *fixture {
 
 	provID := mustUUID(t)
 	prov, err := q.CreateUserModelProvider(bg, store.CreateUserModelProviderParams{
-		ID:     provID,
-		UserID: user.ID,
-		Type:   "openai-compatible",
-		Label:  "test",
-		ConfigEncrypted:    []byte(`{}`),
+		ID:              provID,
+		UserID:          user.ID,
+		Type:            "openai-compatible",
+		Label:           "test",
+		ConfigEncrypted: []byte(`{}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)

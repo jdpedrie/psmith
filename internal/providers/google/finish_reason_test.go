@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // Hard-failure finish reasons (system-level failures where retry chrome
@@ -141,8 +141,8 @@ func TestSend_ProhibitedContentEmitsFinishReasonOnly(t *testing.T) {
 	}
 
 	var (
-		types        []providers.ChunkType
-		usageReason  string
+		types       []providers.ChunkType
+		usageReason string
 	)
 	for c := range ch {
 		types = append(types, c.Type)

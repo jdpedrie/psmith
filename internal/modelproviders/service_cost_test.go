@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 func makeNumeric(t *testing.T, v float64) pgtype.Numeric {
@@ -54,7 +54,7 @@ func TestListProviderCosts_GroupsByProviderAndSums(t *testing.T) {
 		t.Fatalf("InsertCostEvent B: %v", err)
 	}
 
-	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{}))
+	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
 	if err != nil {
 		t.Fatalf("ListProviderCosts: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestListProviderCosts_GroupsByProviderAndSums(t *testing.T) {
 		t.Fatalf("expected 2 provider rows, got %d", len(resp.Msg.Providers))
 	}
 
-	got := map[string]*reevev1.ProviderCost{}
+	got := map[string]*spaltv1.ProviderCost{}
 	for _, p := range resp.Msg.Providers {
 		got[p.ProviderId] = p
 	}
@@ -98,7 +98,7 @@ func TestListProviderCosts_IncludesProvidersWithNoEvents(t *testing.T) {
 	typeName := registerStatelessFakeDriver(t, "cost-empty", nil, nil, nil, nil)
 	_ = makeProvider(t, q, user.ID, typeName, "Unused", nil)
 
-	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{}))
+	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
 	if err != nil {
 		t.Fatalf("ListProviderCosts: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestListProviderCosts_ScopedByCaller(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := svc.ListProviderCosts(ctxAs(alice), connect.NewRequest(&reevev1.ListProviderCostsRequest{}))
+	resp, err := svc.ListProviderCosts(ctxAs(alice), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
 	if err != nil {
 		t.Fatalf("ListProviderCosts: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestListProviderCosts_WindowFilter(t *testing.T) {
 	insertAt(0.04, now)
 
 	// All-time: 0.07 across 3 events.
-	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{}))
+	resp, err := svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
 	if err != nil {
 		t.Fatalf("all-time: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestListProviderCosts_WindowFilter(t *testing.T) {
 
 	// Future-only window — should be empty.
 	future := now.Add(time.Hour)
-	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{
+	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{
 		Since: timestamppb.New(future),
 	}))
 	if err != nil {
@@ -215,7 +215,7 @@ func TestListProviderCosts_WindowFilter(t *testing.T) {
 
 	// Past-bounded until — also empty.
 	past := now.Add(-time.Hour)
-	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{
+	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{
 		Until: timestamppb.New(past),
 	}))
 	if err != nil {
@@ -226,7 +226,7 @@ func TestListProviderCosts_WindowFilter(t *testing.T) {
 	}
 
 	// Window that includes now — should match all-time.
-	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&reevev1.ListProviderCostsRequest{
+	resp, err = svc.ListProviderCosts(ctxAs(user), connect.NewRequest(&spaltv1.ListProviderCostsRequest{
 		Since: timestamppb.New(past),
 		Until: timestamppb.New(future),
 	}))

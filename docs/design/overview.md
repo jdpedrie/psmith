@@ -1,12 +1,12 @@
 # Overview
 
-Reeve is a self-hosted AI chat orchestrator. One Go server owns every conversation, every provider credential, and every byte of model output. Clients are thin: they render state and send commands, and they can disconnect at any moment without losing work. The iOS app is the reference client and the one the author uses daily.
+Spalt is a self-hosted AI chat orchestrator. One Go server owns every conversation, every provider credential, and every byte of model output. Clients are thin: they render state and send commands, and they can disconnect at any moment without losing work. The iOS app is the reference client and the one the author uses daily.
 
-This document is the entry point to the design. It says what Reeve is, what it optimizes for, and how the pieces fit. The per-subsystem documents go deep; start here for the shape.
+This document is the entry point to the design. It says what Spalt is, what it optimizes for, and how the pieces fit. The per-subsystem documents go deep; start here for the shape.
 
 ## What it is
 
-Reeve is "ChatGPT with any model, any provider, and a lot of configuration." It mixes cloud APIs (Anthropic, OpenAI, Google, OpenRouter, anything OpenAI-compatible) behind one chat surface, and it exposes the knobs that off-the-shelf chat UIs hide:
+Spalt is "ChatGPT with any model, any provider, and a lot of configuration." It mixes cloud APIs (Anthropic, OpenAI, Google, OpenRouter, anything OpenAI-compatible) behind one chat surface, and it exposes the knobs that off-the-shelf chat UIs hide:
 
 - Pick the model per turn. Ask Claude for code, hand the result to Gemini for review, settle it with GPT-5, all in one conversation.
 - Branch from any message. A conversation is a tree, not a list.
@@ -20,7 +20,7 @@ It is a personal project for one developer. Scope and tradeoffs favor "one perso
 
 Two priorities shape almost every decision.
 
-**Stream resilience for a mobile client.** When the iOS app backgrounds, the OS kills its network connections and the in-flight provider stream dies with them. Reeve routes all provider traffic through the server. The server consumes the upstream stream to completion regardless of client state, persists every chunk, and lets clients disconnect and reconnect freely. Background the app, come back five minutes later, the answer is finished and waiting. This single requirement is why the server owns history and why streaming is durable from the first design.
+**Stream resilience for a mobile client.** When the iOS app backgrounds, the OS kills its network connections and the in-flight provider stream dies with them. Spalt routes all provider traffic through the server. The server consumes the upstream stream to completion regardless of client state, persists every chunk, and lets clients disconnect and reconnect freely. Background the app, come back five minutes later, the answer is finished and waiting. This single requirement is why the server owns history and why streaming is durable from the first design.
 
 **Operational simplicity.** One Go binary, one Postgres, no message broker, no workflow engine, no Kubernetes. The server is a single process. Streaming durability is `INSERT INTO stream_chunks` plus an in-process pub/sub broker, not a distributed system. Adding a provider driver means writing Go and recompiling, not loading a plugin at runtime. The cost of this simplicity is that "plugin" means "compiled-in Go," and horizontal scale is not a goal.
 
@@ -28,7 +28,7 @@ Two priorities shape almost every decision.
 
 ```
                  ┌───────────────────────────────────────────┐
-   clients       │                 reeved (Go)               │
+   clients       │                 spaltd (Go)               │
  ┌──────────┐    │  ConnectRPC services (auth, conversations, │     ┌──────────┐
  │  iOS app │◀──▶│  streams, model-providers, profiles,       │◀───▶│ Postgres │
  │  Mac app │    │  files, embedder, langfuse, device-tools,  │     │ (pgvector)│
@@ -45,7 +45,7 @@ The server is the source of truth. It holds the model catalog, every provider cr
 
 ## Stack
 
-- Server: Go, a single binary named `reeved`. An operator CLI named `reeve` handles migrations, user creation, and key generation.
+- Server: Go, a single binary named `spaltd`. An operator CLI named `spalt` handles migrations, user creation, and key generation.
 - Storage: Postgres, with the pgvector extension for message embeddings.
 - Transport: ConnectRPC over HTTP/2 (h2c, cleartext; put a TLS proxy in front for anything beyond localhost). Chosen for first-class Go and Swift codegen, browser support without a gRPC-Web proxy, and clean server-streaming for token streams. Any endpoint that carries model output is a streaming RPC.
 - Provider SDKs: each vendor's official SDK directly (`anthropic-sdk-go`, `openai-go`, `go-genai`). No multi-provider framework, so provider-specific features survive intact: Anthropic `cache_control` and extended thinking, OpenAI Responses API, Google `safetySettings`.
@@ -75,8 +75,8 @@ Provider configuration is three layers, covered in [providers.md](providers.md):
 
 ## What is deliberately not here
 
-- No multi-provider abstraction framework. Reeve's own Go interface is the common shape.
-- No Temporal or workflow engine. The hard problem is token durability plus client reconnection, which a table and a goroutine solve. A workflow engine cannot revive a dead provider socket, so it would add operational weight for no gain. Revisit only if Reeve grows multi-step agent orchestration with independently resumable steps across processes.
+- No multi-provider abstraction framework. Spalt's own Go interface is the common shape.
+- No Temporal or workflow engine. The hard problem is token durability plus client reconnection, which a table and a goroutine solve. A workflow engine cannot revive a dead provider socket, so it would add operational weight for no gain. Revisit only if Spalt grows multi-step agent orchestration with independently resumable steps across processes.
 - No runtime-loadable plugins. Plugins are compiled-in Go. Adding one is a recompile.
 - No end-to-end encryption of message bodies. The server's value is processing plaintext (compression, history building, plugin pipelines, embeddings). E2E breaks all of it. Provider and plugin credentials are encrypted at rest; message bodies are not. For genuine "no provider sees this" privacy, run a local model through the OpenAI-compatible driver. See [encryption.md](encryption.md).
 

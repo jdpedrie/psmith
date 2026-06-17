@@ -6,11 +6,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
 )
 
-// Service implements reeve.v1.EventsService. Each subscription opens
+// Service implements spalt.v1.EventsService. Each subscription opens
 // a per-user channel on the bus and translates internal Event values
 // into wire-shaped AccountEvent messages.
 type Service struct {
@@ -37,8 +37,8 @@ func NewService(bus *Bus) *Service {
 // proto doesn't model yet doesn't crash the connection.
 func (s *Service) SubscribeAccountEvents(
 	ctx context.Context,
-	req *connect.Request[reevev1.SubscribeAccountEventsRequest],
-	stream *connect.ServerStream[reevev1.AccountEvent],
+	req *connect.Request[spaltv1.SubscribeAccountEventsRequest],
+	stream *connect.ServerStream[spaltv1.AccountEvent],
 ) error {
 	caller, ok := auth.FromContext(ctx)
 	if !ok {
@@ -75,12 +75,12 @@ func (s *Service) SubscribeAccountEvents(
 // Returns nil for event types the proto doesn't model — caller skips
 // those, so a forward-compatible server can publish new types without
 // breaking old clients.
-func eventToProto(ev Event) *reevev1.AccountEvent {
+func eventToProto(ev Event) *spaltv1.AccountEvent {
 	switch ev.Type {
 	case ProfileChanged:
-		return &reevev1.AccountEvent{
-			Kind: &reevev1.AccountEvent_ProfileChanged{
-				ProfileChanged: &reevev1.ProfileChanged{
+		return &spaltv1.AccountEvent{
+			Kind: &spaltv1.AccountEvent_ProfileChanged{
+				ProfileChanged: &spaltv1.ProfileChanged{
 					ProfileId: ev.Profile.ProfileID.String(),
 					Kind:      profileChangeKindToProto(ev.Profile.Kind),
 				},
@@ -91,15 +91,15 @@ func eventToProto(ev Event) *reevev1.AccountEvent {
 	}
 }
 
-func profileChangeKindToProto(k ProfileChangeKind) reevev1.ProfileChangeKind {
+func profileChangeKindToProto(k ProfileChangeKind) spaltv1.ProfileChangeKind {
 	switch k {
 	case ProfileChangeCreated:
-		return reevev1.ProfileChangeKind_PROFILE_CHANGE_KIND_CREATED
+		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_CREATED
 	case ProfileChangeUpdated:
-		return reevev1.ProfileChangeKind_PROFILE_CHANGE_KIND_UPDATED
+		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UPDATED
 	case ProfileChangeDeleted:
-		return reevev1.ProfileChangeKind_PROFILE_CHANGE_KIND_DELETED
+		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_DELETED
 	default:
-		return reevev1.ProfileChangeKind_PROFILE_CHANGE_KIND_UNSPECIFIED
+		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UNSPECIFIED
 	}
 }

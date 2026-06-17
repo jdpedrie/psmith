@@ -3,7 +3,7 @@ package conversations
 import (
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 func TestHashWireMessages_StableForSameInputs(t *testing.T) {
@@ -49,9 +49,9 @@ func TestHashWireMessages_LengthPrefixDisambiguates(t *testing.T) {
 func TestStablePrefixLength(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name           string
-		cur, prev      []string
-		wantStableLen  int
+		name          string
+		cur, prev     []string
+		wantStableLen int
 	}{
 		{"both empty", nil, nil, 0},
 		{"prev empty", []string{"a", "b"}, nil, 0},

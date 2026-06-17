@@ -1,6 +1,6 @@
 # Non-RPC endpoints
 
-A few things do not fit the ConnectRPC mold and are served as plain HTTP on the same mux as the RPC services. They are mounted in `cmd/reeved/main.go`. All except `/healthz` use the same bearer session as the RPCs.
+A few things do not fit the ConnectRPC mold and are served as plain HTTP on the same mux as the RPC services. They are mounted in `cmd/spaltd/main.go`. All except `/healthz` use the same bearer session as the RPCs.
 
 ## `GET` / `HEAD /files/{id}`
 
@@ -33,8 +33,8 @@ The elicited content flows to the waiting tool and never enters the model's cont
 
 ## `/mcp`
 
-Reeve's own MCP server surface, mounted for dogfooding through the `mcp` plugin. `POST`-only (other methods `405`), Streamable-HTTP transport with JSON responses (no SSE), and the same bearer session as the RPCs (a `401` on a bad token). It exposes a curated subset of Reeve's RPCs as MCP tools (profile, plugin-pipeline, conversation, and model/provider operations), all scoped to the authenticated user. The same dispatcher is also reachable in-process by the `mcp` plugin without a network hop, which is the transport elicitation runs over. Protocol and tool detail are in [tools.md](../design/tools.md).
+Spalt's own MCP server surface, mounted for dogfooding through the `mcp` plugin. `POST`-only (other methods `405`), Streamable-HTTP transport with JSON responses (no SSE), and the same bearer session as the RPCs (a `401` on a bad token). It exposes a curated subset of Spalt's RPCs as MCP tools (profile, plugin-pipeline, conversation, and model/provider operations), all scoped to the authenticated user. The same dispatcher is also reachable in-process by the `mcp` plugin without a network hop, which is the transport elicitation runs over. Protocol and tool detail are in [tools.md](../design/tools.md).
 
 ## `/healthz`
 
-An unauthenticated liveness check that returns a simple OK. It is the one endpoint that does not require a session, suitable for a load balancer or container health probe. To validate that a server is a Reeve server and learn its version, a client uses the `AuthService.Probe` RPC instead, which is also unauthenticated but returns structured identity.
+An unauthenticated liveness check that returns a simple OK. It is the one endpoint that does not require a session, suitable for a load balancer or container health probe. To validate that a server is a Spalt server and learn its version, a client uses the `AuthService.Probe` RPC instead, which is also unauthenticated but returns structured identity.

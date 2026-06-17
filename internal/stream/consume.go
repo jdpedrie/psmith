@@ -13,9 +13,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // consume is the supervisor goroutine for one run. It:
@@ -50,14 +50,14 @@ func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartP
 
 	// Aggregators for materialization.
 	var (
-		contentBuilder    strings.Builder
-		thinkingBuilder   strings.Builder
-		thinkingFirstAt   time.Time // wall-clock of first thinking_delta seen
-		thinkingLastAt    time.Time // wall-clock of last thinking_delta seen
-		seenError         *chunkErrorPayload
-		usage             *providers.Usage
-		nextSequence      int64
-		toolCalls         = newToolCallAggregator()
+		contentBuilder  strings.Builder
+		thinkingBuilder strings.Builder
+		thinkingFirstAt time.Time // wall-clock of first thinking_delta seen
+		thinkingLastAt  time.Time // wall-clock of last thinking_delta seen
+		seenError       *chunkErrorPayload
+		usage           *providers.Usage
+		nextSequence    int64
+		toolCalls       = newToolCallAggregator()
 	)
 
 	buffer := make([]Chunk, 0, flushBatchSize)
@@ -178,7 +178,7 @@ loop:
 					seq := nextSequence
 					nextSequence++
 					applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
-				toolCalls.observe(ch)
+					toolCalls.observe(ch)
 					buffer = append(buffer, Chunk{
 						Sequence: seq,
 						Type:     ch.Type,
@@ -200,7 +200,7 @@ loop:
 			seq := nextSequence
 			nextSequence++
 			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
-				toolCalls.observe(ch)
+			toolCalls.observe(ch)
 			buffer = append(buffer, Chunk{
 				Sequence: seq,
 				Type:     ch.Type,
@@ -507,34 +507,34 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		finishReason = &s
 	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
-		ID:                   msgID,
-		ContextID:            params.ContextID,
-		ParentID:             params.ParentMessageID,
-		Role:                 "assistant",
-		Content:              content,
-		RawContent:           nil,
-		Thinking:             thinkingJSON,
-		ThinkingProviderType: thinkingProviderType,
-		ThinkingRenderedText: thinkingRenderedText,
-		ThinkingDurationMs:   thinkingDurationMs,
-		ProviderID:           &providerID,
-		ModelID:              &modelID,
-		InputTokens:          usageParams.InputTokens,
-		OutputTokens:         usageParams.OutputTokens,
-		CacheReadTokens:      usageParams.CacheReadTokens,
-		CacheWriteTokens:     usageParams.CacheWriteTokens,
-		ReasoningTokens:      usageParams.ReasoningTokens,
-		ProviderUsageRaw:     usageParams.ProviderUsageRaw,
-		InputCostUsd:         usageParams.InputCostUsd,
-		OutputCostUsd:        usageParams.OutputCostUsd,
-		CacheReadCostUsd:     usageParams.CacheReadCostUsd,
-		CacheWriteCostUsd:    usageParams.CacheWriteCostUsd,
-		ToolCostUsd:          usageParams.ToolCostUsd,
-		TotalCostUsd:         usageParams.TotalCostUsd,
-		ErrorPayload:         errPayload,
+		ID:                    msgID,
+		ContextID:             params.ContextID,
+		ParentID:              params.ParentMessageID,
+		Role:                  "assistant",
+		Content:               content,
+		RawContent:            nil,
+		Thinking:              thinkingJSON,
+		ThinkingProviderType:  thinkingProviderType,
+		ThinkingRenderedText:  thinkingRenderedText,
+		ThinkingDurationMs:    thinkingDurationMs,
+		ProviderID:            &providerID,
+		ModelID:               &modelID,
+		InputTokens:           usageParams.InputTokens,
+		OutputTokens:          usageParams.OutputTokens,
+		CacheReadTokens:       usageParams.CacheReadTokens,
+		CacheWriteTokens:      usageParams.CacheWriteTokens,
+		ReasoningTokens:       usageParams.ReasoningTokens,
+		ProviderUsageRaw:      usageParams.ProviderUsageRaw,
+		InputCostUsd:          usageParams.InputCostUsd,
+		OutputCostUsd:         usageParams.OutputCostUsd,
+		CacheReadCostUsd:      usageParams.CacheReadCostUsd,
+		CacheWriteCostUsd:     usageParams.CacheWriteCostUsd,
+		ToolCostUsd:           usageParams.ToolCostUsd,
+		TotalCostUsd:          usageParams.TotalCostUsd,
+		ErrorPayload:          errPayload,
 		ExplicitCacheAttached: params.ExplicitCacheAttached,
-		ToolCalls:            toolCallsJSON,
-		FinishReason:         finishReason,
+		ToolCalls:             toolCallsJSON,
+		FinishReason:          finishReason,
 	}); err != nil {
 		// If the context row was deleted out from under us (cascade),
 		// log and skip — the run still gets finalized.

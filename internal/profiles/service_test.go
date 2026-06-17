@@ -8,11 +8,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // --- helpers ---
@@ -60,11 +60,11 @@ func mustCreateProvider(t *testing.T, q *store.Queries, userID uuid.UUID) store.
 		t.Fatalf("uuid: %v", err)
 	}
 	p, err := q.CreateUserModelProvider(context.Background(), store.CreateUserModelProviderParams{
-		ID:     id,
-		UserID: userID,
-		Type:   "openai-compatible",
-		Label:  "test",
-		ConfigEncrypted:    []byte(`{}`),
+		ID:              id,
+		UserID:          userID,
+		Type:            "openai-compatible",
+		Label:           "test",
+		ConfigEncrypted: []byte(`{}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateUserModelProvider: %v", err)
@@ -93,7 +93,7 @@ func TestService_CreateProfile_Minimal(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name: "minimal",
 	}))
 	if err != nil {
@@ -116,10 +116,10 @@ func TestService_CreateProfile_AllFields(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 	prov := mustCreateProvider(t, q, user.ID)
 	provIDStr := prov.ID.String()
-	mode := reevev1.CompressionMode_COMPRESSION_MODE_APPEND
+	mode := spaltv1.CompressionMode_COMPRESSION_MODE_APPEND
 	includeThinking := true
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:                  "full",
 		SystemMessage:         strPtr("sys"),
 		DefaultUserMessage:    strPtr("ctx"),
@@ -127,7 +127,7 @@ func TestService_CreateProfile_AllFields(t *testing.T) {
 		CompressionMode:       &mode,
 		CompressionProviderId: &provIDStr,
 		CompressionModelId:    strPtr("the-model"),
-		DefaultSettings: &reevev1.ProfileDefaults{
+		DefaultSettings: &spaltv1.ProfileDefaults{
 			DefaultModelId:           strPtr("default-model"),
 			IncludeThinkingInHistory: &includeThinking,
 		},
@@ -139,7 +139,7 @@ func TestService_CreateProfile_AllFields(t *testing.T) {
 	if got.SystemMessage == nil || *got.SystemMessage != "sys" {
 		t.Errorf("system_message: %+v", got.SystemMessage)
 	}
-	if got.CompressionMode == nil || *got.CompressionMode != reevev1.CompressionMode_COMPRESSION_MODE_APPEND {
+	if got.CompressionMode == nil || *got.CompressionMode != spaltv1.CompressionMode_COMPRESSION_MODE_APPEND {
 		t.Errorf("compression_mode: %+v", got.CompressionMode)
 	}
 	if got.CompressionProviderId == nil || *got.CompressionProviderId != provIDStr {
@@ -161,7 +161,7 @@ func TestService_CreateProfile_DescriptionAndParentOnly(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:        "tmpl",
 		Description: "Shared base prompt",
 		ParentOnly:  true,
@@ -182,7 +182,7 @@ func TestService_CreateProfile_DescriptionAndParentOnlyDefaults(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name: "default",
 	}))
 	if err != nil {
@@ -201,7 +201,7 @@ func TestService_UpdateProfile_DescriptionAndParentOnly(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	created, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	created, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name: "p",
 	}))
 	if err != nil {
@@ -210,7 +210,7 @@ func TestService_UpdateProfile_DescriptionAndParentOnly(t *testing.T) {
 
 	desc := "Now described"
 	parentOnly := true
-	resp, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          created.Msg.Profile.Id,
 		Description: &desc,
 		ParentOnly:  &parentOnly,
@@ -226,7 +226,7 @@ func TestService_UpdateProfile_DescriptionAndParentOnly(t *testing.T) {
 	}
 
 	// clear description via clear_fields → empty string
-	resp2, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp2, err := svc.UpdateProfile(ctxAs(user), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          created.Msg.Profile.Id,
 		ClearFields: []string{"description"},
 	}))
@@ -246,7 +246,7 @@ func TestService_CreateProfile_MissingName(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	_, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name: "",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -259,14 +259,14 @@ func TestService_CreateProfile_ParentOwnedBySomeoneElse(t *testing.T) {
 	bob := mustCreateUser(t, q, "bob")
 
 	// Alice's parent profile.
-	parentResp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "alice-parent"}))
+	parentResp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "alice-parent"}))
 	if err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	pid := parentResp.Msg.Profile.Id
 
 	// Bob tries to use it.
-	_, err = svc.CreateProfile(ctxAs(bob), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err = svc.CreateProfile(ctxAs(bob), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "bob-child",
 		ParentProfileId: &pid,
 	}))
@@ -279,7 +279,7 @@ func TestService_CreateProfile_ParentNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	missing := uuid.New().String()
-	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &missing,
 	}))
@@ -292,7 +292,7 @@ func TestService_CreateProfile_ParentBadUUID(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	bad := "not-a-uuid"
-	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &bad,
 	}))
@@ -307,7 +307,7 @@ func TestService_CreateProfile_CompressionProviderOwnedBySomeoneElse(t *testing.
 	bobProv := mustCreateProvider(t, q, bob.ID)
 	pid := bobProv.ID.String()
 
-	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:                  "x",
 		CompressionProviderId: &pid,
 	}))
@@ -320,7 +320,7 @@ func TestService_CreateProfile_CompressionProviderNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	pid := uuid.New().String()
-	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:                  "x",
 		CompressionProviderId: &pid,
 	}))
@@ -336,16 +336,16 @@ func TestService_ListProfiles_PerUser(t *testing.T) {
 	bob := mustCreateUser(t, q, "bob")
 
 	for _, n := range []string{"a1", "a2"} {
-		if _, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: n})); err != nil {
+		if _, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: n})); err != nil {
 			t.Fatalf("seed alice: %v", err)
 		}
 	}
-	if _, err := svc.CreateProfile(ctxAs(bob), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "b1"})); err != nil {
+	if _, err := svc.CreateProfile(ctxAs(bob), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "b1"})); err != nil {
 		t.Fatalf("seed bob: %v", err)
 	}
 
 	// Alice sees her two.
-	resp, err := svc.ListProfiles(ctxAs(alice), connect.NewRequest(&reevev1.ListProfilesRequest{}))
+	resp, err := svc.ListProfiles(ctxAs(alice), connect.NewRequest(&spaltv1.ListProfilesRequest{}))
 	if err != nil {
 		t.Fatalf("ListProfiles: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestService_ListProfiles_PerUser(t *testing.T) {
 	}
 
 	// Bob sees his one.
-	bResp, err := svc.ListProfiles(ctxAs(bob), connect.NewRequest(&reevev1.ListProfilesRequest{}))
+	bResp, err := svc.ListProfiles(ctxAs(bob), connect.NewRequest(&spaltv1.ListProfilesRequest{}))
 	if err != nil {
 		t.Fatalf("ListProfiles bob: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestService_GetProfile_Found(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	created, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	created, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:          "p",
 		SystemMessage: strPtr("hello"),
 	}))
@@ -383,7 +383,7 @@ func TestService_GetProfile_Found(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&reevev1.GetProfileRequest{
+	resp, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id: created.Msg.Profile.Id,
 	}))
 	if err != nil {
@@ -403,12 +403,12 @@ func TestService_GetProfile_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 
-	created, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	created, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err = svc.GetProfile(ctxAs(bob), connect.NewRequest(&reevev1.GetProfileRequest{
+	_, err = svc.GetProfile(ctxAs(bob), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id: created.Msg.Profile.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -419,7 +419,7 @@ func TestService_GetProfile_NotFound(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&reevev1.GetProfileRequest{
+	_, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -430,7 +430,7 @@ func TestService_GetProfile_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&reevev1.GetProfileRequest{
+	_, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -441,7 +441,7 @@ func TestService_GetProfile_Resolve_WalksParentChain(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	parent, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	parent, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:             "parent",
 		CompressionGuide: strPtr("inherited-guide"),
 	}))
@@ -450,7 +450,7 @@ func TestService_GetProfile_Resolve_WalksParentChain(t *testing.T) {
 	}
 	pid := parent.Msg.Profile.Id
 
-	child, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	child, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &pid,
 		SystemMessage:   strPtr("child-sys"),
@@ -459,7 +459,7 @@ func TestService_GetProfile_Resolve_WalksParentChain(t *testing.T) {
 		t.Fatalf("seed child: %v", err)
 	}
 
-	resp, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&reevev1.GetProfileRequest{
+	resp, err := svc.GetProfile(ctxAs(alice), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id:      child.Msg.Profile.Id,
 		Resolve: true,
 	}))
@@ -487,12 +487,12 @@ func TestService_UpdateProfile_SetField(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:            p.Msg.Profile.Id,
 		SystemMessage: strPtr("new-sys"),
 	}))
@@ -509,13 +509,13 @@ func TestService_UpdateProfile_RenameViaName(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "old"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "old"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	newName := "new"
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:   p.Msg.Profile.Id,
 		Name: &newName,
 	}))
@@ -533,7 +533,7 @@ func TestService_UpdateProfile_ClearField(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	// Create with system_message set.
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:          "p",
 		SystemMessage: strPtr("seeded"),
 	}))
@@ -542,7 +542,7 @@ func TestService_UpdateProfile_ClearField(t *testing.T) {
 	}
 
 	// Clear via clear_fields.
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          p.Msg.Profile.Id,
 		ClearFields: []string{"system_message"},
 	}))
@@ -563,9 +563,9 @@ func TestService_UpdateProfile_ReParent(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	parent1Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent-A"}))
-	parent2Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent-B"}))
-	childResp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	parent1Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "parent-A"}))
+	parent2Resp, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "parent-B"}))
+	childResp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &parent1Resp.Msg.Profile.Id,
 	}))
@@ -577,7 +577,7 @@ func TestService_UpdateProfile_ReParent(t *testing.T) {
 	}
 
 	// Re-parent to parent2 via UpdateProfile.
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:              childResp.Msg.Profile.Id,
 		ParentProfileId: &parent2Resp.Msg.Profile.Id,
 	}))
@@ -589,7 +589,7 @@ func TestService_UpdateProfile_ReParent(t *testing.T) {
 	}
 
 	// Clear to detach via clear_fields.
-	resp, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          childResp.Msg.Profile.Id,
 		ClearFields: []string{"parent_profile_id"},
 	}))
@@ -608,9 +608,9 @@ func TestService_UpdateProfile_ReParent_RejectsSelf(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 
-	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:              p.Msg.Profile.Id,
 		ParentProfileId: &p.Msg.Profile.Id,
 	}))
@@ -627,19 +627,19 @@ func TestService_UpdateProfile_ReParent_RejectsCycle(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	grandparent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "g"}))
-	parent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	grandparent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "g"}))
+	parent, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "p",
 		ParentProfileId: &grandparent.Msg.Profile.Id,
 	}))
-	child, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	child, _ := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "c",
 		ParentProfileId: &parent.Msg.Profile.Id,
 	}))
 
 	// Try to set the GRANDPARENT's parent to the CHILD — completes a
 	// child→parent→grandparent→child loop.
-	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:              grandparent.Msg.Profile.Id,
 		ParentProfileId: &child.Msg.Profile.Id,
 	}))
@@ -653,7 +653,7 @@ func TestService_UpdateProfile_LeavesUntouchedFieldsAlone(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:               "p",
 		SystemMessage:      strPtr("sys"),
 		DefaultUserMessage: strPtr("user"),
@@ -663,7 +663,7 @@ func TestService_UpdateProfile_LeavesUntouchedFieldsAlone(t *testing.T) {
 	}
 
 	// Update only compression_guide; the other fields must remain.
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:               p.Msg.Profile.Id,
 		CompressionGuide: strPtr("guide"),
 	}))
@@ -686,25 +686,25 @@ func TestService_UpdateProfile_CompressionMode(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	mode := reevev1.CompressionMode_COMPRESSION_MODE_REPLACE
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	mode := spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:              p.Msg.Profile.Id,
 		CompressionMode: &mode,
 	}))
 	if err != nil {
 		t.Fatalf("UpdateProfile: %v", err)
 	}
-	if resp.Msg.Profile.CompressionMode == nil || *resp.Msg.Profile.CompressionMode != reevev1.CompressionMode_COMPRESSION_MODE_REPLACE {
+	if resp.Msg.Profile.CompressionMode == nil || *resp.Msg.Profile.CompressionMode != spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE {
 		t.Errorf("compression_mode: %+v", resp.Msg.Profile.CompressionMode)
 	}
 
 	// Then clear it.
-	resp, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          p.Msg.Profile.Id,
 		ClearFields: []string{"compression_mode"},
 	}))
@@ -721,15 +721,15 @@ func TestService_UpdateProfile_DefaultSettings(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	include := false
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id: p.Msg.Profile.Id,
-		DefaultSettings: &reevev1.ProfileDefaults{
+		DefaultSettings: &spaltv1.ProfileDefaults{
 			DefaultModelId:           strPtr("m1"),
 			IncludeThinkingInHistory: &include,
 		},
@@ -751,12 +751,12 @@ func TestService_UpdateProfile_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err = svc.UpdateProfile(ctxAs(bob), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err = svc.UpdateProfile(ctxAs(bob), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:            p.Msg.Profile.Id,
 		SystemMessage: strPtr("hijack"),
 	}))
@@ -768,7 +768,7 @@ func TestService_UpdateProfile_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -781,13 +781,13 @@ func TestService_UpdateProfile_CompressionProviderOwnedBySomeoneElse(t *testing.
 	bob := mustCreateUser(t, q, "bob")
 	bobProv := mustCreateProvider(t, q, bob.ID)
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	bid := bobProv.ID.String()
-	_, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:                    p.Msg.Profile.Id,
 		CompressionProviderId: &bid,
 	}))
@@ -801,19 +801,19 @@ func TestService_DeleteProfile_Success(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	if _, err := svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&reevev1.DeleteProfileRequest{
+	if _, err := svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&spaltv1.DeleteProfileRequest{
 		Id: p.Msg.Profile.Id,
 	})); err != nil {
 		t.Fatalf("DeleteProfile: %v", err)
 	}
 
 	// Subsequent get should not find it.
-	_, err = svc.GetProfile(ctxAs(alice), connect.NewRequest(&reevev1.GetProfileRequest{
+	_, err = svc.GetProfile(ctxAs(alice), connect.NewRequest(&spaltv1.GetProfileRequest{
 		Id: p.Msg.Profile.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -825,12 +825,12 @@ func TestService_DeleteProfile_OtherUserNotFound(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 	bob := mustCreateUser(t, q, "bob")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err = svc.DeleteProfile(ctxAs(bob), connect.NewRequest(&reevev1.DeleteProfileRequest{
+	_, err = svc.DeleteProfile(ctxAs(bob), connect.NewRequest(&spaltv1.DeleteProfileRequest{
 		Id: p.Msg.Profile.Id,
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -841,7 +841,7 @@ func TestService_DeleteProfile_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	_, err := svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&reevev1.DeleteProfileRequest{
+	_, err := svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&spaltv1.DeleteProfileRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -852,19 +852,19 @@ func TestService_DeleteProfile_WithChildren_FailedPrecondition(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	parent, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent"}))
+	parent, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "parent"}))
 	if err != nil {
 		t.Fatalf("seed parent: %v", err)
 	}
 	pid := parent.Msg.Profile.Id
-	if _, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	if _, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &pid,
 	})); err != nil {
 		t.Fatalf("seed child: %v", err)
 	}
 
-	_, err = svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&reevev1.DeleteProfileRequest{Id: pid}))
+	_, err = svc.DeleteProfile(ctxAs(alice), connect.NewRequest(&spaltv1.DeleteProfileRequest{Id: pid}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
 }
 
@@ -876,7 +876,7 @@ func TestService_CreateProfile_WithTitleProviderKind(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	kind := TitleProviderKindAppleFoundation
-	resp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	resp, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:              "local",
 		TitleProviderKind: &kind,
 	}))
@@ -894,7 +894,7 @@ func TestService_CreateProfile_RejectsUnknownTitleProviderKind(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	bogus := "not_a_real_kind"
-	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	_, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:              "p",
 		TitleProviderKind: &bogus,
 	}))
@@ -906,12 +906,12 @@ func TestService_UpdateProfile_SetTitleProviderKind(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	kind := TitleProviderKindAppleFoundation
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:                p.Msg.Profile.Id,
 		TitleProviderKind: &kind,
 	}))
@@ -929,14 +929,14 @@ func TestService_UpdateProfile_ClearTitleProviderKind(t *testing.T) {
 	alice := mustCreateUser(t, q, "alice")
 
 	kind := TitleProviderKindAppleFoundation
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:              "p",
 		TitleProviderKind: &kind,
 	}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	resp, err := svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:          p.Msg.Profile.Id,
 		ClearFields: []string{"title_provider_kind"},
 	}))
@@ -953,12 +953,12 @@ func TestService_UpdateProfile_RejectsUnknownTitleProviderKind(t *testing.T) {
 	svc, q := newTestSvc(t)
 	alice := mustCreateUser(t, q, "alice")
 
-	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	bogus := "not_a_real_kind"
-	_, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&reevev1.UpdateProfileRequest{
+	_, err = svc.UpdateProfile(ctxAs(alice), connect.NewRequest(&spaltv1.UpdateProfileRequest{
 		Id:                p.Msg.Profile.Id,
 		TitleProviderKind: &bogus,
 	}))

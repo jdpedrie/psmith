@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/elicit"
+	"github.com/jdpedrie/spalt/internal/elicit"
 )
 
 func TestElicitBroker_RoundTrip(t *testing.T) {

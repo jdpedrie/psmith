@@ -3,7 +3,7 @@
 // audio attachments).
 //
 // v1 ships a filesystem backend (`fs.Storage`) that writes to
-// `$REEVE_DATA_DIR/files/{user_id}/{sha256}` with restrictive
+// `$SPALT_DATA_DIR/files/{user_id}/{sha256}` with restrictive
 // permissions (0700 dir / 0600 file). S3 / GCS / R2 backends slot
 // in later behind the same `Storage` interface without touching
 // callers. The interface is content-addressed by `(user_id, sha256)`

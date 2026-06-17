@@ -118,7 +118,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	// Returns the user's embedder config row, if any. pgx ErrNoRows on
-	// missing — callers fall back to the daemon's REEVE_EMBEDDER env var
+	// missing — callers fall back to the daemon's SPALT_EMBEDDER env var
 	// (server-default mode).
 	GetUserEmbedderConfig(ctx context.Context, userID uuid.UUID) (UserEmbedderConfig, error)
 	// Returns the user's Langfuse config row, if any. pgx ErrNoRows on
@@ -265,7 +265,7 @@ type Querier interface {
 	ListUnseededUserIDs(ctx context.Context) ([]uuid.UUID, error)
 	// The worker enumerates this to know which users have configured
 	// embedders. Returning all rows in one shot is fine — we'd never
-	// have more than a handful per Reeve instance.
+	// have more than a handful per Spalt instance.
 	ListUserEmbedderConfigs(ctx context.Context) ([]UserEmbedderConfig, error)
 	// Every existing row across all users. Used at server boot to prime
 	// the in-memory emitter cache so tracing works for the very first
@@ -329,7 +329,7 @@ type Querier interface {
 	// pgvector's HNSW index handles ORDER BY ... LIMIT efficiently even
 	// with the WHERE filter, provided the filter is selective enough to
 	// not prune away most candidates. For a single user that's free; if
-	// we ever scale to many users per Reeve instance the index would
+	// we ever scale to many users per Spalt instance the index would
 	// need partitioning, but that's a future-us problem.
 	SearchMessagesByEmbedding(ctx context.Context, arg SearchMessagesByEmbeddingParams) ([]SearchMessagesByEmbeddingRow, error)
 	// Worker writes the embedding triple. Idempotent: the CHECK constraint

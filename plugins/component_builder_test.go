@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 func buildComponentBuilder(t *testing.T, configJSON string) *componentBuilder {
@@ -40,14 +40,14 @@ func TestComponentBuilder_EmptyConfigIsNoOp(t *testing.T) {
 func TestComponentBuilder_RejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"missing name":         `{"components":[{"component":"choice_list","open_tag":"<a>","close_tag":"</a>"}]}`,
-		"missing component":    `{"components":[{"name":"x","open_tag":"<a>","close_tag":"</a>"}]}`,
-		"missing open":         `{"components":[{"name":"x","component":"choice_list","close_tag":"</a>"}]}`,
-		"missing close":        `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>"}]}`,
-		"identical tags":       `{"components":[{"name":"x","component":"choice_list","open_tag":"X","close_tag":"X"}]}`,
-		"duplicate names":      `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>"},{"name":"x","component":"key_value","open_tag":"<b>","close_tag":"</b>"}]}`,
-		"bad reminder mode":    `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>","reminder_mode":"sometimes"}]}`,
-		"bad json":             `{not json`,
+		"missing name":      `{"components":[{"component":"choice_list","open_tag":"<a>","close_tag":"</a>"}]}`,
+		"missing component": `{"components":[{"name":"x","open_tag":"<a>","close_tag":"</a>"}]}`,
+		"missing open":      `{"components":[{"name":"x","component":"choice_list","close_tag":"</a>"}]}`,
+		"missing close":     `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>"}]}`,
+		"identical tags":    `{"components":[{"name":"x","component":"choice_list","open_tag":"X","close_tag":"X"}]}`,
+		"duplicate names":   `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>"},{"name":"x","component":"key_value","open_tag":"<b>","close_tag":"</b>"}]}`,
+		"bad reminder mode": `{"components":[{"name":"x","component":"choice_list","open_tag":"<a>","close_tag":"</a>","reminder_mode":"sometimes"}]}`,
+		"bad json":          `{not json`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -187,7 +187,9 @@ Some text.
 		t.Fatalf("expected 3 parts; got %d (%#v)", len(out), out)
 	}
 	componentOf := func(p ContentPart) string {
-		if p.IsText() { return "text" }
+		if p.IsText() {
+			return "text"
+		}
 		return p.Fragment.Component
 	}
 	if componentOf(out[0]) != "key_value" {

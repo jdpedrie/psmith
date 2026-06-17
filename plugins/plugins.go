@@ -1,4 +1,4 @@
-// Package plugins implements Reeve's chat-plugin system. A chat plugin is a
+// Package plugins implements Spalt's chat-plugin system. A chat plugin is a
 // compiled-in unit that can contribute to the system prompt, transform
 // outgoing user messages, mutate stored history at prefix-build time, process
 // inbound chunk streams, transform stored content for display, and provide
@@ -20,7 +20,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ type ConfigOption struct {
 }
 
 // ModelPickerFilter constrains which user_models a MODEL_PICKER
-// field surfaces. Mirror of `reeve.v1.ModelPickerFilter`. Any
+// field surfaces. Mirror of `spalt.v1.ModelPickerFilter`. Any
 // flag set to true is required; flags AND. Empty = no filter.
 type ModelPickerFilter struct {
 	RequiresStreaming       bool

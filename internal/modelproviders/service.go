@@ -19,20 +19,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/profiles"
-	"github.com/jdpedrie/reeve/internal/providers"
-	openaidriver "github.com/jdpedrie/reeve/internal/providers/openai"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/spalt/internal/providers"
+	openaidriver "github.com/jdpedrie/spalt/internal/providers/openai"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
-// Service implements reevev1connect.ModelProvidersServiceHandler.
+// Service implements spaltv1connect.ModelProvidersServiceHandler.
 type Service struct {
-	reevev1connect.UnimplementedModelProvidersServiceHandler
+	spaltv1connect.UnimplementedModelProvidersServiceHandler
 	queries *store.Queries
 	catalog modelmeta.Catalog
 	cipher  crypto.Cipher
@@ -41,7 +41,7 @@ type Service struct {
 
 // NewService constructs a Service. logger may be nil — slog.Default() is used
 // in that case. cipher must be non-nil; pass crypto.Nop{} to opt out of
-// encryption (tests, deployments without REEVE_MASTER_KEY).
+// encryption (tests, deployments without SPALT_MASTER_KEY).
 func NewService(queries *store.Queries, catalog modelmeta.Catalog, cipher crypto.Cipher, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
@@ -99,19 +99,19 @@ func mergeJSONConfig(patch []byte, loadCurrent func() ([]byte, error)) ([]byte, 
 
 // --- Driver types & templates ---
 
-func (s *Service) ListProviderTypes(ctx context.Context, _ *connect.Request[reevev1.ListProviderTypesRequest]) (*connect.Response[reevev1.ListProviderTypesResponse], error) {
+func (s *Service) ListProviderTypes(ctx context.Context, _ *connect.Request[spaltv1.ListProviderTypesRequest]) (*connect.Response[spaltv1.ListProviderTypesResponse], error) {
 	names := providers.Types()
 	sort.Strings(names)
-	out := make([]*reevev1.ProviderType, 0, len(names))
+	out := make([]*spaltv1.ProviderType, 0, len(names))
 	for _, n := range names {
-		out = append(out, &reevev1.ProviderType{
+		out = append(out, &spaltv1.ProviderType{
 			Name:         n,
 			DisplayName:  humanizeName(n),
 			Stateful:     knownStatefulTypes[n],
 			ConfigSchema: nil,
 		})
 	}
-	return connect.NewResponse(&reevev1.ListProviderTypesResponse{Types: out}), nil
+	return connect.NewResponse(&spaltv1.ListProviderTypesResponse{Types: out}), nil
 }
 
 // ListProviderTemplates returns the "Add provider" picker entries:
@@ -128,19 +128,19 @@ func (s *Service) ListProviderTypes(ctx context.Context, _ *connect.Request[reev
 // preset's catalog_provider_id in the in-memory catalog and fill those
 // fields when present. Missing catalog entries don't cause the template
 // to be omitted; the UI falls back to its bundled defaults.
-func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[reevev1.ListProviderTemplatesRequest]) (*connect.Response[reevev1.ListProviderTemplatesResponse], error) {
-	out := make([]*reevev1.ProviderTemplate, 0, len(openaidriver.AllPresets())+2)
+func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[spaltv1.ListProviderTemplatesRequest]) (*connect.Response[spaltv1.ListProviderTemplatesResponse], error) {
+	out := make([]*spaltv1.ProviderTemplate, 0, len(openaidriver.AllPresets())+2)
 
 	// Native-driver entries first — they appear at the top of the picker.
 	out = append(out,
-		&reevev1.ProviderTemplate{
+		&spaltv1.ProviderTemplate{
 			CatalogProviderId: "anthropic",
 			Name:              "Anthropic",
 			DriverType:        "anthropic",
 			ApiBase:           strPtr("https://api.anthropic.com"),
 			LogoSlug:          strPtr("anthropic"),
 		},
-		&reevev1.ProviderTemplate{
+		&spaltv1.ProviderTemplate{
 			CatalogProviderId: "google",
 			Name:              "Google Gemini",
 			DriverType:        "google",
@@ -150,7 +150,7 @@ func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[
 	)
 
 	for _, p := range openaidriver.AllPresets() {
-		t := &reevev1.ProviderTemplate{
+		t := &spaltv1.ProviderTemplate{
 			// catalog_provider_id is the preset id for openai-compat
 			// entries — same string the driver enricher uses for catalog
 			// lookups. It happens to match the models.dev provider slug
@@ -176,12 +176,12 @@ func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[
 		out = append(out, t)
 	}
 
-	return connect.NewResponse(&reevev1.ListProviderTemplatesResponse{Templates: out}), nil
+	return connect.NewResponse(&spaltv1.ListProviderTemplatesResponse{Templates: out}), nil
 }
 
 // --- UserModelProvider CRUD ---
 
-func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Request[reevev1.CreateUserModelProviderRequest]) (*connect.Response[reevev1.CreateUserModelProviderResponse], error) {
+func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Request[spaltv1.CreateUserModelProviderRequest]) (*connect.Response[spaltv1.CreateUserModelProviderResponse], error) {
 	u := auth.MustFromContext(ctx)
 	if req.Msg.Type == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("type is required"))
@@ -219,23 +219,23 @@ func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.CreateUserModelProviderResponse{Provider: s.storeProviderToProto(row)}), nil
+	return connect.NewResponse(&spaltv1.CreateUserModelProviderResponse{Provider: s.storeProviderToProto(row)}), nil
 }
 
-func (s *Service) ListUserModelProviders(ctx context.Context, _ *connect.Request[reevev1.ListUserModelProvidersRequest]) (*connect.Response[reevev1.ListUserModelProvidersResponse], error) {
+func (s *Service) ListUserModelProviders(ctx context.Context, _ *connect.Request[spaltv1.ListUserModelProvidersRequest]) (*connect.Response[spaltv1.ListUserModelProvidersResponse], error) {
 	u := auth.MustFromContext(ctx)
 	rows, err := s.queries.ListUserModelProvidersByUser(ctx, u.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*reevev1.UserModelProvider, 0, len(rows))
+	out := make([]*spaltv1.UserModelProvider, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, s.storeProviderToProto(r))
 	}
-	return connect.NewResponse(&reevev1.ListUserModelProvidersResponse{Providers: out}), nil
+	return connect.NewResponse(&spaltv1.ListUserModelProvidersResponse{Providers: out}), nil
 }
 
-func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request[reevev1.GetUserModelProviderRequest]) (*connect.Response[reevev1.GetUserModelProviderResponse], error) {
+func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request[spaltv1.GetUserModelProviderRequest]) (*connect.Response[spaltv1.GetUserModelProviderResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.Id)
 	if err != nil {
 		return nil, err
@@ -244,17 +244,17 @@ func (s *Service) GetUserModelProvider(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	enabled := make([]*reevev1.UserModel, 0, len(models))
+	enabled := make([]*spaltv1.UserModel, 0, len(models))
 	for _, m := range models {
 		enabled = append(enabled, storeUserModelToProto(m, row.Type))
 	}
-	return connect.NewResponse(&reevev1.GetUserModelProviderResponse{
+	return connect.NewResponse(&spaltv1.GetUserModelProviderResponse{
 		Provider:      s.storeProviderToProto(row),
 		EnabledModels: enabled,
 	}), nil
 }
 
-func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Request[reevev1.UpdateUserModelProviderRequest]) (*connect.Response[reevev1.UpdateUserModelProviderResponse], error) {
+func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Request[spaltv1.UpdateUserModelProviderRequest]) (*connect.Response[spaltv1.UpdateUserModelProviderResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.Id)
 	if err != nil {
 		return nil, err
@@ -315,10 +315,10 @@ func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.UpdateUserModelProviderResponse{Provider: s.storeProviderToProto(updated)}), nil
+	return connect.NewResponse(&spaltv1.UpdateUserModelProviderResponse{Provider: s.storeProviderToProto(updated)}), nil
 }
 
-func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Request[reevev1.DeleteUserModelProviderRequest]) (*connect.Response[reevev1.DeleteUserModelProviderResponse], error) {
+func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Request[spaltv1.DeleteUserModelProviderRequest]) (*connect.Response[spaltv1.DeleteUserModelProviderResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.Id)
 	if err != nil {
 		return nil, err
@@ -326,12 +326,12 @@ func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Requ
 	if err := s.queries.DeleteUserModelProvider(ctx, row.ID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.DeleteUserModelProviderResponse{}), nil
+	return connect.NewResponse(&spaltv1.DeleteUserModelProviderResponse{}), nil
 }
 
 // --- Discovery & enablement ---
 
-func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reevev1.DiscoverModelsRequest]) (*connect.Response[reevev1.DiscoverModelsResponse], error) {
+func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[spaltv1.DiscoverModelsRequest]) (*connect.Response[spaltv1.DiscoverModelsResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -365,11 +365,11 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reeve
 		if lookupErr != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("catalog list: %w", lookupErr))
 		}
-		out := make([]*reevev1.DiscoveredModel, 0, len(cms))
+		out := make([]*spaltv1.DiscoveredModel, 0, len(cms))
 		for i := range cms {
 			out = append(out, catalogModelToDiscovered(&cms[i], enabledSet[cms[i].ID]))
 		}
-		return connect.NewResponse(&reevev1.DiscoverModelsResponse{Models: out}), nil
+		return connect.NewResponse(&spaltv1.DiscoverModelsResponse{Models: out}), nil
 	}
 
 	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
@@ -380,20 +380,20 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[reeve
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("discover models: %w", err))
 	}
-	out := make([]*reevev1.DiscoveredModel, 0, len(models))
+	out := make([]*spaltv1.DiscoveredModel, 0, len(models))
 	for _, m := range models {
 		out = append(out, providerModelToDiscovered(m, enabledSet[m.ID]))
 	}
-	return connect.NewResponse(&reevev1.DiscoverModelsResponse{Models: out}), nil
+	return connect.NewResponse(&spaltv1.DiscoverModelsResponse{Models: out}), nil
 }
 
-func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1.EnableModelsRequest]) (*connect.Response[reevev1.EnableModelsResponse], error) {
+func (s *Service) EnableModels(ctx context.Context, req *connect.Request[spaltv1.EnableModelsRequest]) (*connect.Response[spaltv1.EnableModelsResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
 	}
 	if len(req.Msg.ModelIds) == 0 {
-		return connect.NewResponse(&reevev1.EnableModelsResponse{}), nil
+		return connect.NewResponse(&spaltv1.EnableModelsResponse{}), nil
 	}
 
 	cfg, err := s.resolveProviderConfig(row)
@@ -424,7 +424,7 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		return driverModels, nil
 	}
 
-	enabled := make([]*reevev1.UserModel, 0, len(req.Msg.ModelIds))
+	enabled := make([]*spaltv1.UserModel, 0, len(req.Msg.ModelIds))
 	now := time.Now().UTC()
 
 	for _, modelID := range req.Msg.ModelIds {
@@ -433,8 +433,8 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		}
 
 		var (
-			snap   store.UpsertUserModelParams
-			found  bool
+			snap  store.UpsertUserModelParams
+			found bool
 		)
 
 		if catalogProviderID != "" {
@@ -476,10 +476,10 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[reevev1
 		enabled = append(enabled, storeUserModelToProto(written, row.Type))
 	}
 
-	return connect.NewResponse(&reevev1.EnableModelsResponse{Enabled: enabled}), nil
+	return connect.NewResponse(&spaltv1.EnableModelsResponse{Enabled: enabled}), nil
 }
 
-func (s *Service) DisableModels(ctx context.Context, req *connect.Request[reevev1.DisableModelsRequest]) (*connect.Response[reevev1.DisableModelsResponse], error) {
+func (s *Service) DisableModels(ctx context.Context, req *connect.Request[spaltv1.DisableModelsRequest]) (*connect.Response[spaltv1.DisableModelsResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -495,10 +495,10 @@ func (s *Service) DisableModels(ctx context.Context, req *connect.Request[reevev
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
-	return connect.NewResponse(&reevev1.DisableModelsResponse{}), nil
+	return connect.NewResponse(&spaltv1.DisableModelsResponse{}), nil
 }
 
-func (s *Service) ListUserModels(ctx context.Context, req *connect.Request[reevev1.ListUserModelsRequest]) (*connect.Response[reevev1.ListUserModelsResponse], error) {
+func (s *Service) ListUserModels(ctx context.Context, req *connect.Request[spaltv1.ListUserModelsRequest]) (*connect.Response[spaltv1.ListUserModelsResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -507,14 +507,14 @@ func (s *Service) ListUserModels(ctx context.Context, req *connect.Request[reeve
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*reevev1.UserModel, 0, len(models))
+	out := make([]*spaltv1.UserModel, 0, len(models))
 	for _, m := range models {
 		out = append(out, storeUserModelToProto(m, row.Type))
 	}
-	return connect.NewResponse(&reevev1.ListUserModelsResponse{Models: out}), nil
+	return connect.NewResponse(&spaltv1.ListUserModelsResponse{Models: out}), nil
 }
 
-func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[reevev1.ListAllUserModelsRequest]) (*connect.Response[reevev1.ListAllUserModelsResponse], error) {
+func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[spaltv1.ListAllUserModelsRequest]) (*connect.Response[spaltv1.ListAllUserModelsResponse], error) {
 	u := auth.MustFromContext(ctx)
 	provs, err := s.queries.ListUserModelProvidersByUser(ctx, u.ID)
 	if err != nil {
@@ -528,19 +528,19 @@ func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[reev
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	entries := make([]*reevev1.UserModelEntry, 0, len(models))
+	entries := make([]*spaltv1.UserModelEntry, 0, len(models))
 	for _, m := range models {
 		p, ok := provByID[m.UserModelProviderID]
 		if !ok {
 			// Defensive: row from JOIN should always match. Skip if not.
 			continue
 		}
-		entries = append(entries, &reevev1.UserModelEntry{
+		entries = append(entries, &spaltv1.UserModelEntry{
 			Provider: s.storeProviderToProto(p),
 			Model:    storeUserModelToProto(m, p.Type),
 		})
 	}
-	return connect.NewResponse(&reevev1.ListAllUserModelsResponse{Entries: entries}), nil
+	return connect.NewResponse(&spaltv1.ListAllUserModelsResponse{Entries: entries}), nil
 }
 
 // --- Favorite toggle ---
@@ -548,7 +548,7 @@ func (s *Service) ListAllUserModels(ctx context.Context, _ *connect.Request[reev
 // ToggleUserModelFavorite sets the `favorite` flag on a single user model.
 // Verifies the caller owns the parent provider; the model row must already
 // exist (callers can't favorite a model they haven't enabled).
-func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Request[reevev1.ToggleUserModelFavoriteRequest]) (*connect.Response[reevev1.ToggleUserModelFavoriteResponse], error) {
+func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Request[spaltv1.ToggleUserModelFavoriteRequest]) (*connect.Response[spaltv1.ToggleUserModelFavoriteResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -584,7 +584,7 @@ func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.ToggleUserModelFavoriteResponse{
+	return connect.NewResponse(&spaltv1.ToggleUserModelFavoriteResponse{
 		Model: storeUserModelToProto(updated, row.Type),
 	}), nil
 }
@@ -605,7 +605,7 @@ func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Requ
 // changes in-memory, then re-call UpsertUserModel with the full set. The
 // merge is one place, easy to read, and stays in sync as the row grows
 // new columns.
-func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reevev1.UpdateUserModelRequest]) (*connect.Response[reevev1.UpdateUserModelResponse], error) {
+func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[spaltv1.UpdateUserModelRequest]) (*connect.Response[spaltv1.UpdateUserModelResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -673,10 +673,10 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reev
 	}
 	if c := req.Msg.Capabilities; c != nil {
 		capJSON, err := json.Marshal(modelmeta.Capabilities{
-			Streaming:     c.Streaming,
-			Thinking:      c.Thinking,
-			ToolUse:       c.ToolUse,
-			Vision:        c.Vision,
+			Streaming:       c.Streaming,
+			Thinking:        c.Thinking,
+			ToolUse:         c.ToolUse,
+			Vision:          c.Vision,
 			PromptCaching:   c.PromptCaching,
 			GeneratesImages: c.GeneratesImages,
 		})
@@ -706,7 +706,7 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reev
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.UpdateUserModelResponse{
+	return connect.NewResponse(&spaltv1.UpdateUserModelResponse{
 		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil
 }
@@ -721,7 +721,7 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[reev
 //   - AlreadyExists when (provider_id, model_id) is already enabled. The user
 //     should call UpdateUserModel (when implemented for snapshot fields) or
 //     DisableModels first.
-func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[reevev1.AddManualModelRequest]) (*connect.Response[reevev1.AddManualModelResponse], error) {
+func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[spaltv1.AddManualModelRequest]) (*connect.Response[spaltv1.AddManualModelResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -764,10 +764,10 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[reeve
 	}
 	if c := req.Msg.Capabilities; c != nil {
 		capJSON, err := json.Marshal(modelmeta.Capabilities{
-			Streaming:     c.Streaming,
-			Thinking:      c.Thinking,
-			ToolUse:       c.ToolUse,
-			Vision:        c.Vision,
+			Streaming:       c.Streaming,
+			Thinking:        c.Thinking,
+			ToolUse:         c.ToolUse,
+			Vision:          c.Vision,
 			PromptCaching:   c.PromptCaching,
 			GeneratesImages: c.GeneratesImages,
 		})
@@ -788,14 +788,14 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[reeve
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.AddManualModelResponse{
+	return connect.NewResponse(&spaltv1.AddManualModelResponse{
 		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil
 }
 
 // --- Catalog ---
 
-func (s *Service) RefreshModelCatalog(ctx context.Context, _ *connect.Request[reevev1.RefreshModelCatalogRequest]) (*connect.Response[reevev1.RefreshModelCatalogResponse], error) {
+func (s *Service) RefreshModelCatalog(ctx context.Context, _ *connect.Request[spaltv1.RefreshModelCatalogRequest]) (*connect.Response[spaltv1.RefreshModelCatalogResponse], error) {
 	u := auth.MustFromContext(ctx)
 	if !u.IsAdmin {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("admin required"))
@@ -807,7 +807,7 @@ func (s *Service) RefreshModelCatalog(ctx context.Context, _ *connect.Request[re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	resp := &reevev1.RefreshModelCatalogResponse{
+	resp := &spaltv1.RefreshModelCatalogResponse{
 		ProvidersCount: int32(status.ProvidersCount),
 		ModelsCount:    int32(status.ModelsCount),
 	}
@@ -817,14 +817,14 @@ func (s *Service) RefreshModelCatalog(ctx context.Context, _ *connect.Request[re
 	return connect.NewResponse(resp), nil
 }
 
-func (s *Service) GetCatalogStatus(ctx context.Context, _ *connect.Request[reevev1.GetCatalogStatusRequest]) (*connect.Response[reevev1.GetCatalogStatusResponse], error) {
+func (s *Service) GetCatalogStatus(ctx context.Context, _ *connect.Request[spaltv1.GetCatalogStatusRequest]) (*connect.Response[spaltv1.GetCatalogStatusResponse], error) {
 	// Auth-protected by the interceptor; no admin requirement.
 	_ = auth.MustFromContext(ctx)
 	status, err := s.catalog.Status(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	resp := &reevev1.GetCatalogStatusResponse{
+	resp := &spaltv1.GetCatalogStatusResponse{
 		ProvidersCount: int32(status.ProvidersCount),
 		ModelsCount:    int32(status.ModelsCount),
 	}
@@ -839,7 +839,7 @@ func (s *Service) GetCatalogStatus(ctx context.Context, _ *connect.Request[reeve
 // events in the window still appear with 0.0 / 0 — the settings screen renders
 // enabled providers consistently rather than hiding the ones the user hasn't
 // sent through yet.
-func (s *Service) ListProviderCosts(ctx context.Context, req *connect.Request[reevev1.ListProviderCostsRequest]) (*connect.Response[reevev1.ListProviderCostsResponse], error) {
+func (s *Service) ListProviderCosts(ctx context.Context, req *connect.Request[spaltv1.ListProviderCostsRequest]) (*connect.Response[spaltv1.ListProviderCostsResponse], error) {
 	u := auth.MustFromContext(ctx)
 	var since, until *time.Time
 	if req.Msg.Since != nil {
@@ -858,12 +858,12 @@ func (s *Service) ListProviderCosts(ctx context.Context, req *connect.Request[re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*reevev1.ProviderCost, 0, len(rows))
+	out := make([]*spaltv1.ProviderCost, 0, len(rows))
 	var grand float64
 	for _, r := range rows {
 		total := costNumericToFloat(r.TotalCostUsd)
 		grand += total
-		out = append(out, &reevev1.ProviderCost{
+		out = append(out, &spaltv1.ProviderCost{
 			ProviderId:    r.ProviderID.String(),
 			ProviderLabel: r.ProviderLabel,
 			ProviderType:  r.ProviderType,
@@ -871,7 +871,7 @@ func (s *Service) ListProviderCosts(ctx context.Context, req *connect.Request[re
 			EventCount:    r.EventCount,
 		})
 	}
-	return connect.NewResponse(&reevev1.ListProviderCostsResponse{
+	return connect.NewResponse(&spaltv1.ListProviderCostsResponse{
 		Providers:     out,
 		GrandTotalUsd: grand,
 	}), nil

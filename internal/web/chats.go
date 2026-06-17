@@ -12,9 +12,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/providers"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +28,7 @@ func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&reevev1.GetConversationRequest{
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{
 		Id: id,
 	}))
 	if err != nil {
@@ -38,7 +38,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 	conv := getResp.Msg.GetConversation()
 	ctxID := getResp.Msg.GetActiveContext().GetId()
 
-	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&reevev1.ListMessagesRequest{
+	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: ctxID,
 	}))
 	if err != nil {
@@ -93,7 +93,7 @@ func (h *Handler) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := &reevev1.SendMessageRequest{ConversationId: convID, Content: text, AttachmentFileIds: attachIDs}
+	req := &spaltv1.SendMessageRequest{ConversationId: convID, Content: text, AttachmentFileIds: attachIDs}
 	if pid, mid, ok := splitModelValue(modelVal); ok {
 		req.ProviderId, req.ModelId = &pid, &mid
 	}
@@ -171,20 +171,20 @@ func (h *Handler) persistModel(ctx context.Context, convID, modelVal string) {
 	if !ok {
 		return
 	}
-	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		return
 	}
 	settings := getResp.Msg.GetConversation().GetSettings()
 	if settings == nil {
-		settings = &reevev1.ConversationSettings{}
+		settings = &spaltv1.ConversationSettings{}
 	}
 	if settings.GetDefaultProviderId() == pid && settings.GetDefaultModelId() == mid {
 		return // unchanged
 	}
 	settings.DefaultProviderId = &pid
 	settings.DefaultModelId = &mid
-	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&reevev1.UpdateConversationRequest{
+	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&spaltv1.UpdateConversationRequest{
 		Id:       convID,
 		Settings: settings,
 	})); err != nil {

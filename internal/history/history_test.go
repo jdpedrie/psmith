@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // --- Fixture helpers -------------------------------------------------------
@@ -498,8 +498,8 @@ func TestBuild_ListMessagesError(t *testing.T) {
 	t.Parallel()
 	convID := mustUUID(t)
 	fake := &fakeQueries{
-		active:   store.Context{ID: mustUUID(t), ConversationID: convID},
-		listErr:  errors.New("boom"),
+		active:  store.Context{ID: mustUUID(t), ConversationID: convID},
+		listErr: errors.New("boom"),
 	}
 	_, err := Build(context.Background(), fake, Params{
 		Conversation:     store.Conversation{ID: convID},
@@ -541,10 +541,10 @@ func TestBuild_BrokenParentChainErrors(t *testing.T) {
 // --- fake queries impl ----------------------------------------------------
 
 type fakeQueries struct {
-	active   store.Context
+	active    store.Context
 	activeErr error
-	messages []store.Message
-	listErr  error
+	messages  []store.Message
+	listErr   error
 }
 
 func (f *fakeQueries) GetActiveContextByConversation(_ context.Context, _ uuid.UUID) (store.Context, error) {

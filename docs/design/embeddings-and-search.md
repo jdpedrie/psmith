@@ -1,6 +1,6 @@
 # Embeddings and semantic search
 
-Reeve embeds message bodies into vectors so the model can search a user's own history by meaning, not keyword. The motivating case is a long chat that has been compressed: the wire prefix no longer holds the early turns, but the model can call `search_history` and pull back the exact passage it needs. Everything here is opt-in. A user with no embedder configured pays nothing, and the feature is invisible.
+Spalt embeds message bodies into vectors so the model can search a user's own history by meaning, not keyword. The motivating case is a long chat that has been compressed: the wire prefix no longer holds the early turns, but the model can call `search_history` and pull back the exact passage it needs. Everything here is opt-in. A user with no embedder configured pays nothing, and the feature is invisible.
 
 Three pieces make it work: a pluggable embedder, a background worker that fills in vectors, and a searcher that the memory plugin calls. They are wired through a per-user resolver so two users can run different embedders on the same server.
 
@@ -16,11 +16,11 @@ The driver name is stable on purpose. Every embedding is stored next to the `Mod
 
 `user_embedder_config` holds one row per user, keyed by `user_id`. The non-secret settings (`base_url`, `model`, `dimensions`, `timeout`) live in a `config` JSONB column; the API key lives in its own encrypted `api_key_encrypted` column, separate so key rotation touches only that column and a plain read needs no decrypt. An `enabled` flag and an empty `type` both mean disabled.
 
-The row is created lazily on first write. A user with no row falls back to the daemon-wide `REEVE_EMBEDDER`, and when the row exists it wins. `internal/embeddersvc` serves the config RPCs: get (returns a sane default on no-row), update (sparse-merge, validates the type, trims a trailing slash off the base URL, encrypts or clears the key, requires base-url plus model plus dimensions before it will save, and invalidates the resolver cache), delete, test (builds the embedder and fires one `Embed("ping")` under a 30-second timeout, returning ok-or-not with a latency inline rather than as an error), and stats (the unembedded-message count that drives the progress chip, plus whether the worker is active for this user).
+The row is created lazily on first write. A user with no row falls back to the daemon-wide `SPALT_EMBEDDER`, and when the row exists it wins. `internal/embeddersvc` serves the config RPCs: get (returns a sane default on no-row), update (sparse-merge, validates the type, trims a trailing slash off the base URL, encrypts or clears the key, requires base-url plus model plus dimensions before it will save, and invalidates the resolver cache), delete, test (builds the embedder and fires one `Embed("ping")` under a 30-second timeout, returning ok-or-not with a latency inline rather than as an error), and stats (the unembedded-message count that drives the progress chip, plus whether the worker is active for this user).
 
 ## The resolver
 
-The worker and the searcher both need "the embedder for this user," repeatedly. A `Resolver` answers that, and caching is its job. `CachingResolver` builds an embedder per user on demand and caches it under a mutex, with the build running outside the lock so a slow or down upstream (Ollama not responding) blocks only the user waiting on it, not everyone. A config change calls `Invalidate(userID)` so the next turn picks up the new settings without a restart. `StaticResolver` returns one embedder for every user and is how the server-wide `REEVE_EMBEDDER` default and the tests work. The sentinel `ErrNoEmbedderForUser` means "no config or disabled"; the worker treats it as "skip this user for now," not an error.
+The worker and the searcher both need "the embedder for this user," repeatedly. A `Resolver` answers that, and caching is its job. `CachingResolver` builds an embedder per user on demand and caches it under a mutex, with the build running outside the lock so a slow or down upstream (Ollama not responding) blocks only the user waiting on it, not everyone. A config change calls `Invalidate(userID)` so the next turn picks up the new settings without a restart. `StaticResolver` returns one embedder for every user and is how the server-wide `SPALT_EMBEDDER` default and the tests work. The sentinel `ErrNoEmbedderForUser` means "no config or disabled"; the worker treats it as "skip this user for now," not an error.
 
 ## The background worker
 
@@ -36,7 +36,7 @@ Migration `00034` adds three columns to `messages`: `embedding vector(768)`, `em
 
 Two partial indexes carry the load. An HNSW index with `vector_cosine_ops` covers `WHERE embedding IS NOT NULL`, so build and write cost stay at zero until a row is actually embedded. A btree on `created_at WHERE embedding IS NULL` is the backlog hot path, and it shrinks to nothing once the worker catches up.
 
-The `vector` extension has to be installed in the database before this migration runs. `CREATE EXTENSION` is not in the migration, because the migration runner usually lacks the database-level privilege it needs; `reeve install` runs an ensure-vector preflight, and the local-dev setup installs it into `template1` so every cloned test database inherits it. See [installation.md](../operations/installation.md).
+The `vector` extension has to be installed in the database before this migration runs. `CREATE EXTENSION` is not in the migration, because the migration runner usually lacks the database-level privilege it needs; `spalt install` runs an ensure-vector preflight, and the local-dev setup installs it into `template1` so every cloned test database inherits it. See [installation.md](../operations/installation.md).
 
 ### Swapping embedders
 
@@ -52,4 +52,4 @@ Because every vector is stored with its model name, changing the embedder does n
 
 By default the plugin skips hits from the caller's active context, because those messages are already in the wire prefix and surfacing them again wastes budget. Retired contexts of the same conversation always come through, which is the whole point: that is the compressed-out content the model is trying to recover. When active-context hits are skipped, the count of skips is reported in the output so the model is not confused by an apparently empty result on a query it expected to match.
 
-The conversations service attaches the searcher and the caller info to the dispatch context right before it calls the tool. If no embedder is configured the searcher is nil, and the tool returns a friendly "search not configured, set REEVE_EMBEDDER" error rather than panicking. The plugin needs the `tool_use` capability like any other tool provider, and it is one of the shipped plugins in [plugins.md](plugins.md).
+The conversations service attaches the searcher and the caller info to the dispatch context right before it calls the tool. If no embedder is configured the searcher is nil, and the tool returns a friendly "search not configured, set SPALT_EMBEDDER" error rather than panicking. The plugin needs the `tool_use` capability like any other tool provider, and it is one of the shipped plugins in [plugins.md](plugins.md).

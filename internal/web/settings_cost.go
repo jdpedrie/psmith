@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
 type costRowVM struct {
@@ -19,7 +19,7 @@ type costRowVM struct {
 func usd(f float64) string { return fmt.Sprintf("$%.4f", f) }
 
 func (h *Handler) handleCost(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.models.ListProviderCosts(r.Context(), connect.NewRequest(&reevev1.ListProviderCostsRequest{}))
+	resp, err := h.models.ListProviderCosts(r.Context(), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

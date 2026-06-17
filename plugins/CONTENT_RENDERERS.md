@@ -1,6 +1,6 @@
 # ContentRenderer plugins — author's guide
 
-> *Status: shipped server-side and on both Mac + iOS clients. The renderer set is shared across platforms via the ReeveUI Swift package.*
+> *Status: shipped server-side and on both Mac + iOS clients. The renderer set is shared across platforms via the SpaltUI Swift package.*
 
 A `ContentRenderer` plugin turns a message's display-time content
 into a structured list of `ContentPart`s the client renders with
@@ -223,7 +223,7 @@ card list inline.
 ## Component reference
 
 Renderers ship in
-`clients/ReeveSwift/Sources/ReeveUI/PluginRenderers/` so Mac
+`clients/SpaltSwift/Sources/SpaltUI/PluginRenderers/` so Mac
 and iOS share the same SwiftUI views. Each maps a
 `UIFragment.Component` string to a `View` consumed by the
 top-level `FragmentView` dispatcher.
@@ -316,7 +316,7 @@ Single inline image loaded from a URL.
 ```
 
 For images that came out of a tool (ImageGen, etc.), prefer the
-existing `MessageAttachment` path — that goes through Reeve's
+existing `MessageAttachment` path — that goes through Spalt's
 file-storage + signed-URL system. `image` is for plugin-supplied
 externally-hosted media.
 
@@ -423,7 +423,7 @@ func (PromoBanner) RenderContent(parts []ContentPart, role string) []ContentPart
         if !strings.Contains(s, "[promo]") { return []ContentPart{NewTextPart(s)} }
         before, after, _ := strings.Cut(s, "[promo]")
         props, _ := json.Marshal(map[string]any{
-            "message": "Try Reeve Pro!", "code": "AD",
+            "message": "Try Spalt Pro!", "code": "AD",
         })
         return []ContentPart{
             NewTextPart(before),
@@ -534,7 +534,7 @@ upstream fragments.
    server doesn't validate it (clients fall back to a safe
    rendering on bad payloads).
 3. **Add a SwiftUI view** in
-   `clients/ReeveSwift/Sources/ReeveUI/PluginRenderers/<Name>Renderer.swift`.
+   `clients/SpaltSwift/Sources/SpaltUI/PluginRenderers/<Name>Renderer.swift`.
    Follow the `ChoiceListRenderer` shape: decode `Props`,
    render, route any user actions through the `onAction`
    closure. Mark the struct + init + body `public` so the host
@@ -548,4 +548,4 @@ upstream fragments.
 There's no proto change required to add a component — the
 Component name is just a string. Renderers are platform-agnostic
 SwiftUI; both Mac and iOS pick up new components automatically
-once they land in ReeveUI.
+once they land in SpaltUI.

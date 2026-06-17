@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/reeve/internal/profiles"
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
 )
 
 // defaultTitleGuide is used when the resolved profile has title fields

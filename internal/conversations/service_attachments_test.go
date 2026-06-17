@@ -7,9 +7,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // TestSendMessage_AttachmentBinding verifies that attachment_file_ids
@@ -41,12 +41,12 @@ func TestSendMessage_AttachmentBinding(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctx, connect.NewRequest(&reevev1.SendMessageRequest{
-		ConversationId:      f.conv.ID.String(),
-		Content:             "look at these",
-		ProviderId:          &pid,
-		ModelId:             &mid,
-		AttachmentFileIds:   []string{imgID.String(), docID.String()},
+	resp, err := svc.SendMessage(ctx, connect.NewRequest(&spaltv1.SendMessageRequest{
+		ConversationId:    f.conv.ID.String(),
+		Content:           "look at these",
+		ProviderId:        &pid,
+		ModelId:           &mid,
+		AttachmentFileIds: []string{imgID.String(), docID.String()},
 	}))
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
@@ -108,7 +108,7 @@ func TestSendMessage_AttachmentNotOwned(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId:    f.conv.ID.String(),
 		Content:           "evil",
 		ProviderId:        &pid,

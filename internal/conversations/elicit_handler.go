@@ -9,12 +9,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/elicit"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/elicit"
 )
 
 // ElicitHandler returns the http.Handler that receives user responses
-// for in-flight elicitation requests. Mounted by cmd/reeved at
+// for in-flight elicitation requests. Mounted by cmd/spaltd at
 // `POST /conversations/{id}/elicitations/{eid}/respond`. The handler:
 //
 //   - authenticates the caller via the same Bearer-token sessions

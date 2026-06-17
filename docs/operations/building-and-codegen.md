@@ -5,11 +5,11 @@ This document covers building the binaries, regenerating the protobuf and SQL bi
 ## Building
 
 ```bash
-make build    # go build -o bin/reeved ./cmd/reeved
-make run      # go run ./cmd/reeved
+make build    # go build -o bin/spaltd ./cmd/spaltd
+make run      # go run ./cmd/spaltd
 ```
 
-The operator CLI builds with `go build ./cmd/reeve`. The Docker image builds both binaries with `CGO_ENABLED=0`, `-trimpath`, and stripped symbols. See [installation.md](installation.md) for the Docker flow.
+The operator CLI builds with `go build ./cmd/spalt`. The Docker image builds both binaries with `CGO_ENABLED=0`, `-trimpath`, and stripped symbols. See [installation.md](installation.md) for the Docker flow.
 
 ## Code generation
 
@@ -23,10 +23,10 @@ make proto    # buf generate
 
 `buf.gen.yaml` runs four remote plugins:
 
-- `protocolbuffers/go` and `connectrpc/go` write Go into `gen/` with `paths=source_relative`. The Go import path is `gen/reeve/v1` (package `reevev1`) and `gen/reeve/v1/reevev1connect` for the service stubs.
-- `apple/swift` and `connectrpc/swift` write Swift into `clients/ReeveSwift/Sources/ReeveKit/Generated` with public visibility, async methods on, and callback methods off.
+- `protocolbuffers/go` and `connectrpc/go` write Go into `gen/` with `paths=source_relative`. The Go import path is `gen/spalt/v1` (package `spaltv1`) and `gen/spalt/v1/spaltv1connect` for the service stubs.
+- `apple/swift` and `connectrpc/swift` write Swift into `clients/SpaltSwift/Sources/SpaltKit/Generated` with public visibility, async methods on, and callback methods off.
 
-`buf.yaml` sets the module root at `proto`, lint level STANDARD, breaking-change detection at FILE level. The protos live under `proto/reeve/v1/`.
+`buf.yaml` sets the module root at `proto`, lint level STANDARD, breaking-change detection at FILE level. The protos live under `proto/spalt/v1/`.
 
 ### SQL to Go
 
@@ -63,14 +63,14 @@ Override the test database connection with the `PGTESTDB_*` variables in [config
 
 ```bash
 make swift-test           # L1 + L2
-make swift-test-l1        # ReeveKit integration tests
-make swift-test-l2        # ReeveMac SwiftUI snapshot tests
+make swift-test-l1        # SpaltKit integration tests
+make swift-test-l2        # SpaltMac SwiftUI snapshot tests
 make swift-test-l2-record # re-baseline snapshots after intentional UI changes
 ```
 
 Two layers, described in full in `testing-plan.md`:
 
-- L1 drives every public Repository and ViewModel method against a freshly spawned `reeved` subprocess on an ephemeral port with its own database. It is a real client-to-server integration test.
+- L1 drives every public Repository and ViewModel method against a freshly spawned `spaltd` subprocess on an ephemeral port with its own database. It is a real client-to-server integration test.
 - L2 renders load-bearing SwiftUI views against committed PNG baselines.
 
 The project convention, enforced in `CLAUDE.md`, is that a backend change ships with tests and a Swift change ships with the matching L1 or L2 coverage.
@@ -79,11 +79,11 @@ The project convention, enforced in `CLAUDE.md`, is that a backend change ships 
 
 ```bash
 make mac-build        # build the Swift package for macOS
-make mac-app          # build and wrap in ReeveMac.app
+make mac-app          # build and wrap in SpaltMac.app
 make mac-app-run      # build, wrap, launch
 make ios-project      # xcodegen the Xcode project from project.yml
 make ios-build        # build the iOS app for the simulator
 make ios-app-run      # xcodegen, build, install, launch on the simulator
 ```
 
-The iOS Xcode project is generated; `clients/reeved-ios/project.yml` is the source of truth, not the `.xcodeproj`. The provider-logo SVGs are converted to PNGs during the iOS build because iOS cannot decode raw SVG bytes from arbitrary file URLs.
+The iOS Xcode project is generated; `clients/spaltd-ios/project.yml` is the source of truth, not the `.xcodeproj`. The provider-logo SVGs are converted to PNGs during the iOS build because iOS cannot decode raw SVG bytes from arbitrary file URLs.

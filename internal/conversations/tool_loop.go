@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/devicetools"
-	"github.com/jdpedrie/reeve/internal/elicit"
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/devicetools"
+	"github.com/jdpedrie/spalt/internal/elicit"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // maxToolRounds caps how many tool-use → tool-result → continued-stream
@@ -44,6 +44,7 @@ const maxToolRounds = 8
 //     cap is reached. The loop swallows the upstream's intermediate
 //     ChunkDone events so the supervisor only sees one ChunkDone at
 //     the very end.
+//
 // ToolSpan is the per-call observation the tool loop hands to its
 // onToolSpan callback. The conversations service uses these to fan
 // out Langfuse span events nested under the parent assistant
@@ -114,7 +115,7 @@ func makeToolLoopSendFunc(
 	activeContextID uuid.UUID,
 	// searcher, when non-nil, is attached to the dispatch context
 	// so the memory plugin can answer search_history calls.
-	// REEVE_EMBEDDER unset → searcher is nil → search_history
+	// SPALT_EMBEDDER unset → searcher is nil → search_history
 	// surfaces a clean "search not configured" error.
 	searcher plugins.Searcher,
 	// deviceToolBroker + deviceToolRegistry power the `app_tools`
@@ -122,7 +123,7 @@ func makeToolLoopSendFunc(
 	// nil-tolerant: the plugin reports "no DeviceToolBroker in
 	// context" when missing, which the model sees as an ordinary
 	// tool error.
-	deviceToolBroker   *devicetools.Broker,
+	deviceToolBroker *devicetools.Broker,
 	deviceToolRegistry *devicetools.Registry,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline, resolver, searcher,
@@ -414,7 +415,7 @@ type roundCapture struct {
 	thinking []anthropicThinkingBlock
 }
 
-// anthropicThinkingBlock mirrors the JSONB shape Reeve stores on
+// anthropicThinkingBlock mirrors the JSONB shape Spalt stores on
 // messages.thinking for signed-thinking turns.
 type anthropicThinkingBlock struct {
 	Type      string `json:"type"`

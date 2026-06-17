@@ -105,13 +105,12 @@ func VerifyToken(key []byte, token string, expectedFileID uuid.UUID, now time.Ti
 
 // DeriveSigningKey turns the server's master key into a separate
 // HMAC sub-key for URL signing. Same threat model — both keys live
-// in process memory and rotate together via REEVE_MASTER_KEY — but
+// in process memory and rotate together via SPALT_MASTER_KEY — but
 // using a derived sub-key keeps the master key out of the URL-
 // signature pipeline so a key-pinning audit of either domain stays
 // independent.
 func DeriveSigningKey(masterKey []byte) []byte {
 	mac := hmac.New(sha256.New, masterKey)
-	_, _ = mac.Write([]byte("reeve.fileurl.v1"))
+	_, _ = mac.Write([]byte("spalt.fileurl.v1"))
 	return mac.Sum(nil)
 }
-

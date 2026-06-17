@@ -13,7 +13,7 @@ import (
 // stream_run with status='running'. This is the server-side enforcement of
 // the UI's "all conversation actions disabled while a stream is in flight"
 // rule. Applied at the start of every mutating RPC so the rule holds even
-// for non-Reeve clients hitting the API directly.
+// for non-Spalt clients hitting the API directly.
 //
 // Reads/listings are NOT gated by this — only mutations.
 func (s *Service) requireNoActiveStream(ctx context.Context, conversationID uuid.UUID) error {

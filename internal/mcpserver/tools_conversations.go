@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
 // Per-call cap on messages returned. Chat history can grow unbounded;
@@ -85,7 +85,7 @@ func (s *Server) toolListConversations(ctx context.Context, args json.RawMessage
 	if err := json.Unmarshal(args, &in); err != nil {
 		return errorResult("invalid arguments: " + err.Error()), nil
 	}
-	req := &reevev1.ListConversationsRequest{
+	req := &spaltv1.ListConversationsRequest{
 		PageSize:   in.PageSize,
 		PageToken:  in.PageToken,
 		TitleQuery: in.TitleQuery,
@@ -120,7 +120,7 @@ func (s *Server) toolGetConversation(ctx context.Context, args json.RawMessage) 
 	if in.ID == "" {
 		return errorResult("id is required"), nil
 	}
-	resp, err := s.conversationsSvc.GetConversation(ctx, connect.NewRequest(&reevev1.GetConversationRequest{Id: in.ID}))
+	resp, err := s.conversationsSvc.GetConversation(ctx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: in.ID}))
 	if err != nil {
 		return errorResult(err.Error()), nil
 	}
@@ -149,7 +149,7 @@ func (s *Server) toolListMessages(ctx context.Context, args json.RawMessage) (To
 	if in.ContextID == "" {
 		return errorResult("context_id is required"), nil
 	}
-	resp, err := s.conversationsSvc.ListMessages(ctx, connect.NewRequest(&reevev1.ListMessagesRequest{
+	resp, err := s.conversationsSvc.ListMessages(ctx, connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId:     in.ContextID,
 		LeafMessageId: in.LeafMessageID,
 		FullTree:      in.FullTree,
@@ -189,7 +189,7 @@ func (s *Server) toolGetConversationPlugins(ctx context.Context, args json.RawMe
 	if in.ConversationID == "" {
 		return errorResult("conversation_id is required"), nil
 	}
-	resp, err := s.conversationsSvc.GetConversationPlugins(ctx, connect.NewRequest(&reevev1.GetConversationPluginsRequest{
+	resp, err := s.conversationsSvc.GetConversationPlugins(ctx, connect.NewRequest(&spaltv1.GetConversationPluginsRequest{
 		ConversationId: in.ConversationID,
 	}))
 	if err != nil {
@@ -221,7 +221,7 @@ func (s *Server) toolSetConversationPlugins(ctx context.Context, args json.RawMe
 	if in.ConversationID == "" {
 		return errorResult("conversation_id is required"), nil
 	}
-	overrides := make([]*reevev1.ConversationPlugin, 0, len(in.Plugins))
+	overrides := make([]*spaltv1.ConversationPlugin, 0, len(in.Plugins))
 	for i, p := range in.Plugins {
 		if p.PluginName == "" {
 			return errorResult(fmt.Sprintf("plugins[%d].plugin_name is required", i)), nil
@@ -233,13 +233,13 @@ func (s *Server) toolSetConversationPlugins(ctx context.Context, args json.RawMe
 		if !p.Disabled && !json.Valid([]byte(cfg)) {
 			return errorResult(fmt.Sprintf("plugins[%d].config_json is not valid JSON: %q", i, cfg)), nil
 		}
-		overrides = append(overrides, &reevev1.ConversationPlugin{
+		overrides = append(overrides, &spaltv1.ConversationPlugin{
 			PluginName: p.PluginName,
 			Config:     []byte(cfg),
 			Disabled:   p.Disabled,
 		})
 	}
-	resp, err := s.conversationsSvc.SetConversationPlugins(ctx, connect.NewRequest(&reevev1.SetConversationPluginsRequest{
+	resp, err := s.conversationsSvc.SetConversationPlugins(ctx, connect.NewRequest(&spaltv1.SetConversationPluginsRequest{
 		ConversationId: in.ConversationID,
 		Plugins:        overrides,
 	}))
@@ -267,7 +267,7 @@ func (s *Server) toolResolveConversationPipeline(ctx context.Context, args json.
 	if in.ConversationID == "" {
 		return errorResult("conversation_id is required"), nil
 	}
-	resp, err := s.conversationsSvc.ResolveConversationPipeline(ctx, connect.NewRequest(&reevev1.ResolveConversationPipelineRequest{
+	resp, err := s.conversationsSvc.ResolveConversationPipeline(ctx, connect.NewRequest(&spaltv1.ResolveConversationPipelineRequest{
 		ConversationId: in.ConversationID,
 	}))
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *Server) toolResolveConversationPipeline(ctx context.Context, args json.
 
 // --- shape helpers -------------------------------------------------------
 
-func conversationSummary(c *reevev1.Conversation) map[string]any {
+func conversationSummary(c *spaltv1.Conversation) map[string]any {
 	out := map[string]any{
 		"id":         c.GetId(),
 		"profile_id": c.GetProfileId(),
@@ -296,7 +296,7 @@ func conversationSummary(c *reevev1.Conversation) map[string]any {
 	return out
 }
 
-func conversationDetail(c *reevev1.Conversation) map[string]any {
+func conversationDetail(c *spaltv1.Conversation) map[string]any {
 	out := conversationSummary(c)
 	out["active_context_id"] = c.GetActiveContextId()
 	if t := c.GetCreatedAt(); t != nil {
@@ -305,7 +305,7 @@ func conversationDetail(c *reevev1.Conversation) map[string]any {
 	return out
 }
 
-func contextSummary(c *reevev1.Context) map[string]any {
+func contextSummary(c *spaltv1.Context) map[string]any {
 	out := map[string]any{
 		"id":              c.GetId(),
 		"conversation_id": c.GetConversationId(),
@@ -323,7 +323,7 @@ func contextSummary(c *reevev1.Context) map[string]any {
 	return out
 }
 
-func messageSummary(m *reevev1.Message) map[string]any {
+func messageSummary(m *spaltv1.Message) map[string]any {
 	out := map[string]any{
 		"id":      m.GetId(),
 		"role":    roleString(m.GetRole()),
@@ -353,7 +353,7 @@ func messageSummary(m *reevev1.Message) map[string]any {
 	return out
 }
 
-func conversationPluginDetail(p *reevev1.ConversationPlugin) map[string]any {
+func conversationPluginDetail(p *spaltv1.ConversationPlugin) map[string]any {
 	out := map[string]any{
 		"plugin_name": p.GetPluginName(),
 		"ordinal":     p.GetOrdinal(),
@@ -373,7 +373,7 @@ func conversationPluginDetail(p *reevev1.ConversationPlugin) map[string]any {
 	return out
 }
 
-func resolvedPipelineEntryDetail(e *reevev1.ResolvedPipelineEntry) map[string]any {
+func resolvedPipelineEntryDetail(e *spaltv1.ResolvedPipelineEntry) map[string]any {
 	out := map[string]any{
 		"plugin_name": e.GetPluginName(),
 		"ordinal":     e.GetOrdinal(),
@@ -393,28 +393,28 @@ func resolvedPipelineEntryDetail(e *reevev1.ResolvedPipelineEntry) map[string]an
 	return out
 }
 
-func pipelineSourceString(s reevev1.ResolvedPipelineSource) string {
+func pipelineSourceString(s spaltv1.ResolvedPipelineSource) string {
 	switch s {
-	case reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE:
+	case spaltv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE:
 		return "profile"
-	case reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION:
+	case spaltv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION:
 		return "conversation"
 	default:
 		return "unspecified"
 	}
 }
 
-func roleString(r reevev1.MessageRole) string {
+func roleString(r spaltv1.MessageRole) string {
 	switch r {
-	case reevev1.MessageRole_MESSAGE_ROLE_SYSTEM:
+	case spaltv1.MessageRole_MESSAGE_ROLE_SYSTEM:
 		return "system"
-	case reevev1.MessageRole_MESSAGE_ROLE_CONTEXT:
+	case spaltv1.MessageRole_MESSAGE_ROLE_CONTEXT:
 		return "context"
-	case reevev1.MessageRole_MESSAGE_ROLE_USER:
+	case spaltv1.MessageRole_MESSAGE_ROLE_USER:
 		return "user"
-	case reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT:
+	case spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
 		return "assistant"
-	case reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
+	case spaltv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
 		return "compression_summary"
 	default:
 		return "unspecified"

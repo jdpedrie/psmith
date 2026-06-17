@@ -4,7 +4,7 @@ Per-service RPC reference. Read [overview.md](overview.md) first for the convent
 
 ## AuthService
 
-Sessions, self-service password management, and admin user management. `proto/reeve/v1/auth.proto`.
+Sessions, self-service password management, and admin user management. `proto/spalt/v1/auth.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -24,7 +24,7 @@ Sessions, self-service password management, and admin user management. `proto/re
 
 ## ConversationsService
 
-The chat core: conversation and context lifecycle, the message tree, sending and editing, branching, compaction, and per-conversation plugin overrides. `proto/reeve/v1/conversations.proto`.
+The chat core: conversation and context lifecycle, the message tree, sending and editing, branching, compaction, and per-conversation plugin overrides. `proto/spalt/v1/conversations.proto`.
 
 Conversations:
 
@@ -76,7 +76,7 @@ Per-conversation plugins:
 
 ## StreamsService
 
-Subscribe to and control streaming runs. `proto/reeve/v1/streams.proto`.
+Subscribe to and control streaming runs. `proto/spalt/v1/streams.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -89,7 +89,7 @@ Subscribe to and control streaming runs. `proto/reeve/v1/streams.proto`.
 
 ## FilesService
 
-Content-addressed file upload and retrieval. `proto/reeve/v1/files.proto`.
+Content-addressed file upload and retrieval. `proto/spalt/v1/files.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -101,7 +101,7 @@ The download itself is a plain HTTP endpoint, not an RPC; see [non-rpc-endpoints
 
 ## ProfilesService
 
-Profiles and their plugin pipelines. `proto/reeve/v1/profiles.proto`.
+Profiles and their plugin pipelines. `proto/spalt/v1/profiles.proto`.
 
 Profiles:
 
@@ -127,7 +127,7 @@ Plugins:
 
 ## ModelProvidersService
 
-Provider instances, model discovery and enablement, testing, and cost. `proto/reeve/v1/model_providers.proto`.
+Provider instances, model discovery and enablement, testing, and cost. `proto/spalt/v1/model_providers.proto`.
 
 Types and templates:
 
@@ -171,7 +171,7 @@ An enabled `UserModel` carries a pricing snapshot, capabilities, modalities, a m
 
 ## EmbedderService
 
-Per-user embedder config for semantic search. `proto/reeve/v1/embedder.proto`.
+Per-user embedder config for semantic search. `proto/spalt/v1/embedder.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -186,7 +186,7 @@ See [embeddings-and-search.md](../design/embeddings-and-search.md).
 
 ## LangfuseService
 
-Per-user Langfuse tracing config. `proto/reeve/v1/langfuse.proto`.
+Per-user Langfuse tracing config. `proto/spalt/v1/langfuse.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -199,7 +199,7 @@ See [titles-cost-observability.md](../design/titles-cost-observability.md).
 
 ## DeviceToolsService
 
-Device-tool capability registration, catalog, and audit log. The dispatch itself rides the stream and the respond endpoint, not an RPC. `proto/reeve/v1/device_tools.proto`.
+Device-tool capability registration, catalog, and audit log. The dispatch itself rides the stream and the respond endpoint, not an RPC. `proto/spalt/v1/device_tools.proto`.
 
 | RPC | Notes |
 |---|---|
@@ -211,7 +211,7 @@ The full dispatch flow (a `DEVICE_TOOL_USE` chunk, run on device, POST to the re
 
 ## EventsService
 
-Account-scoped server push. `proto/reeve/v1/events.proto`.
+Account-scoped server push. `proto/spalt/v1/events.proto`.
 
 | RPC | Notes |
 |---|---|

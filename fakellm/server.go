@@ -166,4 +166,3 @@ func coalesceErrCode(s, fallback string) string {
 	}
 	return fallback
 }
-

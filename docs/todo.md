@@ -1,4 +1,4 @@
-# Reeve — deferred work
+# Spalt — deferred work
 
 Master list of known-deferred items. Update as new deferrals are introduced and as items get done. Cross-references go to the relevant package or doc section.
 
@@ -8,7 +8,7 @@ The architecture doc's "Open threads" section captures the *strategic* deferrals
 
 ## Main system priorities — what's not done yet
 
-Ordered by impact on getting Reeve to a "useful for sustained personal chat" state. Refer to the categorized sections below for implementation detail.
+Ordered by impact on getting Spalt to a "useful for sustained personal chat" state. Refer to the categorized sections below for implementation detail.
 
 ### Architecture-flagship features not yet built
 
@@ -85,7 +85,7 @@ shared with the Connect surface. Tools: `list_profiles`,
 `toggle_user_model_favorite`, `test_user_model_provider`,
 `list_conversations`, `get_conversation`, `list_messages`. Plus the
 `inproc` MCP transport on the client side so the seeded
-`Reeve Manager` profile dispatches to the local server with no port
+`Spalt Manager` profile dispatches to the local server with no port
 and no token.
 
 Deferred:
@@ -107,7 +107,7 @@ Deferred:
 ## Elicitation (inproc shipped — `internal/elicit` + the broker)
 
 MCP elicitation lets a server tool request additional input from the
-user mid-call without that input ever entering LLM context. Reeve
+user mid-call without that input ever entering LLM context. Spalt
 ships the inproc-transport flavour today:
 
 * `internal/elicit` holds the protocol types (`Request`, `Response`,
@@ -124,14 +124,14 @@ ships the inproc-transport flavour today:
 * `POST /conversations/{id}/elicitations/{eid}/respond` is the
   user-facing endpoint. Same Bearer-token auth as the Connect surface;
   ownership-checked against the conversation row.
-* `ElicitSheet` (ReeveUI) renders a JSON-Schema-driven form. Handles
+* `ElicitSheet` (SpaltUI) renders a JSON-Schema-driven form. Handles
   string / boolean / integer fields; string + `format: password`
   renders as a SecureField (the secrets use case).
-* `ElicitationsRepository` (ReeveKit) POSTs the response.
+* `ElicitationsRepository` (SpaltKit) POSTs the response.
 * Mac + iOS conversation views mount the sheet via `.sheet(item:)`
   bound to the first pending elicit on the active stream.
 
-First tool using it: `create_user_model_provider` — Reeve Manager can
+First tool using it: `create_user_model_provider` — Spalt Manager can
 add a provider end-to-end without the API key ever entering chat
 content, the model's context, or DB-persisted message rows. The
 secret flows user → client UI → POST → tool's local stack frame →
@@ -140,8 +140,8 @@ provider config encryption → discarded.
 Deferred:
 - **Elicitation over HTTP transport** — needs SSE response framing
   on server-initiated requests + a paired POST channel for client
-  responses. Inproc is sufficient for Reeve's own assistant
-  (Reeve Manager via local `/mcp`); remote MCP clients calling
+  responses. Inproc is sufficient for Spalt's own assistant
+  (Spalt Manager via local `/mcp`); remote MCP clients calling
   Elicit get `elicit.ErrUnsupported` and can degrade gracefully.
 - **Schema renderer coverage** — v1 handles flat objects with
   string/boolean/integer properties + the `password` format hint.
@@ -155,7 +155,7 @@ assistant message is inserted at conversation-create time (role=
 assistant, is_welcome=true) — included in wire history sent to the
 LLM so the model knows what greeting it opened with. Clients render
 the message normally; first open in an app session plays a token-
-chunked fake-stream reveal (`WelcomeReveal` in ReeveUI), subsequent
+chunked fake-stream reveal (`WelcomeReveal` in SpaltUI), subsequent
 opens render statically.
 
 Seed file format extended with YAML-style frontmatter so a single
@@ -173,18 +173,18 @@ enabled models, `OnboardingView` takes the full app surface and
 walks them through pick-template → enter-key → discover → enable
 inline. As soon as the state condition flips (live, observed via
 @Environment), the gate lifts and the normal app shell renders.
-Shared SwiftUI view in ReeveUI; both platforms render the same
+Shared SwiftUI view in SpaltUI; both platforms render the same
 flow.
 
 Important fix folded in: the stream supervisor's detached run
 context now carries the authenticated user through, so inproc MCP
-tool calls (Reeve Manager's `mcp` plugin → local /mcp surface)
+tool calls (Spalt Manager's `mcp` plugin → local /mcp surface)
 resolve identity correctly during background tool dispatch.
 
 ## System profiles + capability enforcement (v1 shipped)
 
 Two seeded profiles materialize on first login (Personal Assistant +
-Reeve Manager). Backed by `users.system_profiles_seeded`; idempotent;
+Spalt Manager). Backed by `users.system_profiles_seeded`; idempotent;
 the user can edit, rename, or delete them like any other profile —
 deleted ones don't resurrect on next login. Templates live in
 `internal/profiles/seeds/*.md`.
@@ -223,7 +223,7 @@ Deferred:
 ## Smaller items
 
 - **Connect server-streaming via raw curl** doesn't pretty-print — Connect's wire format isn't plain newline-delimited JSON. For terminal smoke testing, write a small `clarkctl` helper or use `buf curl` to subscribe to streams.
-- **`REEVE_CATALOG_REFRESH_INTERVAL` smoke-tested only at "0" (disabled).** Periodic refresh path not exercised in tests.
+- **`SPALT_CATALOG_REFRESH_INTERVAL` smoke-tested only at "0" (disabled).** Periodic refresh path not exercised in tests.
 - **`ListConversations` pagination** — `page_size` capped at 100, `page_token` ignored (returns all in one page). Real pagination deferred.
 - **`ListProviderTypes` `display_name`** — currently humanized via `humanizeName`. Could come from driver metadata if drivers exposed a `DisplayName()` method.
 - **`ListProviderTypes` `config_schema`** — empty bytes for v1; UI hardcodes config forms. JSON Schema generation per-driver is a future ergonomic win.
@@ -235,13 +235,13 @@ Deferred:
 
 - **Anthropic SDK upgrade for native `ttl` field.** The `AnthropicExtras.cache_ttl` follow-up shipped the 1-hour TTL via the SDK's `metadata.SetExtraFields` escape hatch (anthropic-sdk-go v1.4 doesn't expose `ttl` on the non-beta `CacheControlEphemeralParam` directly — the beta path does). The escape hatch produces the correct wire payload (`"cache_control":{"type":"ephemeral","ttl":"1h"}`), but it's brittle: if the SDK adds a typed `TTL` field in a later release, the marshalling could double-emit or conflict. Drop the `SetExtraFields` call in `internal/providers/anthropic/send.go::applyAutoCacheControl` once the SDK exposes a typed `TTL` field, or alternatively switch the driver to the `betamessage` API (which already has `BetaCacheControlEphemeralTTL`).
 
-- **Mac profile editor lacks welcome-message editing.** iOS gained a Welcome message row (Prompt section) plus viewer display; `ReeveProfilePatch.welcomeMessage` is wired through the repository, so the Mac form just needs the field + clear handling. (Mac is knowingly behind; see iOS ProfilesListView for the shape.)
+- **Mac profile editor lacks welcome-message editing.** iOS gained a Welcome message row (Prompt section) plus viewer display; `SpaltProfilePatch.welcomeMessage` is wired through the repository, so the Mac form just needs the field + clear handling. (Mac is knowingly behind; see iOS ProfilesListView for the shape.)
 
 - **Mac SnapshotHarness is broken on HEAD** (pre-existing, unrelated to current work): `Tests/SnapshotHarness/Stubs.swift` assigns `streamRunID` / `streamingText` / `streamingToolCalls`, which became get-only computed properties on ConversationViewModel — 8 compile errors, so `make swift-test-l2` can't run. Fix the stubs to drive the hub-backed state instead.
 
-- **Mac chat surface may share the iOS cold-entry phantom-scroll bug.** iOS fix (tail-window + staged backfill + `defaultScrollAnchor` + `isPositionedByUser`, `clients/reeved-ios/.../ConversationView.swift`, commits fe92a7d + follow-up) addresses LazyVStack handing the bottom anchor an estimated content size with phantom blank space below the last message. The Mac ConversationView uses its own scroll plumbing — audit it for the same realize-from-top + estimate-inflation class and port the tail-window approach if long chats land past the content end. iOS-first per current priorities.
+- **Mac chat surface may share the iOS cold-entry phantom-scroll bug.** iOS fix (tail-window + staged backfill + `defaultScrollAnchor` + `isPositionedByUser`, `clients/spaltd-ios/.../ConversationView.swift`, commits fe92a7d + follow-up) addresses LazyVStack handing the bottom anchor an estimated content size with phantom blank space below the last message. The Mac ConversationView uses its own scroll plumbing — audit it for the same realize-from-top + estimate-inflation class and port the tail-window approach if long chats land past the content end. iOS-first per current priorities.
 
-- **Per-context cache-savings cost split (`ContextListView.swift`).** The contexts page metadata strip currently shows total `cumulativeCostUsd`. The Model Settings work added cache observability to per-message popovers (computed client-side as `cache_read_tokens × input_price × discount` where the discount is 90% on Anthropic and 50% on OpenAI/Google). Doing the same per-context aggregate client-side would require summing across all messages in the context — fine but expensive on large contexts. Cleaner fix: extend the per-context aggregate the server stamps on `ReeveContext` (alongside `cumulativeCostUsd` and `lastMessageTotalTokens`) to also surface `cache_savings_usd` (or a `would_have_cost_usd`). Then the chip on each row shows "billed $X · saved $Y" cleanly. Frontend has a TODO comment in the metadata strip already.
+- **Per-context cache-savings cost split (`ContextListView.swift`).** The contexts page metadata strip currently shows total `cumulativeCostUsd`. The Model Settings work added cache observability to per-message popovers (computed client-side as `cache_read_tokens × input_price × discount` where the discount is 90% on Anthropic and 50% on OpenAI/Google). Doing the same per-context aggregate client-side would require summing across all messages in the context — fine but expensive on large contexts. Cleaner fix: extend the per-context aggregate the server stamps on `SpaltContext` (alongside `cumulativeCostUsd` and `lastMessageTotalTokens`) to also surface `cache_savings_usd` (or a `would_have_cost_usd`). Then the chip on each row shows "billed $X · saved $Y" cleanly. Frontend has a TODO comment in the metadata strip already.
 
 ---
 
@@ -294,7 +294,7 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
   - **`error`** — `{message, code?, retry?: action}` — typed error rendering.
   - **`raw_json`** — explicit fallback the existing JSON pretty-print path migrates to.
 
-  Each component lives as a SwiftUI view in `clients/reeved-mac/ReeveMac/PluginRenderers/`; plugins are pure-Go authors describing structure, not native code. The same proto fragment ships to a future iOS/web client and they render their own component set. **Behaviour** rides on declarative `action` strings on interactive components: `compose:{text}`, `tool:{name}?{key}={value}`, `external:{https://…}` (with the link-safety prompt), `nav:conversation:{id}`. Anything beyond that is a signal the action set should grow, NOT that we should ship a JS sandbox.
+  Each component lives as a SwiftUI view in `clients/spaltd-mac/SpaltMac/PluginRenderers/`; plugins are pure-Go authors describing structure, not native code. The same proto fragment ships to a future iOS/web client and they render their own component set. **Behaviour** rides on declarative `action` strings on interactive components: `compose:{text}`, `tool:{name}?{key}={value}`, `external:{https://…}` (with the link-safety prompt), `nav:conversation:{id}`. Anything beyond that is a signal the action set should grow, NOT that we should ship a JS sandbox.
 
   Wire shape: a new `Message.ui_fragments []UIFragment` proto field (per message, ordered, may be empty); persisted alongside content. Server runs ContentRenderer pipeline at materialisation (assistant turns) AND at fetch (read-time, so old messages benefit when a renderer plugin is added later — the fragments are derived, not stored, so re-deriving on read is correct).
 

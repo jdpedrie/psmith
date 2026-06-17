@@ -39,10 +39,10 @@ const DefaultTimeout = 60 * time.Second
 // payload; the client decodes, dispatches to its handler, posts a
 // Response back.
 type Request struct {
-	CallID    uuid.UUID       `json:"call_id"`
-	ToolName  string          `json:"tool_name"`
-	Input     json.RawMessage `json:"input"`
-	IssuedAt  time.Time       `json:"issued_at"`
+	CallID   uuid.UUID       `json:"call_id"`
+	ToolName string          `json:"tool_name"`
+	Input    json.RawMessage `json:"input"`
+	IssuedAt time.Time       `json:"issued_at"`
 }
 
 // Response is what the client POSTs back. `Output` is the JSON the
@@ -71,7 +71,7 @@ type CompletionEvent struct {
 	// a partial output alongside a soft error — the broker
 	// passes both through and lets the hook decide what to log.
 	Output       json.RawMessage
-	Status       string  // "ok" | "error" | "timeout"
+	Status       string // "ok" | "error" | "timeout"
 	ErrorMessage string
 	InvokedAt    time.Time
 	CompletedAt  time.Time
@@ -108,7 +108,7 @@ func NewBroker() *Broker {
 // SetCompletionHook installs (or replaces) the post-call hook.
 // Pass nil to drop the existing hook. Safe to call at startup;
 // not safe to call concurrently with Invoke (cheap to set once
-// from cmd/reeved or the conversations service constructor).
+// from cmd/spaltd or the conversations service constructor).
 func (b *Broker) SetCompletionHook(h CompletionHook) {
 	b.hook = h
 }
@@ -175,7 +175,7 @@ func (b *Broker) Invoke(
 	case <-timeoutCtx.Done():
 		b.fireHook(CompletionEvent{
 			CallID: id, ConversationID: convoID, ToolName: toolName,
-			Input: input,
+			Input:  input,
 			Status: "timeout", ErrorMessage: timeoutCtx.Err().Error(),
 			InvokedAt: invokedAt, CompletedAt: time.Now().UTC(),
 		})

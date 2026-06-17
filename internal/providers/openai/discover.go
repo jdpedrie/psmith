@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // DiscoverModels lists models from the configured endpoint's /v1/models
@@ -162,10 +162,10 @@ func (d *Driver) enrichModel(ctx context.Context, modelID string) providers.Mode
 		}
 	}
 	m.Capabilities = providers.ModelCapabilities{
-		Streaming:     cat.Capabilities.Streaming,
-		Thinking:      cat.Capabilities.Thinking,
-		ToolUse:       cat.Capabilities.ToolUse,
-		Vision:        cat.Capabilities.Vision,
+		Streaming:       cat.Capabilities.Streaming,
+		Thinking:        cat.Capabilities.Thinking,
+		ToolUse:         cat.Capabilities.ToolUse,
+		Vision:          cat.Capabilities.Vision,
 		PromptCaching:   cat.Capabilities.PromptCaching,
 		GeneratesImages: cat.Capabilities.GeneratesImages,
 	}

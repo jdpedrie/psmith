@@ -7,8 +7,8 @@ import (
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // DiscoverModels lists models from Anthropic's /v1/models endpoint and
@@ -63,10 +63,10 @@ func (d *Driver) enrichModel(ctx context.Context, info sdk.ModelInfo) providers.
 		}
 	}
 	m.Capabilities = providers.ModelCapabilities{
-		Streaming:     cat.Capabilities.Streaming,
-		Thinking:      cat.Capabilities.Thinking,
-		ToolUse:       cat.Capabilities.ToolUse,
-		Vision:        cat.Capabilities.Vision,
+		Streaming:       cat.Capabilities.Streaming,
+		Thinking:        cat.Capabilities.Thinking,
+		ToolUse:         cat.Capabilities.ToolUse,
+		Vision:          cat.Capabilities.Vision,
 		PromptCaching:   cat.Capabilities.PromptCaching,
 		GeneratesImages: cat.Capabilities.GeneratesImages,
 	}

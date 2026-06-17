@@ -9,20 +9,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jdpedrie/reeve/internal/embeddings"
+	"github.com/jdpedrie/spalt/internal/embeddings"
 )
 
 // stubSearcher returns canned results so tests assert behavior
 // without spinning up Postgres + the worker. UserID and Limit are
 // captured for the "scope-by-caller" assertions.
 type stubSearcher struct {
-	hits          []embeddings.Hit
-	err           error
-	lastUserID    uuid.UUID
-	lastLimit     int
-	lastQuery     string
-	lastMaxDist   float64
-	wasCalled     bool
+	hits        []embeddings.Hit
+	err         error
+	lastUserID  uuid.UUID
+	lastLimit   int
+	lastQuery   string
+	lastMaxDist float64
+	wasCalled   bool
 }
 
 func (s *stubSearcher) Search(_ context.Context, query string, opts embeddings.SearchOptions) ([]embeddings.Hit, error) {

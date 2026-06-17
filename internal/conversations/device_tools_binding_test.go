@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/devicetools"
+	"github.com/jdpedrie/spalt/internal/devicetools"
 )
 
 // TestNewDeviceToolBinding_NilOnMissingDeps verifies the

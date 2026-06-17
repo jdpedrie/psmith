@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/devicetools"
-	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/spalt/internal/devicetools"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // TestRecordDeviceToolCompletion_WritesRow exercises the broker

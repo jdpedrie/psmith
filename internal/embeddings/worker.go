@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jdpedrie/reeve/internal/store"
+	"github.com/jdpedrie/spalt/internal/store"
 	"github.com/pgvector/pgvector-go"
 )
 
@@ -247,7 +247,7 @@ func sleep(ctx context.Context, d time.Duration) bool {
 // --- StaticResolver: the simple cache that wraps a single Embedder ---
 
 // StaticResolver returns the same Embedder for every user. Useful
-// when REEVE_EMBEDDER configures a server-wide default — every user
+// when SPALT_EMBEDDER configures a server-wide default — every user
 // shares one embedder instance and there's no per-user lookup.
 // Tests use this too.
 type StaticResolver struct {

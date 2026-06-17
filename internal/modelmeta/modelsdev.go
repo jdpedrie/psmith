@@ -24,18 +24,18 @@ type modelsDevProvider struct {
 }
 
 type modelsDevModelDoc struct {
-	ID          string                  `json:"id"`
-	Name        string                  `json:"name"`
-	Limit       *modelsDevLimit         `json:"limit,omitempty"`
-	Cost        *modelsDevCost          `json:"cost,omitempty"`
-	Modalities  *modelsDevModalities    `json:"modalities,omitempty"`
-	Knowledge   string                  `json:"knowledge,omitempty"`
-	ReleaseDate string                  `json:"release_date,omitempty"`
-	Reasoning   bool                    `json:"reasoning,omitempty"`
-	ToolCall    bool                    `json:"tool_call,omitempty"`
-	Attachment  bool                    `json:"attachment,omitempty"`
-	OpenWeights bool                    `json:"open_weights,omitempty"`
-	Extra       map[string]any          `json:"-"` // captured separately if we ever need it
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Limit       *modelsDevLimit      `json:"limit,omitempty"`
+	Cost        *modelsDevCost       `json:"cost,omitempty"`
+	Modalities  *modelsDevModalities `json:"modalities,omitempty"`
+	Knowledge   string               `json:"knowledge,omitempty"`
+	ReleaseDate string               `json:"release_date,omitempty"`
+	Reasoning   bool                 `json:"reasoning,omitempty"`
+	ToolCall    bool                 `json:"tool_call,omitempty"`
+	Attachment  bool                 `json:"attachment,omitempty"`
+	OpenWeights bool                 `json:"open_weights,omitempty"`
+	Extra       map[string]any       `json:"-"` // captured separately if we ever need it
 }
 
 type modelsDevLimit struct {

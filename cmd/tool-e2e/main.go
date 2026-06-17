@@ -1,5 +1,5 @@
 // tool-e2e exercises the conversations-side tool loop end-to-end against a
-// running reeved. It logs in, finds the Personal Assistant profile (which
+// running spaltd. It logs in, finds the Personal Assistant profile (which
 // has the brave_search plugin attached), creates a fresh conversation,
 // sends a search-prompting message, subscribes to the stream, prints
 // every chunk it sees, and finally re-reads the persisted assistant
@@ -26,8 +26,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
 )
 
 const (
@@ -48,7 +48,7 @@ func (b *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func main() {
-	addr := flag.String("addr", "http://localhost:8080", "reeved base URL")
+	addr := flag.String("addr", "http://localhost:8080", "spaltd base URL")
 	user := flag.String("u", "john", "username")
 	pass := flag.String("p", "password", "password")
 	profile := flag.String("profile", "Personal Assistant", "profile name to send under")
@@ -62,8 +62,8 @@ func main() {
 
 	// 1. Login.
 	rawClient := http.DefaultClient
-	authClient := reevev1connect.NewAuthServiceClient(rawClient, *addr)
-	loginResp, err := authClient.Login(ctx, connect.NewRequest(&reevev1.LoginRequest{
+	authClient := spaltv1connect.NewAuthServiceClient(rawClient, *addr)
+	loginResp, err := authClient.Login(ctx, connect.NewRequest(&spaltv1.LoginRequest{
 		Username: *user,
 		Password: *pass,
 	}))
@@ -75,13 +75,13 @@ func main() {
 
 	// 2. Authed clients (every subsequent call carries the bearer).
 	authedHTTP := &http.Client{Transport: &bearerTransport{token: token}}
-	profilesClient := reevev1connect.NewProfilesServiceClient(authedHTTP, *addr)
-	convClient := reevev1connect.NewConversationsServiceClient(authedHTTP, *addr)
-	streamsClient := reevev1connect.NewStreamsServiceClient(authedHTTP, *addr)
-	mpClient := reevev1connect.NewModelProvidersServiceClient(authedHTTP, *addr)
+	profilesClient := spaltv1connect.NewProfilesServiceClient(authedHTTP, *addr)
+	convClient := spaltv1connect.NewConversationsServiceClient(authedHTTP, *addr)
+	streamsClient := spaltv1connect.NewStreamsServiceClient(authedHTTP, *addr)
+	mpClient := spaltv1connect.NewModelProvidersServiceClient(authedHTTP, *addr)
 
 	// 3. Find the target profile.
-	listProf, err := profilesClient.ListProfiles(ctx, connect.NewRequest(&reevev1.ListProfilesRequest{}))
+	listProf, err := profilesClient.ListProfiles(ctx, connect.NewRequest(&spaltv1.ListProfilesRequest{}))
 	if err != nil {
 		log.Fatalf("list profiles: %v", err)
 	}
@@ -98,7 +98,7 @@ func main() {
 	fmt.Printf("✓ profile %q id=%s\n", *profile, profileID)
 
 	// 4. Verify the profile actually has brave_search attached.
-	pluginsResp, err := profilesClient.GetProfilePlugins(ctx, connect.NewRequest(&reevev1.GetProfilePluginsRequest{
+	pluginsResp, err := profilesClient.GetProfilePlugins(ctx, connect.NewRequest(&spaltv1.GetProfilePluginsRequest{
 		ProfileId: profileID,
 	}))
 	if err != nil {
@@ -116,7 +116,7 @@ func main() {
 	fmt.Printf("✓ brave_search plugin attached\n")
 
 	// 5. Fresh conversation.
-	createResp, err := convClient.CreateConversation(ctx, connect.NewRequest(&reevev1.CreateConversationRequest{
+	createResp, err := convClient.CreateConversation(ctx, connect.NewRequest(&spaltv1.CreateConversationRequest{
 		ProfileId: profileID,
 	}))
 	if err != nil {
@@ -126,12 +126,12 @@ func main() {
 	fmt.Printf("✓ conversation id=%s\n", convID)
 
 	// 6. Resolve optional provider/model override into ids.
-	sendReq := &reevev1.SendMessageRequest{
+	sendReq := &spaltv1.SendMessageRequest{
 		ConversationId: convID,
 		Content:        *prompt,
 	}
 	if *providerName != "" || *modelID != "" {
-		listProv, err := mpClient.ListUserModelProviders(ctx, connect.NewRequest(&reevev1.ListUserModelProvidersRequest{}))
+		listProv, err := mpClient.ListUserModelProviders(ctx, connect.NewRequest(&spaltv1.ListUserModelProvidersRequest{}))
 		if err != nil {
 			log.Fatalf("list providers: %v", err)
 		}
@@ -159,7 +159,7 @@ func main() {
 	fmt.Printf("✓ stream run id=%s; subscribing…\n", runID)
 
 	// 7. Subscribe + drain. Print every chunk type so we can see the loop run.
-	sub, err := streamsClient.SubscribeStream(ctx, connect.NewRequest(&reevev1.SubscribeStreamRequest{
+	sub, err := streamsClient.SubscribeStream(ctx, connect.NewRequest(&spaltv1.SubscribeStreamRequest{
 		StreamRunId:  runID,
 		FromSequence: 0,
 	}))
@@ -173,11 +173,11 @@ func main() {
 		if ch := ev.GetChunk(); ch != nil {
 			counts[ch.Type.String()]++
 			switch ch.Type {
-			case reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
-				reevev1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
-				reevev1.ChunkType_CHUNK_TYPE_TOOL_RESULT,
-				reevev1.ChunkType_CHUNK_TYPE_ERROR,
-				reevev1.ChunkType_CHUNK_TYPE_USAGE:
+			case spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
+				spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
+				spaltv1.ChunkType_CHUNK_TYPE_TOOL_RESULT,
+				spaltv1.ChunkType_CHUNK_TYPE_ERROR,
+				spaltv1.ChunkType_CHUNK_TYPE_USAGE:
 				fmt.Printf("  [%d] %s payload=%s\n", ch.Sequence, ch.Type, string(ch.Payload))
 			}
 		}
@@ -194,13 +194,13 @@ func main() {
 	}
 }
 
-func readBackAndVerify(ctx context.Context, c reevev1connect.ConversationsServiceClient, msgID string, counts map[string]int) {
+func readBackAndVerify(ctx context.Context, c spaltv1connect.ConversationsServiceClient, msgID string, counts map[string]int) {
 	fmt.Printf("\n--- chunk counts ---\n")
 	for k, v := range counts {
 		fmt.Printf("  %-32s %d\n", k, v)
 	}
 
-	resp, err := c.GetMessage(ctx, connect.NewRequest(&reevev1.GetMessageRequest{Id: msgID}))
+	resp, err := c.GetMessage(ctx, connect.NewRequest(&spaltv1.GetMessageRequest{Id: msgID}))
 	if err != nil {
 		log.Fatalf("get materialised message: %v", err)
 	}

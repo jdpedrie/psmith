@@ -11,12 +11,12 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/langfuse"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/langfuse"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // TestUpdate_StoresSecretEncryptedInDB is the load-bearing one. Confirms
@@ -49,7 +49,7 @@ func TestUpdate_StoresSecretEncryptedInDB(t *testing.T) {
 	pubKey := "lf-pk-public"
 	enabled := true
 
-	_, err = svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	_, err = svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Host:      &host,
 		PublicKey: &pubKey,
 		SecretKey: &plaintextSecret,
@@ -100,13 +100,13 @@ func TestGet_NeverEchoesSecret(t *testing.T) {
 	host := "https://x"
 	pub := "pk"
 	enabled := true
-	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Host: &host, PublicKey: &pub, SecretKey: &plaintext, Enabled: &enabled,
 	})); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
-	resp, err := svc.GetLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.GetLangfuseConfigRequest{}))
+	resp, err := svc.GetLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.GetLangfuseConfigRequest{}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestUpdate_NilSecretKeyKeepsExisting(t *testing.T) {
 	host := "https://h"
 	pub := "pk"
 	enabled := true
-	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Host: &host, PublicKey: &pub, SecretKey: &original, Enabled: &enabled,
 	})); err != nil {
 		t.Fatalf("Update(initial): %v", err)
@@ -153,7 +153,7 @@ func TestUpdate_NilSecretKeyKeepsExisting(t *testing.T) {
 
 	// Second Update with secret_key=nil (just toggle enabled off).
 	disabled := false
-	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Enabled: &disabled,
 	})); err != nil {
 		t.Fatalf("Update(toggle): %v", err)
@@ -184,7 +184,7 @@ func TestUpdate_EmptySecretKeyClears(t *testing.T) {
 	host := "https://h"
 	pub := "pk"
 	yes := true
-	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Host: &host, PublicKey: &pub, SecretKey: &original, Enabled: &yes,
 	})); err != nil {
 		t.Fatalf("Update(initial): %v", err)
@@ -194,7 +194,7 @@ func TestUpdate_EmptySecretKeyClears(t *testing.T) {
 	// enabled=true without a key).
 	empty := ""
 	no := false
-	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	if _, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		SecretKey: &empty, Enabled: &no,
 	})); err != nil {
 		t.Fatalf("Update(clear): %v", err)
@@ -221,7 +221,7 @@ func TestUpdate_EnabledRequiresFullCredentials(t *testing.T) {
 	// Try to enable with no credentials.
 	host := "https://h"
 	yes := true
-	_, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&reevev1.UpdateLangfuseConfigRequest{
+	_, err := svc.UpdateLangfuseConfig(ctxAsUser(user), connect.NewRequest(&spaltv1.UpdateLangfuseConfigRequest{
 		Host: &host, Enabled: &yes,
 	}))
 	if err == nil {

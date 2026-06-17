@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // ---------- Test fakes ---------------------------------------------------

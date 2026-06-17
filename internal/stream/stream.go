@@ -30,11 +30,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/reeve/internal/auth"
+	"github.com/jdpedrie/spalt/internal/auth"
 
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // StreamPurpose distinguishes assistant-response runs from compression runs.
@@ -144,7 +144,7 @@ type StartParams struct {
 	// columns to NULL — the same behaviour as before this hook existed.
 	Provider providers.Provider
 
-	// ExplicitCacheAttached records whether Reeve attached an explicit
+	// ExplicitCacheAttached records whether Spalt attached an explicit
 	// Gemini cachedContents reference to the request that produced this
 	// run. Stamped onto the materialized assistant message's
 	// explicit_cache_attached column for forensics. nil → don't write

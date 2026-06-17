@@ -19,10 +19,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/providers"
-	"github.com/jdpedrie/reeve/internal/storage"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/spalt/internal/storage"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // Message roles as stored in the messages table.

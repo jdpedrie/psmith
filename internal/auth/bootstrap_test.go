@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 func TestBootstrap_NoUsersWithCreds_CreatesAdmin(t *testing.T) {
@@ -35,8 +35,8 @@ func TestBootstrap_NoUsersNoCreds_AllowsStart(t *testing.T) {
 	q := store.New(pool)
 
 	// Empty creds + empty DB now returns nil (with a logged warning)
-	// so the operator can bring reeved up first and create users via
-	// `reeve useradd`. Verify no admin was silently created.
+	// so the operator can bring spaltd up first and create users via
+	// `spalt useradd`. Verify no admin was silently created.
 	if err := auth.Bootstrap(context.Background(), q, "", ""); err != nil {
 		t.Fatalf("expected nil; got %v", err)
 	}

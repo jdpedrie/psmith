@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jdpedrie/reeve/internal/embeddings"
+	"github.com/jdpedrie/spalt/internal/embeddings"
 )
 
 // MemoryName is the registered name for the conversation-memory
@@ -23,7 +23,7 @@ const MemoryName = "memory"
 //
 // The plugin is config-free: no API key, no model picker, no per-
 // conversation toggle. The user already configured an embedder at
-// the daemon level (REEVE_EMBEDDER), and the same Searcher serves
+// the daemon level (SPALT_EMBEDDER), and the same Searcher serves
 // every memory-enabled conversation. Per-call settings are knobs the
 // model itself drives via the tool's `count` and `max_distance`
 // args.
@@ -82,7 +82,7 @@ func (p *memory) DisplayName() string { return "Memory" }
 func (p *memory) Description() string {
 	return "Lets the model search older messages for grounding when the " +
 		"wire prefix has been compressed or the relevant context is no " +
-		"longer in scope. Requires a configured embedder (REEVE_EMBEDDER)."
+		"longer in scope. Requires a configured embedder (SPALT_EMBEDDER)."
 }
 
 // --- Configurable ---
@@ -154,12 +154,12 @@ type memoryToolOutput struct {
 }
 
 type memoryToolHit struct {
-	ConversationID    string  `json:"conversation_id"`
-	ConversationTitle string  `json:"conversation_title,omitempty"`
-	MessageID         string  `json:"message_id"`
-	Role              string  `json:"role"`
-	Content           string  `json:"content"`
-	When              string  `json:"when"`
+	ConversationID    string `json:"conversation_id"`
+	ConversationTitle string `json:"conversation_title,omitempty"`
+	MessageID         string `json:"message_id"`
+	Role              string `json:"role"`
+	Content           string `json:"content"`
+	When              string `json:"when"`
 	// Distance is reported so the model can self-grade hit
 	// quality and ignore noisier ones if it wants.
 	Distance float64 `json:"distance"`
@@ -189,7 +189,7 @@ func (p *memory) ExecuteTool(ctx context.Context, name string, input json.RawMes
 
 	searcher := SearcherFrom(ctx)
 	if searcher == nil {
-		return ToolResult{}, fmt.Errorf("memory: no Searcher in context — server not wired (set REEVE_EMBEDDER)")
+		return ToolResult{}, fmt.Errorf("memory: no Searcher in context — server not wired (set SPALT_EMBEDDER)")
 	}
 
 	// CallerInfo tells us who's running this tool. The dispatch site

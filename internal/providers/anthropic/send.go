@@ -9,7 +9,7 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // Send opens a streaming Anthropic Messages call and returns a channel
@@ -26,7 +26,7 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 
 	// NewStreaming returns a *Stream that lazily decodes; errors surface via
 	// stream.Err() during iteration. We hand the iteration to a goroutine and
-	// translate events into Reeve's chunk vocabulary.
+	// translate events into Spalt's chunk vocabulary.
 	stream := d.client.Messages.NewStreaming(ctx, params)
 
 	out := make(chan providers.Chunk, 16)
@@ -100,7 +100,7 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 					}
 				case sdk.SignatureDelta:
 					// Anthropic emits one signature_delta per thinking block,
-					// at the end of the block. Reeve forwards it so the
+					// at the end of the block. Spalt forwards it so the
 					// conversations-side tool loop can pair it with the
 					// preceding thinking text and round-trip the signed pair
 					// back on the next request.
@@ -173,7 +173,7 @@ func sendChunk(ctx context.Context, out chan<- providers.Chunk, c providers.Chun
 	}
 }
 
-// buildMessageParams translates Reeve's WireMessage prefix + CallSettings
+// buildMessageParams translates Spalt's WireMessage prefix + CallSettings
 // into the SDK's MessageNewParams. The system message (if any) is hoisted
 // out of the messages array — Anthropic carries it on a separate field.
 //

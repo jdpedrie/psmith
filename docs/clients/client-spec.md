@@ -1,18 +1,18 @@
 # Client specification
 
-This is the contract any Reeve client must honor, independent of platform. It describes what the server expects and guarantees: how to authenticate, how to drive a conversation, how streaming and reconnection work, what the client owns versus what the server owns, and how the side channels (device tools, elicitation, file upload) behave. The iOS app is the reference implementation of this contract; [ios-reference.md](ios-reference.md) maps each section here to concrete Swift types. If you are building a new client, build to this document and check your understanding against the iOS code.
+This is the contract any Spalt client must honor, independent of platform. It describes what the server expects and guarantees: how to authenticate, how to drive a conversation, how streaming and reconnection work, what the client owns versus what the server owns, and how the side channels (device tools, elicitation, file upload) behave. The iOS app is the reference implementation of this contract; [ios-reference.md](ios-reference.md) maps each section here to concrete Swift types. If you are building a new client, build to this document and check your understanding against the iOS code.
 
 The guiding principle: **the server is authoritative, the client is a viewer.** The server owns conversation state, history, and the lifecycle of every model run. A client holds no authoritative state it cannot reconstruct by re-fetching. This is what lets a client disconnect, background, crash, or be replaced by another device without losing work. Build the client so that "throw away all local state and re-fetch" is always correct.
 
 ## Transport
 
-Reeve speaks ConnectRPC over HTTP/2. The server runs h2c (cleartext HTTP/2) behind whatever TLS termination the operator puts in front of it; the client connects with the Connect protocol and protobuf codec. There are also a few plain HTTP endpoints for things that do not fit the RPC mold (file download, the device-tool and elicitation respond endpoints, health). All of them, RPC and HTTP alike, authenticate with the same bearer token.
+Spalt speaks ConnectRPC over HTTP/2. The server runs h2c (cleartext HTTP/2) behind whatever TLS termination the operator puts in front of it; the client connects with the Connect protocol and protobuf codec. There are also a few plain HTTP endpoints for things that do not fit the RPC mold (file download, the device-tool and elicitation respond endpoints, health). All of them, RPC and HTTP alike, authenticate with the same bearer token.
 
-The protobuf schema is the source of truth for every message shape. Generate your client stubs from `proto/reeve/v1/*.proto`. Every RPC has a dedicated request and response message; no RPC returns a bare domain message or an empty, so responses always have headroom to grow.
+The protobuf schema is the source of truth for every message shape. Generate your client stubs from `proto/spalt/v1/*.proto`. Every RPC has a dedicated request and response message; no RPC returns a bare domain message or an empty, so responses always have headroom to grow.
 
 ## Authentication
 
-1. **Probe** (`AuthService.Probe`, unauthenticated) confirms a URL is a reachable Reeve server and reports its version. Use it before login to validate a server address.
+1. **Probe** (`AuthService.Probe`, unauthenticated) confirms a URL is a reachable Spalt server and reports its version. Use it before login to validate a server address.
 2. **Login** (`AuthService.Login`, unauthenticated) takes a username and password and returns a session token and its expiry. The token is shown once; store it.
 3. Attach the token as `Authorization: Bearer <token>` on every subsequent request, RPC and HTTP. An interceptor is the right place for this.
 4. On a `401` / `Unauthenticated`, the session is gone (expired or revoked). Drop the stored token and route the user back to login. Do not retry with the dead token.

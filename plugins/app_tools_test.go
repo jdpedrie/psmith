@@ -13,10 +13,10 @@ import (
 // SupportedTools; nil means "no client has registered" so the plugin
 // shouldn't gate on it.
 type stubDeviceToolBroker struct {
-	lastTool     string
-	lastInput    json.RawMessage
-	resp         json.RawMessage
-	err          error
+	lastTool       string
+	lastInput      json.RawMessage
+	resp           json.RawMessage
+	err            error
 	supportedNames map[string]struct{}
 }
 

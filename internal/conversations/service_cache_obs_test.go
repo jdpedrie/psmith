@@ -7,10 +7,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/fakellm"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/fakellm"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // TestCacheObs_FirstTurnRecordsHashesNullsMetrics — the very first send for
@@ -28,7 +28,7 @@ func TestCacheObs_FirstTurnRecordsHashesNullsMetrics(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hello",
 		ProviderId:     &pid,
@@ -120,10 +120,10 @@ func TestCacheObs_LetteredChoicesShiftsTrailingByOne(t *testing.T) {
 	svc, q, sup := newFullSvc(t)
 	f := seedAnthropicSendable(t, q, fake.URL())
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID:  f.profile.ID,
-		Ordinal:    0,
-		PluginName: plugins.LetteredChoicesName,
-		ConfigEncrypted:    []byte(`{"keep_last_n": 1}`),
+		ProfileID:       f.profile.ID,
+		Ordinal:         0,
+		PluginName:      plugins.LetteredChoicesName,
+		ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestCacheObs_ForkProducesShortPrefixDivergesEarly(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	sysStr := f.systemMsgID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &sysStr,
 		Content:         "fork",
@@ -218,7 +218,7 @@ func TestCacheObs_StreamRunProtoExposesFields(t *testing.T) {
 	// Second turn — the response carries the diagnostics for it directly.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "second",
 		ProviderId:     &pid,

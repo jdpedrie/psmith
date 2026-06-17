@@ -12,14 +12,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 func newConvosHandler(t *testing.T) (*Handler, *conversations.Service, *store.Queries) {
@@ -35,7 +35,7 @@ func newConvosHandler(t *testing.T) (*Handler, *conversations.Service, *store.Qu
 
 func activeContextID(t *testing.T, convos *conversations.Service, ctx context.Context, convID string) uuid.UUID {
 	t.Helper()
-	resp, err := convos.GetConversation(ctx, connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	resp, err := convos.GetConversation(ctx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestEditMessage(t *testing.T) {
 		t.Fatalf("edit status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 
-	got, err := convos.GetMessage(userCtx, connect.NewRequest(&reevev1.GetMessageRequest{Id: mid.String()}))
+	got, err := convos.GetMessage(userCtx, connect.NewRequest(&spaltv1.GetMessageRequest{Id: mid.String()}))
 	if err != nil {
 		t.Fatalf("GetMessage: %v", err)
 	}
@@ -84,9 +84,9 @@ func TestRegenerate(t *testing.T) {
 	// Give the conversation a default model so regenerate (no per-turn model)
 	// can resolve one.
 	pid, mid := fx.providerID.String(), fx.modelID
-	if _, err := convos.UpdateConversation(userCtx, connect.NewRequest(&reevev1.UpdateConversationRequest{
+	if _, err := convos.UpdateConversation(userCtx, connect.NewRequest(&spaltv1.UpdateConversationRequest{
 		Id:       fx.convID.String(),
-		Settings: &reevev1.ConversationSettings{DefaultProviderId: &pid, DefaultModelId: &mid},
+		Settings: &spaltv1.ConversationSettings{DefaultProviderId: &pid, DefaultModelId: &mid},
 	})); err != nil {
 		t.Fatalf("UpdateConversation: %v", err)
 	}

@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // geminiModelInfo is the AI-Studio /models response shape, trimmed to fields
@@ -161,10 +161,10 @@ func (d *Driver) enrichModel(ctx context.Context, info geminiModelInfo) provider
 		}
 	}
 	m.Capabilities = providers.ModelCapabilities{
-		Streaming:     cat.Capabilities.Streaming,
-		Thinking:      cat.Capabilities.Thinking,
-		ToolUse:       cat.Capabilities.ToolUse,
-		Vision:        cat.Capabilities.Vision,
+		Streaming:       cat.Capabilities.Streaming,
+		Thinking:        cat.Capabilities.Thinking,
+		ToolUse:         cat.Capabilities.ToolUse,
+		Vision:          cat.Capabilities.Vision,
 		PromptCaching:   cat.Capabilities.PromptCaching,
 		GeneratesImages: cat.Capabilities.GeneratesImages,
 	}

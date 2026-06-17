@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
 // --- conversation settings (call settings + plugin overrides) ---
@@ -75,7 +75,7 @@ type convPluginRowVM struct {
 // plugins tab).
 func (h *Handler) handleConvSettings(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
@@ -99,7 +99,7 @@ func (h *Handler) handleConvSettings(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, convSettingsPage(vm))
 }
 
-func fillCallFields(vm *convSettingsVM, own, inh *reevev1.CallSettings, ownConv, inhConv *reevev1.ConversationSettings) {
+func fillCallFields(vm *convSettingsVM, own, inh *spaltv1.CallSettings, ownConv, inhConv *spaltv1.ConversationSettings) {
 	vm.Temperature = floatField("temperature", own.GetTemperature(), own != nil && own.Temperature != nil, inh.GetTemperature(), inh != nil && inh.Temperature != nil)
 	vm.TopP = floatField("top_p", own.GetTopP(), own != nil && own.TopP != nil, inh.GetTopP(), inh != nil && inh.TopP != nil)
 	vm.MaxOutputTokens = intField("max_output_tokens", own.GetMaxOutputTokens(), own != nil && own.MaxOutputTokens != nil, inh.GetMaxOutputTokens(), inh != nil && inh.MaxOutputTokens != nil)
@@ -125,31 +125,31 @@ func fillCallFields(vm *convSettingsVM, own, inh *reevev1.CallSettings, ownConv,
 
 // nil-safe pointer accessors for nested optional bools (proto getters return
 // the message pointer, which can be nil; reaching the field would panic).
-func thinkEnabled(t *reevev1.ThinkingSettings) *bool {
+func thinkEnabled(t *spaltv1.ThinkingSettings) *bool {
 	if t == nil {
 		return nil
 	}
 	return t.Enabled
 }
-func explicitCache(cs *reevev1.CallSettings) *bool {
+func explicitCache(cs *spaltv1.CallSettings) *bool {
 	if cs == nil {
 		return nil
 	}
 	return cs.ExplicitCache
 }
-func includeThinking(s *reevev1.ConversationSettings) *bool {
+func includeThinking(s *spaltv1.ConversationSettings) *bool {
 	if s == nil {
 		return nil
 	}
 	return s.IncludeThinkingInHistory
 }
-func anthCache(a *reevev1.AnthropicExtras) *bool {
+func anthCache(a *spaltv1.AnthropicExtras) *bool {
 	if a == nil {
 		return nil
 	}
 	return a.CacheEnabled
 }
-func oaiParallel(o *reevev1.OpenAIExtras) *bool {
+func oaiParallel(o *spaltv1.OpenAIExtras) *bool {
 	if o == nil {
 		return nil
 	}
@@ -199,12 +199,12 @@ func boolWord(b bool) string {
 // inheritedCallSettings resolves the call settings below the conversation:
 // provider defaults < model defaults < resolved profile defaults. Higher layers
 // win per scalar field; this is what an unset conversation field falls back to.
-func (h *Handler) inheritedCallSettings(ctx context.Context, conv *reevev1.Conversation) *reevev1.CallSettings {
-	out := &reevev1.CallSettings{}
+func (h *Handler) inheritedCallSettings(ctx context.Context, conv *spaltv1.Conversation) *spaltv1.CallSettings {
+	out := &spaltv1.CallSettings{}
 	providerID, modelID := resolvedModel(conv)
 
 	if providerID != "" && h.models != nil {
-		if resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&reevev1.ListAllUserModelsRequest{})); err == nil {
+		if resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&spaltv1.ListAllUserModelsRequest{})); err == nil {
 			for _, e := range resp.Msg.GetEntries() {
 				if e.GetProvider().GetId() != providerID {
 					continue
@@ -217,17 +217,17 @@ func (h *Handler) inheritedCallSettings(ctx context.Context, conv *reevev1.Conve
 		}
 	}
 	if h.profiles != nil {
-		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&reevev1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
+		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&spaltv1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
 			out = mergeCall(out, prof.Msg.GetProfile().GetDefaultSettings().GetCallSettings()) // profile layer (top of inherited)
 		}
 	}
 	return out
 }
 
-func (h *Handler) inheritedConvSettings(ctx context.Context, conv *reevev1.Conversation) *reevev1.ConversationSettings {
-	out := &reevev1.ConversationSettings{}
+func (h *Handler) inheritedConvSettings(ctx context.Context, conv *spaltv1.Conversation) *spaltv1.ConversationSettings {
+	out := &spaltv1.ConversationSettings{}
 	if h.profiles != nil {
-		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&reevev1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
+		if prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&spaltv1.GetProfileRequest{Id: conv.GetProfileId(), Resolve: true})); err == nil {
 			if d := prof.Msg.GetProfile().GetDefaultSettings(); d != nil {
 				out.IncludeThinkingInHistory = d.IncludeThinkingInHistory
 			}
@@ -238,19 +238,19 @@ func (h *Handler) inheritedConvSettings(ctx context.Context, conv *reevev1.Conve
 
 // resolvedModel returns the conversation's effective provider/model: its own
 // override if set, else the profile default (caller resolves further if blank).
-func resolvedModel(conv *reevev1.Conversation) (providerID, modelID string) {
+func resolvedModel(conv *spaltv1.Conversation) (providerID, modelID string) {
 	if s := conv.GetSettings(); s != nil {
 		return s.GetDefaultProviderId(), s.GetDefaultModelId()
 	}
 	return "", ""
 }
 
-func (h *Handler) activeDriverType(ctx context.Context, conv *reevev1.Conversation) string {
+func (h *Handler) activeDriverType(ctx context.Context, conv *spaltv1.Conversation) string {
 	pid, _ := resolvedModel(conv)
 	if pid == "" || h.models == nil {
 		return ""
 	}
-	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&reevev1.ListAllUserModelsRequest{}))
+	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}))
 	if err != nil {
 		return ""
 	}
@@ -264,14 +264,14 @@ func (h *Handler) activeDriverType(ctx context.Context, conv *reevev1.Conversati
 
 // mergeCall overlays higher onto lower for the scalar fields the web form
 // exposes (higher wins when set). nil inputs are treated as empty.
-func mergeCall(higher, lower *reevev1.CallSettings) *reevev1.CallSettings {
+func mergeCall(higher, lower *spaltv1.CallSettings) *spaltv1.CallSettings {
 	if higher == nil {
-		higher = &reevev1.CallSettings{}
+		higher = &spaltv1.CallSettings{}
 	}
 	if lower == nil {
 		return higher
 	}
-	out := &reevev1.CallSettings{
+	out := &spaltv1.CallSettings{
 		Temperature:     pickF(higher.Temperature, lower.Temperature),
 		TopP:            pickF(higher.TopP, lower.TopP),
 		MaxOutputTokens: pickI(higher.MaxOutputTokens, lower.MaxOutputTokens),
@@ -289,30 +289,30 @@ func mergeCall(higher, lower *reevev1.CallSettings) *reevev1.CallSettings {
 	return out
 }
 
-func mergeThinking(h, l *reevev1.ThinkingSettings) *reevev1.ThinkingSettings {
+func mergeThinking(h, l *spaltv1.ThinkingSettings) *spaltv1.ThinkingSettings {
 	if h == nil && l == nil {
 		return nil
 	}
 	if h == nil {
-		h = &reevev1.ThinkingSettings{}
+		h = &spaltv1.ThinkingSettings{}
 	}
 	if l == nil {
-		l = &reevev1.ThinkingSettings{}
+		l = &spaltv1.ThinkingSettings{}
 	}
-	return &reevev1.ThinkingSettings{Enabled: pickB(h.Enabled, l.Enabled), BudgetTokens: pickI(h.BudgetTokens, l.BudgetTokens)}
+	return &spaltv1.ThinkingSettings{Enabled: pickB(h.Enabled, l.Enabled), BudgetTokens: pickI(h.BudgetTokens, l.BudgetTokens)}
 }
 
-func mergeAnth(h, l *reevev1.AnthropicExtras) *reevev1.AnthropicExtras {
+func mergeAnth(h, l *spaltv1.AnthropicExtras) *spaltv1.AnthropicExtras {
 	if h == nil && l == nil {
 		return nil
 	}
 	if h == nil {
-		h = &reevev1.AnthropicExtras{}
+		h = &spaltv1.AnthropicExtras{}
 	}
 	if l == nil {
-		l = &reevev1.AnthropicExtras{}
+		l = &spaltv1.AnthropicExtras{}
 	}
-	out := &reevev1.AnthropicExtras{CacheEnabled: pickB(h.CacheEnabled, l.CacheEnabled)}
+	out := &spaltv1.AnthropicExtras{CacheEnabled: pickB(h.CacheEnabled, l.CacheEnabled)}
 	if h.CacheTtl != nil {
 		out.CacheTtl = h.CacheTtl
 	} else {
@@ -321,17 +321,17 @@ func mergeAnth(h, l *reevev1.AnthropicExtras) *reevev1.AnthropicExtras {
 	return out
 }
 
-func mergeOAI(h, l *reevev1.OpenAIExtras) *reevev1.OpenAIExtras {
+func mergeOAI(h, l *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtras {
 	if h == nil && l == nil {
 		return nil
 	}
 	if h == nil {
-		h = &reevev1.OpenAIExtras{}
+		h = &spaltv1.OpenAIExtras{}
 	}
 	if l == nil {
-		l = &reevev1.OpenAIExtras{}
+		l = &spaltv1.OpenAIExtras{}
 	}
-	return &reevev1.OpenAIExtras{
+	return &spaltv1.OpenAIExtras{
 		Seed:              pickI(h.Seed, l.Seed),
 		FrequencyPenalty:  pickF(h.FrequencyPenalty, l.FrequencyPenalty),
 		PresencePenalty:   pickF(h.PresencePenalty, l.PresencePenalty),
@@ -339,17 +339,17 @@ func mergeOAI(h, l *reevev1.OpenAIExtras) *reevev1.OpenAIExtras {
 	}
 }
 
-func mergeGoog(h, l *reevev1.GoogleExtras) *reevev1.GoogleExtras {
+func mergeGoog(h, l *spaltv1.GoogleExtras) *spaltv1.GoogleExtras {
 	if h == nil && l == nil {
 		return nil
 	}
 	if h == nil {
-		h = &reevev1.GoogleExtras{}
+		h = &spaltv1.GoogleExtras{}
 	}
 	if l == nil {
-		l = &reevev1.GoogleExtras{}
+		l = &spaltv1.GoogleExtras{}
 	}
-	return &reevev1.GoogleExtras{CandidateCount: pickI(h.CandidateCount, l.CandidateCount)}
+	return &spaltv1.GoogleExtras{CandidateCount: pickI(h.CandidateCount, l.CandidateCount)}
 }
 
 func pickF(h, l *float64) *float64 {
@@ -377,17 +377,17 @@ func (h *Handler) handleConvSettingsSave(w http.ResponseWriter, r *http.Request)
 	convID := r.PathValue("id")
 	_ = r.ParseForm()
 
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&reevev1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	settings := getResp.Msg.GetConversation().GetSettings()
 	if settings == nil {
-		settings = &reevev1.ConversationSettings{}
+		settings = &spaltv1.ConversationSettings{}
 	}
 
-	cs := &reevev1.CallSettings{
+	cs := &spaltv1.CallSettings{
 		Temperature:     formFloat(r, "temperature"),
 		TopP:            formFloat(r, "top_p"),
 		MaxOutputTokens: formInt(r, "max_output_tokens"),
@@ -396,21 +396,21 @@ func (h *Handler) handleConvSettingsSave(w http.ResponseWriter, r *http.Request)
 		ExplicitCache:   formTri(r, "explicit_cache"),
 	}
 	if en, bud := formTri(r, "thinking_enabled"), formInt(r, "thinking_budget"); en != nil || bud != nil {
-		cs.Thinking = &reevev1.ThinkingSettings{Enabled: en, BudgetTokens: bud}
+		cs.Thinking = &spaltv1.ThinkingSettings{Enabled: en, BudgetTokens: bud}
 	}
 	if ce := formTri(r, "anth_cache_enabled"); ce != nil {
-		cs.Anthropic = &reevev1.AnthropicExtras{CacheEnabled: ce}
+		cs.Anthropic = &spaltv1.AnthropicExtras{CacheEnabled: ce}
 	}
 	if seed, fp, pp, par := formInt(r, "oai_seed"), formFloat(r, "oai_frequency_penalty"), formFloat(r, "oai_presence_penalty"), formTri(r, "oai_parallel_tool_calls"); seed != nil || fp != nil || pp != nil || par != nil {
-		cs.Openai = &reevev1.OpenAIExtras{Seed: seed, FrequencyPenalty: fp, PresencePenalty: pp, ParallelToolCalls: par}
+		cs.Openai = &spaltv1.OpenAIExtras{Seed: seed, FrequencyPenalty: fp, PresencePenalty: pp, ParallelToolCalls: par}
 	}
 	if cc := formInt(r, "goog_candidate_count"); cc != nil {
-		cs.Google = &reevev1.GoogleExtras{CandidateCount: cc}
+		cs.Google = &spaltv1.GoogleExtras{CandidateCount: cc}
 	}
 	settings.CallSettings = cs
 	settings.IncludeThinkingInHistory = formTri(r, "include_thinking_in_history")
 
-	if _, err := h.convos.UpdateConversation(r.Context(), connect.NewRequest(&reevev1.UpdateConversationRequest{Id: convID, Settings: settings})); err != nil {
+	if _, err := h.convos.UpdateConversation(r.Context(), connect.NewRequest(&spaltv1.UpdateConversationRequest{Id: convID, Settings: settings})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -470,7 +470,7 @@ func splitStops(s string) []string {
 // convPlugins resolves the merged pipeline for display (with inherited/override
 // source badges) and lists catalog plugins not yet present for adding.
 func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPluginRowVM, addable []pluginOptVM) {
-	pipe, err := h.convos.ResolveConversationPipeline(ctx, connect.NewRequest(&reevev1.ResolveConversationPipelineRequest{ConversationId: convID}))
+	pipe, err := h.convos.ResolveConversationPipeline(ctx, connect.NewRequest(&spaltv1.ResolveConversationPipelineRequest{ConversationId: convID}))
 	if err != nil {
 		return nil, nil
 	}
@@ -486,7 +486,7 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 	for _, e := range pipe.Msg.GetEntries() {
 		present[e.GetPluginName()] = true
 		src := "Inherited"
-		if e.GetSource() == reevev1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION {
+		if e.GetSource() == spaltv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION {
 			src = "Override"
 		}
 		rows = append(rows, convPluginRowVM{
@@ -499,7 +499,7 @@ func (h *Handler) convPlugins(ctx context.Context, convID string) (rows []convPl
 	}
 	// Conversation overrides that disable an inherited plugin don't appear in the
 	// resolved pipeline; surface them so they can be restored.
-	if ov, err := h.convos.GetConversationPlugins(ctx, connect.NewRequest(&reevev1.GetConversationPluginsRequest{ConversationId: convID})); err == nil {
+	if ov, err := h.convos.GetConversationPlugins(ctx, connect.NewRequest(&spaltv1.GetConversationPluginsRequest{ConversationId: convID})); err == nil {
 		for _, p := range ov.Msg.GetPlugins() {
 			if p.GetDisabled() {
 				rows = append(rows, convPluginRowVM{
@@ -535,7 +535,7 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cur, err := h.convos.GetConversationPlugins(r.Context(), connect.NewRequest(&reevev1.GetConversationPluginsRequest{ConversationId: convID}))
+	cur, err := h.convos.GetConversationPlugins(r.Context(), connect.NewRequest(&spaltv1.GetConversationPluginsRequest{ConversationId: convID}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -569,7 +569,7 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if _, err := h.convos.SetConversationPlugins(r.Context(), connect.NewRequest(&reevev1.SetConversationPluginsRequest{
+	if _, err := h.convos.SetConversationPlugins(r.Context(), connect.NewRequest(&spaltv1.SetConversationPluginsRequest{
 		ConversationId: convID, Plugins: plugins,
 	})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -579,7 +579,7 @@ func (h *Handler) handleConvPluginOverride(w http.ResponseWriter, r *http.Reques
 }
 
 // currentConfigFor returns the existing override config for a plugin, or nil.
-func currentConfigFor(plugins []*reevev1.ConversationPlugin, name string) []byte {
+func currentConfigFor(plugins []*spaltv1.ConversationPlugin, name string) []byte {
 	for _, p := range plugins {
 		if p.GetPluginName() == name {
 			return p.GetConfig()
@@ -588,7 +588,7 @@ func currentConfigFor(plugins []*reevev1.ConversationPlugin, name string) []byte
 	return nil
 }
 
-func dropPlugin(plugins []*reevev1.ConversationPlugin, name string) []*reevev1.ConversationPlugin {
+func dropPlugin(plugins []*spaltv1.ConversationPlugin, name string) []*spaltv1.ConversationPlugin {
 	out := plugins[:0]
 	for _, p := range plugins {
 		if p.GetPluginName() != name {
@@ -598,7 +598,7 @@ func dropPlugin(plugins []*reevev1.ConversationPlugin, name string) []*reevev1.C
 	return out
 }
 
-func upsertPlugin(plugins []*reevev1.ConversationPlugin, name string, config []byte, disabled bool) []*reevev1.ConversationPlugin {
+func upsertPlugin(plugins []*spaltv1.ConversationPlugin, name string, config []byte, disabled bool) []*spaltv1.ConversationPlugin {
 	for _, p := range plugins {
 		if p.GetPluginName() == name {
 			p.Config = config
@@ -612,7 +612,7 @@ func upsertPlugin(plugins []*reevev1.ConversationPlugin, name string, config []b
 			ord = p.GetOrdinal() + 1
 		}
 	}
-	return append(plugins, &reevev1.ConversationPlugin{PluginName: name, Ordinal: ord, Config: config, Disabled: disabled})
+	return append(plugins, &spaltv1.ConversationPlugin{PluginName: name, Ordinal: ord, Config: config, Disabled: disabled})
 }
 
 func prettyJSON(b []byte) string {

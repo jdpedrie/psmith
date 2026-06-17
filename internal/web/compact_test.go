@@ -13,16 +13,16 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/jdpedrie/reeve/fakellm"
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	_ "github.com/jdpedrie/reeve/internal/providers/anthropic" // register driver
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/fakellm"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	_ "github.com/jdpedrie/spalt/internal/providers/anthropic" // register driver
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // TestCompactFlow_E2E proves the two-stage compaction: a real compression run
@@ -50,7 +50,7 @@ func TestCompactFlow_E2E(t *testing.T) {
 	// Start a compaction run with explicit compression model (the seed profile
 	// has none); this is the override path Compact supports.
 	pid, mid, guide := fx.providerID.String(), fx.modelID, "Summarize."
-	cresp, err := convos.Compact(userCtx, connect.NewRequest(&reevev1.CompactRequest{
+	cresp, err := convos.Compact(userCtx, connect.NewRequest(&spaltv1.CompactRequest{
 		ConversationId:        fx.convID.String(),
 		CompressionProviderId: &pid,
 		CompressionModelId:    &mid,
@@ -92,7 +92,7 @@ func TestCompactFlow_E2E(t *testing.T) {
 	}
 
 	// There should now be two contexts (original + promoted).
-	ctxs, err := convos.ListContexts(userCtx, connect.NewRequest(&reevev1.ListContextsRequest{ConversationId: fx.convID.String()}))
+	ctxs, err := convos.ListContexts(userCtx, connect.NewRequest(&spaltv1.ListContextsRequest{ConversationId: fx.convID.String()}))
 	if err != nil {
 		t.Fatalf("ListContexts: %v", err)
 	}

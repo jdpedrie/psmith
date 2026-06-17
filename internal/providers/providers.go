@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
 )
 
 // Provider is the registered driver for a backend kind.
@@ -85,7 +85,7 @@ type ToolDef struct {
 
 // WireMessage is the shape providers actually see.
 type WireMessage struct {
-	Role     string          // "system" | "user" | "assistant"
+	Role     string // "system" | "user" | "assistant"
 	Content  string
 	Thinking json.RawMessage // native shape; non-nil only on same-provider sends with thinking enabled
 	// ToolUses is set on assistant messages that contain tool invocations
@@ -172,8 +172,8 @@ type ToolResultBlock struct {
 }
 
 // CallSettings carries per-turn provider settings. The shape mirrors the
-// `reeve.v1.CallSettings` proto (a hybrid common-core + provider-specific
-// design); see proto/reeve/v1/types.proto for field-level documentation.
+// `spalt.v1.CallSettings` proto (a hybrid common-core + provider-specific
+// design); see proto/spalt/v1/types.proto for field-level documentation.
 //
 // Drivers translate the subset of fields they support and silently drop the
 // rest. The 4-layer resolution chain
@@ -206,14 +206,14 @@ type CallSettings struct {
 	ExplicitCache *bool
 }
 
-// ThinkingSettings mirrors reeve.v1.ThinkingSettings.
+// ThinkingSettings mirrors spalt.v1.ThinkingSettings.
 type ThinkingSettings struct {
 	Enabled      *bool
 	BudgetTokens *int
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the
-// cross-provider common surface. Mirrors reeve.v1.AnthropicExtras.
+// cross-provider common surface. Mirrors spalt.v1.AnthropicExtras.
 type AnthropicExtras struct {
 	// CacheEnabled, when non-nil and false, instructs the driver to skip
 	// the auto cache_control marker placement entirely. nil = inherit
@@ -289,7 +289,7 @@ type GoogleExtras struct {
 	CachedContent *string
 }
 
-// SafetySettings mirrors reeve.v1.SafetySettings.
+// SafetySettings mirrors spalt.v1.SafetySettings.
 type SafetySettings struct {
 	Harassment       *HarmThreshold
 	HateSpeech       *HarmThreshold
@@ -297,15 +297,15 @@ type SafetySettings struct {
 	DangerousContent *HarmThreshold
 }
 
-// HarmThreshold mirrors reeve.v1.HarmThreshold.
+// HarmThreshold mirrors spalt.v1.HarmThreshold.
 type HarmThreshold int
 
 const (
-	HarmThresholdUnspecified       HarmThreshold = 0
-	HarmThresholdBlockNone         HarmThreshold = 1
-	HarmThresholdBlockLowAndAbove  HarmThreshold = 2
+	HarmThresholdUnspecified         HarmThreshold = 0
+	HarmThresholdBlockNone           HarmThreshold = 1
+	HarmThresholdBlockLowAndAbove    HarmThreshold = 2
 	HarmThresholdBlockMediumAndAbove HarmThreshold = 3
-	HarmThresholdBlockOnlyHigh     HarmThreshold = 4
+	HarmThresholdBlockOnlyHigh       HarmThreshold = 4
 )
 
 // Chunk is the normalized streaming output type.
@@ -322,12 +322,12 @@ type Chunk struct {
 type ChunkType string
 
 const (
-	ChunkText                ChunkType = "text_delta"
-	ChunkThinking            ChunkType = "thinking_delta"
-	ChunkThinkingSignature   ChunkType = "thinking_signature"
-	ChunkToolUseStart        ChunkType = "tool_use_start"
-	ChunkToolUseDelta        ChunkType = "tool_use_delta"
-	ChunkToolUseEnd          ChunkType = "tool_use_end"
+	ChunkText              ChunkType = "text_delta"
+	ChunkThinking          ChunkType = "thinking_delta"
+	ChunkThinkingSignature ChunkType = "thinking_signature"
+	ChunkToolUseStart      ChunkType = "tool_use_start"
+	ChunkToolUseDelta      ChunkType = "tool_use_delta"
+	ChunkToolUseEnd        ChunkType = "tool_use_end"
 	// ChunkToolResult is synthesized by the conversations-side tool-loop
 	// wrapper after a plugin's ExecuteTool returns. Payload:
 	//   {"tool_use_id": "...", "output": <raw json>, "error": "...", "elapsed_ms": <int>}
@@ -406,10 +406,10 @@ type ModelCapabilities struct {
 }
 
 type Pricing struct {
-	InputPerMillion       float64
-	OutputPerMillion      float64
-	CacheReadPerMillion   float64
-	CacheWritePerMillion  float64
+	InputPerMillion      float64
+	OutputPerMillion     float64
+	CacheReadPerMillion  float64
+	CacheWritePerMillion float64
 }
 
 // Constructor builds a Provider from injected dependencies and a driver-specific

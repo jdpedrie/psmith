@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // buildLetteredChoices is a helper that constructs the registered plugin and
@@ -274,7 +274,6 @@ func TestLetteredChoices_HistoryTransformer_MultipleBlocksAllStripped(t *testing
 		t.Errorf("multi-block strip = %q want %q", got.Content, want)
 	}
 }
-
 
 // --- DisplayTransformer ---
 

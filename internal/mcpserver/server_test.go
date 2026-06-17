@@ -15,16 +15,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/modelproviders"
-	"github.com/jdpedrie/reeve/internal/profiles"
-	"github.com/jdpedrie/reeve/internal/storage"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/modelproviders"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/spalt/internal/storage"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // --- harness ---
@@ -146,7 +146,7 @@ func TestServer_Initialize(t *testing.T) {
 	if ir.ProtocolVersion != ProtocolVersion {
 		t.Errorf("protocol version: got %q, want %q", ir.ProtocolVersion, ProtocolVersion)
 	}
-	if ir.ServerInfo["name"] != "reeve" {
+	if ir.ServerInfo["name"] != "spalt" {
 		t.Errorf("server name: %q", ir.ServerInfo["name"])
 	}
 }

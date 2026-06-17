@@ -27,9 +27,9 @@ type registryKey struct {
 }
 
 type registryEntry struct {
-	supported       map[string]struct{}
-	attributes      map[string]string
-	registeredAt    time.Time
+	supported    map[string]struct{}
+	attributes   map[string]string
+	registeredAt time.Time
 }
 
 // NewRegistry constructs an empty registry.

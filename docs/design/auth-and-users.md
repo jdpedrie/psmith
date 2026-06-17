@@ -1,6 +1,6 @@
 # Auth and users
 
-Reeve is multi-user and self-hosted. Authentication is deliberately plain: username and password, a bcrypt hash, and an opaque bearer session token. There is no OAuth, no external identity provider, no email verification. The threat model is a small set of known users on an operator's own server, so the design favors simplicity and operability over the machinery a public SaaS would need. This document covers the session model, the interceptor that guards every RPC, bootstrap and user creation, the admin distinction, and ownership scoping.
+Spalt is multi-user and self-hosted. Authentication is deliberately plain: username and password, a bcrypt hash, and an opaque bearer session token. There is no OAuth, no external identity provider, no email verification. The threat model is a small set of known users on an operator's own server, so the design favors simplicity and operability over the machinery a public SaaS would need. This document covers the session model, the interceptor that guards every RPC, bootstrap and user creation, the admin distinction, and ownership scoping.
 
 ## Sessions
 
@@ -14,7 +14,7 @@ The session is the whole auth state. There is no refresh token and no rotation; 
 
 Every RPC is guarded by a Connect interceptor that authenticates the bearer token before the handler runs. It pulls the `Authorization` header, runs `AuthenticateBearer` against the sessions table, and on success attaches the resolved user to the request context. Handlers read the user with `auth.MustFromContext`, which panics if it is absent, so a handler can assume an authenticated user without re-checking. A failed check returns `Unauthenticated` (and the equivalent HTTP 401 on the non-RPC endpoints).
 
-Two procedures are on the unauthenticated allowlist: `AuthService.Login` (you cannot present a token before you have one) and `AuthService.Probe` (an unauthenticated identity ping clients use to confirm a server is a Reeve server and reachable before login). Everything else requires a valid session. The allowlist is explicit per-procedure, built from the generated procedure constants, so adding an unauthenticated endpoint is a deliberate one-line change rather than a pattern match that might over-match.
+Two procedures are on the unauthenticated allowlist: `AuthService.Login` (you cannot present a token before you have one) and `AuthService.Probe` (an unauthenticated identity ping clients use to confirm a server is a Spalt server and reachable before login). Everything else requires a valid session. The allowlist is explicit per-procedure, built from the generated procedure constants, so adding an unauthenticated endpoint is a deliberate one-line change rather than a pattern match that might over-match.
 
 The same bearer check guards the non-RPC HTTP endpoints (`/mcp`, the file download, the device-tool and elicitation respond endpoints), reading the same sessions table so there is one auth surface, not two. See [api/non-rpc-endpoints](../api/non-rpc-endpoints.md).
 
@@ -24,7 +24,7 @@ On first run, `Bootstrap` creates an admin user if none exists, from the bootstr
 
 ## Creating users
 
-Beyond bootstrap, users are created through `AuthService.CreateUser`, an authenticated admin RPC. The operator CLI's `reeve useradd` is a thin client over that same RPC, so it works against a fresh or remote server the same way the app would. There is no open sign-up endpoint; user creation is an administrative action by design, matching the small-known-set threat model.
+Beyond bootstrap, users are created through `AuthService.CreateUser`, an authenticated admin RPC. The operator CLI's `spalt useradd` is a thin client over that same RPC, so it works against a fresh or remote server the same way the app would. There is no open sign-up endpoint; user creation is an administrative action by design, matching the small-known-set threat model.
 
 ## Admin
 

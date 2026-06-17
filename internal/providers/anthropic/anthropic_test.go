@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // fakeCatalog implements modelmeta.Catalog with an in-memory map.
@@ -36,8 +36,10 @@ func (f *fakeCatalog) ListProviders(_ context.Context) ([]modelmeta.Provider, er
 func (f *fakeCatalog) ListModelsByProvider(_ context.Context, _ string) ([]modelmeta.Model, error) {
 	return nil, nil
 }
-func (f *fakeCatalog) Refresh(_ context.Context) error                   { return nil }
-func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) { return modelmeta.Status{}, nil }
+func (f *fakeCatalog) Refresh(_ context.Context) error { return nil }
+func (f *fakeCatalog) Status(_ context.Context) (modelmeta.Status, error) {
+	return modelmeta.Status{}, nil
+}
 
 // newTestDriver builds a Driver pointed at the given httptest server.
 func newTestDriver(t *testing.T, baseURL string, cat modelmeta.Catalog) *Driver {

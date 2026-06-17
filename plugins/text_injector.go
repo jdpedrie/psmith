@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // TextInjectorName is the registered name for the text-injector plugin.
@@ -22,10 +22,10 @@ const TextInjectorName = "text_injector"
 //   - SystemPrompter prepend → `system_prefix`
 //   - SystemPrompter append  → `system_suffix`
 //   - HistoryTransformer on every user message:
-//       * `user_prefix` prepended
-//       * `user_suffix` appended
+//   - `user_prefix` prepended
+//   - `user_suffix` appended
 //   - HistoryTransformer on the head user message only:
-//       * `user_head_reminder` appended
+//   - `user_head_reminder` appended
 //
 // Every user-side hook lives in HistoryTransformer (NOT
 // OutgoingUserTransformer), so the additions ride on the wire

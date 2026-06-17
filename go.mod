@@ -1,4 +1,4 @@
-module github.com/jdpedrie/reeve
+module github.com/jdpedrie/spalt
 
 go 1.25.5
 

@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/reeve/internal/langfuse"
-	"github.com/jdpedrie/reeve/internal/stream"
+	"github.com/jdpedrie/spalt/internal/langfuse"
+	"github.com/jdpedrie/spalt/internal/stream"
 )
 
 // emitLangfuseAssistantTurn fires one Langfuse Trace + Generation
@@ -108,7 +108,7 @@ func (s *Service) emitLangfuseAssistantTurn(
 
 	traceName := truncateLangfuseName(strings.TrimSpace(userInput), 80)
 	if traceName == "" {
-		traceName = "(reeve turn)"
+		traceName = "(spalt turn)"
 	}
 
 	trace := langfuse.Trace{
@@ -164,7 +164,7 @@ func (s *Service) emitLangfuseAssistantTurn(
 			Input:     rawJSONOrString(sp.Input),
 			Output:    rawJSONOrString(sp.Output),
 			Metadata: map[string]any{
-				"tool_name":      sp.ToolName,
+				"tool_name":       sp.ToolName,
 				"conversation_id": conv.ID.String(),
 			},
 		}
@@ -280,9 +280,9 @@ func (s *Service) emitLangfuseCompressionTurn(
 	}
 	traceID := summaryMsgID.String() + ":compaction"
 	metadata := map[string]any{
-		"conversation_id":      conversationID.String(),
-		"context_id":           contextID.String(),
-		"compression_msg_id":   summaryMsgID.String(),
+		"conversation_id":    conversationID.String(),
+		"context_id":         contextID.String(),
+		"compression_msg_id": summaryMsgID.String(),
 	}
 	if row.ProviderID != nil {
 		metadata["provider_id"] = row.ProviderID.String()

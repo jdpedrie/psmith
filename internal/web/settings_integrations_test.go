@@ -12,15 +12,15 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/embeddersvc"
-	_ "github.com/jdpedrie/reeve/internal/embeddings/openai" // registers the "openai" embedder type
-	"github.com/jdpedrie/reeve/internal/langfuse"
-	"github.com/jdpedrie/reeve/internal/langfusesvc"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/embeddersvc"
+	_ "github.com/jdpedrie/spalt/internal/embeddings/openai" // registers the "openai" embedder type
+	"github.com/jdpedrie/spalt/internal/langfuse"
+	"github.com/jdpedrie/spalt/internal/langfusesvc"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 func TestEmbedderSettings(t *testing.T) {
@@ -54,7 +54,7 @@ func TestEmbedderSettings(t *testing.T) {
 		t.Fatalf("embedder save status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 
-	got, err := emb.GetEmbedderConfig(userCtx, connect.NewRequest(&reevev1.GetEmbedderConfigRequest{}))
+	got, err := emb.GetEmbedderConfig(userCtx, connect.NewRequest(&spaltv1.GetEmbedderConfigRequest{}))
 	if err != nil {
 		t.Fatalf("GetEmbedderConfig: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestLangfuseSettings(t *testing.T) {
 		t.Fatalf("langfuse save status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 
-	got, err := lf.GetLangfuseConfig(userCtx, connect.NewRequest(&reevev1.GetLangfuseConfigRequest{}))
+	got, err := lf.GetLangfuseConfig(userCtx, connect.NewRequest(&spaltv1.GetLangfuseConfigRequest{}))
 	if err != nil {
 		t.Fatalf("GetLangfuseConfig: %v", err)
 	}

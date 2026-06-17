@@ -106,7 +106,7 @@ func (p *obsidian) DisplayName() string { return "Obsidian" }
 func (p *obsidian) Description() string {
 	return "Lets the model read and write markdown notes in a folder " +
 		"you grant access to — your entire Obsidian vault, or a " +
-		"subfolder of it (e.g. just \"Vault/Reeve/\"). Backed by a " +
+		"subfolder of it (e.g. just \"Vault/Spalt/\"). Backed by a " +
 		"security-scoped folder bookmark the client maintains via the " +
 		"system file picker; no Obsidian plugin or local-REST setup " +
 		"required. Tools default to read-only; flip writes on per profile."
@@ -207,7 +207,7 @@ func (p *obsidian) ExecuteTool(ctx context.Context, name string, input json.RawM
 		if _, ok := supported[name]; !ok {
 			return ToolResult{}, fmt.Errorf(
 				"obsidian: %q not available — the connected device hasn't bookmarked an Obsidian vault yet "+
-					"(open the Reeve app, Settings → Obsidian, pick your vault folder)",
+					"(open the Spalt app, Settings → Obsidian, pick your vault folder)",
 				name)
 		}
 	}

@@ -1,12 +1,12 @@
 # Streaming
 
-Streaming is the part Reeve cares most about getting right. A model turn can run for minutes, and the client that started it might background, lose signal, or be swapped for another device mid-stream. The design goal is that none of that loses work or corrupts state. The server owns the stream; the client is a viewer that can come and go.
+Streaming is the part Spalt cares most about getting right. A model turn can run for minutes, and the client that started it might background, lose signal, or be swapped for another device mid-stream. The design goal is that none of that loses work or corrupts state. The server owns the stream; the client is a viewer that can come and go.
 
 The mechanism is a supervisor goroutine per run, a durable chunk log, and an in-process pub/sub broker. A client subscribes from a sequence number and gets every chunk after it, whether the run is live or already finished. This document covers the supervisor, the chunk vocabulary, durability and replay, retry, and how a turn materializes into a message.
 
 ## The shape of the problem
 
-A naive design streams provider tokens straight to the requesting HTTP connection. When that connection drops, the stream is gone: either the turn dies, or it finishes into a void and the client never sees the result. Reeve decouples the two. The provider stream feeds a supervisor that writes every chunk to Postgres and publishes it to subscribers. The client subscribes over a separate, resumable channel. The run's lifetime is tied to the supervisor, not to any client connection.
+A naive design streams provider tokens straight to the requesting HTTP connection. When that connection drops, the stream is gone: either the turn dies, or it finishes into a void and the client never sees the result. Spalt decouples the two. The provider stream feeds a supervisor that writes every chunk to Postgres and publishes it to subscribers. The client subscribes over a separate, resumable channel. The run's lifetime is tied to the supervisor, not to any client connection.
 
 ## The supervisor
 

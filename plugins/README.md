@@ -1,6 +1,6 @@
-# `plugins/` — Reeve's chat-plugin system
+# `plugins/` — Spalt's chat-plugin system
 
-Compiled-in extension points for Reeve's conversation pipeline. Plugins observe and shape the lifecycle of a turn — system prompts, outgoing user content, history rewrites, inbound chunks, persisted assistant text, displayed text, tool calls, and post-write events.
+Compiled-in extension points for Spalt's conversation pipeline. Plugins observe and shape the lifecycle of a turn — system prompts, outgoing user content, history rewrites, inbound chunks, persisted assistant text, displayed text, tool calls, and post-write events.
 
 This README is the orientation guide. The canonical design lives in `docs/design/plugins.md`; deferred ideas in `docs/todo.md` ("Plugin hook ideas").
 
@@ -17,7 +17,7 @@ Four concrete plugins live alongside this README:
 | `lettered_choices` | Asks the model to wrap interactive choices in delimiters; strips them from older history; renders them clean for display | `Configurable`, `SystemPrompter`, `HistoryTransformer`, `DisplayTransformer` |
 | `brave_search` | Exposes `web_search` as a model-callable tool backed by the Brave API | `Configurable`, `ToolProvider` |
 | `basic_grounding` | Prepends grounding facts (current time, …) to outgoing user messages and hides them on display | `Configurable`, `OutgoingUserTransformer`, `DisplayTransformer` |
-| `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Reeve. Two transports: **stdio** (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) and **http** (POST JSON-RPC to a remote URL — Streamable HTTP transport, both `application/json` and `text/event-stream` responses; honours `Mcp-Session-Id`). Pool keeps connections alive across sends; idle entries reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
+| `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Spalt. Two transports: **stdio** (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) and **http** (POST JSON-RPC to a remote URL — Streamable HTTP transport, both `application/json` and `text/event-stream` responses; honours `Mcp-Session-Id`). Pool keeps connections alive across sends; idle entries reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
 
 Read those for working examples before / while building a new one.
 
@@ -201,7 +201,7 @@ func newMyPlugin(configBytes json.RawMessage) (Plugin, error) {
 
 `Register` panics on duplicate names, empty names, or nil constructors — surfacing programmer errors at boot rather than at first call.
 
-To make the plugin discoverable by the registry, ensure `plugins` is imported transitively from `cmd/reeved`. New files in `plugins/` are picked up automatically by the package init.
+To make the plugin discoverable by the registry, ensure `plugins` is imported transitively from `cmd/spaltd`. New files in `plugins/` are picked up automatically by the package init.
 
 ---
 
@@ -272,7 +272,7 @@ When the existing surface doesn't fit a use case (and the use case is real, not 
 2. Add a `Pipeline.<Method>` that iterates and fans out.
 3. Add a `Capabilities.<NewCapability> bool` and detect it in `Describe`.
 4. Wire the call site (search the codebase for existing `Pipeline.Transform...` calls; the new one slots in nearby).
-5. Ship a proto field on `PluginCapabilities` and bridge to Swift's `ReevePluginCapabilities`.
+5. Ship a proto field on `PluginCapabilities` and bridge to Swift's `SpaltPluginCapabilities`.
 6. Render a new mini-chip in the profile-form plugin card (`ProfilesView.swift::capabilityChips`).
 7. Tests: pipeline composition (in `plugins/`), end-to-end wiring (in the relevant `internal/` package).
 

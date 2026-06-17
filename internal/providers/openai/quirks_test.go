@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // TestQuirks_Empty_NoBehaviorChange asserts that a config without a
@@ -195,7 +195,7 @@ func TestQuirks_XAI_DiscoveryRoutesToLanguageModels(t *testing.T) {
 }
 
 // TestPresetByID_UnknownReturnsCustom — forward compat: when a config
-// references a preset id newer than the running reeved, we fall back to
+// references a preset id newer than the running spaltd, we fall back to
 // PresetCustom rather than failing.
 func TestPresetByID_UnknownReturnsCustom(t *testing.T) {
 	p := PresetByID("totally-made-up-id")
@@ -456,8 +456,8 @@ func TestQuirks_Ollama_DiscoveryHitsApiTags(t *testing.T) {
 		t.Fatalf("got %d models want 2", len(models))
 	}
 	want := map[string]string{
-		"llama3.1:8b":         "llama3.1:8b (8.0B, Q4_0)",
-		"qwen2.5-coder:14b":   "qwen2.5-coder:14b (14.0B, Q4_K_M)",
+		"llama3.1:8b":       "llama3.1:8b (8.0B, Q4_0)",
+		"qwen2.5-coder:14b": "qwen2.5-coder:14b (14.0B, Q4_K_M)",
 	}
 	for _, m := range models {
 		if want[m.ID] != m.DisplayName {

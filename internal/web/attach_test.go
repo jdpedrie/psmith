@@ -12,17 +12,17 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/files"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	_ "github.com/jdpedrie/reeve/internal/providers/anthropic" // register driver
-	"github.com/jdpedrie/reeve/internal/storage"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/files"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	_ "github.com/jdpedrie/spalt/internal/providers/anthropic" // register driver
+	"github.com/jdpedrie/spalt/internal/storage"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // TestSend_WithAttachment proves the composer upload path: a posted image is
@@ -73,11 +73,11 @@ func TestSend_WithAttachment(t *testing.T) {
 	}
 
 	// The stored user message should carry one image attachment.
-	getResp, err := h.convos.GetConversation(userCtx, connect.NewRequest(&reevev1.GetConversationRequest{Id: fx.convID.String()}))
+	getResp, err := h.convos.GetConversation(userCtx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: fx.convID.String()}))
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}
-	msgs, err := h.convos.ListMessages(userCtx, connect.NewRequest(&reevev1.ListMessagesRequest{ContextId: getResp.Msg.GetActiveContext().GetId()}))
+	msgs, err := h.convos.ListMessages(userCtx, connect.NewRequest(&spaltv1.ListMessagesRequest{ContextId: getResp.Msg.GetActiveContext().GetId()}))
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}

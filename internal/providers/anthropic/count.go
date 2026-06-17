@@ -6,7 +6,7 @@ import (
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // CountTokens calls Anthropic's /v1/messages/count_tokens endpoint and

@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
 func keyHint(set bool) string {
@@ -54,7 +54,7 @@ func (h *Handler) handleEmbedder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) renderEmbedder(w http.ResponseWriter, r *http.Request, result *testVM) {
-	cfgResp, err := h.embedder.GetEmbedderConfig(r.Context(), connect.NewRequest(&reevev1.GetEmbedderConfigRequest{}))
+	cfgResp, err := h.embedder.GetEmbedderConfig(r.Context(), connect.NewRequest(&spaltv1.GetEmbedderConfigRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -69,10 +69,10 @@ func (h *Handler) renderEmbedder(w http.ResponseWriter, r *http.Request, result 
 		Enabled:    c.GetEnabled(),
 		Result:     result,
 	}
-	if tr, err := h.embedder.ListEmbedderTypes(r.Context(), connect.NewRequest(&reevev1.ListEmbedderTypesRequest{})); err == nil {
+	if tr, err := h.embedder.ListEmbedderTypes(r.Context(), connect.NewRequest(&spaltv1.ListEmbedderTypesRequest{})); err == nil {
 		vm.Types = tr.Msg.GetTypes()
 	}
-	if sr, err := h.embedder.GetEmbedderStats(r.Context(), connect.NewRequest(&reevev1.GetEmbedderStatsRequest{})); err == nil {
+	if sr, err := h.embedder.GetEmbedderStats(r.Context(), connect.NewRequest(&spaltv1.GetEmbedderStatsRequest{})); err == nil {
 		vm.UnembeddedCount = sr.Msg.GetUnembeddedCount()
 		vm.WorkerActive = sr.Msg.GetWorkerActive()
 	}
@@ -88,7 +88,7 @@ func (h *Handler) handleEmbedderSave(w http.ResponseWriter, r *http.Request) {
 	baseURL := strings.TrimSpace(r.PostFormValue("base_url"))
 	model := strings.TrimSpace(r.PostFormValue("model"))
 	enabled := r.PostFormValue("enabled") != ""
-	req := &reevev1.UpdateEmbedderConfigRequest{
+	req := &spaltv1.UpdateEmbedderConfigRequest{
 		Type:    &typ,
 		BaseUrl: &baseURL,
 		Model:   &model,
@@ -110,7 +110,7 @@ func (h *Handler) handleEmbedderSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleEmbedderTest(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.embedder.TestEmbedderConfig(r.Context(), connect.NewRequest(&reevev1.TestEmbedderConfigRequest{}))
+	resp, err := h.embedder.TestEmbedderConfig(r.Context(), connect.NewRequest(&spaltv1.TestEmbedderConfigRequest{}))
 	result := &testVM{}
 	if err != nil {
 		result.Message = err.Error()
@@ -122,7 +122,7 @@ func (h *Handler) handleEmbedderTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleEmbedderDelete(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.embedder.DeleteEmbedderConfig(r.Context(), connect.NewRequest(&reevev1.DeleteEmbedderConfigRequest{})); err != nil {
+	if _, err := h.embedder.DeleteEmbedderConfig(r.Context(), connect.NewRequest(&spaltv1.DeleteEmbedderConfigRequest{})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -136,7 +136,7 @@ func (h *Handler) handleLangfuse(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) renderLangfuse(w http.ResponseWriter, r *http.Request, result *testVM) {
-	cfgResp, err := h.langfuse.GetLangfuseConfig(r.Context(), connect.NewRequest(&reevev1.GetLangfuseConfigRequest{}))
+	cfgResp, err := h.langfuse.GetLangfuseConfig(r.Context(), connect.NewRequest(&spaltv1.GetLangfuseConfigRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -159,7 +159,7 @@ func (h *Handler) handleLangfuseSave(w http.ResponseWriter, r *http.Request) {
 	host := strings.TrimSpace(r.PostFormValue("host"))
 	pub := strings.TrimSpace(r.PostFormValue("public_key"))
 	enabled := r.PostFormValue("enabled") != ""
-	req := &reevev1.UpdateLangfuseConfigRequest{
+	req := &spaltv1.UpdateLangfuseConfigRequest{
 		Host:      &host,
 		PublicKey: &pub,
 		Enabled:   &enabled,
@@ -175,7 +175,7 @@ func (h *Handler) handleLangfuseSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLangfuseTest(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.langfuse.TestLangfuseConfig(r.Context(), connect.NewRequest(&reevev1.TestLangfuseConfigRequest{}))
+	resp, err := h.langfuse.TestLangfuseConfig(r.Context(), connect.NewRequest(&spaltv1.TestLangfuseConfigRequest{}))
 	result := &testVM{}
 	if err != nil {
 		result.Message = err.Error()
@@ -187,7 +187,7 @@ func (h *Handler) handleLangfuseTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLangfuseDelete(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.langfuse.DeleteLangfuseConfig(r.Context(), connect.NewRequest(&reevev1.DeleteLangfuseConfigRequest{})); err != nil {
+	if _, err := h.langfuse.DeleteLangfuseConfig(r.Context(), connect.NewRequest(&spaltv1.DeleteLangfuseConfigRequest{})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

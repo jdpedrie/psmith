@@ -26,7 +26,7 @@ WHERE user_id = $1
 `
 
 // Returns the user's embedder config row, if any. pgx ErrNoRows on
-// missing — callers fall back to the daemon's REEVE_EMBEDDER env var
+// missing — callers fall back to the daemon's SPALT_EMBEDDER env var
 // (server-default mode).
 func (q *Queries) GetUserEmbedderConfig(ctx context.Context, userID uuid.UUID) (UserEmbedderConfig, error) {
 	row := q.db.QueryRow(ctx, getUserEmbedderConfig, userID)
@@ -49,7 +49,7 @@ SELECT user_id, type, config, api_key_encrypted, enabled, created_at, updated_at
 
 // The worker enumerates this to know which users have configured
 // embedders. Returning all rows in one shot is fine — we'd never
-// have more than a handful per Reeve instance.
+// have more than a handful per Spalt instance.
 func (q *Queries) ListUserEmbedderConfigs(ctx context.Context) ([]UserEmbedderConfig, error) {
 	rows, err := q.db.Query(ctx, listUserEmbedderConfigs)
 	if err != nil {

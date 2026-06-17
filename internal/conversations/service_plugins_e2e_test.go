@@ -9,10 +9,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/fakellm"
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/fakellm"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // attachLetteredChoicesPlugin writes a single profile_plugins row referencing
@@ -20,10 +20,10 @@ import (
 func attachLetteredChoicesPlugin(t *testing.T, q *store.Queries, profileID uuid.UUID) {
 	t.Helper()
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID:  profileID,
-		Ordinal:    0,
-		PluginName: plugins.LetteredChoicesName,
-		ConfigEncrypted:    []byte(`{"keep_last_n": 1}`),
+		ProfileID:       profileID,
+		Ordinal:         0,
+		PluginName:      plugins.LetteredChoicesName,
+		ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	// SendMessage a third time: this is the turn we inspect on the wire.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "third",
 		ProviderId:     &pid,
@@ -152,7 +152,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	}
 
 	// (4) ListMessages populates display_content with tags stripped.
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -160,7 +160,7 @@ func TestPlugins_E2E_LetteredChoicesAppliesEverywhere(t *testing.T) {
 	}
 	var sawAssistantWithStrippedDisplay bool
 	for _, m := range listResp.Msg.Messages {
-		if m.Role != reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+		if m.Role != spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 			continue
 		}
 		if !strings.Contains(m.Content, "<choices>") {
@@ -196,7 +196,7 @@ func TestPlugins_E2E_NoPluginsDisplayEqualsContent(t *testing.T) {
 
 	_, _ = runOneTurn(t, svc, sup, q, f, "first")
 
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -343,7 +343,7 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	const original = "what's the weather like?"
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&reevev1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        original,
 		ProviderId:     &pid,
@@ -418,7 +418,7 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 	}
 
 	// (4) ListMessages returns the same display-stripped content.
-	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&reevev1.ListMessagesRequest{
+	listResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&spaltv1.ListMessagesRequest{
 		ContextId: f.contextID.String(),
 	}))
 	if err != nil {
@@ -426,7 +426,7 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 	}
 	var sawUserStripped bool
 	for _, m := range listResp.Msg.Messages {
-		if m.Role != reevev1.MessageRole_MESSAGE_ROLE_USER {
+		if m.Role != spaltv1.MessageRole_MESSAGE_ROLE_USER {
 			continue
 		}
 		if strings.Contains(m.DisplayContent, "<grounding>") || strings.Contains(m.DisplayContent, "</grounding>") {

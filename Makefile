@@ -14,10 +14,10 @@ lint:
 	go vet ./...
 
 build:
-	go build -o bin/reeved ./cmd/reeved
+	go build -o bin/spaltd ./cmd/spaltd
 
 run:
-	go run ./cmd/reeved
+	go run ./cmd/spaltd
 
 tidy:
 	go mod tidy
@@ -40,98 +40,98 @@ test:
 	go test ./...
 
 swift-build:
-	cd clients/ReeveSwift && swift build
+	cd clients/SpaltSwift && swift build
 
-# Layer 1 (behavior) tests: ReeveKit integration tests against a freshly-
-# spawned reeved subprocess. Each test gets a uuid-suffixed user; the server
+# Layer 1 (behavior) tests: SpaltKit integration tests against a freshly-
+# spawned spaltd subprocess. Each test gets a uuid-suffixed user; the server
 # binds an ephemeral port and uses an isolated, per-process database that's
 # dropped at exit.
 swift-test-l1:
-	cd clients/ReeveSwift && swift test --filter ReeveKitTests
+	cd clients/SpaltSwift && swift test --filter SpaltKitTests
 
-# Layer 2 (layout) tests: ReeveMac SwiftUI snapshot tests. References live
-# in clients/reeved-mac/Tests/ReeveMacSnapshotTests/__Snapshots__/ and are
+# Layer 2 (layout) tests: SpaltMac SwiftUI snapshot tests. References live
+# in clients/spaltd-mac/Tests/SpaltMacSnapshotTests/__Snapshots__/ and are
 # checked into git. Compares pixels against the committed baselines and
 # fails on diff. NSHostingView's `cacheDisplay(in:to:)` doesn't capture
 # Liquid Glass / Metal effects; baselines therefore record text + layout
 # structure (which is where most regressions land anyway).
 swift-test-l2:
-	cd clients/reeved-mac && swift test --filter ReeveMacSnapshotTests
+	cd clients/spaltd-mac && swift test --filter SpaltMacSnapshotTests
 
 # Re-baseline after intentional UI changes — sets the pointfreeco
 # RECORD_SNAPSHOTS env var so every assertion writes its current output
 # to disk (overwriting committed PNGs). Review the diff in git before
 # committing.
 swift-test-l2-record:
-	cd clients/reeved-mac && RECORD_SNAPSHOTS=1 swift test --filter ReeveMacSnapshotTests
+	cd clients/spaltd-mac && RECORD_SNAPSHOTS=1 swift test --filter SpaltMacSnapshotTests
 
 # Run all swift tests — L1 (behavior) + L2 (layout snapshots).
 swift-test: swift-test-l1 swift-test-l2
 
 mac-build:
 	# --product (not --target) so SwiftPM runs the link step and
-	# writes .build/debug/ReeveMac. `--target` alone compiles
+	# writes .build/debug/SpaltMac. `--target` alone compiles
 	# without linking, leaving mac-app's cp step looking for a
 	# binary that was never produced.
-	cd clients/reeved-mac && swift build --product ReeveMac
+	cd clients/spaltd-mac && swift build --product SpaltMac
 
 mac-run:
-	cd clients/reeved-mac && swift run ReeveMac
+	cd clients/spaltd-mac && swift run SpaltMac
 
 # Generates AppIcon.icns from the source PNG. Apple's iconutil expects a
 # .iconset directory containing per-size pngs; sips downsamples the source.
-clients/reeved-mac/AppBundle/AppIcon.icns: clients/reeved-mac/AppBundle/AppIcon.png
-	rm -rf clients/reeved-mac/AppBundle/AppIcon.iconset
-	mkdir -p clients/reeved-mac/AppBundle/AppIcon.iconset
-	sips -z 16 16     clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_16x16.png      >/dev/null
-	sips -z 32 32     clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_16x16@2x.png   >/dev/null
-	sips -z 32 32     clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_32x32.png      >/dev/null
-	sips -z 64 64     clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_32x32@2x.png   >/dev/null
-	sips -z 128 128   clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_128x128.png    >/dev/null
-	sips -z 256 256   clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_128x128@2x.png >/dev/null
-	sips -z 256 256   clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_256x256.png    >/dev/null
-	sips -z 512 512   clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_256x256@2x.png >/dev/null
-	sips -z 512 512   clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_512x512.png    >/dev/null
-	sips -z 1024 1024 clients/reeved-mac/AppBundle/AppIcon.png --out clients/reeved-mac/AppBundle/AppIcon.iconset/icon_512x512@2x.png >/dev/null
-	iconutil -c icns clients/reeved-mac/AppBundle/AppIcon.iconset -o clients/reeved-mac/AppBundle/AppIcon.icns
-	rm -rf clients/reeved-mac/AppBundle/AppIcon.iconset
+clients/spaltd-mac/AppBundle/AppIcon.icns: clients/spaltd-mac/AppBundle/AppIcon.png
+	rm -rf clients/spaltd-mac/AppBundle/AppIcon.iconset
+	mkdir -p clients/spaltd-mac/AppBundle/AppIcon.iconset
+	sips -z 16 16     clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_16x16.png      >/dev/null
+	sips -z 32 32     clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_16x16@2x.png   >/dev/null
+	sips -z 32 32     clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_32x32.png      >/dev/null
+	sips -z 64 64     clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_32x32@2x.png   >/dev/null
+	sips -z 128 128   clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_128x128.png    >/dev/null
+	sips -z 256 256   clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_128x128@2x.png >/dev/null
+	sips -z 256 256   clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_256x256.png    >/dev/null
+	sips -z 512 512   clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_256x256@2x.png >/dev/null
+	sips -z 512 512   clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_512x512.png    >/dev/null
+	sips -z 1024 1024 clients/spaltd-mac/AppBundle/AppIcon.png --out clients/spaltd-mac/AppBundle/AppIcon.iconset/icon_512x512@2x.png >/dev/null
+	iconutil -c icns clients/spaltd-mac/AppBundle/AppIcon.iconset -o clients/spaltd-mac/AppBundle/AppIcon.icns
+	rm -rf clients/spaltd-mac/AppBundle/AppIcon.iconset
 
 # Wraps the SwiftPM-built executable in a .app bundle so macOS sees it as a
 # proper app (registers a CFBundleIdentifier, gets a Dock icon, can be
 # screenshot/automated by tools that filter by bundle).
-mac-app: mac-build clients/reeved-mac/AppBundle/AppIcon.icns
-	rm -rf clients/reeved-mac/.build/ReeveMac.app
-	mkdir -p clients/reeved-mac/.build/ReeveMac.app/Contents/MacOS
-	mkdir -p clients/reeved-mac/.build/ReeveMac.app/Contents/Resources
-	cp clients/reeved-mac/AppBundle/Info.plist clients/reeved-mac/.build/ReeveMac.app/Contents/Info.plist
-	cp clients/reeved-mac/AppBundle/AppIcon.icns clients/reeved-mac/.build/ReeveMac.app/Contents/Resources/AppIcon.icns
-	cp clients/reeved-mac/.build/debug/ReeveMac clients/reeved-mac/.build/ReeveMac.app/Contents/MacOS/ReeveMac
+mac-app: mac-build clients/spaltd-mac/AppBundle/AppIcon.icns
+	rm -rf clients/spaltd-mac/.build/SpaltMac.app
+	mkdir -p clients/spaltd-mac/.build/SpaltMac.app/Contents/MacOS
+	mkdir -p clients/spaltd-mac/.build/SpaltMac.app/Contents/Resources
+	cp clients/spaltd-mac/AppBundle/Info.plist clients/spaltd-mac/.build/SpaltMac.app/Contents/Info.plist
+	cp clients/spaltd-mac/AppBundle/AppIcon.icns clients/spaltd-mac/.build/SpaltMac.app/Contents/Resources/AppIcon.icns
+	cp clients/spaltd-mac/.build/debug/SpaltMac clients/spaltd-mac/.build/SpaltMac.app/Contents/MacOS/SpaltMac
 	# SwiftPM resource bundles. The provider-logo SVGs moved to
-	# ReeveUI/Resources/Logos/ as part of the iOS-share refactor —
-	# the bundle is now ReeveSwift_ReeveUI.bundle (auto-named by SPM
+	# SpaltUI/Resources/Logos/ as part of the iOS-share refactor —
+	# the bundle is now SpaltSwift_SpaltUI.bundle (auto-named by SPM
 	# from <package>_<target>). Goes inside Contents/Resources/ so the
 	# .app stays a proper sealable bundle (unsealed root content
 	# breaks codesign).
-	if [ -e clients/reeved-mac/.build/debug/ReeveSwift_ReeveUI.bundle ]; then \
-		cp -R clients/reeved-mac/.build/debug/ReeveSwift_ReeveUI.bundle \
-			clients/reeved-mac/.build/ReeveMac.app/Contents/Resources/ReeveSwift_ReeveUI.bundle; \
+	if [ -e clients/spaltd-mac/.build/debug/SpaltSwift_SpaltUI.bundle ]; then \
+		cp -R clients/spaltd-mac/.build/debug/SpaltSwift_SpaltUI.bundle \
+			clients/spaltd-mac/.build/SpaltMac.app/Contents/Resources/SpaltSwift_SpaltUI.bundle; \
 	fi
 	# Ad-hoc re-sign with the Info.plist's bundle ID. The default SwiftPM
-	# signature uses an auto-generated identifier ("ReeveMac-<hash>") which
+	# signature uses an auto-generated identifier ("SpaltMac-<hash>") which
 	# doesn't match CFBundleIdentifier — the mismatch silently breaks
 	# UNUserNotificationCenter (system has no idea which app the
 	# permission grant belongs to). Re-signing with --identifier fixes it.
-	codesign --force --deep --sign - --identifier dev.jdpedrie.ReeveMac \
-		clients/reeved-mac/.build/ReeveMac.app
+	codesign --force --deep --sign - --identifier dev.jdpedrie.SpaltMac \
+		clients/spaltd-mac/.build/SpaltMac.app
 
 mac-app-run: mac-app
-	-pkill -x ReeveMac
-	# Invoke the binary directly. `open clients/.../ReeveMac.app` is filtered
+	-pkill -x SpaltMac
+	# Invoke the binary directly. `open clients/.../SpaltMac.app` is filtered
 	# by Launch Services to whichever copy of the bundle id it has registered
 	# (typically a /Applications install), which silently bypasses the freshly
 	# built bundle here. Running the executable inside the freshly built
 	# bundle wins regardless of LS state.
-	clients/reeved-mac/.build/ReeveMac.app/Contents/MacOS/ReeveMac &
+	clients/spaltd-mac/.build/SpaltMac.app/Contents/MacOS/SpaltMac &
 
 # --- iOS ---
 
@@ -139,13 +139,13 @@ mac-app-run: mac-app
 # device the iOS plan's snapshot harness will record against; switching
 # requires touching one variable here.
 IOS_SIMULATOR ?= iPhone 17 Pro
-IOS_BUNDLE_ID := dev.jdpedrie.ReeveiOS
-IOS_DERIVED_APP := clients/reeved-ios/.build/Build/Products/Debug-iphonesimulator/ReeveiOS.app
+IOS_BUNDLE_ID := dev.jdpedrie.SpaltiOS
+IOS_DERIVED_APP := clients/spaltd-ios/.build/Build/Products/Debug-iphonesimulator/SpaltiOS.app
 
 # Regenerate the Xcode project from project.yml. xcodegen is the
 # git-friendly source of truth — never hand-edit project.pbxproj.
 ios-project:
-	cd clients/reeved-ios && xcodegen generate
+	cd clients/spaltd-ios && xcodegen generate
 
 # Convert provider-logo SVGs into matching PNGs so iOS — which can't
 # decode raw SVG bytes from arbitrary file URLs — can render them via
@@ -158,11 +158,11 @@ logos-png:
 # parsing xcodebuild's per-machine hash.
 ios-build: ios-project logos-png
 	xcodebuild \
-		-project clients/reeved-ios/ReeveiOS.xcodeproj \
-		-scheme ReeveiOS \
+		-project clients/spaltd-ios/SpaltiOS.xcodeproj \
+		-scheme SpaltiOS \
 		-configuration Debug \
 		-destination 'platform=iOS Simulator,name=$(IOS_SIMULATOR),OS=latest' \
-		-derivedDataPath clients/reeved-ios/.build \
+		-derivedDataPath clients/spaltd-ios/.build \
 		build
 
 # Build, boot the simulator, install the freshly-built bundle, and

@@ -28,11 +28,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/storage"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/storage"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // MaxUploadSize is the hard cap on a single upload. Enforced server-
@@ -41,15 +41,15 @@ import (
 // declared-size check.
 const MaxUploadSize = 50 * 1024 * 1024 // 50 MB
 
-// Service implements reevev1connect.FilesServiceHandler.
+// Service implements spaltv1connect.FilesServiceHandler.
 type Service struct {
-	reevev1connect.UnimplementedFilesServiceHandler
+	spaltv1connect.UnimplementedFilesServiceHandler
 
 	queries    *store.Queries
 	store      storage.Storage
 	signingKey []byte
-	// baseURL is the externally-reachable origin of this reeved
-	// (e.g. "https://reeve.example.com"). Used to build absolute
+	// baseURL is the externally-reachable origin of this spaltd
+	// (e.g. "https://spalt.example.com"). Used to build absolute
 	// URLs in GetFileURL responses. Empty falls back to relative
 	// paths — clients prepend their own base.
 	baseURL string
@@ -76,10 +76,10 @@ func NewService(queries *store.Queries, st storage.Storage, signingKey []byte, b
 // message followed by zero or more Chunk messages; computes the
 // SHA-256, validates the size cap, hands the bytes to Storage, and
 // writes the `files` row (idempotent on user+sha256).
-func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[reevev1.UploadFileRequest]) (*connect.Response[reevev1.UploadFileResponse], error) {
+func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[spaltv1.UploadFileRequest]) (*connect.Response[spaltv1.UploadFileResponse], error) {
 	user := auth.MustFromContext(ctx)
 
-	var header *reevev1.UploadFileHeader
+	var header *spaltv1.UploadFileHeader
 	var buf bytes.Buffer
 	hasher := sha256.New()
 	var received int64
@@ -87,7 +87,7 @@ func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[r
 	for stream.Receive() {
 		msg := stream.Msg()
 		switch body := msg.GetBody().(type) {
-		case *reevev1.UploadFileRequest_Header:
+		case *spaltv1.UploadFileRequest_Header:
 			if header != nil {
 				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("multiple headers"))
 			}
@@ -102,7 +102,7 @@ func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[r
 				return nil, connect.NewError(connect.CodeInvalidArgument,
 					fmt.Errorf("upload exceeds %d byte cap", MaxUploadSize))
 			}
-		case *reevev1.UploadFileRequest_Chunk:
+		case *spaltv1.UploadFileRequest_Chunk:
 			if header == nil {
 				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("chunk before header"))
 			}
@@ -159,7 +159,7 @@ func (s *Service) UploadFile(ctx context.Context, stream *connect.ClientStream[r
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create file row: %w", err))
 	}
 
-	return connect.NewResponse(&reevev1.UploadFileResponse{
+	return connect.NewResponse(&spaltv1.UploadFileResponse{
 		FileId:           row.ID.String(),
 		Sha256:           row.Sha256,
 		MimeType:         row.MimeType,
@@ -206,7 +206,7 @@ func (s *Service) Store(ctx context.Context, userID uuid.UUID, mime, filename st
 
 // GetFileURL mints a short-lived signed URL for the given file. The
 // caller must own the file.
-func (s *Service) GetFileURL(ctx context.Context, req *connect.Request[reevev1.GetFileURLRequest]) (*connect.Response[reevev1.GetFileURLResponse], error) {
+func (s *Service) GetFileURL(ctx context.Context, req *connect.Request[spaltv1.GetFileURLRequest]) (*connect.Response[spaltv1.GetFileURLResponse], error) {
 	user := auth.MustFromContext(ctx)
 	fileID, err := uuid.Parse(req.Msg.GetFileId())
 	if err != nil {
@@ -222,14 +222,14 @@ func (s *Service) GetFileURL(ctx context.Context, req *connect.Request[reevev1.G
 	expires := s.nowFn().Add(SignedURLTTL)
 	token := SignToken(s.signingKey, fileID, user.ID, expires)
 	url := fmt.Sprintf("%s/files/%s?token=%s", s.baseURL, fileID.String(), token)
-	return connect.NewResponse(&reevev1.GetFileURLResponse{
+	return connect.NewResponse(&spaltv1.GetFileURLResponse{
 		Url:       url,
 		ExpiresAt: timestamppb.New(expires),
 	}), nil
 }
 
 // ListFiles returns the caller's recent files.
-func (s *Service) ListFiles(ctx context.Context, req *connect.Request[reevev1.ListFilesRequest]) (*connect.Response[reevev1.ListFilesResponse], error) {
+func (s *Service) ListFiles(ctx context.Context, req *connect.Request[spaltv1.ListFilesRequest]) (*connect.Response[spaltv1.ListFilesResponse], error) {
 	user := auth.MustFromContext(ctx)
 	limit := int32(50)
 	if v := req.Msg.Limit; v != nil && *v > 0 {
@@ -245,9 +245,9 @@ func (s *Service) ListFiles(ctx context.Context, req *connect.Request[reevev1.Li
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*reevev1.FileMeta, 0, len(rows))
+	out := make([]*spaltv1.FileMeta, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, &reevev1.FileMeta{
+		out = append(out, &spaltv1.FileMeta{
 			Id:               r.ID.String(),
 			Sha256:           r.Sha256,
 			MimeType:         r.MimeType,
@@ -256,11 +256,11 @@ func (s *Service) ListFiles(ctx context.Context, req *connect.Request[reevev1.Li
 			CreatedAt:        timestamppb.New(r.CreatedAt),
 		})
 	}
-	return connect.NewResponse(&reevev1.ListFilesResponse{Files: out}), nil
+	return connect.NewResponse(&spaltv1.ListFilesResponse{Files: out}), nil
 }
 
 // BytesHandler serves the raw bytes for a signed URL. Mount at
-// `GET /files/{id}` on the reeved mux. Reads + verifies the token,
+// `GET /files/{id}` on the spaltd mux. Reads + verifies the token,
 // loads the file row, streams the storage object through to the
 // response. No Connect framing — straight HTTP so a system image
 // loader can fetch it.

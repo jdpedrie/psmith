@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
-	"github.com/jdpedrie/reeve/plugins"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // TestResolveRequiredModelCapabilities_EmptyForBareProfile verifies a profile
@@ -22,7 +22,7 @@ func TestResolveRequiredModelCapabilities_EmptyForBareProfile(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "bare"}))
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "bare"}))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestResolveRequiredModelCapabilities_AutoDerivesToolUse(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "with_mcp"}))
+	resp, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "with_mcp"}))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -52,9 +52,9 @@ func TestResolveRequiredModelCapabilities_AutoDerivesToolUse(t *testing.T) {
 
 	// Attach an mcp plugin (any transport — stdio is fine; we just need
 	// the ToolProvider interface implementation, not actual tool calls).
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: pid.String(),
-		Plugins: []*reevev1.ProfilePlugin{{
+		Plugins: []*spaltv1.ProfilePlugin{{
 			PluginName: plugins.MCPName,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
@@ -79,14 +79,14 @@ func TestResolveRequiredModelCapabilities_ParentInheritance(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	parent, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent"}))
+	parent, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "parent"}))
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	parentID := uuid.MustParse(parent.Msg.Profile.Id)
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: parentID.String(),
-		Plugins: []*reevev1.ProfilePlugin{{
+		Plugins: []*spaltv1.ProfilePlugin{{
 			PluginName: plugins.MCPName,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
@@ -95,7 +95,7 @@ func TestResolveRequiredModelCapabilities_ParentInheritance(t *testing.T) {
 	}
 
 	pParent := parentID.String()
-	child, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	child, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &pParent,
 	}))
@@ -120,11 +120,11 @@ func TestResolveRequiredModelCapabilities_ChildOverridesParent(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	parent, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "parent"}))
+	parent, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "parent"}))
 	parentID := uuid.MustParse(parent.Msg.Profile.Id)
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: parentID.String(),
-		Plugins: []*reevev1.ProfilePlugin{{
+		Plugins: []*spaltv1.ProfilePlugin{{
 			PluginName: plugins.MCPName,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
@@ -133,15 +133,15 @@ func TestResolveRequiredModelCapabilities_ChildOverridesParent(t *testing.T) {
 	}
 
 	pParent := parentID.String()
-	child, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{
+	child, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{
 		Name:            "child",
 		ParentProfileId: &pParent,
 	}))
 	childID := uuid.MustParse(child.Msg.Profile.Id)
 	// Override parent: child has its own (cap-free) plugin list.
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: childID.String(),
-		Plugins: []*reevev1.ProfilePlugin{{
+		Plugins: []*spaltv1.ProfilePlugin{{
 			PluginName: plugins.BasicGroundingName,
 			Config:     []byte(`{}`),
 		}},
@@ -165,11 +165,11 @@ func TestGetProfile_PopulatesRequiredCapabilities(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
 
-	resp, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&reevev1.CreateProfileRequest{Name: "p"}))
+	resp, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&spaltv1.CreateProfileRequest{Name: "p"}))
 	pid := uuid.MustParse(resp.Msg.Profile.Id)
-	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&reevev1.SetProfilePluginsRequest{
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
 		ProfileId: pid.String(),
-		Plugins: []*reevev1.ProfilePlugin{{
+		Plugins: []*spaltv1.ProfilePlugin{{
 			PluginName: plugins.MCPName,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
@@ -177,7 +177,7 @@ func TestGetProfile_PopulatesRequiredCapabilities(t *testing.T) {
 		t.Fatalf("set plugins: %v", err)
 	}
 
-	got, err := svc.GetProfile(ctxAs(user), connect.NewRequest(&reevev1.GetProfileRequest{Id: pid.String()}))
+	got, err := svc.GetProfile(ctxAs(user), connect.NewRequest(&spaltv1.GetProfileRequest{Id: pid.String()}))
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

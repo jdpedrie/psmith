@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/profiles"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // nowUTC is a small helper so the call sites read cleanly. time.Now().UTC()
@@ -26,7 +26,7 @@ func nowUTC() time.Time { return time.Now().UTC() }
 //     be transmuted into or out of)
 //   - rejected when the conversation has any in-flight stream_run
 //   - sets edited_at = NOW unconditionally
-func (s *Service) EditMessage(ctx context.Context, req *connect.Request[reevev1.EditMessageRequest]) (*connect.Response[reevev1.EditMessageResponse], error) {
+func (s *Service) EditMessage(ctx context.Context, req *connect.Request[spaltv1.EditMessageRequest]) (*connect.Response[spaltv1.EditMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -85,7 +85,7 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[reevev1.
 	pipeline, _ := s.resolvePipelineForConversation(ctx, conv)
 	proto := messageToProto(updated)
 	applyDisplay(proto, pipeline)
-	return connect.NewResponse(&reevev1.EditMessageResponse{Message: proto}), nil
+	return connect.NewResponse(&spaltv1.EditMessageResponse{Message: proto}), nil
 }
 
 // DeleteMessage removes a message. cascade=false stitches direct children to
@@ -94,7 +94,7 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[reevev1.
 //
 // Rejected when the conversation has any in-flight stream_run. The client is
 // responsible for confirming the destructive action (especially cascade=true).
-func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[reevev1.DeleteMessageRequest]) (*connect.Response[reevev1.DeleteMessageResponse], error) {
+func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[spaltv1.DeleteMessageRequest]) (*connect.Response[spaltv1.DeleteMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -126,7 +126,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[reevev
 		if err := s.queries.DeleteMessageByID(ctx, id); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete (cascade): %w", err))
 		}
-		return connect.NewResponse(&reevev1.DeleteMessageResponse{}), nil
+		return connect.NewResponse(&spaltv1.DeleteMessageResponse{}), nil
 	}
 
 	// Stitch path: reparent direct children to msg.ParentID, THEN delete.
@@ -156,7 +156,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[reevev
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	return connect.NewResponse(&reevev1.DeleteMessageResponse{}), nil
+	return connect.NewResponse(&spaltv1.DeleteMessageResponse{}), nil
 }
 
 // PromoteCompactionToNewContext is the second half of the two-stage
@@ -171,7 +171,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[reevev
 // contexts seeded from the same summary, both becoming sequential active
 // contexts (one then the other; the latter wins). Useful as "compact and
 // branch into two directions."
-func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connect.Request[reevev1.PromoteCompactionToNewContextRequest]) (*connect.Response[reevev1.PromoteCompactionToNewContextResponse], error) {
+func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connect.Request[spaltv1.PromoteCompactionToNewContextRequest]) (*connect.Response[spaltv1.PromoteCompactionToNewContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	mid, err := uuid.Parse(req.Msg.MessageId)
@@ -290,7 +290,7 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	return connect.NewResponse(&reevev1.PromoteCompactionToNewContextResponse{
+	return connect.NewResponse(&spaltv1.PromoteCompactionToNewContextResponse{
 		Context: contextToProto(newCtx),
 	}), nil
 }
@@ -304,7 +304,7 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 //     to derive it from
 //   - an optional initial user message is seeded so the user lands in
 //     the new context with a turn already typed
-func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[reevev1.CreateContextManualRequest]) (*connect.Response[reevev1.CreateContextManualResponse], error) {
+func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[spaltv1.CreateContextManualRequest]) (*connect.Response[spaltv1.CreateContextManualResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	convID, err := uuid.Parse(req.Msg.ConversationId)
@@ -340,7 +340,7 @@ func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[
 	}
 
 	var framing string
-	if req.Msg.Mode == reevev1.CompressionMode_COMPRESSION_MODE_APPEND {
+	if req.Msg.Mode == spaltv1.CompressionMode_COMPRESSION_MODE_APPEND {
 		prior, err := s.queries.GetContextRoleMessageInContext(ctx, activeCtx.ID)
 		if err == nil {
 			framing = prior.Content
@@ -414,7 +414,7 @@ func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[
 	}
 
 	// Optional initial user message.
-	var userMsgProto *reevev1.Message
+	var userMsgProto *spaltv1.Message
 	initialUser := req.Msg.InitialUserMessage
 	if initialUser != "" {
 		userID, err := uuid.NewV7()
@@ -438,7 +438,7 @@ func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	return connect.NewResponse(&reevev1.CreateContextManualResponse{
+	return connect.NewResponse(&spaltv1.CreateContextManualResponse{
 		Context:     contextToProto(newCtx),
 		UserMessage: userMsgProto,
 	}), nil
@@ -453,17 +453,17 @@ func roleEditable(role string) bool {
 // messageRoleToStorage maps the wire enum to the storage string used in the
 // messages.role CHECK constraint. Returns an error for unspecified or
 // unknown values; callers funnel that into InvalidArgument.
-func messageRoleToStorage(r reevev1.MessageRole) (string, error) {
+func messageRoleToStorage(r spaltv1.MessageRole) (string, error) {
 	switch r {
-	case reevev1.MessageRole_MESSAGE_ROLE_SYSTEM:
+	case spaltv1.MessageRole_MESSAGE_ROLE_SYSTEM:
 		return roleSystem, nil
-	case reevev1.MessageRole_MESSAGE_ROLE_CONTEXT:
+	case spaltv1.MessageRole_MESSAGE_ROLE_CONTEXT:
 		return roleContext, nil
-	case reevev1.MessageRole_MESSAGE_ROLE_USER:
+	case spaltv1.MessageRole_MESSAGE_ROLE_USER:
 		return roleUser, nil
-	case reevev1.MessageRole_MESSAGE_ROLE_ASSISTANT:
+	case spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
 		return roleAssistant, nil
-	case reevev1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
+	case spaltv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
 		return roleCompressionSummary, nil
 	default:
 		return "", fmt.Errorf("unspecified or unknown role")

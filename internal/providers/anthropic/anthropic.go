@@ -1,4 +1,4 @@
-// Package anthropic implements the Reeve provider driver for Anthropic's
+// Package anthropic implements the Spalt provider driver for Anthropic's
 // Claude API. It is stateless: every turn carries the full prefix.
 //
 // The driver self-registers in init(); importing this package is sufficient
@@ -14,7 +14,7 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // defaultMaxOutputTokens is used when CallSettings.MaxOutputTokens is nil.
@@ -64,7 +64,7 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
 	}
 	// SDK retries upstream errors transparently. The supervisor in the
-	// streaming subsystem owns Reeve's higher-level retry posture, so we
+	// streaming subsystem owns Spalt's higher-level retry posture, so we
 	// disable SDK retries to keep behaviour predictable in tests and prod.
 	opts = append(opts, option.WithMaxRetries(0))
 

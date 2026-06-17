@@ -1,6 +1,6 @@
 # Tools
 
-A tool is a function the model can call mid-turn. The model emits a tool-use request, the server runs the function, feeds the result back, and the model continues. Reeve runs the whole loop server-side, so the model sees one linear stream whether the tool ran in Go on the server or on the user's phone. Three kinds of tool exist: server tools (run in the Go process), device tools (run on the connected client), and MCP tools (proxied to an external or in-process MCP server). They all flow through the same loop.
+A tool is a function the model can call mid-turn. The model emits a tool-use request, the server runs the function, feeds the result back, and the model continues. Spalt runs the whole loop server-side, so the model sees one linear stream whether the tool ran in Go on the server or on the user's phone. Three kinds of tool exist: server tools (run in the Go process), device tools (run on the connected client), and MCP tools (proxied to an external or in-process MCP server). They all flow through the same loop.
 
 This document covers the tool loop, how tools are collected and gated, device tools and their broker, and elicitation (a tool asking the user for input without the model seeing it). The plugin interface that declares tools is in [plugins.md](plugins.md); the streaming pipeline the loop rides on is in [streaming.md](streaming.md).
 
@@ -76,7 +76,7 @@ Each implements `ToolProvider`. Server tools run in the Go process; device tools
 - **brave_search** (server). One tool, `web_search`, over the Brave Web Search API. Config: an API key (a shared per-user global), a default result count, safesearch level, and country. No cost reported.
 - **memory** (server). One tool, `search_history`, that semantic-searches the user's own message history through the searcher, scoped to the user, skipping the active context by default. Needs an embedder configured. See [embeddings-and-search.md](embeddings-and-search.md).
 - **imagegen** (server). One tool, `generate_image`, that resolves a configured image model and dispatches to OpenAI image generation or Google image output. Returns an image attachment and reports cost, the only plugin that does. The generated image persists on the assistant turn and rides back into the next round for drivers that accept images in tool results.
-- **mcp** (server, bridge). Connects to an MCP server over stdio (subprocess), HTTP (Streamable HTTP), or inproc (this Reeve instance's own MCP surface, which is the elicitation path). It snapshots the server's advertised tools, optionally name-prefixed, and proxies calls. See [titles-cost-observability.md](titles-cost-observability.md) and the MCP section of the API docs.
+- **mcp** (server, bridge). Connects to an MCP server over stdio (subprocess), HTTP (Streamable HTTP), or inproc (this Spalt instance's own MCP surface, which is the elicitation path). It snapshots the server's advertised tools, optionally name-prefixed, and proxies calls. See [titles-cost-observability.md](titles-cost-observability.md) and the MCP section of the API docs.
 
 ## Cross-cutting notes
 

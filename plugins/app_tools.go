@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jdpedrie/reeve/internal/devicetools"
+	"github.com/jdpedrie/spalt/internal/devicetools"
 )
 
 // AppToolsName is the registered name for the device-tools plugin.
@@ -17,14 +17,14 @@ const AppToolsName = "app_tools"
 // appTools exposes the server-side catalog of device tools to the
 // model, filtered by:
 //
-//   1. The plugin's per-tool `enabled` config (per-profile, with
-//      the usual parent→child→conversation merge chain).
-//   2. The currently-connected client's advertised supported set
-//      (so iOS-only tools like HealthKit don't appear when only a
-//      Mac is connected, and vice versa).
-//   3. The server-side catalog itself (the source of truth — a
-//      tool not in the catalog can never be exposed even if some
-//      stale config says enabled).
+//  1. The plugin's per-tool `enabled` config (per-profile, with
+//     the usual parent→child→conversation merge chain).
+//  2. The currently-connected client's advertised supported set
+//     (so iOS-only tools like HealthKit don't appear when only a
+//     Mac is connected, and vice versa).
+//  3. The server-side catalog itself (the source of truth — a
+//     tool not in the catalog can never be exposed even if some
+//     stale config says enabled).
 //
 // ExecuteTool routes the call through the DeviceToolBroker, which
 // emits a CHUNK_TYPE_DEVICE_TOOL_USE chunk and blocks until the

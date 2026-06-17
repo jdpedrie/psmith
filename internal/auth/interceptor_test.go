@@ -10,40 +10,40 @@ import (
 
 	"connectrpc.com/connect"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // captureSvc records the context seen by handlers so tests can assert what
 // the interceptor attached.
 type captureSvc struct {
-	reevev1connect.UnimplementedAuthServiceHandler
+	spaltv1connect.UnimplementedAuthServiceHandler
 	got context.Context
 }
 
-func (c *captureSvc) WhoAmI(ctx context.Context, _ *connect.Request[reevev1.WhoAmIRequest]) (*connect.Response[reevev1.WhoAmIResponse], error) {
+func (c *captureSvc) WhoAmI(ctx context.Context, _ *connect.Request[spaltv1.WhoAmIRequest]) (*connect.Response[spaltv1.WhoAmIResponse], error) {
 	c.got = ctx
-	return connect.NewResponse(&reevev1.WhoAmIResponse{}), nil
+	return connect.NewResponse(&spaltv1.WhoAmIResponse{}), nil
 }
 
-func (c *captureSvc) Login(ctx context.Context, _ *connect.Request[reevev1.LoginRequest]) (*connect.Response[reevev1.LoginResponse], error) {
+func (c *captureSvc) Login(ctx context.Context, _ *connect.Request[spaltv1.LoginRequest]) (*connect.Response[spaltv1.LoginResponse], error) {
 	c.got = ctx
-	return connect.NewResponse(&reevev1.LoginResponse{SessionToken: "fake"}), nil
+	return connect.NewResponse(&spaltv1.LoginResponse{SessionToken: "fake"}), nil
 }
 
-func newInterceptedServer(t *testing.T) (*captureSvc, *store.Queries, reevev1connect.AuthServiceClient) {
+func newInterceptedServer(t *testing.T) (*captureSvc, *store.Queries, spaltv1connect.AuthServiceClient) {
 	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 	capture := &captureSvc{}
-	interceptor := NewInterceptor(q, reevev1connect.AuthServiceLoginProcedure)
+	interceptor := NewInterceptor(q, spaltv1connect.AuthServiceLoginProcedure)
 	mux := http.NewServeMux()
-	mux.Handle(reevev1connect.NewAuthServiceHandler(capture, connect.WithInterceptors(interceptor)))
+	mux.Handle(spaltv1connect.NewAuthServiceHandler(capture, connect.WithInterceptors(interceptor)))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	client := reevev1connect.NewAuthServiceClient(srv.Client(), srv.URL)
+	client := spaltv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
 	return capture, q, client
 }
 
@@ -53,7 +53,7 @@ func loginAndGetToken(t *testing.T, q *store.Queries, username, password string)
 	t.Helper()
 	mustCreateUser(t, q, username, password, false)
 	svc := NewService(q)
-	resp, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	resp, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: username, Password: password,
 	}))
 	if err != nil {
@@ -66,7 +66,7 @@ func TestInterceptor_NoToken_Rejects(t *testing.T) {
 	t.Parallel()
 	_, _, client := newInterceptedServer(t)
 
-	_, err := client.WhoAmI(context.Background(), connect.NewRequest(&reevev1.WhoAmIRequest{}))
+	_, err := client.WhoAmI(context.Background(), connect.NewRequest(&spaltv1.WhoAmIRequest{}))
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
 		t.Fatalf("expected *connect.Error, got %T (%v)", err, err)
@@ -80,7 +80,7 @@ func TestInterceptor_EmptyBearer_Rejects(t *testing.T) {
 	t.Parallel()
 	_, _, client := newInterceptedServer(t)
 
-	req := connect.NewRequest(&reevev1.WhoAmIRequest{})
+	req := connect.NewRequest(&spaltv1.WhoAmIRequest{})
 	req.Header().Set("Authorization", "Bearer ")
 	_, err := client.WhoAmI(context.Background(), req)
 	var ce *connect.Error
@@ -93,7 +93,7 @@ func TestInterceptor_InvalidToken_Rejects(t *testing.T) {
 	t.Parallel()
 	_, _, client := newInterceptedServer(t)
 
-	req := connect.NewRequest(&reevev1.WhoAmIRequest{})
+	req := connect.NewRequest(&spaltv1.WhoAmIRequest{})
 	req.Header().Set("Authorization", "Bearer not-a-real-token")
 	_, err := client.WhoAmI(context.Background(), req)
 	var ce *connect.Error
@@ -107,7 +107,7 @@ func TestInterceptor_ValidToken_AttachesUser(t *testing.T) {
 	capture, q, client := newInterceptedServer(t)
 	token := loginAndGetToken(t, q, "alice", "x")
 
-	req := connect.NewRequest(&reevev1.WhoAmIRequest{})
+	req := connect.NewRequest(&spaltv1.WhoAmIRequest{})
 	req.Header().Set("Authorization", "Bearer "+token)
 	if _, err := client.WhoAmI(context.Background(), req); err != nil {
 		t.Fatalf("WhoAmI: %v", err)
@@ -134,7 +134,7 @@ func TestInterceptor_ValidToken_TouchesSession(t *testing.T) {
 	originalLastUsed := row.LastUsedAt
 
 	// Wait a hair so the timestamp can differ, then call.
-	req := connect.NewRequest(&reevev1.WhoAmIRequest{})
+	req := connect.NewRequest(&spaltv1.WhoAmIRequest{})
 	req.Header().Set("Authorization", "Bearer "+token)
 	if _, err := client.WhoAmI(context.Background(), req); err != nil {
 		t.Fatalf("WhoAmI: %v", err)
@@ -155,7 +155,7 @@ func TestInterceptor_AllowlistedProcedure_PassesWithoutToken(t *testing.T) {
 
 	// Login is on the allowlist — should not be rejected for missing auth.
 	// (The captureSvc.Login stub doesn't require valid credentials.)
-	resp, err := client.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	resp, err := client.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "anyone", Password: "anything",
 	}))
 	if err != nil {
@@ -181,7 +181,7 @@ func TestInterceptor_ExpiredSession_Rejects(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	req := connect.NewRequest(&reevev1.WhoAmIRequest{})
+	req := connect.NewRequest(&spaltv1.WhoAmIRequest{})
 	req.Header().Set("Authorization", "Bearer "+rawToken)
 	_, err := client.WhoAmI(context.Background(), req)
 	var ce *connect.Error

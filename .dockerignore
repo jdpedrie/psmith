@@ -12,8 +12,8 @@ clients/
 # Binaries built locally on the host — would shadow the multi-stage
 # build's own outputs if accidentally COPY'd in.
 bin/
-reeved
-reeve
+spaltd
+spalt
 
 # Test + coverage outputs.
 coverage.out

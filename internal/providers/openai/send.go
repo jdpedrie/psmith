@@ -14,8 +14,8 @@ import (
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // locksSampling reports whether the target model rejects explicit
@@ -47,7 +47,7 @@ func locksSampling(modelID string) bool {
 //
 // Tool-use translation is implemented but minimal: we emit start/delta/end
 // chunks with the call_id, name, and accumulated argument-JSON delta.
-// Reeve's history-builder doesn't yet round-trip tool calls, so this path
+// Spalt's history-builder doesn't yet round-trip tool calls, so this path
 // is best-effort — see the architecture doc's "Open threads".
 //
 // The returned channel is closed when the upstream stream terminates (any
@@ -270,7 +270,9 @@ func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage, finishR
 	// "fresh" (non-cached) portion and the math works out.
 	cached := int(u.PromptTokensDetails.CachedTokens)
 	prompt := int(u.PromptTokens) - cached
-	if prompt < 0 { prompt = 0 } // defensive — upstream invariant says cached <= prompt
+	if prompt < 0 {
+		prompt = 0
+	} // defensive — upstream invariant says cached <= prompt
 	completion := int(u.CompletionTokens)
 	usage := providers.Usage{
 		InputTokens:  &prompt,
@@ -297,7 +299,7 @@ func emitChatUsage(out chan<- providers.Chunk, u openai.CompletionUsage, finishR
 	out <- providers.Chunk{Type: providers.ChunkUsage, Payload: payload}
 }
 
-// buildChatCompletionParams translates Reeve's wire shape into the SDK's
+// buildChatCompletionParams translates Spalt's wire shape into the SDK's
 // ChatCompletionNewParams. Refusals and audio are not yet wired.
 func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletionNewParams, error) {
 	if req.ModelID == "" {
@@ -507,7 +509,7 @@ func chatToolResultContent(tr providers.ToolResultBlock) string {
 	return string(tr.Output)
 }
 
-// chatServiceTier maps the Reeve enum to the SDK's ChatCompletionNewParamsServiceTier.
+// chatServiceTier maps the Spalt enum to the SDK's ChatCompletionNewParamsServiceTier.
 // Returns the zero value for Unspecified — leaves the field empty on the wire.
 func chatServiceTier(in providers.ServiceTier) openai.ChatCompletionNewParamsServiceTier {
 	switch in {
@@ -703,7 +705,9 @@ func emitResponsesUsage(out chan<- providers.Chunk, u responses.ResponseUsage, i
 	// the cost calc doesn't double-charge the cached portion.
 	cached := int(u.InputTokensDetails.CachedTokens)
 	in := int(u.InputTokens) - cached
-	if in < 0 { in = 0 }
+	if in < 0 {
+		in = 0
+	}
 	outTok := int(u.OutputTokens)
 	usage := providers.Usage{
 		InputTokens:  &in,
@@ -741,7 +745,7 @@ func emit(out chan<- providers.Chunk, typ providers.ChunkType, payload any) {
 	out <- providers.Chunk{Type: typ, Payload: raw}
 }
 
-// buildResponseParams translates the Reeve wire shape into the openai-go
+// buildResponseParams translates the Spalt wire shape into the openai-go
 // ResponseNewParams.
 func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams, error) {
 	if req.ModelID == "" {
@@ -753,7 +757,7 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 	}
 
 	// Walk the wire messages. `system` collapses into the Instructions
-	// field if there's exactly one and it's first (the typical Reeve
+	// field if there's exactly one and it's first (the typical Spalt
 	// shape — see history-builder). Any further system messages are
 	// passed inline as developer-role inputs to keep their semantics.
 	var inputs responses.ResponseInputParam
@@ -934,7 +938,7 @@ func derivedReasoningEffort(budget *int) shared.ReasoningEffort {
 	}
 }
 
-// responsesServiceTier maps the Reeve enum to the Responses API tier enum.
+// responsesServiceTier maps the Spalt enum to the Responses API tier enum.
 func responsesServiceTier(in providers.ServiceTier) responses.ResponseNewParamsServiceTier {
 	switch in {
 	case providers.ServiceTierAuto:

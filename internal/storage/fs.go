@@ -15,7 +15,7 @@ import (
 //
 //	$root/files/{user_id}/{sha256}
 //
-// Per-user dir at 0700 (only the reeved process should list a user's
+// Per-user dir at 0700 (only the spaltd process should list a user's
 // uploads); files at 0600 (no peeking). Atomic writes via temp + rename
 // so a crash mid-write never leaves a partial sha256-named file the
 // next Put could mistake for "already present".

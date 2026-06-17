@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // TestSend_Chat_ImageAttachment_TranslatesToImageURLPart asserts the

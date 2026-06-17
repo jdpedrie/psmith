@@ -12,17 +12,17 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/reeve/fakellm"
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/auth"
-	"github.com/jdpedrie/reeve/internal/conversations"
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/modelmeta"
-	"github.com/jdpedrie/reeve/internal/modelproviders"
-	_ "github.com/jdpedrie/reeve/internal/providers/anthropic" // register the real driver
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/stream"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	"github.com/jdpedrie/spalt/fakellm"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/auth"
+	"github.com/jdpedrie/spalt/internal/conversations"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/spalt/internal/modelproviders"
+	_ "github.com/jdpedrie/spalt/internal/providers/anthropic" // register the real driver
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // TestHandleStream_E2E proves the spike's risky surface: a real assistant run
@@ -56,7 +56,7 @@ func TestHandleStream_E2E(t *testing.T) {
 	// default model in this seed; model selection in the composer is a
 	// fan-out item).
 	pid, mid := fx.providerID.String(), fx.modelID
-	sendResp, err := convos.SendMessage(userCtx, connect.NewRequest(&reevev1.SendMessageRequest{
+	sendResp, err := convos.SendMessage(userCtx, connect.NewRequest(&spaltv1.SendMessageRequest{
 		ConversationId: fx.convID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,

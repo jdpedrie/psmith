@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jdpedrie/reeve/internal/crypto"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/plugins"
+	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/plugins"
 )
 
 // System profile prose lives in seeds/*.md so reviewers can read it
@@ -26,12 +26,12 @@ import (
 //go:embed seeds/personal_assistant.md
 var personalAssistantSeedRaw string
 
-//go:embed seeds/reeve_manager.md
-var reeveManagerSeedRaw string
+//go:embed seeds/spalt_manager.md
+var spaltManagerSeedRaw string
 
 var (
 	personalAssistantSeed = mustParseSeed(personalAssistantSeedRaw)
-	reeveManagerSeed      = mustParseSeed(reeveManagerSeedRaw)
+	spaltManagerSeed      = mustParseSeed(spaltManagerSeedRaw)
 )
 
 // SystemProfileTemplate is one entry in the static catalog of profiles
@@ -80,12 +80,12 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 		},
 	},
 	{
-		Name:           "Reeve Manager",
-		Description:    "Walks you through configuring Reeve — providers, models, profiles, plugins — using the local management API.",
-		SystemMessage:  reeveManagerSeed.SystemMessage,
-		WelcomeMessage: reeveManagerSeed.WelcomeMessage,
+		Name:           "Spalt Manager",
+		Description:    "Walks you through configuring Spalt — providers, models, profiles, plugins — using the local management API.",
+		SystemMessage:  spaltManagerSeed.SystemMessage,
+		WelcomeMessage: spaltManagerSeed.WelcomeMessage,
 		Plugins: []SystemProfilePlugin{
-			// In-process MCP transport — talks to this Reeve instance's
+			// In-process MCP transport — talks to this Spalt instance's
 			// own /mcp surface without a token, port, or HTTP round-trip.
 			// The dispatcher is registered at server startup; without it,
 			// the plugin construction succeeds but tool calls fail with
@@ -104,7 +104,7 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 // BackfillSystemProfiles runs SeedSystemProfiles for every user whose
 // `system_profiles_seeded` flag is still false, PLUS runs the
 // "repair existing system profile plugin configs" pass for every
-// user. Intended for cmd/reeved startup so existing accounts pick up
+// user. Intended for cmd/spaltd startup so existing accounts pick up
 // newly-added templates AND get stale plugin configs repaired
 // without waiting for each user to log in. Failures on individual
 // users are logged via the slog default and don't abort the loop —

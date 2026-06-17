@@ -13,9 +13,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/gen/reeve/v1/reevev1connect"
-	"github.com/jdpedrie/reeve/internal/store"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
+	"github.com/jdpedrie/spalt/internal/store"
 )
 
 // SessionTTL is the lifetime of a freshly-issued session.
@@ -29,9 +29,9 @@ const SessionTTL = 30 * 24 * time.Hour
 // motivating case).
 type PostLoginHook func(ctx context.Context, userID uuid.UUID) error
 
-// Service implements reevev1connect.AuthServiceHandler.
+// Service implements spaltv1connect.AuthServiceHandler.
 type Service struct {
-	reevev1connect.UnimplementedAuthServiceHandler
+	spaltv1connect.UnimplementedAuthServiceHandler
 	queries       *store.Queries
 	postLoginHook PostLoginHook
 }
@@ -41,7 +41,7 @@ func NewService(queries *store.Queries) *Service {
 }
 
 // SetPostLoginHook installs a hook that runs after every successful
-// Login. Pass nil to clear. Wiring lives in cmd/reeved/main.go so the
+// Login. Pass nil to clear. Wiring lives in cmd/spaltd/main.go so the
 // auth package itself stays free of profile/seeding dependencies.
 func (s *Service) SetPostLoginHook(h PostLoginHook) {
 	s.postLoginHook = h
@@ -50,13 +50,13 @@ func (s *Service) SetPostLoginHook(h PostLoginHook) {
 // --- Probe / Login / Logout / WhoAmI ---
 
 // Probe is the unauthenticated identity ping. Clients use it to confirm
-// "yes this URL hosts a reeved" before showing the login form. No DB
+// "yes this URL hosts a spaltd" before showing the login form. No DB
 // hit, no token check; the existence of a successful response is the
-// signal. Server name is hard-coded to "reeved" — forks should bump
+// signal. Server name is hard-coded to "spaltd" — forks should bump
 // this so a misconfigured client can warn.
-func (s *Service) Probe(_ context.Context, _ *connect.Request[reevev1.ProbeRequest]) (*connect.Response[reevev1.ProbeResponse], error) {
-	return connect.NewResponse(&reevev1.ProbeResponse{
-		Server:  "reeved",
+func (s *Service) Probe(_ context.Context, _ *connect.Request[spaltv1.ProbeRequest]) (*connect.Response[spaltv1.ProbeResponse], error) {
+	return connect.NewResponse(&spaltv1.ProbeResponse{
+		Server:  "spaltd",
 		Version: serverVersion(),
 	}), nil
 }
@@ -65,7 +65,7 @@ func (s *Service) Probe(_ context.Context, _ *connect.Request[reevev1.ProbeReque
 // builds (`go run`) where no -ldflags-stamped value is available; the
 // client treats empty as "unknown — proceed without warning."
 func serverVersion() string {
-	// TODO: stamp at build time via -ldflags='-X github.com/jdpedrie/reeve/internal/auth.buildVersion=...'
+	// TODO: stamp at build time via -ldflags='-X github.com/jdpedrie/spalt/internal/auth.buildVersion=...'
 	return buildVersion
 }
 
@@ -73,7 +73,7 @@ func serverVersion() string {
 // "no version stamped" (dev builds).
 var buildVersion = ""
 
-func (s *Service) Login(ctx context.Context, req *connect.Request[reevev1.LoginRequest]) (*connect.Response[reevev1.LoginResponse], error) {
+func (s *Service) Login(ctx context.Context, req *connect.Request[spaltv1.LoginRequest]) (*connect.Response[spaltv1.LoginResponse], error) {
 	if req.Msg.Username == "" || req.Msg.Password == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("username and password are required"))
 	}
@@ -115,14 +115,14 @@ func (s *Service) Login(ctx context.Context, req *connect.Request[reevev1.LoginR
 		}
 	}
 
-	return connect.NewResponse(&reevev1.LoginResponse{
+	return connect.NewResponse(&spaltv1.LoginResponse{
 		SessionToken: raw,
 		ExpiresAt:    timestamppb.New(expiresAt),
 		User:         storeUserToProto(user),
 	}), nil
 }
 
-func (s *Service) Logout(ctx context.Context, req *connect.Request[reevev1.LogoutRequest]) (*connect.Response[reevev1.LogoutResponse], error) {
+func (s *Service) Logout(ctx context.Context, req *connect.Request[spaltv1.LogoutRequest]) (*connect.Response[spaltv1.LogoutResponse], error) {
 	// We don't have the raw token at this point — read it from the request header.
 	auth := req.Header().Get("Authorization")
 	if len(auth) < len("Bearer ") {
@@ -132,15 +132,15 @@ func (s *Service) Logout(ctx context.Context, req *connect.Request[reevev1.Logou
 	if err := s.queries.DeleteSession(ctx, hashToken(raw)); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.LogoutResponse{}), nil
+	return connect.NewResponse(&spaltv1.LogoutResponse{}), nil
 }
 
-func (s *Service) WhoAmI(ctx context.Context, req *connect.Request[reevev1.WhoAmIRequest]) (*connect.Response[reevev1.WhoAmIResponse], error) {
+func (s *Service) WhoAmI(ctx context.Context, req *connect.Request[spaltv1.WhoAmIRequest]) (*connect.Response[spaltv1.WhoAmIResponse], error) {
 	u := MustFromContext(ctx)
-	return connect.NewResponse(&reevev1.WhoAmIResponse{User: userToProto(u)}), nil
+	return connect.NewResponse(&spaltv1.WhoAmIResponse{User: userToProto(u)}), nil
 }
 
-func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[reevev1.ChangePasswordRequest]) (*connect.Response[reevev1.ChangePasswordResponse], error) {
+func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[spaltv1.ChangePasswordRequest]) (*connect.Response[spaltv1.ChangePasswordResponse], error) {
 	if req.Msg.NewPassword == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("new_password is required"))
 	}
@@ -164,12 +164,12 @@ func (s *Service) ChangePassword(ctx context.Context, req *connect.Request[reeve
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.ChangePasswordResponse{}), nil
+	return connect.NewResponse(&spaltv1.ChangePasswordResponse{}), nil
 }
 
 // --- Admin user management ---
 
-func (s *Service) CreateUser(ctx context.Context, req *connect.Request[reevev1.CreateUserRequest]) (*connect.Response[reevev1.CreateUserResponse], error) {
+func (s *Service) CreateUser(ctx context.Context, req *connect.Request[spaltv1.CreateUserRequest]) (*connect.Response[spaltv1.CreateUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -194,10 +194,10 @@ func (s *Service) CreateUser(ctx context.Context, req *connect.Request[reevev1.C
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.CreateUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&spaltv1.CreateUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) ListUsers(ctx context.Context, req *connect.Request[reevev1.ListUsersRequest]) (*connect.Response[reevev1.ListUsersResponse], error) {
+func (s *Service) ListUsers(ctx context.Context, req *connect.Request[spaltv1.ListUsersRequest]) (*connect.Response[spaltv1.ListUsersResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -205,14 +205,14 @@ func (s *Service) ListUsers(ctx context.Context, req *connect.Request[reevev1.Li
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*reevev1.User, 0, len(users))
+	out := make([]*spaltv1.User, 0, len(users))
 	for _, u := range users {
 		out = append(out, storeUserToProto(u))
 	}
-	return connect.NewResponse(&reevev1.ListUsersResponse{Users: out}), nil
+	return connect.NewResponse(&spaltv1.ListUsersResponse{Users: out}), nil
 }
 
-func (s *Service) GetUser(ctx context.Context, req *connect.Request[reevev1.GetUserRequest]) (*connect.Response[reevev1.GetUserResponse], error) {
+func (s *Service) GetUser(ctx context.Context, req *connect.Request[spaltv1.GetUserRequest]) (*connect.Response[spaltv1.GetUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -227,10 +227,10 @@ func (s *Service) GetUser(ctx context.Context, req *connect.Request[reevev1.GetU
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.GetUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&spaltv1.GetUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[reevev1.UpdateUserRequest]) (*connect.Response[reevev1.UpdateUserResponse], error) {
+func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[spaltv1.UpdateUserRequest]) (*connect.Response[spaltv1.UpdateUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -264,10 +264,10 @@ func (s *Service) UpdateUser(ctx context.Context, req *connect.Request[reevev1.U
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.UpdateUserResponse{User: storeUserToProto(user)}), nil
+	return connect.NewResponse(&spaltv1.UpdateUserResponse{User: storeUserToProto(user)}), nil
 }
 
-func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[reevev1.DeleteUserRequest]) (*connect.Response[reevev1.DeleteUserResponse], error) {
+func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[spaltv1.DeleteUserRequest]) (*connect.Response[spaltv1.DeleteUserResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -282,10 +282,10 @@ func (s *Service) DeleteUser(ctx context.Context, req *connect.Request[reevev1.D
 	if err := s.queries.DeleteUser(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.DeleteUserResponse{}), nil
+	return connect.NewResponse(&spaltv1.DeleteUserResponse{}), nil
 }
 
-func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[reevev1.AdminResetPasswordRequest]) (*connect.Response[reevev1.AdminResetPasswordResponse], error) {
+func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[spaltv1.AdminResetPasswordRequest]) (*connect.Response[spaltv1.AdminResetPasswordResponse], error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (s *Service) AdminResetPassword(ctx context.Context, req *connect.Request[r
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&reevev1.AdminResetPasswordResponse{}), nil
+	return connect.NewResponse(&spaltv1.AdminResetPasswordResponse{}), nil
 }
 
 // --- helpers ---
@@ -319,8 +319,8 @@ func requireAdmin(ctx context.Context) error {
 	return nil
 }
 
-func storeUserToProto(u store.User) *reevev1.User {
-	return &reevev1.User{
+func storeUserToProto(u store.User) *spaltv1.User {
+	return &spaltv1.User{
 		Id:          u.ID.String(),
 		Username:    u.Username,
 		DisplayName: u.DisplayName,
@@ -330,8 +330,8 @@ func storeUserToProto(u store.User) *reevev1.User {
 	}
 }
 
-func userToProto(u User) *reevev1.User {
-	return &reevev1.User{
+func userToProto(u User) *spaltv1.User {
+	return &spaltv1.User{
 		Id:          u.ID.String(),
 		Username:    u.Username,
 		DisplayName: u.DisplayName,

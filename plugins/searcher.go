@@ -3,7 +3,7 @@ package plugins
 import (
 	"context"
 
-	"github.com/jdpedrie/reeve/internal/embeddings"
+	"github.com/jdpedrie/spalt/internal/embeddings"
 )
 
 // Searcher is the runtime-injected dependency the `memory` plugin
@@ -34,7 +34,7 @@ func WithSearcher(ctx context.Context, s Searcher) context.Context {
 }
 
 // SearcherFrom returns the Searcher attached to ctx, or nil if the
-// runtime didn't wire one (REEVE_EMBEDDER unset). Plugins should
+// runtime didn't wire one (SPALT_EMBEDDER unset). Plugins should
 // treat a nil return as a clean "search is not configured" path and
 // surface a friendly tool-error rather than panicking.
 func SearcherFrom(ctx context.Context) Searcher {

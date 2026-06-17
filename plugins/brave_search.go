@@ -63,9 +63,9 @@ type braveSearchConfig struct {
 // to pass on tool_use. Mirrors the schema below — kept as a typed Go
 // struct so ExecuteTool gets compile-time field access.
 type braveSearchInput struct {
-	Query      string `json:"query"`
-	Count      *int   `json:"count,omitempty"`
-	Freshness  string `json:"freshness,omitempty"`
+	Query     string `json:"query"`
+	Count     *int   `json:"count,omitempty"`
+	Freshness string `json:"freshness,omitempty"`
 }
 
 // braveSearchOutput is the trimmed result shape we hand back to the model.

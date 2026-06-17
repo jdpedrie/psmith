@@ -35,7 +35,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jdpedrie/reeve/internal/embeddings"
+	"github.com/jdpedrie/spalt/internal/embeddings"
 )
 
 // Name is the registered embedder type. Stored in
@@ -128,8 +128,8 @@ func init() {
 	embeddings.Register(Name, newEmbedder)
 }
 
-func (e *embedder) Model() string    { return e.cfg.Model }
-func (e *embedder) Dimensions() int  { return e.cfg.Dimensions }
+func (e *embedder) Model() string   { return e.cfg.Model }
+func (e *embedder) Dimensions() int { return e.cfg.Dimensions }
 
 // embedRequest mirrors OpenAI's request shape.
 type embedRequest struct {

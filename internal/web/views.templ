@@ -22,10 +22,10 @@ templ layout(title string) {
 }
 
 templ loginPage(errMsg string) {
-	@layout("Sign in — Reeve") {
+	@layout("Sign in — Spalt") {
 		<main class="auth">
 			<form class="card" method="post" action="/login">
-				<h1 class="brand">Reeve</h1>
+				<h1 class="brand">Spalt</h1>
 				if errMsg != "" {
 					<p class="error">{ errMsg }</p>
 				}
@@ -46,7 +46,7 @@ templ loginPage(errMsg string) {
 templ sidebar(convos []convoVM) {
 	<aside class="sidebar">
 		<header class="sidebar-head">
-			<a class="brand" href="/chats">Reeve</a>
+			<a class="brand" href="/chats">Spalt</a>
 			<div class="sidebar-actions">
 				<a class="new-chat" href="/new">+ New</a>
 				<a class="link" href="/settings">Settings</a>
@@ -69,7 +69,7 @@ templ sidebar(convos []convoVM) {
 }
 
 templ chatsPage(convos []convoVM) {
-	@layout("Chats — Reeve") {
+	@layout("Chats — Spalt") {
 		<div class="app">
 			@sidebar(convos)
 			<main class="main empty">
@@ -80,7 +80,7 @@ templ chatsPage(convos []convoVM) {
 }
 
 templ newConversationPage(convos []convoVM, profiles []profileVM) {
-	@layout("New chat — Reeve") {
+	@layout("New chat — Spalt") {
 		<div class="app">
 			@sidebar(convos)
 			<main class="main">
@@ -109,7 +109,7 @@ templ newConversationPage(convos []convoVM, profiles []profileVM) {
 // settingsShell wraps the settings pages with a header that links back to the
 // chats and to the settings home.
 templ settingsShell(title string) {
-	@layout(title + " — Reeve") {
+	@layout(title + " — Spalt") {
 		<div class="settings">
 			<header class="settings-head">
 				<a class="brand" href="/chats">← Chats</a>
@@ -767,7 +767,7 @@ templ messageBubble(m msgVM, showActions bool) {
 }
 
 templ editMessagePage(convID, mid, content string) {
-	@layout("Edit message — Reeve") {
+	@layout("Edit message — Spalt") {
 		<div class="settings">
 			<header class="settings-head">
 				<a class="brand" href={ templ.SafeURL("/c/" + convID) }>← Back to chat</a>
@@ -825,7 +825,7 @@ templ composer(convID string, current pickerModelVM) {
 				</svg>
 				<input id="composer-file" type="file" name="file" accept="image/*"/>
 			</label>
-			<textarea name="message" rows="1" placeholder="Message Reeve…"></textarea>
+			<textarea name="message" rows="1" placeholder="Message Spalt…"></textarea>
 			<button class="composer-send" type="submit" title="Send" aria-label="Send">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
 					<path d="M12 19V5M5 12l7-7 7 7"></path>
@@ -860,7 +860,7 @@ templ modelChip(convID string, m pickerModelVM) {
 }
 
 templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string) {
-	@layout(conv.Title + " — Reeve") {
+	@layout(conv.Title + " — Spalt") {
 		<div class="app">
 			@sidebar(convos)
 			<main class="main">
@@ -1295,7 +1295,7 @@ templ pluginAction(convID, action, name, label string, danger bool) {
 
 // modelPickerPage is the no-JS standalone picker.
 templ modelPickerPage(data pickerData) {
-	@layout("Model — Reeve") {
+	@layout("Model — Spalt") {
 		<div class="settings">
 			<header class="settings-head">
 				<a class="brand" href={ templ.SafeURL("/c/" + data.ConvID) }>← Back to chat</a>

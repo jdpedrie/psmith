@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/reeve/internal/providers"
+	"github.com/jdpedrie/spalt/internal/providers"
 )
 
 // TestLive_Send is a smoke test that hits the real Gemini API. It runs only
@@ -208,7 +208,7 @@ func TestLive_ExplicitCaching(t *testing.T) {
 
 	cc, err := d.CreateCachedContent(ctx, CreateCachedContentRequest{
 		ModelID:           modelID,
-		DisplayName:       "reeve-live-test",
+		DisplayName:       "spalt-live-test",
 		SystemInstruction: bigSystem,
 		TTL:               "300s",
 	})

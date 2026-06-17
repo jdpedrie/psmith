@@ -16,7 +16,7 @@ import (
 // The last delta-bearing chunk has finish_reason: "stop" on its choice. If
 // usage is non-nil, an additional chunk follows with empty choices and a
 // populated `usage` field (the SDK requires stream_options.include_usage on
-// the request — Reeve's driver always sets it). The terminator is the
+// the request — Spalt's driver always sets it). The terminator is the
 // literal `data: [DONE]\n\n`.
 //
 // Thinking events are silently dropped: Chat Completions has no reasoning

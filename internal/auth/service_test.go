@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
-	"github.com/jdpedrie/reeve/internal/store"
-	"github.com/jdpedrie/reeve/internal/testutil"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/spalt/internal/testutil"
 )
 
 // --- helpers ---
@@ -83,7 +83,7 @@ func TestService_Login_Success(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice", "alicepass", false)
 
-	resp, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	resp, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "alice", Password: "alicepass",
 	}))
 	if err != nil {
@@ -111,7 +111,7 @@ func TestService_Login_WrongPassword(t *testing.T) {
 	svc, q := newTestSvc(t)
 	mustCreateUser(t, q, "alice", "right", false)
 
-	_, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	_, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "alice", Password: "wrong",
 	}))
 	assertCode(t, err, connect.CodeUnauthenticated)
@@ -120,7 +120,7 @@ func TestService_Login_WrongPassword(t *testing.T) {
 func TestService_Login_UnknownUser(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestSvc(t)
-	_, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	_, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "ghost", Password: "x",
 	}))
 	assertCode(t, err, connect.CodeUnauthenticated)
@@ -129,7 +129,7 @@ func TestService_Login_UnknownUser(t *testing.T) {
 func TestService_Login_MissingFields(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestSvc(t)
-	_, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	_, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "", Password: "",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -143,7 +143,7 @@ func TestService_Logout_DeletesSession(t *testing.T) {
 	mustCreateUser(t, q, "alice", "x", false)
 
 	// Login to get a real token.
-	loginResp, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	loginResp, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "alice", Password: "x",
 	}))
 	if err != nil {
@@ -151,7 +151,7 @@ func TestService_Logout_DeletesSession(t *testing.T) {
 	}
 	token := loginResp.Msg.SessionToken
 
-	req := connect.NewRequest(&reevev1.LogoutRequest{})
+	req := connect.NewRequest(&spaltv1.LogoutRequest{})
 	req.Header().Set("Authorization", "Bearer "+token)
 	if _, err := svc.Logout(context.Background(), req); err != nil {
 		t.Fatalf("Logout: %v", err)
@@ -165,7 +165,7 @@ func TestService_Logout_DeletesSession(t *testing.T) {
 func TestService_Logout_MissingHeader(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestSvc(t)
-	_, err := svc.Logout(context.Background(), connect.NewRequest(&reevev1.LogoutRequest{}))
+	_, err := svc.Logout(context.Background(), connect.NewRequest(&spaltv1.LogoutRequest{}))
 	assertCode(t, err, connect.CodeUnauthenticated)
 }
 
@@ -176,7 +176,7 @@ func TestService_WhoAmI(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice", "x", false)
 
-	resp, err := svc.WhoAmI(ctxAs(user), connect.NewRequest(&reevev1.WhoAmIRequest{}))
+	resp, err := svc.WhoAmI(ctxAs(user), connect.NewRequest(&spaltv1.WhoAmIRequest{}))
 	if err != nil {
 		t.Fatalf("WhoAmI: %v", err)
 	}
@@ -192,19 +192,19 @@ func TestService_ChangePassword_Success(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice", "old", false)
 
-	if _, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&reevev1.ChangePasswordRequest{
+	if _, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&spaltv1.ChangePasswordRequest{
 		OldPassword: "old", NewPassword: "new",
 	})); err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
 
 	// Old password should fail, new password should succeed.
-	if _, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	if _, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "alice", Password: "old",
 	})); err == nil {
 		t.Error("old password should no longer work")
 	}
-	if _, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	if _, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "alice", Password: "new",
 	})); err != nil {
 		t.Errorf("new password should work: %v", err)
@@ -216,7 +216,7 @@ func TestService_ChangePassword_WrongOld(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice", "right", false)
 
-	_, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&reevev1.ChangePasswordRequest{
+	_, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&spaltv1.ChangePasswordRequest{
 		OldPassword: "wrong", NewPassword: "new",
 	}))
 	assertCode(t, err, connect.CodeUnauthenticated)
@@ -227,7 +227,7 @@ func TestService_ChangePassword_MissingNew(t *testing.T) {
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice", "old", false)
 
-	_, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&reevev1.ChangePasswordRequest{
+	_, err := svc.ChangePassword(ctxAs(user), connect.NewRequest(&spaltv1.ChangePasswordRequest{
 		OldPassword: "old", NewPassword: "",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -241,7 +241,7 @@ func TestService_CreateUser_AdminCanCreate(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 	dn := "Bob B"
 
-	resp, err := svc.CreateUser(ctxAs(admin), connect.NewRequest(&reevev1.CreateUserRequest{
+	resp, err := svc.CreateUser(ctxAs(admin), connect.NewRequest(&spaltv1.CreateUserRequest{
 		Username:    "bob",
 		DisplayName: &dn,
 		Password:    "bobpass",
@@ -261,7 +261,7 @@ func TestService_CreateUser_AdminCanCreate(t *testing.T) {
 	}
 
 	// Verify Bob can log in.
-	if _, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	if _, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "bob", Password: "bobpass",
 	})); err != nil {
 		t.Errorf("Bob login failed: %v", err)
@@ -273,7 +273,7 @@ func TestService_CreateUser_NonAdminDenied(t *testing.T) {
 	svc, q := newTestSvc(t)
 	regular := mustCreateUser(t, q, "alice", "x", false)
 
-	_, err := svc.CreateUser(ctxAs(regular), connect.NewRequest(&reevev1.CreateUserRequest{
+	_, err := svc.CreateUser(ctxAs(regular), connect.NewRequest(&spaltv1.CreateUserRequest{
 		Username: "bob", Password: "bobpass",
 	}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -284,7 +284,7 @@ func TestService_CreateUser_MissingFields(t *testing.T) {
 	svc, q := newTestSvc(t)
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
-	_, err := svc.CreateUser(ctxAs(admin), connect.NewRequest(&reevev1.CreateUserRequest{
+	_, err := svc.CreateUser(ctxAs(admin), connect.NewRequest(&spaltv1.CreateUserRequest{
 		Username: "", Password: "x",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -299,7 +299,7 @@ func TestService_ListUsers_AdminSeesAll(t *testing.T) {
 	mustCreateUser(t, q, "alice", "x", false)
 	mustCreateUser(t, q, "bob", "x", false)
 
-	resp, err := svc.ListUsers(ctxAs(admin), connect.NewRequest(&reevev1.ListUsersRequest{}))
+	resp, err := svc.ListUsers(ctxAs(admin), connect.NewRequest(&spaltv1.ListUsersRequest{}))
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestService_ListUsers_NonAdminDenied(t *testing.T) {
 	svc, q := newTestSvc(t)
 	regular := mustCreateUser(t, q, "alice", "x", false)
 
-	_, err := svc.ListUsers(ctxAs(regular), connect.NewRequest(&reevev1.ListUsersRequest{}))
+	_, err := svc.ListUsers(ctxAs(regular), connect.NewRequest(&spaltv1.ListUsersRequest{}))
 	assertCode(t, err, connect.CodePermissionDenied)
 }
 
@@ -325,7 +325,7 @@ func TestService_GetUser_Found(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	resp, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&reevev1.GetUserRequest{
+	resp, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&spaltv1.GetUserRequest{
 		Id: target.ID.String(),
 	}))
 	if err != nil {
@@ -342,7 +342,7 @@ func TestService_GetUser_NotFound(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
 	missing, _ := uuid.NewV7()
-	_, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&reevev1.GetUserRequest{
+	_, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&spaltv1.GetUserRequest{
 		Id: missing.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -353,7 +353,7 @@ func TestService_GetUser_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
-	_, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&reevev1.GetUserRequest{
+	_, err := svc.GetUser(ctxAs(admin), connect.NewRequest(&spaltv1.GetUserRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -365,7 +365,7 @@ func TestService_GetUser_NonAdminDenied(t *testing.T) {
 	regular := mustCreateUser(t, q, "alice", "x", false)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	_, err := svc.GetUser(ctxAs(regular), connect.NewRequest(&reevev1.GetUserRequest{
+	_, err := svc.GetUser(ctxAs(regular), connect.NewRequest(&spaltv1.GetUserRequest{
 		Id: target.ID.String(),
 	}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -380,7 +380,7 @@ func TestService_UpdateUser_SetDisplayName(t *testing.T) {
 	target := mustCreateUser(t, q, "bob", "x", false)
 
 	dn := "Bobby"
-	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&reevev1.UpdateUserRequest{
+	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id:          target.ID.String(),
 		DisplayName: &dn,
 	}))
@@ -400,14 +400,14 @@ func TestService_UpdateUser_ClearDisplayName(t *testing.T) {
 
 	// Seed a display name first.
 	dn := "Bobby"
-	if _, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&reevev1.UpdateUserRequest{
+	if _, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id: target.ID.String(), DisplayName: &dn,
 	})); err != nil {
 		t.Fatalf("seed update: %v", err)
 	}
 
 	// Clear it.
-	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&reevev1.UpdateUserRequest{
+	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id:          target.ID.String(),
 		ClearFields: []string{"display_name"},
 	}))
@@ -426,7 +426,7 @@ func TestService_UpdateUser_PromoteToAdmin(t *testing.T) {
 	target := mustCreateUser(t, q, "bob", "x", false)
 
 	yes := true
-	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&reevev1.UpdateUserRequest{
+	resp, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id: target.ID.String(), IsAdmin: &yes,
 	}))
 	if err != nil {
@@ -444,7 +444,7 @@ func TestService_UpdateUser_NonAdminDenied(t *testing.T) {
 	target := mustCreateUser(t, q, "bob", "x", false)
 
 	dn := "x"
-	_, err := svc.UpdateUser(ctxAs(regular), connect.NewRequest(&reevev1.UpdateUserRequest{
+	_, err := svc.UpdateUser(ctxAs(regular), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id: target.ID.String(), DisplayName: &dn,
 	}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -455,7 +455,7 @@ func TestService_UpdateUser_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
-	_, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&reevev1.UpdateUserRequest{
+	_, err := svc.UpdateUser(ctxAs(admin), connect.NewRequest(&spaltv1.UpdateUserRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -469,7 +469,7 @@ func TestService_DeleteUser_Success(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	if _, err := svc.DeleteUser(ctxAs(admin), connect.NewRequest(&reevev1.DeleteUserRequest{
+	if _, err := svc.DeleteUser(ctxAs(admin), connect.NewRequest(&spaltv1.DeleteUserRequest{
 		Id: target.ID.String(),
 	})); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
@@ -491,7 +491,7 @@ func TestService_DeleteUser_CannotDeleteSelf(t *testing.T) {
 	svc, q := newTestSvc(t)
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
-	_, err := svc.DeleteUser(ctxAs(admin), connect.NewRequest(&reevev1.DeleteUserRequest{
+	_, err := svc.DeleteUser(ctxAs(admin), connect.NewRequest(&spaltv1.DeleteUserRequest{
 		Id: admin.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeFailedPrecondition)
@@ -503,7 +503,7 @@ func TestService_DeleteUser_NonAdminDenied(t *testing.T) {
 	regular := mustCreateUser(t, q, "alice", "x", false)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	_, err := svc.DeleteUser(ctxAs(regular), connect.NewRequest(&reevev1.DeleteUserRequest{
+	_, err := svc.DeleteUser(ctxAs(regular), connect.NewRequest(&spaltv1.DeleteUserRequest{
 		Id: target.ID.String(),
 	}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -517,13 +517,13 @@ func TestService_AdminResetPassword_Success(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 	target := mustCreateUser(t, q, "bob", "old", false)
 
-	if _, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&reevev1.AdminResetPasswordRequest{
+	if _, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&spaltv1.AdminResetPasswordRequest{
 		UserId: target.ID.String(), NewPassword: "newpass",
 	})); err != nil {
 		t.Fatalf("AdminResetPassword: %v", err)
 	}
 
-	if _, err := svc.Login(context.Background(), connect.NewRequest(&reevev1.LoginRequest{
+	if _, err := svc.Login(context.Background(), connect.NewRequest(&spaltv1.LoginRequest{
 		Username: "bob", Password: "newpass",
 	})); err != nil {
 		t.Errorf("login with new password failed: %v", err)
@@ -536,7 +536,7 @@ func TestService_AdminResetPassword_NonAdminDenied(t *testing.T) {
 	regular := mustCreateUser(t, q, "alice", "x", false)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	_, err := svc.AdminResetPassword(ctxAs(regular), connect.NewRequest(&reevev1.AdminResetPasswordRequest{
+	_, err := svc.AdminResetPassword(ctxAs(regular), connect.NewRequest(&spaltv1.AdminResetPasswordRequest{
 		UserId: target.ID.String(), NewPassword: "x",
 	}))
 	assertCode(t, err, connect.CodePermissionDenied)
@@ -548,7 +548,7 @@ func TestService_AdminResetPassword_MissingNew(t *testing.T) {
 	admin := mustCreateUser(t, q, "admin", "x", true)
 	target := mustCreateUser(t, q, "bob", "x", false)
 
-	_, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&reevev1.AdminResetPasswordRequest{
+	_, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&spaltv1.AdminResetPasswordRequest{
 		UserId: target.ID.String(), NewPassword: "",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -559,7 +559,7 @@ func TestService_AdminResetPassword_InvalidID(t *testing.T) {
 	svc, q := newTestSvc(t)
 	admin := mustCreateUser(t, q, "admin", "x", true)
 
-	_, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&reevev1.AdminResetPasswordRequest{
+	_, err := svc.AdminResetPassword(ctxAs(admin), connect.NewRequest(&spaltv1.AdminResetPasswordRequest{
 		UserId: "not-a-uuid", NewPassword: "x",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)

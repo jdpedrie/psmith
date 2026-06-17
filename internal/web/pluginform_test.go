@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"testing"
 
-	reevev1 "github.com/jdpedrie/reeve/gen/reeve/v1"
+	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
 )
 
-func sampleType() *reevev1.PluginType {
-	return &reevev1.PluginType{
+func sampleType() *spaltv1.PluginType {
+	return &spaltv1.PluginType{
 		Name: "demo",
-		ConfigFields: []*reevev1.ConfigField{
-			{Name: "label", Display: "Label", Type: reevev1.ConfigField_TEXT, DefaultJson: `"hi"`},
-			{Name: "count", Display: "Count", Type: reevev1.ConfigField_NUMBER, DefaultJson: `5`},
-			{Name: "on", Display: "On", Type: reevev1.ConfigField_BOOLEAN, DefaultJson: `true`},
-			{Name: "mode", Display: "Mode", Type: reevev1.ConfigField_SELECT, Options: []*reevev1.ConfigOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}},
-			{Name: "secret", Display: "Secret", Type: reevev1.ConfigField_TEXT, Global: true},
+		ConfigFields: []*spaltv1.ConfigField{
+			{Name: "label", Display: "Label", Type: spaltv1.ConfigField_TEXT, DefaultJson: `"hi"`},
+			{Name: "count", Display: "Count", Type: spaltv1.ConfigField_NUMBER, DefaultJson: `5`},
+			{Name: "on", Display: "On", Type: spaltv1.ConfigField_BOOLEAN, DefaultJson: `true`},
+			{Name: "mode", Display: "Mode", Type: spaltv1.ConfigField_SELECT, Options: []*spaltv1.ConfigOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}},
+			{Name: "secret", Display: "Secret", Type: spaltv1.ConfigField_TEXT, Global: true},
 		},
 	}
 }
@@ -89,10 +89,10 @@ func TestPluginHasForm(t *testing.T) {
 	if !pluginHasForm(sampleType()) {
 		t.Error("sample type should have a form")
 	}
-	if pluginHasForm(&reevev1.PluginType{Name: "component_builder", ConfigFields: sampleType().ConfigFields}) {
+	if pluginHasForm(&spaltv1.PluginType{Name: "component_builder", ConfigFields: sampleType().ConfigFields}) {
 		t.Error("custom-form plugin should fall back to raw JSON")
 	}
-	allGlobal := &reevev1.PluginType{Name: "x", ConfigFields: []*reevev1.ConfigField{{Name: "g", Global: true}}}
+	allGlobal := &spaltv1.PluginType{Name: "x", ConfigFields: []*spaltv1.ConfigField{{Name: "g", Global: true}}}
 	if pluginHasForm(allGlobal) {
 		t.Error("all-global plugin has no editable form")
 	}
