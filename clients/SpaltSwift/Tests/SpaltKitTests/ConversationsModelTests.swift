@@ -29,7 +29,27 @@ struct ConversationsModelTests {
         #expect(model.conversations.count == 2)
         #expect(model.loadError == nil)
         #expect(!model.isLoading)
-        #expect(model.profiles.count == 1)
+        // A fresh user is seeded with system profiles in addition to the one
+        // created here, so assert the created profile is present rather than a
+        // brittle exact count.
+        #expect(model.profiles.contains { $0.id == profile.id })
+    }
+
+    @Test("refresh awaits the wired ProfilesViewModel so profiles populate (production path)")
+    func refreshLoadsProfilesViaSharedVM() async throws {
+        let (client, _) = try await freshUserWithProfile(prefix: "convm-pvm")
+        // Wiring a ProfilesViewModel is the production path (RootView does
+        // this). refresh() must await its load — a fire-and-forget async let
+        // gets cancelled when refresh() returns, leaving profiles empty and
+        // the new-conversation button wrongly disabled.
+        let pvm = ProfilesViewModel(client: client)
+        let model = ConversationsModel(client: client, profiles: pvm)
+        #expect(model.profiles.isEmpty)
+
+        await model.refresh()
+
+        #expect(!model.profiles.isEmpty)
+        #expect(model.profiles.count == pvm.profiles.count)
     }
 
     @Test("refresh (allChats + recentlyCreated) yields a different order than recentlyUsed")

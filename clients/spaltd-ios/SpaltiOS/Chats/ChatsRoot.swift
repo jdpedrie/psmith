@@ -65,7 +65,12 @@ struct ChatsRoot: View {
                             Image(systemName: "plus")
                         }
                         .accessibilityLabel("New conversation")
-                        .disabled(convos.profiles.allSatisfy { $0.parentOnly })
+                        // Only disable when we positively know there are no
+                        // usable profiles. An empty list (not yet loaded)
+                        // must NOT disable it — `allSatisfy` is true for an
+                        // empty array, which used to wrongly grey this out
+                        // before profiles finished loading.
+                        .disabled(!convos.profiles.isEmpty && convos.profiles.allSatisfy { $0.parentOnly })
                     }
                 }
                 .sheet(isPresented: $showingNewConversation) {

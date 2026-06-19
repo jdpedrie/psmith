@@ -98,9 +98,16 @@ public final class ConversationsModel {
             // here directly.
             async let convos = client.conversations.list(order: listOrder, titleQuery: titleQuery)
             if let pvm = profilesVM {
-                async let _: () = pvm.load()
+                // Load both concurrently, but await the profile load too. A
+                // bare unawaited `async let` is cancelled when this scope
+                // exits, and because the conversation list often resolves
+                // instantly from cache, that cancellation landed before the
+                // profile fetch finished — leaving `profiles` empty and the
+                // new-conversation button wrongly disabled.
+                async let profileLoad: Void = pvm.load()
                 let cs = try await convos
                 self.conversations = cs.items
+                await profileLoad
             } else {
                 async let profs = client.profiles.list()
                 let (cs, ps) = try await (convos, profs)
