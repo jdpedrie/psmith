@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package psmith.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
+
+// DeviceToolsService is the per-connection handshake that lets a
+// client advertise which device-side tools it can fulfill. The
+// server-side `device_tools` plugin's `Tools()` is filtered to the
+// intersection of (server catalog) ∩ (this client's supported names),
+// so the model never sees a tool the connected device can't actually
+// run.
+//
+// Lifecycle: the client calls RegisterCapabilities once per
+// StreamSubscriber connection (re-fires on reconnect). The server
+// keeps the last-published set per (user, conversation) in-memory
+// and prefers the most-recently-registered client when a tool fires
+// — see docs/design/tools.md "Device tools."
+//
+// The actual tool dispatch goes through the existing chunk + HTTP-
+// response loop:
+//
+//   1. Model emits tool_use →
+//   2. `device_tools` plugin's ExecuteTool calls
+//      `devicetools.Broker.Invoke`, which emits a CHUNK_TYPE_DEVICE_TOOL_USE
+//      with payload JSON {call_id, tool_name, input}.
+//   3. Client receives the chunk, runs the EventKit / Files / etc.
+//      handler matching tool_name, POSTs the result to
+//      `/conversations/{id}/device-tools/{call_id}/respond`.
+//   4. Broker unblocks the waiting ExecuteTool, returns the result
+//      into the tool loop, supervisor emits the matching
+//      `tool_result` chunk on the wire as usual.
+service DeviceToolsService {
+  rpc RegisterCapabilities(RegisterCapabilitiesRequest)
+      returns (RegisterCapabilitiesResponse);
+
+  // ListSupportedTools returns the server's catalog — every device
+  // tool the server knows how to dispatch — paired with the JSON
+  // Schema each one expects on input. Clients render the schemas
+  // for documentation / debugging; production dispatch happens
+  // entirely via the chunk + HTTP-response loop.
+  rpc ListSupportedTools(ListSupportedToolsRequest)
+      returns (ListSupportedToolsResponse);
+
+  // ListDeviceToolCalls returns the calling user's recent device-
+  // tool calls — every Invoke the broker has logged via the
+  // completion hook. Paginated by `invoked_at` cursor; sorted
+  // recent-first. Drives Settings → Device tool activity on the
+  // client.
+  rpc ListDeviceToolCalls(ListDeviceToolCallsRequest)
+      returns (ListDeviceToolCallsResponse);
+}
+
+message RegisterCapabilitiesRequest {
+  // Names this client can fulfill RIGHT NOW (permission granted +
+  // OS version supports it + dependencies satisfied). The server
+  // intersects with its own catalog; unknown names are silently
+  // dropped (forward-compat: an old server safely ignores a new
+  // tool the client advertises).
+  repeated string supported_tool_names = 1;
+  // Free-form context the server may want for gating:
+  //   "os" → "iOS"
+  //   "os_version" → "26.5"
+  //   "app_version" → "0.1.0"
+  //   "device_model" → "iPhone 17 Pro"
+  // Used for "tool requires iOS 26+" guards in the server-side
+  // catalog. Empty values are dropped.
+  map<string, string> client_attributes = 2;
+}
+message RegisterCapabilitiesResponse {}
+
+message ListSupportedToolsRequest {}
+message ListSupportedToolsResponse {
+  repeated SupportedTool tools = 1;
+}
+
+message ListDeviceToolCallsRequest {
+  // Recent-first cursor — pass the `invoked_at` of the oldest
+  // entry from the previous page. Omit for the first page.
+  optional google.protobuf.Timestamp before = 1;
+  // Default 50; clamped server-side at 100.
+  optional int32 limit = 2;
+  // Optional conversation filter. When set, restricts results to
+  // calls that fired in that conversation. The server still
+  // checks ownership via the user gate, so an attacker can't
+  // probe other users' conversation ids.
+  optional string conversation_id = 3;
+}
+message ListDeviceToolCallsResponse {
+  repeated DeviceToolCall calls = 1;
+}
+
+message DeviceToolCall {
+  string id = 1;
+  string conversation_id = 2;
+  // The materialised assistant message that emitted the tool_use,
+  // when known. Optional because the message isn't always
+  // available when the call lands (the broker logs at completion;
+  // the supervisor materialises after the round). Future audit
+  // backfill could populate this from the OnAssistantMaterialized
+  // hook.
+  optional string message_id = 3;
+  string tool_name = 4;
+  // Raw JSON the model sent + the client returned. Empty on the
+  // output side when status != "ok".
+  bytes input_json = 5;
+  bytes output_json = 6;
+  // "ok" | "error" | "timeout"
+  string status = 7;
+  string error_message = 8;
+  google.protobuf.Timestamp invoked_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
+}
+
+message SupportedTool {
+  // Stable identifier — the wire-name the model calls and the
+  // client's handler key. Never renamed.
+  string name = 1;
+  // Human-readable label for the settings UI.
+  string display_name = 2;
+  // One-paragraph description rendered next to the per-tool
+  // enable toggle.
+  string description = 3;
+  // JSON Schema for the tool's input. Mirrors the schema the
+  // server ships to the model, so the client can pre-validate.
+  bytes input_schema = 4;
+  // Logical grouping for the settings UI (e.g. "Calendar",
+  // "Obsidian", "Files"). Stable; used as a section header.
+  string category = 5;
+  // Permissions the tool needs at runtime. Free-form strings
+  // ("calendar", "reminders", "contacts", "health.steps",
+  // "files.bookmark:obsidian_vault"). Clients use these to
+  // pre-prompt for OS access and to render "Calendar access
+  // required" badges on the settings UI.
+  repeated string required_permissions = 6;
+}

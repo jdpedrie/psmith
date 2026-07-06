@@ -10,16 +10,16 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/conversations"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/modelproviders"
-	_ "github.com/jdpedrie/spalt/internal/providers/anthropic"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/conversations"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/modelproviders"
+	_ "github.com/jdpedrie/psmith/internal/providers/anthropic"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 func TestAbbrevTokens(t *testing.T) {
@@ -35,7 +35,7 @@ func TestAbbrevTokens(t *testing.T) {
 func TestCostBucket(t *testing.T) {
 	t.Parallel()
 	bk := func(out float64) string {
-		b, _ := costBucket(&spaltv1.ModelPricing{OutputPerMillionTokens: &out})
+		b, _ := costBucket(&psmithv1.ModelPricing{OutputPerMillionTokens: &out})
 		return b
 	}
 	for out, want := range map[float64]string{1: "$", 5: "$$", 15: "$$$", 75: "$$$$"} {
@@ -43,7 +43,7 @@ func TestCostBucket(t *testing.T) {
 			t.Errorf("costBucket(out=%v) = %q want %q", out, got, want)
 		}
 	}
-	if b, _ := costBucket(&spaltv1.ModelPricing{}); b != "" {
+	if b, _ := costBucket(&psmithv1.ModelPricing{}); b != "" {
 		t.Errorf("costBucket(empty) = %q want empty", b)
 	}
 }
@@ -100,7 +100,7 @@ func TestModelPicker_RendersGroupedAndSelects(t *testing.T) {
 	}
 
 	// The conversation now stores that default.
-	got, err := convos.GetConversation(userCtx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: fx.convID.String()}))
+	got, err := convos.GetConversation(userCtx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: fx.convID.String()}))
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}

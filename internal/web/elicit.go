@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/elicit"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/elicit"
 )
 
 type elicitField struct {
@@ -71,7 +71,7 @@ func (h *Handler) handleElicitRespond(w http.ResponseWriter, r *http.Request) {
 	eid := r.PathValue("eid")
 
 	// Ownership check (cross-user conversations return NotFound).
-	if _, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID})); err != nil {
+	if _, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID})); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

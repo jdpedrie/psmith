@@ -10,10 +10,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/fakellm"
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	_ "github.com/jdpedrie/spalt/internal/providers/anthropic" // registers the real driver
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/fakellm"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	_ "github.com/jdpedrie/psmith/internal/providers/anthropic" // registers the real driver
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // TestSendMessage_E2E_AnthropicViaFakeLLM exercises the full happy path
@@ -38,7 +38,7 @@ func TestSendMessage_E2E_AnthropicViaFakeLLM(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,

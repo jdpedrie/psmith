@@ -1,6 +1,6 @@
 # The fake LLM
 
-`fakellm` (under `fakellm/`) is a test harness that stands in for an upstream LLM HTTP API. It runs an `httptest.Server` that speaks the three wire formats Spalt's drivers consume, so a test can drive a real conversation end to end without reaching a real provider, spending tokens, or depending on the network. The point is that the wire parsing actually happens: a test exercises the real SDK, the real driver, the supervisor, and the database path, with only the provider's HTTP endpoint faked. It is the right tool when a test needs the streaming, retry, or tool-loop machinery to run for real; reach for a stubbed driver only when you explicitly want to bypass wire parsing.
+`fakellm` (under `fakellm/`) is a test harness that stands in for an upstream LLM HTTP API. It runs an `httptest.Server` that speaks the three wire formats Psmith's drivers consume, so a test can drive a real conversation end to end without reaching a real provider, spending tokens, or depending on the network. The point is that the wire parsing actually happens: a test exercises the real SDK, the real driver, the supervisor, and the database path, with only the provider's HTTP endpoint faked. It is the right tool when a test needs the streaming, retry, or tool-loop machinery to run for real; reach for a stubbed driver only when you explicitly want to bypass wire parsing.
 
 ## What it speaks
 

@@ -3,7 +3,7 @@ package conversations
 import (
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 func TestHashWireMessages_StableForSameInputs(t *testing.T) {

@@ -95,7 +95,7 @@ func loginPage(errMsg string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<main class=\"auth\"><form class=\"card\" method=\"post\" action=\"/login\"><h1 class=\"brand\">Spalt</h1>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<main class=\"auth\"><form class=\"card\" method=\"post\" action=\"/login\"><h1 class=\"brand\">Psmith</h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -124,7 +124,7 @@ func loginPage(errMsg string) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("Sign in — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("Sign in — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -153,7 +153,7 @@ func sidebar(convos []convoVM) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<aside class=\"sidebar\"><header class=\"sidebar-head\"><a class=\"brand\" href=\"/chats\">Spalt</a></header><a class=\"new-chat\" href=\"/new\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12h14\"></path></svg> New chat</a><nav class=\"convo-list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<aside class=\"sidebar\"><header class=\"sidebar-head\"><a class=\"brand\" href=\"/chats\">Psmith</a></header><a class=\"new-chat\" href=\"/new\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12h14\"></path></svg> New chat</a><nav class=\"convo-list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -314,7 +314,7 @@ func chatsPage(convos []convoVM) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("Chats — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("Chats — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -434,7 +434,7 @@ func newConversationPage(convos []convoVM, profiles []profileVM) templ.Component
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("New chat — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var16), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("New chat — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var16), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -491,7 +491,7 @@ func settingsShell(title string) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(title+" — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var21), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(title+" — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var21), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3459,7 +3459,7 @@ func editMessagePage(convID, mid, content string) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("Edit message — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var158), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("Edit message — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var158), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3573,7 +3573,7 @@ func composer(convID string, current pickerModelVM) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 283, "\"><div class=\"composer-box\"><label class=\"composer-attach\" title=\"Attach image\" aria-label=\"Attach image\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48\"></path></svg> <input id=\"composer-file\" type=\"file\" name=\"file\" accept=\"image/*\"></label> <textarea name=\"message\" rows=\"1\" placeholder=\"Message Spalt…\"></textarea> <button class=\"composer-send\" type=\"submit\" title=\"Send\" aria-label=\"Send\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"></path></svg></button></div><div class=\"composer-tools\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 283, "\"><div class=\"composer-box\"><label class=\"composer-attach\" title=\"Attach image\" aria-label=\"Attach image\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48\"></path></svg> <input id=\"composer-file\" type=\"file\" name=\"file\" accept=\"image/*\"></label> <textarea name=\"message\" rows=\"1\" placeholder=\"Message Psmith…\"></textarea> <button class=\"composer-send\" type=\"submit\" title=\"Send\" aria-label=\"Send\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"></path></svg></button></div><div class=\"composer-tools\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3801,7 +3801,7 @@ func conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pick
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(conv.Title+" — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var174), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(conv.Title+" — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var174), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5985,7 +5985,7 @@ func modelPickerPage(data pickerData) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("Model — Spalt").Render(templ.WithChildren(ctx, templ_7745c5c3_Var281), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("Model — Psmith").Render(templ.WithChildren(ctx, templ_7745c5c3_Var281), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

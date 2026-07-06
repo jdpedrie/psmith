@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // modelsHandler mounts /v1beta/models with a canned listModelsResponse.

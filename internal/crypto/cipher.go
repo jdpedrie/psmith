@@ -1,5 +1,5 @@
 // Package crypto wraps the (deliberately small) set of symmetric
-// primitives Spalt uses to encrypt secrets at rest — provider API
+// primitives Psmith uses to encrypt secrets at rest — provider API
 // keys, plugin credentials, anything that lives in a `*.config` JSONB
 // column today. The package is intentionally narrow: AES-256-GCM with
 // a single master key, no per-row key derivation, no envelope wrapping.
@@ -28,14 +28,14 @@ const KeySize = 32
 // EnvKeyVar names the environment variable that must hold the
 // base64-encoded 32-byte master key in production. Naming kept short
 // so deploy configs read cleanly.
-const EnvKeyVar = "SPALT_MASTER_KEY"
+const EnvKeyVar = "PSMITH_MASTER_KEY"
 
 // EnvDevAutoKey names the environment variable that, when set to "1",
 // allows LoadKey to mint a one-shot ephemeral key on the fly. ONLY for
 // local dev — every restart generates a fresh key, so any data
 // encrypted under the previous key becomes unreadable. The server logs
 // a loud warning when this branch fires.
-const EnvDevAutoKey = "SPALT_DEV_AUTOKEY"
+const EnvDevAutoKey = "PSMITH_DEV_AUTOKEY"
 
 // Cipher is the abstraction services depend on for "give me back the
 // encrypted form / give me back the plaintext form". Two production
@@ -143,8 +143,8 @@ var ErrInvalidCiphertext = errors.New("crypto: ciphertext too short")
 //
 // Resolution order:
 //
-//  1. SPALT_MASTER_KEY set → base64-decode, validate length, return.
-//  2. SPALT_DEV_AUTOKEY=1 → mint a fresh 32 bytes, return ephemeral=true.
+//  1. PSMITH_MASTER_KEY set → base64-decode, validate length, return.
+//  2. PSMITH_DEV_AUTOKEY=1 → mint a fresh 32 bytes, return ephemeral=true.
 //  3. Otherwise → return (nil, false, nil). Caller decides whether to
 //     proceed with the Nop cipher or refuse to start.
 func LoadKey() (key []byte, ephemeral bool, err error) {
@@ -169,7 +169,7 @@ func LoadKey() (key []byte, ephemeral bool, err error) {
 }
 
 // GenerateKeyB64 mints a fresh 32-byte master key and returns it as
-// base64 — the format SPALT_MASTER_KEY expects. Used by `spalt genkey`
+// base64 — the format PSMITH_MASTER_KEY expects. Used by `psmith genkey`
 // and by tests that need a real key without going through env-var
 // indirection.
 func GenerateKeyB64() (string, error) {

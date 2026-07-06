@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // geminiModelInfo is the AI-Studio /models response shape, trimmed to fields

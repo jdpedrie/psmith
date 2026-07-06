@@ -1,6 +1,6 @@
 -- name: GetUserEmbedderConfig :one
 -- Returns the user's embedder config row, if any. pgx ErrNoRows on
--- missing — callers fall back to the daemon's SPALT_EMBEDDER env var
+-- missing — callers fall back to the daemon's PSMITH_EMBEDDER env var
 -- (server-default mode).
 SELECT * FROM user_embedder_config
 WHERE user_id = $1;
@@ -28,5 +28,5 @@ DELETE FROM user_embedder_config WHERE user_id = $1;
 -- name: ListUserEmbedderConfigs :many
 -- The worker enumerates this to know which users have configured
 -- embedders. Returning all rows in one shot is fine — we'd never
--- have more than a handful per Spalt instance.
+-- have more than a handful per Psmith instance.
 SELECT * FROM user_embedder_config WHERE enabled = TRUE ORDER BY user_id;

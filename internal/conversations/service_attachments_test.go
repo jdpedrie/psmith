@@ -7,9 +7,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // TestSendMessage_AttachmentBinding verifies that attachment_file_ids
@@ -41,7 +41,7 @@ func TestSendMessage_AttachmentBinding(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctx, connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctx, connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId:    f.conv.ID.String(),
 		Content:           "look at these",
 		ProviderId:        &pid,
@@ -108,7 +108,7 @@ func TestSendMessage_AttachmentNotOwned(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId:    f.conv.ID.String(),
 		Content:           "evil",
 		ProviderId:        &pid,

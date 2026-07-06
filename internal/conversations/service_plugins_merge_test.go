@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // makeMergeProfile creates a profile via raw query — focused on the merge

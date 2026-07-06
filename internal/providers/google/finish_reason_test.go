@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // Hard-failure finish reasons (system-level failures where retry chrome

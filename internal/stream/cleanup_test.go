@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // TestPruneFinalizedStreamChunks_FinalizedRunsPruned uses retention=0

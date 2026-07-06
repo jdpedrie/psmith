@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/internal/devicetools"
-	"github.com/jdpedrie/spalt/internal/elicit"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/elicit"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // maxToolRounds caps how many tool-use → tool-result → continued-stream
@@ -115,7 +115,7 @@ func makeToolLoopSendFunc(
 	activeContextID uuid.UUID,
 	// searcher, when non-nil, is attached to the dispatch context
 	// so the memory plugin can answer search_history calls.
-	// SPALT_EMBEDDER unset → searcher is nil → search_history
+	// PSMITH_EMBEDDER unset → searcher is nil → search_history
 	// surfaces a clean "search not configured" error.
 	searcher plugins.Searcher,
 	// deviceToolBroker + deviceToolRegistry power the `app_tools`
@@ -415,7 +415,7 @@ type roundCapture struct {
 	thinking []anthropicThinkingBlock
 }
 
-// anthropicThinkingBlock mirrors the JSONB shape Spalt stores on
+// anthropicThinkingBlock mirrors the JSONB shape Psmith stores on
 // messages.thinking for signed-thinking turns.
 type anthropicThinkingBlock struct {
 	Type      string `json:"type"`

@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/elicit"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/elicit"
 )
 
 func (s *Server) registerModelTools() {
@@ -25,13 +25,13 @@ func (s *Server) registerModelTools() {
 	)
 	s.register(
 		"list_provider_types",
-		"List every model-provider driver compiled into this Spalt build (anthropic, openai, google, openrouter, openai-compatible, etc.). The user can configure one user_model_provider per `provider_type`. Use this to advise the user on what providers are available before they've added any.",
+		"List every model-provider driver compiled into this Psmith build (anthropic, openai, google, openrouter, openai-compatible, etc.). The user can configure one user_model_provider per `provider_type`. Use this to advise the user on what providers are available before they've added any.",
 		`{"type":"object","properties":{},"additionalProperties":false}`,
 		s.toolListProviderTypes,
 	)
 	s.register(
 		"list_provider_templates",
-		"List the curated catalog of common providers Spalt knows about (Anthropic, OpenAI, Google, Groq, Together, Fireworks, etc.) with their driver type, default API base URL, and conventional API-key env var. Use this when suggesting a provider to add: the user still needs to create the row themselves through the Settings UI (assistants cannot enter API keys), but knowing the template helps the user recognize what they're picking.",
+		"List the curated catalog of common providers Psmith knows about (Anthropic, OpenAI, Google, Groq, Together, Fireworks, etc.) with their driver type, default API base URL, and conventional API-key env var. Use this when suggesting a provider to add: the user still needs to create the row themselves through the Settings UI (assistants cannot enter API keys), but knowing the template helps the user recognize what they're picking.",
 		`{"type":"object","properties":{},"additionalProperties":false}`,
 		s.toolListProviderTemplates,
 	)
@@ -82,7 +82,7 @@ func (s *Server) registerModelTools() {
 func (s *Server) toolListProviders(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
 	resp, err := s.modelProvidersSvc.ListUserModelProviders(
 		ctx,
-		connect.NewRequest(&spaltv1.ListUserModelProvidersRequest{}),
+		connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -97,7 +97,7 @@ func (s *Server) toolListProviders(ctx context.Context, _ json.RawMessage) (Tool
 func (s *Server) toolListModels(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
 	resp, err := s.modelProvidersSvc.ListAllUserModels(
 		ctx,
-		connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}),
+		connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -118,7 +118,7 @@ func (s *Server) toolListModels(ctx context.Context, _ json.RawMessage) (ToolRes
 func (s *Server) toolListProviderTypes(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
 	resp, err := s.modelProvidersSvc.ListProviderTypes(
 		ctx,
-		connect.NewRequest(&spaltv1.ListProviderTypesRequest{}),
+		connect.NewRequest(&psmithv1.ListProviderTypesRequest{}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -139,7 +139,7 @@ func (s *Server) toolListProviderTypes(ctx context.Context, _ json.RawMessage) (
 func (s *Server) toolListProviderTemplates(ctx context.Context, _ json.RawMessage) (ToolResult, error) {
 	resp, err := s.modelProvidersSvc.ListProviderTemplates(
 		ctx,
-		connect.NewRequest(&spaltv1.ListProviderTemplatesRequest{}),
+		connect.NewRequest(&psmithv1.ListProviderTemplatesRequest{}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -184,7 +184,7 @@ func (s *Server) toolDiscoverModels(ctx context.Context, args json.RawMessage) (
 	}
 	resp, err := s.modelProvidersSvc.DiscoverModels(
 		ctx,
-		connect.NewRequest(&spaltv1.DiscoverModelsRequest{UserModelProviderId: in.UserModelProviderID}),
+		connect.NewRequest(&psmithv1.DiscoverModelsRequest{UserModelProviderId: in.UserModelProviderID}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -237,7 +237,7 @@ func (s *Server) toolEnableModels(ctx context.Context, args json.RawMessage) (To
 	}
 	resp, err := s.modelProvidersSvc.EnableModels(
 		ctx,
-		connect.NewRequest(&spaltv1.EnableModelsRequest{
+		connect.NewRequest(&psmithv1.EnableModelsRequest{
 			UserModelProviderId: in.UserModelProviderID,
 			ModelIds:            in.ModelIDs,
 		}),
@@ -270,7 +270,7 @@ func (s *Server) toolToggleFavorite(ctx context.Context, args json.RawMessage) (
 	}
 	resp, err := s.modelProvidersSvc.ToggleUserModelFavorite(
 		ctx,
-		connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+		connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 			UserModelProviderId: in.UserModelProviderID,
 			ModelId:             in.ModelID,
 			Favorite:            in.Favorite,
@@ -298,7 +298,7 @@ func (s *Server) toolTestProvider(ctx context.Context, args json.RawMessage) (To
 	}
 	resp, err := s.modelProvidersSvc.TestUserModelProvider(
 		ctx,
-		connect.NewRequest(&spaltv1.TestUserModelProviderRequest{UserModelProviderId: in.UserModelProviderID}),
+		connect.NewRequest(&psmithv1.TestUserModelProviderRequest{UserModelProviderId: in.UserModelProviderID}),
 	)
 	if err != nil {
 		return errorResult(err.Error()), nil
@@ -353,7 +353,7 @@ func (s *Server) toolCreateProviderWithElicit(ctx context.Context, args json.Raw
 	schema := []byte(`{"type":"object","required":["api_key"],"properties":{"api_key":{"type":"string","format":"password","description":"API key for ` + in.Type + `"}},"additionalProperties":false}`)
 
 	resp, err := ec.Elicit(ctx, elicit.Request{
-		Message:         "Paste your API key for " + in.Label + ". It's stored encrypted on this Spalt instance and never sent to the LLM provider.",
+		Message:         "Paste your API key for " + in.Label + ". It's stored encrypted on this Psmith instance and never sent to the LLM provider.",
 		RequestedSchema: schema,
 	})
 	if err != nil {
@@ -388,7 +388,7 @@ func (s *Server) toolCreateProviderWithElicit(ctx context.Context, args json.Raw
 		return errorResult("marshal config: " + err.Error()), nil
 	}
 
-	created, err := s.modelProvidersSvc.CreateUserModelProvider(ctx, connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	created, err := s.modelProvidersSvc.CreateUserModelProvider(ctx, connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   in.Type,
 		Label:  in.Label,
 		Config: configBytes,
@@ -406,7 +406,7 @@ func (s *Server) toolCreateProviderWithElicit(ctx context.Context, args json.Raw
 // providerSummary keeps the secret-bearing config bytes off the wire.
 // The assistant only needs the id, driver type, and label to reference
 // a provider in subsequent tool calls.
-func providerSummary(p *spaltv1.UserModelProvider) map[string]any {
+func providerSummary(p *psmithv1.UserModelProvider) map[string]any {
 	return map[string]any{
 		"id":    p.GetId(),
 		"type":  p.GetType(),
@@ -418,7 +418,7 @@ func providerSummary(p *spaltv1.UserModelProvider) map[string]any {
 // assistant uses when picking a model. Excludes snapshotted pricing
 // and the per-model CallSettings — both noisy and not load-bearing
 // for the typical "which model should I use" decision.
-func userModelSummary(m *spaltv1.UserModel) map[string]any {
+func userModelSummary(m *psmithv1.UserModel) map[string]any {
 	out := map[string]any{
 		"user_model_provider_id": m.GetUserModelProviderId(),
 		"model_id":               m.GetModelId(),

@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 type contextRowVM struct {
@@ -18,14 +18,14 @@ type contextRowVM struct {
 
 func (h *Handler) handleContexts(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	activeID := getResp.Msg.GetActiveContext().GetId()
 
-	listResp, err := h.convos.ListContexts(r.Context(), connect.NewRequest(&spaltv1.ListContextsRequest{ConversationId: convID}))
+	listResp, err := h.convos.ListContexts(r.Context(), connect.NewRequest(&psmithv1.ListContextsRequest{ConversationId: convID}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -53,12 +53,12 @@ func (h *Handler) handleContexts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleContextView(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	ctxID := r.PathValue("cid")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&spaltv1.ListMessagesRequest{ContextId: ctxID}))
+	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&psmithv1.ListMessagesRequest{ContextId: ctxID}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -9,16 +9,16 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/devicetools"
-	"github.com/jdpedrie/spalt/internal/store"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // DeviceToolsService implements the connect handler for the
 // per-connection capability handshake. Lives on the conversations
 // Service so it shares the broker + registry; constructed via
-// `s.DeviceToolsService()` and mounted by cmd/spaltd.
+// `s.DeviceToolsService()` and mounted by cmd/psmithd.
 //
 // Two RPCs:
 //
@@ -51,8 +51,8 @@ type deviceToolsServiceHandler struct {
 }
 
 // DeviceToolsService returns a Connect handler suitable for
-// spaltv1connect.NewDeviceToolsServiceHandler. Mounted by
-// cmd/spaltd alongside the other service handlers.
+// psmithv1connect.NewDeviceToolsServiceHandler. Mounted by
+// cmd/psmithd alongside the other service handlers.
 func (s *Service) DeviceToolsService() *deviceToolsServiceHandler {
 	return &deviceToolsServiceHandler{
 		broker:   s.deviceToolBroker,
@@ -63,8 +63,8 @@ func (s *Service) DeviceToolsService() *deviceToolsServiceHandler {
 
 func (h *deviceToolsServiceHandler) RegisterCapabilities(
 	ctx context.Context,
-	req *connect.Request[spaltv1.RegisterCapabilitiesRequest],
-) (*connect.Response[spaltv1.RegisterCapabilitiesResponse], error) {
+	req *connect.Request[psmithv1.RegisterCapabilitiesRequest],
+) (*connect.Response[psmithv1.RegisterCapabilitiesResponse], error) {
 	user, ok := auth.FromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("not authenticated"))
@@ -81,17 +81,17 @@ func (h *deviceToolsServiceHandler) RegisterCapabilities(
 	// per-call broker binding's SupportedTools.
 	h.registry.Register(user.ID, uuid.Nil,
 		req.Msg.SupportedToolNames, req.Msg.ClientAttributes)
-	return connect.NewResponse(&spaltv1.RegisterCapabilitiesResponse{}), nil
+	return connect.NewResponse(&psmithv1.RegisterCapabilitiesResponse{}), nil
 }
 
 func (h *deviceToolsServiceHandler) ListSupportedTools(
 	_ context.Context,
-	_ *connect.Request[spaltv1.ListSupportedToolsRequest],
-) (*connect.Response[spaltv1.ListSupportedToolsResponse], error) {
+	_ *connect.Request[psmithv1.ListSupportedToolsRequest],
+) (*connect.Response[psmithv1.ListSupportedToolsResponse], error) {
 	tools := devicetools.All()
-	out := make([]*spaltv1.SupportedTool, 0, len(tools))
+	out := make([]*psmithv1.SupportedTool, 0, len(tools))
 	for _, t := range tools {
-		out = append(out, &spaltv1.SupportedTool{
+		out = append(out, &psmithv1.SupportedTool{
 			Name:                t.Name,
 			DisplayName:         t.DisplayName,
 			Description:         t.Description,
@@ -100,13 +100,13 @@ func (h *deviceToolsServiceHandler) ListSupportedTools(
 			RequiredPermissions: append([]string(nil), t.RequiredPermissions...),
 		})
 	}
-	return connect.NewResponse(&spaltv1.ListSupportedToolsResponse{Tools: out}), nil
+	return connect.NewResponse(&psmithv1.ListSupportedToolsResponse{Tools: out}), nil
 }
 
 func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 	ctx context.Context,
-	req *connect.Request[spaltv1.ListDeviceToolCallsRequest],
-) (*connect.Response[spaltv1.ListDeviceToolCallsResponse], error) {
+	req *connect.Request[psmithv1.ListDeviceToolCallsRequest],
+) (*connect.Response[psmithv1.ListDeviceToolCallsResponse], error) {
 	user, ok := auth.FromContext(ctx)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("not authenticated"))
@@ -153,7 +153,7 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		return connect.NewResponse(&spaltv1.ListDeviceToolCallsResponse{
+		return connect.NewResponse(&psmithv1.ListDeviceToolCallsResponse{
 			Calls: callsToProto(rows),
 		}), nil
 	}
@@ -166,15 +166,15 @@ func (h *deviceToolsServiceHandler) ListDeviceToolCalls(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.ListDeviceToolCallsResponse{
+	return connect.NewResponse(&psmithv1.ListDeviceToolCallsResponse{
 		Calls: callsToProto(rows),
 	}), nil
 }
 
-func callsToProto(rows []store.DeviceToolCall) []*spaltv1.DeviceToolCall {
-	out := make([]*spaltv1.DeviceToolCall, 0, len(rows))
+func callsToProto(rows []store.DeviceToolCall) []*psmithv1.DeviceToolCall {
+	out := make([]*psmithv1.DeviceToolCall, 0, len(rows))
 	for _, r := range rows {
-		c := &spaltv1.DeviceToolCall{
+		c := &psmithv1.DeviceToolCall{
 			Id:             r.ID.String(),
 			ConversationId: r.ConversationID.String(),
 			ToolName:       r.ToolName,

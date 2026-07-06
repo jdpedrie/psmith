@@ -1,10 +1,10 @@
-// Package mcpserver exposes a curated subset of Spalt's operations
+// Package mcpserver exposes a curated subset of Psmith's operations
 // (profile management, plugin pipeline editing, conversation reads,
 // model + provider reads) as Model Context Protocol (MCP) tools served
-// over HTTP. The intended use is dogfooding through Spalt's own `mcp`
+// over HTTP. The intended use is dogfooding through Psmith's own `mcp`
 // plugin so an assistant attached to a profile can read and edit other
 // profiles, set up plugin pipelines, and inspect conversation state on
-// the same Spalt instance.
+// the same Psmith instance.
 //
 // The server speaks MCP protocol version 2024-11-05 — the version
 // `plugins/mcp.go` already negotiates — so the two are dogfood
@@ -21,7 +21,7 @@ import (
 )
 
 // ProtocolVersion advertised in the initialize response. Matches the
-// version the spaltd-side mcp client speaks (plugins/mcp.go).
+// version the psmithd-side mcp client speaks (plugins/mcp.go).
 const ProtocolVersion = "2024-11-05"
 
 // JSON-RPC 2.0 envelope. `id` is `string | number` per spec — we keep

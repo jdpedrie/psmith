@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // Quirks is the per-provider behavior overlay for the openai-compatible

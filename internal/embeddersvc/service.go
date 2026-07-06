@@ -23,14 +23,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/embeddings"
-	"github.com/jdpedrie/spalt/internal/store"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/embeddings"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
-// Service implements spaltv1connect.EmbedderServiceHandler.
+// Service implements psmithv1connect.EmbedderServiceHandler.
 // Stateless beyond the cache-invalidation hook; constructed once at
 // server boot and shared across requests.
 type Service struct {
@@ -78,25 +78,25 @@ type nonSecretConfig struct {
 
 // --- GetEmbedderConfig ---
 
-func (s *Service) GetEmbedderConfig(ctx context.Context, _ *connect.Request[spaltv1.GetEmbedderConfigRequest]) (*connect.Response[spaltv1.GetEmbedderConfigResponse], error) {
+func (s *Service) GetEmbedderConfig(ctx context.Context, _ *connect.Request[psmithv1.GetEmbedderConfigRequest]) (*connect.Response[psmithv1.GetEmbedderConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	row, err := s.queries.GetUserEmbedderConfig(ctx, user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return connect.NewResponse(&spaltv1.GetEmbedderConfigResponse{
+			return connect.NewResponse(&psmithv1.GetEmbedderConfigResponse{
 				Config: defaultProtoConfig(),
 			}), nil
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.GetEmbedderConfigResponse{
+	return connect.NewResponse(&psmithv1.GetEmbedderConfigResponse{
 		Config: s.rowToProto(row),
 	}), nil
 }
 
 // --- UpdateEmbedderConfig ---
 
-func (s *Service) UpdateEmbedderConfig(ctx context.Context, req *connect.Request[spaltv1.UpdateEmbedderConfigRequest]) (*connect.Response[spaltv1.UpdateEmbedderConfigResponse], error) {
+func (s *Service) UpdateEmbedderConfig(ctx context.Context, req *connect.Request[psmithv1.UpdateEmbedderConfigRequest]) (*connect.Response[psmithv1.UpdateEmbedderConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 
 	// Load existing row so we can sparse-merge.
@@ -189,14 +189,14 @@ func (s *Service) UpdateEmbedderConfig(ctx context.Context, req *connect.Request
 		s.invalidateCache(user.ID)
 	}
 
-	return connect.NewResponse(&spaltv1.UpdateEmbedderConfigResponse{
+	return connect.NewResponse(&psmithv1.UpdateEmbedderConfigResponse{
 		Config: s.rowToProto(row),
 	}), nil
 }
 
 // --- DeleteEmbedderConfig ---
 
-func (s *Service) DeleteEmbedderConfig(ctx context.Context, _ *connect.Request[spaltv1.DeleteEmbedderConfigRequest]) (*connect.Response[spaltv1.DeleteEmbedderConfigResponse], error) {
+func (s *Service) DeleteEmbedderConfig(ctx context.Context, _ *connect.Request[psmithv1.DeleteEmbedderConfigRequest]) (*connect.Response[psmithv1.DeleteEmbedderConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	if err := s.queries.DeleteUserEmbedderConfig(ctx, user.ID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -204,7 +204,7 @@ func (s *Service) DeleteEmbedderConfig(ctx context.Context, _ *connect.Request[s
 	if s.invalidateCache != nil {
 		s.invalidateCache(user.ID)
 	}
-	return connect.NewResponse(&spaltv1.DeleteEmbedderConfigResponse{}), nil
+	return connect.NewResponse(&psmithv1.DeleteEmbedderConfigResponse{}), nil
 }
 
 // --- TestEmbedderConfig ---
@@ -213,12 +213,12 @@ func (s *Service) DeleteEmbedderConfig(ctx context.Context, _ *connect.Request[s
 // endpoint and reports back. Returns ok=false (with the error in
 // error_message) on auth / network failure rather than a Connect
 // error, so the settings UI can render the result inline.
-func (s *Service) TestEmbedderConfig(ctx context.Context, _ *connect.Request[spaltv1.TestEmbedderConfigRequest]) (*connect.Response[spaltv1.TestEmbedderConfigResponse], error) {
+func (s *Service) TestEmbedderConfig(ctx context.Context, _ *connect.Request[psmithv1.TestEmbedderConfigRequest]) (*connect.Response[psmithv1.TestEmbedderConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	row, err := s.queries.GetUserEmbedderConfig(ctx, user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return connect.NewResponse(&spaltv1.TestEmbedderConfigResponse{
+			return connect.NewResponse(&psmithv1.TestEmbedderConfigResponse{
 				Ok: false, ErrorMessage: "no embedder config saved yet",
 			}), nil
 		}
@@ -227,7 +227,7 @@ func (s *Service) TestEmbedderConfig(ctx context.Context, _ *connect.Request[spa
 
 	embedder, buildErr := buildEmbedderFromRow(s.cipher, row)
 	if buildErr != nil {
-		return connect.NewResponse(&spaltv1.TestEmbedderConfigResponse{
+		return connect.NewResponse(&psmithv1.TestEmbedderConfigResponse{
 			Ok: false, ErrorMessage: buildErr.Error(),
 		}), nil
 	}
@@ -238,26 +238,26 @@ func (s *Service) TestEmbedderConfig(ctx context.Context, _ *connect.Request[spa
 	_, err = embedder.Embed(probeCtx, []string{"ping"})
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
-		return connect.NewResponse(&spaltv1.TestEmbedderConfigResponse{
+		return connect.NewResponse(&psmithv1.TestEmbedderConfigResponse{
 			Ok: false, ErrorMessage: err.Error(), LatencyMs: latency,
 		}), nil
 	}
-	return connect.NewResponse(&spaltv1.TestEmbedderConfigResponse{
+	return connect.NewResponse(&psmithv1.TestEmbedderConfigResponse{
 		Ok: true, LatencyMs: latency,
 	}), nil
 }
 
 // --- ListEmbedderTypes ---
 
-func (s *Service) ListEmbedderTypes(_ context.Context, _ *connect.Request[spaltv1.ListEmbedderTypesRequest]) (*connect.Response[spaltv1.ListEmbedderTypesResponse], error) {
+func (s *Service) ListEmbedderTypes(_ context.Context, _ *connect.Request[psmithv1.ListEmbedderTypesRequest]) (*connect.Response[psmithv1.ListEmbedderTypesResponse], error) {
 	names := embeddings.Names()
 	sort.Strings(names)
-	return connect.NewResponse(&spaltv1.ListEmbedderTypesResponse{Types: names}), nil
+	return connect.NewResponse(&psmithv1.ListEmbedderTypesResponse{Types: names}), nil
 }
 
 // --- GetEmbedderStats ---
 
-func (s *Service) GetEmbedderStats(ctx context.Context, _ *connect.Request[spaltv1.GetEmbedderStatsRequest]) (*connect.Response[spaltv1.GetEmbedderStatsResponse], error) {
+func (s *Service) GetEmbedderStats(ctx context.Context, _ *connect.Request[psmithv1.GetEmbedderStatsRequest]) (*connect.Response[psmithv1.GetEmbedderStatsResponse], error) {
 	user := auth.MustFromContext(ctx)
 	unembedded, err := s.queries.CountUnembeddedMessages(ctx, user.ID)
 	if err != nil {
@@ -265,14 +265,14 @@ func (s *Service) GetEmbedderStats(ctx context.Context, _ *connect.Request[spalt
 	}
 
 	// Worker is active when the user has a row marked enabled.
-	// (The cmd/spaltd SPALT_EMBEDDER fallback path counts as
+	// (The cmd/psmithd PSMITH_EMBEDDER fallback path counts as
 	// "active" too — we surface that case in a follow-up when the
 	// fallback is wired into this service.)
 	workerActive := false
 	if row, err := s.queries.GetUserEmbedderConfig(ctx, user.ID); err == nil && row.Enabled {
 		workerActive = true
 	}
-	return connect.NewResponse(&spaltv1.GetEmbedderStatsResponse{
+	return connect.NewResponse(&psmithv1.GetEmbedderStatsResponse{
 		UnembeddedCount: unembedded,
 		WorkerActive:    workerActive,
 	}), nil
@@ -290,9 +290,9 @@ func defaultNonSecret() nonSecretConfig {
 	}
 }
 
-func defaultProtoConfig() *spaltv1.EmbedderConfig {
+func defaultProtoConfig() *psmithv1.EmbedderConfig {
 	d := defaultNonSecret()
-	return &spaltv1.EmbedderConfig{
+	return &psmithv1.EmbedderConfig{
 		Type:       defaultType,
 		BaseUrl:    d.BaseURL,
 		Model:      d.Model,
@@ -301,10 +301,10 @@ func defaultProtoConfig() *spaltv1.EmbedderConfig {
 	}
 }
 
-func (s *Service) rowToProto(row store.UserEmbedderConfig) *spaltv1.EmbedderConfig {
+func (s *Service) rowToProto(row store.UserEmbedderConfig) *psmithv1.EmbedderConfig {
 	var ns nonSecretConfig
 	_ = json.Unmarshal(row.Config, &ns)
-	return &spaltv1.EmbedderConfig{
+	return &psmithv1.EmbedderConfig{
 		Type:       row.Type,
 		BaseUrl:    ns.BaseURL,
 		Model:      ns.Model,

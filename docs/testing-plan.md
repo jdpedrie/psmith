@@ -1,6 +1,6 @@
-# Spalt client-side testing plan — Layer 1 + Layer 2
+# Psmith client-side testing plan — Layer 1 + Layer 2
 
-This plan brings the macOS client (and the shared SpaltKit Swift package) up
+This plan brings the macOS client (and the shared PsmithKit Swift package) up
 to the same coverage standard as the Go backend. It defines two test layers,
 the harness for each, and the full enumeration of cases to write.
 
@@ -13,7 +13,7 @@ investing here.
 ## Goals
 
 1. **Behavior coverage** — every public ViewModel and Repository method gets
-   an integration test that drives it against a live local spaltd. Catches
+   an integration test that drives it against a live local psmithd. Catches
    contract regressions, RPC plumbing breakage, ViewModel state-machine bugs,
    the "save doesn't actually save" class of failure that bit us this week.
 2. **Layout coverage** — every view that has burned us (or could) gets a
@@ -25,28 +25,28 @@ investing here.
    a dependency for the all-in-one check.
 
 Out of scope for this pass: full XCUITest end-to-end (requires a parallel
-Xcode project; deferred until project stabilizes), iOS — SpaltSwift is
+Xcode project; deferred until project stabilizes), iOS — PsmithSwift is
 designed to be reusable but no iOS app exists yet.
 
-## Layer 1: integration tests against a live spaltd
+## Layer 1: integration tests against a live psmithd
 
 ### Harness
 
-- New target `SpaltKitTests` in `clients/SpaltSwift/Package.swift`. Depends on
-  `SpaltKit`. Uses Swift Testing (`@Test`) where possible, falls back to
+- New target `PsmithKitTests` in `clients/PsmithSwift/Package.swift`. Depends on
+  `PsmithKit`. Uses Swift Testing (`@Test`) where possible, falls back to
   `XCTest` only where that's needed (e.g., async streaming).
-- New helper module `clients/SpaltSwift/Tests/Harness/` with:
-  - `TestSpaltdServer` — boots a local spaltd against a fresh
+- New helper module `clients/PsmithSwift/Tests/Harness/` with:
+  - `TestPsmithdServer` — boots a local psmithd against a fresh
     `pgtestdb`-style isolated Postgres database. Implementation:
-    - On first call per test process, fork `go run ./cmd/spaltd` with
-      `SPALT_DSN` pointing at a fresh template-cloned database (mirror the
+    - On first call per test process, fork `go run ./cmd/psmithd` with
+      `PSMITH_DSN` pointing at a fresh template-cloned database (mirror the
       Go side's `testutil` package's pgtestdb config).
     - Bind to an ephemeral port (`:0`), parse the actual port from the
       stdout startup log, expose as `baseURL`.
     - On test-process exit, send SIGTERM, wait, drop the test database.
   - `TestSession` — a per-test helper that:
     - Registers a fresh user with a UUID-suffix username, logs in, returns
-      a fully-authenticated `SpaltClient`.
+      a fully-authenticated `PsmithClient`.
     - Optionally seeds common fixtures (a profile, a fake provider, an
       enabled model) via convenience helpers.
   - `FakeProvider` — a fake `openai-compatible` provider whose base_url
@@ -55,7 +55,7 @@ designed to be reusable but no iOS app exists yet.
     LLM calls. Returns canned chunk streams shaped like real provider
     responses. (For tests that legitimately need a live model, gate with
     `@available(skipUnlessLiveProviderEnv: true)`.)
-- One `Tests/SpaltKitTests/` test file per ViewModel/Repository, mirroring
+- One `Tests/PsmithKitTests/` test file per ViewModel/Repository, mirroring
   the source layout:
   - `AuthRepositoryTests.swift`
   - `ConversationsRepositoryTests.swift`
@@ -139,7 +139,7 @@ materially, each variant gets its own test.
 | 3 | `get` | with `resolve: true` returns `(raw, resolved)` with parent fields applied |
 | 4 | `get` | NotFound across users |
 | 5 | `create` | minimum (just name) |
-| 6 | `create` | with full SpaltProfilePatch (parent, system message, defaults, compression, title settings) |
+| 6 | `create` | with full PsmithProfilePatch (parent, system message, defaults, compression, title settings) |
 | 7 | `create` | with `parentOnly: true` |
 | 8 | `create` | with `favorite: true` |
 | 9 | `create` | InvalidArgument when name empty |
@@ -323,7 +323,7 @@ make swift-test-l1 FILTER=Auth   # filter to a class
 ```
 
 Test process responsibilities:
-- Boots its own spaltd subprocess on test start, tears down on exit.
+- Boots its own psmithd subprocess on test start, tears down on exit.
 - Each `@Test` runs against an isolated database (or at minimum an isolated
   user account; full DB isolation is preferred).
 - No shared global state across tests.
@@ -333,14 +333,14 @@ Test process responsibilities:
 ### Harness
 
 - Add `https://github.com/pointfreeco/swift-snapshot-testing` to
-  `clients/spaltd-mac/Package.swift` as a test-only dependency. (SpaltSwift
-  package itself doesn't need it — snapshots cover SpaltMac SwiftUI views.)
-- New target `SpaltMacSnapshotTests` in spaltd-mac.
+  `clients/psmithd-mac/Package.swift` as a test-only dependency. (PsmithSwift
+  package itself doesn't need it — snapshots cover PsmithMac SwiftUI views.)
+- New target `PsmithMacSnapshotTests` in psmithd-mac.
 - New helper module `Tests/SnapshotHarness/`:
-  - `Fixtures` — pre-built SpaltConversation, SpaltProfile, SpaltPluginType,
-    SpaltUserModelProvider, SpaltUserModel, etc. Hand-rolled, no server.
+  - `Fixtures` — pre-built PsmithConversation, PsmithProfile, PsmithPluginType,
+    PsmithUserModelProvider, PsmithUserModel, etc. Hand-rolled, no server.
   - `Stubs` — minimal stub view models that satisfy the `@Environment` /
-    `@Bindable` requirements without hitting spaltd. ConversationsModel
+    `@Bindable` requirements without hitting psmithd. ConversationsModel
     pre-loaded with fixtures, etc.
   - Helper for "render this view at column width X with WindowState=.normal"
     so we can also snapshot at the minimum supported column width and
@@ -505,7 +505,7 @@ make swift-test-l2          # snapshot tests only
 make swift-test-l2-record   # re-baseline on intentional UI changes
 ```
 
-Reference images live in `clients/spaltd-mac/Tests/__Snapshots__/`. PRs that
+Reference images live in `clients/psmithd-mac/Tests/__Snapshots__/`. PRs that
 change UI must include a re-baseline commit; CI fails if a snapshot drifts
 without one.
 
@@ -514,15 +514,15 @@ without one.
 - `Makefile` adds:
   ```make
   swift-test:        swift-test-l1 swift-test-l2
-  swift-test-l1:     ## Run SpaltKit integration tests against a local spaltd
-      cd clients/SpaltSwift && swift test --filter SpaltKitTests
-  swift-test-l2:     ## Run SpaltMac snapshot tests
-      cd clients/spaltd-mac && swift test --filter SpaltMacSnapshotTests
+  swift-test-l1:     ## Run PsmithKit integration tests against a local psmithd
+      cd clients/PsmithSwift && swift test --filter PsmithKitTests
+  swift-test-l2:     ## Run PsmithMac snapshot tests
+      cd clients/psmithd-mac && swift test --filter PsmithMacSnapshotTests
   test:              swift-test
       go test ./...
   ```
-- A test run boots a private spaltd, owns it for the test process,
-  tears down on exit. No shared dev spaltd interference.
+- A test run boots a private psmithd, owns it for the test process,
+  tears down on exit. No shared dev psmithd interference.
 - Snapshot diffs render to PR artifacts on CI when run there.
 
 ## Estimated effort

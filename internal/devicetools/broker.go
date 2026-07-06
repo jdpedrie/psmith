@@ -108,7 +108,7 @@ func NewBroker() *Broker {
 // SetCompletionHook installs (or replaces) the post-call hook.
 // Pass nil to drop the existing hook. Safe to call at startup;
 // not safe to call concurrently with Invoke (cheap to set once
-// from cmd/spaltd or the conversations service constructor).
+// from cmd/psmithd or the conversations service constructor).
 func (b *Broker) SetCompletionHook(h CompletionHook) {
 	b.hook = h
 }

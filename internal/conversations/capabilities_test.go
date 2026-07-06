@@ -3,8 +3,8 @@ package conversations
 import (
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 func TestCapabilityShortfall_AllSatisfied(t *testing.T) {

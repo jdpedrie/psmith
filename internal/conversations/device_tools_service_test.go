@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/devicetools"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/devicetools"
 )
 
 func TestDeviceToolsService_RegisterCapabilities_PopulatesRegistry(t *testing.T) {
@@ -24,7 +24,7 @@ func TestDeviceToolsService_RegisterCapabilities_PopulatesRegistry(t *testing.T)
 	ctx := auth.ContextWithUser(context.Background(),
 		auth.User{ID: user.ID, Username: user.Username})
 
-	_, err := handler.RegisterCapabilities(ctx, connect.NewRequest(&spaltv1.RegisterCapabilitiesRequest{
+	_, err := handler.RegisterCapabilities(ctx, connect.NewRequest(&psmithv1.RegisterCapabilitiesRequest{
 		SupportedToolNames: []string{"calendar_list_events", "reminders_list"},
 		ClientAttributes:   map[string]string{"os": "iOS", "version": "26.5"},
 	}))
@@ -51,7 +51,7 @@ func TestDeviceToolsService_RegisterCapabilities_RequiresAuth(t *testing.T) {
 	handler := svc.DeviceToolsService()
 
 	_, err := handler.RegisterCapabilities(context.Background(),
-		connect.NewRequest(&spaltv1.RegisterCapabilitiesRequest{}))
+		connect.NewRequest(&psmithv1.RegisterCapabilitiesRequest{}))
 	if err == nil {
 		t.Fatal("want Unauthenticated error")
 	}
@@ -66,7 +66,7 @@ func TestDeviceToolsService_ListSupportedTools_ReturnsCatalog(t *testing.T) {
 	handler := svc.DeviceToolsService()
 
 	resp, err := handler.ListSupportedTools(context.Background(),
-		connect.NewRequest(&spaltv1.ListSupportedToolsRequest{}))
+		connect.NewRequest(&psmithv1.ListSupportedToolsRequest{}))
 	if err != nil {
 		t.Fatalf("ListSupportedTools: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestDeviceToolsService_ListDeviceToolCalls_ScopedToCaller(t *testing.T) {
 		auth.User{ID: user.ID, Username: user.Username})
 
 	resp, err := handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{}))
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{}))
 	if err != nil {
 		t.Fatalf("ListDeviceToolCalls: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestDeviceToolsService_ListDeviceToolCalls_ScopedToCaller(t *testing.T) {
 	// Pull-by-conversation: the caller's own conversation succeeds.
 	convStr := conv.ID.String()
 	resp, err = handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{
 			ConversationId: &convStr,
 		}))
 	if err != nil {
@@ -149,7 +149,7 @@ func TestDeviceToolsService_ListDeviceToolCalls_ScopedToCaller(t *testing.T) {
 	// rather than leaking the row count.
 	otherConvStr := otherConv.ID.String()
 	_, err = handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{
 			ConversationId: &otherConvStr,
 		}))
 	if err == nil {
@@ -191,7 +191,7 @@ func TestDeviceToolsService_ListDeviceToolCalls_HonoursCursor(t *testing.T) {
 
 	// First page: all three.
 	resp, err := handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{}))
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{}))
 	if err != nil || len(resp.Msg.Calls) != 3 {
 		t.Fatalf("first page err=%v count=%d", err, len(resp.Msg.Calls))
 	}
@@ -200,7 +200,7 @@ func TestDeviceToolsService_ListDeviceToolCalls_HonoursCursor(t *testing.T) {
 	// only the row[0] (oldest).
 	cursor := resp.Msg.Calls[1].InvokedAt
 	resp, err = handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{
 			Before: timestamppb.New(cursor.AsTime()),
 		}))
 	if err != nil {
@@ -238,7 +238,7 @@ func TestDeviceToolsService_CallsToProto_NullableFields(t *testing.T) {
 	ctx := auth.ContextWithUser(context.Background(),
 		auth.User{ID: user.ID, Username: user.Username})
 	resp, err := handler.ListDeviceToolCalls(ctx,
-		connect.NewRequest(&spaltv1.ListDeviceToolCallsRequest{}))
+		connect.NewRequest(&psmithv1.ListDeviceToolCallsRequest{}))
 	if err != nil {
 		t.Fatalf("ListDeviceToolCalls: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestDeviceToolsService_CallsToProto_NullableFields(t *testing.T) {
 
 // Helpers ------------------------------------------------------------
 
-func toolNames(in []*spaltv1.SupportedTool) []string {
+func toolNames(in []*psmithv1.SupportedTool) []string {
 	out := make([]string, len(in))
 	for i, t := range in {
 		out[i] = t.Name
@@ -269,7 +269,7 @@ func toolNames(in []*spaltv1.SupportedTool) []string {
 	return out
 }
 
-func callNames(in []*spaltv1.DeviceToolCall) []string {
+func callNames(in []*psmithv1.DeviceToolCall) []string {
 	out := make([]string, len(in))
 	for i, c := range in {
 		out[i] = c.ToolName

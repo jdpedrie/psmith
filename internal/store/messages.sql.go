@@ -933,7 +933,7 @@ type SearchMessagesByEmbeddingRow struct {
 // pgvector's HNSW index handles ORDER BY ... LIMIT efficiently even
 // with the WHERE filter, provided the filter is selective enough to
 // not prune away most candidates. For a single user that's free; if
-// we ever scale to many users per Spalt instance the index would
+// we ever scale to many users per Psmith instance the index would
 // need partitioning, but that's a future-us problem.
 func (q *Queries) SearchMessagesByEmbedding(ctx context.Context, arg SearchMessagesByEmbeddingParams) ([]SearchMessagesByEmbeddingRow, error) {
 	rows, err := q.db.Query(ctx, searchMessagesByEmbedding,

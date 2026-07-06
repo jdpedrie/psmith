@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"testing"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
-func sampleType() *spaltv1.PluginType {
-	return &spaltv1.PluginType{
+func sampleType() *psmithv1.PluginType {
+	return &psmithv1.PluginType{
 		Name: "demo",
-		ConfigFields: []*spaltv1.ConfigField{
-			{Name: "label", Display: "Label", Type: spaltv1.ConfigField_TEXT, DefaultJson: `"hi"`},
-			{Name: "count", Display: "Count", Type: spaltv1.ConfigField_NUMBER, DefaultJson: `5`},
-			{Name: "on", Display: "On", Type: spaltv1.ConfigField_BOOLEAN, DefaultJson: `true`},
-			{Name: "mode", Display: "Mode", Type: spaltv1.ConfigField_SELECT, Options: []*spaltv1.ConfigOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}},
-			{Name: "secret", Display: "Secret", Type: spaltv1.ConfigField_TEXT, Global: true},
+		ConfigFields: []*psmithv1.ConfigField{
+			{Name: "label", Display: "Label", Type: psmithv1.ConfigField_TEXT, DefaultJson: `"hi"`},
+			{Name: "count", Display: "Count", Type: psmithv1.ConfigField_NUMBER, DefaultJson: `5`},
+			{Name: "on", Display: "On", Type: psmithv1.ConfigField_BOOLEAN, DefaultJson: `true`},
+			{Name: "mode", Display: "Mode", Type: psmithv1.ConfigField_SELECT, Options: []*psmithv1.ConfigOption{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}},
+			{Name: "secret", Display: "Secret", Type: psmithv1.ConfigField_TEXT, Global: true},
 		},
 	}
 }
@@ -89,10 +89,10 @@ func TestPluginHasForm(t *testing.T) {
 	if !pluginHasForm(sampleType()) {
 		t.Error("sample type should have a form")
 	}
-	if pluginHasForm(&spaltv1.PluginType{Name: "component_builder", ConfigFields: sampleType().ConfigFields}) {
+	if pluginHasForm(&psmithv1.PluginType{Name: "component_builder", ConfigFields: sampleType().ConfigFields}) {
 		t.Error("custom-form plugin should fall back to raw JSON")
 	}
-	allGlobal := &spaltv1.PluginType{Name: "x", ConfigFields: []*spaltv1.ConfigField{{Name: "g", Global: true}}}
+	allGlobal := &psmithv1.PluginType{Name: "x", ConfigFields: []*psmithv1.ConfigField{{Name: "g", Global: true}}}
 	if pluginHasForm(allGlobal) {
 		t.Error("all-global plugin has no editable form")
 	}

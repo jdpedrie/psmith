@@ -1,4 +1,4 @@
-// Package langfuse is Spalt's Langfuse observability emitter.
+// Package langfuse is Psmith's Langfuse observability emitter.
 //
 // Wire shape: POST <host>/api/public/ingestion with HTTP basic auth
 // (public_key:secret_key), body = a JSON envelope wrapping a list of
@@ -6,10 +6,10 @@
 // in our case so the timeline orders cleanly), a `timestamp`, and a
 // `body` whose schema depends on the type.
 //
-// We emit two event types per Spalt assistant turn:
+// We emit two event types per Psmith assistant turn:
 //
 //   - trace-create  → opens the trace (the unit users browse in the
-//     Langfuse UI). One per Spalt assistant turn. Carries the
+//     Langfuse UI). One per Psmith assistant turn. Carries the
 //     conversation_id as session_id, so all turns from one chat
 //     group together; tags + metadata carry context_id, profile_id,
 //     model_id, provider_label.
@@ -21,7 +21,7 @@
 // The emitter buffers events and flushes asynchronously: every
 // FlushInterval, when the buffer reaches FlushBatchSize, or when
 // Stop is called. POST failures are logged at warn (no retries today
-// — losing a few traces is a survivable degradation; a Spalt restart
+// — losing a few traces is a survivable degradation; a Psmith restart
 // drops anything unflushed).
 //
 // Per-user credentials live on user_langfuse_config (one row per
@@ -63,9 +63,9 @@ func (c Config) Valid() bool {
 	return c.Enabled && c.Host != "" && c.PublicKey != "" && c.SecretKey != ""
 }
 
-// Trace describes a single Langfuse trace event. One per Spalt
+// Trace describes a single Langfuse trace event. One per Psmith
 // assistant turn. The fields are a subset of Langfuse's trace shape
-// — we send the bits Spalt has data for, leave the rest unset.
+// — we send the bits Psmith has data for, leave the rest unset.
 type Trace struct {
 	ID        string // unique trace id (we use stream_run_id)
 	Name      string // human-friendly label, shown in the trace list
@@ -99,7 +99,7 @@ type Generation struct {
 }
 
 // Span describes a single Langfuse span event — a non-LLM unit of
-// work nested under a trace. Spalt uses these for tool calls dispatched
+// work nested under a trace. Psmith uses these for tool calls dispatched
 // during a turn (one span per tool call, with input = model-emitted
 // arguments, output = plugin return value).
 //

@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/internal/storage"
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/storage"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // Regression: a single missing-from-storage attachment must NOT

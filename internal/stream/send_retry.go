@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // Send retry / first-chunk timeout policy for upstream stream-opening.

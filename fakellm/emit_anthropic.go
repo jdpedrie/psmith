@@ -90,7 +90,7 @@ func emitAnthropic(ctx context.Context, w io.Writer, flusher http.Flusher, scrip
 	}
 
 	// message_delta carries final output_tokens (and reasoning/cache reads
-	// in newer API versions). The Spalt driver reads this for terminal usage.
+	// in newer API versions). The Psmith driver reads this for terminal usage.
 	deltaUsage := map[string]any{"output_tokens": 0}
 	if script.Usage != nil {
 		deltaUsage["output_tokens"] = script.Usage.OutputTokens

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // --- Test plugins ----------------------------------------------------------

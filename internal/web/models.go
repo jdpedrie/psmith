@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 // --- rich model picker ---
@@ -68,7 +68,7 @@ func (h *Handler) modelPicker(ctx context.Context, convID, selected string, requ
 	if h.models == nil {
 		return data
 	}
-	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}))
+	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
 	if err != nil {
 		h.logger.Warn("web: list models failed", "err", err)
 		return data
@@ -113,7 +113,7 @@ func (h *Handler) modelPicker(ctx context.Context, convID, selected string, requ
 	return data
 }
 
-func modelRowVM(providerID string, m *spaltv1.UserModel, selected string, required capsVM) pickerModelVM {
+func modelRowVM(providerID string, m *psmithv1.UserModel, selected string, required capsVM) pickerModelVM {
 	name := m.GetDisplayName()
 	if name == "" {
 		name = m.GetModelId()
@@ -148,11 +148,11 @@ func (h *Handler) requiredCaps(ctx context.Context, convID string) capsVM {
 	if h.convos == nil || h.profiles == nil {
 		return req
 	}
-	conv, err := h.convos.GetConversation(ctx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
+	conv, err := h.convos.GetConversation(ctx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		return req
 	}
-	prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&spaltv1.GetProfileRequest{
+	prof, err := h.profiles.GetProfile(ctx, connect.NewRequest(&psmithv1.GetProfileRequest{
 		Id: conv.Msg.GetConversation().GetProfileId(), Resolve: true,
 	}))
 	if err != nil {
@@ -164,7 +164,7 @@ func (h *Handler) requiredCaps(ctx context.Context, convID string) capsVM {
 	return req
 }
 
-func missingCaps(have *spaltv1.ModelCapabilities, required capsVM) []string {
+func missingCaps(have *psmithv1.ModelCapabilities, required capsVM) []string {
 	var missing []string
 	if required.Thinking && !have.GetThinking() {
 		missing = append(missing, "thinking")
@@ -199,7 +199,7 @@ func abbrevTokens(n int32) string {
 
 // costBucket maps output price/M to a $-bucket, with a tooltip carrying the
 // real input/output prices. Same intent as the iOS cost chip.
-func costBucket(p *spaltv1.ModelPricing) (bucket, hint string) {
+func costBucket(p *psmithv1.ModelPricing) (bucket, hint string) {
 	out := p.GetOutputPerMillionTokens()
 	if out <= 0 {
 		return "", ""
@@ -223,7 +223,7 @@ func costBucket(p *spaltv1.ModelPricing) (bucket, hint string) {
 // fragment; without JS it renders a standalone page.
 func (h *Handler) handleModelPicker(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
-	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
@@ -263,17 +263,17 @@ func (h *Handler) handleSetModel(w http.ResponseWriter, r *http.Request) {
 // setConversationModel writes the default provider/model onto the conversation,
 // preserving other settings. Best-effort.
 func (h *Handler) setConversationModel(ctx context.Context, convID, providerID, modelID string) {
-	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: convID}))
+	getResp, err := h.convos.GetConversation(ctx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: convID}))
 	if err != nil {
 		return
 	}
 	settings := getResp.Msg.GetConversation().GetSettings()
 	if settings == nil {
-		settings = &spaltv1.ConversationSettings{}
+		settings = &psmithv1.ConversationSettings{}
 	}
 	settings.DefaultProviderId = &providerID
 	settings.DefaultModelId = &modelID
-	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&spaltv1.UpdateConversationRequest{
+	if _, err := h.convos.UpdateConversation(ctx, connect.NewRequest(&psmithv1.UpdateConversationRequest{
 		Id:       convID,
 		Settings: settings,
 	})); err != nil {
@@ -282,7 +282,7 @@ func (h *Handler) setConversationModel(ctx context.Context, convID, providerID, 
 }
 
 // currentSettingsModel returns the conversation's stored model value, or "".
-func currentSettingsModel(conv *spaltv1.Conversation) string {
+func currentSettingsModel(conv *psmithv1.Conversation) string {
 	if s := conv.GetSettings(); s != nil && s.GetDefaultProviderId() != "" && s.GetDefaultModelId() != "" {
 		return modelValue(s.GetDefaultProviderId(), s.GetDefaultModelId())
 	}

@@ -14,13 +14,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // --- Fixture ---------------------------------------------------------------
@@ -37,7 +37,7 @@ type fixture struct {
 	cctx   store.Context
 	parent uuid.UUID
 	srv    *httptest.Server
-	client spaltv1connect.StreamsServiceClient
+	client psmithv1connect.StreamsServiceClient
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -88,11 +88,11 @@ func newFixture(t *testing.T) *fixture {
 
 	mux := http.NewServeMux()
 	svc := NewService(q, sup)
-	mux.Handle(spaltv1connect.NewStreamsServiceHandler(svc))
+	mux.Handle(psmithv1connect.NewStreamsServiceHandler(svc))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := spaltv1connect.NewStreamsServiceClient(srv.Client(), srv.URL)
+	client := psmithv1connect.NewStreamsServiceClient(srv.Client(), srv.URL)
 
 	return &fixture{
 		q: q, sup: sup, user: user, prov: prov, conv: conv,
@@ -164,7 +164,7 @@ func expectCode(t *testing.T, err error, want connect.Code) {
 func TestSubscribeStream_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	stream, err := f.client.SubscribeStream(context.Background(), connect.NewRequest(&spaltv1.SubscribeStreamRequest{
+	stream, err := f.client.SubscribeStream(context.Background(), connect.NewRequest(&psmithv1.SubscribeStreamRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	if err == nil {
@@ -181,7 +181,7 @@ func TestSubscribeStream_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	missing := mustUUID(t).String()
-	stream, _ := f.client.SubscribeStream(context.Background(), connect.NewRequest(&spaltv1.SubscribeStreamRequest{
+	stream, _ := f.client.SubscribeStream(context.Background(), connect.NewRequest(&psmithv1.SubscribeStreamRequest{
 		StreamRunId: missing,
 	}))
 	_ = stream.Receive()
@@ -216,7 +216,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&spaltv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&psmithv1.SubscribeStreamRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -228,18 +228,18 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 		text       string
 		sawUsage   bool
 		usageInput int32
-		terminal   *spaltv1.StreamRun
+		terminal   *psmithv1.StreamRun
 	)
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch e := ev.(type) {
-		case *spaltv1.SubscribeStreamResponse_Chunk:
+		case *psmithv1.SubscribeStreamResponse_Chunk:
 			switch e.Chunk.Type {
-			case spaltv1.ChunkType_CHUNK_TYPE_TEXT_DELTA:
+			case psmithv1.ChunkType_CHUNK_TYPE_TEXT_DELTA:
 				var p struct{ Text string }
 				_ = json.Unmarshal(e.Chunk.Payload, &p)
 				text += p.Text
-			case spaltv1.ChunkType_CHUNK_TYPE_USAGE:
+			case psmithv1.ChunkType_CHUNK_TYPE_USAGE:
 				sawUsage = true
 				var p struct {
 					InputTokens int32 `json:"input_tokens"`
@@ -247,7 +247,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 				_ = json.Unmarshal(e.Chunk.Payload, &p)
 				usageInput = p.InputTokens
 			}
-		case *spaltv1.SubscribeStreamResponse_Terminal:
+		case *psmithv1.SubscribeStreamResponse_Terminal:
 			terminal = e.Terminal
 		}
 	}
@@ -266,7 +266,7 @@ func TestSubscribeStream_HappyPath(t *testing.T) {
 	if terminal == nil {
 		t.Fatal("no terminal event received")
 	}
-	if terminal.Status != spaltv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
+	if terminal.Status != psmithv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
 		t.Errorf("terminal status=%v want COMPLETED", terminal.Status)
 	}
 	if terminal.Id != runID.String() {
@@ -307,7 +307,7 @@ func TestSubscribeStream_FromSequenceSkipsPriorChunks(t *testing.T) {
 	// Subscribe from sequence 2 — should skip "a" (seq 0) and "b" (seq 1).
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&spaltv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&psmithv1.SubscribeStreamRequest{
 		StreamRunId:  runID.String(),
 		FromSequence: 2,
 	}))
@@ -321,9 +321,9 @@ func TestSubscribeStream_FromSequenceSkipsPriorChunks(t *testing.T) {
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch e := ev.(type) {
-		case *spaltv1.SubscribeStreamResponse_Chunk:
+		case *psmithv1.SubscribeStreamResponse_Chunk:
 			seqs = append(seqs, e.Chunk.Sequence)
-		case *spaltv1.SubscribeStreamResponse_Terminal:
+		case *psmithv1.SubscribeStreamResponse_Terminal:
 			sawTerminal = true
 		}
 	}
@@ -369,7 +369,7 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 	// persisted chunks via DB replay + a terminal event.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&spaltv1.SubscribeStreamRequest{
+	streamCli, err := f.client.SubscribeStream(ctx, connect.NewRequest(&psmithv1.SubscribeStreamRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -381,9 +381,9 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 	for streamCli.Receive() {
 		ev := streamCli.Msg().Event
 		switch ev.(type) {
-		case *spaltv1.SubscribeStreamResponse_Chunk:
+		case *psmithv1.SubscribeStreamResponse_Chunk:
 			chunkCount++
-		case *spaltv1.SubscribeStreamResponse_Terminal:
+		case *psmithv1.SubscribeStreamResponse_Terminal:
 			sawTerminal = true
 		}
 	}
@@ -400,7 +400,7 @@ func TestSubscribeStream_AlreadyTerminal(t *testing.T) {
 func TestCancelStream_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&spaltv1.CancelStreamRequest{
+	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&psmithv1.CancelStreamRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	expectCode(t, err, connect.CodeInvalidArgument)
@@ -409,7 +409,7 @@ func TestCancelStream_InvalidUUID(t *testing.T) {
 func TestCancelStream_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&spaltv1.CancelStreamRequest{
+	_, err := f.client.CancelStream(context.Background(), connect.NewRequest(&psmithv1.CancelStreamRequest{
 		StreamRunId: mustUUID(t).String(),
 	}))
 	expectCode(t, err, connect.CodeNotFound)
@@ -426,7 +426,7 @@ func TestCancelStream_HappyPath(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := f.client.CancelStream(context.Background(), connect.NewRequest(&spaltv1.CancelStreamRequest{
+	if _, err := f.client.CancelStream(context.Background(), connect.NewRequest(&psmithv1.CancelStreamRequest{
 		StreamRunId: runID.String(),
 	})); err != nil {
 		t.Fatalf("CancelStream: %v", err)
@@ -448,7 +448,7 @@ func TestCancelStream_HappyPath(t *testing.T) {
 func TestGetStreamRun_InvalidUUID(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&spaltv1.GetStreamRunRequest{
+	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&psmithv1.GetStreamRunRequest{
 		StreamRunId: "not-a-uuid",
 	}))
 	expectCode(t, err, connect.CodeInvalidArgument)
@@ -457,7 +457,7 @@ func TestGetStreamRun_InvalidUUID(t *testing.T) {
 func TestGetStreamRun_NotFound(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&spaltv1.GetStreamRunRequest{
+	_, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&psmithv1.GetStreamRunRequest{
 		StreamRunId: mustUUID(t).String(),
 	}))
 	expectCode(t, err, connect.CodeNotFound)
@@ -477,7 +477,7 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 	}
 	_ = waitTerminal(t, f.sup, runID, 3*time.Second)
 
-	resp, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&spaltv1.GetStreamRunRequest{
+	resp, err := f.client.GetStreamRun(context.Background(), connect.NewRequest(&psmithv1.GetStreamRunRequest{
 		StreamRunId: runID.String(),
 	}))
 	if err != nil {
@@ -489,10 +489,10 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 	if resp.Msg.StreamRun.Id != runID.String() {
 		t.Errorf("id=%q want %q", resp.Msg.StreamRun.Id, runID.String())
 	}
-	if resp.Msg.StreamRun.Status != spaltv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
+	if resp.Msg.StreamRun.Status != psmithv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED {
 		t.Errorf("status=%v want COMPLETED", resp.Msg.StreamRun.Status)
 	}
-	if resp.Msg.StreamRun.Purpose != spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE {
+	if resp.Msg.StreamRun.Purpose != psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE {
 		t.Errorf("purpose=%v want ASSISTANT_RESPONSE", resp.Msg.StreamRun.Purpose)
 	}
 	if resp.Msg.StreamRun.ConversationId != f.conv.ID.String() {
@@ -513,14 +513,14 @@ func TestGetStreamRun_HappyPath(t *testing.T) {
 
 func TestStatusToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[string]spaltv1.StreamRunStatus{
-		"running":     spaltv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING,
-		"completed":   spaltv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED,
-		"errored":     spaltv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED,
-		"cancelled":   spaltv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED,
-		"interrupted": spaltv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED,
-		"":            spaltv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
-		"garbage":     spaltv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
+	cases := map[string]psmithv1.StreamRunStatus{
+		"running":     psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING,
+		"completed":   psmithv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED,
+		"errored":     psmithv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED,
+		"cancelled":   psmithv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED,
+		"interrupted": psmithv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED,
+		"":            psmithv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
+		"garbage":     psmithv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := statusToProto(in); got != want {
@@ -531,11 +531,11 @@ func TestStatusToProto(t *testing.T) {
 
 func TestPurposeToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[string]spaltv1.StreamRunPurpose{
-		"assistant_response": spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE,
-		"compression":        spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION,
-		"":                   spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
-		"garbage":            spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
+	cases := map[string]psmithv1.StreamRunPurpose{
+		"assistant_response": psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE,
+		"compression":        psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION,
+		"":                   psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
+		"garbage":            psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := purposeToProto(in); got != want {
@@ -546,20 +546,20 @@ func TestPurposeToProto(t *testing.T) {
 
 func TestChunkTypeToProto(t *testing.T) {
 	t.Parallel()
-	cases := map[providers.ChunkType]spaltv1.ChunkType{
-		providers.ChunkText:              spaltv1.ChunkType_CHUNK_TYPE_TEXT_DELTA,
-		providers.ChunkThinking:          spaltv1.ChunkType_CHUNK_TYPE_THINKING_DELTA,
-		providers.ChunkToolUseStart:      spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
-		providers.ChunkToolUseDelta:      spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA,
-		providers.ChunkToolUseEnd:        spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
-		providers.ChunkUsage:             spaltv1.ChunkType_CHUNK_TYPE_USAGE,
-		providers.ChunkError:             spaltv1.ChunkType_CHUNK_TYPE_ERROR,
-		providers.ChunkDone:              spaltv1.ChunkType_CHUNK_TYPE_DONE,
-		providers.ChunkToolResult:        spaltv1.ChunkType_CHUNK_TYPE_TOOL_RESULT,
-		providers.ChunkThinkingSignature: spaltv1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE,
-		providers.ChunkElicit:            spaltv1.ChunkType_CHUNK_TYPE_ELICIT,
-		providers.ChunkDeviceToolUse:     spaltv1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE,
-		providers.ChunkType("???"):       spaltv1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
+	cases := map[providers.ChunkType]psmithv1.ChunkType{
+		providers.ChunkText:              psmithv1.ChunkType_CHUNK_TYPE_TEXT_DELTA,
+		providers.ChunkThinking:          psmithv1.ChunkType_CHUNK_TYPE_THINKING_DELTA,
+		providers.ChunkToolUseStart:      psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_START,
+		providers.ChunkToolUseDelta:      psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA,
+		providers.ChunkToolUseEnd:        psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_END,
+		providers.ChunkUsage:             psmithv1.ChunkType_CHUNK_TYPE_USAGE,
+		providers.ChunkError:             psmithv1.ChunkType_CHUNK_TYPE_ERROR,
+		providers.ChunkDone:              psmithv1.ChunkType_CHUNK_TYPE_DONE,
+		providers.ChunkToolResult:        psmithv1.ChunkType_CHUNK_TYPE_TOOL_RESULT,
+		providers.ChunkThinkingSignature: psmithv1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE,
+		providers.ChunkElicit:            psmithv1.ChunkType_CHUNK_TYPE_ELICIT,
+		providers.ChunkDeviceToolUse:     psmithv1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE,
+		providers.ChunkType("???"):       psmithv1.ChunkType_CHUNK_TYPE_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := chunkTypeToProto(in); got != want {
@@ -676,7 +676,7 @@ func TestListActiveRuns_FiltersByConversationAndStatus(t *testing.T) {
 	}
 
 	// All-active: caller sees both A and B.
-	resp, err := svc.ListActiveRuns(ctx, connect.NewRequest(&spaltv1.ListActiveRunsRequest{}))
+	resp, err := svc.ListActiveRuns(ctx, connect.NewRequest(&psmithv1.ListActiveRunsRequest{}))
 	if err != nil {
 		t.Fatalf("ListActiveRuns(all): %v", err)
 	}
@@ -686,7 +686,7 @@ func TestListActiveRuns_FiltersByConversationAndStatus(t *testing.T) {
 
 	// Filtered to conversation A: just runA.
 	convAID := f.conv.ID.String()
-	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&spaltv1.ListActiveRunsRequest{
+	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&psmithv1.ListActiveRunsRequest{
 		ConversationId: &convAID,
 	}))
 	if err != nil {
@@ -699,7 +699,7 @@ func TestListActiveRuns_FiltersByConversationAndStatus(t *testing.T) {
 	// Terminate A: it should disappear from the all-active list.
 	srcA.close()
 	_ = waitTerminal(t, f.sup, runA, 2*time.Second)
-	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&spaltv1.ListActiveRunsRequest{}))
+	resp, err = svc.ListActiveRuns(ctx, connect.NewRequest(&psmithv1.ListActiveRunsRequest{}))
 	if err != nil {
 		t.Fatalf("ListActiveRuns(post-terminal): %v", err)
 	}
@@ -725,7 +725,7 @@ func TestListActiveRuns_ScopedByCaller(t *testing.T) {
 	// Different user must NOT see the run.
 	other := mustCreateUser(t, f.q, "u-"+mustUUID(t).String())
 	otherCtx := authContextForUser(other)
-	resp, err := svc.ListActiveRuns(otherCtx, connect.NewRequest(&spaltv1.ListActiveRunsRequest{}))
+	resp, err := svc.ListActiveRuns(otherCtx, connect.NewRequest(&psmithv1.ListActiveRunsRequest{}))
 	if err != nil {
 		t.Fatalf("ListActiveRuns(other): %v", err)
 	}

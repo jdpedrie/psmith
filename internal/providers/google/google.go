@@ -1,4 +1,4 @@
-// Package google implements the Spalt provider driver for Google's Gemini
+// Package google implements the Psmith provider driver for Google's Gemini
 // API (the "AI Studio" surface at generativelanguage.googleapis.com).
 //
 // The driver is stateless: every turn carries the full prefix.
@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // defaultBaseURL is the AI Studio (generativelanguage) endpoint.
@@ -86,7 +86,7 @@ func New(deps providers.Deps, configBytes json.RawMessage) (providers.Provider, 
 func (d *Driver) Type() string { return "google" }
 
 // Stateful returns false — Gemini's HTTP API is stateless. Cached content is
-// orthogonal to session state and is not yet wired through Spalt.
+// orthogonal to session state and is not yet wired through Psmith.
 func (d *Driver) Stateful() bool { return false }
 
 // logger returns the driver's logger or slog.Default if no logger was injected.

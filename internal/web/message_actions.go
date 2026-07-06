@@ -5,14 +5,14 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 // handleEditForm renders a focused editor for a single message's content.
 func (h *Handler) handleEditForm(w http.ResponseWriter, r *http.Request) {
 	convID := r.PathValue("id")
 	mid := r.PathValue("mid")
-	resp, err := h.convos.GetMessage(r.Context(), connect.NewRequest(&spaltv1.GetMessageRequest{Id: mid}))
+	resp, err := h.convos.GetMessage(r.Context(), connect.NewRequest(&psmithv1.GetMessageRequest{Id: mid}))
 	if err != nil {
 		http.Error(w, "message not found", http.StatusNotFound)
 		return
@@ -28,7 +28,7 @@ func (h *Handler) handleEditSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.convos.EditMessage(r.Context(), connect.NewRequest(&spaltv1.EditMessageRequest{
+	if _, err := h.convos.EditMessage(r.Context(), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      mid,
 		Content: r.PostFormValue("content"),
 	})); err != nil {
@@ -51,7 +51,7 @@ func (h *Handler) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "parent_message_id required", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := h.convos.SendMessage(r.Context(), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId:  convID,
 		ParentMessageId: &parentID,
 		Regenerate:      true,

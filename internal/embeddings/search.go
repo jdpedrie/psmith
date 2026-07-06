@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/pgvector/pgvector-go"
 )
 

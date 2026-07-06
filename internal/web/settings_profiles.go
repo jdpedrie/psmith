@@ -6,11 +6,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 func (h *Handler) handleProfiles(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.profiles.ListProfiles(r.Context(), connect.NewRequest(&spaltv1.ListProfilesRequest{}))
+	resp, err := h.profiles.ListProfiles(r.Context(), connect.NewRequest(&psmithv1.ListProfilesRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -41,7 +41,7 @@ func (h *Handler) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
-	req := &spaltv1.CreateProfileRequest{Name: name}
+	req := &psmithv1.CreateProfileRequest{Name: name}
 	if sm := r.PostFormValue("system_message"); strings.TrimSpace(sm) != "" {
 		req.SystemMessage = &sm
 	}
@@ -56,7 +56,7 @@ func (h *Handler) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleProfileEdit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	resp, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&spaltv1.GetProfileRequest{Id: id}))
+	resp, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&psmithv1.GetProfileRequest{Id: id}))
 	if err != nil {
 		http.Error(w, "profile not found", http.StatusNotFound)
 		return
@@ -76,9 +76,9 @@ func (h *Handler) handleProfileEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := ""
 	switch p.GetCompressionMode() {
-	case spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE:
+	case psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE:
 		mode = "REPLACE"
-	case spaltv1.CompressionMode_COMPRESSION_MODE_APPEND:
+	case psmithv1.CompressionMode_COMPRESSION_MODE_APPEND:
 		mode = "APPEND"
 	}
 	h.render(w, r, http.StatusOK, profileFormPage("Edit profile", "/settings/profiles/"+id, profileFormVM{
@@ -109,7 +109,7 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	sm := r.PostFormValue("system_message")
 	desc := r.PostFormValue("description")
-	req := &spaltv1.UpdateProfileRequest{
+	req := &psmithv1.UpdateProfileRequest{
 		Id:            id,
 		Name:          &name,
 		SystemMessage: &sm,
@@ -119,14 +119,14 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// Default model lives inside default_settings; preserve the rest of that
 	// message (include-thinking, call settings) by reading the current value.
-	cur, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&spaltv1.GetProfileRequest{Id: id}))
+	cur, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&psmithv1.GetProfileRequest{Id: id}))
 	if err != nil {
 		http.Error(w, "profile not found", http.StatusNotFound)
 		return
 	}
 	defaults := cur.Msg.GetProfile().GetDefaultSettings()
 	if defaults == nil {
-		defaults = &spaltv1.ProfileDefaults{}
+		defaults = &psmithv1.ProfileDefaults{}
 	}
 	if pid, mid, ok := splitModelValue(r.PostFormValue("default_model")); ok {
 		defaults.DefaultProviderId, defaults.DefaultModelId = &pid, &mid
@@ -148,10 +148,10 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.PostFormValue("compression_mode") {
 	case "REPLACE":
-		m := spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE
+		m := psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE
 		req.CompressionMode = &m
 	case "APPEND":
-		m := spaltv1.CompressionMode_COMPRESSION_MODE_APPEND
+		m := psmithv1.CompressionMode_COMPRESSION_MODE_APPEND
 		req.CompressionMode = &m
 	default:
 		clear = append(clear, "compression_mode")
@@ -179,7 +179,7 @@ func (h *Handler) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := h.profiles.DeleteProfile(r.Context(), connect.NewRequest(&spaltv1.DeleteProfileRequest{Id: id})); err != nil {
+	if _, err := h.profiles.DeleteProfile(r.Context(), connect.NewRequest(&psmithv1.DeleteProfileRequest{Id: id})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

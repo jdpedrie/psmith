@@ -1,0 +1,831 @@
+syntax = "proto3";
+
+package psmith.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+message User {
+  string id = 1;
+  string username = 2;
+  optional string display_name = 3;
+  bool is_admin = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Providers — driver types and user-configured instances
+// ---------------------------------------------------------------------------
+
+// A driver type compiled into the server. Set is fixed at build time;
+// adding a type requires a recompile. UIs consult ListProviderTypes to render
+// configuration forms.
+message ProviderType {
+  string name = 1;          // 'anthropic', 'openai-compatible', 'claude-code-subprocess', ...
+  string display_name = 2;
+  bool stateful = 3;        // true for harness-style providers
+  bytes config_schema = 4;  // JSON Schema for the type's config
+}
+
+// A user-configured instance of a driver type with credentials/endpoint/etc.
+message UserModelProvider {
+  string id = 1;
+  string type = 2;          // driver type name
+  string label = 3;
+  bytes config = 4;         // driver-specific JSON
+  string owner_user_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  // Provider-level default CallSettings — bottom layer of the resolution
+  // chain (conversation > profile > model > provider). Sparse: any unset
+  // field inherits nothing (this is the floor), but unset fields here let
+  // higher layers contribute their own values normally.
+  optional CallSettings default_settings = 8;
+}
+
+// A template surfaced from the catalog to accelerate "add provider" UX.
+// One entry the UI surfaces in the "Add provider" picker. Combines the
+// built-in preset registry (native + openai-compatible) with optional
+// catalog metadata (env var hints, doc URLs from models.dev).
+message ProviderTemplate {
+  string catalog_provider_id = 1;   // e.g. 'groq'
+  string name = 2;                  // e.g. 'Groq'
+  string driver_type = 3;           // which Psmith driver to use, e.g. 'openai-compatible'
+  optional string api_base = 4;
+  optional string env_key = 5;      // conventional env var for the API key
+  optional string doc_url = 6;
+  // preset_id, when present, names the openai-compatible preset (see
+  // internal/providers/openai/presets.go) the client must persist in
+  // config.preset_id so the driver picks the right Quirks at runtime.
+  // Empty for native-driver entries (anthropic, google) where the
+  // driver type already pins behaviour.
+  optional string preset_id = 7;
+  // logo_slug is the LobeHub icon slug bundled with the Mac app. The
+  // client renders `bundleResource("Logos/<slug>.svg")`. Empty when no
+  // logo is bundled (e.g. Custom OpenAI-compatible).
+  optional string logo_slug = 8;
+}
+
+// ---------------------------------------------------------------------------
+// Models — catalog reference data and user-enabled snapshots
+// ---------------------------------------------------------------------------
+
+enum MetadataSource {
+  METADATA_SOURCE_UNSPECIFIED = 0;
+  METADATA_SOURCE_CATALOG = 1;
+  METADATA_SOURCE_DRIVER = 2;
+  METADATA_SOURCE_MANUAL = 3;
+}
+
+message ModelCapabilities {
+  bool streaming = 1;
+  bool thinking = 2;
+  bool tool_use = 3;
+  // `vision` is the input modality — model accepts image attachments
+  // in user messages.
+  bool vision = 4;
+  bool prompt_caching = 5;
+  // `generates_images` is the output modality — model emits image
+  // bytes in its response. Used by modality-aware plugin config
+  // (e.g. `imagegen`) to filter the model picker so the user only
+  // sees models that can actually produce what the plugin needs.
+  bool generates_images = 6;
+}
+
+message ModelPricing {
+  optional double input_per_million_tokens = 1;
+  optional double output_per_million_tokens = 2;
+  optional double cache_read_per_million_tokens = 3;
+  optional double cache_write_per_million_tokens = 4;
+}
+
+// Read-only catalog provider entry (refreshed periodically from models.dev).
+message CatalogModelProvider {
+  string id = 1;
+  string name = 2;
+  optional string api_base = 3;
+  optional string env_key = 4;
+  optional string doc_url = 5;
+  optional string npm = 6;
+  google.protobuf.Timestamp fetched_at = 7;
+}
+
+// Read-only catalog model entry.
+message CatalogModel {
+  string provider_id = 1;           // catalog provider id
+  string model_id = 2;
+  string display_name = 3;
+  optional int32 context_window = 4;
+  optional int32 max_output_tokens = 5;
+  optional ModelPricing pricing = 6;
+  optional string knowledge_cutoff = 7;
+  repeated string modalities = 8;
+  optional ModelCapabilities capabilities = 9;
+  google.protobuf.Timestamp fetched_at = 10;
+}
+
+// A user-enabled model on a configured provider. Metadata is snapshotted at
+// enable time and editable thereafter; never auto-mutated by catalog refresh.
+message UserModel {
+  string user_model_provider_id = 1;
+  string model_id = 2;
+
+  string display_name = 3;
+  optional int32 context_window = 4;
+  optional int32 max_output_tokens = 5;
+  optional ModelPricing pricing = 6;
+  optional string knowledge_cutoff = 7;
+  repeated string modalities = 8;
+  optional ModelCapabilities capabilities = 9;
+  optional CallSettings default_settings = 10;
+
+  MetadataSource metadata_source = 11;
+  google.protobuf.Timestamp metadata_snapshot_at = 12;
+  google.protobuf.Timestamp enabled_at = 13;
+
+  // When true, surface this model in the FAVORITES section at the top of
+  // model pickers. Identity-style metadata, like profiles.favorite — does not
+  // affect snapshotted catalog metadata.
+  bool favorite = 14;
+
+  // constraints describes per-model limits on the CallSettings the UI
+  // can offer for this model — clamp temperature ranges, hide controls
+  // for unsupported fields, etc. Sourced from a hand-maintained
+  // server-side table (see internal/modelmeta/constraints.go),
+  // empirically discovered via cmd/discover-constraints. Sparse: any
+  // field left empty means "no known constraint" — UI offers the full
+  // range and reactively renders any upstream rejection inline.
+  optional ModelConstraints constraints = 15;
+}
+
+// ModelConstraints carries per-model UI guardrails for CallSettings.
+// Sparse — any field left empty means "no known constraint." See
+// internal/modelmeta/constraints.go for the source-of-truth table.
+message ModelConstraints {
+  // temperature, when set, defines the model's accepted temperature
+  // interval. The UI clamps slider bounds and rejects out-of-range
+  // values at edit time.
+  optional Range temperature = 1;
+
+  // unsupported lists dotted CallSettings field paths the model is
+  // known to reject (e.g. "openai.response_format" for some Z.AI
+  // models). Clients hide or disable controls for any path in this
+  // list.
+  repeated string unsupported = 2;
+}
+
+// Range is the supported interval for a numeric setting. min and max
+// are inclusive; locked_at overrides both — when set, the only valid
+// value is exactly locked_at (e.g. OpenAI's o-series + gpt-5 family
+// lock temperature at 1.0).
+message Range {
+  optional double min = 1;
+  optional double max = 2;
+  optional double locked_at = 3;
+}
+
+// Per-call provider settings. Hybrid common-core + provider-specific shape:
+// the first block is universal (every driver translates it), `top_k` is
+// shared by Anthropic + Google, `thinking` is the universal "extended
+// reasoning" knob translated per driver, and `anthropic` / `openai` /
+// `google` carry per-provider knobs that don't fit the common surface.
+//
+// Stored on JSONB columns at four layers (conversation > profile > model >
+// provider). Resolution merges sparsely — every layer can leave any field
+// unset to inherit from below; see `internal/profiles/callsettings.go`.
+message CallSettings {
+  // --- Common (all three providers) ---
+  optional double temperature        = 1;   // clamped per-driver: Anthropic [0,1], OpenAI/Google [0,2]
+  optional double top_p              = 2;
+  optional int32  max_output_tokens  = 3;
+  repeated string stop_sequences     = 4;
+
+  // --- Two-of-three (Anthropic + Google) ---
+  optional int32  top_k              = 5;
+
+  // --- Universal "thinking" knob, translated per driver ---
+  optional ThinkingSettings thinking = 6;
+
+  // --- Provider-specific extension blocks ---
+  optional AnthropicExtras anthropic = 10;   // empty in v1 — reserved for future
+  optional OpenAIExtras    openai    = 11;
+  optional GoogleExtras    google    = 12;
+
+  // --- Cross-cutting: caching ---
+  // explicit_cache opts the conversation in to server-managed
+  // explicit caching. Drivers that implement
+  // providers.ExplicitCacheProvider (currently Google's
+  // cachedContents; Anthropic's cache_control auto-placement could
+  // grow into one in the future) hook in. The conversations service
+  // owns the lookup/create/attach/expire orchestration; drivers
+  // provide just the upstream call shapes. No-op for drivers that
+  // don't implement the interface.
+  optional bool explicit_cache = 13;
+}
+
+// ThinkingSettings carries the cross-driver "show your work" knob. Each
+// driver translates it differently:
+//   Anthropic & Google → literal budget_tokens.
+//   OpenAI Responses    → budget_tokens derives reasoning_effort
+//                         (<2k → low, 2-8k → medium, >8k → high).
+//   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+message ThinkingSettings {
+  optional bool   enabled        = 1;
+  optional int32  budget_tokens  = 2;
+}
+
+// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
+// provider common surface. v1 surfaces prompt-cache control; further knobs
+// will be added as they're needed.
+message AnthropicExtras {
+  // When false, the driver skips placing a cache_control marker on the
+  // request — useful for one-off conversations where the +25% write
+  // overhead doesn't pay off, or for users who prefer not to cache for
+  // privacy reasons. Default (unset) = true.
+  optional bool cache_enabled = 1;
+  // Cache TTL — 5m (default) or 1h. 1h has higher break-even but
+  // survives stop-and-resume workflows.
+  optional CacheTTL cache_ttl = 2;
+}
+
+// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
+// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
+// tier costs more to write but persists across longer idle gaps.
+enum CacheTTL {
+  CACHE_TTL_UNSPECIFIED = 0;
+  CACHE_TTL_5M          = 1;
+  CACHE_TTL_1H          = 2;
+}
+
+// OpenAIExtras carries the per-driver knobs that map to Chat Completions /
+// Responses but have no analog on Anthropic or Google.
+message OpenAIExtras {
+  optional int32  seed                  = 1;   // reproducibility
+  optional double frequency_penalty     = 2;   // [-2, 2]
+  optional double presence_penalty      = 3;   // [-2, 2]
+  optional int32  top_logprobs          = 4;   // [0, 5]; also enables Logprobs=true on the wire
+  optional bool   parallel_tool_calls   = 5;
+  optional ServiceTier service_tier     = 6;
+  optional ResponseFormat response_format = 7;
+  // logit_bias is map<int32_token_id, double_bias>. Tokenization is
+  // model-specific so the v1 UI is a JSON-blob field; no per-token row editor.
+  map<int32, double> logit_bias         = 8;
+}
+
+enum ServiceTier {
+  SERVICE_TIER_UNSPECIFIED = 0;
+  SERVICE_TIER_AUTO        = 1;
+  SERVICE_TIER_STANDARD    = 2;
+  SERVICE_TIER_PRIORITY    = 3;
+}
+
+// ResponseFormat is the OpenAI response-format oneof.
+//   text         — plain text output (default; no-op when set).
+//   json_object  — model is forced to emit a syntactically-valid JSON object.
+//   json_schema  — model output is constrained to match the embedded schema.
+message ResponseFormat {
+  oneof kind {
+    bool text         = 1;
+    bool json_object  = 2;
+    JsonSchema json_schema = 3;
+  }
+}
+
+message JsonSchema {
+  string name        = 1;
+  optional string description = 2;
+  bytes  schema      = 3;     // raw JSON Schema bytes; UI is a JSON code editor
+  optional bool strict = 4;
+}
+
+// GoogleExtras carries Gemini-specific knobs.
+message GoogleExtras {
+  optional SafetySettings safety_settings = 1;
+  optional string response_mime_type      = 2;   // e.g. "application/json"
+  optional bytes  response_schema         = 3;   // JSON Schema bytes
+  optional int32  candidate_count         = 4;   // [1, 8]
+}
+
+message SafetySettings {
+  optional HarmThreshold harassment        = 1;
+  optional HarmThreshold hate_speech       = 2;
+  optional HarmThreshold sexually_explicit = 3;
+  optional HarmThreshold dangerous_content = 4;
+}
+
+enum HarmThreshold {
+  HARM_THRESHOLD_UNSPECIFIED = 0;
+  HARM_THRESHOLD_BLOCK_NONE                 = 1;
+  HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE        = 2;
+  HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE     = 3;  // Gemini default
+  HARM_THRESHOLD_BLOCK_ONLY_HIGH            = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+enum CompressionMode {
+  COMPRESSION_MODE_UNSPECIFIED = 0;
+  COMPRESSION_MODE_REPLACE = 1;
+  COMPRESSION_MODE_APPEND = 2;
+}
+
+message ProfileDefaults {
+  optional string default_provider_id = 1;
+  optional string default_model_id = 2;
+  optional bool include_thinking_in_history = 3;
+  // Per-profile default CallSettings. Sparse — any unset field falls through
+  // to the layers below in the resolution chain
+  // (provider > model > profile (resolved through parent inheritance) > conversation,
+  // walked highest-precedence first).
+  optional CallSettings call_settings = 4;
+}
+
+message Profile {
+  string id = 1;
+  optional string parent_profile_id = 2;
+  string name = 3;
+
+  // All optional: null means "inherit from parent."
+  optional string system_message = 4;
+  optional string default_user_message = 5;
+  optional string compression_guide = 6;
+  optional CompressionMode compression_mode = 7;
+  optional string compression_provider_id = 8;
+  optional string compression_model_id = 9;
+  optional ProfileDefaults default_settings = 10;
+
+  string owner_user_id = 13;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+
+  // Auto-title knobs. When all three resolve to non-null (with parent-chain
+  // inheritance), the server fires an LLM call to generate a 2-5 word title
+  // for the conversation (and per-context titles for new contexts) after
+  // each first assistant turn. When any are unset post-resolution, title
+  // generation is skipped — the feature is opt-in.
+  optional string title_provider_id = 14;
+  optional string title_model_id = 15;
+  optional string title_guide = 16;
+
+  // Sentinel naming a non-server title generator. NULL = "use the configured
+  // (title_provider_id, title_model_id) cloud call." A non-null value names a
+  // generator handled outside the server's stateless-provider title path.
+  // v1 sentinel: "apple_foundation" — the Mac client uses Apple's on-device
+  // FoundationModels framework (macOS 26+) to title locally; the server skips
+  // its cloud roundtrip and the client persists via UpdateConversation.
+  optional string title_provider_kind = 20;
+
+  // Free-form description shown alongside `name` in pickers and the detail
+  // viewer. Identity metadata — NOT inherited through the parent chain.
+  // Empty string means "no description."
+  string description = 17;
+
+  // When true, the profile is hidden from the new-conversation picker and
+  // only usable as a parent for inheritance. Defaults to false (chat-capable).
+  bool parent_only = 18;
+
+  // When true, surface this profile at the start of pickers. Identity
+  // metadata — not inherited.
+  bool favorite = 19;
+
+  // Union of the model capability requirements declared by every plugin
+  // in this profile's effective pipeline (with parent-chain inheritance
+  // applied). DERIVED, not stored — recomputed on every read so adding a
+  // tool-providing plugin to the parent immediately reflects in the
+  // child's requirements. Sparse: any field left false is "no
+  // requirement here." Empty when the profile has no plugins or none of
+  // them require anything.
+  //
+  // UIs filter the model picker by these flags so the user can't pick a
+  // model that the active pipeline can't drive (e.g. attaching the
+  // `mcp` plugin to a profile whose default model lacks tool_use). The
+  // server also validates at SendMessage time so a stale picker doesn't
+  // sneak an unsupported send through.
+  optional ModelCapabilities required_model_capabilities = 21;
+
+  // Optional opening assistant message. Persisted as a real `messages`
+  // row at conversation-create time (role=assistant, is_welcome=true),
+  // included in the wire history sent to the LLM on every subsequent
+  // turn so the model knows what greeting it opened with. Clients
+  // play a fake-stream reveal animation the first time the conversation
+  // is opened in an app session; subsequent visits render it instantly.
+  //
+  // Snapshotted at conversation create — later edits to this field do
+  // NOT mutate the welcome message in existing conversations. Inherits
+  // through the parent chain like the other text fields (null = inherit).
+  optional string welcome_message = 22;
+}
+
+// ---------------------------------------------------------------------------
+// Conversation / Context / Message
+// ---------------------------------------------------------------------------
+
+message ConversationSettings {
+  optional string default_provider_id = 1;
+  optional string default_model_id = 2;
+  optional bool include_thinking_in_history = 3;
+  // Per-conversation CallSettings overrides — top of the resolution chain
+  // (conversation > profile > model > provider). Sparse: unset fields fall
+  // through to the resolved profile layer below.
+  optional CallSettings call_settings = 4;
+}
+
+message Conversation {
+  string id = 1;
+  string profile_id = 2;
+  optional string title = 3;
+  optional ConversationSettings settings = 4;
+  string active_context_id = 5;
+  string owner_user_id = 8;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  // Most recent message timestamp across this conversation's contexts.
+  // Falls back to created_at when no messages exist yet, so a fresh
+  // conversation still sorts above older ones in "Recently Used".
+  google.protobuf.Timestamp last_activity_at = 9;
+  // Resolved (tag → renderer-component) pairs from this conversation's
+  // plugin pipeline. Used by clients during streaming to render
+  // complete `<tag>body</tag>` blocks as live components (without
+  // waiting for terminal) and to hide in-progress partial blocks
+  // (avoiding the raw-JSON flash that otherwise jerks into a
+  // component when streaming ends).
+  //
+  // Server-side derived: walk the pipeline, ask each plugin that
+  // emits streaming-renderable tag pairs (component_builder,
+  // lettered_choices in component mode) for its set, aggregate.
+  // Clients without inline-render support ignore this field with
+  // no behaviour change.
+  repeated StreamingComponentTag streaming_components = 10;
+}
+
+// One (tag-name, renderer-component) pair surfaced by a plugin in
+// the resolved pipeline. Tag format is fixed: `<{name}>...</{name}>`.
+// Clients scan the streaming text for these tag names and render
+// completed blocks via the named component renderer.
+message StreamingComponentTag {
+  // The tag name. Format on the wire is `<{name}>...</{name}>`.
+  string tag = 1;
+  // The renderer component to use for the block body. Matches the
+  // `component` field on UIFragment (e.g., "key_value", "choice_list").
+  string component = 2;
+}
+
+message Context {
+  string id = 1;
+  string conversation_id = 2;
+  optional string parent_context_id = 3;
+  google.protobuf.Timestamp activation_time = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // Server-tracked cursor: "the tip the user is currently viewing in this
+  // context." Drives SendMessage's default parent. Null on fresh contexts and
+  // immediately after compression.
+  optional string current_leaf_message_id = 6;
+  // Human-friendly title, populated by auto-title generation after the
+  // first assistant turn lands in the context (when profile title settings
+  // are configured). Editable via UpdateContext.
+  optional string title = 7;
+  // Total count of messages in this context (every role). Populated by
+  // ListContexts; zero when retrieved via single-context RPCs that don't
+  // aggregate.
+  int32 message_count = 8;
+  // Total tokens (input + output) reported by the most recent assistant
+  // message in this context. Populated by ListContexts; zero when retrieved
+  // via single-context RPCs that don't aggregate, or when the context
+  // contains no assistant message with usage data yet.
+  int64 last_message_total_tokens = 9;
+  // Cumulative cost in USD across every message in this context (sum of
+  // total_cost_usd over all messages, assistant + compression_summary alike).
+  // Populated by ListContexts; zero when retrieved via single-context RPCs
+  // that don't aggregate.
+  double cumulative_cost_usd = 10;
+}
+
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_SYSTEM = 1;
+  MESSAGE_ROLE_CONTEXT = 2;             // wire-mapped to user at send time
+  MESSAGE_ROLE_USER = 3;
+  MESSAGE_ROLE_ASSISTANT = 4;
+  MESSAGE_ROLE_COMPRESSION_SUMMARY = 5; // assistant output of a compression turn,
+                                        // recorded in the OLD context for audit/cost.
+                                        // History-builder always skips this role.
+}
+
+message Message {
+  string id = 1;
+  string context_id = 2;
+  optional string parent_id = 3;
+  MessageRole role = 4;
+  string content = 5;
+  optional string raw_content = 6;
+  bytes thinking = 7;
+  optional string thinking_provider_type = 8;
+  optional string thinking_rendered_text = 9;
+  optional string provider_id = 10;
+  optional string model_id = 11;
+  google.protobuf.Timestamp created_at = 12;
+  optional MessageUsage usage = 13;
+  // Number of OTHER messages sharing this row's parent — i.e. branches
+  // forking off the same parent. Populated only when returned via
+  // ListMessages with leaf_message_id (the recursive CTE path); zero on
+  // tree/list reads where forks would be visible directly.
+  int32 sibling_count = 14;
+  // Display-friendly rendering of `content` after running the active
+  // profile's plugin DisplayTransformers. Server-side so display logic
+  // isn't smeared across clients. When no DisplayTransformer applies (or
+  // the plugin pipeline is empty), this is identical to `content`.
+  string display_content = 15;
+  // Set by EditMessage. UI shows "edited <relative time>" only when this
+  // is non-null. Audit trail; doesn't affect history-builder output.
+  optional google.protobuf.Timestamp edited_at = 16;
+  // Human-readable error text when the stream that produced this message
+  // terminated in errored/cancelled state. Non-null marks the message as a
+  // failed turn: the UI renders it with a warning accent + the error text,
+  // shows whatever partial content streamed before failure (still in
+  // `content`), and exposes retry-from-here affordances. The full failure
+  // payload — provider-specific raw fields — is preserved in the database
+  // for debugging; only the human-readable string travels on the wire.
+  optional string error_text = 17;
+  // Elapsed wall-clock between the first and last `thinking_delta` chunk
+  // captured during the stream that produced this message. Powers the UI's
+  // "Thought for X.Ys" badge on historical turns. Null when the assistant
+  // didn't reason (or only emitted reasoning tokens without surfacing
+  // thinking_delta chunks — see usage.reasoning_tokens for the latter case).
+  optional int32 thinking_duration_ms = 18;
+  // Tool calls executed by the conversations-side tool loop while
+  // producing this message. One entry per tool invocation, in invocation
+  // order. Empty when the model didn't request any tools.
+  repeated ToolCall tool_calls = 19;
+  // Verbatim per-provider termination reason captured from the final
+  // upstream chunk: Anthropic `stop_reason`, OpenAI `finish_reason`,
+  // Google `finishReason`. The UI surfaces this only when it's
+  // unexpected (anything other than stop / end_turn / STOP).
+  optional string finish_reason = 20;
+  // Files attached to this message, ordered by storage ordinal. The
+  // bytes aren't inlined — clients fetch them via the FilesService
+  // signed URL endpoint. Empty for text-only turns.
+  repeated MessageAttachment attachments = 21;
+  // Structured UI fragments produced by the active profile's
+  // ContentRenderer plugin chain. When non-empty, the client renders
+  // these natively (typed UI components) instead of (or alongside)
+  // `display_content`'s plain markdown. Empty when no
+  // ContentRenderer fired — the client falls back to rendering
+  // `display_content` as before.
+  //
+  // DERIVED, not stored. The server re-renders on every fetch so
+  // adding/removing a ContentRenderer plugin from a profile takes
+  // effect retroactively across the whole history without a
+  // backfill job. See plugins/CONTENT_RENDERERS.md for the
+  // component catalog + Props schemas.
+  repeated UIFragment ui_fragments = 22;
+  // True when this row is the profile's welcome message — inserted at
+  // conversation-create time so the LLM sees its own opening greeting
+  // in history. Clients gate a fake-stream reveal animation on this
+  // flag (first open in an app session). Same wire shape as a normal
+  // assistant turn otherwise.
+  bool is_welcome = 23;
+}
+
+// UIFragment is one structured UI component the server hands the
+// client to render with a native view. Plugins emit these via the
+// ContentRenderer interface; clients dispatch on `component` to a
+// per-component renderer in their PluginRenderers/ directory.
+//
+// `text` is a special component name reserved for literal text
+// segments — text-only fragments carry their string in
+// `props.text`. Mixing text + component fragments in one
+// `Message.ui_fragments` slice is the supported way to interleave
+// markdown with structured UI.
+message UIFragment {
+  // Stable identifier matching the client's renderer registry.
+  // Examples: "text", "card_list", "choice_list", "key_value",
+  // "image", "image_grid", "error", "raw_json".
+  string component = 1;
+  // Component-specific JSON payload. The schema for each
+  // component lives in plugins/CONTENT_RENDERERS.md. Clients
+  // validate inline + fall back to a safe rendering on
+  // malformed payloads (typically an empty Text node).
+  bytes props = 2;
+  // Optional stable key the client uses to preserve per-fragment
+  // view state (selection, scroll, expansion) across re-renders.
+  // Empty when the renderer doesn't need stable identity.
+  string key = 3;
+}
+
+// MessageAttachment is the client-side projection of a
+// `message_attachments` row joined to its `files` row. The bytes
+// themselves are NOT carried on the wire — fetch via
+// FilesService.GetFileURL.
+message MessageAttachment {
+  // file_id from the `files` table; pass to GetFileURL to mint a
+  // signed bytes URL.
+  string file_id = 1;
+  // image | audio | document | video — denormalised from
+  // files.mime_type for client-side dispatch without re-parsing
+  // mime on every render.
+  string kind = 2;
+  // Full MIME type (e.g. "image/jpeg", "application/pdf").
+  string mime_type = 3;
+  // SHA-256 of the stored bytes, hex-encoded. Useful as a stable
+  // cache key for clients that cache fetched bytes locally —
+  // content addressed, immutable, content_id-stable across
+  // re-uploads.
+  string sha256 = 4;
+  // Original filename when the user uploaded it. Surfaced on
+  // document chips; ignored for inline image renders.
+  optional string original_filename = 5;
+  // user_supplied | tool_result | model_generated |
+  // compressed_reference — see message_attachments.role_hint
+  // CHECK constraint.
+  string role_hint = 6;
+  int64 size_bytes = 7;
+}
+
+// One tool call recorded on an assistant message — the model's request
+// (id, name, input) plus the loop's execution result (output OR error,
+// elapsed_ms, optional provider_opaque for Gemini's thoughtSignature).
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  bytes input = 3;
+  // Exactly one of output / error is set.
+  bytes output = 4;
+  optional string error = 5;
+  int64 elapsed_ms = 6;
+  optional string provider_opaque = 7;
+}
+
+// MessageUsage records token usage reported by the provider plus the
+// per-component cost computed at the moment of materialization (using the
+// pricing snapshotted on user_models when the model was enabled).
+message MessageUsage {
+  optional int32 input_tokens = 1;
+  optional int32 output_tokens = 2;
+  optional int32 cache_read_tokens = 3;
+  optional int32 cache_write_tokens = 4;
+  optional int32 reasoning_tokens = 5;
+
+  optional double input_cost_usd = 6;
+  optional double output_cost_usd = 7;
+  optional double cache_read_cost_usd = 8;
+  optional double cache_write_cost_usd = 9;
+  optional double total_cost_usd = 10;
+
+  // explicit_cache_attached records whether Psmith attached an
+  // explicit Gemini cachedContents reference to the request that
+  // produced this message. NULL = not applicable (toggle off / non-
+  // google driver / pre-feature message); TRUE = cache attached;
+  // FALSE = toggle on but no cache attached this turn (most often:
+  // prefix below the per-model minimum). Combined with
+  // cache_read_tokens this distinguishes explicit cache hits from
+  // implicit ones.
+  optional bool explicit_cache_attached = 11;
+
+  // tool_cost_usd is the sum of every tool call the assistant
+  // dispatched during this turn that returned a `cost_usd` value
+  // (today: imagegen — OpenAI images endpoint or Gemini's
+  // generateContent for image output; future: any plugin that can
+  // compute its own API spend). Independent of input/output/cache
+  // token costs, but already folded into total_cost_usd at write
+  // time so the existing chip captures total spend without UI
+  // changes. NULL when no tool reported a cost (or pre-migration
+  // rows). Surface separately when the UI wants to break down spend.
+  optional double tool_cost_usd = 12;
+}
+
+// ---------------------------------------------------------------------------
+// Streaming
+// ---------------------------------------------------------------------------
+
+enum StreamRunStatus {
+  STREAM_RUN_STATUS_UNSPECIFIED = 0;
+  STREAM_RUN_STATUS_RUNNING = 1;
+  STREAM_RUN_STATUS_COMPLETED = 2;
+  STREAM_RUN_STATUS_ERRORED = 3;
+  STREAM_RUN_STATUS_CANCELLED = 4;
+  STREAM_RUN_STATUS_INTERRUPTED = 5;
+}
+
+enum StreamRunPurpose {
+  STREAM_RUN_PURPOSE_UNSPECIFIED = 0;
+  STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE = 1;
+  STREAM_RUN_PURPOSE_COMPRESSION = 2;
+}
+
+message StreamRun {
+  string id = 1;
+  string conversation_id = 2;
+  string context_id = 3;
+  optional string parent_message_id = 4;
+  string provider_id = 5;
+  string model_id = 6;
+  StreamRunStatus status = 7;
+  StreamRunPurpose purpose = 8;
+  google.protobuf.Timestamp started_at = 9;
+  optional google.protobuf.Timestamp ended_at = 10;
+  bytes error_payload = 11;
+  optional string result_message_id = 12;
+  optional string result_context_id = 13;
+  // Cache observability for the chat-plugin pipeline. See
+  // docs/design/history-builder.md and docs/design/streaming.md.
+  //
+  // prefix_length: number of messages in the rendered wire-prefix.
+  // cache_stable_prefix_length: positions whose hash matched the previous
+  //   turn for this context. Null on the first turn (no comparison).
+  // cache_trailing_depth: previous turn's prefix length minus
+  //   stable_prefix_length — positions that fell out of cache between turns.
+  //   Null on the first turn.
+  optional int32 prefix_length = 14;
+  optional int32 cache_stable_prefix_length = 15;
+  optional int32 cache_trailing_depth = 16;
+}
+
+enum ChunkType {
+  CHUNK_TYPE_UNSPECIFIED = 0;
+  CHUNK_TYPE_TEXT_DELTA = 1;
+  CHUNK_TYPE_THINKING_DELTA = 2;
+  CHUNK_TYPE_TOOL_USE_START = 3;
+  CHUNK_TYPE_TOOL_USE_DELTA = 4;
+  CHUNK_TYPE_TOOL_USE_END = 5;
+  CHUNK_TYPE_ERROR = 6;
+  CHUNK_TYPE_DONE = 7;
+  CHUNK_TYPE_USAGE = 8;
+  // Synthetic — emitted by the conversations-side tool loop after
+  // executing one tool_use. Carries the tool_use_id, the plugin output (or
+  // error), and the wall-clock duration. Surfaces both during live streams
+  // and on history reads (the chunk row is replayed, and the materialised
+  // assistant message also encodes the same data in `tool_calls`).
+  CHUNK_TYPE_TOOL_RESULT = 9;
+  // Anthropic-only signed thinking signature, emitted at the end of a
+  // thinking block. Psmith stores the (text, signature) pair on
+  // messages.thinking so it can be round-tripped on the next request.
+  CHUNK_TYPE_THINKING_SIGNATURE = 10;
+  // Synthetic — emitted by the conversations-side tool loop when an
+  // in-process MCP tool calls ctx.Elicit (MCP elicitation). Payload is
+  // JSON `{"elicitation_id":"<uuid>","message":"...","requested_schema":{...}}`.
+  // Clients render a form bound to the JSON Schema; submitting POSTs
+  // the user's response to `/conversations/{id}/elicitations/{eid}/respond`,
+  // which unblocks the waiting tool. Not persisted as message content
+  // — purely an in-flight UI cue.
+  CHUNK_TYPE_ELICIT = 11;
+  // Synthetic — emitted by the conversations-side tool loop when the
+  // model calls a device tool (calendar_list_events, obsidian_read_note,
+  // …). Payload is JSON
+  // `{"call_id":"<uuid>","tool_name":"...","input":{...}}`.
+  // The connected client executes the tool via its native APIs
+  // (EventKit / Contacts / file bookmarks) and POSTs the result to
+  // `/conversations/{id}/device-tools/{call_id}/respond`, which
+  // unblocks the waiting server-side tool dispatch. Not persisted as
+  // message content; the resulting `tool_result` chunk that follows
+  // is the message-visible row.
+  CHUNK_TYPE_DEVICE_TOOL_USE = 12;
+}
+
+message Chunk {
+  int64 sequence = 1;
+  ChunkType type = 2;
+  bytes payload = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Device facts (basic_grounding & friends)
+// ---------------------------------------------------------------------------
+
+// DeviceFactKey is the closed enum of context bits a fact-aware
+// plugin can ask the device to gather and ship alongside the
+// outgoing user message. Adding a new fact requires a new enum
+// value AND client-side gathering code, which are coordinated —
+// closed-enum keeps that gate explicit instead of a free-form
+// string map drifting between implementations.
+enum DeviceFactKey {
+  DEVICE_FACT_KEY_UNSPECIFIED = 0;
+  // BCP-47 tag, e.g. "en-US". Zero permission cost.
+  DEVICE_FACT_KEY_LOCALE = 1;
+  // IANA timezone, e.g. "America/New_York".
+  DEVICE_FACT_KEY_TIMEZONE = 2;
+  // Free-form OS + device, e.g. "iOS 26.5 / iPhone 17 Pro".
+  DEVICE_FACT_KEY_PLATFORM = 3;
+  // Reverse-geocoded place name, e.g. "Brooklyn, NY". Requires
+  // location permission on the client.
+  DEVICE_FACT_KEY_LOCATION_CITY = 4;
+  // Raw "lat,lng" string, e.g. "40.6782,-73.9442". Requires
+  // location permission. Acts as a fallback when reverse-geocoding
+  // wasn't possible.
+  DEVICE_FACT_KEY_LOCATION_COORDS = 5;
+}
+
+// One device-supplied fact. `value` is intentionally untyped — the
+// shape varies per key (locale tags, ISO timestamps, free-form
+// strings) and the consumers (plugins) parse per-key.
+message DeviceFact {
+  DeviceFactKey key = 1;
+  string value = 2;
+}

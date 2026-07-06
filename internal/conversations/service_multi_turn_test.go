@@ -9,10 +9,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/fakellm"
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/psmith/fakellm"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
 )
 
 // runOneTurn drives a single SendMessage end-to-end against the fake server
@@ -22,7 +22,7 @@ func runOneTurn(t *testing.T, svc *Service, sup *stream.Supervisor, q *store.Que
 	t.Helper()
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        content,
 		ProviderId:     &pid,
@@ -189,13 +189,13 @@ func TestMultiTurn_ConcurrentSendsSerialize(t *testing.T) {
 	mid := f.modelID
 
 	var wg sync.WaitGroup
-	results := make([]*spaltv1.SendMessageResponse, N)
+	results := make([]*psmithv1.SendMessageResponse, N)
 	errs := make([]error, N)
 	for i := 0; i < N; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+			resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 				ConversationId: f.conv.ID.String(),
 				Content:        "concurrent",
 				ProviderId:     &pid,

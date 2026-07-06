@@ -9,11 +9,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // realCipher mints an AES-256-GCM cipher with a per-test key so each
@@ -54,7 +54,7 @@ func TestEncryption_CreateProviderRoundTripsThroughCiphertext(t *testing.T) {
 	ctx := ctxAs(user)
 
 	plaintext := []byte(`{"api_key":"sk-the-very-real-key","base_url":"https://api.example.com"}`)
-	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   "openai-compatible",
 		Label:  "test",
 		Config: plaintext,
@@ -89,7 +89,7 @@ func TestEncryption_CreateProviderRoundTripsThroughCiphertext(t *testing.T) {
 	// Read back through the service — should round-trip to the
 	// original plaintext (api_key included; the proto Config field
 	// surfaces the decrypted blob).
-	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: resp.Msg.Provider.Id,
 	}))
 	if err != nil {
@@ -114,7 +114,7 @@ func TestEncryption_LegacyPlaintextRowReadsBack(t *testing.T) {
 	// Create through the service (lands encrypted), then move bytes
 	// sideways into the legacy plaintext column so the fallback path
 	// is what gets exercised on read.
-	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   "openai-compatible",
 		Label:  "legacy",
 		Config: []byte(`{"api_key":"sk-legacy","base_url":"https://legacy.example.com"}`),
@@ -131,7 +131,7 @@ func TestEncryption_LegacyPlaintextRowReadsBack(t *testing.T) {
 		t.Fatalf("rewire to legacy plaintext: %v", err)
 	}
 
-	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: resp.Msg.Provider.Id,
 	}))
 	if err != nil {
@@ -153,7 +153,7 @@ func TestEncryption_UpdateMergesAndRotatesToEncrypted(t *testing.T) {
 	ctx := ctxAs(user)
 
 	// Create with both fields.
-	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	resp, err := svc.CreateUserModelProvider(ctx, connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   "openai-compatible",
 		Label:  "test",
 		Config: []byte(`{"api_key":"sk-original","base_url":"https://orig.example.com"}`),
@@ -163,7 +163,7 @@ func TestEncryption_UpdateMergesAndRotatesToEncrypted(t *testing.T) {
 	}
 
 	// Update only base_url — api_key must survive the merge.
-	if _, err := svc.UpdateUserModelProvider(ctx, connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	if _, err := svc.UpdateUserModelProvider(ctx, connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:     resp.Msg.Provider.Id,
 		Config: []byte(`{"base_url":"https://new.example.com"}`),
 	})); err != nil {
@@ -171,7 +171,7 @@ func TestEncryption_UpdateMergesAndRotatesToEncrypted(t *testing.T) {
 	}
 
 	// Read back, prove both fields landed.
-	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	got, err := svc.GetUserModelProvider(ctx, connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: resp.Msg.Provider.Id,
 	}))
 	if err != nil {

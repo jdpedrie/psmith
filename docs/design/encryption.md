@@ -1,6 +1,6 @@
 # Encryption
 
-Spalt encrypts the secrets it holds on a user's behalf (provider credentials, plugin secrets, Langfuse and embedder API keys) at rest, with a single master key. The scheme is deliberately narrow: AES-256-GCM, one key, no per-row key derivation, no envelope wrapping. This document covers what is encrypted and what is not, the cipher, the master key, the file-URL signing sub-key, and the threat tiers the design does and does not address.
+Psmith encrypts the secrets it holds on a user's behalf (provider credentials, plugin secrets, Langfuse and embedder API keys) at rest, with a single master key. The scheme is deliberately narrow: AES-256-GCM, one key, no per-row key derivation, no envelope wrapping. This document covers what is encrypted and what is not, the cipher, the master key, the file-URL signing sub-key, and the threat tiers the design does and does not address.
 
 ## What is encrypted
 
@@ -26,13 +26,13 @@ The key must be exactly 32 bytes; anything else is a construction error. There i
 
 ## The master key
 
-The master key comes from `SPALT_MASTER_KEY`, a base64-encoded 32-byte value ([configuration.md](../operations/configuration.md)). It is the root of all at-rest secret encryption. Lose it and every encrypted secret becomes unrecoverable; the user has to re-enter every provider credential and API key. Leak it together with a database dump and the secrets are exposed. So the operational contract is: generate it once, store it somewhere durable and separate from the database backups, and supply it to the process through the environment.
+The master key comes from `PSMITH_MASTER_KEY`, a base64-encoded 32-byte value ([configuration.md](../operations/configuration.md)). It is the root of all at-rest secret encryption. Lose it and every encrypted secret becomes unrecoverable; the user has to re-enter every provider credential and API key. Leak it together with a database dump and the secrets are exposed. So the operational contract is: generate it once, store it somewhere durable and separate from the database backups, and supply it to the process through the environment.
 
 If no master key is configured, the deployment can opt into the Nop cipher and run with secrets stored in the clear. That is a development convenience, not a production posture; a real deployment sets the key.
 
 ## The file-URL signing sub-key
 
-File download URLs are signed so a short-lived URL grants read access to one file without a session ([api/non-rpc-endpoints](../api/non-rpc-endpoints.md)). The signing key for those URLs is not the master key directly; it is derived from it with an HMAC over a fixed domain-separation label (`"spalt.fileurl.v1"`). Deriving a sub-key keeps URL signing out of the secret-encryption pipeline, so the two concerns can be audited and, if ever needed, rotated independently. A signed URL token is an HMAC over the file id, the user id, and an expiry; flipping any field invalidates it, and every verification failure returns the same generic "invalid token" so the endpoint leaks nothing about why a token was rejected.
+File download URLs are signed so a short-lived URL grants read access to one file without a session ([api/non-rpc-endpoints](../api/non-rpc-endpoints.md)). The signing key for those URLs is not the master key directly; it is derived from it with an HMAC over a fixed domain-separation label (`"psmith.fileurl.v1"`). Deriving a sub-key keeps URL signing out of the secret-encryption pipeline, so the two concerns can be audited and, if ever needed, rotated independently. A signed URL token is an HMAC over the file id, the user id, and an expiry; flipping any field invalidates it, and every verification failure returns the same generic "invalid token" so the endpoint leaks nothing about why a token was rejected.
 
 ## Threat tiers
 

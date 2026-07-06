@@ -13,13 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // --- helpers ---
@@ -189,12 +189,12 @@ func TestListProviderTypes_IncludesRegistered(t *testing.T) {
 	svc, _, _, _ := newTestService(t)
 	registered := registerFakeDriver(t, "lpt", nil, nil)
 
-	resp, err := svc.ListProviderTypes(context.Background(), connect.NewRequest(&spaltv1.ListProviderTypesRequest{}))
+	resp, err := svc.ListProviderTypes(context.Background(), connect.NewRequest(&psmithv1.ListProviderTypesRequest{}))
 	if err != nil {
 		t.Fatalf("ListProviderTypes: %v", err)
 	}
 
-	var found *spaltv1.ProviderType
+	var found *psmithv1.ProviderType
 	for _, pt := range resp.Msg.Types {
 		if pt.Name == registered {
 			found = pt
@@ -240,12 +240,12 @@ func TestListProviderTemplates_PresetRegistry(t *testing.T) {
 	// catalog enrichment to prove templates surface even without it.
 	seedCatalog(t, cat, "openai", "OpenAI", "https://api.openai.com/v1", "gpt-foo", "GPT Foo")
 
-	resp, err := svc.ListProviderTemplates(context.Background(), connect.NewRequest(&spaltv1.ListProviderTemplatesRequest{}))
+	resp, err := svc.ListProviderTemplates(context.Background(), connect.NewRequest(&psmithv1.ListProviderTemplatesRequest{}))
 	if err != nil {
 		t.Fatalf("ListProviderTemplates: %v", err)
 	}
 
-	got := map[string]*spaltv1.ProviderTemplate{}
+	got := map[string]*psmithv1.ProviderTemplate{}
 	for _, t := range resp.Msg.Templates {
 		got[t.CatalogProviderId] = t
 	}
@@ -309,7 +309,7 @@ func TestCreateUserModelProvider_Success(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	typeName := registerFakeDriver(t, "create-success", nil, nil)
 
-	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   typeName,
 		Label:  "main",
 		Config: []byte(`{"api_key":"sk-x"}`),
@@ -334,7 +334,7 @@ func TestCreateUserModelProvider_DefaultsConfigToEmptyObject(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	typeName := registerFakeDriver(t, "create-default-cfg", nil, nil)
 
-	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	resp, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:  typeName,
 		Label: "main",
 	}))
@@ -356,7 +356,7 @@ func TestCreateUserModelProvider_RejectsInvalidConfig(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	typeName := registerFakeDriver(t, "create-bad-cfg", nil, nil)
 
-	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:   typeName,
 		Label:  "main",
 		Config: []byte("not-json"),
@@ -370,7 +370,7 @@ func TestCreateUserModelProvider_RejectsUnknownType(t *testing.T) {
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
 
-	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type:  "nonexistent-driver-type",
 		Label: "main",
 	}))
@@ -381,7 +381,7 @@ func TestCreateUserModelProvider_RequiresType(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
-	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type: "", Label: "x",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -391,7 +391,7 @@ func TestCreateUserModelProvider_RequiresLabel(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
-	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.CreateUserModelProviderRequest{
+	_, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type: "x", Label: "",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -408,7 +408,7 @@ func TestListUserModelProviders_PerUser(t *testing.T) {
 	makeProvider(t, q, alice.ID, "fake", "alice-2", nil)
 	makeProvider(t, q, bob.ID, "fake", "bob-1", nil)
 
-	resp, err := svc.ListUserModelProviders(ctxAs(alice), connect.NewRequest(&spaltv1.ListUserModelProvidersRequest{}))
+	resp, err := svc.ListUserModelProviders(ctxAs(alice), connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}))
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -430,7 +430,7 @@ func TestGetUserModelProvider_OwnerCanRead(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	resp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	resp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	if err != nil {
@@ -459,7 +459,7 @@ func TestGetUserModelProvider_IncludesEnabledModels(t *testing.T) {
 		t.Fatalf("UpsertUserModel: %v", err)
 	}
 
-	resp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	resp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	if err != nil {
@@ -477,7 +477,7 @@ func TestGetUserModelProvider_OtherUserNotFound(t *testing.T) {
 	bob := mustUser(t, q, "bob", false)
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
-	_, err := svc.GetUserModelProvider(ctxAs(bob), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	_, err := svc.GetUserModelProvider(ctxAs(bob), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -487,7 +487,7 @@ func TestGetUserModelProvider_InvalidID(t *testing.T) {
 	t.Parallel()
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
-	_, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	_, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: "not-a-uuid",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -498,7 +498,7 @@ func TestGetUserModelProvider_NotFound(t *testing.T) {
 	svc, q, _, _ := newTestService(t)
 	user := mustUser(t, q, "alice", false)
 	missing, _ := uuid.NewV7()
-	_, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	_, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: missing.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -514,7 +514,7 @@ func TestUpdateUserModelProvider_LabelAndConfig(t *testing.T) {
 
 	newLabel := "new"
 	newConfig := []byte(`{"a":2}`)
-	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:     prov.ID.String(),
 		Label:  &newLabel,
 		Config: newConfig,
@@ -542,7 +542,7 @@ func TestUpdateUserModelProvider_OtherUserNotFound(t *testing.T) {
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
 	newLabel := "x"
-	_, err := svc.UpdateUserModelProvider(ctxAs(bob), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	_, err := svc.UpdateUserModelProvider(ctxAs(bob), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:    prov.ID.String(),
 		Label: &newLabel,
 	}))
@@ -555,7 +555,7 @@ func TestUpdateUserModelProvider_InvalidConfig(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	_, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:     prov.ID.String(),
 		Config: []byte("not-json"),
 	}))
@@ -568,7 +568,7 @@ func TestUpdateUserModelProvider_EmptyLabelRejected(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 	empty := ""
-	_, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	_, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:    prov.ID.String(),
 		Label: &empty,
 	}))
@@ -589,14 +589,14 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	temp := 0.5
 	budget := int32(4096)
 	thinkingOn := true
-	want := &spaltv1.CallSettings{
+	want := &psmithv1.CallSettings{
 		Temperature: &temp,
-		Thinking: &spaltv1.ThinkingSettings{
+		Thinking: &psmithv1.ThinkingSettings{
 			Enabled:      &thinkingOn,
 			BudgetTokens: &budget,
 		},
 	}
-	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:              prov.ID.String(),
 		DefaultSettings: want,
 	}))
@@ -612,7 +612,7 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	}
 
 	// Round-trip via Get — this exercises the convert.go decode path too.
-	getResp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	getResp, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	if err != nil {
@@ -627,13 +627,13 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	// Second update — change something else (label) and leave default_settings
 	// unset. The previously-stored value must NOT be cleared.
 	newLabel := "renamed"
-	if _, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelProviderRequest{
+	if _, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:    prov.ID.String(),
 		Label: &newLabel,
 	})); err != nil {
 		t.Fatalf("Update (label only): %v", err)
 	}
-	getResp2, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.GetUserModelProviderRequest{
+	getResp2, err := svc.GetUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.GetUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	if err != nil {
@@ -654,7 +654,7 @@ func TestDeleteUserModelProvider_Success(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	if _, err := svc.DeleteUserModelProvider(ctxAs(user), connect.NewRequest(&spaltv1.DeleteUserModelProviderRequest{
+	if _, err := svc.DeleteUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.DeleteUserModelProviderRequest{
 		Id: prov.ID.String(),
 	})); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -672,7 +672,7 @@ func TestDeleteUserModelProvider_OtherUserNotFound(t *testing.T) {
 	bob := mustUser(t, q, "bob", false)
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
-	_, err := svc.DeleteUserModelProvider(ctxAs(bob), connect.NewRequest(&spaltv1.DeleteUserModelProviderRequest{
+	_, err := svc.DeleteUserModelProvider(ctxAs(bob), connect.NewRequest(&psmithv1.DeleteUserModelProviderRequest{
 		Id: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -702,7 +702,7 @@ func TestDiscoverModels_FlagsAlreadyEnabled(t *testing.T) {
 		t.Fatalf("seed UpsertUserModel: %v", err)
 	}
 
-	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&spaltv1.DiscoverModelsRequest{
+	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -730,7 +730,7 @@ func TestDiscoverModels_DriverError(t *testing.T) {
 	typeName := registerFakeDriver(t, "discover-err", nil, errors.New("boom"))
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	_, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&spaltv1.DiscoverModelsRequest{
+	_, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeInternal)
@@ -744,7 +744,7 @@ func TestDiscoverModels_OtherUserNotFound(t *testing.T) {
 	typeName := registerFakeDriver(t, "discover-other", nil, nil)
 	prov := makeProvider(t, q, alice.ID, typeName, "main", nil)
 
-	_, err := svc.DiscoverModels(ctxAs(bob), connect.NewRequest(&spaltv1.DiscoverModelsRequest{
+	_, err := svc.DiscoverModels(ctxAs(bob), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -764,7 +764,7 @@ func TestEnableModels_FromCatalog(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, "openai-compatible", "main",
 		[]byte(`{"catalog_provider_id":"anthropic"}`))
 
-	resp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	resp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"claude-foo"},
 	}))
@@ -778,7 +778,7 @@ func TestEnableModels_FromCatalog(t *testing.T) {
 	if got.ModelId != "claude-foo" {
 		t.Errorf("model_id mismatch: %q", got.ModelId)
 	}
-	if got.MetadataSource != spaltv1.MetadataSource_METADATA_SOURCE_CATALOG {
+	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_CATALOG {
 		t.Errorf("expected catalog source, got %v", got.MetadataSource)
 	}
 	if got.DisplayName != "Claude Foo" {
@@ -804,7 +804,7 @@ func TestEnableModels_FromDriverDiscovery(t *testing.T) {
 	typeName := registerFakeDriver(t, "enable-drv", models, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	resp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"drv-model"},
 	}))
@@ -815,7 +815,7 @@ func TestEnableModels_FromDriverDiscovery(t *testing.T) {
 		t.Fatalf("got %d want 1", len(resp.Msg.Enabled))
 	}
 	got := resp.Msg.Enabled[0]
-	if got.MetadataSource != spaltv1.MetadataSource_METADATA_SOURCE_DRIVER {
+	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_DRIVER {
 		t.Errorf("expected driver source, got %v", got.MetadataSource)
 	}
 	if got.GetContextWindow() != 1024 {
@@ -830,7 +830,7 @@ func TestEnableModels_NotDiscoverable(t *testing.T) {
 	typeName := registerFakeDriver(t, "enable-miss", []providers.Model{{ID: "other"}}, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	_, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	_, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"missing-model"},
 	}))
@@ -845,14 +845,14 @@ func TestEnableModels_Idempotent(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
 	// First call enables.
-	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	})); err != nil {
 		t.Fatalf("first Enable: %v", err)
 	}
 	// Second call must succeed and produce a single row.
-	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	})); err != nil {
@@ -875,7 +875,7 @@ func TestEnableModels_OtherUserNotFound(t *testing.T) {
 	typeName := registerFakeDriver(t, "enable-other", []providers.Model{{ID: "m1"}}, nil)
 	prov := makeProvider(t, q, alice.ID, typeName, "main", nil)
 
-	_, err := svc.EnableModels(ctxAs(bob), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	_, err := svc.EnableModels(ctxAs(bob), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	}))
@@ -899,7 +899,7 @@ func TestDisableModels_RemovesRow(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	if _, err := svc.DisableModels(ctxAs(user), connect.NewRequest(&spaltv1.DisableModelsRequest{
+	if _, err := svc.DisableModels(ctxAs(user), connect.NewRequest(&psmithv1.DisableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	})); err != nil {
@@ -921,7 +921,7 @@ func TestDisableModels_Idempotent(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
 	// Disable a model that was never enabled — should succeed.
-	if _, err := svc.DisableModels(ctxAs(user), connect.NewRequest(&spaltv1.DisableModelsRequest{
+	if _, err := svc.DisableModels(ctxAs(user), connect.NewRequest(&psmithv1.DisableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"never-existed"},
 	})); err != nil {
@@ -936,7 +936,7 @@ func TestDisableModels_OtherUserNotFound(t *testing.T) {
 	bob := mustUser(t, q, "bob", false)
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
-	_, err := svc.DisableModels(ctxAs(bob), connect.NewRequest(&spaltv1.DisableModelsRequest{
+	_, err := svc.DisableModels(ctxAs(bob), connect.NewRequest(&psmithv1.DisableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"x"},
 	}))
@@ -960,7 +960,7 @@ func TestToggleUserModelFavorite_SetsTrue(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		Favorite:            true,
@@ -1002,7 +1002,7 @@ func TestToggleUserModelFavorite_SetsFalse(t *testing.T) {
 		t.Fatalf("seed favorite: %v", err)
 	}
 
-	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	resp, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		Favorite:            false,
@@ -1024,20 +1024,20 @@ func TestToggleUserModelFavorite_PreservedAcrossUpsert(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
 	// Enable, then favorite, then re-enable. Favorite must survive the upsert.
-	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	})); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
-	if _, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	if _, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		Favorite:            true,
 	})); err != nil {
 		t.Fatalf("favorite: %v", err)
 	}
-	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"m1"},
 	})); err != nil {
@@ -1070,7 +1070,7 @@ func TestToggleUserModelFavorite_OtherUserNotFound(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err := svc.ToggleUserModelFavorite(ctxAs(bob), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	_, err := svc.ToggleUserModelFavorite(ctxAs(bob), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		Favorite:            true,
@@ -1084,7 +1084,7 @@ func TestToggleUserModelFavorite_ModelNotFound(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "nonexistent",
 		Favorite:            true,
@@ -1098,7 +1098,7 @@ func TestToggleUserModelFavorite_EmptyModelID(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&spaltv1.ToggleUserModelFavoriteRequest{
+	_, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "",
 		Favorite:            true,
@@ -1124,8 +1124,8 @@ func TestUpdateUserModel_HappyPath(t *testing.T) {
 	}
 
 	topP := 0.7
-	want := &spaltv1.CallSettings{TopP: &topP}
-	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	want := &psmithv1.CallSettings{TopP: &topP}
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DefaultSettings:     want,
@@ -1138,7 +1138,7 @@ func TestUpdateUserModel_HappyPath(t *testing.T) {
 	}
 
 	// Confirm via ListUserModels — exercises the read/decode path too.
-	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -1159,10 +1159,10 @@ func TestUpdateUserModel_NotEnabled(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
 	topP := 0.7
-	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "never-enabled",
-		DefaultSettings:     &spaltv1.CallSettings{TopP: &topP},
+		DefaultSettings:     &psmithv1.CallSettings{TopP: &topP},
 	}))
 	assertCode(t, err, connect.CodeNotFound)
 }
@@ -1184,10 +1184,10 @@ func TestUpdateUserModel_CrossUser(t *testing.T) {
 	}
 
 	topP := 0.5
-	_, err := svc.UpdateUserModel(ctxAs(bob), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	_, err := svc.UpdateUserModel(ctxAs(bob), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
-		DefaultSettings:     &spaltv1.CallSettings{TopP: &topP},
+		DefaultSettings:     &psmithv1.CallSettings{TopP: &topP},
 	}))
 	// NotFound — don't leak existence to the wrong user.
 	assertCode(t, err, connect.CodeNotFound)
@@ -1199,7 +1199,7 @@ func TestUpdateUserModel_EmptyModelID(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "",
 	}))
@@ -1235,19 +1235,19 @@ func TestUpdateUserModel_FullMetadata(t *testing.T) {
 	newCW := int32(128000)
 	newMO := int32(16384)
 	newKC := "2025-01-15"
-	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         &newDisplay,
 		ContextWindow:       &newCW,
 		MaxOutputTokens:     &newMO,
-		Pricing: &spaltv1.ModelPricing{
+		Pricing: &psmithv1.ModelPricing{
 			InputPerMillionTokens:  ptr(2.5),
 			OutputPerMillionTokens: ptr(10.0),
 		},
 		UpdateModalities: true,
 		Modalities:       []string{"text", "image"},
-		Capabilities: &spaltv1.ModelCapabilities{
+		Capabilities: &psmithv1.ModelCapabilities{
 			Streaming: true,
 			Vision:    true,
 		},
@@ -1306,7 +1306,7 @@ func TestUpdateUserModel_SparseMerge(t *testing.T) {
 	}
 
 	newDisplay := "Renamed"
-	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         &newDisplay,
@@ -1353,7 +1353,7 @@ func TestUpdateUserModel_ModalitiesFlagGate(t *testing.T) {
 
 	// Flag false → existing modalities preserved.
 	newDisplay := "Keep"
-	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	resp, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         &newDisplay,
@@ -1368,7 +1368,7 @@ func TestUpdateUserModel_ModalitiesFlagGate(t *testing.T) {
 	}
 
 	// Flag true with empty array → cleared.
-	resp2, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	resp2, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		UpdateModalities:    true,
@@ -1400,7 +1400,7 @@ func TestUpdateUserModel_EmptyDisplayNameRejected(t *testing.T) {
 	}
 
 	empty := "   "
-	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&spaltv1.UpdateUserModelRequest{
+	_, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         &empty,
@@ -1427,7 +1427,7 @@ func TestListUserModels_PerInstance(t *testing.T) {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	resp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	resp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov1.ID.String(),
 	}))
 	if err != nil {
@@ -1445,7 +1445,7 @@ func TestListUserModels_OtherUserNotFound(t *testing.T) {
 	bob := mustUser(t, q, "bob", false)
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
-	_, err := svc.ListUserModels(ctxAs(bob), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	_, err := svc.ListUserModels(ctxAs(bob), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -1471,7 +1471,7 @@ func TestListAllUserModels_AcrossProviders(t *testing.T) {
 		}
 	}
 
-	resp, err := svc.ListAllUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}))
+	resp, err := svc.ListAllUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
 	if err != nil {
 		t.Fatalf("ListAll: %v", err)
 	}
@@ -1504,7 +1504,7 @@ func TestListAllUserModels_PerUser(t *testing.T) {
 		}
 	}
 
-	resp, err := svc.ListAllUserModels(ctxAs(alice), connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}))
+	resp, err := svc.ListAllUserModels(ctxAs(alice), connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
 	if err != nil {
 		t.Fatalf("ListAll: %v", err)
 	}
@@ -1528,7 +1528,7 @@ func TestRefreshModelCatalog_Admin(t *testing.T) {
 	svc := NewService(q, cat, crypto.Nop{}, nil)
 	admin := mustUser(t, q, "admin", true)
 
-	resp, err := svc.RefreshModelCatalog(ctxAs(admin), connect.NewRequest(&spaltv1.RefreshModelCatalogRequest{}))
+	resp, err := svc.RefreshModelCatalog(ctxAs(admin), connect.NewRequest(&psmithv1.RefreshModelCatalogRequest{}))
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
@@ -1547,7 +1547,7 @@ func TestRefreshModelCatalog_NonAdminDenied(t *testing.T) {
 	cat := &fakeCatalog{}
 	svc := NewService(q, cat, crypto.Nop{}, nil)
 	regular := mustUser(t, q, "alice", false)
-	_, err := svc.RefreshModelCatalog(ctxAs(regular), connect.NewRequest(&spaltv1.RefreshModelCatalogRequest{}))
+	_, err := svc.RefreshModelCatalog(ctxAs(regular), connect.NewRequest(&psmithv1.RefreshModelCatalogRequest{}))
 	assertCode(t, err, connect.CodePermissionDenied)
 	if cat.refreshed {
 		t.Error("Refresh should not have been called for a non-admin")
@@ -1567,7 +1567,7 @@ func TestGetCatalogStatus_Authenticated(t *testing.T) {
 	svc := NewService(q, cat, crypto.Nop{}, nil)
 	user := mustUser(t, q, "alice", false)
 
-	resp, err := svc.GetCatalogStatus(ctxAs(user), connect.NewRequest(&spaltv1.GetCatalogStatusRequest{}))
+	resp, err := svc.GetCatalogStatus(ctxAs(user), connect.NewRequest(&psmithv1.GetCatalogStatusRequest{}))
 	if err != nil {
 		t.Fatalf("GetCatalogStatus: %v", err)
 	}
@@ -1585,7 +1585,7 @@ func TestGetCatalogStatus_RealCatalog(t *testing.T) {
 	seedCatalog(t, cat, "anthropic", "Anthropic", "https://api.anthropic.com", "claude-x", "Claude X")
 	user := mustUser(t, q, "alice", false)
 
-	resp, err := svc.GetCatalogStatus(ctxAs(user), connect.NewRequest(&spaltv1.GetCatalogStatusRequest{}))
+	resp, err := svc.GetCatalogStatus(ctxAs(user), connect.NewRequest(&psmithv1.GetCatalogStatusRequest{}))
 	if err != nil {
 		t.Fatalf("GetCatalogStatus: %v", err)
 	}
@@ -1724,7 +1724,7 @@ func TestEnableModels_FromCatalog_RichMetadata_RoundTrip(t *testing.T) {
 	prov := makeProvider(t, q, user.ID, "openai-compatible", "main",
 		[]byte(`{"catalog_provider_id":"anthropic"}`))
 
-	enableResp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	enableResp, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"rich-claude"},
 	}))
@@ -1732,7 +1732,7 @@ func TestEnableModels_FromCatalog_RichMetadata_RoundTrip(t *testing.T) {
 		t.Fatalf("EnableModels: %v", err)
 	}
 
-	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -1774,7 +1774,7 @@ func TestEnableModels_FromCatalog_RichMetadata_RoundTrip(t *testing.T) {
 		!got.Capabilities.ToolUse || !got.Capabilities.Vision || !got.Capabilities.PromptCaching {
 		t.Errorf("capabilities not preserved: %+v", got.Capabilities)
 	}
-	if got.MetadataSource != spaltv1.MetadataSource_METADATA_SOURCE_CATALOG {
+	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_CATALOG {
 		t.Errorf("source: %v", got.MetadataSource)
 	}
 
@@ -1822,14 +1822,14 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 	typeName := registerFakeDriver(t, "rich-driver", []providers.Model{rich}, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&spaltv1.EnableModelsRequest{
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelIds:            []string{"driver-rich"},
 	})); err != nil {
 		t.Fatalf("EnableModels: %v", err)
 	}
 
-	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -1857,7 +1857,7 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 		got.DefaultSettings.GetThinking().GetBudgetTokens() != int32(thinkingBudget) {
 		t.Errorf("default_settings round-trip: %+v", got.DefaultSettings)
 	}
-	if got.MetadataSource != spaltv1.MetadataSource_METADATA_SOURCE_DRIVER {
+	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_DRIVER {
 		t.Errorf("source: %v", got.MetadataSource)
 	}
 }
@@ -1884,7 +1884,7 @@ func TestDiscoverModels_PassesThroughRichMetadata(t *testing.T) {
 	typeName := registerFakeDriver(t, "discover-rich", []providers.Model{rich}, nil)
 	prov := makeProvider(t, q, user.ID, typeName, "main", nil)
 
-	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&spaltv1.DiscoverModelsRequest{
+	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -1903,7 +1903,7 @@ func TestDiscoverModels_PassesThroughRichMetadata(t *testing.T) {
 	if d.GetKnowledgeCutoff() != "2024-08-15" {
 		t.Errorf("knowledge_cutoff: %q", d.GetKnowledgeCutoff())
 	}
-	if d.MetadataSource != spaltv1.MetadataSource_METADATA_SOURCE_CATALOG {
+	if d.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_CATALOG {
 		t.Errorf("source: %v", d.MetadataSource)
 	}
 }
@@ -1941,20 +1941,20 @@ func TestAddManualModel_HappyPath(t *testing.T) {
 	cutoff := "2025-04-01"
 	temp := 0.4
 
-	resp, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&spaltv1.AddManualModelRequest{
+	resp, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "gpt-mystery",
 		DisplayName:         "GPT Mystery",
 		ContextWindow:       &cw,
 		MaxOutputTokens:     &maxOut,
-		Pricing: &spaltv1.ModelPricing{
+		Pricing: &psmithv1.ModelPricing{
 			InputPerMillionTokens:  &inputPrice,
 			OutputPerMillionTokens: &outputPrice,
 		},
 		Modalities:      []string{"text", "image"},
-		Capabilities:    &spaltv1.ModelCapabilities{Streaming: true, Vision: true},
+		Capabilities:    &psmithv1.ModelCapabilities{Streaming: true, Vision: true},
 		KnowledgeCutoff: &cutoff,
-		DefaultSettings: &spaltv1.CallSettings{Temperature: &temp},
+		DefaultSettings: &psmithv1.CallSettings{Temperature: &temp},
 	}))
 	if err != nil {
 		t.Fatalf("AddManualModel: %v", err)
@@ -1991,7 +1991,7 @@ func TestAddManualModel_HappyPath(t *testing.T) {
 	if ds := got.GetDefaultSettings(); ds == nil || ds.GetTemperature() != temp {
 		t.Errorf("default_settings: %+v", ds)
 	}
-	if got.GetMetadataSource() != spaltv1.MetadataSource_METADATA_SOURCE_MANUAL {
+	if got.GetMetadataSource() != psmithv1.MetadataSource_METADATA_SOURCE_MANUAL {
 		t.Errorf("metadata_source: %v", got.GetMetadataSource())
 	}
 	if got.GetEnabledAt() == nil || got.GetMetadataSnapshotAt() == nil {
@@ -1999,7 +1999,7 @@ func TestAddManualModel_HappyPath(t *testing.T) {
 	}
 
 	// Round-trip: ListUserModels should return the same row.
-	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&spaltv1.ListUserModelsRequest{
+	listResp, err := svc.ListUserModels(ctxAs(user), connect.NewRequest(&psmithv1.ListUserModelsRequest{
 		UserModelProviderId: prov.ID.String(),
 	}))
 	if err != nil {
@@ -2008,7 +2008,7 @@ func TestAddManualModel_HappyPath(t *testing.T) {
 	if len(listResp.Msg.Models) != 1 {
 		t.Fatalf("got %d models want 1", len(listResp.Msg.Models))
 	}
-	if listResp.Msg.Models[0].GetMetadataSource() != spaltv1.MetadataSource_METADATA_SOURCE_MANUAL {
+	if listResp.Msg.Models[0].GetMetadataSource() != psmithv1.MetadataSource_METADATA_SOURCE_MANUAL {
 		t.Errorf("listed metadata_source: %v", listResp.Msg.Models[0].GetMetadataSource())
 	}
 }
@@ -2029,7 +2029,7 @@ func TestAddManualModel_DuplicateModelID(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&spaltv1.AddManualModelRequest{
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "dup",
 		DisplayName:         "Replacement",
@@ -2043,7 +2043,7 @@ func TestAddManualModel_EmptyModelID(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&spaltv1.AddManualModelRequest{
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "",
 		DisplayName:         "Nameless",
@@ -2057,7 +2057,7 @@ func TestAddManualModel_EmptyDisplayName(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&spaltv1.AddManualModelRequest{
+	_, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         "",
@@ -2072,7 +2072,7 @@ func TestAddManualModel_CrossUser(t *testing.T) {
 	bob := mustUser(t, q, "bob", false)
 	prov := makeProvider(t, q, alice.ID, "fake", "main", nil)
 
-	_, err := svc.AddManualModel(ctxAs(bob), connect.NewRequest(&spaltv1.AddManualModelRequest{
+	_, err := svc.AddManualModel(ctxAs(bob), connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: prov.ID.String(),
 		ModelId:             "m1",
 		DisplayName:         "M1",

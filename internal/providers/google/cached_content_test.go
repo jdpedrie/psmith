@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // TestCreateCachedContent_HappyPath asserts the request body shape and that

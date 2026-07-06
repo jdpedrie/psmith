@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/jdpedrie/spalt/internal/conversations"
-	"github.com/jdpedrie/spalt/internal/modelproviders"
-	"github.com/jdpedrie/spalt/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/conversations"
+	"github.com/jdpedrie/psmith/internal/modelproviders"
+	"github.com/jdpedrie/psmith/internal/profiles"
 )
 
 // ToolFunc is the contract every tool implementation satisfies. The
@@ -94,7 +94,7 @@ func (s *Server) HandleRPC(ctx context.Context, body []byte) ([]byte, error) {
 		return s.okResponse(req.ID, InitializeResult{
 			ProtocolVersion: ProtocolVersion,
 			Capabilities:    map[string]any{"tools": map[string]any{}},
-			ServerInfo:      map[string]string{"name": "spalt", "version": "0.1"},
+			ServerInfo:      map[string]string{"name": "psmith", "version": "0.1"},
 		})
 
 	case "notifications/initialized", "notifications/cancelled":

@@ -1,6 +1,6 @@
-// Package web is the server-rendered web client for spaltd. It is a
+// Package web is the server-rendered web client for psmithd. It is a
 // presentation layer over the same services the ConnectRPC handlers expose,
-// called in-process, and is served from spaltd's own mux. The UI works as
+// called in-process, and is served from psmithd's own mux. The UI works as
 // plain HTML (forms POST, links navigate) and is progressively enhanced with
 // htmx (plus its SSE extension): the conversation streams live over SSE.
 package web
@@ -18,16 +18,16 @@ import (
 	"connectrpc.com/connect"
 	"github.com/a-h/templ"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/conversations"
-	"github.com/jdpedrie/spalt/internal/embeddersvc"
-	"github.com/jdpedrie/spalt/internal/files"
-	"github.com/jdpedrie/spalt/internal/langfusesvc"
-	"github.com/jdpedrie/spalt/internal/modelproviders"
-	"github.com/jdpedrie/spalt/internal/profiles"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/conversations"
+	"github.com/jdpedrie/psmith/internal/embeddersvc"
+	"github.com/jdpedrie/psmith/internal/files"
+	"github.com/jdpedrie/psmith/internal/langfusesvc"
+	"github.com/jdpedrie/psmith/internal/modelproviders"
+	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
 )
 
 //go:embed assets
@@ -87,7 +87,7 @@ func (h *Handler) signedImageURL(ctx context.Context, fileID string) string {
 	if h.files == nil {
 		return ""
 	}
-	resp, err := h.files.GetFileURL(ctx, connect.NewRequest(&spaltv1.GetFileURLRequest{FileId: fileID}))
+	resp, err := h.files.GetFileURL(ctx, connect.NewRequest(&psmithv1.GetFileURLRequest{FileId: fileID}))
 	if err != nil {
 		return ""
 	}
@@ -212,7 +212,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, c t
 // listConvos loads the caller's conversations for the sidebar, marking
 // activeID as current.
 func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, error) {
-	resp, err := h.convos.ListConversations(ctx, connect.NewRequest(&spaltv1.ListConversationsRequest{
+	resp, err := h.convos.ListConversations(ctx, connect.NewRequest(&psmithv1.ListConversationsRequest{
 		PageSize: 100,
 	}))
 	if err != nil {
@@ -274,18 +274,18 @@ func dateGroup(now, t time.Time) string {
 	}
 }
 
-func convoTitle(c *spaltv1.Conversation) string {
+func convoTitle(c *psmithv1.Conversation) string {
 	if t := strings.TrimSpace(c.GetTitle()); t != "" {
 		return t
 	}
 	return "Untitled"
 }
 
-func roleClass(r spaltv1.MessageRole) string {
+func roleClass(r psmithv1.MessageRole) string {
 	switch r {
-	case spaltv1.MessageRole_MESSAGE_ROLE_USER:
+	case psmithv1.MessageRole_MESSAGE_ROLE_USER:
 		return "user"
-	case spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT, spaltv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
+	case psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT, psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY:
 		return "assistant"
 	default:
 		return "system"
@@ -313,7 +313,7 @@ func (h *Handler) listModels(ctx context.Context, selected string) []modelVM {
 	if h.models == nil {
 		return nil
 	}
-	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&spaltv1.ListAllUserModelsRequest{}))
+	resp, err := h.models.ListAllUserModels(ctx, connect.NewRequest(&psmithv1.ListAllUserModelsRequest{}))
 	if err != nil {
 		h.logger.Warn("web: list models failed", "err", err)
 		return nil
@@ -341,7 +341,7 @@ func (h *Handler) listProfiles(ctx context.Context) []profileVM {
 	if h.profiles == nil {
 		return nil
 	}
-	resp, err := h.profiles.ListProfiles(ctx, connect.NewRequest(&spaltv1.ListProfilesRequest{}))
+	resp, err := h.profiles.ListProfiles(ctx, connect.NewRequest(&psmithv1.ListProfilesRequest{}))
 	if err != nil {
 		h.logger.Warn("web: list profiles failed", "err", err)
 		return nil

@@ -9,16 +9,16 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/embeddings"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/embeddings"
 
 	// Register the openai driver so IsRegistered passes in tests.
-	_ "github.com/jdpedrie/spalt/internal/embeddings/openai"
+	_ "github.com/jdpedrie/psmith/internal/embeddings/openai"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 type fixture struct {
@@ -70,7 +70,7 @@ func TestGetEmbedderConfig_DefaultsWhenNoRow(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	resp, err := f.svc.GetEmbedderConfig(f.ctxAsUser,
-		connect.NewRequest(&spaltv1.GetEmbedderConfigRequest{}))
+		connect.NewRequest(&psmithv1.GetEmbedderConfigRequest{}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestUpdateEmbedderConfig_FullWrite(t *testing.T) {
 	f := newFixture(t)
 	apiKey := "sk-test-key"
 	enabled := true
-	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
@@ -127,7 +127,7 @@ func TestUpdateEmbedderConfig_FullWrite(t *testing.T) {
 
 	// Get should mirror what Update returned, never echoing the key.
 	getResp, _ := f.svc.GetEmbedderConfig(f.ctxAsUser,
-		connect.NewRequest(&spaltv1.GetEmbedderConfigRequest{}))
+		connect.NewRequest(&psmithv1.GetEmbedderConfigRequest{}))
 	if !getResp.Msg.Config.ApiKeySet {
 		t.Error("ApiKeySet should persist across Get")
 	}
@@ -139,7 +139,7 @@ func TestUpdateEmbedderConfig_SparseMergePreservesUnchanged(t *testing.T) {
 	// First write: full row.
 	apiKey := "sk-initial"
 	enabled := true
-	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
@@ -152,7 +152,7 @@ func TestUpdateEmbedderConfig_SparseMergePreservesUnchanged(t *testing.T) {
 	}
 
 	// Second write: only changes the model. Everything else stays.
-	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Model: strPtr("text-embedding-3-large"),
 	}))
 	if err != nil {
@@ -181,7 +181,7 @@ func TestUpdateEmbedderConfig_EmptyAPIKeyClearsIt(t *testing.T) {
 	f := newFixture(t)
 	// Save a key first.
 	apiKey := "sk-keep"
-	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),
@@ -193,7 +193,7 @@ func TestUpdateEmbedderConfig_EmptyAPIKeyClearsIt(t *testing.T) {
 	}
 	// Clear it.
 	empty := ""
-	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	resp, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		ApiKey: &empty,
 	}))
 	if err != nil {
@@ -207,7 +207,7 @@ func TestUpdateEmbedderConfig_EmptyAPIKeyClearsIt(t *testing.T) {
 func TestUpdateEmbedderConfig_RejectsUnknownType(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, err := f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("not-a-driver"),
 		BaseUrl:    strPtr("https://x"),
 		Model:      strPtr("m"),
@@ -222,14 +222,14 @@ func TestDeleteEmbedderConfig_RemovesAndInvalidates(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	apiKey := "sk"
-	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type: strPtr("openai"), BaseUrl: strPtr("https://x"), Model: strPtr("m"),
 		Dimensions: int32Ptr(8), ApiKey: &apiKey,
 	}))
 	f.invalCnt.n = 0 // reset so we can assert Delete invalidates
 
 	_, err := f.svc.DeleteEmbedderConfig(f.ctxAsUser,
-		connect.NewRequest(&spaltv1.DeleteEmbedderConfigRequest{}))
+		connect.NewRequest(&psmithv1.DeleteEmbedderConfigRequest{}))
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestDeleteEmbedderConfig_RemovesAndInvalidates(t *testing.T) {
 	}
 	// Subsequent Get returns the defaults again.
 	resp, _ := f.svc.GetEmbedderConfig(f.ctxAsUser,
-		connect.NewRequest(&spaltv1.GetEmbedderConfigRequest{}))
+		connect.NewRequest(&psmithv1.GetEmbedderConfigRequest{}))
 	if resp.Msg.Config.ApiKeySet {
 		t.Error("ApiKeySet should be false after Delete")
 	}
@@ -248,7 +248,7 @@ func TestListEmbedderTypes_IncludesRegistered(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	resp, err := f.svc.ListEmbedderTypes(f.ctxAsUser,
-		connect.NewRequest(&spaltv1.ListEmbedderTypesRequest{}))
+		connect.NewRequest(&psmithv1.ListEmbedderTypesRequest{}))
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestNewDBResolver_DisabledRowSurfacesSentinel(t *testing.T) {
 	f := newFixture(t)
 	disabled := false
 	apiKey := "k"
-	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://x"),
 		Model:      strPtr("m"),
@@ -298,7 +298,7 @@ func TestNewDBResolver_BuildsEmbedderForEnabledRow(t *testing.T) {
 	f := newFixture(t)
 	enabled := true
 	apiKey := "k"
-	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&spaltv1.UpdateEmbedderConfigRequest{
+	_, _ = f.svc.UpdateEmbedderConfig(f.ctxAsUser, connect.NewRequest(&psmithv1.UpdateEmbedderConfigRequest{
 		Type:       strPtr("openai"),
 		BaseUrl:    strPtr("https://api.openai.com/v1"),
 		Model:      strPtr("text-embedding-3-small"),

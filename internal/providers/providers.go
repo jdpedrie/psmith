@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
 )
 
 // Provider is the registered driver for a backend kind.
@@ -172,8 +172,8 @@ type ToolResultBlock struct {
 }
 
 // CallSettings carries per-turn provider settings. The shape mirrors the
-// `spalt.v1.CallSettings` proto (a hybrid common-core + provider-specific
-// design); see proto/spalt/v1/types.proto for field-level documentation.
+// `psmith.v1.CallSettings` proto (a hybrid common-core + provider-specific
+// design); see proto/psmith/v1/types.proto for field-level documentation.
 //
 // Drivers translate the subset of fields they support and silently drop the
 // rest. The 4-layer resolution chain
@@ -206,14 +206,14 @@ type CallSettings struct {
 	ExplicitCache *bool
 }
 
-// ThinkingSettings mirrors spalt.v1.ThinkingSettings.
+// ThinkingSettings mirrors psmith.v1.ThinkingSettings.
 type ThinkingSettings struct {
 	Enabled      *bool
 	BudgetTokens *int
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the
-// cross-provider common surface. Mirrors spalt.v1.AnthropicExtras.
+// cross-provider common surface. Mirrors psmith.v1.AnthropicExtras.
 type AnthropicExtras struct {
 	// CacheEnabled, when non-nil and false, instructs the driver to skip
 	// the auto cache_control marker placement entirely. nil = inherit
@@ -289,7 +289,7 @@ type GoogleExtras struct {
 	CachedContent *string
 }
 
-// SafetySettings mirrors spalt.v1.SafetySettings.
+// SafetySettings mirrors psmith.v1.SafetySettings.
 type SafetySettings struct {
 	Harassment       *HarmThreshold
 	HateSpeech       *HarmThreshold
@@ -297,7 +297,7 @@ type SafetySettings struct {
 	DangerousContent *HarmThreshold
 }
 
-// HarmThreshold mirrors spalt.v1.HarmThreshold.
+// HarmThreshold mirrors psmith.v1.HarmThreshold.
 type HarmThreshold int
 
 const (

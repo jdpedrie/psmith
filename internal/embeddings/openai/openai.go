@@ -35,7 +35,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/embeddings"
+	"github.com/jdpedrie/psmith/internal/embeddings"
 )
 
 // Name is the registered embedder type. Stored in

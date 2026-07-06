@@ -18,14 +18,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/langfuse"
-	"github.com/jdpedrie/spalt/internal/store"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/langfuse"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
-// Service implements spaltv1connect.LangfuseServiceHandler. Stateless;
+// Service implements psmithv1connect.LangfuseServiceHandler. Stateless;
 // constructed once at server startup and shared across all requests.
 type Service struct {
 	queries *store.Queries
@@ -49,18 +49,18 @@ func NewService(queries *store.Queries, cipher crypto.Cipher, emitter *langfuse.
 // zero-value disabled shape when no row exists. secret_key is
 // never echoed back — the response carries `has_secret_key` so the
 // client can render a "credentials saved" indicator.
-func (s *Service) GetLangfuseConfig(ctx context.Context, _ *connect.Request[spaltv1.GetLangfuseConfigRequest]) (*connect.Response[spaltv1.GetLangfuseConfigResponse], error) {
+func (s *Service) GetLangfuseConfig(ctx context.Context, _ *connect.Request[psmithv1.GetLangfuseConfigRequest]) (*connect.Response[psmithv1.GetLangfuseConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	row, err := s.queries.GetUserLangfuseConfig(ctx, user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return connect.NewResponse(&spaltv1.GetLangfuseConfigResponse{
+			return connect.NewResponse(&psmithv1.GetLangfuseConfigResponse{
 				Config: defaultProtoConfig(),
 			}), nil
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.GetLangfuseConfigResponse{
+	return connect.NewResponse(&psmithv1.GetLangfuseConfigResponse{
 		Config: s.rowToProto(row),
 	}), nil
 }
@@ -75,7 +75,7 @@ func (s *Service) GetLangfuseConfig(ctx context.Context, _ *connect.Request[spal
 //
 // On success, the in-memory emitter cache is refreshed so the next
 // turn dispatches with the new credentials.
-func (s *Service) UpdateLangfuseConfig(ctx context.Context, req *connect.Request[spaltv1.UpdateLangfuseConfigRequest]) (*connect.Response[spaltv1.UpdateLangfuseConfigResponse], error) {
+func (s *Service) UpdateLangfuseConfig(ctx context.Context, req *connect.Request[psmithv1.UpdateLangfuseConfigRequest]) (*connect.Response[psmithv1.UpdateLangfuseConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 
 	// Load existing row (if any) so the upsert merges sparsely.
@@ -147,7 +147,7 @@ func (s *Service) UpdateLangfuseConfig(ctx context.Context, req *connect.Request
 	// the row to the client and log so the operator notices.
 	s.refreshEmitter(user.ID.String(), row)
 
-	return connect.NewResponse(&spaltv1.UpdateLangfuseConfigResponse{
+	return connect.NewResponse(&psmithv1.UpdateLangfuseConfigResponse{
 		Config: s.rowToProto(row),
 	}), nil
 }
@@ -155,7 +155,7 @@ func (s *Service) UpdateLangfuseConfig(ctx context.Context, req *connect.Request
 // DeleteLangfuseConfig removes the row entirely + drops the
 // emitter's cached credentials. Idempotent — no error when nothing
 // exists to delete.
-func (s *Service) DeleteLangfuseConfig(ctx context.Context, _ *connect.Request[spaltv1.DeleteLangfuseConfigRequest]) (*connect.Response[spaltv1.DeleteLangfuseConfigResponse], error) {
+func (s *Service) DeleteLangfuseConfig(ctx context.Context, _ *connect.Request[psmithv1.DeleteLangfuseConfigRequest]) (*connect.Response[psmithv1.DeleteLangfuseConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	if err := s.queries.DeleteUserLangfuseConfig(ctx, user.ID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -163,7 +163,7 @@ func (s *Service) DeleteLangfuseConfig(ctx context.Context, _ *connect.Request[s
 	if s.emitter != nil {
 		s.emitter.SetUserConfig(user.ID.String(), langfuse.Config{})
 	}
-	return connect.NewResponse(&spaltv1.DeleteLangfuseConfigResponse{}), nil
+	return connect.NewResponse(&psmithv1.DeleteLangfuseConfigResponse{}), nil
 }
 
 // TestLangfuseConfig fires a single synthetic trace at the
@@ -176,12 +176,12 @@ func (s *Service) DeleteLangfuseConfig(ctx context.Context, _ *connect.Request[s
 // needs synchronous success/failure for the UI's test affordance.
 // A throwaway one-shot Emitter is constructed, fired, and torn
 // down within the call.
-func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[spaltv1.TestLangfuseConfigRequest]) (*connect.Response[spaltv1.TestLangfuseConfigResponse], error) {
+func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[psmithv1.TestLangfuseConfigRequest]) (*connect.Response[psmithv1.TestLangfuseConfigResponse], error) {
 	user := auth.MustFromContext(ctx)
 	row, err := s.queries.GetUserLangfuseConfig(ctx, user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return connect.NewResponse(&spaltv1.TestLangfuseConfigResponse{
+			return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
 				Ok: false, ErrorMessage: "no langfuse config saved yet",
 			}), nil
 		}
@@ -189,12 +189,12 @@ func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[spa
 	}
 	cfg, decErr := s.decryptedConfig(row)
 	if decErr != nil {
-		return connect.NewResponse(&spaltv1.TestLangfuseConfigResponse{
+		return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
 			Ok: false, ErrorMessage: decErr.Error(),
 		}), nil
 	}
 	if cfg.PublicKey == "" || cfg.SecretKey == "" {
-		return connect.NewResponse(&spaltv1.TestLangfuseConfigResponse{
+		return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
 			Ok: false, ErrorMessage: "credentials are incomplete",
 		}), nil
 	}
@@ -212,17 +212,17 @@ func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[spa
 	now := time.Now().UTC()
 	probeEmitter.EmitTurn(user.ID.String(),
 		langfuse.Trace{
-			ID:        fmt.Sprintf("spalt-test-%d", now.UnixNano()),
-			Name:      "spalt · test trace",
-			SessionID: "spalt-test-session",
-			Output:    "If you're seeing this in Langfuse, your Spalt integration is working.",
+			ID:        fmt.Sprintf("psmith-test-%d", now.UnixNano()),
+			Name:      "psmith · test trace",
+			SessionID: "psmith-test-session",
+			Output:    "If you're seeing this in Langfuse, your Psmith integration is working.",
 			StartTime: now,
 			EndTime:   now,
-			Tags:      []string{"spalt", "test"},
+			Tags:      []string{"psmith", "test"},
 		},
 		langfuse.Generation{
-			ID:        fmt.Sprintf("spalt-test-gen-%d", now.UnixNano()),
-			TraceID:   fmt.Sprintf("spalt-test-%d", now.UnixNano()),
+			ID:        fmt.Sprintf("psmith-test-gen-%d", now.UnixNano()),
+			TraceID:   fmt.Sprintf("psmith-test-%d", now.UnixNano()),
 			Name:      "test ping",
 			Model:     "synthetic",
 			Output:    "ok",
@@ -241,7 +241,7 @@ func (s *Service) TestLangfuseConfig(ctx context.Context, _ *connect.Request[spa
 	// rejected it" here. Treat completion-without-panic as success;
 	// real auth failures show up in server logs and the user can
 	// re-test after fixing.
-	return connect.NewResponse(&spaltv1.TestLangfuseConfigResponse{
+	return connect.NewResponse(&psmithv1.TestLangfuseConfigResponse{
 		Ok:        true,
 		LatencyMs: latency,
 	}), nil
@@ -271,15 +271,15 @@ func (s *Service) LoadAllOnStartup(ctx context.Context) error {
 
 const defaultHost = "https://us.cloud.langfuse.com"
 
-func defaultProtoConfig() *spaltv1.LangfuseConfig {
-	return &spaltv1.LangfuseConfig{
+func defaultProtoConfig() *psmithv1.LangfuseConfig {
+	return &psmithv1.LangfuseConfig{
 		Host:    defaultHost,
 		Enabled: false,
 	}
 }
 
-func (s *Service) rowToProto(row store.UserLangfuseConfig) *spaltv1.LangfuseConfig {
-	out := &spaltv1.LangfuseConfig{
+func (s *Service) rowToProto(row store.UserLangfuseConfig) *psmithv1.LangfuseConfig {
+	out := &psmithv1.LangfuseConfig{
 		Host:         row.Host,
 		PublicKey:    row.PublicKey,
 		SecretKeySet: row.SecretKeyEncrypted != nil,

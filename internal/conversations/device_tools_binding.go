@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/internal/devicetools"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/internal/devicetools"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // deviceToolBinding adapts the in-memory devicetools.Broker +

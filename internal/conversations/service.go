@@ -22,34 +22,34 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/devicetools"
-	"github.com/jdpedrie/spalt/internal/history"
-	"github.com/jdpedrie/spalt/internal/langfuse"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/profiles"
-	"github.com/jdpedrie/spalt/internal/protoconv"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/storage"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/plugins"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/history"
+	"github.com/jdpedrie/psmith/internal/langfuse"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/protoconv"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/storage"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // MaxListPageSize caps page_size in ListConversations regardless of what the
 // client requests.
 const MaxListPageSize = 100
 
-// Service implements spaltv1connect.ConversationsServiceHandler.
+// Service implements psmithv1connect.ConversationsServiceHandler.
 //
 // catalog, supervisor, logger may be nil when only CRUD is exercised
 // (e.g., older tests). SendMessage / Compact require all three plus pool
 // (for the per-context-row lock that serializes concurrent sends).
 type Service struct {
-	spaltv1connect.UnimplementedConversationsServiceHandler
+	psmithv1connect.UnimplementedConversationsServiceHandler
 	queries    *store.Queries
 	pool       *pgxpool.Pool
 	catalog    modelmeta.Catalog
@@ -59,7 +59,7 @@ type Service struct {
 	logger     *slog.Logger
 	// langfuse, when non-nil, receives a Trace + Generation pair
 	// for every assistant turn the supervisor materialises.
-	// Wired by cmd/spaltd at startup; nil in tests that don't
+	// Wired by cmd/psmithd at startup; nil in tests that don't
 	// care about observability. The Emitter itself is per-user-
 	// gated — emit is a silent no-op when the calling user
 	// hasn't configured Langfuse.
@@ -71,7 +71,7 @@ type Service struct {
 	elicit *elicitBroker
 	// searcher, when non-nil, is attached to every ExecuteTool ctx
 	// so the memory plugin's search_history tool can run. nil when
-	// SPALT_EMBEDDER isn't configured — memory plugin then surfaces
+	// PSMITH_EMBEDDER isn't configured — memory plugin then surfaces
 	// a clean "search not configured" error. Set via SetSearcher
 	// after construction so existing test fixtures stay one-line.
 	searcher plugins.Searcher
@@ -124,7 +124,7 @@ func NewService(queries *store.Queries, pool *pgxpool.Pool, catalog modelmeta.Ca
 }
 
 // ElicitBroker exposes the in-memory elicitation router so the HTTP
-// handler (mounted from cmd/spaltd) can deliver user responses back
+// handler (mounted from cmd/psmithd) can deliver user responses back
 // to in-flight tool calls. Returns nil only in degenerate test
 // fixtures that bypass NewService — production callers always get a
 // live broker.
@@ -142,7 +142,7 @@ func (s *Service) SetSearcher(searcher plugins.Searcher) {
 }
 
 // DeviceToolBroker returns the in-memory router for device-tool
-// calls. Exposed so cmd/spaltd can mount the matching HTTP
+// calls. Exposed so cmd/psmithd can mount the matching HTTP
 // `respond` endpoint and the DeviceToolsService Connect handler
 // without each one wiring its own broker. Always non-nil after
 // NewService.
@@ -152,7 +152,7 @@ func (s *Service) DeviceToolBroker() *devicetools.Broker {
 
 // DeviceToolRegistry returns the in-memory (user, conversation) →
 // supported-tool-set router. Same exposure rationale as
-// DeviceToolBroker — cmd/spaltd mounts the DeviceToolsService
+// DeviceToolBroker — cmd/psmithd mounts the DeviceToolsService
 // Connect handler that calls Register on it.
 func (s *Service) DeviceToolRegistry() *devicetools.Registry {
 	return s.deviceToolRegistry
@@ -161,7 +161,7 @@ func (s *Service) DeviceToolRegistry() *devicetools.Registry {
 // SetLangfuseEmitter installs the per-user Langfuse emitter the
 // service uses to fire Trace + Generation events on every assistant
 // materialisation. Pass nil to disable (tests, deployments without
-// the integration). Called by cmd/spaltd at startup so tests can
+// the integration). Called by cmd/psmithd at startup so tests can
 // construct the service without an emitter dependency.
 func (s *Service) SetLangfuseEmitter(e *langfuse.Emitter) {
 	s.langfuse = e
@@ -184,7 +184,7 @@ func (s *Service) resolveProviderConfig(row store.UserModelProvider) ([]byte, er
 
 // --- CreateConversation ---
 
-func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[spaltv1.CreateConversationRequest]) (*connect.Response[spaltv1.CreateConversationResponse], error) {
+func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[psmithv1.CreateConversationRequest]) (*connect.Response[psmithv1.CreateConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	profileID, err := uuid.Parse(req.Msg.ProfileId)
@@ -273,7 +273,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[s
 	}
 
 	// Snapshot seed messages from the resolved profile.
-	seeds := make([]*spaltv1.Message, 0, 2)
+	seeds := make([]*psmithv1.Message, 0, 2)
 	var systemMsgID *uuid.UUID
 	if resolved.SystemMessage != nil && *resolved.SystemMessage != "" {
 		id, err := uuid.NewV7()
@@ -356,7 +356,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[s
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, convoRow, convoProto)
-	return connect.NewResponse(&spaltv1.CreateConversationResponse{
+	return connect.NewResponse(&psmithv1.CreateConversationResponse{
 		Conversation:   convoProto,
 		InitialContext: contextToProto(contextRow),
 		SeedMessages:   seeds,
@@ -365,7 +365,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[s
 
 // --- ListConversations ---
 
-func (s *Service) ListConversations(ctx context.Context, req *connect.Request[spaltv1.ListConversationsRequest]) (*connect.Response[spaltv1.ListConversationsResponse], error) {
+func (s *Service) ListConversations(ctx context.Context, req *connect.Request[psmithv1.ListConversationsRequest]) (*connect.Response[psmithv1.ListConversationsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	var titleQuery *string
@@ -390,7 +390,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[sp
 	}
 	var rows []row
 	switch req.Msg.GetOrder() {
-	case spaltv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
+	case psmithv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
 		raw, err := s.queries.ListConversationsByUserRecentlyCreated(ctx, store.ListConversationsByUserRecentlyCreatedParams{
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
@@ -440,7 +440,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[sp
 		rows = rows[:limit]
 	}
 
-	out := make([]*spaltv1.Conversation, 0, len(rows))
+	out := make([]*psmithv1.Conversation, 0, len(rows))
 	for _, r := range rows {
 		// active_context_id is left empty in list responses — clients can
 		// fetch the full conversation via GetConversation when they need it.
@@ -452,12 +452,12 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[sp
 		s.attachStreamingComponents(ctx, r.Conversation, p)
 		out = append(out, p)
 	}
-	return connect.NewResponse(&spaltv1.ListConversationsResponse{Conversations: out}), nil
+	return connect.NewResponse(&psmithv1.ListConversationsResponse{Conversations: out}), nil
 }
 
 // --- GetConversation ---
 
-func (s *Service) GetConversation(ctx context.Context, req *connect.Request[spaltv1.GetConversationRequest]) (*connect.Response[spaltv1.GetConversationResponse], error) {
+func (s *Service) GetConversation(ctx context.Context, req *connect.Request[psmithv1.GetConversationRequest]) (*connect.Response[psmithv1.GetConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -485,7 +485,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[spal
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, row, convoProto)
-	return connect.NewResponse(&spaltv1.GetConversationResponse{
+	return connect.NewResponse(&psmithv1.GetConversationResponse{
 		Conversation:  convoProto,
 		ActiveContext: contextToProto(active),
 	}), nil
@@ -493,7 +493,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[spal
 
 // --- UpdateConversation ---
 
-func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[spaltv1.UpdateConversationRequest]) (*connect.Response[spaltv1.UpdateConversationResponse], error) {
+func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[psmithv1.UpdateConversationRequest]) (*connect.Response[psmithv1.UpdateConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -547,12 +547,12 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[s
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, updated, proto)
-	return connect.NewResponse(&spaltv1.UpdateConversationResponse{Conversation: proto}), nil
+	return connect.NewResponse(&psmithv1.UpdateConversationResponse{Conversation: proto}), nil
 }
 
 // --- DeleteConversation ---
 
-func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[spaltv1.DeleteConversationRequest]) (*connect.Response[spaltv1.DeleteConversationResponse], error) {
+func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[psmithv1.DeleteConversationRequest]) (*connect.Response[psmithv1.DeleteConversationResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -568,7 +568,7 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[s
 	if err := s.queries.DeleteConversation(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.DeleteConversationResponse{}), nil
+	return connect.NewResponse(&psmithv1.DeleteConversationResponse{}), nil
 }
 
 // --- Conversation-scoped plugin overrides ---
@@ -577,7 +577,7 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[s
 // one conversation. Empty list means "no overrides — falls back to
 // the profile-chain pipeline." For the merged view (what's actually
 // running), call ResolveConversationPipeline.
-func (s *Service) GetConversationPlugins(ctx context.Context, req *connect.Request[spaltv1.GetConversationPluginsRequest]) (*connect.Response[spaltv1.GetConversationPluginsResponse], error) {
+func (s *Service) GetConversationPlugins(ctx context.Context, req *connect.Request[psmithv1.GetConversationPluginsRequest]) (*connect.Response[psmithv1.GetConversationPluginsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	convID, err := uuid.Parse(req.Msg.ConversationId)
 	if err != nil {
@@ -590,20 +590,20 @@ func (s *Service) GetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*spaltv1.ConversationPlugin, 0, len(rows))
+	out := make([]*psmithv1.ConversationPlugin, 0, len(rows))
 	for i, r := range rows {
 		cfg, dErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
 		if dErr != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugins[%d]: %w", i, dErr))
 		}
-		out = append(out, &spaltv1.ConversationPlugin{
+		out = append(out, &psmithv1.ConversationPlugin{
 			PluginName: r.PluginName,
 			Ordinal:    r.Ordinal,
 			Config:     cfg,
 			Disabled:   r.Disabled,
 		})
 	}
-	return connect.NewResponse(&spaltv1.GetConversationPluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&psmithv1.GetConversationPluginsResponse{Plugins: out}), nil
 }
 
 // SetConversationPlugins atomically replaces this conversation's
@@ -612,7 +612,7 @@ func (s *Service) GetConversationPlugins(ctx context.Context, req *connect.Reque
 // InvalidArgument (matches SetProfilePlugins). Disabled rows are
 // still validated against the registry (the name must exist) so a
 // typo can't silently disable nothing.
-func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Request[spaltv1.SetConversationPluginsRequest]) (*connect.Response[spaltv1.SetConversationPluginsResponse], error) {
+func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Request[psmithv1.SetConversationPluginsRequest]) (*connect.Response[psmithv1.SetConversationPluginsResponse], error) {
 	if s.pool == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SetConversationPlugins requires pool dependency"))
 	}
@@ -653,7 +653,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err := qtx.ReplaceConversationPlugins(ctx, convID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear existing: %w", err))
 	}
-	out := make([]*spaltv1.ConversationPlugin, 0, len(req.Msg.Plugins))
+	out := make([]*psmithv1.ConversationPlugin, 0, len(req.Msg.Plugins))
 	for i, p := range req.Msg.Plugins {
 		var encrypted []byte
 		if p.Config != nil {
@@ -672,7 +672,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("insert plugins[%d]: %w", i, err))
 		}
-		out = append(out, &spaltv1.ConversationPlugin{
+		out = append(out, &psmithv1.ConversationPlugin{
 			PluginName: row.PluginName,
 			Ordinal:    row.Ordinal,
 			Config:     p.Config,
@@ -682,14 +682,14 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	return connect.NewResponse(&spaltv1.SetConversationPluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&psmithv1.SetConversationPluginsResponse{Plugins: out}), nil
 }
 
 // ResolveConversationPipeline returns the merged view (profile chain
 // + conversation overrides + disabled subtracts applied), tagged with
 // the source layer for each entry. Drives the conversation-settings
 // UI's "what's actually running" rendering.
-func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.Request[spaltv1.ResolveConversationPipelineRequest]) (*connect.Response[spaltv1.ResolveConversationPipelineResponse], error) {
+func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.Request[psmithv1.ResolveConversationPipelineRequest]) (*connect.Response[psmithv1.ResolveConversationPipelineResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	convID, err := uuid.Parse(req.Msg.ConversationId)
 	if err != nil {
@@ -719,25 +719,25 @@ func (s *Service) ResolveConversationPipeline(ctx context.Context, req *connect.
 		}
 	}
 
-	entries := make([]*spaltv1.ResolvedPipelineEntry, 0, len(final))
+	entries := make([]*psmithv1.ResolvedPipelineEntry, 0, len(final))
 	for _, r := range final {
-		source := spaltv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE
+		source := psmithv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_PROFILE
 		if convNames[r.Name] {
-			source = spaltv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION
+			source = psmithv1.ResolvedPipelineSource_RESOLVED_PIPELINE_SOURCE_CONVERSATION
 		}
-		entries = append(entries, &spaltv1.ResolvedPipelineEntry{
+		entries = append(entries, &psmithv1.ResolvedPipelineEntry{
 			PluginName: r.Name,
 			Ordinal:    r.Ordinal,
 			Config:     r.Config,
 			Source:     source,
 		})
 	}
-	return connect.NewResponse(&spaltv1.ResolveConversationPipelineResponse{Entries: entries}), nil
+	return connect.NewResponse(&psmithv1.ResolveConversationPipelineResponse{Entries: entries}), nil
 }
 
 // --- ListContexts ---
 
-func (s *Service) ListContexts(ctx context.Context, req *connect.Request[spaltv1.ListContextsRequest]) (*connect.Response[spaltv1.ListContextsResponse], error) {
+func (s *Service) ListContexts(ctx context.Context, req *connect.Request[psmithv1.ListContextsRequest]) (*connect.Response[psmithv1.ListContextsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	convoID, err := uuid.Parse(req.Msg.ConversationId)
@@ -752,16 +752,16 @@ func (s *Service) ListContexts(ctx context.Context, req *connect.Request[spaltv1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*spaltv1.Context, 0, len(rows))
+	out := make([]*psmithv1.Context, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, listContextRowToProto(r))
 	}
-	return connect.NewResponse(&spaltv1.ListContextsResponse{Contexts: out}), nil
+	return connect.NewResponse(&psmithv1.ListContextsResponse{Contexts: out}), nil
 }
 
 // --- ActivateContext ---
 
-func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[spaltv1.ActivateContextRequest]) (*connect.Response[spaltv1.ActivateContextResponse], error) {
+func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[psmithv1.ActivateContextRequest]) (*connect.Response[psmithv1.ActivateContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.ContextId)
@@ -783,7 +783,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[spal
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.ActivateContextResponse{Context: contextToProto(updated)}), nil
+	return connect.NewResponse(&psmithv1.ActivateContextResponse{Context: contextToProto(updated)}), nil
 }
 
 // --- SetCurrentLeaf ---
@@ -796,7 +796,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[spal
 //
 // Pass message_id == "" to clear the cursor (next SendMessage falls back to
 // latest by created_at).
-func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[spaltv1.SetCurrentLeafRequest]) (*connect.Response[spaltv1.SetCurrentLeafResponse], error) {
+func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[psmithv1.SetCurrentLeafRequest]) (*connect.Response[psmithv1.SetCurrentLeafResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	cxID, err := uuid.Parse(req.Msg.ContextId)
@@ -839,7 +839,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[spalt
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
+	return connect.NewResponse(&psmithv1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
 }
 
 // --- UpdateContext ---
@@ -847,7 +847,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[spalt
 // UpdateContext edits a context's mutable metadata. Currently just `title`.
 // Replace semantics: nil leaves alone, non-nil sets (empty string clears).
 // Conversation-lock applies (no in-flight stream).
-func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[spaltv1.UpdateContextRequest]) (*connect.Response[spaltv1.UpdateContextResponse], error) {
+func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[psmithv1.UpdateContextRequest]) (*connect.Response[psmithv1.UpdateContextResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	cxID, err := uuid.Parse(req.Msg.ContextId)
@@ -876,12 +876,12 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[spaltv
 		cxRow.Title = title
 	}
 
-	return connect.NewResponse(&spaltv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
+	return connect.NewResponse(&psmithv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
 }
 
 // --- ListMessages ---
 
-func (s *Service) ListMessages(ctx context.Context, req *connect.Request[spaltv1.ListMessagesRequest]) (*connect.Response[spaltv1.ListMessagesResponse], error) {
+func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv1.ListMessagesRequest]) (*connect.Response[psmithv1.ListMessagesResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	contextID, err := uuid.Parse(req.Msg.ContextId)
@@ -916,14 +916,14 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[spaltv1
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		out := make([]*spaltv1.Message, 0, len(all))
+		out := make([]*psmithv1.Message, 0, len(all))
 		for _, m := range all {
 			proto := messageToProto(m)
 			proto.Attachments = attBy[proto.Id]
 			applyDisplay(proto, pipeline)
 			out = append(out, proto)
 		}
-		return connect.NewResponse(&spaltv1.ListMessagesResponse{Messages: out}), nil
+		return connect.NewResponse(&psmithv1.ListMessagesResponse{Messages: out}), nil
 	}
 
 	// Resolve the leaf to walk the ancestor chain from. Priority:
@@ -959,7 +959,7 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[spaltv1
 		leaf, err := s.queries.GetContextLeafMessage(ctx, contextID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return connect.NewResponse(&spaltv1.ListMessagesResponse{}), nil
+				return connect.NewResponse(&psmithv1.ListMessagesResponse{}), nil
 			}
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
@@ -978,19 +978,19 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[spaltv1
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*spaltv1.Message, 0, len(rows))
+	out := make([]*psmithv1.Message, 0, len(rows))
 	for _, r := range rows {
 		proto := chainRowToProto(r)
 		proto.Attachments = attBy[proto.Id]
 		applyDisplay(proto, pipeline)
 		out = append(out, proto)
 	}
-	return connect.NewResponse(&spaltv1.ListMessagesResponse{Messages: out}), nil
+	return connect.NewResponse(&psmithv1.ListMessagesResponse{Messages: out}), nil
 }
 
 // --- GetMessage ---
 
-func (s *Service) GetMessage(ctx context.Context, req *connect.Request[spaltv1.GetMessageRequest]) (*connect.Response[spaltv1.GetMessageResponse], error) {
+func (s *Service) GetMessage(ctx context.Context, req *connect.Request[psmithv1.GetMessageRequest]) (*connect.Response[psmithv1.GetMessageResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -1020,7 +1020,7 @@ func (s *Service) GetMessage(ctx context.Context, req *connect.Request[spaltv1.G
 	}
 	proto := messageToProto(msg)
 	applyDisplay(proto, pipeline)
-	return connect.NewResponse(&spaltv1.GetMessageResponse{Message: proto}), nil
+	return connect.NewResponse(&psmithv1.GetMessageResponse{Message: proto}), nil
 }
 
 // --- helpers ---
@@ -1074,7 +1074,7 @@ func (s *Service) fetchOwnedContext(ctx context.Context, id, userID uuid.UUID) (
 
 // SendMessage initiates a turn. Synchronously creates the user message and the
 // stream_run, then returns. Client subscribes to the stream via StreamsService.
-func (s *Service) SendMessage(ctx context.Context, req *connect.Request[spaltv1.SendMessageRequest]) (*connect.Response[spaltv1.SendMessageResponse], error) {
+func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1.SendMessageRequest]) (*connect.Response[psmithv1.SendMessageResponse], error) {
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires supervisor + catalog dependencies"))
 	}
@@ -1606,7 +1606,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[spaltv1.
 		userProto.Attachments = attBy[userProto.Id]
 	}
 	applyDisplay(userProto, pipeline)
-	return connect.NewResponse(&spaltv1.SendMessageResponse{
+	return connect.NewResponse(&psmithv1.SendMessageResponse{
 		UserMessage: userProto,
 		StreamRun:   streamRunToProto(runRow),
 	}), nil
@@ -1614,7 +1614,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[spaltv1.
 
 // resolveProviderModel walks the per-turn → conversation → profile chain to
 // determine which provider/model to use. Both ids must be set together.
-func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversation, msg *spaltv1.SendMessageRequest) (uuid.UUID, string, error) {
+func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversation, msg *psmithv1.SendMessageRequest) (uuid.UUID, string, error) {
 	// Per-turn override.
 	if msg.ProviderId != nil || msg.ModelId != nil {
 		if msg.ProviderId == nil || msg.ModelId == nil {
@@ -1629,7 +1629,7 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 
 	// Conversation settings.
 	if conv.Settings != nil {
-		var settings spaltv1.ConversationSettings
+		var settings psmithv1.ConversationSettings
 		if err := json.Unmarshal(conv.Settings, &settings); err == nil {
 			if settings.DefaultProviderId != nil && settings.DefaultModelId != nil {
 				pid, err := uuid.Parse(*settings.DefaultProviderId)
@@ -1667,7 +1667,7 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 // resolveIncludeThinking walks conversation settings → profile defaults, default false.
 func (s *Service) resolveIncludeThinking(ctx context.Context, conv store.Conversation) bool {
 	if conv.Settings != nil {
-		var settings spaltv1.ConversationSettings
+		var settings psmithv1.ConversationSettings
 		if err := json.Unmarshal(conv.Settings, &settings); err == nil && settings.IncludeThinkingInHistory != nil {
 			return *settings.IncludeThinkingInHistory
 		}
@@ -1746,7 +1746,7 @@ func (s *Service) resolveParent(ctx context.Context, q *store.Queries, activeCtx
 // `user_models.default_settings` (the model layer of the resolution chain)
 // into a proto CallSettings. Returns nil for an empty/invalid blob — the
 // model layer contributes nothing in that case.
-func decodeCallSettingsBytes(b []byte) *spaltv1.CallSettings {
+func decodeCallSettingsBytes(b []byte) *psmithv1.CallSettings {
 	if len(b) == 0 {
 		return nil
 	}
@@ -1760,7 +1760,7 @@ func decodeCallSettingsBytes(b []byte) *spaltv1.CallSettings {
 // loadProviderDefaultSettings loads the bottom-of-chain provider-level
 // CallSettings from `user_model_providers.default_settings`. Returns
 // (nil, nil) when the column is NULL — that layer contributes nothing.
-func (s *Service) loadProviderDefaultSettings(ctx context.Context, providerID uuid.UUID) (*spaltv1.CallSettings, error) {
+func (s *Service) loadProviderDefaultSettings(ctx context.Context, providerID uuid.UUID) (*psmithv1.CallSettings, error) {
 	prov, err := s.queries.GetUserModelProvider(ctx, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("load provider %s: %w", providerID, err)
@@ -1826,7 +1826,7 @@ func (s *Service) assembleCallSettings(
 // extractProfileCallSettings pulls the call_settings sub-object out of a
 // profile's default_settings JSONB blob. Returns nil for an empty blob or
 // missing field — that layer contributes nothing to the merge.
-func extractProfileCallSettings(blob []byte) *spaltv1.CallSettings {
+func extractProfileCallSettings(blob []byte) *psmithv1.CallSettings {
 	if len(blob) == 0 {
 		return nil
 	}
@@ -1852,11 +1852,11 @@ func extractProfileCallSettings(blob []byte) *spaltv1.CallSettings {
 // proto's optional-field presence rules.
 var conversationSettingsExtractUnmarshaller = protojson.UnmarshalOptions{DiscardUnknown: true}
 
-func extractConversationCallSettings(blob []byte) *spaltv1.CallSettings {
+func extractConversationCallSettings(blob []byte) *psmithv1.CallSettings {
 	if len(blob) == 0 {
 		return nil
 	}
-	var settings spaltv1.ConversationSettings
+	var settings psmithv1.ConversationSettings
 	if err := conversationSettingsExtractUnmarshaller.Unmarshal(blob, &settings); err != nil {
 		return nil
 	}
@@ -1870,13 +1870,13 @@ func extractConversationCallSettings(blob []byte) *spaltv1.CallSettings {
 // in internal/protoconv. Kept so the call sites in this file stay
 // terse; remove if the package gets refactored to use the converter
 // directly everywhere.
-func protoCallSettingsToProvider(s *spaltv1.CallSettings) providers.CallSettings {
+func protoCallSettingsToProvider(s *psmithv1.CallSettings) providers.CallSettings {
 	return protoconv.CallSettings(s)
 }
 
 // streamRunToProto converts a store.StreamRun to its proto shape.
-func streamRunToProto(r store.StreamRun) *spaltv1.StreamRun {
-	out := &spaltv1.StreamRun{
+func streamRunToProto(r store.StreamRun) *psmithv1.StreamRun {
+	out := &psmithv1.StreamRun{
 		Id:             r.ID.String(),
 		ConversationId: r.ConversationID.String(),
 		ContextId:      r.ContextID.String(),
@@ -1909,30 +1909,30 @@ func streamRunToProto(r store.StreamRun) *spaltv1.StreamRun {
 	return out
 }
 
-func statusToProto(s string) spaltv1.StreamRunStatus {
+func statusToProto(s string) psmithv1.StreamRunStatus {
 	switch s {
 	case "running":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
 	case "completed":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
 	case "errored":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
 	case "cancelled":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
 	case "interrupted":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
 	}
-	return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
+	return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
 }
 
-func purposeToProto(p string) spaltv1.StreamRunPurpose {
+func purposeToProto(p string) psmithv1.StreamRunPurpose {
 	switch p {
 	case "assistant_response":
-		return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
+		return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
 	case "compression":
-		return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
+		return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
 	}
-	return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
+	return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
 }
 
 // silence "imported and not used" for the time package if helpers above don't reference it directly.
@@ -2322,7 +2322,7 @@ func (s *Service) resolvePipelineForConversation(ctx context.Context, conv store
 //     dual-writes the compression_summary message in the OLD context (with
 //     usage/cost) plus a new Context with the role=context message containing
 //     the calculated REPLACE/APPEND content.
-func (s *Service) Compact(ctx context.Context, req *connect.Request[spaltv1.CompactRequest]) (*connect.Response[spaltv1.CompactResponse], error) {
+func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.CompactRequest]) (*connect.Response[psmithv1.CompactResponse], error) {
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Compact requires supervisor + catalog dependencies"))
 	}
@@ -2529,7 +2529,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[spaltv1.Comp
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
+	return connect.NewResponse(&psmithv1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
 }
 
 // renderTranscript turns the active chain — the linear walk from
@@ -2575,7 +2575,7 @@ func (s *Service) renderTranscript(ctx context.Context, leafID *uuid.UUID) (stri
 //
 // Returns Unimplemented if the destination driver doesn't satisfy
 // providers.TokenCounter (OpenAI-compat doesn't, currently).
-func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[spaltv1.CountContextTokensRequest]) (*connect.Response[spaltv1.CountContextTokensResponse], error) {
+func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[psmithv1.CountContextTokensRequest]) (*connect.Response[psmithv1.CountContextTokensResponse], error) {
 	if s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("CountContextTokens requires catalog dependency"))
 	}
@@ -2653,7 +2653,7 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[s
 	if enabled.ContextWindow != nil {
 		ctxWindow = *enabled.ContextWindow
 	}
-	return connect.NewResponse(&spaltv1.CountContextTokensResponse{
+	return connect.NewResponse(&psmithv1.CountContextTokensResponse{
 		TokenCount:    int32(count),
 		ContextWindow: ctxWindow,
 	}), nil

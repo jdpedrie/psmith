@@ -10,15 +10,15 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/conversations"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/modelproviders"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/conversations"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/modelproviders"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 func TestCostPage(t *testing.T) {
@@ -61,7 +61,7 @@ func TestContextsView(t *testing.T) {
 	}
 
 	// Look up the active context id and render its read-only view.
-	getResp, err := convos.GetConversation(userCtx, connect.NewRequest(&spaltv1.GetConversationRequest{Id: fx.convID.String()}))
+	getResp, err := convos.GetConversation(userCtx, connect.NewRequest(&psmithv1.GetConversationRequest{Id: fx.convID.String()}))
 	if err != nil {
 		t.Fatalf("GetConversation: %v", err)
 	}

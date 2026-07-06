@@ -1,6 +1,6 @@
 # Plugins
 
-A plugin is a unit of behavior attached to a profile and, through it, to a conversation. Plugins are how Spalt adds capability without bloating the core: a system-prompt injection, a tool, a stream rewriter, a display renderer are all plugins. They register at compile time like providers, they configure per profile, and they compose into an ordered pipeline that the conversations service runs at the right points in a turn. This document covers the interface set, the pipeline and its inheritance, where each capability runs, and the shipped catalog.
+A plugin is a unit of behavior attached to a profile and, through it, to a conversation. Plugins are how Psmith adds capability without bloating the core: a system-prompt injection, a tool, a stream rewriter, a display renderer are all plugins. They register at compile time like providers, they configure per profile, and they compose into an ordered pipeline that the conversations service runs at the right points in a turn. This document covers the interface set, the pipeline and its inheritance, where each capability runs, and the shipped catalog.
 
 ## One plugin, many optional interfaces
 
@@ -58,10 +58,10 @@ The registered plugins:
 - **imagegen** (`imagegen`) — ToolProvider. One server tool, `generate_image`. The only plugin that reports a cost.
 - **app_tools** (`app_tools`) — ToolProvider over the device-tools catalog (Calendar, Reminders, Health), routed through the device-tool broker. See [tools.md](tools.md).
 - **obsidian** (`obsidian`) — ToolProvider over a bookmarked Obsidian vault on the device, its own five-tool catalog, sharing the device-tool broker.
-- **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Spalt tools. The in-process transport is the elicitation path. See [tools.md](tools.md) and the MCP section of the API docs.
+- **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Psmith tools. The in-process transport is the elicitation path. See [tools.md](tools.md) and the MCP section of the API docs.
 
 Alongside these, a few non-plugin support files in the same package are wiring shims rather than registered plugins: `caller_info` and `provider_resolver` and `searcher` thread caller, provider-resolution, and search dependencies onto the dispatch context for tools to pull, and `device_tool_broker` is the broker handle. They are not attachable to a profile.
 
 ## Adding a plugin
 
-The `/spalt-add-plugin` skill scaffolds a new one. The shape: a type implementing `Plugin` plus whichever capability interfaces it needs, an `init()` registering its name, and a config struct if it is Configurable. Implement only the capabilities the plugin actually uses; the framework runs each at its proper point. A plugin with tools gets the `tool_use` requirement for free by implementing ToolProvider and CapabilityRequirer.
+The `/psmith-add-plugin` skill scaffolds a new one. The shape: a type implementing `Plugin` plus whichever capability interfaces it needs, an `init()` registering its name, and a config struct if it is Configurable. Implement only the capabilities the plugin actually uses; the framework runs each at its proper point. A plugin with tools gets the `tool_use` requirement for free by implementing ToolProvider and CapabilityRequirer.

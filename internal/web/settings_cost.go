@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 type costRowVM struct {
@@ -19,7 +19,7 @@ type costRowVM struct {
 func usd(f float64) string { return fmt.Sprintf("$%.4f", f) }
 
 func (h *Handler) handleCost(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.models.ListProviderCosts(r.Context(), connect.NewRequest(&spaltv1.ListProviderCostsRequest{}))
+	resp, err := h.models.ListProviderCosts(r.Context(), connect.NewRequest(&psmithv1.ListProviderCostsRequest{}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

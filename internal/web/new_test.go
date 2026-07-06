@@ -12,15 +12,15 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/conversations"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/profiles"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/conversations"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // TestNewConversationFlow proves the new-conversation page lists usable
@@ -76,7 +76,7 @@ func TestNewConversationFlow(t *testing.T) {
 	}
 
 	// The conversation now exists for the user.
-	list, err := convos.ListConversations(userCtx, connect.NewRequest(&spaltv1.ListConversationsRequest{PageSize: 10}))
+	list, err := convos.ListConversations(userCtx, connect.NewRequest(&psmithv1.ListConversationsRequest{PageSize: 10}))
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}

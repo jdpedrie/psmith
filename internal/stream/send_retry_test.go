@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // shrinkRetryConfigForTest swaps the package-global retry vars to

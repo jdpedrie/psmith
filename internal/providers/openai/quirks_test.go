@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // TestQuirks_Empty_NoBehaviorChange asserts that a config without a
@@ -195,7 +195,7 @@ func TestQuirks_XAI_DiscoveryRoutesToLanguageModels(t *testing.T) {
 }
 
 // TestPresetByID_UnknownReturnsCustom — forward compat: when a config
-// references a preset id newer than the running spaltd, we fall back to
+// references a preset id newer than the running psmithd, we fall back to
 // PresetCustom rather than failing.
 func TestPresetByID_UnknownReturnsCustom(t *testing.T) {
 	p := PresetByID("totally-made-up-id")

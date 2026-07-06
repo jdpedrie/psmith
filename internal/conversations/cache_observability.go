@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // hashWireMessages produces the per-position content-hash list used for

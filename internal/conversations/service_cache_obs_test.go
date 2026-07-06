@@ -7,10 +7,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/fakellm"
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/plugins"
+	"github.com/jdpedrie/psmith/fakellm"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // TestCacheObs_FirstTurnRecordsHashesNullsMetrics — the very first send for
@@ -28,7 +28,7 @@ func TestCacheObs_FirstTurnRecordsHashesNullsMetrics(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hello",
 		ProviderId:     &pid,
@@ -170,7 +170,7 @@ func TestCacheObs_ForkProducesShortPrefixDivergesEarly(t *testing.T) {
 	pid := f.provider.ID.String()
 	mid := f.modelID
 	sysStr := f.systemMsgID.String()
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId:  f.conv.ID.String(),
 		ParentMessageId: &sysStr,
 		Content:         "fork",
@@ -218,7 +218,7 @@ func TestCacheObs_StreamRunProtoExposesFields(t *testing.T) {
 	// Second turn — the response carries the diagnostics for it directly.
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "second",
 		ProviderId:     &pid,

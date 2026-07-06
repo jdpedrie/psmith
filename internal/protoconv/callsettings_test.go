@@ -3,8 +3,8 @@ package protoconv
 import (
 	"testing"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/providers"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 func TestCallSettings_NilReturnsZero(t *testing.T) {
@@ -31,13 +31,13 @@ func TestCallSettings_TopLevelFieldsRoundTrip(t *testing.T) {
 	topK := int32(40)
 	enabled := true
 	cache := true
-	out := CallSettings(&spaltv1.CallSettings{
+	out := CallSettings(&psmithv1.CallSettings{
 		Temperature:     &temp,
 		TopP:            &topP,
 		MaxOutputTokens: &maxTok,
 		TopK:            &topK,
 		StopSequences:   []string{"END", "STOP"},
-		Thinking: &spaltv1.ThinkingSettings{
+		Thinking: &psmithv1.ThinkingSettings{
 			Enabled: &enabled,
 		},
 		ExplicitCache: &cache,
@@ -65,8 +65,8 @@ func TestCallSettings_TopLevelFieldsRoundTrip(t *testing.T) {
 func TestCallSettings_ThinkingBudgetTokensConverted(t *testing.T) {
 	t.Parallel()
 	budget := int32(8000)
-	out := CallSettings(&spaltv1.CallSettings{
-		Thinking: &spaltv1.ThinkingSettings{BudgetTokens: &budget},
+	out := CallSettings(&psmithv1.CallSettings{
+		Thinking: &psmithv1.ThinkingSettings{BudgetTokens: &budget},
 	})
 	if out.Thinking == nil || out.Thinking.BudgetTokens == nil || *out.Thinking.BudgetTokens != 8000 {
 		t.Errorf("BudgetTokens=%v", out.Thinking)
@@ -76,9 +76,9 @@ func TestCallSettings_ThinkingBudgetTokensConverted(t *testing.T) {
 func TestCallSettings_AnthropicExtras(t *testing.T) {
 	t.Parallel()
 	on := true
-	ttl5 := spaltv1.CacheTTL_CACHE_TTL_5M
-	out := CallSettings(&spaltv1.CallSettings{
-		Anthropic: &spaltv1.AnthropicExtras{
+	ttl5 := psmithv1.CacheTTL_CACHE_TTL_5M
+	out := CallSettings(&psmithv1.CallSettings{
+		Anthropic: &psmithv1.AnthropicExtras{
 			CacheEnabled: &on,
 			CacheTtl:     &ttl5,
 		},
@@ -98,11 +98,11 @@ func TestCallSettings_OpenAIExtras(t *testing.T) {
 	t.Parallel()
 	seed := int32(42)
 	tlp := int32(5)
-	tier := spaltv1.ServiceTier_SERVICE_TIER_PRIORITY
+	tier := psmithv1.ServiceTier_SERVICE_TIER_PRIORITY
 	freq, pres := 0.5, -0.2
 	parallel := false
-	out := CallSettings(&spaltv1.CallSettings{
-		Openai: &spaltv1.OpenAIExtras{
+	out := CallSettings(&psmithv1.CallSettings{
+		Openai: &psmithv1.OpenAIExtras{
 			Seed:              &seed,
 			TopLogprobs:       &tlp,
 			ServiceTier:       &tier,
@@ -139,13 +139,13 @@ func TestCallSettings_GoogleExtras(t *testing.T) {
 	t.Parallel()
 	count := int32(4)
 	mime := "application/json"
-	thr := spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH
-	out := CallSettings(&spaltv1.CallSettings{
-		Google: &spaltv1.GoogleExtras{
+	thr := psmithv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH
+	out := CallSettings(&psmithv1.CallSettings{
+		Google: &psmithv1.GoogleExtras{
 			ResponseMimeType: &mime,
 			CandidateCount:   &count,
 			ResponseSchema:   []byte(`{"type":"object"}`),
-			SafetySettings: &spaltv1.SafetySettings{
+			SafetySettings: &psmithv1.SafetySettings{
 				DangerousContent: &thr,
 			},
 		},
@@ -176,13 +176,13 @@ func TestCallSettings_GoogleExtras(t *testing.T) {
 func TestCacheTTL_AllVariants(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		in   *spaltv1.CacheTTL
+		in   *psmithv1.CacheTTL
 		want providers.CacheTTL
 	}{
 		{nil, providers.CacheTTLUnspecified},
-		{ptr(spaltv1.CacheTTL_CACHE_TTL_5M), providers.CacheTTL5m},
-		{ptr(spaltv1.CacheTTL_CACHE_TTL_1H), providers.CacheTTL1h},
-		{ptr(spaltv1.CacheTTL_CACHE_TTL_UNSPECIFIED), providers.CacheTTLUnspecified},
+		{ptr(psmithv1.CacheTTL_CACHE_TTL_5M), providers.CacheTTL5m},
+		{ptr(psmithv1.CacheTTL_CACHE_TTL_1H), providers.CacheTTL1h},
+		{ptr(psmithv1.CacheTTL_CACHE_TTL_UNSPECIFIED), providers.CacheTTLUnspecified},
 	}
 	for _, c := range cases {
 		if got := CacheTTL(c.in); got != c.want {
@@ -194,13 +194,13 @@ func TestCacheTTL_AllVariants(t *testing.T) {
 func TestServiceTier_AllVariants(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		in   spaltv1.ServiceTier
+		in   psmithv1.ServiceTier
 		want providers.ServiceTier
 	}{
-		{spaltv1.ServiceTier_SERVICE_TIER_AUTO, providers.ServiceTierAuto},
-		{spaltv1.ServiceTier_SERVICE_TIER_STANDARD, providers.ServiceTierStandard},
-		{spaltv1.ServiceTier_SERVICE_TIER_PRIORITY, providers.ServiceTierPriority},
-		{spaltv1.ServiceTier_SERVICE_TIER_UNSPECIFIED, providers.ServiceTierUnspecified},
+		{psmithv1.ServiceTier_SERVICE_TIER_AUTO, providers.ServiceTierAuto},
+		{psmithv1.ServiceTier_SERVICE_TIER_STANDARD, providers.ServiceTierStandard},
+		{psmithv1.ServiceTier_SERVICE_TIER_PRIORITY, providers.ServiceTierPriority},
+		{psmithv1.ServiceTier_SERVICE_TIER_UNSPECIFIED, providers.ServiceTierUnspecified},
 	}
 	for _, c := range cases {
 		if got := ServiceTier(c.in); got != c.want {
@@ -217,16 +217,16 @@ func TestResponseFormat_Variants(t *testing.T) {
 	}
 
 	// Text variant.
-	got := ResponseFormat(&spaltv1.ResponseFormat{
-		Kind: &spaltv1.ResponseFormat_Text{Text: true},
+	got := ResponseFormat(&psmithv1.ResponseFormat{
+		Kind: &psmithv1.ResponseFormat_Text{Text: true},
 	})
 	if got == nil || got.Text == nil || !*got.Text {
 		t.Errorf("Text variant lost: %+v", got)
 	}
 
 	// JsonObject variant.
-	got = ResponseFormat(&spaltv1.ResponseFormat{
-		Kind: &spaltv1.ResponseFormat_JsonObject{JsonObject: true},
+	got = ResponseFormat(&psmithv1.ResponseFormat{
+		Kind: &psmithv1.ResponseFormat_JsonObject{JsonObject: true},
 	})
 	if got == nil || got.JSONObject == nil || !*got.JSONObject {
 		t.Errorf("JsonObject variant lost: %+v", got)
@@ -237,9 +237,9 @@ func TestResponseFormat_Variants(t *testing.T) {
 	// shape regressions show up here first).
 	strict := true
 	desc := "user profile"
-	got = ResponseFormat(&spaltv1.ResponseFormat{
-		Kind: &spaltv1.ResponseFormat_JsonSchema{
-			JsonSchema: &spaltv1.JsonSchema{
+	got = ResponseFormat(&psmithv1.ResponseFormat{
+		Kind: &psmithv1.ResponseFormat_JsonSchema{
+			JsonSchema: &psmithv1.JsonSchema{
 				Name:        "Profile",
 				Description: &desc,
 				Strict:      &strict,
@@ -270,14 +270,14 @@ func TestHarmThreshold_AllVariants(t *testing.T) {
 		t.Errorf("nil → nil; got %v", got)
 	}
 	cases := []struct {
-		in   spaltv1.HarmThreshold
+		in   psmithv1.HarmThreshold
 		want providers.HarmThreshold
 	}{
-		{spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE, providers.HarmThresholdBlockNone},
-		{spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE, providers.HarmThresholdBlockLowAndAbove},
-		{spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE, providers.HarmThresholdBlockMediumAndAbove},
-		{spaltv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH, providers.HarmThresholdBlockOnlyHigh},
-		{spaltv1.HarmThreshold_HARM_THRESHOLD_UNSPECIFIED, providers.HarmThresholdUnspecified},
+		{psmithv1.HarmThreshold_HARM_THRESHOLD_BLOCK_NONE, providers.HarmThresholdBlockNone},
+		{psmithv1.HarmThreshold_HARM_THRESHOLD_BLOCK_LOW_AND_ABOVE, providers.HarmThresholdBlockLowAndAbove},
+		{psmithv1.HarmThreshold_HARM_THRESHOLD_BLOCK_MEDIUM_AND_ABOVE, providers.HarmThresholdBlockMediumAndAbove},
+		{psmithv1.HarmThreshold_HARM_THRESHOLD_BLOCK_ONLY_HIGH, providers.HarmThresholdBlockOnlyHigh},
+		{psmithv1.HarmThreshold_HARM_THRESHOLD_UNSPECIFIED, providers.HarmThresholdUnspecified},
 	}
 	for _, c := range cases {
 		got := HarmThreshold(&c.in)
@@ -293,9 +293,9 @@ func TestHarmThreshold_AllVariants(t *testing.T) {
 func TestCallSettings_DefensiveCopiesProtectFromMutation(t *testing.T) {
 	t.Parallel()
 	stops := []string{"A", "B"}
-	out := CallSettings(&spaltv1.CallSettings{
+	out := CallSettings(&psmithv1.CallSettings{
 		StopSequences: stops,
-		Google: &spaltv1.GoogleExtras{
+		Google: &psmithv1.GoogleExtras{
 			ResponseSchema: []byte("orig"),
 		},
 	})

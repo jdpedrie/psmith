@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // DiscoverModels lists models from the configured endpoint's /v1/models

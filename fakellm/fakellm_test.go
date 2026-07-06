@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/jdpedrie/spalt/fakellm"
-	"github.com/jdpedrie/spalt/internal/providers"
-	_ "github.com/jdpedrie/spalt/internal/providers/anthropic" // registers driver
-	"github.com/jdpedrie/spalt/internal/providers/openai"      // registers openai-compatible driver
+	"github.com/jdpedrie/psmith/fakellm"
+	"github.com/jdpedrie/psmith/internal/providers"
+	_ "github.com/jdpedrie/psmith/internal/providers/anthropic" // registers driver
+	"github.com/jdpedrie/psmith/internal/providers/openai"      // registers openai-compatible driver
 )
 
 // TestAnthropicRoundTrip drives the real Anthropic driver against the fake

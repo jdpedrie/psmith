@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // Interceptor authenticates RPCs via Authorization: Bearer <token>.
@@ -22,7 +22,7 @@ type Interceptor struct {
 }
 
 // NewInterceptor constructs an interceptor with the given unauthenticated
-// procedure paths (use the per-procedure constants from spaltv1connect).
+// procedure paths (use the per-procedure constants from psmithv1connect).
 func NewInterceptor(queries *store.Queries, unauthenticated ...string) *Interceptor {
 	al := make(map[string]struct{}, len(unauthenticated))
 	for _, p := range unauthenticated {

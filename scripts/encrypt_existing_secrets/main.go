@@ -1,14 +1,14 @@
 // One-off migration: re-encrypt any rows in user_model_providers /
 // profile_plugins / user_plugin_settings whose `config` column is
 // plaintext into the `config_encrypted` column under the master key in
-// SPALT_MASTER_KEY, then NULL out the plaintext column.
+// PSMITH_MASTER_KEY, then NULL out the plaintext column.
 //
 // Idempotent: rows where `config_encrypted` is already populated are
 // skipped. Run as many times as you want; the second run is a no-op.
 //
 // Usage:
 //
-//	SPALT_DSN=... SPALT_MASTER_KEY=$(spalt genkey) \
+//	PSMITH_DSN=... PSMITH_MASTER_KEY=$(psmith genkey) \
 //	  go run ./scripts/encrypt_existing_secrets
 //
 // Will print one line per table summarising rows touched.
@@ -22,7 +22,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jdpedrie/spalt/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/crypto"
 )
 
 // tableSpec describes the SELECT shape for one table — its key columns
@@ -36,9 +36,9 @@ type tableSpec struct {
 }
 
 func main() {
-	dsn := os.Getenv("SPALT_DSN")
+	dsn := os.Getenv("PSMITH_DSN")
 	if dsn == "" {
-		log.Fatal("SPALT_DSN is required")
+		log.Fatal("PSMITH_DSN is required")
 	}
 
 	keyBytes, ephemeral, err := crypto.LoadKey()
@@ -46,10 +46,10 @@ func main() {
 		log.Fatalf("load master key: %v", err)
 	}
 	if keyBytes == nil {
-		log.Fatalf("SPALT_MASTER_KEY is required (set to a base64-encoded 32-byte key — `spalt genkey` mints one)")
+		log.Fatalf("PSMITH_MASTER_KEY is required (set to a base64-encoded 32-byte key — `psmith genkey` mints one)")
 	}
 	if ephemeral {
-		log.Fatal("refusing to encrypt under an ephemeral dev-auto key — set SPALT_MASTER_KEY explicitly")
+		log.Fatal("refusing to encrypt under an ephemeral dev-auto key — set PSMITH_MASTER_KEY explicitly")
 	}
 	cipher, err := crypto.NewAESGCM(keyBytes)
 	if err != nil {

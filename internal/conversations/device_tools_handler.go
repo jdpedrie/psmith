@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/devicetools"
 )
 
 // DeviceToolsHandler returns the http.Handler that receives a
 // client's response for an in-flight device-tool call. Mounted by
-// cmd/spaltd at `POST /conversations/{id}/device-tools/{call_id}/respond`.
+// cmd/psmithd at `POST /conversations/{id}/device-tools/{call_id}/respond`.
 // Mirrors ElicitHandler's shape — same auth gate, same convo-
 // ownership check, same write-once semantics on the broker side.
 //

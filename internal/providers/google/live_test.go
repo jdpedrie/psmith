@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // TestLive_Send is a smoke test that hits the real Gemini API. It runs only
@@ -208,7 +208,7 @@ func TestLive_ExplicitCaching(t *testing.T) {
 
 	cc, err := d.CreateCachedContent(ctx, CreateCachedContentRequest{
 		ModelID:           modelID,
-		DisplayName:       "spalt-live-test",
+		DisplayName:       "psmith-live-test",
 		SystemInstruction: bigSystem,
 		TTL:               "300s",
 	})

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // TestExplicitCache_InterfaceConformance — compile-time check is in

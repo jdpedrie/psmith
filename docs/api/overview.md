@@ -1,12 +1,12 @@
 # API overview
 
-Spalt's API is ConnectRPC over HTTP/2, defined entirely by the protobuf schema in `proto/spalt/v1/`. This document covers the conventions that hold across every service: transport, auth, error codes, the streaming shapes, sparse updates, and the service list. The per-service detail is in [services.md](services.md); the handful of plain HTTP endpoints that are not RPCs are in [non-rpc-endpoints.md](non-rpc-endpoints.md).
+Psmith's API is ConnectRPC over HTTP/2, defined entirely by the protobuf schema in `proto/psmith/v1/`. This document covers the conventions that hold across every service: transport, auth, error codes, the streaming shapes, sparse updates, and the service list. The per-service detail is in [services.md](services.md); the handful of plain HTTP endpoints that are not RPCs are in [non-rpc-endpoints.md](non-rpc-endpoints.md).
 
 The protobuf schema is the source of truth. Generate clients from it ([building-and-codegen.md](../operations/building-and-codegen.md)); this prose describes the surface, the schema defines it.
 
 ## Transport
 
-The server speaks the Connect protocol with a protobuf codec over h2c (cleartext HTTP/2), with TLS terminated by whatever the operator puts in front. The Go server stubs are generated into `gen/spalt/v1/spaltv1connect`; the Swift client stubs into `clients/SpaltSwift/Sources/SpaltKit/Generated`. There are three RPC shapes in use: unary (most calls), server-streaming (`SubscribeStream`, `SubscribeAccountEvents`), and client-streaming (`UploadFile`).
+The server speaks the Connect protocol with a protobuf codec over h2c (cleartext HTTP/2), with TLS terminated by whatever the operator puts in front. The Go server stubs are generated into `gen/psmith/v1/psmithv1connect`; the Swift client stubs into `clients/PsmithSwift/Sources/PsmithKit/Generated`. There are three RPC shapes in use: unary (most calls), server-streaming (`SubscribeStream`, `SubscribeAccountEvents`), and client-streaming (`UploadFile`).
 
 ## The request/response convention
 
@@ -24,7 +24,7 @@ Authentication establishes identity; ownership scoping enforces access. Almost e
 
 ## Error codes
 
-Spalt uses standard Connect error codes with consistent meanings:
+Psmith uses standard Connect error codes with consistent meanings:
 
 - `Unauthenticated` — no valid session.
 - `PermissionDenied` — authenticated but not allowed (admin-only operations).

@@ -3,7 +3,7 @@ package stream
 import (
 	"encoding/json"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // toolCallAggregator builds the JSONB shape stored on

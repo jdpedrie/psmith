@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // TestUserPartsFromWire_EmptyContentFallback verifies the placeholder

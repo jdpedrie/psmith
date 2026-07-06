@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 // Plugins declare their settings as ConfigField descriptors; the client builds
@@ -51,7 +51,7 @@ type pluginConfigForm struct {
 // buildPluginForm turns a plugin type's non-global config fields into form view
 // models, prefilled from currentConfig. models supplies the choices for
 // model-picker fields.
-func (h *Handler) buildPluginForm(ctx context.Context, t *spaltv1.PluginType, currentConfig []byte, models []modelVM) pluginConfigForm {
+func (h *Handler) buildPluginForm(ctx context.Context, t *psmithv1.PluginType, currentConfig []byte, models []modelVM) pluginConfigForm {
 	form := pluginConfigForm{RawJSON: prettyJSON(currentConfig)}
 	if form.RawJSON == "" {
 		form.RawJSON = "{}"
@@ -96,7 +96,7 @@ func (h *Handler) buildPluginForm(ctx context.Context, t *spaltv1.PluginType, cu
 }
 
 // displayName is the plugin's display name, nil-safe.
-func displayName(t *spaltv1.PluginType) string {
+func displayName(t *psmithv1.PluginType) string {
 	if t == nil {
 		return ""
 	}
@@ -106,7 +106,7 @@ func displayName(t *spaltv1.PluginType) string {
 // pluginHasForm reports whether a plugin has editable non-global fields and
 // isn't a custom-form plugin (so the generated form applies rather than the
 // raw JSON fallback).
-func pluginHasForm(t *spaltv1.PluginType) bool {
+func pluginHasForm(t *psmithv1.PluginType) bool {
 	if t == nil || customFormPlugins[t.GetName()] {
 		return false
 	}
@@ -118,17 +118,17 @@ func pluginHasForm(t *spaltv1.PluginType) bool {
 	return false
 }
 
-func fieldTypeName(t spaltv1.ConfigField_Type) string {
+func fieldTypeName(t psmithv1.ConfigField_Type) string {
 	switch t {
-	case spaltv1.ConfigField_TEXTAREA:
+	case psmithv1.ConfigField_TEXTAREA:
 		return "textarea"
-	case spaltv1.ConfigField_NUMBER:
+	case psmithv1.ConfigField_NUMBER:
 		return "number"
-	case spaltv1.ConfigField_BOOLEAN:
+	case psmithv1.ConfigField_BOOLEAN:
 		return "boolean"
-	case spaltv1.ConfigField_SELECT:
+	case psmithv1.ConfigField_SELECT:
 		return "select"
-	case spaltv1.ConfigField_MODEL_PICKER:
+	case psmithv1.ConfigField_MODEL_PICKER:
 		return "model"
 	default:
 		return "text"
@@ -198,7 +198,7 @@ func modelOptions(models []modelVM) []configOptVM {
 // values. It starts from the current config (so global/unknown keys survive)
 // and overwrites each non-global field, coercing by type. get returns the
 // posted value for a field's input (already prefix-resolved by the caller).
-func assemblePluginConfig(t *spaltv1.PluginType, current []byte, get func(field string) string) ([]byte, error) {
+func assemblePluginConfig(t *psmithv1.PluginType, current []byte, get func(field string) string) ([]byte, error) {
 	out := map[string]json.RawMessage{}
 	_ = json.Unmarshal(current, &out)
 	if t == nil {
@@ -244,12 +244,12 @@ func assemblePluginConfig(t *spaltv1.PluginType, current []byte, get func(field 
 }
 
 // pluginTypesByName loads the plugin catalog keyed by machine name.
-func (h *Handler) pluginTypesByName(ctx context.Context) map[string]*spaltv1.PluginType {
-	out := map[string]*spaltv1.PluginType{}
+func (h *Handler) pluginTypesByName(ctx context.Context) map[string]*psmithv1.PluginType {
+	out := map[string]*psmithv1.PluginType{}
 	if h.profiles == nil {
 		return out
 	}
-	resp, err := h.profiles.ListPluginTypes(ctx, connect.NewRequest(&spaltv1.ListPluginTypesRequest{}))
+	resp, err := h.profiles.ListPluginTypes(ctx, connect.NewRequest(&psmithv1.ListPluginTypesRequest{}))
 	if err != nil {
 		return out
 	}

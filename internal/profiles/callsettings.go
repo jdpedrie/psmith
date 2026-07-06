@@ -3,7 +3,7 @@ package profiles
 import (
 	"google.golang.org/protobuf/encoding/protojson"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 // callSettingsMarshaller / callSettingsUnmarshaller pin a protojson config so
@@ -23,7 +23,7 @@ var (
 
 // MarshalCallSettings encodes a *CallSettings to JSONB-compatible bytes.
 // Returns (nil, nil) for nil input — the column stays NULL.
-func MarshalCallSettings(cs *spaltv1.CallSettings) ([]byte, error) {
+func MarshalCallSettings(cs *psmithv1.CallSettings) ([]byte, error) {
 	if cs == nil {
 		return nil, nil
 	}
@@ -33,11 +33,11 @@ func MarshalCallSettings(cs *spaltv1.CallSettings) ([]byte, error) {
 // UnmarshalCallSettings decodes JSONB bytes back to a *CallSettings. Empty
 // input returns (nil, nil). Unknown fields are discarded so old binaries
 // gracefully read forward-compatible rows.
-func UnmarshalCallSettings(b []byte) (*spaltv1.CallSettings, error) {
+func UnmarshalCallSettings(b []byte) (*psmithv1.CallSettings, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
-	var out spaltv1.CallSettings
+	var out psmithv1.CallSettings
 	if err := callSettingsUnmarshaller.Unmarshal(b, &out); err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func UnmarshalCallSettings(b []byte) (*spaltv1.CallSettings, error) {
 // otherwise-empty `OpenAIExtras` block on top.
 //
 // Either argument may be nil. If both are nil the result is nil.
-func MergeCallSettings(higher, lower *spaltv1.CallSettings) *spaltv1.CallSettings {
+func MergeCallSettings(higher, lower *psmithv1.CallSettings) *psmithv1.CallSettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -74,7 +74,7 @@ func MergeCallSettings(higher, lower *spaltv1.CallSettings) *spaltv1.CallSetting
 		return cloneCallSettings(higher)
 	}
 
-	out := &spaltv1.CallSettings{}
+	out := &psmithv1.CallSettings{}
 
 	// --- scalar fields ---
 	out.Temperature = pickFloat(higher.Temperature, lower.Temperature)
@@ -103,11 +103,11 @@ func MergeCallSettings(higher, lower *spaltv1.CallSettings) *spaltv1.CallSetting
 
 // cloneCallSettings returns a deep copy. Used when only one of higher/lower
 // is non-nil so we never hand the caller our input back.
-func cloneCallSettings(s *spaltv1.CallSettings) *spaltv1.CallSettings {
+func cloneCallSettings(s *psmithv1.CallSettings) *psmithv1.CallSettings {
 	if s == nil {
 		return nil
 	}
-	out := &spaltv1.CallSettings{
+	out := &psmithv1.CallSettings{
 		Temperature:     copyFloat(s.Temperature),
 		TopP:            copyFloat(s.TopP),
 		MaxOutputTokens: copyInt32(s.MaxOutputTokens),
@@ -126,7 +126,7 @@ func cloneCallSettings(s *spaltv1.CallSettings) *spaltv1.CallSettings {
 
 // --- ThinkingSettings -------------------------------------------------------
 
-func mergeThinking(higher, lower *spaltv1.ThinkingSettings) *spaltv1.ThinkingSettings {
+func mergeThinking(higher, lower *psmithv1.ThinkingSettings) *psmithv1.ThinkingSettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -136,17 +136,17 @@ func mergeThinking(higher, lower *spaltv1.ThinkingSettings) *spaltv1.ThinkingSet
 	if lower == nil {
 		return cloneThinking(higher)
 	}
-	return &spaltv1.ThinkingSettings{
+	return &psmithv1.ThinkingSettings{
 		Enabled:      pickBool(higher.Enabled, lower.Enabled),
 		BudgetTokens: pickInt32(higher.BudgetTokens, lower.BudgetTokens),
 	}
 }
 
-func cloneThinking(t *spaltv1.ThinkingSettings) *spaltv1.ThinkingSettings {
+func cloneThinking(t *psmithv1.ThinkingSettings) *psmithv1.ThinkingSettings {
 	if t == nil {
 		return nil
 	}
-	return &spaltv1.ThinkingSettings{
+	return &psmithv1.ThinkingSettings{
 		Enabled:      copyBool(t.Enabled),
 		BudgetTokens: copyInt32(t.BudgetTokens),
 	}
@@ -157,7 +157,7 @@ func cloneThinking(t *spaltv1.ThinkingSettings) *spaltv1.ThinkingSettings {
 // mergeAnthropicExtras sparse-merges two AnthropicExtras blocks per-field.
 // `higher` wins where set; `lower` fills in unset slots. Either side nil is
 // equivalent to that side carrying no fields.
-func mergeAnthropicExtras(higher, lower *spaltv1.AnthropicExtras) *spaltv1.AnthropicExtras {
+func mergeAnthropicExtras(higher, lower *psmithv1.AnthropicExtras) *psmithv1.AnthropicExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -167,23 +167,23 @@ func mergeAnthropicExtras(higher, lower *spaltv1.AnthropicExtras) *spaltv1.Anthr
 	if lower == nil {
 		return cloneAnthropicExtras(higher)
 	}
-	return &spaltv1.AnthropicExtras{
+	return &psmithv1.AnthropicExtras{
 		CacheEnabled: pickBool(higher.CacheEnabled, lower.CacheEnabled),
 		CacheTtl:     pickCacheTTL(higher.CacheTtl, lower.CacheTtl),
 	}
 }
 
-func cloneAnthropicExtras(a *spaltv1.AnthropicExtras) *spaltv1.AnthropicExtras {
+func cloneAnthropicExtras(a *psmithv1.AnthropicExtras) *psmithv1.AnthropicExtras {
 	if a == nil {
 		return nil
 	}
-	return &spaltv1.AnthropicExtras{
+	return &psmithv1.AnthropicExtras{
 		CacheEnabled: copyBool(a.CacheEnabled),
 		CacheTtl:     copyCacheTTL(a.CacheTtl),
 	}
 }
 
-func pickCacheTTL(higher, lower *spaltv1.CacheTTL) *spaltv1.CacheTTL {
+func pickCacheTTL(higher, lower *psmithv1.CacheTTL) *psmithv1.CacheTTL {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -195,7 +195,7 @@ func pickCacheTTL(higher, lower *spaltv1.CacheTTL) *spaltv1.CacheTTL {
 	return nil
 }
 
-func copyCacheTTL(v *spaltv1.CacheTTL) *spaltv1.CacheTTL {
+func copyCacheTTL(v *psmithv1.CacheTTL) *psmithv1.CacheTTL {
 	if v == nil {
 		return nil
 	}
@@ -205,7 +205,7 @@ func copyCacheTTL(v *spaltv1.CacheTTL) *spaltv1.CacheTTL {
 
 // --- OpenAIExtras -----------------------------------------------------------
 
-func mergeOpenAIExtras(higher, lower *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtras {
+func mergeOpenAIExtras(higher, lower *psmithv1.OpenAIExtras) *psmithv1.OpenAIExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -215,7 +215,7 @@ func mergeOpenAIExtras(higher, lower *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtra
 	if lower == nil {
 		return cloneOpenAIExtras(higher)
 	}
-	out := &spaltv1.OpenAIExtras{
+	out := &psmithv1.OpenAIExtras{
 		Seed:              pickInt32(higher.Seed, lower.Seed),
 		FrequencyPenalty:  pickFloat(higher.FrequencyPenalty, lower.FrequencyPenalty),
 		PresencePenalty:   pickFloat(higher.PresencePenalty, lower.PresencePenalty),
@@ -240,11 +240,11 @@ func mergeOpenAIExtras(higher, lower *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtra
 	return out
 }
 
-func cloneOpenAIExtras(o *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtras {
+func cloneOpenAIExtras(o *psmithv1.OpenAIExtras) *psmithv1.OpenAIExtras {
 	if o == nil {
 		return nil
 	}
-	out := &spaltv1.OpenAIExtras{
+	out := &psmithv1.OpenAIExtras{
 		Seed:              copyInt32(o.Seed),
 		FrequencyPenalty:  copyFloat(o.FrequencyPenalty),
 		PresencePenalty:   copyFloat(o.PresencePenalty),
@@ -259,20 +259,20 @@ func cloneOpenAIExtras(o *spaltv1.OpenAIExtras) *spaltv1.OpenAIExtras {
 	return out
 }
 
-func cloneResponseFormat(rf *spaltv1.ResponseFormat) *spaltv1.ResponseFormat {
+func cloneResponseFormat(rf *psmithv1.ResponseFormat) *psmithv1.ResponseFormat {
 	if rf == nil {
 		return nil
 	}
-	out := &spaltv1.ResponseFormat{}
+	out := &psmithv1.ResponseFormat{}
 	switch k := rf.Kind.(type) {
-	case *spaltv1.ResponseFormat_Text:
-		out.Kind = &spaltv1.ResponseFormat_Text{Text: k.Text}
-	case *spaltv1.ResponseFormat_JsonObject:
-		out.Kind = &spaltv1.ResponseFormat_JsonObject{JsonObject: k.JsonObject}
-	case *spaltv1.ResponseFormat_JsonSchema:
-		var schema *spaltv1.JsonSchema
+	case *psmithv1.ResponseFormat_Text:
+		out.Kind = &psmithv1.ResponseFormat_Text{Text: k.Text}
+	case *psmithv1.ResponseFormat_JsonObject:
+		out.Kind = &psmithv1.ResponseFormat_JsonObject{JsonObject: k.JsonObject}
+	case *psmithv1.ResponseFormat_JsonSchema:
+		var schema *psmithv1.JsonSchema
 		if k.JsonSchema != nil {
-			schema = &spaltv1.JsonSchema{
+			schema = &psmithv1.JsonSchema{
 				Name:        k.JsonSchema.Name,
 				Description: copyString(k.JsonSchema.Description),
 				Strict:      copyBool(k.JsonSchema.Strict),
@@ -281,7 +281,7 @@ func cloneResponseFormat(rf *spaltv1.ResponseFormat) *spaltv1.ResponseFormat {
 				schema.Schema = append([]byte(nil), k.JsonSchema.Schema...)
 			}
 		}
-		out.Kind = &spaltv1.ResponseFormat_JsonSchema{JsonSchema: schema}
+		out.Kind = &psmithv1.ResponseFormat_JsonSchema{JsonSchema: schema}
 	}
 	return out
 }
@@ -296,7 +296,7 @@ func cloneLogitBias(in map[int32]float64) map[int32]float64 {
 
 // --- GoogleExtras -----------------------------------------------------------
 
-func mergeGoogleExtras(higher, lower *spaltv1.GoogleExtras) *spaltv1.GoogleExtras {
+func mergeGoogleExtras(higher, lower *psmithv1.GoogleExtras) *psmithv1.GoogleExtras {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -306,7 +306,7 @@ func mergeGoogleExtras(higher, lower *spaltv1.GoogleExtras) *spaltv1.GoogleExtra
 	if lower == nil {
 		return cloneGoogleExtras(higher)
 	}
-	out := &spaltv1.GoogleExtras{
+	out := &psmithv1.GoogleExtras{
 		ResponseMimeType: pickString(higher.ResponseMimeType, lower.ResponseMimeType),
 		CandidateCount:   pickInt32(higher.CandidateCount, lower.CandidateCount),
 	}
@@ -319,11 +319,11 @@ func mergeGoogleExtras(higher, lower *spaltv1.GoogleExtras) *spaltv1.GoogleExtra
 	return out
 }
 
-func cloneGoogleExtras(g *spaltv1.GoogleExtras) *spaltv1.GoogleExtras {
+func cloneGoogleExtras(g *psmithv1.GoogleExtras) *psmithv1.GoogleExtras {
 	if g == nil {
 		return nil
 	}
-	out := &spaltv1.GoogleExtras{
+	out := &psmithv1.GoogleExtras{
 		ResponseMimeType: copyString(g.ResponseMimeType),
 		CandidateCount:   copyInt32(g.CandidateCount),
 	}
@@ -334,7 +334,7 @@ func cloneGoogleExtras(g *spaltv1.GoogleExtras) *spaltv1.GoogleExtras {
 	return out
 }
 
-func mergeSafetySettings(higher, lower *spaltv1.SafetySettings) *spaltv1.SafetySettings {
+func mergeSafetySettings(higher, lower *psmithv1.SafetySettings) *psmithv1.SafetySettings {
 	if higher == nil && lower == nil {
 		return nil
 	}
@@ -344,7 +344,7 @@ func mergeSafetySettings(higher, lower *spaltv1.SafetySettings) *spaltv1.SafetyS
 	if lower == nil {
 		return cloneSafetySettings(higher)
 	}
-	return &spaltv1.SafetySettings{
+	return &psmithv1.SafetySettings{
 		Harassment:       pickHarmThreshold(higher.Harassment, lower.Harassment),
 		HateSpeech:       pickHarmThreshold(higher.HateSpeech, lower.HateSpeech),
 		SexuallyExplicit: pickHarmThreshold(higher.SexuallyExplicit, lower.SexuallyExplicit),
@@ -352,11 +352,11 @@ func mergeSafetySettings(higher, lower *spaltv1.SafetySettings) *spaltv1.SafetyS
 	}
 }
 
-func cloneSafetySettings(s *spaltv1.SafetySettings) *spaltv1.SafetySettings {
+func cloneSafetySettings(s *psmithv1.SafetySettings) *psmithv1.SafetySettings {
 	if s == nil {
 		return nil
 	}
-	return &spaltv1.SafetySettings{
+	return &psmithv1.SafetySettings{
 		Harassment:       copyHarmThreshold(s.Harassment),
 		HateSpeech:       copyHarmThreshold(s.HateSpeech),
 		SexuallyExplicit: copyHarmThreshold(s.SexuallyExplicit),
@@ -414,7 +414,7 @@ func pickString(higher, lower *string) *string {
 	return nil
 }
 
-func pickServiceTier(higher, lower *spaltv1.ServiceTier) *spaltv1.ServiceTier {
+func pickServiceTier(higher, lower *psmithv1.ServiceTier) *psmithv1.ServiceTier {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -426,7 +426,7 @@ func pickServiceTier(higher, lower *spaltv1.ServiceTier) *spaltv1.ServiceTier {
 	return nil
 }
 
-func copyServiceTier(v *spaltv1.ServiceTier) *spaltv1.ServiceTier {
+func copyServiceTier(v *psmithv1.ServiceTier) *psmithv1.ServiceTier {
 	if v == nil {
 		return nil
 	}
@@ -434,7 +434,7 @@ func copyServiceTier(v *spaltv1.ServiceTier) *spaltv1.ServiceTier {
 	return &x
 }
 
-func pickHarmThreshold(higher, lower *spaltv1.HarmThreshold) *spaltv1.HarmThreshold {
+func pickHarmThreshold(higher, lower *psmithv1.HarmThreshold) *psmithv1.HarmThreshold {
 	if higher != nil {
 		v := *higher
 		return &v
@@ -478,7 +478,7 @@ func copyString(v *string) *string {
 	return &x
 }
 
-func copyHarmThreshold(v *spaltv1.HarmThreshold) *spaltv1.HarmThreshold {
+func copyHarmThreshold(v *psmithv1.HarmThreshold) *psmithv1.HarmThreshold {
 	if v == nil {
 		return nil
 	}

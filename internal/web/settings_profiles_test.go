@@ -12,14 +12,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/modelproviders"
-	"github.com/jdpedrie/spalt/internal/profiles"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/modelproviders"
+	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // TestProfilesSettings proves the profile CRUD surface: create, list, edit
@@ -77,7 +77,7 @@ func TestProfilesSettings(t *testing.T) {
 		t.Fatalf("update status=%d; body:\n%s", upRec.Code, upRec.Body.String())
 	}
 
-	got, err := prof.GetProfile(userCtx, connect.NewRequest(&spaltv1.GetProfileRequest{Id: id}))
+	got, err := prof.GetProfile(userCtx, connect.NewRequest(&psmithv1.GetProfileRequest{Id: id}))
 	if err != nil {
 		t.Fatalf("GetProfile: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestProfileAdvancedConfig(t *testing.T) {
 		t.Fatalf("update status=%d; body:\n%s", rec.Code, rec.Body.String())
 	}
 
-	got, err := prof.GetProfile(userCtx, connect.NewRequest(&spaltv1.GetProfileRequest{Id: id}))
+	got, err := prof.GetProfile(userCtx, connect.NewRequest(&psmithv1.GetProfileRequest{Id: id}))
 	if err != nil {
 		t.Fatalf("GetProfile: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestProfileAdvancedConfig(t *testing.T) {
 	if p.GetCompressionModelId() != fx.modelID || p.GetCompressionGuide() != "summarize please" {
 		t.Errorf("compression not persisted: model=%q guide=%q", p.GetCompressionModelId(), p.GetCompressionGuide())
 	}
-	if p.GetCompressionMode() != spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE {
+	if p.GetCompressionMode() != psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE {
 		t.Errorf("compression mode = %v want REPLACE", p.GetCompressionMode())
 	}
 	if p.GetTitleModelId() != fx.modelID {

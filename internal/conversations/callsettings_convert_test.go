@@ -3,13 +3,13 @@ package conversations
 import (
 	"testing"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/protoconv"
-	"github.com/jdpedrie/spalt/internal/providers"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/protoconv"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 func TestProtoCallSettingsToProvider_AnthropicNil(t *testing.T) {
-	out := protoCallSettingsToProvider(&spaltv1.CallSettings{})
+	out := protoCallSettingsToProvider(&psmithv1.CallSettings{})
 	if out.Anthropic != nil {
 		t.Errorf("expected Anthropic nil when proto unset, got %+v", out.Anthropic)
 	}
@@ -29,8 +29,8 @@ func TestProtoCallSettingsToProvider_AnthropicCacheEnabledRoundTrip(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := protoCallSettingsToProvider(&spaltv1.CallSettings{
-				Anthropic: &spaltv1.AnthropicExtras{CacheEnabled: tc.in},
+			out := protoCallSettingsToProvider(&psmithv1.CallSettings{
+				Anthropic: &psmithv1.AnthropicExtras{CacheEnabled: tc.in},
 			})
 			if out.Anthropic == nil {
 				t.Fatalf("expected Anthropic non-nil")
@@ -49,12 +49,12 @@ func TestProtoCallSettingsToProvider_AnthropicCacheEnabledRoundTrip(t *testing.T
 }
 
 func TestProtoCallSettingsToProvider_AnthropicCacheTTL(t *testing.T) {
-	ttl5m := spaltv1.CacheTTL_CACHE_TTL_5M
-	ttl1h := spaltv1.CacheTTL_CACHE_TTL_1H
-	ttlUnspec := spaltv1.CacheTTL_CACHE_TTL_UNSPECIFIED
+	ttl5m := psmithv1.CacheTTL_CACHE_TTL_5M
+	ttl1h := psmithv1.CacheTTL_CACHE_TTL_1H
+	ttlUnspec := psmithv1.CacheTTL_CACHE_TTL_UNSPECIFIED
 	cases := []struct {
 		name string
-		in   *spaltv1.CacheTTL
+		in   *psmithv1.CacheTTL
 		want providers.CacheTTL
 	}{
 		{"unset", nil, providers.CacheTTLUnspecified},
@@ -64,8 +64,8 @@ func TestProtoCallSettingsToProvider_AnthropicCacheTTL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := protoCallSettingsToProvider(&spaltv1.CallSettings{
-				Anthropic: &spaltv1.AnthropicExtras{CacheTtl: tc.in},
+			out := protoCallSettingsToProvider(&psmithv1.CallSettings{
+				Anthropic: &psmithv1.AnthropicExtras{CacheTtl: tc.in},
 			})
 			if out.Anthropic == nil {
 				t.Fatalf("expected Anthropic non-nil")
@@ -78,11 +78,11 @@ func TestProtoCallSettingsToProvider_AnthropicCacheTTL(t *testing.T) {
 }
 
 func TestConvertProtoCacheTTL_Direct(t *testing.T) {
-	ttl5m := spaltv1.CacheTTL_CACHE_TTL_5M
-	ttl1h := spaltv1.CacheTTL_CACHE_TTL_1H
+	ttl5m := psmithv1.CacheTTL_CACHE_TTL_5M
+	ttl1h := psmithv1.CacheTTL_CACHE_TTL_1H
 	cases := []struct {
 		name string
-		in   *spaltv1.CacheTTL
+		in   *psmithv1.CacheTTL
 		want providers.CacheTTL
 	}{
 		{"nil", nil, providers.CacheTTLUnspecified},

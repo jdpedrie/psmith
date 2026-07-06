@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // Anthropic's implementation of providers.ExplicitCacheProvider.

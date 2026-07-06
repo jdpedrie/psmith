@@ -1,4 +1,4 @@
-module github.com/jdpedrie/spalt
+module github.com/jdpedrie/psmith
 
 go 1.25.5
 

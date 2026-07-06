@@ -7,12 +7,12 @@ plugins:
     out: gen
     opt: paths=source_relative
   - remote: buf.build/apple/swift
-    out: clients/SpaltSwift/Sources/SpaltKit/Generated
+    out: clients/PsmithSwift/Sources/PsmithKit/Generated
     opt:
       - Visibility=Public
       - FileNaming=PathToUnderscores
   - remote: buf.build/connectrpc/swift
-    out: clients/SpaltSwift/Sources/SpaltKit/Generated
+    out: clients/PsmithSwift/Sources/PsmithKit/Generated
     opt:
       - Visibility=Public
       - GenerateAsyncMethods=true

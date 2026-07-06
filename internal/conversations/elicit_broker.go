@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/internal/elicit"
+	"github.com/jdpedrie/psmith/internal/elicit"
 )
 
 // elicitTimeout is how long a tool's Elicit call waits for the user's

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Converts every .svg in clients/SpaltSwift/Sources/SpaltUI/Resources/Logos/
+# Converts every .svg in clients/PsmithSwift/Sources/PsmithUI/Resources/Logos/
 # into a sibling .png at 192px so iOS — which can't decode raw SVG bytes
 # from arbitrary file URLs — can render the same provider logos via
 # `UIImage(named:in:with:)` against the SwiftPM resource bundle.
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-LOGOS_DIR="$(cd "$(dirname "$0")/.." && pwd)/clients/SpaltSwift/Sources/SpaltUI/Resources/Logos"
+LOGOS_DIR="$(cd "$(dirname "$0")/.." && pwd)/clients/PsmithSwift/Sources/PsmithUI/Resources/Logos"
 SIZE=192  # covers @1x = 24px, @2x = 48px, @3x = 72px for the 24pt callsites
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

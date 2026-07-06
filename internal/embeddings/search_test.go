@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jdpedrie/spalt/internal/embeddings"
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/embeddings"
+	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/pgvector/pgvector-go"
 )
 

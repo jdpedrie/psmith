@@ -6,11 +6,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
 )
 
-// Service implements spalt.v1.EventsService. Each subscription opens
+// Service implements psmith.v1.EventsService. Each subscription opens
 // a per-user channel on the bus and translates internal Event values
 // into wire-shaped AccountEvent messages.
 type Service struct {
@@ -37,8 +37,8 @@ func NewService(bus *Bus) *Service {
 // proto doesn't model yet doesn't crash the connection.
 func (s *Service) SubscribeAccountEvents(
 	ctx context.Context,
-	req *connect.Request[spaltv1.SubscribeAccountEventsRequest],
-	stream *connect.ServerStream[spaltv1.AccountEvent],
+	req *connect.Request[psmithv1.SubscribeAccountEventsRequest],
+	stream *connect.ServerStream[psmithv1.AccountEvent],
 ) error {
 	caller, ok := auth.FromContext(ctx)
 	if !ok {
@@ -75,12 +75,12 @@ func (s *Service) SubscribeAccountEvents(
 // Returns nil for event types the proto doesn't model — caller skips
 // those, so a forward-compatible server can publish new types without
 // breaking old clients.
-func eventToProto(ev Event) *spaltv1.AccountEvent {
+func eventToProto(ev Event) *psmithv1.AccountEvent {
 	switch ev.Type {
 	case ProfileChanged:
-		return &spaltv1.AccountEvent{
-			Kind: &spaltv1.AccountEvent_ProfileChanged{
-				ProfileChanged: &spaltv1.ProfileChanged{
+		return &psmithv1.AccountEvent{
+			Kind: &psmithv1.AccountEvent_ProfileChanged{
+				ProfileChanged: &psmithv1.ProfileChanged{
 					ProfileId: ev.Profile.ProfileID.String(),
 					Kind:      profileChangeKindToProto(ev.Profile.Kind),
 				},
@@ -91,15 +91,15 @@ func eventToProto(ev Event) *spaltv1.AccountEvent {
 	}
 }
 
-func profileChangeKindToProto(k ProfileChangeKind) spaltv1.ProfileChangeKind {
+func profileChangeKindToProto(k ProfileChangeKind) psmithv1.ProfileChangeKind {
 	switch k {
 	case ProfileChangeCreated:
-		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_CREATED
+		return psmithv1.ProfileChangeKind_PROFILE_CHANGE_KIND_CREATED
 	case ProfileChangeUpdated:
-		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UPDATED
+		return psmithv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UPDATED
 	case ProfileChangeDeleted:
-		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_DELETED
+		return psmithv1.ProfileChangeKind_PROFILE_CHANGE_KIND_DELETED
 	default:
-		return spaltv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UNSPECIFIED
+		return psmithv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UNSPECIFIED
 	}
 }

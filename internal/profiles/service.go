@@ -12,13 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/events"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/plugins"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/events"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // Compression mode wire/storage constants. The DB CHECK constraint enforces
@@ -62,7 +62,7 @@ var validTitleProviderKinds = map[string]struct{}{
 	TitleProviderKindAppleFoundation: {},
 }
 
-// Service implements spaltv1connect.ProfilesServiceHandler.
+// Service implements psmithv1connect.ProfilesServiceHandler.
 //
 // pool is required for the SetProfilePlugins atomic-replace transaction.
 // Older callers / tests that only exercise CRUD may pass nil.
@@ -71,9 +71,9 @@ var validTitleProviderKinds = map[string]struct{}{
 // user_plugin_settings.config_encrypted) at write time and unseals
 // them on the read paths that hand bytes to plugin constructors. Pass
 // crypto.Nop{} to opt out of encryption (tests + deployments without
-// SPALT_MASTER_KEY).
+// PSMITH_MASTER_KEY).
 type Service struct {
-	spaltv1connect.UnimplementedProfilesServiceHandler
+	psmithv1connect.UnimplementedProfilesServiceHandler
 	queries *store.Queries
 	pool    *pgxpool.Pool
 	cipher  crypto.Cipher
@@ -120,7 +120,7 @@ func (s *Service) publishProfileEvent(userID, profileID uuid.UUID, kind events.P
 
 // --- CreateProfile ---
 
-func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[spaltv1.CreateProfileRequest]) (*connect.Response[spaltv1.CreateProfileResponse], error) {
+func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[psmithv1.CreateProfileRequest]) (*connect.Response[psmithv1.CreateProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	if req.Msg.Name == "" {
@@ -230,12 +230,12 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[spaltv
 	}
 	s.attachRequiredCaps(ctx, proto)
 	s.publishProfileEvent(caller.ID, id, events.ProfileChangeCreated)
-	return connect.NewResponse(&spaltv1.CreateProfileResponse{Profile: proto}), nil
+	return connect.NewResponse(&psmithv1.CreateProfileResponse{Profile: proto}), nil
 }
 
 // --- ListProfiles ---
 
-func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[spaltv1.ListProfilesRequest]) (*connect.Response[spaltv1.ListProfilesResponse], error) {
+func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[psmithv1.ListProfilesRequest]) (*connect.Response[psmithv1.ListProfilesResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	rows, err := s.queries.ListProfilesByUser(ctx, caller.ID)
@@ -243,7 +243,7 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[spaltv1
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	out := make([]*spaltv1.Profile, 0, len(rows))
+	out := make([]*psmithv1.Profile, 0, len(rows))
 	for _, r := range rows {
 		p, err := profileToProto(r)
 		if err != nil {
@@ -252,12 +252,12 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[spaltv1
 		s.attachRequiredCaps(ctx, p)
 		out = append(out, p)
 	}
-	return connect.NewResponse(&spaltv1.ListProfilesResponse{Profiles: out}), nil
+	return connect.NewResponse(&psmithv1.ListProfilesResponse{Profiles: out}), nil
 }
 
 // --- GetProfile ---
 
-func (s *Service) GetProfile(ctx context.Context, req *connect.Request[spaltv1.GetProfileRequest]) (*connect.Response[spaltv1.GetProfileResponse], error) {
+func (s *Service) GetProfile(ctx context.Context, req *connect.Request[psmithv1.GetProfileRequest]) (*connect.Response[psmithv1.GetProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -276,7 +276,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[spaltv1.G
 	}
 	s.attachRequiredCaps(ctx, proto)
 
-	resp := &spaltv1.GetProfileResponse{Profile: proto}
+	resp := &psmithv1.GetProfileResponse{Profile: proto}
 
 	if req.Msg.Resolve {
 		resolved, err := Resolve(ctx, s.queries, row)
@@ -296,7 +296,7 @@ func (s *Service) GetProfile(ctx context.Context, req *connect.Request[spaltv1.G
 
 // --- UpdateProfile ---
 
-func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[spaltv1.UpdateProfileRequest]) (*connect.Response[spaltv1.UpdateProfileResponse], error) {
+func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[psmithv1.UpdateProfileRequest]) (*connect.Response[psmithv1.UpdateProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -559,12 +559,12 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[spaltv
 	}
 	s.attachRequiredCaps(ctx, proto)
 	s.publishProfileEvent(caller.ID, id, events.ProfileChangeUpdated)
-	return connect.NewResponse(&spaltv1.UpdateProfileResponse{Profile: proto}), nil
+	return connect.NewResponse(&psmithv1.UpdateProfileResponse{Profile: proto}), nil
 }
 
 // --- DeleteProfile ---
 
-func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[spaltv1.DeleteProfileRequest]) (*connect.Response[spaltv1.DeleteProfileResponse], error) {
+func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[psmithv1.DeleteProfileRequest]) (*connect.Response[psmithv1.DeleteProfileResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	id, err := uuid.Parse(req.Msg.Id)
@@ -586,7 +586,7 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[spaltv
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.publishProfileEvent(caller.ID, id, events.ProfileChangeDeleted)
-	return connect.NewResponse(&spaltv1.DeleteProfileResponse{}), nil
+	return connect.NewResponse(&psmithv1.DeleteProfileResponse{}), nil
 }
 
 // --- ListPluginTypes ---
@@ -594,16 +594,16 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[spaltv
 // ListPluginTypes returns metadata for every plugin type compiled into the
 // server. The set is fixed at build time (registered in init()); the proto
 // shape mirrors plugins.TypeDescriptor with a flat capabilities sub-message.
-func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[spaltv1.ListPluginTypesRequest]) (*connect.Response[spaltv1.ListPluginTypesResponse], error) {
+func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[psmithv1.ListPluginTypesRequest]) (*connect.Response[psmithv1.ListPluginTypesResponse], error) {
 	descs, err := plugins.DescribeAll()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("describe plugins: %w", err))
 	}
-	out := make([]*spaltv1.PluginType, 0, len(descs))
+	out := make([]*psmithv1.PluginType, 0, len(descs))
 	for _, d := range descs {
 		out = append(out, pluginTypeToProto(d))
 	}
-	return connect.NewResponse(&spaltv1.ListPluginTypesResponse{PluginTypes: out}), nil
+	return connect.NewResponse(&psmithv1.ListPluginTypesResponse{PluginTypes: out}), nil
 }
 
 // --- GetProfilePlugins ---
@@ -611,7 +611,7 @@ func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[spaltv
 // GetProfilePlugins returns the plugin pipeline attached to ONE profile (no
 // parent-chain walk). Empty list = "inherit from parent" per the
 // architecture's all-or-nothing inheritance rule.
-func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[spaltv1.GetProfilePluginsRequest]) (*connect.Response[spaltv1.GetProfilePluginsResponse], error) {
+func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[psmithv1.GetProfilePluginsRequest]) (*connect.Response[psmithv1.GetProfilePluginsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	profileID, err := uuid.Parse(req.Msg.ProfileId)
 	if err != nil {
@@ -624,7 +624,7 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[sp
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*spaltv1.ProfilePlugin, 0, len(rows))
+	out := make([]*psmithv1.ProfilePlugin, 0, len(rows))
 	for i, r := range rows {
 		// Decrypt the encrypted column when present; fall back to the
 		// legacy plaintext column for rows written before the
@@ -636,14 +636,14 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[sp
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugins[%d] config: %w", i, err))
 		}
-		out = append(out, &spaltv1.ProfilePlugin{
+		out = append(out, &psmithv1.ProfilePlugin{
 			PluginName: r.PluginName,
 			Ordinal:    r.Ordinal,
 			Config:     cfg,
 			Disabled:   r.Disabled,
 		})
 	}
-	return connect.NewResponse(&spaltv1.GetProfilePluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&psmithv1.GetProfilePluginsResponse{Plugins: out}), nil
 }
 
 // --- SetProfilePlugins ---
@@ -654,7 +654,7 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[sp
 // or malformed config aborts the request without touching the existing
 // pipeline. The replace itself runs in a transaction (delete-then-insert)
 // so concurrent reads either see the old or the new full pipeline.
-func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[spaltv1.SetProfilePluginsRequest]) (*connect.Response[spaltv1.SetProfilePluginsResponse], error) {
+func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[psmithv1.SetProfilePluginsRequest]) (*connect.Response[psmithv1.SetProfilePluginsResponse], error) {
 	if s.pool == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SetProfilePlugins requires pool dependency"))
 	}
@@ -689,7 +689,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[sp
 	if err := qtx.ReplaceProfilePlugins(ctx, profileID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear existing plugins: %w", err))
 	}
-	out := make([]*spaltv1.ProfilePlugin, 0, len(req.Msg.Plugins))
+	out := make([]*psmithv1.ProfilePlugin, 0, len(req.Msg.Plugins))
 	for i, p := range req.Msg.Plugins {
 		// Encrypt the per-profile plugin config blob before persisting.
 		// Reads in conversations/service.go (plugin pipeline build) go
@@ -716,7 +716,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[sp
 		// Echo the plaintext config the caller sent — the proto
 		// response is informational and shouldn't make the client
 		// re-issue a Get to see the current shape.
-		out = append(out, &spaltv1.ProfilePlugin{
+		out = append(out, &psmithv1.ProfilePlugin{
 			PluginName: row.PluginName,
 			Ordinal:    row.Ordinal,
 			Config:     p.Config,
@@ -726,7 +726,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[sp
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	return connect.NewResponse(&spaltv1.SetProfilePluginsResponse{Plugins: out}), nil
+	return connect.NewResponse(&psmithv1.SetProfilePluginsResponse{Plugins: out}), nil
 }
 
 // --- User-scoped plugin settings (`Global` config fields) -------------------
@@ -734,7 +734,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[sp
 // GetUserPluginSettings returns the calling user's stored global config
 // blob for one plugin. Missing row → empty config (`{}`); the UI seeds
 // the form with field defaults from the plugin descriptor.
-func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Request[spaltv1.GetUserPluginSettingsRequest]) (*connect.Response[spaltv1.GetUserPluginSettingsResponse], error) {
+func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Request[psmithv1.GetUserPluginSettingsRequest]) (*connect.Response[psmithv1.GetUserPluginSettingsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	name := req.Msg.PluginName
 	if name == "" {
@@ -744,7 +744,7 @@ func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Reques
 		UserID:     caller.ID,
 		PluginName: name,
 	})
-	settings := &spaltv1.UserPluginSettings{PluginName: name, Config: []byte("{}")}
+	settings := &psmithv1.UserPluginSettings{PluginName: name, Config: []byte("{}")}
 	if err == nil {
 		cfg, decryptErr := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
 		if decryptErr != nil {
@@ -756,30 +756,30 @@ func (s *Service) GetUserPluginSettings(ctx context.Context, req *connect.Reques
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.GetUserPluginSettingsResponse{Settings: settings}), nil
+	return connect.NewResponse(&psmithv1.GetUserPluginSettingsResponse{Settings: settings}), nil
 }
 
 // ListUserPluginSettings returns every plugin the calling user has
 // stored a global config for. Plugins not in the list are "not yet
 // configured globally"; merging treats absence as an empty object.
-func (s *Service) ListUserPluginSettings(ctx context.Context, req *connect.Request[spaltv1.ListUserPluginSettingsRequest]) (*connect.Response[spaltv1.ListUserPluginSettingsResponse], error) {
+func (s *Service) ListUserPluginSettings(ctx context.Context, req *connect.Request[psmithv1.ListUserPluginSettingsRequest]) (*connect.Response[psmithv1.ListUserPluginSettingsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	rows, err := s.queries.ListUserPluginSettings(ctx, caller.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := make([]*spaltv1.UserPluginSettings, 0, len(rows))
+	out := make([]*psmithv1.UserPluginSettings, 0, len(rows))
 	for _, r := range rows {
 		cfg, decryptErr := crypto.ResolveSecret(s.cipher, r.ConfigEncrypted, r.Config)
 		if decryptErr != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decrypt plugin settings %q: %w", r.PluginName, decryptErr))
 		}
-		out = append(out, &spaltv1.UserPluginSettings{
+		out = append(out, &psmithv1.UserPluginSettings{
 			PluginName: r.PluginName,
 			Config:     cfg,
 		})
 	}
-	return connect.NewResponse(&spaltv1.ListUserPluginSettingsResponse{Settings: out}), nil
+	return connect.NewResponse(&psmithv1.ListUserPluginSettingsResponse{Settings: out}), nil
 }
 
 // UpsertUserPluginSettings replaces the calling user's global config blob
@@ -787,7 +787,7 @@ func (s *Service) ListUserPluginSettings(ctx context.Context, req *connect.Reque
 // supplied (global-only) config — same pre-write check as
 // SetProfilePlugins, so a malformed JSON or unknown plugin name surfaces
 // as InvalidArgument before any DB write.
-func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Request[spaltv1.UpsertUserPluginSettingsRequest]) (*connect.Response[spaltv1.UpsertUserPluginSettingsResponse], error) {
+func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Request[psmithv1.UpsertUserPluginSettingsRequest]) (*connect.Response[psmithv1.UpsertUserPluginSettingsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 	name := req.Msg.PluginName
 	if name == "" {
@@ -812,8 +812,8 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.UpsertUserPluginSettingsResponse{
-		Settings: &spaltv1.UserPluginSettings{
+	return connect.NewResponse(&psmithv1.UpsertUserPluginSettingsResponse{
+		Settings: &psmithv1.UserPluginSettings{
 			PluginName: row.PluginName,
 			Config:     cfg, // echo plaintext (row.ConfigEncrypted is opaque bytes)
 		},
@@ -821,23 +821,23 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 }
 
 // pluginTypeToProto converts a plugins.TypeDescriptor to its proto shape.
-func pluginTypeToProto(d plugins.TypeDescriptor) *spaltv1.PluginType {
-	fields := make([]*spaltv1.ConfigField, 0, len(d.ConfigFields))
+func pluginTypeToProto(d plugins.TypeDescriptor) *psmithv1.PluginType {
+	fields := make([]*psmithv1.ConfigField, 0, len(d.ConfigFields))
 	for _, f := range d.ConfigFields {
 		fields = append(fields, configFieldToProto(f))
 	}
-	requestedFacts := make([]spaltv1.DeviceFactKey, 0, len(d.RequestedDeviceFacts))
+	requestedFacts := make([]psmithv1.DeviceFactKey, 0, len(d.RequestedDeviceFacts))
 	for _, k := range d.RequestedDeviceFacts {
-		if proto := deviceFactKeyToProto(k); proto != spaltv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED {
+		if proto := deviceFactKeyToProto(k); proto != psmithv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED {
 			requestedFacts = append(requestedFacts, proto)
 		}
 	}
-	return &spaltv1.PluginType{
+	return &psmithv1.PluginType{
 		Name:         d.Name,
 		DisplayName:  d.DisplayName,
 		Description:  d.Description,
 		ConfigFields: fields,
-		Capabilities: &spaltv1.PluginCapabilities{
+		Capabilities: &psmithv1.PluginCapabilities{
 			Configurable:                d.Capabilities.Configurable,
 			SystemPrompter:              d.Capabilities.SystemPrompter,
 			OutgoingUserTransformer:     d.Capabilities.OutgoingUserTransformer,
@@ -858,11 +858,11 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *spaltv1.PluginType {
 // capabilityRequirementsToProto converts the plugins-package shape to its
 // proto twin. Returns nil when the requirement set is empty so the proto
 // field stays unset (mirroring the optional<ModelCapabilities> on the wire).
-func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *spaltv1.ModelCapabilities {
+func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *psmithv1.ModelCapabilities {
 	if r.Empty() {
 		return nil
 	}
-	return &spaltv1.ModelCapabilities{
+	return &psmithv1.ModelCapabilities{
 		Streaming:       r.Streaming,
 		Thinking:        r.Thinking,
 		ToolUse:         r.ToolUse,
@@ -877,20 +877,20 @@ func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *spalt
 // here to avoid a cross-package dep from internal/profiles into
 // internal/conversations; both pin to the plugins.DeviceFactKey*
 // string constants as the source of truth.
-func deviceFactKeyToProto(k string) spaltv1.DeviceFactKey {
+func deviceFactKeyToProto(k string) psmithv1.DeviceFactKey {
 	switch k {
 	case plugins.DeviceFactKeyLocale:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
 	case plugins.DeviceFactKeyTimezone:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
 	case plugins.DeviceFactKeyPlatform:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
 	case plugins.DeviceFactKeyLocationCity:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
 	case plugins.DeviceFactKeyLocationCoords:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
 	default:
-		return spaltv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
+		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
 	}
 }
 
@@ -899,8 +899,8 @@ func deviceFactKeyToProto(k string) spaltv1.DeviceFactKey {
 // string (which the wire treats as "no default"). Unknown field types map
 // to TYPE_UNSPECIFIED so a malformed plugin descriptor surfaces as an
 // explicit zero-value rather than getting silently coerced.
-func configFieldToProto(f plugins.ConfigField) *spaltv1.ConfigField {
-	out := &spaltv1.ConfigField{
+func configFieldToProto(f plugins.ConfigField) *psmithv1.ConfigField {
+	out := &psmithv1.ConfigField{
 		Name:        f.Name,
 		Display:     f.Display,
 		Description: f.Description,
@@ -920,14 +920,14 @@ func configFieldToProto(f plugins.ConfigField) *spaltv1.ConfigField {
 		}
 	}
 	if len(f.Options) > 0 {
-		opts := make([]*spaltv1.ConfigOption, 0, len(f.Options))
+		opts := make([]*psmithv1.ConfigOption, 0, len(f.Options))
 		for _, o := range f.Options {
-			opts = append(opts, &spaltv1.ConfigOption{Value: o.Value, Label: o.Label})
+			opts = append(opts, &psmithv1.ConfigOption{Value: o.Value, Label: o.Label})
 		}
 		out.Options = opts
 	}
 	if f.Type == plugins.ConfigFieldModelPicker {
-		out.ModelPickerFilter = &spaltv1.ModelPickerFilter{
+		out.ModelPickerFilter = &psmithv1.ModelPickerFilter{
 			RequiresStreaming:       f.ModelPickerFilter.RequiresStreaming,
 			RequiresThinking:        f.ModelPickerFilter.RequiresThinking,
 			RequiresToolUse:         f.ModelPickerFilter.RequiresToolUse,
@@ -939,31 +939,31 @@ func configFieldToProto(f plugins.ConfigField) *spaltv1.ConfigField {
 	return out
 }
 
-func configFieldMergeToProto(m plugins.ConfigFieldMerge) spaltv1.ConfigField_Merge {
+func configFieldMergeToProto(m plugins.ConfigFieldMerge) psmithv1.ConfigField_Merge {
 	switch m {
 	case plugins.MergeAppendString:
-		return spaltv1.ConfigField_MERGE_APPEND_STRING
+		return psmithv1.ConfigField_MERGE_APPEND_STRING
 	default:
-		return spaltv1.ConfigField_MERGE_REPLACE
+		return psmithv1.ConfigField_MERGE_REPLACE
 	}
 }
 
-func configFieldTypeToProto(t plugins.ConfigFieldType) spaltv1.ConfigField_Type {
+func configFieldTypeToProto(t plugins.ConfigFieldType) psmithv1.ConfigField_Type {
 	switch t {
 	case plugins.ConfigFieldNumber:
-		return spaltv1.ConfigField_NUMBER
+		return psmithv1.ConfigField_NUMBER
 	case plugins.ConfigFieldText:
-		return spaltv1.ConfigField_TEXT
+		return psmithv1.ConfigField_TEXT
 	case plugins.ConfigFieldTextarea:
-		return spaltv1.ConfigField_TEXTAREA
+		return psmithv1.ConfigField_TEXTAREA
 	case plugins.ConfigFieldBoolean:
-		return spaltv1.ConfigField_BOOLEAN
+		return psmithv1.ConfigField_BOOLEAN
 	case plugins.ConfigFieldSelect:
-		return spaltv1.ConfigField_SELECT
+		return psmithv1.ConfigField_SELECT
 	case plugins.ConfigFieldModelPicker:
-		return spaltv1.ConfigField_MODEL_PICKER
+		return psmithv1.ConfigField_MODEL_PICKER
 	default:
-		return spaltv1.ConfigField_TYPE_UNSPECIFIED
+		return psmithv1.ConfigField_TYPE_UNSPECIFIED
 	}
 }
 
@@ -1041,33 +1041,33 @@ func (s *Service) assertProviderOwned(ctx context.Context, providerID, userID uu
 	return nil
 }
 
-func compressionModeToString(m spaltv1.CompressionMode) (string, error) {
+func compressionModeToString(m psmithv1.CompressionMode) (string, error) {
 	switch m {
-	case spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE:
+	case psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE:
 		return compressionModeReplace, nil
-	case spaltv1.CompressionMode_COMPRESSION_MODE_APPEND:
+	case psmithv1.CompressionMode_COMPRESSION_MODE_APPEND:
 		return compressionModeAppend, nil
-	case spaltv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED:
+	case psmithv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED:
 		return "", errors.New("compression_mode is unspecified")
 	default:
 		return "", fmt.Errorf("unknown compression_mode: %v", m)
 	}
 }
 
-func compressionModeFromString(s string) spaltv1.CompressionMode {
+func compressionModeFromString(s string) psmithv1.CompressionMode {
 	switch s {
 	case compressionModeReplace:
-		return spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE
+		return psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE
 	case compressionModeAppend:
-		return spaltv1.CompressionMode_COMPRESSION_MODE_APPEND
+		return psmithv1.CompressionMode_COMPRESSION_MODE_APPEND
 	default:
-		return spaltv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED
+		return psmithv1.CompressionMode_COMPRESSION_MODE_UNSPECIFIED
 	}
 }
 
 // defaultsToJSON marshals a ProfileDefaults message to a JSON blob suitable
 // for the JSONB column. Returns nil for a nil input (so the column stays NULL).
-func defaultsToJSON(d *spaltv1.ProfileDefaults) ([]byte, error) {
+func defaultsToJSON(d *psmithv1.ProfileDefaults) ([]byte, error) {
 	if d == nil {
 		return nil, nil
 	}
@@ -1093,11 +1093,11 @@ func defaultsToJSON(d *spaltv1.ProfileDefaults) ([]byte, error) {
 // can decode profiles.default_settings without re-implementing the storage
 // shape — the snake_case JSON keys don't match protojson's camelCase output,
 // so a vanilla json.Unmarshal into ProfileDefaults silently misses every field.
-func DefaultsFromJSON(b []byte) (*spaltv1.ProfileDefaults, error) {
+func DefaultsFromJSON(b []byte) (*psmithv1.ProfileDefaults, error) {
 	return defaultsFromJSON(b)
 }
 
-func defaultsFromJSON(b []byte) (*spaltv1.ProfileDefaults, error) {
+func defaultsFromJSON(b []byte) (*psmithv1.ProfileDefaults, error) {
 	if len(b) == 0 {
 		return nil, nil
 	}
@@ -1105,7 +1105,7 @@ func defaultsFromJSON(b []byte) (*spaltv1.ProfileDefaults, error) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("decode default_settings: %w", err)
 	}
-	out := &spaltv1.ProfileDefaults{
+	out := &psmithv1.ProfileDefaults{
 		DefaultProviderId:        s.DefaultProviderID,
 		DefaultModelId:           s.DefaultModelID,
 		IncludeThinkingInHistory: s.IncludeThinkingInHistory,
@@ -1127,12 +1127,12 @@ type defaultsStorage struct {
 	CallSettings             json.RawMessage `json:"call_settings,omitempty"`
 }
 
-func profileToProto(p store.Profile) (*spaltv1.Profile, error) {
+func profileToProto(p store.Profile) (*psmithv1.Profile, error) {
 	defaults, err := defaultsFromJSON(p.DefaultSettings)
 	if err != nil {
 		return nil, err
 	}
-	out := &spaltv1.Profile{
+	out := &psmithv1.Profile{
 		Id:                 p.ID.String(),
 		Name:               p.Name,
 		SystemMessage:      p.SystemMessage,
@@ -1175,7 +1175,7 @@ func profileToProto(p store.Profile) (*spaltv1.Profile, error) {
 // inheritance). Best-effort: resolution failures are logged-and-skipped
 // rather than failing the read — a stale row shouldn't make GetProfile
 // itself fail.
-func (s *Service) attachRequiredCaps(ctx context.Context, p *spaltv1.Profile) {
+func (s *Service) attachRequiredCaps(ctx context.Context, p *psmithv1.Profile) {
 	if p == nil {
 		return
 	}

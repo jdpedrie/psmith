@@ -11,17 +11,17 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
 )
 
-// Service satisfies spaltv1connect.StreamsServiceHandler.
+// Service satisfies psmithv1connect.StreamsServiceHandler.
 type Service struct {
-	spaltv1connect.UnimplementedStreamsServiceHandler
+	psmithv1connect.UnimplementedStreamsServiceHandler
 	queries    *store.Queries
 	supervisor *stream.Supervisor
 }
@@ -33,7 +33,7 @@ func NewService(queries *store.Queries, supervisor *stream.Supervisor) *Service 
 // SubscribeStream forwards events from supervisor.Subscribe to the Connect
 // server-stream. Closes when the supervisor signals terminal or when the
 // client/context is done.
-func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[spaltv1.SubscribeStreamRequest], serverStream *connect.ServerStream[spaltv1.SubscribeStreamResponse]) error {
+func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[psmithv1.SubscribeStreamRequest], serverStream *connect.ServerStream[psmithv1.SubscribeStreamResponse]) error {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -48,12 +48,12 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[spal
 	}
 
 	for ev := range events {
-		var msg *spaltv1.SubscribeStreamResponse
+		var msg *psmithv1.SubscribeStreamResponse
 		switch {
 		case ev.Chunk != nil:
-			msg = &spaltv1.SubscribeStreamResponse{
-				Event: &spaltv1.SubscribeStreamResponse_Chunk{
-					Chunk: &spaltv1.Chunk{
+			msg = &psmithv1.SubscribeStreamResponse{
+				Event: &psmithv1.SubscribeStreamResponse_Chunk{
+					Chunk: &psmithv1.Chunk{
 						Sequence: ev.Chunk.Sequence,
 						Type:     chunkTypeToProto(ev.Chunk.Type),
 						Payload:  ev.Chunk.Payload,
@@ -61,8 +61,8 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[spal
 				},
 			}
 		case ev.Terminal != nil:
-			msg = &spaltv1.SubscribeStreamResponse{
-				Event: &spaltv1.SubscribeStreamResponse_Terminal{
+			msg = &psmithv1.SubscribeStreamResponse{
+				Event: &psmithv1.SubscribeStreamResponse_Terminal{
 					Terminal: streamRunToProto(*ev.Terminal),
 				},
 			}
@@ -77,7 +77,7 @@ func (s *Service) SubscribeStream(ctx context.Context, req *connect.Request[spal
 	return nil
 }
 
-func (s *Service) CancelStream(ctx context.Context, req *connect.Request[spaltv1.CancelStreamRequest]) (*connect.Response[spaltv1.CancelStreamResponse], error) {
+func (s *Service) CancelStream(ctx context.Context, req *connect.Request[psmithv1.CancelStreamRequest]) (*connect.Response[psmithv1.CancelStreamResponse], error) {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -88,10 +88,10 @@ func (s *Service) CancelStream(ctx context.Context, req *connect.Request[spaltv1
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.CancelStreamResponse{}), nil
+	return connect.NewResponse(&psmithv1.CancelStreamResponse{}), nil
 }
 
-func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[spaltv1.GetStreamRunRequest]) (*connect.Response[spaltv1.GetStreamRunResponse], error) {
+func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[psmithv1.GetStreamRunRequest]) (*connect.Response[psmithv1.GetStreamRunResponse], error) {
 	runID, err := uuid.Parse(req.Msg.StreamRunId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid stream_run_id: %w", err))
@@ -103,14 +103,14 @@ func (s *Service) GetStreamRun(ctx context.Context, req *connect.Request[spaltv1
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&spaltv1.GetStreamRunResponse{StreamRun: streamRunToProto(row)}), nil
+	return connect.NewResponse(&psmithv1.GetStreamRunResponse{StreamRun: streamRunToProto(row)}), nil
 }
 
 // ListActiveRuns returns every `status='running'` stream_run the caller
 // owns, optionally filtered to a single conversation. iOS StreamHub
 // calls this on app launch and on conversation entry to adopt in-flight
 // turns the previous view didn't finish receiving.
-func (s *Service) ListActiveRuns(ctx context.Context, req *connect.Request[spaltv1.ListActiveRunsRequest]) (*connect.Response[spaltv1.ListActiveRunsResponse], error) {
+func (s *Service) ListActiveRuns(ctx context.Context, req *connect.Request[psmithv1.ListActiveRunsRequest]) (*connect.Response[psmithv1.ListActiveRunsResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
 	var rows []store.StreamRun
@@ -135,17 +135,17 @@ func (s *Service) ListActiveRuns(ctx context.Context, req *connect.Request[spalt
 		rows = got
 	}
 
-	out := make([]*spaltv1.StreamRun, 0, len(rows))
+	out := make([]*psmithv1.StreamRun, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, streamRunToProto(r))
 	}
-	return connect.NewResponse(&spaltv1.ListActiveRunsResponse{Runs: out}), nil
+	return connect.NewResponse(&psmithv1.ListActiveRunsResponse{Runs: out}), nil
 }
 
 // --- conversions ---
 
-func streamRunToProto(r store.StreamRun) *spaltv1.StreamRun {
-	out := &spaltv1.StreamRun{
+func streamRunToProto(r store.StreamRun) *psmithv1.StreamRun {
+	out := &psmithv1.StreamRun{
 		Id:             r.ID.String(),
 		ConversationId: r.ConversationID.String(),
 		ContextId:      r.ContextID.String(),
@@ -177,58 +177,58 @@ func streamRunToProto(r store.StreamRun) *spaltv1.StreamRun {
 	return out
 }
 
-func statusToProto(s string) spaltv1.StreamRunStatus {
+func statusToProto(s string) psmithv1.StreamRunStatus {
 	switch s {
 	case "running":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING
 	case "completed":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_COMPLETED
 	case "errored":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_ERRORED
 	case "cancelled":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_CANCELLED
 	case "interrupted":
-		return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
+		return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_INTERRUPTED
 	}
-	return spaltv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
+	return psmithv1.StreamRunStatus_STREAM_RUN_STATUS_UNSPECIFIED
 }
 
-func purposeToProto(p string) spaltv1.StreamRunPurpose {
+func purposeToProto(p string) psmithv1.StreamRunPurpose {
 	switch p {
 	case "assistant_response":
-		return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
+		return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE
 	case "compression":
-		return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
+		return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_COMPRESSION
 	}
-	return spaltv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
+	return psmithv1.StreamRunPurpose_STREAM_RUN_PURPOSE_UNSPECIFIED
 }
 
-func chunkTypeToProto(t providers.ChunkType) spaltv1.ChunkType {
+func chunkTypeToProto(t providers.ChunkType) psmithv1.ChunkType {
 	switch t {
 	case providers.ChunkText:
-		return spaltv1.ChunkType_CHUNK_TYPE_TEXT_DELTA
+		return psmithv1.ChunkType_CHUNK_TYPE_TEXT_DELTA
 	case providers.ChunkThinking:
-		return spaltv1.ChunkType_CHUNK_TYPE_THINKING_DELTA
+		return psmithv1.ChunkType_CHUNK_TYPE_THINKING_DELTA
 	case providers.ChunkToolUseStart:
-		return spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_START
+		return psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_START
 	case providers.ChunkToolUseDelta:
-		return spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA
+		return psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_DELTA
 	case providers.ChunkToolUseEnd:
-		return spaltv1.ChunkType_CHUNK_TYPE_TOOL_USE_END
+		return psmithv1.ChunkType_CHUNK_TYPE_TOOL_USE_END
 	case providers.ChunkUsage:
-		return spaltv1.ChunkType_CHUNK_TYPE_USAGE
+		return psmithv1.ChunkType_CHUNK_TYPE_USAGE
 	case providers.ChunkError:
-		return spaltv1.ChunkType_CHUNK_TYPE_ERROR
+		return psmithv1.ChunkType_CHUNK_TYPE_ERROR
 	case providers.ChunkDone:
-		return spaltv1.ChunkType_CHUNK_TYPE_DONE
+		return psmithv1.ChunkType_CHUNK_TYPE_DONE
 	case providers.ChunkToolResult:
-		return spaltv1.ChunkType_CHUNK_TYPE_TOOL_RESULT
+		return psmithv1.ChunkType_CHUNK_TYPE_TOOL_RESULT
 	case providers.ChunkThinkingSignature:
-		return spaltv1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE
+		return psmithv1.ChunkType_CHUNK_TYPE_THINKING_SIGNATURE
 	case providers.ChunkElicit:
-		return spaltv1.ChunkType_CHUNK_TYPE_ELICIT
+		return psmithv1.ChunkType_CHUNK_TYPE_ELICIT
 	case providers.ChunkDeviceToolUse:
-		return spaltv1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE
+		return psmithv1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE
 	}
-	return spaltv1.ChunkType_CHUNK_TYPE_UNSPECIFIED
+	return psmithv1.ChunkType_CHUNK_TYPE_UNSPECIFIED
 }

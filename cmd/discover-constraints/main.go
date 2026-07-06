@@ -1,5 +1,5 @@
 // discover-constraints fires a battery of probe requests through a
-// running spaltd instance to map out which CallSettings fields each
+// running psmithd instance to map out which CallSettings fields each
 // enabled model accepts, silently drops, or actively rejects.
 //
 // Output is a JSON results file (default
@@ -9,10 +9,10 @@
 //
 // The tool is a thin Connect client — it does not touch the database
 // directly, decrypt API keys, or call upstream provider APIs. Every
-// probe goes through spaltd's existing TestUserModel RPC, which
+// probe goes through psmithd's existing TestUserModel RPC, which
 // already handles auth, decryption, driver construction, and per-call
 // settings dispatch. What the report measures is "what happens when
-// you set this field on a real chat through Spalt" — exactly what UI
+// you set this field on a real chat through Psmith" — exactly what UI
 // guardrails need to know.
 //
 // Usage:
@@ -42,8 +42,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/gen/spalt/v1/spaltv1connect"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
 )
 
 // probe is one (name, mutator) pair. mutate sets the field(s) under
@@ -52,28 +52,28 @@ import (
 // probes on a non-thinking model). Each probe is one TestUserModel RPC.
 type probe struct {
 	Name   string
-	Mutate func(*spaltv1.CallSettings)
-	Skip   func(model *spaltv1.UserModel) bool
+	Mutate func(*psmithv1.CallSettings)
+	Skip   func(model *psmithv1.UserModel) bool
 }
 
 func ptrFloat(v float64) *float64 { return &v }
 func ptrInt(v int32) *int32       { return &v }
 func ptrBool(v bool) *bool        { return &v }
 
-func hasThinking(m *spaltv1.UserModel) bool {
+func hasThinking(m *psmithv1.UserModel) bool {
 	return m.Capabilities != nil && m.Capabilities.Thinking
 }
 
 var probes = []probe{
 	{Name: "baseline"},
-	{Name: "temperature_zero", Mutate: func(s *spaltv1.CallSettings) { s.Temperature = ptrFloat(0.0) }},
-	{Name: "temperature_one", Mutate: func(s *spaltv1.CallSettings) { s.Temperature = ptrFloat(1.0) }},
-	{Name: "temperature_one_five", Mutate: func(s *spaltv1.CallSettings) { s.Temperature = ptrFloat(1.5) }},
-	{Name: "temperature_two", Mutate: func(s *spaltv1.CallSettings) { s.Temperature = ptrFloat(2.0) }},
-	{Name: "top_p_half", Mutate: func(s *spaltv1.CallSettings) { s.TopP = ptrFloat(0.5) }},
-	{Name: "top_k_forty", Mutate: func(s *spaltv1.CallSettings) { s.TopK = ptrInt(40) }},
-	{Name: "max_output_tokens_4", Mutate: func(s *spaltv1.CallSettings) { s.MaxOutputTokens = ptrInt(4) }},
-	{Name: "stop_sequences", Mutate: func(s *spaltv1.CallSettings) { s.StopSequences = []string{"END"} }},
+	{Name: "temperature_zero", Mutate: func(s *psmithv1.CallSettings) { s.Temperature = ptrFloat(0.0) }},
+	{Name: "temperature_one", Mutate: func(s *psmithv1.CallSettings) { s.Temperature = ptrFloat(1.0) }},
+	{Name: "temperature_one_five", Mutate: func(s *psmithv1.CallSettings) { s.Temperature = ptrFloat(1.5) }},
+	{Name: "temperature_two", Mutate: func(s *psmithv1.CallSettings) { s.Temperature = ptrFloat(2.0) }},
+	{Name: "top_p_half", Mutate: func(s *psmithv1.CallSettings) { s.TopP = ptrFloat(0.5) }},
+	{Name: "top_k_forty", Mutate: func(s *psmithv1.CallSettings) { s.TopK = ptrInt(40) }},
+	{Name: "max_output_tokens_4", Mutate: func(s *psmithv1.CallSettings) { s.MaxOutputTokens = ptrInt(4) }},
+	{Name: "stop_sequences", Mutate: func(s *psmithv1.CallSettings) { s.StopSequences = []string{"END"} }},
 	// Thinking-capable probes: enabled at default budget; enabled
 	// alongside a non-1.0 temperature (Anthropic should reject this
 	// pair); enabled with a sub-floor budget (Anthropic has a 1024-
@@ -81,61 +81,61 @@ var probes = []probe{
 	// message verbatim).
 	{
 		Name: "thinking_enabled",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Thinking = &spaltv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
 			s.MaxOutputTokens = ptrInt(2048)
 		},
-		Skip: func(m *spaltv1.UserModel) bool { return !hasThinking(m) },
+		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },
 	},
 	{
 		Name: "thinking_with_temperature_half",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Thinking = &spaltv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
 			s.Temperature = ptrFloat(0.5)
 			s.MaxOutputTokens = ptrInt(2048)
 		},
-		Skip: func(m *spaltv1.UserModel) bool { return !hasThinking(m) },
+		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },
 	},
 	{
 		Name: "thinking_below_min_budget",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Thinking = &spaltv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(100)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(100)}
 			s.MaxOutputTokens = ptrInt(2048)
 		},
-		Skip: func(m *spaltv1.UserModel) bool { return !hasThinking(m) },
+		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },
 	},
 	// OpenAI-only extras. Drivers for non-OpenAI providers either
 	// silently drop these (probe records "ok") or pass them through
 	// to a provider that rejects them — the report surfaces both.
 	{
 		Name: "frequency_penalty_half",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Openai = &spaltv1.OpenAIExtras{FrequencyPenalty: ptrFloat(0.5)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Openai = &psmithv1.OpenAIExtras{FrequencyPenalty: ptrFloat(0.5)}
 		},
 	},
 	{
 		Name: "presence_penalty_half",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Openai = &spaltv1.OpenAIExtras{PresencePenalty: ptrFloat(0.5)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Openai = &psmithv1.OpenAIExtras{PresencePenalty: ptrFloat(0.5)}
 		},
 	},
 	{
 		Name: "openai_seed",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Openai = &spaltv1.OpenAIExtras{Seed: ptrInt(42)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Openai = &psmithv1.OpenAIExtras{Seed: ptrInt(42)}
 		},
 	},
 	{
 		Name: "openai_top_logprobs",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Openai = &spaltv1.OpenAIExtras{TopLogprobs: ptrInt(3)}
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Openai = &psmithv1.OpenAIExtras{TopLogprobs: ptrInt(3)}
 		},
 	},
 	{
 		Name: "response_format_json_object",
-		Mutate: func(s *spaltv1.CallSettings) {
-			s.Openai = &spaltv1.OpenAIExtras{ResponseFormat: &spaltv1.ResponseFormat{
-				Kind: &spaltv1.ResponseFormat_JsonObject{JsonObject: true},
+		Mutate: func(s *psmithv1.CallSettings) {
+			s.Openai = &psmithv1.OpenAIExtras{ResponseFormat: &psmithv1.ResponseFormat{
+				Kind: &psmithv1.ResponseFormat_JsonObject{JsonObject: true},
 			}}
 		},
 	},
@@ -175,7 +175,7 @@ type runReport struct {
 	StartedAt   time.Time      `json:"started_at"`
 	CompletedAt time.Time      `json:"completed_at"`
 	ToolVersion string         `json:"tool_version"`
-	SpaltdAddr  string         `json:"spaltd_addr"`
+	PsmithdAddr string         `json:"psmithd_addr"`
 	Targets     []targetResult `json:"targets"`
 }
 
@@ -197,7 +197,7 @@ func (b *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func main() {
-	addr := flag.String("addr", "http://localhost:8080", "spaltd base URL")
+	addr := flag.String("addr", "http://localhost:8080", "psmithd base URL")
 	user := flag.String("u", "john", "username")
 	pass := flag.String("p", "password", "password")
 	out := flag.String("out", "", "output JSON path; empty = stdout, 'auto' = internal/modelmeta/constraint_probes/<timestamp>.json")
@@ -211,8 +211,8 @@ func main() {
 
 	// Login.
 	rawClient := http.DefaultClient
-	authClient := spaltv1connect.NewAuthServiceClient(rawClient, *addr)
-	loginResp, err := authClient.Login(ctx, connect.NewRequest(&spaltv1.LoginRequest{
+	authClient := psmithv1connect.NewAuthServiceClient(rawClient, *addr)
+	loginResp, err := authClient.Login(ctx, connect.NewRequest(&psmithv1.LoginRequest{
 		Username: *user,
 		Password: *pass,
 	}))
@@ -222,7 +222,7 @@ func main() {
 	token := loginResp.Msg.SessionToken
 	authedHTTP := &http.Client{Transport: &bearerTransport{token: token}}
 
-	mpClient := spaltv1connect.NewModelProvidersServiceClient(authedHTTP, *addr)
+	mpClient := psmithv1connect.NewModelProvidersServiceClient(authedHTTP, *addr)
 
 	// Filter probes by -only.
 	activeProbes := probes
@@ -250,7 +250,7 @@ func main() {
 	}
 
 	// Enumerate enabled (provider, model) pairs via the API.
-	provResp, err := mpClient.ListUserModelProviders(ctx, connect.NewRequest(&spaltv1.ListUserModelProvidersRequest{}))
+	provResp, err := mpClient.ListUserModelProviders(ctx, connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}))
 	if err != nil {
 		fatal("ListUserModelProviders: %v", err)
 	}
@@ -258,11 +258,11 @@ func main() {
 	report := runReport{
 		StartedAt:   time.Now().UTC(),
 		ToolVersion: toolVersion,
-		SpaltdAddr:  *addr,
+		PsmithdAddr: *addr,
 	}
 
 	for _, prov := range provResp.Msg.Providers {
-		modelsResp, err := mpClient.ListUserModels(ctx, connect.NewRequest(&spaltv1.ListUserModelsRequest{
+		modelsResp, err := mpClient.ListUserModels(ctx, connect.NewRequest(&psmithv1.ListUserModelsRequest{
 			UserModelProviderId: prov.Id,
 		}))
 		if err != nil {
@@ -336,8 +336,8 @@ func main() {
 // runProbe issues one TestUserModel call with the probe's settings
 // applied and classifies the response. ok=true → "ok"; ok=false →
 // "rejected" with the upstream error string.
-func runProbe(ctx context.Context, c spaltv1connect.ModelProvidersServiceClient, providerID, modelID string, p probe, timeout time.Duration) probeResult {
-	settings := &spaltv1.CallSettings{}
+func runProbe(ctx context.Context, c psmithv1connect.ModelProvidersServiceClient, providerID, modelID string, p probe, timeout time.Duration) probeResult {
+	settings := &psmithv1.CallSettings{}
 	if p.Mutate != nil {
 		p.Mutate(settings)
 	}
@@ -345,7 +345,7 @@ func runProbe(ctx context.Context, c spaltv1connect.ModelProvidersServiceClient,
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	resp, err := c.TestUserModel(probeCtx, connect.NewRequest(&spaltv1.TestUserModelRequest{
+	resp, err := c.TestUserModel(probeCtx, connect.NewRequest(&psmithv1.TestUserModelRequest{
 		UserModelProviderId: providerID,
 		ModelId:             modelID,
 		CallSettings:        settings,
@@ -360,7 +360,7 @@ func runProbe(ctx context.Context, c spaltv1connect.ModelProvidersServiceClient,
 	return probeResult{Probe: p.Name, Status: "rejected", ErrorMessage: shorten(r.ErrorMessage), LatencyMs: r.LatencyMs}
 }
 
-func capsFromProto(c *spaltv1.ModelCapabilities) capabilities {
+func capsFromProto(c *psmithv1.ModelCapabilities) capabilities {
 	if c == nil {
 		return capabilities{}
 	}

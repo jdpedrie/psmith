@@ -7,10 +7,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/jdpedrie/spalt/fakellm"
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/fakellm"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // --- EditMessage -----------------------------------------------------------
@@ -23,7 +23,7 @@ func TestEditMessage_HappyPath(t *testing.T) {
 	parent := f.systemMsgID
 	msg := insertMessage(t, q, f.contextID, &parent, "user", "original content")
 
-	resp, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	resp, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      msg.ID.String(),
 		Content: "edited content",
 	}))
@@ -54,8 +54,8 @@ func TestEditMessage_RoleFlipUserToAssistant(t *testing.T) {
 	parent := f.systemMsgID
 	msg := insertMessage(t, q, f.contextID, &parent, "user", "could be either")
 
-	asst := spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT
-	resp, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	asst := psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+	resp, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      msg.ID.String(),
 		Content: "still could be either",
 		Role:    &asst,
@@ -63,7 +63,7 @@ func TestEditMessage_RoleFlipUserToAssistant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
-	if resp.Msg.Message.Role != spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+	if resp.Msg.Message.Role != psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		t.Errorf("role=%v want assistant", resp.Msg.Message.Role)
 	}
 }
@@ -74,8 +74,8 @@ func TestEditMessage_RoleFlipFromSystemRejected(t *testing.T) {
 	driverType := registerFakeDriver(t, "edit-role-from-system", nil, nil)
 	f := seedSendable(t, q, driverType)
 
-	asst := spaltv1.MessageRole_MESSAGE_ROLE_ASSISTANT
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	asst := psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      f.systemMsgID.String(),
 		Content: "x",
 		Role:    &asst,
@@ -91,8 +91,8 @@ func TestEditMessage_RoleFlipToContextRejected(t *testing.T) {
 	parent := f.systemMsgID
 	msg := insertMessage(t, q, f.contextID, &parent, "user", "x")
 
-	cxRole := spaltv1.MessageRole_MESSAGE_ROLE_CONTEXT
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	cxRole := psmithv1.MessageRole_MESSAGE_ROLE_CONTEXT
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      msg.ID.String(),
 		Content: "x",
 		Role:    &cxRole,
@@ -107,7 +107,7 @@ func TestEditMessage_ContentOnlyEditOnSystemAllowed(t *testing.T) {
 	driverType := registerFakeDriver(t, "edit-system-content", nil, nil)
 	f := seedSendable(t, q, driverType)
 
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      f.systemMsgID.String(),
 		Content: "tweaked system prompt",
 	}))
@@ -124,7 +124,7 @@ func TestEditMessage_ContentEditOnCompressionSummaryAllowed(t *testing.T) {
 	parent := f.systemMsgID
 	summary := insertMessage(t, q, f.contextID, &parent, "compression_summary", "rough draft")
 
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      summary.ID.String(),
 		Content: "polished summary",
 	}))
@@ -143,7 +143,7 @@ func TestEditMessage_NotFound(t *testing.T) {
 	driverType := registerFakeDriver(t, "edit-notfound", nil, nil)
 	f := seedSendable(t, q, driverType)
 
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      uuid.New().String(),
 		Content: "x",
 	}))
@@ -159,7 +159,7 @@ func TestEditMessage_CrossUserNotFound(t *testing.T) {
 	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
 		ID: uuid.New(), Username: "bob-" + t.Name(), PasswordHash: "x",
 	})
-	_, err := svc.EditMessage(ctxAsUser(bob), connect.NewRequest(&spaltv1.EditMessageRequest{
+	_, err := svc.EditMessage(ctxAsUser(bob), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      f.systemMsgID.String(),
 		Content: "x",
 	}))
@@ -171,7 +171,7 @@ func TestEditMessage_InvalidUUID(t *testing.T) {
 	svc, q, _ := newFullSvc(t)
 	driverType := registerFakeDriver(t, "edit-bad-uuid", nil, nil)
 	f := seedSendable(t, q, driverType)
-	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      "not-a-uuid",
 		Content: "x",
 	}))
@@ -192,7 +192,7 @@ func TestDeleteMessage_StitchReparentsChildrenToGrandparent(t *testing.T) {
 	c := insertMessage(t, q, f.contextID, &b.ID, "user", "C")
 
 	// Delete B (cascade=false default). C should reparent to A.
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id: b.ID.String(),
 	})); err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
@@ -219,7 +219,7 @@ func TestDeleteMessage_StitchReparentsToNullWhenTargetIsRoot(t *testing.T) {
 	a := insertMessage(t, q, f.contextID, &parent, "user", "A")
 
 	// Delete the system message (root). A.parent_id should become NULL.
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id: f.systemMsgID.String(),
 	})); err != nil {
 		t.Fatalf("DeleteMessage(system): %v", err)
@@ -240,7 +240,7 @@ func TestDeleteMessage_CascadeRemovesSubtree(t *testing.T) {
 	b := insertMessage(t, q, f.contextID, &a.ID, "assistant", "B")
 	c := insertMessage(t, q, f.contextID, &b.ID, "user", "C")
 
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id:      a.ID.String(),
 		Cascade: true,
 	})); err != nil {
@@ -273,7 +273,7 @@ func TestDeleteMessage_StreamRunFKSetNullPreservesRunRow(t *testing.T) {
 	}
 
 	// Delete the user message with cascade=true so the assistant goes too.
-	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	if _, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id:      uid.String(),
 		Cascade: true,
 	})); err != nil {
@@ -304,7 +304,7 @@ func TestDeleteMessage_NotFound(t *testing.T) {
 	svc, q, _ := newFullSvc(t)
 	driverType := registerFakeDriver(t, "delete-notfound", nil, nil)
 	f := seedSendable(t, q, driverType)
-	_, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	_, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -318,7 +318,7 @@ func TestDeleteMessage_CrossUserNotFound(t *testing.T) {
 	bob, _ := q.CreateUser(context.Background(), store.CreateUserParams{
 		ID: uuid.New(), Username: "bob-" + t.Name(), PasswordHash: "x",
 	})
-	_, err := svc.DeleteMessage(ctxAsUser(bob), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+	_, err := svc.DeleteMessage(ctxAsUser(bob), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 		Id: f.systemMsgID.String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -351,7 +351,7 @@ func compactAndGetSummary(t *testing.T, svc *Service, q *store.Queries, sup inte
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "tell me a story")
 
-	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -383,14 +383,14 @@ func TestPromote_REPLACE_SeedsNewContextWithSummaryOnly(t *testing.T) {
 	summaryID := compactAndGetSummary(t, svc, q, sup, f)
 
 	// Edit the summary to confirm Promote uses the (possibly-edited) content.
-	if _, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+	if _, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 		Id:      summaryID.String(),
 		Content: "edited summary",
 	})); err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
 
-	resp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&spaltv1.PromoteCompactionToNewContextRequest{
+	resp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
 		MessageId: summaryID.String(),
 	}))
 	if err != nil {
@@ -473,7 +473,7 @@ func TestPromote_APPEND_ChainsForwardPriorRoleContextContent(t *testing.T) {
 	// User turn so the transcript isn't empty.
 	_ = insertMessage(t, q, f.contextID, &parent, "user", "tell me a story")
 
-	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CompactRequest{
+	cresp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CompactRequest{
 		ConversationId: f.conv.ID.String(),
 	}))
 	if err != nil {
@@ -484,7 +484,7 @@ func TestPromote_APPEND_ChainsForwardPriorRoleContextContent(t *testing.T) {
 	if final.ResultMessageID == nil {
 		t.Fatal("no summary id")
 	}
-	resp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&spaltv1.PromoteCompactionToNewContextRequest{
+	resp, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
 		MessageId: final.ResultMessageID.String(),
 	}))
 	if err != nil {
@@ -505,7 +505,7 @@ func TestPromote_RejectsNonSummaryMessage(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 	parent := f.systemMsgID
 	user := insertMessage(t, q, f.contextID, &parent, "user", "not a summary")
-	_, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&spaltv1.PromoteCompactionToNewContextRequest{
+	_, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
 		MessageId: user.ID.String(),
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -516,7 +516,7 @@ func TestPromote_NotFound(t *testing.T) {
 	svc, q, _ := newFullSvc(t)
 	driverType := registerFakeDriver(t, "promote-notfound", nil, nil)
 	f := seedSendable(t, q, driverType)
-	_, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&spaltv1.PromoteCompactionToNewContextRequest{
+	_, err := svc.PromoteCompactionToNewContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{
 		MessageId: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -534,10 +534,10 @@ func TestCreateContextManual_REPLACE_NoFraming(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "context", "OLD FRAMING")
 
-	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CreateContextManualRequest{
+	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CreateContextManualRequest{
 		ConversationId:     f.conv.ID.String(),
 		InitialUserMessage: "first turn in the new context",
-		Mode:               spaltv1.CompressionMode_COMPRESSION_MODE_REPLACE,
+		Mode:               psmithv1.CompressionMode_COMPRESSION_MODE_REPLACE,
 	}))
 	if err != nil {
 		t.Fatalf("CreateContextManual: %v", err)
@@ -585,10 +585,10 @@ func TestCreateContextManual_APPEND_InheritsPriorContext(t *testing.T) {
 	parent := f.systemMsgID
 	_ = insertMessage(t, q, f.contextID, &parent, "context", "INHERITED FRAMING")
 
-	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CreateContextManualRequest{
+	resp, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CreateContextManualRequest{
 		ConversationId:     f.conv.ID.String(),
 		InitialUserMessage: "",
-		Mode:               spaltv1.CompressionMode_COMPRESSION_MODE_APPEND,
+		Mode:               psmithv1.CompressionMode_COMPRESSION_MODE_APPEND,
 	}))
 	if err != nil {
 		t.Fatalf("CreateContextManual: %v", err)
@@ -614,7 +614,7 @@ func TestCreateContextManual_RejectsUnknownConversation(t *testing.T) {
 	driverType := registerFakeDriver(t, "manual-unknown", nil, nil)
 	f := seedSendable(t, q, driverType)
 	_ = f
-	_, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&spaltv1.CreateContextManualRequest{
+	_, err := svc.CreateContextManual(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CreateContextManualRequest{
 		ConversationId: uuid.New().String(),
 	}))
 	assertCode(t, err, connect.CodeNotFound)
@@ -646,7 +646,7 @@ func TestLock_BlocksMutationsWhileStreamRunning(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid, ModelId: &mid,
@@ -667,7 +667,7 @@ func TestLock_BlocksMutationsWhileStreamRunning(t *testing.T) {
 
 	// Various mutations should be rejected with FailedPrecondition.
 	t.Run("SendMessage", func(t *testing.T) {
-		_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+		_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 			ConversationId: f.conv.ID.String(),
 			Content:        "another",
 			ProviderId:     &pid, ModelId: &mid,
@@ -675,38 +675,38 @@ func TestLock_BlocksMutationsWhileStreamRunning(t *testing.T) {
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("EditMessage", func(t *testing.T) {
-		_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.EditMessageRequest{
+		_, err := svc.EditMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.EditMessageRequest{
 			Id: f.systemMsgID.String(), Content: "x",
 		}))
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("DeleteMessage", func(t *testing.T) {
-		_, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteMessageRequest{
+		_, err := svc.DeleteMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteMessageRequest{
 			Id: f.systemMsgID.String(),
 		}))
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("UpdateConversation", func(t *testing.T) {
 		title := "blocked"
-		_, err := svc.UpdateConversation(ctxAsUser(f.user), connect.NewRequest(&spaltv1.UpdateConversationRequest{
+		_, err := svc.UpdateConversation(ctxAsUser(f.user), connect.NewRequest(&psmithv1.UpdateConversationRequest{
 			Id: f.conv.ID.String(), Title: &title,
 		}))
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("DeleteConversation", func(t *testing.T) {
-		_, err := svc.DeleteConversation(ctxAsUser(f.user), connect.NewRequest(&spaltv1.DeleteConversationRequest{
+		_, err := svc.DeleteConversation(ctxAsUser(f.user), connect.NewRequest(&psmithv1.DeleteConversationRequest{
 			Id: f.conv.ID.String(),
 		}))
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("ActivateContext", func(t *testing.T) {
-		_, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&spaltv1.ActivateContextRequest{
+		_, err := svc.ActivateContext(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ActivateContextRequest{
 			ContextId: f.contextID.String(),
 		}))
 		assertCode(t, err, connect.CodeFailedPrecondition)
 	})
 	t.Run("SetCurrentLeaf", func(t *testing.T) {
-		_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SetCurrentLeafRequest{
+		_, err := svc.SetCurrentLeaf(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SetCurrentLeafRequest{
 			ContextId: f.contextID.String(),
 			MessageId: f.systemMsgID.String(),
 		}))

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 func buildTextInjector(t *testing.T, configJSON string) *textInjector {

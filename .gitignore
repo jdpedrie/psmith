@@ -4,10 +4,10 @@
 .env
 .env.local
 
-# `go build ./cmd/spaltd` output + the file storage root that
-# defaults to ./spaltd-data when SPALT_DATA_DIR is unset.
-/spaltd
-/spaltd-data/
+# `go build ./cmd/psmithd` output + the file storage root that
+# defaults to ./psmithd-data when PSMITH_DATA_DIR is unset.
+/psmithd
+/psmithd-data/
 
 # `cmd/discover-constraints --out auto` dumps per-run JSON here. These
 # files embed verbatim provider error messages which have leaked an API

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jdpedrie/spalt/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/devicetools"
 )
 
 // AppToolsName is the registered name for the device-tools plugin.

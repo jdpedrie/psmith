@@ -14,15 +14,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/auth"
-	"github.com/jdpedrie/spalt/internal/crypto"
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/profiles"
-	"github.com/jdpedrie/spalt/internal/providers"
-	"github.com/jdpedrie/spalt/internal/store"
-	"github.com/jdpedrie/spalt/internal/stream"
-	"github.com/jdpedrie/spalt/internal/testutil"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/stream"
+	"github.com/jdpedrie/psmith/internal/testutil"
 )
 
 // --- fake driver setup ---
@@ -251,7 +251,7 @@ func TestSendMessage_Success_MaterializesAssistant(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -266,7 +266,7 @@ func TestSendMessage_Success_MaterializesAssistant(t *testing.T) {
 	if resp.Msg.UserMessage.GetParentId() != f.systemMsgID.String() {
 		t.Errorf("user message parent should be system msg, got %q", resp.Msg.UserMessage.GetParentId())
 	}
-	if resp.Msg.StreamRun == nil || resp.Msg.StreamRun.Status != spaltv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING {
+	if resp.Msg.StreamRun == nil || resp.Msg.StreamRun.Status != psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING {
 		t.Errorf("stream_run not in running state: %+v", resp.Msg.StreamRun)
 	}
 
@@ -300,7 +300,7 @@ func TestSendMessage_MissingContent(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "",
 		ProviderId:     &pid,
@@ -314,7 +314,7 @@ func TestSendMessage_InvalidConversationID(t *testing.T) {
 	svc, q, _ := newFullSvc(t)
 	driverType := registerFakeDriver(t, "bad-cid", nil, nil)
 	f := seedSendable(t, q, driverType)
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: "not-a-uuid", Content: "hi",
 	}))
 	assertCode(t, err, connect.CodeInvalidArgument)
@@ -333,7 +333,7 @@ func TestSendMessage_CrossUserConversation(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	_, err := svc.SendMessage(ctxAsUser(bob), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(bob), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -359,7 +359,7 @@ func TestSendMessage_ProviderNotOwned(t *testing.T) {
 	})
 	pid := bobProv.ID.String()
 	mid := "anything"
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -375,7 +375,7 @@ func TestSendMessage_ModelNotEnabled(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 	pid := f.provider.ID.String()
 	mid := "not-enabled"
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -390,7 +390,7 @@ func TestSendMessage_ProviderIDWithoutModelID(t *testing.T) {
 	driverType := registerFakeDriver(t, "half-override", nil, nil)
 	f := seedSendable(t, q, driverType)
 	pid := f.provider.ID.String()
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -404,7 +404,7 @@ func TestSendMessage_NoProviderResolved(t *testing.T) {
 	driverType := registerFakeDriver(t, "no-resolve", nil, nil)
 	f := seedSendable(t, q, driverType)
 	// No per-turn override, no conversation defaults, no profile defaults → InvalidArgument.
-	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 	}))
@@ -421,7 +421,7 @@ func TestSendMessage_ResolvesFromConversationSettings(t *testing.T) {
 
 	// Set conversation settings to point at the provider/model.
 	pidStr := f.provider.ID.String()
-	settings := spaltv1.ConversationSettings{
+	settings := psmithv1.ConversationSettings{
 		DefaultProviderId: &pidStr,
 		DefaultModelId:    &f.modelID,
 	}
@@ -432,7 +432,7 @@ func TestSendMessage_ResolvesFromConversationSettings(t *testing.T) {
 		t.Fatalf("UpdateConversationSettings: %v", err)
 	}
 
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		// no per-turn provider/model — should resolve from conversation settings
@@ -466,7 +466,7 @@ func TestSendMessage_DriverSendFails(t *testing.T) {
 	f := seedSendable(t, q, driverType)
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	resp, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hi",
 		ProviderId:     &pid,
@@ -547,7 +547,7 @@ func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
 	ctx := context.Background()
 
 	// Layer 4 (lowest): provider sets temperature=0.4.
-	provCS := &spaltv1.CallSettings{Temperature: f64ptr(0.4)}
+	provCS := &psmithv1.CallSettings{Temperature: f64ptr(0.4)}
 	provBlob, err := profiles.MarshalCallSettings(provCS)
 	if err != nil {
 		t.Fatalf("marshal provider cs: %v", err)
@@ -559,7 +559,7 @@ func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
 	}
 
 	// Layer 3: model sets top_p=0.9.
-	modelCS := &spaltv1.CallSettings{TopP: f64ptr(0.9)}
+	modelCS := &psmithv1.CallSettings{TopP: f64ptr(0.9)}
 	modelBlob, err := profiles.MarshalCallSettings(modelCS)
 	if err != nil {
 		t.Fatalf("marshal model cs: %v", err)
@@ -578,7 +578,7 @@ func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
 	}
 
 	// Layer 2: profile sets max_output_tokens=4096 inside default_settings.call_settings.
-	profileCS := &spaltv1.CallSettings{MaxOutputTokens: i32ptr(4096)}
+	profileCS := &psmithv1.CallSettings{MaxOutputTokens: i32ptr(4096)}
 	profileCSBlob, err := profiles.MarshalCallSettings(profileCS)
 	if err != nil {
 		t.Fatalf("marshal profile cs: %v", err)
@@ -597,8 +597,8 @@ func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
 	}
 
 	// Layer 1 (highest): conversation overrides temperature=0.7.
-	convCS := &spaltv1.ConversationSettings{
-		CallSettings: &spaltv1.CallSettings{Temperature: f64ptr(0.7)},
+	convCS := &psmithv1.ConversationSettings{
+		CallSettings: &psmithv1.CallSettings{Temperature: f64ptr(0.7)},
 	}
 	convBlob, err := json.Marshal(convCS)
 	if err != nil {
@@ -612,7 +612,7 @@ func TestSendMessage_FourLayerCallSettingsMerge(t *testing.T) {
 
 	pid := f.provider.ID.String()
 	mid := f.modelID
-	if _, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	if _, err := svc.SendMessage(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: f.conv.ID.String(),
 		Content:        "hello",
 		ProviderId:     &pid,
@@ -659,7 +659,7 @@ func TestSendMessage_NoSupervisor_Unimplemented(t *testing.T) {
 	// Conversation id need not exist — the nil-deps check fires before lookup.
 	pid := uuid.New().String()
 	mid := "x"
-	_, err := svc.SendMessage(ctxAsUser(user), connect.NewRequest(&spaltv1.SendMessageRequest{
+	_, err := svc.SendMessage(ctxAsUser(user), connect.NewRequest(&psmithv1.SendMessageRequest{
 		ConversationId: uuid.New().String(),
 		Content:        "hi",
 		ProviderId:     &pid,

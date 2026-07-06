@@ -8,16 +8,16 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jdpedrie/spalt/internal/store"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 // Bootstrap creates an admin user on first run if none exists. If
 // users already exist, no-op. If no users and no bootstrap creds,
 // log a loud warning and return nil — the server still starts, but
 // every authenticated RPC will reject with Unauthenticated until
-// somebody runs `spalt useradd`. This shape is friendlier to Docker
+// somebody runs `psmith useradd`. This shape is friendlier to Docker
 // deployments where the operator wants to bring the container up
-// first, then `docker exec … spalt useradd alice`.
+// first, then `docker exec … psmith useradd alice`.
 func Bootstrap(ctx context.Context, q *store.Queries, username, password string) error {
 	n, err := q.CountUsers(ctx)
 	if err != nil {
@@ -28,7 +28,7 @@ func Bootstrap(ctx context.Context, q *store.Queries, username, password string)
 	}
 
 	if username == "" || password == "" {
-		slog.Warn("spaltd: no users in database — every RPC will reject until one is created. Run `spalt useradd <name>` (in the container, that's `docker exec <name> spalt useradd <user>`) or set SPALT_BOOTSTRAP_ADMIN_USERNAME + SPALT_BOOTSTRAP_ADMIN_PASSWORD on next start.")
+		slog.Warn("psmithd: no users in database — every RPC will reject until one is created. Run `psmith useradd <name>` (in the container, that's `docker exec <name> psmith useradd <user>`) or set PSMITH_BOOTSTRAP_ADMIN_USERNAME + PSMITH_BOOTSTRAP_ADMIN_PASSWORD on next start.")
 		return nil
 	}
 

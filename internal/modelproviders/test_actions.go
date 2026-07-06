@@ -18,9 +18,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
-	"github.com/jdpedrie/spalt/internal/protoconv"
-	"github.com/jdpedrie/spalt/internal/providers"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/protoconv"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 const (
@@ -42,7 +42,7 @@ const (
 // driver.DiscoverModels. Failures are packed into the response — only
 // "couldn't start the test" cases (NotFound, FailedPrecondition for
 // unbuildable driver) come back as RPC errors.
-func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Request[spaltv1.TestUserModelProviderRequest]) (*connect.Response[spaltv1.TestUserModelProviderResponse], error) {
+func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Request[psmithv1.TestUserModelProviderRequest]) (*connect.Response[psmithv1.TestUserModelProviderResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Reques
 	models, derr := driver.DiscoverModels(ctx)
 	elapsed := time.Since(start)
 
-	resp := &spaltv1.TestUserModelProviderResponse{
+	resp := &psmithv1.TestUserModelProviderResponse{
 		LatencyMs: elapsed.Milliseconds(),
 	}
 	if derr != nil {
@@ -80,7 +80,7 @@ func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Reques
 // for those we report ok=false with an explanatory message rather than an
 // RPC error so the UI can render the explanation inline alongside reachable
 // providers' real results.
-func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[spaltv1.TestUserModelRequest]) (*connect.Response[spaltv1.TestUserModelResponse], error) {
+func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[psmithv1.TestUserModelRequest]) (*connect.Response[psmithv1.TestUserModelResponse], error) {
 	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[spaltv
 		// Same pattern as conversations.Compact: stateful providers don't have
 		// a session-less "send a turn" surface yet. Return ok=false rather
 		// than an RPC error so the UI shows the reason in the test row.
-		return connect.NewResponse(&spaltv1.TestUserModelResponse{
+		return connect.NewResponse(&psmithv1.TestUserModelResponse{
 			Ok:           false,
 			ErrorMessage: fmt.Sprintf("driver %q is not a stateless provider; model test not yet wired", row.Type),
 		}), nil
@@ -127,7 +127,7 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[spaltv
 	if sendErr != nil {
 		// Driver refused to even start (4xx, etc.). Pack into the response so
 		// the UI shows the message inline.
-		return connect.NewResponse(&spaltv1.TestUserModelResponse{
+		return connect.NewResponse(&psmithv1.TestUserModelResponse{
 			Ok:           false,
 			ErrorMessage: firstLine(sendErr.Error()),
 			LatencyMs:    time.Since(start).Milliseconds(),
@@ -179,7 +179,7 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[spaltv
 	}
 	elapsed := time.Since(start)
 
-	resp := &spaltv1.TestUserModelResponse{
+	resp := &psmithv1.TestUserModelResponse{
 		LatencyMs: elapsed.Milliseconds(),
 	}
 	resp.SampleText = capSampleText(sample.String(), modelTestSampleCap)

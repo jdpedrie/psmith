@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 // handleNewForm renders the new-conversation page: pick a profile to start a chat.
@@ -26,7 +26,7 @@ func (h *Handler) handleNewCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "profile_id is required", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.convos.CreateConversation(r.Context(), connect.NewRequest(&spaltv1.CreateConversationRequest{
+	resp, err := h.convos.CreateConversation(r.Context(), connect.NewRequest(&psmithv1.CreateConversationRequest{
 		ProfileId: profileID,
 	}))
 	if err != nil {

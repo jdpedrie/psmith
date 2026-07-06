@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jdpedrie/spalt/internal/langfuse"
-	"github.com/jdpedrie/spalt/internal/stream"
+	"github.com/jdpedrie/psmith/internal/langfuse"
+	"github.com/jdpedrie/psmith/internal/stream"
 )
 
 // emitLangfuseAssistantTurn fires one Langfuse Trace + Generation
@@ -108,7 +108,7 @@ func (s *Service) emitLangfuseAssistantTurn(
 
 	traceName := truncateLangfuseName(strings.TrimSpace(userInput), 80)
 	if traceName == "" {
-		traceName = "(spalt turn)"
+		traceName = "(psmith turn)"
 	}
 
 	trace := langfuse.Trace{

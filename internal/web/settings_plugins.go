@@ -10,7 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	spaltv1 "github.com/jdpedrie/spalt/gen/spalt/v1"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 )
 
 type pluginRowVM struct {
@@ -28,12 +28,12 @@ type pluginOptVM struct {
 
 func (h *Handler) handlePluginsPage(w http.ResponseWriter, r *http.Request) {
 	profileID := r.PathValue("id")
-	prof, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&spaltv1.GetProfileRequest{Id: profileID}))
+	prof, err := h.profiles.GetProfile(r.Context(), connect.NewRequest(&psmithv1.GetProfileRequest{Id: profileID}))
 	if err != nil {
 		http.Error(w, "profile not found", http.StatusNotFound)
 		return
 	}
-	plugResp, err := h.profiles.GetProfilePlugins(r.Context(), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{ProfileId: profileID}))
+	plugResp, err := h.profiles.GetProfilePlugins(r.Context(), connect.NewRequest(&psmithv1.GetProfilePluginsRequest{ProfileId: profileID}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -77,7 +77,7 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 	for _, p := range h.currentPlugins(r, profileID) {
 		existing[p.GetPluginName()] = p.GetConfig()
 	}
-	var plugins []*spaltv1.ProfilePlugin
+	var plugins []*psmithv1.ProfilePlugin
 	for i := 0; ; i++ {
 		name := r.PostFormValue(fmt.Sprintf("pname_%d", i))
 		if name == "" {
@@ -102,7 +102,7 @@ func (h *Handler) handlePluginsSave(w http.ResponseWriter, r *http.Request) {
 			}
 			cfg = []byte(raw)
 		}
-		plugins = append(plugins, &spaltv1.ProfilePlugin{
+		plugins = append(plugins, &psmithv1.ProfilePlugin{
 			PluginName: name,
 			Ordinal:    int32(i),
 			Config:     cfg,
@@ -129,7 +129,7 @@ func (h *Handler) handlePluginAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := h.currentPlugins(r, profileID)
-	current = append(current, &spaltv1.ProfilePlugin{PluginName: name, Ordinal: int32(len(current)), Config: []byte("{}")})
+	current = append(current, &psmithv1.ProfilePlugin{PluginName: name, Ordinal: int32(len(current)), Config: []byte("{}")})
 	if err := h.setPlugins(r, profileID, current); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -165,16 +165,16 @@ func (h *Handler) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings/profiles/"+profileID+"/plugins", http.StatusSeeOther)
 }
 
-func (h *Handler) currentPlugins(r *http.Request, profileID string) []*spaltv1.ProfilePlugin {
-	resp, err := h.profiles.GetProfilePlugins(r.Context(), connect.NewRequest(&spaltv1.GetProfilePluginsRequest{ProfileId: profileID}))
+func (h *Handler) currentPlugins(r *http.Request, profileID string) []*psmithv1.ProfilePlugin {
+	resp, err := h.profiles.GetProfilePlugins(r.Context(), connect.NewRequest(&psmithv1.GetProfilePluginsRequest{ProfileId: profileID}))
 	if err != nil {
 		return nil
 	}
 	return resp.Msg.GetPlugins()
 }
 
-func (h *Handler) setPlugins(r *http.Request, profileID string, plugins []*spaltv1.ProfilePlugin) error {
-	_, err := h.profiles.SetProfilePlugins(r.Context(), connect.NewRequest(&spaltv1.SetProfilePluginsRequest{
+func (h *Handler) setPlugins(r *http.Request, profileID string, plugins []*psmithv1.ProfilePlugin) error {
+	_, err := h.profiles.SetProfilePlugins(r.Context(), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: profileID,
 		Plugins:   plugins,
 	}))

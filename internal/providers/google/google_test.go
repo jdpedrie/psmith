@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/spalt/internal/modelmeta"
-	"github.com/jdpedrie/spalt/internal/providers"
+	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/providers"
 )
 
 // ---------- Test fakes ---------------------------------------------------

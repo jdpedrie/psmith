@@ -72,7 +72,7 @@ type mcpPlugin struct {
 }
 
 type mcpConfig struct {
-	// Transport picks how spaltd talks to the MCP server. One of
+	// Transport picks how psmithd talks to the MCP server. One of
 	// "stdio" (subprocess + JSON-RPC over stdin/stdout) or "http"
 	// (Streamable HTTP — POST JSON-RPC to a URL, response is either
 	// a single JSON body or an SSE stream we read the first event
@@ -155,7 +155,7 @@ func (p *mcpPlugin) Name() string        { return MCPName }
 func (p *mcpPlugin) DisplayName() string { return "MCP Server" }
 
 func (p *mcpPlugin) Description() string {
-	return "Bridges any Model Context Protocol (MCP) server's tools into Spalt's tool surface. " +
+	return "Bridges any Model Context Protocol (MCP) server's tools into Psmith's tool surface. " +
 		"Two transports: stdio (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) " +
 		"and http (POST JSON-RPC to a remote URL — Streamable HTTP transport). Each server-declared " +
 		"tool is exposed to the model; tool calls dispatch back to the right server. " +
@@ -169,13 +169,13 @@ func (p *mcpPlugin) ConfigFields() []ConfigField {
 		{
 			Name:        "transport",
 			Display:     "Transport",
-			Description: "stdio spawns a local subprocess; http POSTs JSON-RPC to a remote URL (Streamable HTTP); inproc dispatches to this Spalt instance's own MCP surface (no port, no token). Each transport uses a different subset of the fields below.",
+			Description: "stdio spawns a local subprocess; http POSTs JSON-RPC to a remote URL (Streamable HTTP); inproc dispatches to this Psmith instance's own MCP surface (no port, no token). Each transport uses a different subset of the fields below.",
 			Type:        ConfigFieldSelect,
 			Default:     mcpTransportStdio,
 			Options: []ConfigOption{
 				{Value: mcpTransportStdio, Label: "Stdio (subprocess)"},
 				{Value: mcpTransportHTTP, Label: "HTTP (remote URL)"},
-				{Value: mcpTransportInproc, Label: "In-process (this Spalt instance)"},
+				{Value: mcpTransportInproc, Label: "In-process (this Psmith instance)"},
 			},
 		},
 		{
@@ -193,7 +193,7 @@ func (p *mcpPlugin) ConfigFields() []ConfigField {
 		{
 			Name:        "env",
 			Display:     "Environment variables (stdio)",
-			Description: "KEY=VALUE per line for stdio transport. The subprocess inherits NOTHING from spaltd's environment — declare what the server needs (PATH, HOME, API keys, etc.) explicitly here.",
+			Description: "KEY=VALUE per line for stdio transport. The subprocess inherits NOTHING from psmithd's environment — declare what the server needs (PATH, HOME, API keys, etc.) explicitly here.",
 			Type:        ConfigFieldTextarea,
 		},
 		{
@@ -425,7 +425,7 @@ func (s *mcpServer) handshake(ctx context.Context) error {
 		"protocolVersion": mcpProtocolVersion,
 		"capabilities":    map[string]any{},
 		"clientInfo": map[string]any{
-			"name":    "spalt",
+			"name":    "psmith",
 			"version": "0.1",
 		},
 	}, &initResp); err != nil {
@@ -648,7 +648,7 @@ func newTransport(ctx context.Context, spec mcpServerSpec) (mcpTransport, error)
 
 // InprocDispatcher is the call-into-server hook the inproc transport
 // dispatches against. Set by RegisterInprocMCPDispatcher (typically
-// from cmd/spaltd/main.go pointing at the local mcpserver.Server's
+// from cmd/psmithd/main.go pointing at the local mcpserver.Server's
 // HandleRPC method). Takes a JSON-RPC request body and returns the
 // JSON-RPC response body — same shape as the HTTP transport's wire
 // format. Returning (nil, nil) means "this was a notification, no
@@ -690,7 +690,7 @@ func newInprocTransport() *inprocTransport {
 func (t *inprocTransport) call(ctx context.Context, method string, params any, into any) error {
 	d := currentInprocDispatcher()
 	if d == nil {
-		return errors.New("mcp inproc: no dispatcher registered (cmd/spaltd should call plugins.RegisterInprocMCPDispatcher at startup)")
+		return errors.New("mcp inproc: no dispatcher registered (cmd/psmithd should call plugins.RegisterInprocMCPDispatcher at startup)")
 	}
 	id := t.nextID.Add(1)
 	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
