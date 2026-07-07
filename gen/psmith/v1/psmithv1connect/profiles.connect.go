@@ -48,6 +48,9 @@ const (
 	// ProfilesServiceDeleteProfileProcedure is the fully-qualified name of the ProfilesService's
 	// DeleteProfile RPC.
 	ProfilesServiceDeleteProfileProcedure = "/psmith.v1.ProfilesService/DeleteProfile"
+	// ProfilesServiceSetDefaultProfileProcedure is the fully-qualified name of the ProfilesService's
+	// SetDefaultProfile RPC.
+	ProfilesServiceSetDefaultProfileProcedure = "/psmith.v1.ProfilesService/SetDefaultProfile"
 	// ProfilesServiceListPluginTypesProcedure is the fully-qualified name of the ProfilesService's
 	// ListPluginTypes RPC.
 	ProfilesServiceListPluginTypesProcedure = "/psmith.v1.ProfilesService/ListPluginTypes"
@@ -75,6 +78,9 @@ type ProfilesServiceClient interface {
 	GetProfile(context.Context, *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error)
 	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
 	DeleteProfile(context.Context, *connect.Request[v1.DeleteProfileRequest]) (*connect.Response[v1.DeleteProfileResponse], error)
+	// Marks a profile as the user's default (clearing any previous
+	// default), or clears the default entirely when profile_id is empty.
+	SetDefaultProfile(context.Context, *connect.Request[v1.SetDefaultProfileRequest]) (*connect.Response[v1.SetDefaultProfileResponse], error)
 	// List the chat-plugin types compiled into this server. The set is fixed
 	// at build time (registered in init()); callers consult this to render
 	// config UIs and to validate plugin names before SetProfilePlugins.
@@ -146,6 +152,12 @@ func NewProfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(profilesServiceMethods.ByName("DeleteProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		setDefaultProfile: connect.NewClient[v1.SetDefaultProfileRequest, v1.SetDefaultProfileResponse](
+			httpClient,
+			baseURL+ProfilesServiceSetDefaultProfileProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("SetDefaultProfile")),
+			connect.WithClientOptions(opts...),
+		),
 		listPluginTypes: connect.NewClient[v1.ListPluginTypesRequest, v1.ListPluginTypesResponse](
 			httpClient,
 			baseURL+ProfilesServiceListPluginTypesProcedure,
@@ -192,6 +204,7 @@ type profilesServiceClient struct {
 	getProfile               *connect.Client[v1.GetProfileRequest, v1.GetProfileResponse]
 	updateProfile            *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
 	deleteProfile            *connect.Client[v1.DeleteProfileRequest, v1.DeleteProfileResponse]
+	setDefaultProfile        *connect.Client[v1.SetDefaultProfileRequest, v1.SetDefaultProfileResponse]
 	listPluginTypes          *connect.Client[v1.ListPluginTypesRequest, v1.ListPluginTypesResponse]
 	getProfilePlugins        *connect.Client[v1.GetProfilePluginsRequest, v1.GetProfilePluginsResponse]
 	setProfilePlugins        *connect.Client[v1.SetProfilePluginsRequest, v1.SetProfilePluginsResponse]
@@ -223,6 +236,11 @@ func (c *profilesServiceClient) UpdateProfile(ctx context.Context, req *connect.
 // DeleteProfile calls psmith.v1.ProfilesService.DeleteProfile.
 func (c *profilesServiceClient) DeleteProfile(ctx context.Context, req *connect.Request[v1.DeleteProfileRequest]) (*connect.Response[v1.DeleteProfileResponse], error) {
 	return c.deleteProfile.CallUnary(ctx, req)
+}
+
+// SetDefaultProfile calls psmith.v1.ProfilesService.SetDefaultProfile.
+func (c *profilesServiceClient) SetDefaultProfile(ctx context.Context, req *connect.Request[v1.SetDefaultProfileRequest]) (*connect.Response[v1.SetDefaultProfileResponse], error) {
+	return c.setDefaultProfile.CallUnary(ctx, req)
 }
 
 // ListPluginTypes calls psmith.v1.ProfilesService.ListPluginTypes.
@@ -262,6 +280,9 @@ type ProfilesServiceHandler interface {
 	GetProfile(context.Context, *connect.Request[v1.GetProfileRequest]) (*connect.Response[v1.GetProfileResponse], error)
 	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
 	DeleteProfile(context.Context, *connect.Request[v1.DeleteProfileRequest]) (*connect.Response[v1.DeleteProfileResponse], error)
+	// Marks a profile as the user's default (clearing any previous
+	// default), or clears the default entirely when profile_id is empty.
+	SetDefaultProfile(context.Context, *connect.Request[v1.SetDefaultProfileRequest]) (*connect.Response[v1.SetDefaultProfileResponse], error)
 	// List the chat-plugin types compiled into this server. The set is fixed
 	// at build time (registered in init()); callers consult this to render
 	// config UIs and to validate plugin names before SetProfilePlugins.
@@ -329,6 +350,12 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(profilesServiceMethods.ByName("DeleteProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profilesServiceSetDefaultProfileHandler := connect.NewUnaryHandler(
+		ProfilesServiceSetDefaultProfileProcedure,
+		svc.SetDefaultProfile,
+		connect.WithSchema(profilesServiceMethods.ByName("SetDefaultProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	profilesServiceListPluginTypesHandler := connect.NewUnaryHandler(
 		ProfilesServiceListPluginTypesProcedure,
 		svc.ListPluginTypes,
@@ -377,6 +404,8 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 			profilesServiceUpdateProfileHandler.ServeHTTP(w, r)
 		case ProfilesServiceDeleteProfileProcedure:
 			profilesServiceDeleteProfileHandler.ServeHTTP(w, r)
+		case ProfilesServiceSetDefaultProfileProcedure:
+			profilesServiceSetDefaultProfileHandler.ServeHTTP(w, r)
 		case ProfilesServiceListPluginTypesProcedure:
 			profilesServiceListPluginTypesHandler.ServeHTTP(w, r)
 		case ProfilesServiceGetProfilePluginsProcedure:
@@ -416,6 +445,10 @@ func (UnimplementedProfilesServiceHandler) UpdateProfile(context.Context, *conne
 
 func (UnimplementedProfilesServiceHandler) DeleteProfile(context.Context, *connect.Request[v1.DeleteProfileRequest]) (*connect.Response[v1.DeleteProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.DeleteProfile is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) SetDefaultProfile(context.Context, *connect.Request[v1.SetDefaultProfileRequest]) (*connect.Response[v1.SetDefaultProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.SetDefaultProfile is not implemented"))
 }
 
 func (UnimplementedProfilesServiceHandler) ListPluginTypes(context.Context, *connect.Request[v1.ListPluginTypesRequest]) (*connect.Response[v1.ListPluginTypesResponse], error) {

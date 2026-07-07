@@ -2465,8 +2465,11 @@ type Profile struct {
 	// NOT mutate the welcome message in existing conversations. Inherits
 	// through the parent chain like the other text fields (null = inherit).
 	WelcomeMessage *string `protobuf:"bytes,22,opt,name=welcome_message,json=welcomeMessage,proto3,oneof" json:"welcome_message,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// At most one profile per user is the default. Clients create new
+	// conversations directly with it, skipping the profile chooser.
+	IsDefault     bool `protobuf:"varint,23,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -2651,6 +2654,13 @@ func (x *Profile) GetWelcomeMessage() string {
 		return *x.WelcomeMessage
 	}
 	return ""
+}
+
+func (x *Profile) GetIsDefault() bool {
+	if x != nil {
+		return x.IsDefault
+	}
+	return false
 }
 
 type ConversationSettings struct {
@@ -4288,8 +4298,7 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
 	"\x1c_include_thinking_in_historyB\x10\n" +
-	"\x0e_call_settings\"\xfc\n" +
-	"\n" +
+	"\x0e_call_settings\"\x9b\v\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12/\n" +
 	"\x11parent_profile_id\x18\x02 \x01(\tH\x00R\x0fparentProfileId\x88\x01\x01\x12\x12\n" +
@@ -4318,7 +4327,9 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"parentOnly\x12\x1a\n" +
 	"\bfavorite\x18\x13 \x01(\bR\bfavorite\x12a\n" +
 	"\x1brequired_model_capabilities\x18\x15 \x01(\v2\x1c.psmith.v1.ModelCapabilitiesH\fR\x19requiredModelCapabilities\x88\x01\x01\x12,\n" +
-	"\x0fwelcome_message\x18\x16 \x01(\tH\rR\x0ewelcomeMessage\x88\x01\x01B\x14\n" +
+	"\x0fwelcome_message\x18\x16 \x01(\tH\rR\x0ewelcomeMessage\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"is_default\x18\x17 \x01(\bR\tisDefaultB\x14\n" +
 	"\x12_parent_profile_idB\x11\n" +
 	"\x0f_system_messageB\x17\n" +
 	"\x15_default_user_messageB\x14\n" +

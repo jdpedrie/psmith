@@ -1965,6 +1965,13 @@ public nonisolated struct Psmith_V1_Profile: @unchecked Sendable {
   /// Clears the value of `welcomeMessage`. Subsequent reads from it will return its default value.
   public mutating func clearWelcomeMessage() {_uniqueStorage()._welcomeMessage = nil}
 
+  /// At most one profile per user is the default. Clients create new
+  /// conversations directly with it, skipping the profile chooser.
+  public var isDefault: Bool {
+    get {_storage._isDefault}
+    set {_uniqueStorage()._isDefault = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -4285,7 +4292,7 @@ nonisolated extension Psmith_V1_ProfileDefaults: SwiftProtobuf.Message, SwiftPro
 
 nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Profile"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}required_model_capabilities\0\u{3}welcome_message\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}parent_profile_id\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}compression_provider_id\0\u{3}compression_model_id\0\u{3}default_settings\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}title_provider_id\0\u{3}title_model_id\0\u{3}title_guide\0\u{1}description\0\u{3}parent_only\0\u{1}favorite\0\u{3}title_provider_kind\0\u{3}required_model_capabilities\0\u{3}welcome_message\0\u{3}is_default\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4310,6 +4317,7 @@ nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._M
     var _favorite: Bool = false
     var _requiredModelCapabilities: Psmith_V1_ModelCapabilities? = nil
     var _welcomeMessage: String? = nil
+    var _isDefault: Bool = false
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4342,6 +4350,7 @@ nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._M
       _favorite = source._favorite
       _requiredModelCapabilities = source._requiredModelCapabilities
       _welcomeMessage = source._welcomeMessage
+      _isDefault = source._isDefault
     }
   }
 
@@ -4382,6 +4391,7 @@ nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._M
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
         case 21: try { try decoder.decodeSingularMessageField(value: &_storage._requiredModelCapabilities) }()
         case 22: try { try decoder.decodeSingularStringField(value: &_storage._welcomeMessage) }()
+        case 23: try { try decoder.decodeSingularBoolField(value: &_storage._isDefault) }()
         default: break
         }
       }
@@ -4460,6 +4470,9 @@ nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._M
       try { if let v = _storage._welcomeMessage {
         try visitor.visitSingularStringField(value: v, fieldNumber: 22)
       } }()
+      if _storage._isDefault != false {
+        try visitor.visitSingularBoolField(value: _storage._isDefault, fieldNumber: 23)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4491,6 +4504,7 @@ nonisolated extension Psmith_V1_Profile: SwiftProtobuf.Message, SwiftProtobuf._M
         if _storage._favorite != rhs_storage._favorite {return false}
         if _storage._requiredModelCapabilities != rhs_storage._requiredModelCapabilities {return false}
         if _storage._welcomeMessage != rhs_storage._welcomeMessage {return false}
+        if _storage._isDefault != rhs_storage._isDefault {return false}
         return true
       }
       if !storagesAreEqual {return false}

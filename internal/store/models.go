@@ -164,6 +164,7 @@ type Profile struct {
 	Favorite              bool
 	TitleProviderKind     *string
 	WelcomeMessage        *string
+	IsDefault             bool
 }
 
 type ProfilePlugin struct {

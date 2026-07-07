@@ -59,18 +59,7 @@ struct ChatsRoot: View {
                         sortMenu
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showingNewConversation = true
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                        .accessibilityLabel("New conversation")
-                        // Only disable when we positively know there are no
-                        // usable profiles. An empty list (not yet loaded)
-                        // must NOT disable it — `allSatisfy` is true for an
-                        // empty array, which used to wrongly grey this out
-                        // before profiles finished loading.
-                        .disabled(!convos.profiles.isEmpty && convos.profiles.allSatisfy { $0.parentOnly })
+                        newConversationButton
                     }
                 }
                 .sheet(isPresented: $showingNewConversation) {
@@ -197,6 +186,50 @@ struct ChatsRoot: View {
     }
 
     // MARK: - List body
+
+    /// With a default profile set, tapping + starts a conversation with
+    /// it immediately — the chooser stays reachable by press-and-hold
+    /// (Menu primaryAction). Without a default, tap opens the chooser as
+    /// before.
+    @ViewBuilder
+    private var newConversationButton: some View {
+        if let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
+            Menu {
+                Button {
+                    showingNewConversation = true
+                } label: {
+                    Label("Choose Profile…", systemImage: "person.crop.circle")
+                }
+            } label: {
+                Image(systemName: "plus")
+            } primaryAction: {
+                Task { await createWithProfile(def) }
+            }
+            .accessibilityLabel("New conversation")
+        } else {
+            Button {
+                showingNewConversation = true
+            } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityLabel("New conversation")
+            // Only disable when we positively know there are no
+            // usable profiles. An empty list (not yet loaded)
+            // must NOT disable it — `allSatisfy` is true for an
+            // empty array, which used to wrongly grey this out
+            // before profiles finished loading.
+            .disabled(!convos.profiles.isEmpty && convos.profiles.allSatisfy { $0.parentOnly })
+        }
+    }
+
+    @MainActor
+    private func createWithProfile(_ profile: PsmithProfile) async {
+        if let conversation = await convos.newConversation(
+            profileID: profile.id, title: nil, settings: nil
+        ) {
+            conversationPath.append(conversation)
+        }
+    }
 
     @ViewBuilder
     private var contentList: some View {

@@ -33,6 +33,16 @@ WHERE user_id = $1
 ORDER BY created_at, id
 LIMIT sqlc.arg('page_limit');
 
+-- name: ClearDefaultProfile :exec
+-- Half of the set-default transaction. Clear must land before Mark: the
+-- partial unique index (user_id WHERE is_default) is checked per row, so
+-- a single UPDATE that flips the new default on before the old one off
+-- trips the constraint against itself.
+UPDATE profiles SET is_default = FALSE WHERE user_id = $1 AND is_default;
+
+-- name: MarkDefaultProfile :exec
+UPDATE profiles SET is_default = TRUE WHERE id = $1;
+
 -- name: DeleteProfile :exec
 DELETE FROM profiles WHERE id = $1;
 

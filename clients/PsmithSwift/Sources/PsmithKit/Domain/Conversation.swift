@@ -730,6 +730,9 @@ public struct PsmithProfile: Sendable, Hashable, Identifiable, Codable {
     public let description: String
     public let parentOnly: Bool
     public let favorite: Bool
+    /// At most one profile per user. New conversations start with it
+    /// directly, skipping the profile chooser.
+    public let isDefault: Bool
     public let parentProfileID: String?
     public let systemMessage: String?
     public let defaultUserMessage: String?
@@ -765,6 +768,7 @@ public struct PsmithProfile: Sendable, Hashable, Identifiable, Codable {
         description: String = "",
         parentOnly: Bool = false,
         favorite: Bool = false,
+        isDefault: Bool = false,
         parentProfileID: String? = nil,
         systemMessage: String? = nil,
         defaultUserMessage: String? = nil,
@@ -787,6 +791,7 @@ public struct PsmithProfile: Sendable, Hashable, Identifiable, Codable {
         self.description = description
         self.parentOnly = parentOnly
         self.favorite = favorite
+        self.isDefault = isDefault
         self.parentProfileID = parentProfileID
         self.systemMessage = systemMessage
         self.defaultUserMessage = defaultUserMessage
@@ -831,6 +836,7 @@ extension PsmithProfile {
             description: p.description_p,
             parentOnly: p.parentOnly,
             favorite: p.favorite,
+            isDefault: p.isDefault,
             parentProfileID:       p.hasParentProfileID       ? p.parentProfileID       : nil,
             systemMessage:         p.hasSystemMessage         ? p.systemMessage         : nil,
             defaultUserMessage:    p.hasDefaultUserMessage    ? p.defaultUserMessage    : nil,

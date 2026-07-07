@@ -13,6 +13,10 @@ service ProfilesService {
   rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
   rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
 
+  // Marks a profile as the user's default (clearing any previous
+  // default), or clears the default entirely when profile_id is empty.
+  rpc SetDefaultProfile(SetDefaultProfileRequest) returns (SetDefaultProfileResponse);
+
   // List the chat-plugin types compiled into this server. The set is fixed
   // at build time (registered in init()); callers consult this to render
   // config UIs and to validate plugin names before SetProfilePlugins.
@@ -142,6 +146,12 @@ message DeleteProfileRequest {
   string id = 1;
 }
 message DeleteProfileResponse {}
+
+message SetDefaultProfileRequest {
+  // Empty clears the default; otherwise must be a profile the caller owns.
+  string profile_id = 1;
+}
+message SetDefaultProfileResponse {}
 
 // --- Chat-plugin management -----------------------------------------------
 

@@ -81,7 +81,14 @@ struct NewConversationSheet: View {
         // up here — the user picks a stale snapshot and the new
         // conversation inherits the wrong defaults. Cheap RPC; cost
         // is paid only when the sheet opens.
-        .task { await convos.refresh() }
+        .task {
+            await convos.refresh()
+            // Pre-select the account default so Start is one tap when the
+            // user got here deliberately (press-and-hold on +).
+            if selectedProfileID == nil {
+                selectedProfileID = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly })?.id
+            }
+        }
     }
 
     private var profilesForPicker: [PsmithProfile] {

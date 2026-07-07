@@ -422,6 +422,9 @@ message Profile {
   // NOT mutate the welcome message in existing conversations. Inherits
   // through the parent chain like the other text fields (null = inherit).
   optional string welcome_message = 22;
+  // At most one profile per user is the default. Clients create new
+  // conversations directly with it, skipping the profile chooser.
+  bool is_default = 23;
 }
 
 // ---------------------------------------------------------------------------

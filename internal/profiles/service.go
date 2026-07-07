@@ -632,6 +632,54 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[psmith
 	return connect.NewResponse(&psmithv1.DeleteProfileResponse{}), nil
 }
 
+// SetDefaultProfile marks one profile as the caller's default (clearing
+// any previous one atomically) or clears the default when profile_id is
+// empty. The partial unique index on profiles(user_id) WHERE is_default
+// backstops the single-statement update.
+func (s *Service) SetDefaultProfile(ctx context.Context, req *connect.Request[psmithv1.SetDefaultProfileRequest]) (*connect.Response[psmithv1.SetDefaultProfileResponse], error) {
+	caller := auth.MustFromContext(ctx)
+
+	var target *uuid.UUID
+	if req.Msg.GetProfileId() != "" {
+		id, err := uuid.Parse(req.Msg.GetProfileId())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid profile_id: %w", err))
+		}
+		row, err := s.queries.GetProfileByID(ctx, id)
+		if err != nil || row.UserID != caller.ID {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("profile not found"))
+		}
+		// A parent-only profile is a template, not a chat persona; it
+		// can't be the default target for new conversations.
+		if row.ParentOnly {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a parent-only profile cannot be the default"))
+		}
+		target = &id
+	}
+	// Clear-then-mark inside one transaction: the partial unique index
+	// is checked per row, so the old default must be off before the new
+	// one goes on, and the pair must be atomic so a crash between them
+	// can't leave the user defaultless when they asked for a switch.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+	if err := qtx.ClearDefaultProfile(ctx, caller.ID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if target != nil {
+		if err := qtx.MarkDefaultProfile(ctx, *target); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&psmithv1.SetDefaultProfileResponse{}), nil
+}
+
 // --- ListPluginTypes ---
 
 // ListPluginTypes returns metadata for every plugin type compiled into the
@@ -1189,6 +1237,7 @@ func profileToProto(p store.Profile) (*psmithv1.Profile, error) {
 		Description:        p.Description,
 		ParentOnly:         p.ParentOnly,
 		Favorite:           p.Favorite,
+		IsDefault:          p.IsDefault,
 	}
 	if p.ParentProfileID != nil {
 		s := p.ParentProfileID.String()

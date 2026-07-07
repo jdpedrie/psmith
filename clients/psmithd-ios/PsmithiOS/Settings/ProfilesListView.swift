@@ -32,6 +32,17 @@ struct ProfilesListView: View {
                         } label: {
                             row(p)
                         }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            if !p.parentOnly {
+                                Button {
+                                    Task { await profiles.setDefault(p.isDefault ? nil : p.id) }
+                                } label: {
+                                    Label(p.isDefault ? "Clear Default" : "Make Default",
+                                          systemImage: p.isDefault ? "pin.slash" : "pin")
+                                }
+                                .tint(.indigo)
+                            }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 deleteCandidate = p
@@ -120,6 +131,14 @@ struct ProfilesListView: View {
                         Image(systemName: "star.fill")
                             .font(.caption2)
                             .foregroundStyle(.yellow)
+                    }
+                    if profile.isDefault {
+                        Text("Default")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(.tint.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.tint)
                     }
                     if profile.parentOnly {
                         Text("PARENT")

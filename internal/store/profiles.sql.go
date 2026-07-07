@@ -12,6 +12,19 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearDefaultProfile = `-- name: ClearDefaultProfile :exec
+UPDATE profiles SET is_default = FALSE WHERE user_id = $1 AND is_default
+`
+
+// Half of the set-default transaction. Clear must land before Mark: the
+// partial unique index (user_id WHERE is_default) is checked per row, so
+// a single UPDATE that flips the new default on before the old one off
+// trips the constraint against itself.
+func (q *Queries) ClearDefaultProfile(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearDefaultProfile, userID)
+	return err
+}
+
 const createProfile = `-- name: CreateProfile :one
 INSERT INTO profiles (
     id, user_id, parent_profile_id, name,
@@ -28,7 +41,7 @@ INSERT INTO profiles (
     $12, $13, $14, $15,
     $16, $17, $18, $19
 )
-RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message
+RETURNING id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message, is_default
 `
 
 type CreateProfileParams struct {
@@ -98,6 +111,7 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		&i.Favorite,
 		&i.TitleProviderKind,
 		&i.WelcomeMessage,
+		&i.IsDefault,
 	)
 	return i, err
 }
@@ -112,7 +126,7 @@ func (q *Queries) DeleteProfile(ctx context.Context, id uuid.UUID) error {
 }
 
 const getProfileByID = `-- name: GetProfileByID :one
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles WHERE id = $1
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message, is_default FROM profiles WHERE id = $1
 `
 
 func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error) {
@@ -140,12 +154,13 @@ func (q *Queries) GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, er
 		&i.Favorite,
 		&i.TitleProviderKind,
 		&i.WelcomeMessage,
+		&i.IsDefault,
 	)
 	return i, err
 }
 
 const listProfilesByUser = `-- name: ListProfilesByUser :many
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message, is_default FROM profiles WHERE user_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error) {
@@ -179,6 +194,7 @@ func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]P
 			&i.Favorite,
 			&i.TitleProviderKind,
 			&i.WelcomeMessage,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -191,7 +207,7 @@ func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]P
 }
 
 const listProfilesByUserPaged = `-- name: ListProfilesByUserPaged :many
-SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message, is_default FROM profiles
 WHERE user_id = $1
   AND ($2::timestamptz IS NULL
        OR (created_at, id) > ($2::timestamptz, $3::uuid))
@@ -245,6 +261,7 @@ func (q *Queries) ListProfilesByUserPaged(ctx context.Context, arg ListProfilesB
 			&i.Favorite,
 			&i.TitleProviderKind,
 			&i.WelcomeMessage,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -254,6 +271,15 @@ func (q *Queries) ListProfilesByUserPaged(ctx context.Context, arg ListProfilesB
 		return nil, err
 	}
 	return items, nil
+}
+
+const markDefaultProfile = `-- name: MarkDefaultProfile :exec
+UPDATE profiles SET is_default = TRUE WHERE id = $1
+`
+
+func (q *Queries) MarkDefaultProfile(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markDefaultProfile, id)
+	return err
 }
 
 const updateProfileCompressionGuide = `-- name: UpdateProfileCompressionGuide :exec

@@ -26,6 +26,11 @@ public protocol Psmith_V1_ProfilesServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `deleteProfile`(request: Psmith_V1_DeleteProfileRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_DeleteProfileResponse>
 
+    /// Marks a profile as the user's default (clearing any previous
+    /// default), or clears the default entirely when profile_id is empty.
+    @available(iOS 13, *)
+    func `setDefaultProfile`(request: Psmith_V1_SetDefaultProfileRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_SetDefaultProfileResponse>
+
     /// List the chat-plugin types compiled into this server. The set is fixed
     /// at build time (registered in init()); callers consult this to render
     /// config UIs and to validate plugin names before SetProfilePlugins.
@@ -101,6 +106,11 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
     }
 
     @available(iOS 13, *)
+    public func `setDefaultProfile`(request: Psmith_V1_SetDefaultProfileRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_SetDefaultProfileResponse> {
+        return await self.client.unary(path: "/psmith.v1.ProfilesService/SetDefaultProfile", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listPluginTypes`(request: Psmith_V1_ListPluginTypesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ListPluginTypesResponse> {
         return await self.client.unary(path: "/psmith.v1.ProfilesService/ListPluginTypes", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -137,6 +147,7 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
             public static let getProfile = Connect.MethodSpec(name: "GetProfile", service: "psmith.v1.ProfilesService", type: .unary)
             public static let updateProfile = Connect.MethodSpec(name: "UpdateProfile", service: "psmith.v1.ProfilesService", type: .unary)
             public static let deleteProfile = Connect.MethodSpec(name: "DeleteProfile", service: "psmith.v1.ProfilesService", type: .unary)
+            public static let setDefaultProfile = Connect.MethodSpec(name: "SetDefaultProfile", service: "psmith.v1.ProfilesService", type: .unary)
             public static let listPluginTypes = Connect.MethodSpec(name: "ListPluginTypes", service: "psmith.v1.ProfilesService", type: .unary)
             public static let getProfilePlugins = Connect.MethodSpec(name: "GetProfilePlugins", service: "psmith.v1.ProfilesService", type: .unary)
             public static let setProfilePlugins = Connect.MethodSpec(name: "SetProfilePlugins", service: "psmith.v1.ProfilesService", type: .unary)

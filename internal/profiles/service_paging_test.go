@@ -95,3 +95,97 @@ func TestService_ListProfiles_InvalidPageToken(t *testing.T) {
 		t.Fatalf("want InvalidArgument, got %v", err)
 	}
 }
+
+// --- SetDefaultProfile ---
+
+func TestService_SetDefaultProfile(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	a, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: "A"}))
+	if err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	b, err := svc.CreateProfile(ctxAs(user), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: "B"}))
+	if err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+
+	defaultOf := func() string {
+		resp, err := svc.ListProfiles(ctxAs(user), connect.NewRequest(&psmithv1.ListProfilesRequest{}))
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		id := ""
+		for _, p := range resp.Msg.Profiles {
+			if p.IsDefault {
+				if id != "" {
+					t.Fatalf("two defaults: %s and %s", id, p.Id)
+				}
+				id = p.Id
+			}
+		}
+		return id
+	}
+
+	if defaultOf() != "" {
+		t.Fatal("fresh profiles should have no default")
+	}
+
+	// Set A, then B — B must atomically displace A.
+	if _, err := svc.SetDefaultProfile(ctxAs(user), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: a.Msg.Profile.Id})); err != nil {
+		t.Fatalf("set A: %v", err)
+	}
+	if got := defaultOf(); got != a.Msg.Profile.Id {
+		t.Errorf("default = %s want A", got)
+	}
+	if _, err := svc.SetDefaultProfile(ctxAs(user), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: b.Msg.Profile.Id})); err != nil {
+		t.Fatalf("set B: %v", err)
+	}
+	if got := defaultOf(); got != b.Msg.Profile.Id {
+		t.Errorf("default = %s want B", got)
+	}
+
+	// Empty profile_id clears.
+	if _, err := svc.SetDefaultProfile(ctxAs(user), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{})); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got := defaultOf(); got != "" {
+		t.Errorf("default should be cleared, got %s", got)
+	}
+}
+
+func TestService_SetDefaultProfile_OwnershipAndValidation(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+	bob := mustCreateUser(t, q, "bob")
+
+	p, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: "A"}))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Another user's profile is not found, not forbidden — no existence leak.
+	_, err = svc.SetDefaultProfile(ctxAs(bob), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: p.Msg.Profile.Id}))
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("cross-user: want NotFound, got %v", err)
+	}
+
+	// Parent-only profiles are templates; refusing them here keeps the
+	// "+ creates with default" path from landing on a non-chat persona.
+	po, err := svc.CreateProfile(ctxAs(alice), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: "tpl", ParentOnly: true}))
+	if err != nil {
+		t.Fatalf("create parent-only: %v", err)
+	}
+	_, err = svc.SetDefaultProfile(ctxAs(alice), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: po.Msg.Profile.Id}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("parent-only: want InvalidArgument, got %v", err)
+	}
+
+	_, err = svc.SetDefaultProfile(ctxAs(alice), connect.NewRequest(&psmithv1.SetDefaultProfileRequest{ProfileId: "not-a-uuid"}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("bad uuid: want InvalidArgument, got %v", err)
+	}
+}

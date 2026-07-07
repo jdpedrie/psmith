@@ -221,6 +221,24 @@ public final class ProfilesViewModel {
         }
     }
 
+    /// Sets (or clears, with nil) the account's default profile, then
+    /// reloads so every row's isDefault reflects the server's answer —
+    /// the swap clears one row and sets another, and reconstructing
+    /// both locally buys little over the one cheap list call.
+    public func setDefault(_ id: String?) async {
+        do {
+            try await client.profiles.setDefault(profileID: id)
+            await load()
+        } catch {
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    /// The account's default profile, when one is set and loaded.
+    public var defaultProfile: PsmithProfile? {
+        profiles.first(where: { $0.isDefault })
+    }
+
     /// Optimistic local toggle of `favorite` so the UI updates instantly;
     /// rolls back on error. Server is the source of truth.
     public func toggleFavorite(_ id: String) async {
@@ -232,6 +250,7 @@ public final class ProfilesViewModel {
             description: original.description,
             parentOnly: original.parentOnly,
             favorite: newValue,
+            isDefault: original.isDefault,
             parentProfileID: original.parentProfileID,
             systemMessage: original.systemMessage,
             defaultUserMessage: original.defaultUserMessage,

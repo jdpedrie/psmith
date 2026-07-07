@@ -52,6 +52,29 @@ struct ProfilesViewModelTests {
         #expect(vm.profiles.count == all.count)
     }
 
+    @Test("setDefault marks exactly one profile; switching moves it; nil clears")
+    func setDefaultFlow() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-def")
+        let a = try await client.profiles.create(Fixtures.minimalProfilePatch(name: "A"))
+        let b = try await client.profiles.create(Fixtures.minimalProfilePatch(name: "B"))
+
+        let vm = ProfilesViewModel(client: client)
+        await vm.load()
+        #expect(vm.defaultProfile == nil)
+
+        await vm.setDefault(a.id)
+        #expect(vm.defaultProfile?.id == a.id)
+        #expect(vm.profiles.filter(\.isDefault).count == 1)
+
+        await vm.setDefault(b.id)
+        #expect(vm.defaultProfile?.id == b.id)
+        #expect(vm.profiles.filter(\.isDefault).count == 1)
+
+        await vm.setDefault(nil)
+        #expect(vm.defaultProfile == nil)
+        #expect(vm.error == nil)
+    }
+
     @Test("load populates profiles and selects the first one")
     func loadPopulatesProfiles() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-load")

@@ -13,6 +13,11 @@ import (
 
 type Querier interface {
 	AttachFileToMessage(ctx context.Context, arg AttachFileToMessageParams) (MessageAttachment, error)
+	// Half of the set-default transaction. Clear must land before Mark: the
+	// partial unique index (user_id WHERE is_default) is checked per row, so
+	// a single UPDATE that flips the new default on before the old one off
+	// trips the constraint against itself.
+	ClearDefaultProfile(ctx context.Context, userID uuid.UUID) error
 	// Reset the triple when a model swap orphans the existing vector.
 	// Backfill picks the row up via ListUnembeddedMessages on the next
 	// pass. CHECK invariant still holds (all three back to NULL).
@@ -290,6 +295,7 @@ type Querier interface {
 	// defaults-from-descriptor render at the UI layer.
 	ListUserPluginSettings(ctx context.Context, userID uuid.UUID) ([]UserPluginSetting, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	MarkDefaultProfile(ctx context.Context, id uuid.UUID) error
 	// Called once on server boot. The upstream sockets died with the process and
 	// cannot be resumed; users see a partial assistant message + retry affordance.
 	MarkRunningAsInterrupted(ctx context.Context) error

@@ -112,6 +112,7 @@ Profiles:
 | `GetProfile` | One profile; with `resolve` it also returns the parent-chain-resolved view. |
 | `UpdateProfile` | Sparse with `clear_fields` (clearing reverts a field to inherited); `parent_profile_id` re-parents. |
 | `DeleteProfile` | Delete. |
+| `SetDefaultProfile` | Marks one profile as the caller's default (at most one per user, enforced by a partial unique index; parent-only profiles rejected); empty `profile_id` clears it. Clients start new conversations directly with the default, skipping the chooser. |
 
 Plugins:
 

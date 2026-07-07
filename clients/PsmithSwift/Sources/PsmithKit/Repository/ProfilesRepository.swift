@@ -63,6 +63,16 @@ public final class ProfilesRepository: Sendable {
         throw resp?.error.map(PsmithError.from) ?? .missingPayload("list profiles")
     }
 
+    /// Marks a profile as the account's default (nil clears it). The
+    /// server enforces at-most-one-per-user and rejects parent-only
+    /// profiles.
+    public func setDefault(profileID: String?) async throws {
+        var req = Psmith_V1_SetDefaultProfileRequest()
+        if let profileID { req.profileID = profileID }
+        let resp = await client.setDefaultProfile(request: req, headers: [:])
+        if let err = resp.error { throw PsmithError.from(err) }
+    }
+
     public func get(id: String, resolve: Bool = false) async throws -> (PsmithProfile, PsmithProfile?) {
         var req = Psmith_V1_GetProfileRequest()
         req.id = id
