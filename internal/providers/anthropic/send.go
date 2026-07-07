@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 
@@ -56,13 +55,12 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 				p.TopP = param.Opt[float64]{}
 				p.TopK = param.Opt[int64]{}
 			}
-			var opts []option.RequestOption
 			if thinkingOn {
-				opts = thinkingRequestConfig(&p, useAdaptive, budget)
+				thinkingRequestConfig(&p, useAdaptive, budget)
 			}
 			// NewStreaming returns a *Stream that lazily decodes; errors
 			// surface via stream.Err() during iteration.
-			stream := d.client.Messages.NewStreaming(ctx, p, opts...)
+			stream := d.client.Messages.NewStreaming(ctx, p)
 			emitted, finished := pumpStream(ctx, out, stream)
 			if finished {
 				return

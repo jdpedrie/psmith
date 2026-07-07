@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 
 	"github.com/jdpedrie/psmith/internal/modelmeta"
 )
@@ -116,20 +115,16 @@ func isSamplingConstraintError(err error) bool {
 }
 
 // thinkingRequestConfig applies the chosen thinking shape to the outgoing
-// request: the legacy shape via the SDK's typed param, the adaptive shape
-// via raw JSON overrides (the pinned SDK predates it). Returns the extra
-// request options to pass alongside params.
-func thinkingRequestConfig(params *sdk.MessageNewParams, adaptive bool, budgetTokens int) []option.RequestOption {
+// request. Both shapes are typed since sdk v1.56: the legacy shape is
+// enabled+budget, the adaptive shape is the bare adaptive tag plus an
+// output_config.effort derived from the budget (omitted when unset).
+func thinkingRequestConfig(params *sdk.MessageNewParams, adaptive bool, budgetTokens int) {
 	if !adaptive {
 		params.Thinking = sdk.ThinkingConfigParamOfEnabled(int64(budgetTokens))
-		return nil
+		return
 	}
-	params.Thinking = sdk.ThinkingConfigParamUnion{} // omit the typed field entirely
-	opts := []option.RequestOption{
-		option.WithJSONSet("thinking", map[string]string{"type": "adaptive"}),
-	}
+	params.Thinking = sdk.ThinkingConfigParamUnion{OfAdaptive: &sdk.ThinkingConfigAdaptiveParam{}}
 	if effort := effortForBudget(budgetTokens); effort != "" {
-		opts = append(opts, option.WithJSONSet("output_config", map[string]any{"effort": effort}))
+		params.OutputConfig = sdk.OutputConfigParam{Effort: sdk.OutputConfigEffort(effort)}
 	}
-	return opts
 }
