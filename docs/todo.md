@@ -305,6 +305,9 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 
 `ContentRenderer` is the bigger piece (proto change, Swift component scaffolding, action-dispatch wiring) — worth deferring until at least one plugin's needs (`lettered_choices`'s choice cards is the clearest candidate) drives the schema. `PreSendContextInjector` once a concrete RAG/memory plugin pulls on it.
 
+- **iOS add-custom-model form: per-model default call settings** (`clients/psmithd-ios/.../AddCustomModelScreen.swift`) — the add form covers identity/limits/pricing/modalities/capabilities/cutoff but omits the embedded CallSettings editor the Mac form has behind a disclosure; set them after adding via the model's Default Settings sheet. Revisit if "add + tune in one pass" comes up.
+- **iOS model metadata editing** — iOS can add a manual model but not edit an existing row's metadata (Mac's ModelEditForm edit mode). UpdateUserModel is wired in PsmithKit; only the screen is missing.
+
 ### Considered, deferred until a real use case lands
 
 - **`ToolMiddleware`** (wrap `ExecuteTool` for validation/logging/rate-limiting). No current need; revisit when an audit-style tool plugin is requested.

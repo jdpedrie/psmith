@@ -41,6 +41,19 @@ public enum PsmithError: Error, LocalizedError {
         return "Something went wrong."
     }
 
+    /// True when the error is a task/request cancellation rather than a
+    /// real failure. SwiftUI tears down `.task`/`.refreshable` work when
+    /// the owning view leaves the hierarchy, which cancels any in-flight
+    /// RPC — surfacing that to the user as "canceled" reads as a bug.
+    /// Callers should quietly keep whatever data they already have.
+    public static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let pe = error as? PsmithError, case let .rpc(code, _) = pe, code == .canceled { return true }
+        if let ce = error as? ConnectError, ce.code == .canceled { return true }
+        let ns = error as NSError
+        return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+    }
+
     /// Best-effort human-friendly rendering of an RPC failure. The
     /// server's Internal errors often wrap a provider's JSON envelope —
     /// `{"error":{"message":"…"}}` — and we'd rather show "…" than the

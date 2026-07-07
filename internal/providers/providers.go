@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/jdpedrie/psmith/internal/modelmeta"
 )
@@ -416,10 +417,21 @@ type Pricing struct {
 // JSON config blob (the contents of user_model_providers.config).
 type Constructor func(deps Deps, config json.RawMessage) (Provider, error)
 
-var registry = map[string]Constructor{}
+// The registry is mutex-guarded rather than init()-only because tests
+// register fake driver types from parallel test goroutines while other
+// tests call Build — an unguarded map is a data race there (and a
+// potential fatal concurrent-map-write). Production still registers
+// exclusively from package init().
+var (
+	registryMu sync.RWMutex
+	registry   = map[string]Constructor{}
+)
 
-// Register a provider type. Call from a package init().
+// Register a provider type. Production callers do this from a package
+// init(); tests may register fake types at runtime.
 func Register(typeName string, c Constructor) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
 	if _, exists := registry[typeName]; exists {
 		panic(fmt.Sprintf("providers: duplicate registration for %q", typeName))
 	}
@@ -428,7 +440,9 @@ func Register(typeName string, c Constructor) {
 
 // Build instantiates a provider from a registered type and its config.
 func Build(typeName string, deps Deps, config json.RawMessage) (Provider, error) {
+	registryMu.RLock()
 	c, ok := registry[typeName]
+	registryMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("providers: unknown type %q", typeName)
 	}
@@ -439,12 +453,16 @@ func Build(typeName string, deps Deps, config json.RawMessage) (Provider, error)
 // Used by the management RPCs to validate `type` at create time so we
 // don't persist dead rows that only fail later on driver-touching paths.
 func IsRegistered(typeName string) bool {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	_, ok := registry[typeName]
 	return ok
 }
 
 // Types returns the names of all registered provider types.
 func Types() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	out := make([]string, 0, len(registry))
 	for t := range registry {
 		out = append(out, t)

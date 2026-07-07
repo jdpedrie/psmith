@@ -15,27 +15,50 @@ import (
 //
 //   - First call to LookupModel / LookupProvider / List* triggers Fetch
 //     under a mutex if the cache is empty. Subsequent calls reuse it.
+//   - A snapshot older than maxAge is refreshed in-line by the next
+//     caller (one request pays the fetch every ~12h; concurrent callers
+//     serve the stale snapshot instead of piling up). A failed refresh
+//     serves the stale snapshot — stale beats dead, and the next caller
+//     retries.
 //   - Refresh() forces a re-fetch and replaces the cache atomically.
 //   - Status() reports cached counts and the timestamp of the last
 //     successful fetch (or zero values if never fetched).
-//   - Stale-cache freshness is the caller's responsibility — the
-//     ModelProvidersService exposes a Refresh RPC for the UI to invoke
-//     when the user explicitly clicks "refresh metadata."
 //
 // We keep the existing Catalog interface so consumers (drivers, the
 // modelproviders service) don't change. The in-memory map shapes mirror
 // the DB rowToProvider/rowToModel translations.
 type LiveCatalog struct {
 	fetcher *Fetcher
+	// maxAge is how old the snapshot may be before a lookup triggers a
+	// re-fetch. Without this a long-running daemon serves its launch-day
+	// model list forever and newly released models never appear in
+	// discovery.
+	maxAge time.Duration
 
 	mu       sync.RWMutex
 	loaded   bool
 	loadedAt time.Time
+	fetching bool
+	// lastAttempt gates refresh retries after a failure. Without it a
+	// models.dev outage would make every catalog lookup pay a doomed
+	// network round-trip until the outage ends.
+	lastAttempt time.Time
 	// Providers indexed by ID.
 	providers map[string]*Provider
 	// Models indexed by (providerID, modelID).
 	models map[string]map[string]*Model
 }
+
+// defaultCatalogMaxAge bounds how stale the models.dev snapshot may get
+// before a lookup refreshes it. models.dev updates within hours of a
+// model release; 12h keeps discovery current without hammering it.
+const defaultCatalogMaxAge = 12 * time.Hour
+
+// refreshRetryBackoff is the minimum gap between refresh attempts once
+// the snapshot is past maxAge. It only matters when refreshes fail
+// (success resets loadedAt); it stops an outage from turning every
+// lookup into a doomed network call.
+const refreshRetryBackoff = 5 * time.Minute
 
 // NewLiveCatalog constructs a LiveCatalog backed by fetcher. If fetcher
 // is nil, NewFetcher() supplies the default models.dev source.
@@ -43,7 +66,7 @@ func NewLiveCatalog(fetcher *Fetcher) *LiveCatalog {
 	if fetcher == nil {
 		fetcher = NewFetcher()
 	}
-	return &LiveCatalog{fetcher: fetcher}
+	return &LiveCatalog{fetcher: fetcher, maxAge: defaultCatalogMaxAge}
 }
 
 // LookupModel returns the catalog entry for (providerID, modelID).
@@ -178,29 +201,63 @@ func (c *LiveCatalog) Status(ctx context.Context) (Status, error) {
 	return out, nil
 }
 
-// ensureLoaded triggers a one-shot fetch the first time the cache is
-// touched. Subsequent calls are a single RWMutex check — the fast path
-// is read-only.
+// ensureLoaded fetches on first touch and re-fetches when the snapshot
+// is older than maxAge. The fast path is a single RWMutex check. When a
+// refresh is due, exactly one caller performs it (in-line, outside the
+// lock); concurrent callers serve the existing snapshot rather than
+// piling up behind the fetch. A failed refresh with a snapshot in hand
+// serves stale — the next caller past maxAge retries.
 func (c *LiveCatalog) ensureLoaded(ctx context.Context) error {
 	c.mu.RLock()
 	loaded := c.loaded
+	fresh := loaded && (c.maxAge <= 0 || time.Since(c.loadedAt) < c.maxAge)
 	c.mu.RUnlock()
-	if loaded {
+	if fresh {
 		return nil
 	}
-	// Slow path: take the write lock, double-check, fetch.
+
+	// Slow path: claim the fetch under the write lock. The lock is
+	// released exactly once, below, on every path.
 	c.mu.Lock()
-	if c.loaded {
+	loaded = c.loaded
+	claimed := false
+	switch {
+	case loaded && (c.maxAge <= 0 || time.Since(c.loadedAt) < c.maxAge):
 		c.mu.Unlock()
-		return nil
+		return nil // another caller refreshed while we waited
+	case loaded && time.Since(c.lastAttempt) < refreshRetryBackoff:
+		c.mu.Unlock()
+		return nil // a recent attempt failed; serve stale, retry later
+	case c.fetching && loaded:
+		c.mu.Unlock()
+		return nil // serve stale while the claiming caller refreshes
+	case c.fetching:
+		// Cold start with a fetch already in flight: fall through and
+		// fetch too rather than inventing a wait queue. The duplicate
+		// fetch is bounded to process startup, and we must not clear
+		// the claiming caller's flag on the way out.
+	default:
+		c.fetching = true
+		c.lastAttempt = time.Now()
+		claimed = true
 	}
 	c.mu.Unlock()
+	if claimed {
+		defer func() {
+			c.mu.Lock()
+			c.fetching = false
+			c.mu.Unlock()
+		}()
+	}
 
 	// Fetch outside the lock — the network call can take seconds and
 	// we don't want lookup goroutines piling up behind it. Final
 	// publish takes the lock again.
 	snap, err := c.fetcher.Fetch(ctx)
 	if err != nil {
+		if loaded {
+			return nil // stale beats dead
+		}
 		return err
 	}
 	c.replace(snap)

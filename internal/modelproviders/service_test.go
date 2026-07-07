@@ -2080,3 +2080,107 @@ func TestAddManualModel_CrossUser(t *testing.T) {
 	// NotFound — don't leak existence of alice's provider to bob.
 	assertCode(t, err, connect.CodeNotFound)
 }
+
+// Catalog-backed discovery must union in models the provider's live API
+// lists but the catalog snapshot hasn't picked up yet (a brand-new
+// release lives on the API hours before models.dev catalogs it). The
+// union applies only to whitelisted driver types, and a live-listing
+// failure serves the catalog list rather than erroring.
+func TestDiscoverModels_UnionsLiveOnlyModels(t *testing.T) {
+	t.Parallel()
+	svc, q, cat, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+
+	// Live API knows both models; the catalog only has the older one.
+	live := []providers.Model{
+		{ID: "claude-old", DisplayName: "Claude Old"},
+		{ID: "claude-new", DisplayName: "Claude New"},
+	}
+	typeName := registerFakeDriver(t, "union", live, nil)
+	catID := "cat-" + typeName
+	seedCatalog(t, cat, catID, "Fake", "https://example.com", "claude-old", "Claude Old")
+	cfg := []byte(`{"catalog_provider_id":"` + catID + `"}`)
+	prov := makeProvider(t, q, user.ID, typeName, "main", cfg)
+
+	// Not whitelisted: catalog-only, the live-only model stays hidden.
+	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("DiscoverModels (no union): %v", err)
+	}
+	if len(resp.Msg.Models) != 1 || resp.Msg.Models[0].ModelId != "claude-old" {
+		t.Fatalf("non-whitelisted type should serve catalog only, got %+v", resp.Msg.Models)
+	}
+
+	// Whitelisted: union. claude-new appears with driver-source metadata,
+	// and the response stays sorted by model id.
+	svc.liveUnion = map[string]bool{typeName: true}
+	resp, err = svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("DiscoverModels (union): %v", err)
+	}
+	if len(resp.Msg.Models) != 2 {
+		t.Fatalf("union should list catalog + live-only models, got %+v", resp.Msg.Models)
+	}
+	if resp.Msg.Models[0].ModelId != "claude-new" || resp.Msg.Models[1].ModelId != "claude-old" {
+		t.Errorf("response should be sorted by model id, got %s, %s",
+			resp.Msg.Models[0].ModelId, resp.Msg.Models[1].ModelId)
+	}
+	if src := resp.Msg.Models[0].MetadataSource; src != psmithv1.MetadataSource_METADATA_SOURCE_DRIVER {
+		t.Errorf("live-only model should carry driver source, got %v", src)
+	}
+	if src := resp.Msg.Models[1].MetadataSource; src != psmithv1.MetadataSource_METADATA_SOURCE_CATALOG {
+		t.Errorf("catalog model should carry catalog source, got %v", src)
+	}
+
+	// already_enabled must be honored on live-only rows too.
+	if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "claude-new",
+		DisplayName:         "Claude New",
+		MetadataSource:      string(modelmeta.SourceDriver),
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed UpsertUserModel: %v", err)
+	}
+	resp, err = svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("DiscoverModels (enabled): %v", err)
+	}
+	for _, m := range resp.Msg.Models {
+		want := m.ModelId == "claude-new"
+		if m.AlreadyEnabled != want {
+			t.Errorf("model %s already_enabled=%v want %v", m.ModelId, m.AlreadyEnabled, want)
+		}
+	}
+}
+
+// A live-listing failure during union must NOT fail discovery — the
+// catalog list is the answer; the union is best-effort enrichment.
+func TestDiscoverModels_UnionDriverFailureServesCatalog(t *testing.T) {
+	t.Parallel()
+	svc, q, cat, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+
+	typeName := registerFakeDriver(t, "union-err", nil, errors.New("upstream down"))
+	catID := "cat-" + typeName
+	seedCatalog(t, cat, catID, "Fake", "https://example.com", "claude-old", "Claude Old")
+	cfg := []byte(`{"catalog_provider_id":"` + catID + `"}`)
+	prov := makeProvider(t, q, user.ID, typeName, "main", cfg)
+	svc.liveUnion = map[string]bool{typeName: true}
+
+	resp, err := svc.DiscoverModels(ctxAs(user), connect.NewRequest(&psmithv1.DiscoverModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("DiscoverModels should tolerate live failure, got %v", err)
+	}
+	if len(resp.Msg.Models) != 1 || resp.Msg.Models[0].ModelId != "claude-old" {
+		t.Errorf("catalog list should still answer, got %+v", resp.Msg.Models)
+	}
+}

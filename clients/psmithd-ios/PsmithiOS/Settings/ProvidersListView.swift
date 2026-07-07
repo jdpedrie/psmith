@@ -238,8 +238,16 @@ private struct ProviderDetailView: View {
                         modelRow(m)
                     }
                 }
+                NavigationLink {
+                    AddCustomModelScreen(provider: provider)
+                } label: {
+                    Label("Add Custom Model", systemImage: "plus")
+                        .foregroundStyle(.tint)
+                }
             } header: {
                 Text("Enabled models")
+            } footer: {
+                Text("Add a model by ID when it isn't in Discover yet — new releases, fine-tunes, or gateway aliases.")
             }
         }
         .listStyle(.insetGrouped)
@@ -257,6 +265,11 @@ private struct ProviderDetailView: View {
                         DiscoverModelsScreen(provider: provider)
                     } label: {
                         Label("Discover models", systemImage: "magnifyingglass")
+                    }
+                    NavigationLink {
+                        AddCustomModelScreen(provider: provider)
+                    } label: {
+                        Label("Add custom model", systemImage: "plus")
                     }
                     Button {
                         Task { await runProviderTest() }
@@ -785,11 +798,16 @@ private struct DiscoverModelsScreen: View {
     @State private var enabling: Set<String> = []
 
     var body: some View {
+        // The List must stay mounted through a pull-to-refresh: swapping
+        // it for a ProgressView destroys the view that owns the
+        // refreshable task, which cancels the in-flight RPC and surfaces
+        // "canceled" as an error. The blocking states only render when
+        // there's nothing to show yet.
         Group {
-            if loading {
+            if discovered.isEmpty, loading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error {
+            } else if discovered.isEmpty, let error {
                 EmptyStateView(
                     "Couldn't load models",
                     systemImage: "exclamationmark.triangle",
@@ -803,6 +821,13 @@ private struct DiscoverModelsScreen: View {
                 )
             } else {
                 List {
+                    if let error {
+                        Section {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
                     ForEach(discovered) { m in
                         let isEnabled = app.providers.enabledModels.contains { $0.modelID == m.modelID }
                         VStack(alignment: .leading, spacing: 6) {
@@ -865,6 +890,9 @@ private struct DiscoverModelsScreen: View {
         do {
             discovered = try await app.providers.discoverModels(providerID: provider.id)
         } catch let err {
+            // Cancellation isn't a failure: the view left the hierarchy or
+            // the refresh gesture was superseded. Keep the current list.
+            if PsmithError.isCancellation(err) { return }
             error = PsmithError.display(err)
         }
     }

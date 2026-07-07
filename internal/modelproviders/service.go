@@ -37,6 +37,10 @@ type Service struct {
 	catalog modelmeta.Catalog
 	cipher  crypto.Cipher
 	logger  *slog.Logger
+	// liveUnion gates which driver types get catalog+live discovery
+	// union (see liveUnionTypes). A field rather than a global so tests
+	// can whitelist their fake driver types per-service.
+	liveUnion map[string]bool
 }
 
 // NewService constructs a Service. logger may be nil — slog.Default() is used
@@ -49,7 +53,7 @@ func NewService(queries *store.Queries, catalog modelmeta.Catalog, cipher crypto
 	if cipher == nil {
 		cipher = crypto.Nop{}
 	}
-	return &Service{queries: queries, catalog: catalog, cipher: cipher, logger: logger}
+	return &Service{queries: queries, catalog: catalog, cipher: cipher, logger: logger, liveUnion: liveUnionTypes}
 }
 
 // resolveProviderConfig returns the plaintext config bytes for a row,
@@ -366,9 +370,32 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[psmit
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("catalog list: %w", lookupErr))
 		}
 		out := make([]*psmithv1.DiscoveredModel, 0, len(cms))
+		inCatalog := make(map[string]bool, len(cms))
 		for i := range cms {
+			inCatalog[cms[i].ID] = true
 			out = append(out, catalogModelToDiscovered(&cms[i], enabledSet[cms[i].ID]))
 		}
+		// For drivers whose live model listing is clean (liveUnionTypes),
+		// union in anything the catalog hasn't picked up yet. A model
+		// released hours ago exists on the provider's API before
+		// models.dev catalogs it, and "it's on the API but discovery
+		// can't see it" is exactly the failure users hit. Live-only rows
+		// carry driver-source metadata (no pricing/limits) until the
+		// catalog catches up. A live-listing failure is non-fatal: the
+		// catalog list still answers.
+		if s.liveUnion[row.Type] {
+			if extra, uErr := s.liveOnlyModels(ctx, row.Type, cfg, inCatalog); uErr != nil {
+				if s.logger != nil {
+					s.logger.Warn("discover: live union failed; serving catalog only",
+						"provider_type", row.Type, "err", uErr)
+				}
+			} else {
+				for _, m := range extra {
+					out = append(out, providerModelToDiscovered(m, enabledSet[m.ID]))
+				}
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].GetModelId() < out[j].GetModelId() })
 		return connect.NewResponse(&psmithv1.DiscoverModelsResponse{Models: out}), nil
 	}
 
@@ -385,6 +412,38 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[psmit
 		out = append(out, providerModelToDiscovered(m, enabledSet[m.ID]))
 	}
 	return connect.NewResponse(&psmithv1.DiscoverModelsResponse{Models: out}), nil
+}
+
+// liveUnionTypes whitelists provider types whose live model listing is
+// trustworthy enough to union into catalog-backed discovery. Anthropic's
+// /v1/models returns exactly the models the key can call — no alias
+// pointers or unversioned noise — so a catalog miss there means the
+// catalog is behind, not that the entry is junk. OpenAI-compatible
+// aggregators (OpenRouter et al.) stay catalog-only: their listings leak
+// aliases and metadata-free entries, which is why discovery prefers the
+// catalog in the first place.
+var liveUnionTypes = map[string]bool{
+	"anthropic": true,
+}
+
+// liveOnlyModels lists the provider's live models and returns those
+// missing from the catalog set.
+func (s *Service) liveOnlyModels(ctx context.Context, typeName string, cfg json.RawMessage, inCatalog map[string]bool) ([]providers.Model, error) {
+	driver, err := providers.Build(typeName, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build driver: %w", err)
+	}
+	models, err := driver.DiscoverModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := models[:0]
+	for _, m := range models {
+		if !inCatalog[m.ID] {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) EnableModels(ctx context.Context, req *connect.Request[psmithv1.EnableModelsRequest]) (*connect.Response[psmithv1.EnableModelsResponse], error) {
@@ -925,7 +984,10 @@ func configCatalogProviderID(driverType string, config []byte) string {
 		return "anthropic"
 	case "google":
 		return "google"
-	case "openai-compatible":
+	default:
+		// openai-compatible providers carry the hint in their config;
+		// any other type may declare one the same way (also what lets
+		// tests give their fake driver types a catalog identity).
 		var c struct {
 			CatalogProviderID string `json:"catalog_provider_id"`
 		}
@@ -936,8 +998,6 @@ func configCatalogProviderID(driverType string, config []byte) string {
 			return ""
 		}
 		return c.CatalogProviderID
-	default:
-		return ""
 	}
 }
 

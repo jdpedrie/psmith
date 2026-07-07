@@ -109,3 +109,40 @@ struct PsmithErrorDisplayTests {
         #expect(!s.isEmpty)
     }
 }
+
+/// `PsmithError.isCancellation(_:)` gates whether a catch-block surfaces
+/// an error or quietly keeps existing content. SwiftUI cancels
+/// `.task`/`.refreshable` work on view teardown, and that cancellation
+/// arrives in several shapes depending on which layer it interrupts.
+@Suite("PsmithError.isCancellation")
+struct PsmithErrorCancellationTests {
+
+    @Test("Swift structured-concurrency CancellationError")
+    func swiftCancellation() {
+        #expect(PsmithError.isCancellation(CancellationError()))
+    }
+
+    @Test("ConnectError with code canceled")
+    func connectCanceled() {
+        let err = ConnectError(code: .canceled, message: "canceled", exception: nil, details: [], metadata: [:])
+        #expect(PsmithError.isCancellation(err))
+    }
+
+    @Test("PsmithError.rpc with code canceled")
+    func rpcCanceled() {
+        #expect(PsmithError.isCancellation(PsmithError.rpc(code: .canceled, message: "canceled")))
+    }
+
+    @Test("NSURLErrorCancelled")
+    func urlCancelled() {
+        let err = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
+        #expect(PsmithError.isCancellation(err))
+    }
+
+    @Test("real failures are not cancellation")
+    func realFailures() {
+        #expect(!PsmithError.isCancellation(PsmithError.rpc(code: .internalError, message: "boom")))
+        #expect(!PsmithError.isCancellation(ConnectError(code: .unavailable, message: "down", exception: nil, details: [], metadata: [:])))
+        #expect(!PsmithError.isCancellation(NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)))
+    }
+}
