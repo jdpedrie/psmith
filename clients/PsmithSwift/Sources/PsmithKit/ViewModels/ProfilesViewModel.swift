@@ -14,6 +14,15 @@ public final class ProfilesViewModel {
     private let client: PsmithClient
 
     public var profiles: [PsmithProfile] = []
+    /// Cursor for the next page; nil = fully loaded. Paging state is
+    /// reset by load() and advanced by loadMore().
+    public private(set) var nextPageToken: String?
+    public private(set) var isLoadingMore = false
+    /// Page size for load()/loadMore(). Var so tests can shrink it;
+    /// 100 matches the server cap, so installations under 100 profiles
+    /// behave exactly as the old return-everything path did.
+    public var pageSize: Int32 = 100
+    public var hasMore: Bool { nextPageToken != nil }
     public var selectedID: String?
     public var isLoading = false
     public var isDeleting = false
@@ -54,11 +63,31 @@ public final class ProfilesViewModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            profiles = try await client.profiles.list()
+            let page = try await client.profiles.listPage(pageSize: pageSize)
+            profiles = page.items
+            nextPageToken = page.nextPageToken
             error = nil
             if selectedID == nil, let first = profiles.first {
                 selectedID = first.id
             }
+        } catch {
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    /// Appends the next page. No-op while a page is in flight or when
+    /// the list is fully loaded, so scroll-trigger callers can fire it
+    /// unconditionally from onAppear.
+    public func loadMore() async {
+        guard let token = nextPageToken, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let page = try await client.profiles.listPage(pageSize: pageSize, pageToken: token)
+            let known = Set(profiles.map(\.id))
+            profiles.append(contentsOf: page.items.filter { !known.contains($0.id) })
+            nextPageToken = page.nextPageToken
+            error = nil
         } catch {
             self.error = PsmithError.display(error)
         }

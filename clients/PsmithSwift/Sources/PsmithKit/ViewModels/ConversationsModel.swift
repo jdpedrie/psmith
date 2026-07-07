@@ -34,6 +34,16 @@ public final class ConversationsModel {
     private let profilesVM: ProfilesViewModel?
 
     public var conversations: [PsmithConversation] = []
+    /// Cursor for the next page of the current listing (order + query);
+    /// nil = fully loaded. refresh() resets it, loadMore() advances it.
+    public private(set) var nextPageToken: String?
+    public private(set) var isLoadingMore = false
+    /// Page size for refresh()/loadMore(). Var so tests can shrink it.
+    /// 50 keeps the first paint fast; before paging the list silently
+    /// capped at the server's 100 — conversations past that were
+    /// unreachable on this client.
+    public var pageSize: Int32 = 50
+    public var hasMore: Bool { nextPageToken != nil }
     /// Profiles for the current user. Read through to the shared
     /// per-account ProfilesViewModel when available — that's what
     /// makes a "Settings → add profile → back to home" flow
@@ -72,31 +82,33 @@ public final class ConversationsModel {
         self.hub = hub
     }
 
+    /// The wire order + title filter for the current list mode. refresh()
+    /// and loadMore() must agree on these — a loadMore against a different
+    /// listing than the one on screen would splice unrelated rows in.
+    private func currentListing() -> (order: PsmithConversationOrder, titleQuery: String?) {
+        switch listMode {
+        case .allChats:
+            return (listOrder, nil)
+        case .byProfile:
+            // The UI groups by profile and sorts within groups by recency.
+            return (.recentlyUsed, nil)
+        case .search:
+            let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (.recentlyUsed, trimmed.isEmpty ? nil : trimmed)
+        }
+    }
+
     public func refresh() async {
         isLoading = true
         defer { isLoading = false }
         do {
-            let listOrder: PsmithConversationOrder
-            let titleQuery: String?
-            switch listMode {
-            case .allChats:
-                listOrder = self.listOrder
-                titleQuery = nil
-            case .byProfile:
-                // The UI groups by profile and sorts within groups by recency.
-                listOrder = .recentlyUsed
-                titleQuery = nil
-            case .search:
-                let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-                listOrder = .recentlyUsed
-                titleQuery = trimmed.isEmpty ? nil : trimmed
-            }
+            let (listOrder, titleQuery) = currentListing()
             // Conversations come straight from the server. Profiles
             // route through the shared ProfilesViewModel when wired
             // so its mutations stay the source of truth across the
             // app; only the test fallback path fetches profiles
             // here directly.
-            async let convos = client.conversations.list(order: listOrder, titleQuery: titleQuery)
+            async let convos = client.conversations.list(pageSize: pageSize, order: listOrder, titleQuery: titleQuery)
             if let pvm = profilesVM {
                 // Load both concurrently, but await the profile load too. A
                 // bare unawaited `async let` is cancelled when this scope
@@ -107,11 +119,13 @@ public final class ConversationsModel {
                 async let profileLoad: Void = pvm.load()
                 let cs = try await convos
                 self.conversations = cs.items
+                self.nextPageToken = cs.nextPageToken
                 await profileLoad
             } else {
                 async let profs = client.profiles.list()
                 let (cs, ps) = try await (convos, profs)
                 self.conversations = cs.items
+                self.nextPageToken = cs.nextPageToken
                 self._profiles = ps
             }
             let cs = self.conversations
@@ -136,6 +150,29 @@ public final class ConversationsModel {
     }
 
     @discardableResult
+    /// Appends the next page of the current listing. No-op while a page
+    /// is in flight or when the list is fully loaded, so scroll-trigger
+    /// callers can fire it unconditionally from the last row's onAppear.
+    public func loadMore() async {
+        guard let token = nextPageToken, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let (order, titleQuery) = currentListing()
+            let page = try await client.conversations.list(
+                pageSize: pageSize, pageToken: token, order: order, titleQuery: titleQuery)
+            // Keyset paging can't duplicate rows, but a conversation
+            // created between pages shifts nothing either — dedupe by id
+            // anyway so a surprise upstream can't corrupt the list.
+            let known = Set(conversations.map(\.id))
+            conversations.append(contentsOf: page.items.filter { !known.contains($0.id) })
+            nextPageToken = page.nextPageToken
+            loadError = nil
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
     public func newConversation(
         profileID: String,
         title: String? = nil,

@@ -308,6 +308,9 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 - **iOS add-custom-model form: per-model default call settings** (`clients/psmithd-ios/.../AddCustomModelScreen.swift`) — the add form covers identity/limits/pricing/modalities/capabilities/cutoff but omits the embedded CallSettings editor the Mac form has behind a disclosure; set them after adding via the model's Default Settings sheet. Revisit if "add + tune in one pass" comes up.
 - **iOS model metadata editing** — iOS can add a manual model but not edit an existing row's metadata (Mac's ModelEditForm edit mode). UpdateUserModel is wired in PsmithKit; only the screen is missing.
 
+- **Web sidebar infinite scroll** (`internal/web/web.go` listConvos) — the web client still fetches one 100-row page for the sidebar. The RPC pages properly now; the web UI needs an htmx load-more affordance. Revisit when a dogfooding account crosses 100 conversations on web.
+- **Profile lookups beyond the loaded pages** (`PsmithKit` ConversationsModel/ProfilesViewModel) — clients page profiles at 100/page, and chain-name/grouping lookups only see loaded pages. Under 100 profiles (everyone today) behavior is identical to pre-paging; above that, conversation rows for profiles on unloaded pages fall back to their placeholder until the profiles list is scrolled. Revisit with a by-id profile hydration if it ever bites.
+
 ### Considered, deferred until a real use case lands
 
 - **`ToolMiddleware`** (wrap `ExecuteTool` for validation/logging/rate-limiting). No current need; revisit when an audit-style tool plugin is requested.

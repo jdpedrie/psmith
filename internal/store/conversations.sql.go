@@ -128,13 +128,19 @@ WHERE c.user_id = $1
            AND c.title ILIKE '%' || $2::text || '%'))
   AND ($3::uuid IS NULL
        OR c.profile_id = $3::uuid)
-ORDER BY c.created_at DESC
+  AND ($4::timestamptz IS NULL
+       OR (c.created_at, c.id) < ($4::timestamptz, $5::uuid))
+ORDER BY c.created_at DESC, c.id DESC
+LIMIT $6
 `
 
 type ListConversationsByUserRecentlyCreatedParams struct {
 	UserID     uuid.UUID
 	TitleQuery *string
 	ProfileID  *uuid.UUID
+	CursorKey  *time.Time
+	CursorID   *uuid.UUID
+	PageLimit  int32
 }
 
 type ListConversationsByUserRecentlyCreatedRow struct {
@@ -152,9 +158,17 @@ type ListConversationsByUserRecentlyCreatedRow struct {
 // conversation's own created_at — the freshest creation always wins
 // regardless of subsequent message traffic. Still computes
 // last_activity_at for clients that want to display "last used" alongside
-// the row even when sorting by creation.
+// the row even when sorting by creation. Same keyset scheme, keyed on
+// created_at.
 func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, arg ListConversationsByUserRecentlyCreatedParams) ([]ListConversationsByUserRecentlyCreatedRow, error) {
-	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyCreated, arg.UserID, arg.TitleQuery, arg.ProfileID)
+	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyCreated,
+		arg.UserID,
+		arg.TitleQuery,
+		arg.ProfileID,
+		arg.CursorKey,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -183,26 +197,35 @@ func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, ar
 }
 
 const listConversationsByUserRecentlyUsed = `-- name: ListConversationsByUserRecentlyUsed :many
-SELECT
-    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
-    COALESCE(
-        (SELECT MAX(m.created_at) FROM messages m
-         JOIN contexts ctx ON ctx.id = m.context_id
-         WHERE ctx.conversation_id = c.id),
-        c.created_at
-    ) AS last_activity_at
-FROM conversations c
-WHERE c.user_id = $1
-  AND ($2::text IS NULL
-       OR (c.title IS NOT NULL
-           AND c.title ILIKE '%' || $2::text || '%'))
-  AND ($3::uuid IS NULL
-       OR c.profile_id = $3::uuid)
-ORDER BY last_activity_at DESC
+WITH convs AS (
+    SELECT
+        c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
+        COALESCE(
+            (SELECT MAX(m.created_at) FROM messages m
+             JOIN contexts ctx ON ctx.id = m.context_id
+             WHERE ctx.conversation_id = c.id),
+            c.created_at
+        ) AS last_activity_at
+    FROM conversations c
+    WHERE c.user_id = $1
+      AND ($5::text IS NULL
+           OR (c.title IS NOT NULL
+               AND c.title ILIKE '%' || $5::text || '%'))
+      AND ($6::uuid IS NULL
+           OR c.profile_id = $6::uuid)
+)
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, last_activity_at FROM convs
+WHERE ($2::timestamptz IS NULL
+       OR (last_activity_at, id) < ($2::timestamptz, $3::uuid))
+ORDER BY last_activity_at DESC, id DESC
+LIMIT $4
 `
 
 type ListConversationsByUserRecentlyUsedParams struct {
 	UserID     uuid.UUID
+	CursorKey  *time.Time
+	CursorID   *uuid.UUID
+	PageLimit  int32
 	TitleQuery *string
 	ProfileID  *uuid.UUID
 }
@@ -223,8 +246,20 @@ type ListConversationsByUserRecentlyUsedRow struct {
 // message yet. Optional filters: case-insensitive title substring (NULL
 // skips the filter; conversations with no title are excluded when set);
 // profile_id (NULL skips the filter).
+//
+// Keyset paging: cursor_key/cursor_id (NULL = first page) resume after
+// the row with that (last_activity_at, id) tuple; id breaks timestamp
+// ties so a page boundary through same-instant rows can't skip or
+// duplicate. page_limit callers pass limit+1 to detect a next page.
 func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error) {
-	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyUsed, arg.UserID, arg.TitleQuery, arg.ProfileID)
+	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyUsed,
+		arg.UserID,
+		arg.CursorKey,
+		arg.CursorID,
+		arg.PageLimit,
+		arg.TitleQuery,
+		arg.ProfileID,
+	)
 	if err != nil {
 		return nil, err
 	}

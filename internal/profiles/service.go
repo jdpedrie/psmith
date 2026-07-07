@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/crypto"
 	"github.com/jdpedrie/psmith/internal/events"
+	"github.com/jdpedrie/psmith/internal/pagetoken"
 	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/jdpedrie/psmith/plugins"
 )
@@ -235,12 +237,50 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[psmith
 
 // --- ListProfiles ---
 
+// MaxProfilePageSize caps page_size in ListProfiles. page_size = 0 keeps
+// the legacy return-everything behavior — existing clients treat the
+// profile list as a complete lookup table (parent-chain resolution,
+// pickers), so paging is strictly opt-in.
+const MaxProfilePageSize = 100
+
 func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[psmithv1.ListProfilesRequest]) (*connect.Response[psmithv1.ListProfilesResponse], error) {
 	caller := auth.MustFromContext(ctx)
 
-	rows, err := s.queries.ListProfilesByUser(ctx, caller.ID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	var rows []store.Profile
+	nextPageToken := ""
+	if req.Msg.GetPageSize() <= 0 {
+		all, err := s.queries.ListProfilesByUser(ctx, caller.ID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		rows = all
+	} else {
+		limit := int(req.Msg.GetPageSize())
+		if limit > MaxProfilePageSize {
+			limit = MaxProfilePageSize
+		}
+		var cursorKey *time.Time
+		var cursorID *uuid.UUID
+		if key, id, ok, err := pagetoken.Decode(req.Msg.GetPageToken()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token: %w", err))
+		} else if ok {
+			cursorKey, cursorID = &key, &id
+		}
+		paged, err := s.queries.ListProfilesByUserPaged(ctx, store.ListProfilesByUserPagedParams{
+			UserID:    caller.ID,
+			CursorKey: cursorKey,
+			CursorID:  cursorID,
+			PageLimit: int32(limit + 1),
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if len(paged) > limit {
+			paged = paged[:limit]
+			last := paged[len(paged)-1]
+			nextPageToken = pagetoken.Encode(last.CreatedAt, last.ID)
+		}
+		rows = paged
 	}
 
 	out := make([]*psmithv1.Profile, 0, len(rows))
@@ -252,7 +292,10 @@ func (s *Service) ListProfiles(ctx context.Context, req *connect.Request[psmithv
 		s.attachRequiredCaps(ctx, p)
 		out = append(out, p)
 	}
-	return connect.NewResponse(&psmithv1.ListProfilesResponse{Profiles: out}), nil
+	return connect.NewResponse(&psmithv1.ListProfilesResponse{
+		Profiles:      out,
+		NextPageToken: nextPageToken,
+	}), nil
 }
 
 // --- GetProfile ---

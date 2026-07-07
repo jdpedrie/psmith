@@ -21,6 +21,37 @@ struct ProfilesViewModelTests {
     /// models / provider labels are populated by a separate `loadAvailableModels()`
     /// call. We assert load() actually populates profiles, and that
     /// loadAvailableModels populates providers/models.
+    @Test("load + loadMore page the profile list; totals match the legacy list")
+    func pagingLoadMore() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-page")
+        for i in 0..<5 {
+            _ = try await client.profiles.create(Fixtures.minimalProfilePatch(name: "page-\(i)"))
+        }
+        // Fresh users carry system-seeded profiles too, so the ground
+        // truth is whatever the legacy return-all path reports.
+        let all = try await client.profiles.list()
+
+        let vm = ProfilesViewModel(client: client)
+        vm.pageSize = 2
+        await vm.load()
+        #expect(vm.profiles.count == 2)
+        #expect(vm.hasMore)
+
+        var guardRail = 0
+        while vm.hasMore {
+            await vm.loadMore()
+            guardRail += 1
+            #expect(guardRail < 20)
+        }
+        #expect(vm.profiles.count == all.count)
+        #expect(Set(vm.profiles.map(\.id)) == Set(all.map(\.id)))
+        #expect(vm.error == nil)
+
+        // Fully loaded: further calls are no-ops.
+        await vm.loadMore()
+        #expect(vm.profiles.count == all.count)
+    }
+
     @Test("load populates profiles and selects the first one")
     func loadPopulatesProfiles() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-load")

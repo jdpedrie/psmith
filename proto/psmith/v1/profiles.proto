@@ -76,9 +76,19 @@ message CreateProfileResponse {
   Profile profile = 1;
 }
 
-message ListProfilesRequest {}
+message ListProfilesRequest {
+  // Page size. 0 preserves the legacy behavior of returning every
+  // profile in one response — existing clients that treat the list as
+  // a complete lookup table (parent-chain resolution, pickers) rely
+  // on that. Paging clients opt in with an explicit size.
+  int32 page_size = 1;
+  string page_token = 2;
+}
 message ListProfilesResponse {
   repeated Profile profiles = 1;
+  // Set when another page exists; empty on the last page (and always
+  // empty for page_size = 0 requests).
+  string next_page_token = 2;
 }
 
 message GetProfileRequest {

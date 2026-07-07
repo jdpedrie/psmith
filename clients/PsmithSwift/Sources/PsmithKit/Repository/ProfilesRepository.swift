@@ -32,6 +32,37 @@ public final class ProfilesRepository: Sendable {
         throw resp?.error.map(PsmithError.from) ?? .missingPayload("list profiles")
     }
 
+    /// Paged variant of list. `list()` above keeps the legacy
+    /// return-everything contract (page_size = 0 on the wire) because
+    /// several callers treat the result as a complete lookup table;
+    /// paging surfaces opt in here. The first unfiltered page refreshes
+    /// the launch cache — it's what the profiles screen renders first.
+    public func listPage(
+        pageSize: Int32,
+        pageToken: String? = nil
+    ) async throws -> (items: [PsmithProfile], nextPageToken: String?) {
+        var req = Psmith_V1_ListProfilesRequest()
+        req.pageSize = pageSize
+        if let pageToken { req.pageToken = pageToken }
+        let frozenReq = req
+        let resp = try? await withRPCTimeout(seconds: 6) { [client] in
+            await client.listProfiles(request: frozenReq, headers: [:])
+        }
+        if let msg = resp?.message {
+            let items = msg.profiles.map(PsmithProfile.init(from:))
+            let next = msg.nextPageToken.isEmpty ? nil : msg.nextPageToken
+            if pageToken == nil, let cache {
+                try? await cache.set(items, kind: CacheKind.profiles, id: "all", capBytes: CachePreferences.capBytes)
+            }
+            return (items, next)
+        }
+        if pageToken == nil, let cache,
+           let cached: [PsmithProfile] = await cache.get([PsmithProfile].self, kind: CacheKind.profiles, id: "all") {
+            return (cached, nil)
+        }
+        throw resp?.error.map(PsmithError.from) ?? .missingPayload("list profiles")
+    }
+
     public func get(id: String, resolve: Bool = false) async throws -> (PsmithProfile, PsmithProfile?) {
         var req = Psmith_V1_GetProfileRequest()
         req.id = id

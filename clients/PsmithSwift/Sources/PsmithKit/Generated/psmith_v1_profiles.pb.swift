@@ -207,6 +207,14 @@ public nonisolated struct Psmith_V1_ListProfilesRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  /// Page size. 0 preserves the legacy behavior of returning every
+  /// profile in one response — existing clients that treat the list as
+  /// a complete lookup table (parent-chain resolution, pickers) rely
+  /// on that. Paging clients opt in with an explicit size.
+  public var pageSize: Int32 = 0
+
+  public var pageToken: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -218,6 +226,10 @@ public nonisolated struct Psmith_V1_ListProfilesResponse: Sendable {
   // methods supported on all messages.
 
   public var profiles: [Psmith_V1_Profile] = []
+
+  /// Set when another page exists; empty on the last page (and always
+  /// empty for page_size = 0 requests).
+  public var nextPageToken: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1262,18 +1274,34 @@ nonisolated extension Psmith_V1_CreateProfileResponse: SwiftProtobuf.Message, Sw
 
 nonisolated extension Psmith_V1_ListProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProfilesRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.pageSize) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.pageToken) }()
+      default: break
+      }
+    }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.pageSize != 0 {
+      try visitor.visitSingularInt32Field(value: self.pageSize, fieldNumber: 1)
+    }
+    if !self.pageToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.pageToken, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ListProfilesRequest, rhs: Psmith_V1_ListProfilesRequest) -> Bool {
+    if lhs.pageSize != rhs.pageSize {return false}
+    if lhs.pageToken != rhs.pageToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1281,7 +1309,7 @@ nonisolated extension Psmith_V1_ListProfilesRequest: SwiftProtobuf.Message, Swif
 
 nonisolated extension Psmith_V1_ListProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProfilesResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profiles\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profiles\0\u{3}next_page_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1290,6 +1318,7 @@ nonisolated extension Psmith_V1_ListProfilesResponse: SwiftProtobuf.Message, Swi
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.profiles) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.nextPageToken) }()
       default: break
       }
     }
@@ -1299,11 +1328,15 @@ nonisolated extension Psmith_V1_ListProfilesResponse: SwiftProtobuf.Message, Swi
     if !self.profiles.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.profiles, fieldNumber: 1)
     }
+    if !self.nextPageToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.nextPageToken, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ListProfilesResponse, rhs: Psmith_V1_ListProfilesResponse) -> Bool {
     if lhs.profiles != rhs.profiles {return false}
+    if lhs.nextPageToken != rhs.nextPageToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

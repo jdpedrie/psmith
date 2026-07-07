@@ -47,6 +47,7 @@ struct ProfilesListView: View {
                             .tint(.yellow)
                         }
                     }
+                    LoadMoreFooter(token: profiles.nextPageToken) { await profiles.loadMore() }
                 }
                 .listStyle(.insetGrouped)
             }

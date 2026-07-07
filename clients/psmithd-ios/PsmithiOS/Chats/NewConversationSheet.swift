@@ -15,6 +15,7 @@ struct NewConversationSheet: View {
     let onCreated: (PsmithConversation) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(ConversationsModel.self) private var convos
+    @Environment(AppModel.self) private var app
 
     @State private var title: String = ""
     @State private var selectedProfileID: String?
@@ -38,6 +39,9 @@ struct NewConversationSheet: View {
                         ForEach(profilesForPicker) { profile in
                             profileRow(profile)
                         }
+                        // The picker reads the shared profiles VM; page in
+                        // the rest when the user scrolls past what's loaded.
+                        LoadMoreFooter(token: app.profiles.nextPageToken) { await app.profiles.loadMore() }
                     }
                 }
 

@@ -30,6 +30,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/history"
 	"github.com/jdpedrie/psmith/internal/langfuse"
 	"github.com/jdpedrie/psmith/internal/modelmeta"
+	"github.com/jdpedrie/psmith/internal/pagetoken"
 	"github.com/jdpedrie/psmith/internal/profiles"
 	"github.com/jdpedrie/psmith/internal/protoconv"
 	"github.com/jdpedrie/psmith/internal/providers"
@@ -381,20 +382,40 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 		profileFilter = &parsed
 	}
 
+	limit := int(req.Msg.PageSize)
+	if limit <= 0 || limit > MaxListPageSize {
+		limit = MaxListPageSize
+	}
+	var cursorKey *time.Time
+	var cursorID *uuid.UUID
+	if key, id, ok, err := pagetoken.Decode(req.Msg.PageToken); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token: %w", err))
+	} else if ok {
+		cursorKey, cursorID = &key, &id
+	}
+
 	// Two SQL queries (one ordered by created_at, one by computed
 	// last_activity_at) — sqlc doesn't support dynamic ORDER BY. Both share
-	// the same filter shape, so we just pick which to call.
+	// the same filter + keyset shape, so we just pick which to call. Fetch
+	// limit+1 to learn whether another page exists without a COUNT.
 	type row struct {
 		Conversation   store.Conversation
 		LastActivityAt time.Time
 	}
 	var rows []row
+	// sortKey selects the keyset column matching the query's ORDER BY —
+	// the cursor must be built from the same key the ordering uses.
+	sortKey := func(r row) time.Time { return r.LastActivityAt }
 	switch req.Msg.GetOrder() {
 	case psmithv1.ConversationOrder_CONVERSATION_ORDER_RECENTLY_CREATED:
+		sortKey = func(r row) time.Time { return r.Conversation.CreatedAt }
 		raw, err := s.queries.ListConversationsByUserRecentlyCreated(ctx, store.ListConversationsByUserRecentlyCreatedParams{
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
 			ProfileID:  profileFilter,
+			CursorKey:  cursorKey,
+			CursorID:   cursorID,
+			PageLimit:  int32(limit + 1),
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
@@ -415,6 +436,9 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
 			ProfileID:  profileFilter,
+			CursorKey:  cursorKey,
+			CursorID:   cursorID,
+			PageLimit:  int32(limit + 1),
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
@@ -432,12 +456,11 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 		}
 	}
 
-	limit := int(req.Msg.PageSize)
-	if limit <= 0 || limit > MaxListPageSize {
-		limit = MaxListPageSize
-	}
+	nextPageToken := ""
 	if len(rows) > limit {
 		rows = rows[:limit]
+		last := rows[len(rows)-1]
+		nextPageToken = pagetoken.Encode(sortKey(last), last.Conversation.ID)
 	}
 
 	out := make([]*psmithv1.Conversation, 0, len(rows))
@@ -452,7 +475,10 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 		s.attachStreamingComponents(ctx, r.Conversation, p)
 		out = append(out, p)
 	}
-	return connect.NewResponse(&psmithv1.ListConversationsResponse{Conversations: out}), nil
+	return connect.NewResponse(&psmithv1.ListConversationsResponse{
+		Conversations: out,
+		NextPageToken: nextPageToken,
+	}), nil
 }
 
 // --- GetConversation ---

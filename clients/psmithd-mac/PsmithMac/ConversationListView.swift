@@ -151,6 +151,7 @@ struct ConversationListView: View {
                     ConversationRowMac(conversation: c, onDelete: { conversationToDelete = c })
                         .tag(c.id)
                 }
+                LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
             } header: {
                 sortMenu
             }
@@ -171,6 +172,9 @@ struct ConversationListView: View {
                     Text(profile.name)
                 }
             }
+            Section {
+                LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
+            }
         case .search:
             Section {
                 if convos.searchQuery.isEmpty {
@@ -186,6 +190,7 @@ struct ConversationListView: View {
                         ConversationRowMac(conversation: c, onDelete: { conversationToDelete = c })
                             .tag(c.id)
                     }
+                    LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
                 }
             }
         }

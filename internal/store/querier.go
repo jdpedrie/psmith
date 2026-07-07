@@ -204,13 +204,19 @@ type Querier interface {
 	// conversation's own created_at — the freshest creation always wins
 	// regardless of subsequent message traffic. Still computes
 	// last_activity_at for clients that want to display "last used" alongside
-	// the row even when sorting by creation.
+	// the row even when sorting by creation. Same keyset scheme, keyed on
+	// created_at.
 	ListConversationsByUserRecentlyCreated(ctx context.Context, arg ListConversationsByUserRecentlyCreatedParams) ([]ListConversationsByUserRecentlyCreatedRow, error)
 	// Returns conversations sorted by the most recent message activity, with
 	// created_at as the fallback for conversations that haven't received a
 	// message yet. Optional filters: case-insensitive title substring (NULL
 	// skips the filter; conversations with no title are excluded when set);
 	// profile_id (NULL skips the filter).
+	//
+	// Keyset paging: cursor_key/cursor_id (NULL = first page) resume after
+	// the row with that (last_activity_at, id) tuple; id breaks timestamp
+	// ties so a page boundary through same-instant rows can't skip or
+	// duplicate. page_limit callers pass limit+1 to detect a next page.
 	ListConversationsByUserRecentlyUsed(ctx context.Context, arg ListConversationsByUserRecentlyUsedParams) ([]ListConversationsByUserRecentlyUsedRow, error)
 	// Same shape as ListDeviceToolCallsByUser, scoped to one
 	// conversation. The handler verifies the caller owns the
@@ -240,6 +246,10 @@ type Querier interface {
 	// defines its own pipeline).
 	ListProfilePlugins(ctx context.Context, profileID uuid.UUID) ([]ProfilePlugin, error)
 	ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error)
+	// Keyset-paged variant: ascending (created_at, id), cursor resumes after
+	// that tuple. Callers pass page_limit = limit+1 to detect a next page.
+	// The unpaged query above stays for page_size=0 (legacy return-all).
+	ListProfilesByUserPaged(ctx context.Context, arg ListProfilesByUserPagedParams) ([]Profile, error)
 	// Per-provider running totals across the ledger, optionally bounded by
 	// a [since, until) occurred_at window. Drives the iOS Settings → Cost
 	// screen — one row per configured provider, single dollar amount per

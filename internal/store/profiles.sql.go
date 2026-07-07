@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -149,6 +150,72 @@ SELECT id, user_id, parent_profile_id, name, system_message, default_user_messag
 
 func (q *Queries) ListProfilesByUser(ctx context.Context, userID uuid.UUID) ([]Profile, error) {
 	rows, err := q.db.Query(ctx, listProfilesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Profile
+	for rows.Next() {
+		var i Profile
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ParentProfileID,
+			&i.Name,
+			&i.SystemMessage,
+			&i.DefaultUserMessage,
+			&i.CompressionGuide,
+			&i.CompressionMode,
+			&i.CompressionProviderID,
+			&i.CompressionModelID,
+			&i.DefaultSettings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TitleProviderID,
+			&i.TitleModelID,
+			&i.TitleGuide,
+			&i.Description,
+			&i.ParentOnly,
+			&i.Favorite,
+			&i.TitleProviderKind,
+			&i.WelcomeMessage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProfilesByUserPaged = `-- name: ListProfilesByUserPaged :many
+SELECT id, user_id, parent_profile_id, name, system_message, default_user_message, compression_guide, compression_mode, compression_provider_id, compression_model_id, default_settings, created_at, updated_at, title_provider_id, title_model_id, title_guide, description, parent_only, favorite, title_provider_kind, welcome_message FROM profiles
+WHERE user_id = $1
+  AND ($2::timestamptz IS NULL
+       OR (created_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY created_at, id
+LIMIT $4
+`
+
+type ListProfilesByUserPagedParams struct {
+	UserID    uuid.UUID
+	CursorKey *time.Time
+	CursorID  *uuid.UUID
+	PageLimit int32
+}
+
+// Keyset-paged variant: ascending (created_at, id), cursor resumes after
+// that tuple. Callers pass page_limit = limit+1 to detect a next page.
+// The unpaged query above stays for page_size=0 (legacy return-all).
+func (q *Queries) ListProfilesByUserPaged(ctx context.Context, arg ListProfilesByUserPagedParams) ([]Profile, error) {
+	rows, err := q.db.Query(ctx, listProfilesByUserPaged,
+		arg.UserID,
+		arg.CursorKey,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

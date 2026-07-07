@@ -22,6 +22,17 @@ SELECT * FROM profiles WHERE id = $1;
 -- name: ListProfilesByUser :many
 SELECT * FROM profiles WHERE user_id = $1 ORDER BY created_at;
 
+-- name: ListProfilesByUserPaged :many
+-- Keyset-paged variant: ascending (created_at, id), cursor resumes after
+-- that tuple. Callers pass page_limit = limit+1 to detect a next page.
+-- The unpaged query above stays for page_size=0 (legacy return-all).
+SELECT * FROM profiles
+WHERE user_id = $1
+  AND (sqlc.narg('cursor_key')::timestamptz IS NULL
+       OR (created_at, id) > (sqlc.narg('cursor_key')::timestamptz, sqlc.narg('cursor_id')::uuid))
+ORDER BY created_at, id
+LIMIT sqlc.arg('page_limit');
+
 -- name: DeleteProfile :exec
 DELETE FROM profiles WHERE id = $1;
 

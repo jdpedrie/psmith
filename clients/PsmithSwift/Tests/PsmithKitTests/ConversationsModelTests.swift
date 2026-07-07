@@ -260,6 +260,40 @@ struct ConversationsModelTests {
 
     // MARK: - Helpers
 
+    @Test("refresh + loadMore page the conversation list without dupes or gaps")
+    func pagingLoadMore() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-page")
+        for i in 0..<5 {
+            _ = try await client.conversations.create(profileID: profile.id, title: "conv-\(i)")
+        }
+
+        let model = ConversationsModel(client: client)
+        model.pageSize = 2
+
+        await model.refresh()
+        #expect(model.conversations.count == 2)
+        #expect(model.hasMore)
+
+        await model.loadMore()
+        #expect(model.conversations.count == 4)
+        #expect(model.hasMore)
+
+        await model.loadMore()
+        #expect(model.conversations.count == 5)
+        #expect(!model.hasMore)
+        #expect(Set(model.conversations.map(\.id)).count == 5)
+
+        // Fully loaded: further calls are no-ops, not errors.
+        await model.loadMore()
+        #expect(model.conversations.count == 5)
+        #expect(model.loadError == nil)
+
+        // refresh() resets to the first page.
+        await model.refresh()
+        #expect(model.conversations.count == 2)
+        #expect(model.hasMore)
+    }
+
     private func freshUserWithProfile(prefix: String) async throws -> (PsmithClient, PsmithProfile) {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: prefix)
         let profile = try await client.profiles.create(Fixtures.minimalProfilePatch())

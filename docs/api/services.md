@@ -31,7 +31,7 @@ Conversations:
 | RPC | Notes |
 |---|---|
 | `CreateConversation` | Profile id (+ optional title, settings). Returns the conversation, its initial context, and seed messages (system, optional default user). |
-| `ListConversations` | Paginated (`page_size`, `page_token`). Optional `order` (recently used / recently created), `title_query` substring, `profile_id` filter. |
+| `ListConversations` | Keyset-paginated (`page_size` capped at 100, opaque `page_token`, `next_page_token` on the response). Optional `order` (recently used / recently created), `title_query` substring, `profile_id` filter — filters and cursor compose. |
 | `GetConversation` | The conversation and its active context. |
 | `UpdateConversation` | Sparse: title, settings. |
 | `DeleteConversation` | Delete. |
@@ -108,7 +108,7 @@ Profiles:
 | RPC | Notes |
 |---|---|
 | `CreateProfile` | Optional `parent_profile_id` for inheritance; name, system message, default user message, compression and title config, `title_provider_kind` (sentinel for a client-side titler like `apple_foundation`), `welcome_message`, defaults. |
-| `ListProfiles` | The caller's profiles. |
+| `ListProfiles` | The caller's profiles. `page_size = 0` (the default) returns everything — clients that treat the list as a lookup table rely on that; `page_size > 0` opts into keyset paging (`page_token` / `next_page_token`, capped at 100 per page). |
 | `GetProfile` | One profile; with `resolve` it also returns the parent-chain-resolved view. |
 | `UpdateProfile` | Sparse with `clear_fields` (clearing reverts a field to inherited); `parent_profile_id` re-parents. |
 | `DeleteProfile` | Delete. |

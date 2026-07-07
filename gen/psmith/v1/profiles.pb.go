@@ -362,7 +362,13 @@ func (x *CreateProfileResponse) GetProfile() *Profile {
 }
 
 type ListProfilesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Page size. 0 preserves the legacy behavior of returning every
+	// profile in one response — existing clients that treat the list as
+	// a complete lookup table (parent-chain resolution, pickers) rely
+	// on that. Paging clients opt in with an explicit size.
+	PageSize      int32  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -397,9 +403,26 @@ func (*ListProfilesRequest) Descriptor() ([]byte, []int) {
 	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{2}
 }
 
+func (x *ListProfilesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListProfilesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListProfilesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Profiles      []*Profile             `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Profiles []*Profile             `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	// Set when another page exists; empty on the last page (and always
+	// empty for page_size = 0 requests).
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -439,6 +462,13 @@ func (x *ListProfilesResponse) GetProfiles() []*Profile {
 		return x.Profiles
 	}
 	return nil
+}
+
+func (x *ListProfilesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type GetProfileRequest struct {
@@ -2114,10 +2144,14 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x14_title_provider_kindB\x12\n" +
 	"\x10_welcome_message\"E\n" +
 	"\x15CreateProfileResponse\x12,\n" +
-	"\aprofile\x18\x01 \x01(\v2\x12.psmith.v1.ProfileR\aprofile\"\x15\n" +
-	"\x13ListProfilesRequest\"F\n" +
+	"\aprofile\x18\x01 \x01(\v2\x12.psmith.v1.ProfileR\aprofile\"Q\n" +
+	"\x13ListProfilesRequest\x12\x1b\n" +
+	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"n\n" +
 	"\x14ListProfilesResponse\x12.\n" +
-	"\bprofiles\x18\x01 \x03(\v2\x12.psmith.v1.ProfileR\bprofiles\"=\n" +
+	"\bprofiles\x18\x01 \x03(\v2\x12.psmith.v1.ProfileR\bprofiles\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"=\n" +
 	"\x11GetProfileRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aresolve\x18\x02 \x01(\bR\aresolve\"\x84\x01\n" +

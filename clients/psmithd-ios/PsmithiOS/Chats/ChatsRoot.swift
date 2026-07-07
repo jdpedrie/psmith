@@ -244,6 +244,7 @@ struct ChatsRoot: View {
             ForEach(convos.conversations) { c in
                 conversationRowLink(c, hideProfile: false)
             }
+            LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
         }
     }
 
@@ -264,6 +265,11 @@ struct ChatsRoot: View {
             } header: {
                 Text(profile.name)
             }
+        }
+        // Paging pages the flat conversation list; groups above grow as
+        // pages land, so the trigger lives once at the end of the list.
+        Section {
+            LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
         }
     }
 
