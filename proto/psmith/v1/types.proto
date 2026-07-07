@@ -471,6 +471,9 @@ message Conversation {
   // list and read-only (every mutating RPC refuses it) until
   // unarchived.
   optional google.protobuf.Timestamp archived_at = 11;
+  // Set while pinned: rendered above the paged list, newest pin first.
+  // Mutually exclusive with archived_at (archiving clears the pin).
+  optional google.protobuf.Timestamp pinned_at = 12;
 }
 
 // One (tag-name, renderer-component) pair surfaced by a plugin in

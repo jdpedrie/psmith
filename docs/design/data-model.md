@@ -4,7 +4,7 @@ The chat data model is three nested objects and a tree. A conversation holds con
 
 ## Conversation, context, message
 
-A **conversation** is the top-level thing a user names and returns to. It owns a profile reference (the persona and pipeline it runs under), a title, and ordering metadata. It does not hold messages directly. A conversation can be archived (`archived_at`): it leaves the default listing and becomes read-only — every mutating RPC refuses it until unarchived, while reads and deletion stay open. Archive is a shelf, not a lock.
+A **conversation** is the top-level thing a user names and returns to. It owns a profile reference (the persona and pipeline it runs under), a title, and ordering metadata. It does not hold messages directly. A conversation can be archived (`archived_at`): it leaves the default listing and becomes read-only — every mutating RPC refuses it until unarchived, while reads and deletion stay open. Archive is a shelf, not a lock. A conversation can also be pinned (`pinned_at`): pinned rows render above the paged listing, newest pin first, and pin/archive are mutually exclusive — archiving clears the pin.
 
 A **context** is a window of activity inside a conversation. A conversation always has exactly one active context, the one with the newest activation time, and messages are added to it. Contexts exist so the conversation can be compacted without destroying history: compression retires the current context and opens a fresh one seeded with a summary, and the old context stays on disk, fully readable. A conversation is therefore a stack of contexts over time, only the newest of which is live.
 

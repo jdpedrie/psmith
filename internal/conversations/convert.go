@@ -133,6 +133,7 @@ func conversationToProtoWithActivity(c store.Conversation, activeContextID strin
 		OwnerUserId:     c.UserID.String(),
 		CreatedAt:       timestamppb.New(c.CreatedAt),
 		ArchivedAt:      tsOrNil(c.ArchivedAt),
+		PinnedAt:        tsOrNil(c.PinnedAt),
 		UpdatedAt:       timestamppb.New(c.UpdatedAt),
 		LastActivityAt:  timestamppb.New(lastActivityAt),
 	}, nil

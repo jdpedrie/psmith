@@ -329,6 +329,28 @@ struct ConversationsModelTests {
         #expect(archivedAfter.items.isEmpty)
     }
 
+    @Test("togglePin hoists a conversation to the top and back")
+    func pinFlow() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-pin")
+        let older = try await client.conversations.create(profileID: profile.id, title: "older")
+        try await Task.sleep(for: .milliseconds(30))
+        _ = try await client.conversations.create(profileID: profile.id, title: "newer")
+
+        let model = ConversationsModel(client: client)
+        await model.refresh()
+        #expect(model.conversations.first?.title == "newer")
+
+        await model.togglePin(older.id)
+        #expect(model.conversations.first?.id == older.id)
+        #expect(model.conversations.first?.pinnedAt != nil)
+        #expect(model.conversations.count == 2)
+
+        await model.togglePin(older.id)
+        #expect(model.conversations.first?.title == "newer")
+        #expect(model.conversations.allSatisfy { $0.pinnedAt == nil })
+        #expect(model.loadError == nil)
+    }
+
     private func freshUserWithProfile(prefix: String) async throws -> (PsmithClient, PsmithProfile) {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: prefix)
         let profile = try await client.profiles.create(Fixtures.minimalProfilePatch())

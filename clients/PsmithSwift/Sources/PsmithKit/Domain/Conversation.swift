@@ -26,6 +26,9 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
     /// Set while the conversation is archived: hidden from the default
     /// list and read-only on the server until unarchived.
     public let archivedAt: Date?
+    /// Set while pinned: served ahead of the paged list, newest pin
+    /// first. Mutually exclusive with archivedAt.
+    public let pinnedAt: Date?
 
     public init(
         id: String,
@@ -38,7 +41,8 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         lastActivityAt: Date? = nil,
         settings: PsmithConversationSettings? = nil,
         streamingComponents: [PsmithStreamingComponentTag] = [],
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        pinnedAt: Date? = nil
     ) {
         self.id = id
         self.profileID = profileID
@@ -51,6 +55,7 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         self.settings = settings
         self.streamingComponents = streamingComponents
         self.archivedAt = archivedAt
+        self.pinnedAt = pinnedAt
     }
 }
 
@@ -84,7 +89,8 @@ extension PsmithConversation {
             lastActivityAt: p.hasLastActivityAt ? p.lastActivityAt.date : nil,
             settings: p.hasSettings ? PsmithConversationSettings(from: p.settings) : nil,
             streamingComponents: p.streamingComponents.map(PsmithStreamingComponentTag.init(from:)),
-            archivedAt: p.hasArchivedAt ? p.archivedAt.date : nil
+            archivedAt: p.hasArchivedAt ? p.archivedAt.date : nil,
+            pinnedAt: p.hasPinnedAt ? p.pinnedAt.date : nil
         )
     }
 }

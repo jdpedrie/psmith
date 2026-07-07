@@ -172,3 +172,96 @@ func titlesOf(cs []*psmithv1.Conversation) []string {
 	}
 	return out
 }
+
+// --- Pin / Unpin ---
+
+func TestService_PinConversation_HoistsAndPages(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
+	// Seeded oldest→newest, so "a" is the OLDEST by recency.
+	seedConversations(t, svc, ctxAs(alice), prof.ID.String(), []string{"a", "b", "c", "d", "e"})
+
+	byTitle := func(title string) string {
+		resp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&psmithv1.ListConversationsRequest{}))
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, c := range resp.Msg.Conversations {
+			if c.GetTitle() == title {
+				return c.Id
+			}
+		}
+		t.Fatalf("conversation %q not found", title)
+		return ""
+	}
+
+	aID := byTitle("a")
+	if _, err := svc.PinConversation(ctxAs(alice), connect.NewRequest(&psmithv1.PinConversationRequest{Id: aID})); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+
+	// Full list: the oldest conversation now leads, stamped.
+	resp, err := svc.ListConversations(ctxAs(alice), connect.NewRequest(&psmithv1.ListConversationsRequest{}))
+	if err != nil {
+		t.Fatalf("list after pin: %v", err)
+	}
+	if got := resp.Msg.Conversations[0]; got.Id != aID || got.PinnedAt == nil {
+		t.Fatalf("pinned conversation should lead the list with pinned_at set, got %q %v", got.GetTitle(), got.PinnedAt)
+	}
+	if len(resp.Msg.Conversations) != 5 {
+		t.Fatalf("pin must not drop rows: %v", titlesOf(resp.Msg.Conversations))
+	}
+
+	// Paging: page one = pinned block + first unpinned page; later pages
+	// never repeat the pinned row.
+	pages := walkPages(t, svc, ctxAs(alice), &psmithv1.ListConversationsRequest{PageSize: 2})
+	if len(pages[0]) != 3 { // 1 pinned + 2 unpinned
+		t.Errorf("first page should carry the pinned block ahead of the page, got %v", pageLens(pages))
+	}
+	if len(flatten(pages)) != 5 {
+		t.Errorf("pin+paging lost or duplicated rows: %v", pageLens(pages))
+	}
+	if pages[0][0] != aID {
+		t.Errorf("pinned row should lead page one")
+	}
+
+	// Unpin restores regular ordering ("a" back to last by recency).
+	if _, err := svc.UnpinConversation(ctxAs(alice), connect.NewRequest(&psmithv1.UnpinConversationRequest{Id: aID})); err != nil {
+		t.Fatalf("unpin: %v", err)
+	}
+	resp, _ = svc.ListConversations(ctxAs(alice), connect.NewRequest(&psmithv1.ListConversationsRequest{}))
+	if got := resp.Msg.Conversations[len(resp.Msg.Conversations)-1]; got.Id != aID {
+		t.Errorf("unpinned oldest conversation should return to the tail, got %q", got.GetTitle())
+	}
+}
+
+func TestService_PinArchiveExclusivity(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	alice := mustCreateUser(t, q, "alice")
+	prof := makeProfile(t, q, alice.ID, nil, nil, nil)
+	seedConversations(t, svc, ctxAs(alice), prof.ID.String(), []string{"x"})
+
+	resp, _ := svc.ListConversations(ctxAs(alice), connect.NewRequest(&psmithv1.ListConversationsRequest{}))
+	id := resp.Msg.Conversations[0].Id
+
+	// Pin, then archive: the archive clears the pin.
+	if _, err := svc.PinConversation(ctxAs(alice), connect.NewRequest(&psmithv1.PinConversationRequest{Id: id})); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+	if _, err := svc.ArchiveConversation(ctxAs(alice), connect.NewRequest(&psmithv1.ArchiveConversationRequest{Id: id})); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	arch, _ := svc.ListConversations(ctxAs(alice), connect.NewRequest(&psmithv1.ListConversationsRequest{Archived: true}))
+	if len(arch.Msg.Conversations) != 1 || arch.Msg.Conversations[0].PinnedAt != nil {
+		t.Errorf("archive should clear the pin, got %+v", arch.Msg.Conversations)
+	}
+
+	// Pinning an archived conversation is a mutation: refused.
+	_, err := svc.PinConversation(ctxAs(alice), connect.NewRequest(&psmithv1.PinConversationRequest{Id: id}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("pin on archived: want FailedPrecondition, got %v", err)
+	}
+}

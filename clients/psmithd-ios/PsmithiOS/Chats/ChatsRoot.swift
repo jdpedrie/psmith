@@ -334,6 +334,15 @@ struct ChatsRoot: View {
                 isUnseen: app.streamHub.unseenConversationIDs.contains(c.id)
             )
         }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                Task { await convos.togglePin(c.id) }
+            } label: {
+                Label(c.pinnedAt == nil ? "Pin" : "Unpin",
+                      systemImage: c.pinnedAt == nil ? "pin" : "pin.slash")
+            }
+            .tint(.yellow)
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
                 deleteCandidate = c
@@ -355,6 +364,12 @@ struct ChatsRoot: View {
             .tint(.blue)
         }
         .contextMenu {
+            Button {
+                Task { await convos.togglePin(c.id) }
+            } label: {
+                Label(c.pinnedAt == nil ? "Pin" : "Unpin",
+                      systemImage: c.pinnedAt == nil ? "pin" : "pin.slash")
+            }
             Button {
                 renameDraft = c.title ?? ""
                 renameCandidate = c

@@ -207,6 +207,24 @@ public final class ConversationsModel {
         }
     }
 
+    /// Pins or unpins, then refreshes: the pinned block's position is
+    /// server-defined ordering (ahead of page one, newest pin first),
+    /// so re-fetching page one is both simpler and more honest than
+    /// re-sorting locally.
+    public func togglePin(_ id: String) async {
+        guard let conv = conversations.first(where: { $0.id == id }) else { return }
+        do {
+            if conv.pinnedAt == nil {
+                try await client.conversations.pin(id: id)
+            } else {
+                try await client.conversations.unpin(id: id)
+            }
+            await refresh()
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
     public func delete(_ id: String) async {
         do {
             try await client.conversations.delete(id: id)

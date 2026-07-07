@@ -54,6 +54,12 @@ const (
 	// ConversationsServiceUnarchiveConversationProcedure is the fully-qualified name of the
 	// ConversationsService's UnarchiveConversation RPC.
 	ConversationsServiceUnarchiveConversationProcedure = "/psmith.v1.ConversationsService/UnarchiveConversation"
+	// ConversationsServicePinConversationProcedure is the fully-qualified name of the
+	// ConversationsService's PinConversation RPC.
+	ConversationsServicePinConversationProcedure = "/psmith.v1.ConversationsService/PinConversation"
+	// ConversationsServiceUnpinConversationProcedure is the fully-qualified name of the
+	// ConversationsService's UnpinConversation RPC.
+	ConversationsServiceUnpinConversationProcedure = "/psmith.v1.ConversationsService/UnpinConversation"
 	// ConversationsServiceListContextsProcedure is the fully-qualified name of the
 	// ConversationsService's ListContexts RPC.
 	ConversationsServiceListContextsProcedure = "/psmith.v1.ConversationsService/ListContexts"
@@ -117,6 +123,11 @@ type ConversationsServiceClient interface {
 	// stays allowed.
 	ArchiveConversation(context.Context, *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error)
 	UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error)
+	// Pin renders the conversation above the paged list (newest pin
+	// first). Pinning an archived conversation is refused; archiving a
+	// pinned conversation clears the pin.
+	PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error)
+	UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
 	// Make the given context the active one (sets activation_time = now).
@@ -242,6 +253,18 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("UnarchiveConversation")),
 			connect.WithClientOptions(opts...),
 		),
+		pinConversation: connect.NewClient[v1.PinConversationRequest, v1.PinConversationResponse](
+			httpClient,
+			baseURL+ConversationsServicePinConversationProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("PinConversation")),
+			connect.WithClientOptions(opts...),
+		),
+		unpinConversation: connect.NewClient[v1.UnpinConversationRequest, v1.UnpinConversationResponse](
+			httpClient,
+			baseURL+ConversationsServiceUnpinConversationProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("UnpinConversation")),
+			connect.WithClientOptions(opts...),
+		),
 		listContexts: connect.NewClient[v1.ListContextsRequest, v1.ListContextsResponse](
 			httpClient,
 			baseURL+ConversationsServiceListContextsProcedure,
@@ -350,6 +373,8 @@ type conversationsServiceClient struct {
 	deleteConversation            *connect.Client[v1.DeleteConversationRequest, v1.DeleteConversationResponse]
 	archiveConversation           *connect.Client[v1.ArchiveConversationRequest, v1.ArchiveConversationResponse]
 	unarchiveConversation         *connect.Client[v1.UnarchiveConversationRequest, v1.UnarchiveConversationResponse]
+	pinConversation               *connect.Client[v1.PinConversationRequest, v1.PinConversationResponse]
+	unpinConversation             *connect.Client[v1.UnpinConversationRequest, v1.UnpinConversationResponse]
 	listContexts                  *connect.Client[v1.ListContextsRequest, v1.ListContextsResponse]
 	activateContext               *connect.Client[v1.ActivateContextRequest, v1.ActivateContextResponse]
 	setCurrentLeaf                *connect.Client[v1.SetCurrentLeafRequest, v1.SetCurrentLeafResponse]
@@ -401,6 +426,16 @@ func (c *conversationsServiceClient) ArchiveConversation(ctx context.Context, re
 // UnarchiveConversation calls psmith.v1.ConversationsService.UnarchiveConversation.
 func (c *conversationsServiceClient) UnarchiveConversation(ctx context.Context, req *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error) {
 	return c.unarchiveConversation.CallUnary(ctx, req)
+}
+
+// PinConversation calls psmith.v1.ConversationsService.PinConversation.
+func (c *conversationsServiceClient) PinConversation(ctx context.Context, req *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error) {
+	return c.pinConversation.CallUnary(ctx, req)
+}
+
+// UnpinConversation calls psmith.v1.ConversationsService.UnpinConversation.
+func (c *conversationsServiceClient) UnpinConversation(ctx context.Context, req *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error) {
+	return c.unpinConversation.CallUnary(ctx, req)
 }
 
 // ListContexts calls psmith.v1.ConversationsService.ListContexts.
@@ -496,6 +531,11 @@ type ConversationsServiceHandler interface {
 	// stays allowed.
 	ArchiveConversation(context.Context, *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error)
 	UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error)
+	// Pin renders the conversation above the paged list (newest pin
+	// first). Pinning an archived conversation is refused; archiving a
+	// pinned conversation clears the pin.
+	PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error)
+	UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
 	// Make the given context the active one (sets activation_time = now).
@@ -617,6 +657,18 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("UnarchiveConversation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServicePinConversationHandler := connect.NewUnaryHandler(
+		ConversationsServicePinConversationProcedure,
+		svc.PinConversation,
+		connect.WithSchema(conversationsServiceMethods.ByName("PinConversation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceUnpinConversationHandler := connect.NewUnaryHandler(
+		ConversationsServiceUnpinConversationProcedure,
+		svc.UnpinConversation,
+		connect.WithSchema(conversationsServiceMethods.ByName("UnpinConversation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceListContextsHandler := connect.NewUnaryHandler(
 		ConversationsServiceListContextsProcedure,
 		svc.ListContexts,
@@ -729,6 +781,10 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceArchiveConversationHandler.ServeHTTP(w, r)
 		case ConversationsServiceUnarchiveConversationProcedure:
 			conversationsServiceUnarchiveConversationHandler.ServeHTTP(w, r)
+		case ConversationsServicePinConversationProcedure:
+			conversationsServicePinConversationHandler.ServeHTTP(w, r)
+		case ConversationsServiceUnpinConversationProcedure:
+			conversationsServiceUnpinConversationHandler.ServeHTTP(w, r)
 		case ConversationsServiceListContextsProcedure:
 			conversationsServiceListContextsHandler.ServeHTTP(w, r)
 		case ConversationsServiceActivateContextProcedure:
@@ -796,6 +852,14 @@ func (UnimplementedConversationsServiceHandler) ArchiveConversation(context.Cont
 
 func (UnimplementedConversationsServiceHandler) UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.UnarchiveConversation is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.PinConversation is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.UnpinConversation is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error) {

@@ -403,6 +403,34 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 		LastActivityAt time.Time
 	}
 	var rows []row
+
+	// The pinned block rides ahead of page one, wholesale (pins are few);
+	// the keyset stream below pages the unpinned rows only, so cursors
+	// never cross a pinned row and later pages can't duplicate one. Every
+	// pinned row is active by invariant, so the archived listing has none.
+	var pinned []row
+	if cursorKey == nil && !req.Msg.GetArchived() {
+		praw, err := s.queries.ListPinnedConversationsByUser(ctx, store.ListPinnedConversationsByUserParams{
+			UserID:     caller.ID,
+			TitleQuery: titleQuery,
+			ProfileID:  profileFilter,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		pinned = make([]row, len(praw))
+		for i, r := range praw {
+			pinned[i] = row{
+				Conversation: store.Conversation{
+					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
+					Title: r.Title, Settings: r.Settings,
+					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					ArchivedAt: r.ArchivedAt, PinnedAt: r.PinnedAt,
+				},
+				LastActivityAt: r.LastActivityAt,
+			}
+		}
+	}
 	// sortKey selects the keyset column matching the query's ORDER BY —
 	// the cursor must be built from the same key the ordering uses.
 	sortKey := func(r row) time.Time { return r.LastActivityAt }
@@ -428,7 +456,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
 					Title: r.Title, Settings: r.Settings,
 					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					ArchivedAt: r.ArchivedAt,
+					ArchivedAt: r.ArchivedAt, PinnedAt: r.PinnedAt,
 				},
 				LastActivityAt: r.LastActivityAt,
 			}
@@ -453,7 +481,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
 					Title: r.Title, Settings: r.Settings,
 					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					ArchivedAt: r.ArchivedAt,
+					ArchivedAt: r.ArchivedAt, PinnedAt: r.PinnedAt,
 				},
 				LastActivityAt: r.LastActivityAt,
 			}
@@ -466,6 +494,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 		last := rows[len(rows)-1]
 		nextPageToken = pagetoken.Encode(sortKey(last), last.Conversation.ID)
 	}
+	rows = append(pinned, rows...)
 
 	out := make([]*psmithv1.Conversation, 0, len(rows))
 	for _, r := range rows {
@@ -1140,6 +1169,45 @@ func (s *Service) UnarchiveConversation(ctx context.Context, req *connect.Reques
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&psmithv1.UnarchiveConversationResponse{}), nil
+}
+
+// PinConversation surfaces the conversation above the paged list.
+// Refused on archived conversations (a pin is a mutation, and pinned is
+// an active-list concept — archive clears any existing pin).
+func (s *Service) PinConversation(ctx context.Context, req *connect.Request[psmithv1.PinConversationRequest]) (*connect.Response[psmithv1.PinConversationResponse], error) {
+	if err := s.setPinned(ctx, req.Msg.Id, true); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&psmithv1.PinConversationResponse{}), nil
+}
+
+// UnpinConversation returns the conversation to the regular ordering.
+func (s *Service) UnpinConversation(ctx context.Context, req *connect.Request[psmithv1.UnpinConversationRequest]) (*connect.Response[psmithv1.UnpinConversationResponse], error) {
+	if err := s.setPinned(ctx, req.Msg.Id, false); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&psmithv1.UnpinConversationResponse{}), nil
+}
+
+func (s *Service) setPinned(ctx context.Context, rawID string, pinned bool) error {
+	caller := auth.MustFromContext(ctx)
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
+	}
+	conv, err := s.fetchOwnedConversation(ctx, id, caller.ID)
+	if err != nil {
+		return err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
+		return err
+	}
+	if err := s.queries.SetConversationPinned(ctx, store.SetConversationPinnedParams{
+		ID: id, Pinned: pinned,
+	}); err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	return nil
 }
 
 // fetchOwnedContext loads a context and the conversation it belongs to,

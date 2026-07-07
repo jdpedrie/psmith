@@ -20,6 +20,12 @@ service ConversationsService {
   rpc ArchiveConversation(ArchiveConversationRequest) returns (ArchiveConversationResponse);
   rpc UnarchiveConversation(UnarchiveConversationRequest) returns (UnarchiveConversationResponse);
 
+  // Pin renders the conversation above the paged list (newest pin
+  // first). Pinning an archived conversation is refused; archiving a
+  // pinned conversation clears the pin.
+  rpc PinConversation(PinConversationRequest) returns (PinConversationResponse);
+  rpc UnpinConversation(UnpinConversationRequest) returns (UnpinConversationResponse);
+
   // Contexts.
   rpc ListContexts(ListContextsRequest) returns (ListContextsResponse);
   // Make the given context the active one (sets activation_time = now).
@@ -175,6 +181,15 @@ message UnarchiveConversationRequest {
   string id = 1;
 }
 message UnarchiveConversationResponse {}
+
+message PinConversationRequest {
+  string id = 1;
+}
+message PinConversationResponse {}
+message UnpinConversationRequest {
+  string id = 1;
+}
+message UnpinConversationResponse {}
 
 // --- Contexts ---
 

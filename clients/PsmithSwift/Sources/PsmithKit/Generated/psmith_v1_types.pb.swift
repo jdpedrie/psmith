@@ -2135,6 +2135,17 @@ public nonisolated struct Psmith_V1_Conversation: @unchecked Sendable {
   /// Clears the value of `archivedAt`. Subsequent reads from it will return its default value.
   public mutating func clearArchivedAt() {_uniqueStorage()._archivedAt = nil}
 
+  /// Set while pinned: rendered above the paged list, newest pin first.
+  /// Mutually exclusive with archived_at (archiving clears the pin).
+  public var pinnedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_storage._pinnedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._pinnedAt = newValue}
+  }
+  /// Returns true if `pinnedAt` has been explicitly set.
+  public var hasPinnedAt: Bool {_storage._pinnedAt != nil}
+  /// Clears the value of `pinnedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearPinnedAt() {_uniqueStorage()._pinnedAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -4588,7 +4599,7 @@ nonisolated extension Psmith_V1_ConversationSettings: SwiftProtobuf.Message, Swi
 
 nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0\u{3}archived_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0\u{3}archived_at\0\u{3}pinned_at\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4602,6 +4613,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
     var _lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _streamingComponents: [Psmith_V1_StreamingComponentTag] = []
     var _archivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _pinnedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4623,6 +4635,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
       _lastActivityAt = source._lastActivityAt
       _streamingComponents = source._streamingComponents
       _archivedAt = source._archivedAt
+      _pinnedAt = source._pinnedAt
     }
   }
 
@@ -4652,6 +4665,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
         case 9: try { try decoder.decodeSingularMessageField(value: &_storage._lastActivityAt) }()
         case 10: try { try decoder.decodeRepeatedMessageField(value: &_storage._streamingComponents) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._archivedAt) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._pinnedAt) }()
         default: break
         }
       }
@@ -4697,6 +4711,9 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
       try { if let v = _storage._archivedAt {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
       } }()
+      try { if let v = _storage._pinnedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4717,6 +4734,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
         if _storage._lastActivityAt != rhs_storage._lastActivityAt {return false}
         if _storage._streamingComponents != rhs_storage._streamingComponents {return false}
         if _storage._archivedAt != rhs_storage._archivedAt {return false}
+        if _storage._pinnedAt != rhs_storage._pinnedAt {return false}
         return true
       }
       if !storagesAreEqual {return false}

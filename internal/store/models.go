@@ -31,6 +31,7 @@ type Conversation struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	ArchivedAt *time.Time
+	PinnedAt   *time.Time
 }
 
 type ConversationPlugin struct {

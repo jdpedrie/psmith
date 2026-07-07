@@ -18,7 +18,7 @@ INSERT INTO conversations (
 ) VALUES (
     $1, $2, $3, $4, $5
 )
-RETURNING id, user_id, profile_id, title, settings, created_at, updated_at, archived_at
+RETURNING id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, pinned_at
 `
 
 type CreateConversationParams struct {
@@ -47,6 +47,7 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.PinnedAt,
 	)
 	return i, err
 }
@@ -61,7 +62,7 @@ func (q *Queries) DeleteConversation(ctx context.Context, id uuid.UUID) error {
 }
 
 const getConversationByID = `-- name: GetConversationByID :one
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at FROM conversations WHERE id = $1
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, pinned_at FROM conversations WHERE id = $1
 `
 
 func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error) {
@@ -76,12 +77,13 @@ func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conver
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.PinnedAt,
 	)
 	return i, err
 }
 
 const listConversationsByUser = `-- name: ListConversationsByUser :many
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at FROM conversations
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, pinned_at FROM conversations
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -104,6 +106,7 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, userID uuid.UUID)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ArchivedAt,
+			&i.PinnedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -117,7 +120,7 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, userID uuid.UUID)
 
 const listConversationsByUserRecentlyCreated = `-- name: ListConversationsByUserRecentlyCreated :many
 SELECT
-    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at,
+    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at, c.pinned_at,
     COALESCE(
         (SELECT MAX(m.created_at) FROM messages m
          JOIN contexts ctx ON ctx.id = m.context_id
@@ -127,6 +130,7 @@ SELECT
 FROM conversations c
 WHERE c.user_id = $1
   AND (c.archived_at IS NOT NULL) = $2::bool
+  AND c.pinned_at IS NULL
   AND ($3::text IS NULL
        OR (c.title IS NOT NULL
            AND c.title ILIKE '%' || $3::text || '%'))
@@ -157,6 +161,7 @@ type ListConversationsByUserRecentlyCreatedRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ArchivedAt     *time.Time
+	PinnedAt       *time.Time
 	LastActivityAt time.Time
 }
 
@@ -192,6 +197,7 @@ func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, ar
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ArchivedAt,
+			&i.PinnedAt,
 			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
@@ -207,7 +213,7 @@ func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, ar
 const listConversationsByUserRecentlyUsed = `-- name: ListConversationsByUserRecentlyUsed :many
 WITH convs AS (
     SELECT
-        c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at,
+        c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at, c.pinned_at,
         COALESCE(
             (SELECT MAX(m.created_at) FROM messages m
              JOIN contexts ctx ON ctx.id = m.context_id
@@ -217,13 +223,14 @@ WITH convs AS (
     FROM conversations c
     WHERE c.user_id = $1
       AND (c.archived_at IS NOT NULL) = $5::bool
+      AND c.pinned_at IS NULL
       AND ($6::text IS NULL
            OR (c.title IS NOT NULL
                AND c.title ILIKE '%' || $6::text || '%'))
       AND ($7::uuid IS NULL
            OR c.profile_id = $7::uuid)
 )
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, last_activity_at FROM convs
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, pinned_at, last_activity_at FROM convs
 WHERE ($2::timestamptz IS NULL
        OR (last_activity_at, id) < ($2::timestamptz, $3::uuid))
 ORDER BY last_activity_at DESC, id DESC
@@ -249,6 +256,7 @@ type ListConversationsByUserRecentlyUsedRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ArchivedAt     *time.Time
+	PinnedAt       *time.Time
 	LastActivityAt time.Time
 }
 
@@ -288,6 +296,83 @@ func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ArchivedAt,
+			&i.PinnedAt,
+			&i.LastActivityAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPinnedConversationsByUser = `-- name: ListPinnedConversationsByUser :many
+SELECT
+    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at, c.pinned_at,
+    COALESCE(
+        (SELECT MAX(m.created_at) FROM messages m
+         JOIN contexts ctx ON ctx.id = m.context_id
+         WHERE ctx.conversation_id = c.id),
+        c.created_at
+    ) AS last_activity_at
+FROM conversations c
+WHERE c.user_id = $1
+  AND c.pinned_at IS NOT NULL
+  AND c.archived_at IS NULL
+  AND ($2::text IS NULL
+       OR (c.title IS NOT NULL
+           AND c.title ILIKE '%' || $2::text || '%'))
+  AND ($3::uuid IS NULL
+       OR c.profile_id = $3::uuid)
+ORDER BY c.pinned_at DESC, c.id DESC
+LIMIT 100
+`
+
+type ListPinnedConversationsByUserParams struct {
+	UserID     uuid.UUID
+	TitleQuery *string
+	ProfileID  *uuid.UUID
+}
+
+type ListPinnedConversationsByUserRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	ProfileID      uuid.UUID
+	Title          *string
+	Settings       []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	ArchivedAt     *time.Time
+	PinnedAt       *time.Time
+	LastActivityAt time.Time
+}
+
+// The pinned block served ahead of page one. Same filters as the paged
+// queries; never paged itself (pins are few; LIMIT 100 is a guardrail,
+// matching MaxListPageSize). Every pinned row is active by invariant,
+// but the archived filter keeps the archived listing honest anyway.
+func (q *Queries) ListPinnedConversationsByUser(ctx context.Context, arg ListPinnedConversationsByUserParams) ([]ListPinnedConversationsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listPinnedConversationsByUser, arg.UserID, arg.TitleQuery, arg.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPinnedConversationsByUserRow
+	for rows.Next() {
+		var i ListPinnedConversationsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProfileID,
+			&i.Title,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+			&i.PinnedAt,
 			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
@@ -303,6 +388,7 @@ func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg L
 const setConversationArchived = `-- name: SetConversationArchived :exec
 UPDATE conversations
 SET archived_at = CASE WHEN $2::bool THEN NOW() ELSE NULL END,
+    pinned_at   = CASE WHEN $2::bool THEN NULL ELSE pinned_at END,
     updated_at = NOW()
 WHERE id = $1
 `
@@ -313,8 +399,28 @@ type SetConversationArchivedParams struct {
 }
 
 // Archive (TRUE → archived_at = now()) or unarchive (FALSE → NULL).
+// Archiving also clears the pin: pinned is an active-list concept, and
+// keeping them exclusive means every pinned row is an active row (the
+// list queries rely on that invariant).
 func (q *Queries) SetConversationArchived(ctx context.Context, arg SetConversationArchivedParams) error {
 	_, err := q.db.Exec(ctx, setConversationArchived, arg.ID, arg.Archived)
+	return err
+}
+
+const setConversationPinned = `-- name: SetConversationPinned :exec
+UPDATE conversations
+SET pinned_at = CASE WHEN $2::bool THEN NOW() ELSE NULL END,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type SetConversationPinnedParams struct {
+	ID     uuid.UUID
+	Pinned bool
+}
+
+func (q *Queries) SetConversationPinned(ctx context.Context, arg SetConversationPinnedParams) error {
+	_, err := q.db.Exec(ctx, setConversationPinned, arg.ID, arg.Pinned)
 	return err
 }
 

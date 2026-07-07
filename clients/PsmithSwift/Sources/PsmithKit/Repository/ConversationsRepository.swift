@@ -108,6 +108,22 @@ public final class ConversationsRepository: Sendable {
         if let err = resp.error { throw PsmithError.from(err) }
     }
 
+    /// Pins the conversation above the paged list. Refused on archived
+    /// conversations.
+    public func pin(id: String) async throws {
+        var req = Psmith_V1_PinConversationRequest()
+        req.id = id
+        let resp = await client.pinConversation(request: req, headers: [:])
+        if let err = resp.error { throw PsmithError.from(err) }
+    }
+
+    public func unpin(id: String) async throws {
+        var req = Psmith_V1_UnpinConversationRequest()
+        req.id = id
+        let resp = await client.unpinConversation(request: req, headers: [:])
+        if let err = resp.error { throw PsmithError.from(err) }
+    }
+
     public func unarchive(id: String) async throws {
         var req = Psmith_V1_UnarchiveConversationRequest()
         req.id = id

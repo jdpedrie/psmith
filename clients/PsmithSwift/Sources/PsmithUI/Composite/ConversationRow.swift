@@ -41,6 +41,12 @@ public struct ConversationRow: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
+                if conversation.pinnedAt != nil {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Pinned")
+                }
                 Text(displayTitle)
                     .lineLimit(1)
                 if isGenerating {

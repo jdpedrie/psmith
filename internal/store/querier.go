@@ -246,6 +246,11 @@ type Querier interface {
 	// re-embedding under the new model. Like ListUnembeddedMessages but
 	// the predicate is "wrong model" rather than "no embedding."
 	ListMessagesEmbeddedUnderDifferentModel(ctx context.Context, arg ListMessagesEmbeddedUnderDifferentModelParams) ([]ListMessagesEmbeddedUnderDifferentModelRow, error)
+	// The pinned block served ahead of page one. Same filters as the paged
+	// queries; never paged itself (pins are few; LIMIT 100 is a guardrail,
+	// matching MaxListPageSize). Every pinned row is active by invariant,
+	// but the archived filter keeps the archived listing honest anyway.
+	ListPinnedConversationsByUser(ctx context.Context, arg ListPinnedConversationsByUserParams) ([]ListPinnedConversationsByUserRow, error)
 	// Returns the ordered plugin pipeline for one profile (no inheritance walk;
 	// callers do the walk in code so they can short-circuit on a profile that
 	// defines its own pipeline).
@@ -349,7 +354,11 @@ type Querier interface {
 	// need partitioning, but that's a future-us problem.
 	SearchMessagesByEmbedding(ctx context.Context, arg SearchMessagesByEmbeddingParams) ([]SearchMessagesByEmbeddingRow, error)
 	// Archive (TRUE → archived_at = now()) or unarchive (FALSE → NULL).
+	// Archiving also clears the pin: pinned is an active-list concept, and
+	// keeping them exclusive means every pinned row is an active row (the
+	// list queries rely on that invariant).
 	SetConversationArchived(ctx context.Context, arg SetConversationArchivedParams) error
+	SetConversationPinned(ctx context.Context, arg SetConversationPinnedParams) error
 	// Worker writes the embedding triple. Idempotent: the CHECK constraint
 	// enforces all-three-or-none on every row already, so calling with the
 	// same triple over and over is fine.
