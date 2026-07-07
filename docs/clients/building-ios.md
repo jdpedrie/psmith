@@ -58,6 +58,7 @@ Plain `xcodebuild` targets the simulator. For a device, drive it through Xcode s
 ## Troubleshooting
 
 - **Build looks stale or links a broken binary after changing a public `PsmithKit` type.** The incremental Swift cache can produce a bad binary across ABI changes. Wipe it: `rm -rf clients/psmithd-ios/.build` (and `clients/PsmithSwift/.build` if the package itself changed), then rebuild.
+- **`unable to read input file '…/Provisioning Profiles/<uuid>.mobileprovision'` on a device build.** A Personal-Team profile rotated (7-day expiry, or the bundle id changed) and Xcode minted a replacement, but the incremental build manifest in DerivedData still references the deleted file by path and fails before re-planning. Wipe the app's DerivedData (`rm -rf ~/Library/Developer/Xcode/DerivedData/PsmithiOS-*`) and build again; automatic signing picks up the fresh profile.
 - **`xcodegen: command not found`.** `brew install xcodegen`.
 - **Accessibility/automation commands hit the wrong simulator.** When you have more than one simulator, the build destination and any UI-automation tooling must agree on the device. Boot the one you intend (`xcrun simctl list devices booted`) and pass the matching `IOS_SIMULATOR`.
 - **Provider logos missing in the UI.** `make logos-png` (it normally runs as part of `ios-build`).
