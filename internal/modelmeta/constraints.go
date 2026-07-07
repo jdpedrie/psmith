@@ -113,6 +113,40 @@ var prefixConstraints = []struct {
 	{"openai-compatible", "o4", Constraints{
 		Temperature: &Range{LockedAt: ptrFloat(1.0)},
 	}},
+
+	// Anthropic's adaptive-thinking generation (Fable 5 / Opus 4.8 /
+	// Sonnet 4.6 onward) locks temperature at 1.0 — the API 400s on any
+	// other value. Observed empirically 2026-07 on opus-4-8, sonnet-4-6,
+	// and fable-5. Mirrors the adaptiveThinkingPrefixes table in the
+	// anthropic driver; models these prefixes miss self-heal at send
+	// time via the driver's constraint-retry.
+	{"anthropic", "claude-fable-", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-opus-4-7", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-opus-4-8", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-opus-4-9", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-opus-5", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-sonnet-4-6", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-sonnet-4-7", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-sonnet-5", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
+	{"anthropic", "claude-haiku-5", Constraints{
+		Temperature: &Range{LockedAt: ptrFloat(1.0)},
+	}},
 }
 
 // providerTypeDefaults is the broadest tier — applies to any model

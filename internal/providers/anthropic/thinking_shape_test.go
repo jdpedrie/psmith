@@ -26,7 +26,8 @@ func happySSE(w http.ResponseWriter) {
 
 // thinkingBody is the subset of the request body these tests inspect.
 type thinkingBody struct {
-	Thinking *struct {
+	Temperature *float64 `json:"temperature"`
+	Thinking    *struct {
 		Type         string `json:"type"`
 		BudgetTokens *int   `json:"budget_tokens"`
 	} `json:"thinking"`
@@ -308,5 +309,159 @@ func TestIsThinkingShapeError(t *testing.T) {
 	}
 	if isThinkingShapeError(nil) {
 		t.Error("nil is not a shape error")
+	}
+}
+
+// Adaptive-generation models lock temperature at 1.0; the driver must
+// omit an explicit temperature rather than forward a value the API will
+// reject. Older models keep passing it through.
+func TestSend_TemperatureOmittedWhenLocked(t *testing.T) {
+	srv, bodies := captureServer(t, func(_ int, w http.ResponseWriter) { happySSE(w) })
+	defer srv.Close()
+	d := newTestDriver(t, srv.URL, nil)
+
+	temp := 0.7
+	for _, model := range []string{"claude-fable-5", "claude-opus-4-7", "claude-haiku-4-5"} {
+		ch, err := d.Send(context.Background(), providers.SendRequest{
+			ModelID:  model,
+			Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+			Settings: providers.CallSettings{Temperature: &temp},
+		})
+		if err != nil {
+			t.Fatalf("Send(%s): %v", model, err)
+		}
+		drainChunks(t, ch)
+	}
+
+	got := bodies()
+	if len(got) != 3 {
+		t.Fatalf("want 3 requests, got %d", len(got))
+	}
+	if got[0].Temperature != nil {
+		t.Errorf("fable-5 is temperature-locked; body carried %v", *got[0].Temperature)
+	}
+	if got[1].Temperature != nil {
+		t.Errorf("opus-4-7 is temperature-locked; body carried %v", *got[1].Temperature)
+	}
+	if got[2].Temperature == nil || *got[2].Temperature != 0.7 {
+		t.Errorf("haiku-4-5 should pass temperature through, got %+v", got[2].Temperature)
+	}
+}
+
+// A model the constraints table doesn't know that rejects an explicit
+// temperature gets one retry with the sampling knobs stripped.
+func TestSend_SamplingConstraintRetry(t *testing.T) {
+	srv, bodies := captureServer(t, func(n int, w http.ResponseWriter) {
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"temperature may only be set to 1 for this model"}}`))
+			return
+		}
+		happySSE(w)
+	})
+	defer srv.Close()
+	d := newTestDriver(t, srv.URL, nil)
+
+	temp := 0.3
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "claude-mystery-9",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+		Settings: providers.CallSettings{Temperature: &temp},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	chunks := drainChunks(t, ch)
+	for _, c := range chunks {
+		if c.Type == providers.ChunkError {
+			t.Fatalf("retry should hide the constraint error, got: %s", c.Payload)
+		}
+	}
+
+	got := bodies()
+	if len(got) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(got))
+	}
+	if got[0].Temperature == nil {
+		t.Error("first attempt should carry the explicit temperature")
+	}
+	if got[1].Temperature != nil {
+		t.Errorf("retry should omit temperature, got %v", *got[1].Temperature)
+	}
+}
+
+// Both remedies compose: a fully unknown adaptive-generation model that
+// rejects the thinking shape and then the temperature recovers in three
+// requests, invisibly.
+func TestSend_ThinkingAndSamplingRemediesCompose(t *testing.T) {
+	srv, bodies := captureServer(t, func(n int, w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		switch n {
+		case 1:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"thinking_type.enabled is not supported for this model. use thinking_type.adaptive and output_config.effort to control thinking behavior"}}`))
+		case 2:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"temperature may only be set to 1 for this model"}}`))
+		default:
+			happySSE(w)
+		}
+	})
+	defer srv.Close()
+	d := newTestDriver(t, srv.URL, nil)
+
+	temp := 0.5
+	settings := thinkingSettings(16000)
+	settings.Temperature = &temp
+	ch, err := d.Send(context.Background(), providers.SendRequest{
+		ModelID:  "claude-mystery-9",
+		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+		Settings: settings,
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	chunks := drainChunks(t, ch)
+	for _, c := range chunks {
+		if c.Type == providers.ChunkError {
+			t.Fatalf("remedies should hide both errors, got: %s", c.Payload)
+		}
+	}
+
+	got := bodies()
+	if len(got) != 3 {
+		t.Fatalf("want 3 requests (legacy, adaptive, adaptive sans sampling), got %d", len(got))
+	}
+	final := got[2]
+	if final.Thinking == nil || final.Thinking.Type != "adaptive" {
+		t.Errorf("final attempt should keep the adaptive flip, got %+v", final.Thinking)
+	}
+	if final.Temperature != nil {
+		t.Errorf("final attempt should omit temperature, got %v", *final.Temperature)
+	}
+}
+
+func TestIsSamplingConstraintError(t *testing.T) {
+	yes := []string{
+		"temperature may only be set to 1 for this model",
+		"400: unsupported parameter: top_p",
+		"top_k is not supported for this model",
+		"invalid value for temperature",
+	}
+	for _, m := range yes {
+		if !isSamplingConstraintError(errors.New(m)) {
+			t.Errorf("should match: %q", m)
+		}
+	}
+	no := []string{
+		"overloaded_error: Overloaded",
+		"max_tokens is too large",
+		"the temperature in the room is pleasant", // names the knob, no rejection wording
+	}
+	for _, m := range no {
+		if isSamplingConstraintError(errors.New(m)) {
+			t.Errorf("should NOT match: %q", m)
+		}
 	}
 }

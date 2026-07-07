@@ -40,8 +40,22 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 	out := make(chan providers.Chunk, 16)
 	go func() {
 		defer close(out)
-		for attempt := 0; ; attempt++ {
+		// Request-shape remedies. Each applies at most once, and only
+		// before any output has streamed, so the worst case is a couple
+		// of extra doomed requests on a model generation the tables
+		// don't know yet — after which it works with no code change.
+		flippedThinking := false
+		droppedSampling := false
+		for {
 			p := params
+			if droppedSampling {
+				// The model rejected an explicit sampling parameter;
+				// omit all three and take the API defaults (which is
+				// what these models demand).
+				p.Temperature = param.Opt[float64]{}
+				p.TopP = param.Opt[float64]{}
+				p.TopK = param.Opt[int64]{}
+			}
 			var opts []option.RequestOption
 			if thinkingOn {
 				opts = thinkingRequestConfig(&p, useAdaptive, budget)
@@ -57,11 +71,19 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 			if err == nil {
 				return // upstream closed without a stop event; nothing more to say
 			}
-			// Wrong thinking shape for this model generation: flip and
-			// retry, once, and only if the downstream hasn't seen output.
-			if attempt == 0 && thinkingOn && !emitted && isThinkingShapeError(err) {
-				useAdaptive = !useAdaptive
-				continue
+			if !emitted {
+				switch {
+				case thinkingOn && !flippedThinking && isThinkingShapeError(err):
+					// Wrong thinking shape for this model generation.
+					useAdaptive = !useAdaptive
+					flippedThinking = true
+					continue
+				case !droppedSampling && isSamplingConstraintError(err):
+					// Model locks its sampling knobs (temperature at 1.0
+					// on the adaptive generation).
+					droppedSampling = true
+					continue
+				}
 			}
 			payload, _ := json.Marshal(map[string]string{"message": err.Error()})
 			_ = sendChunk(ctx, out, providers.Chunk{
@@ -244,7 +266,11 @@ func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error)
 	} else {
 		out.MaxTokens = defaultMaxOutputTokens
 	}
-	if req.Settings.Temperature != nil {
+	// Adaptive-generation models lock temperature at 1.0 and 400 on any
+	// explicit value; omit the parameter rather than forwarding a knob
+	// the model will reject (the clients render the slider locked from
+	// the same constraints table).
+	if req.Settings.Temperature != nil && !temperatureLocked(req.ModelID) {
 		out.Temperature = param.NewOpt(*req.Settings.Temperature)
 	}
 	if req.Settings.TopP != nil {

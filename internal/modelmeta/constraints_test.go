@@ -49,3 +49,26 @@ func TestConstraintsFor_OtherOpenAIModelsUnconstrained(t *testing.T) {
 		t.Errorf("expected gpt-4o to have no temperature constraint, got %+v", c.Temperature)
 	}
 }
+
+// The adaptive-thinking generation locks temperature at 1.0; older
+// Anthropic models keep the documented [0, 1] range from the provider
+// default tier.
+func TestConstraintsFor_AnthropicTemperatureLock(t *testing.T) {
+	for _, id := range []string{
+		"claude-fable-5", "claude-opus-4-7", "claude-opus-4-8",
+		"claude-sonnet-4-6", "claude-sonnet-5",
+	} {
+		c := ConstraintsFor("anthropic", id)
+		if c.Temperature == nil || c.Temperature.LockedAt == nil || *c.Temperature.LockedAt != 1.0 {
+			t.Errorf("%s: want temperature locked at 1.0, got %+v", id, c.Temperature)
+		}
+	}
+	// Pre-adaptive model: ranged, not locked.
+	c := ConstraintsFor("anthropic", "claude-haiku-4-5")
+	if c.Temperature == nil || c.Temperature.LockedAt != nil {
+		t.Errorf("haiku-4-5: want ranged temperature, got %+v", c.Temperature)
+	}
+	if c.Temperature != nil && (c.Temperature.Min == nil || c.Temperature.Max == nil || *c.Temperature.Max != 1.0) {
+		t.Errorf("haiku-4-5: want [0,1] range, got %+v", c.Temperature)
+	}
+}

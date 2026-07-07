@@ -5,6 +5,8 @@ import (
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/jdpedrie/psmith/internal/modelmeta"
 )
 
 // Anthropic split its extended-thinking API: older models take
@@ -22,6 +24,7 @@ import (
 // therefore still work without a code change.
 var adaptiveThinkingPrefixes = []string{
 	"claude-fable-",
+	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-opus-4-9",
 	"claude-opus-5",
@@ -76,6 +79,40 @@ func isThinkingShapeError(err error) bool {
 		return true
 	}
 	return strings.Contains(msg, "thinking") && strings.Contains(msg, "adaptive")
+}
+
+// temperatureLocked reports whether the constraints table locks this
+// model's temperature (the adaptive-thinking generation 400s on any
+// value but 1.0). Same single-source-of-truth pattern as the openai
+// driver's locksSampling — the table also drives the clients' locked
+// slider rendering, so driver and UI can't drift apart.
+func temperatureLocked(modelID string) bool {
+	c := modelmeta.ConstraintsFor("anthropic", modelID)
+	return c.Temperature != nil && c.Temperature.LockedAt != nil
+}
+
+// isSamplingConstraintError reports whether an API error is a rejection
+// of an explicit sampling parameter (temperature / top_p / top_k) — the
+// adaptive-generation models 400 on temperature ≠ 1. Gates a one-shot
+// retry with the sampling knobs stripped, for models the constraints
+// table doesn't know yet.
+func isSamplingConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	names := strings.Contains(msg, "temperature") ||
+		strings.Contains(msg, "top_p") ||
+		strings.Contains(msg, "top_k")
+	if !names {
+		return false
+	}
+	rejection := strings.Contains(msg, "not supported") ||
+		strings.Contains(msg, "unsupported") ||
+		strings.Contains(msg, "may only be set") ||
+		strings.Contains(msg, "must be") ||
+		strings.Contains(msg, "invalid")
+	return rejection
 }
 
 // thinkingRequestConfig applies the chosen thinking shape to the outgoing
