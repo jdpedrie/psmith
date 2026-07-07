@@ -144,40 +144,38 @@ public nonisolated struct Psmith_V1_CreateConversationRequest: Sendable {
   fileprivate var _settings: Psmith_V1_ConversationSettings? = nil
 }
 
-public nonisolated struct Psmith_V1_CreateConversationResponse: @unchecked Sendable {
+public nonisolated struct Psmith_V1_CreateConversationResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var conversation: Psmith_V1_Conversation {
-    get {_storage._conversation ?? Psmith_V1_Conversation()}
-    set {_uniqueStorage()._conversation = newValue}
+    get {_conversation ?? Psmith_V1_Conversation()}
+    set {_conversation = newValue}
   }
   /// Returns true if `conversation` has been explicitly set.
-  public var hasConversation: Bool {_storage._conversation != nil}
+  public var hasConversation: Bool {self._conversation != nil}
   /// Clears the value of `conversation`. Subsequent reads from it will return its default value.
-  public mutating func clearConversation() {_uniqueStorage()._conversation = nil}
+  public mutating func clearConversation() {self._conversation = nil}
 
   public var initialContext: Psmith_V1_Context {
-    get {_storage._initialContext ?? Psmith_V1_Context()}
-    set {_uniqueStorage()._initialContext = newValue}
+    get {_initialContext ?? Psmith_V1_Context()}
+    set {_initialContext = newValue}
   }
   /// Returns true if `initialContext` has been explicitly set.
-  public var hasInitialContext: Bool {_storage._initialContext != nil}
+  public var hasInitialContext: Bool {self._initialContext != nil}
   /// Clears the value of `initialContext`. Subsequent reads from it will return its default value.
-  public mutating func clearInitialContext() {_uniqueStorage()._initialContext = nil}
+  public mutating func clearInitialContext() {self._initialContext = nil}
 
   /// Snapshot rows written to the initial context (system + optional default user message).
-  public var seedMessages: [Psmith_V1_Message] {
-    get {_storage._seedMessages}
-    set {_uniqueStorage()._seedMessages = newValue}
-  }
+  public var seedMessages: [Psmith_V1_Message] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _storage = _StorageClass.defaultInstance
+  fileprivate var _conversation: Psmith_V1_Conversation? = nil
+  fileprivate var _initialContext: Psmith_V1_Context? = nil
 }
 
 public nonisolated struct Psmith_V1_ListConversationsRequest: Sendable {
@@ -221,6 +219,10 @@ public nonisolated struct Psmith_V1_ListConversationsRequest: Sendable {
   /// Clears the value of `profileID`. Subsequent reads from it will return its default value.
   public mutating func clearProfileID() {self._profileID = nil}
 
+  /// false (default): the active list, as always. true: archived
+  /// conversations only, newest archive first by the usual ordering.
+  public var archived: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -256,34 +258,35 @@ public nonisolated struct Psmith_V1_GetConversationRequest: Sendable {
   public init() {}
 }
 
-public nonisolated struct Psmith_V1_GetConversationResponse: @unchecked Sendable {
+public nonisolated struct Psmith_V1_GetConversationResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var conversation: Psmith_V1_Conversation {
-    get {_storage._conversation ?? Psmith_V1_Conversation()}
-    set {_uniqueStorage()._conversation = newValue}
+    get {_conversation ?? Psmith_V1_Conversation()}
+    set {_conversation = newValue}
   }
   /// Returns true if `conversation` has been explicitly set.
-  public var hasConversation: Bool {_storage._conversation != nil}
+  public var hasConversation: Bool {self._conversation != nil}
   /// Clears the value of `conversation`. Subsequent reads from it will return its default value.
-  public mutating func clearConversation() {_uniqueStorage()._conversation = nil}
+  public mutating func clearConversation() {self._conversation = nil}
 
   public var activeContext: Psmith_V1_Context {
-    get {_storage._activeContext ?? Psmith_V1_Context()}
-    set {_uniqueStorage()._activeContext = newValue}
+    get {_activeContext ?? Psmith_V1_Context()}
+    set {_activeContext = newValue}
   }
   /// Returns true if `activeContext` has been explicitly set.
-  public var hasActiveContext: Bool {_storage._activeContext != nil}
+  public var hasActiveContext: Bool {self._activeContext != nil}
   /// Clears the value of `activeContext`. Subsequent reads from it will return its default value.
-  public mutating func clearActiveContext() {_uniqueStorage()._activeContext = nil}
+  public mutating func clearActiveContext() {self._activeContext = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _storage = _StorageClass.defaultInstance
+  fileprivate var _conversation: Psmith_V1_Conversation? = nil
+  fileprivate var _activeContext: Psmith_V1_Context? = nil
 }
 
 public nonisolated struct Psmith_V1_UpdateConversationRequest: Sendable {
@@ -353,6 +356,50 @@ public nonisolated struct Psmith_V1_DeleteConversationRequest: Sendable {
 }
 
 public nonisolated struct Psmith_V1_DeleteConversationResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ArchiveConversationRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ArchiveConversationResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_UnarchiveConversationRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_UnarchiveConversationResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1142,81 +1189,41 @@ nonisolated extension Psmith_V1_CreateConversationResponse: SwiftProtobuf.Messag
   public static let protoMessageName: String = _protobuf_package + ".CreateConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0\u{3}initial_context\0\u{3}seed_messages\0")
 
-  fileprivate class _StorageClass {
-    var _conversation: Psmith_V1_Conversation? = nil
-    var _initialContext: Psmith_V1_Context? = nil
-    var _seedMessages: [Psmith_V1_Message] = []
-
-      // This property is used as the initial default value for new instances of the type.
-      // The type itself is protecting the reference to its storage via CoW semantics.
-      // This will force a copy to be made of this reference when the first mutation occurs;
-      // hence, it is safe to mark this as `nonisolated(unsafe)`.
-      static nonisolated(unsafe) let defaultInstance = _StorageClass()
-
-    private init() {}
-
-    init(copying source: _StorageClass) {
-      _conversation = source._conversation
-      _initialContext = source._initialContext
-      _seedMessages = source._seedMessages
-    }
-  }
-
-  fileprivate mutating func _uniqueStorage() -> _StorageClass {
-    if !isKnownUniquelyReferenced(&_storage) {
-      _storage = _StorageClass(copying: _storage)
-    }
-    return _storage
-  }
-
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    _ = _uniqueStorage()
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      while let fieldNumber = try decoder.nextFieldNumber() {
-        // The use of inline closures is to circumvent an issue where the compiler
-        // allocates stack space for every case branch when no optimizations are
-        // enabled. https://github.com/apple/swift-protobuf/issues/1034
-        switch fieldNumber {
-        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._conversation) }()
-        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._initialContext) }()
-        case 3: try { try decoder.decodeRepeatedMessageField(value: &_storage._seedMessages) }()
-        default: break
-        }
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._conversation) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._initialContext) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.seedMessages) }()
+      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every if/case branch local when no optimizations
-      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-      // https://github.com/apple/swift-protobuf/issues/1182
-      try { if let v = _storage._conversation {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-      } }()
-      try { if let v = _storage._initialContext {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-      } }()
-      if !_storage._seedMessages.isEmpty {
-        try visitor.visitRepeatedMessageField(value: _storage._seedMessages, fieldNumber: 3)
-      }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._conversation {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._initialContext {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.seedMessages.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.seedMessages, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_CreateConversationResponse, rhs: Psmith_V1_CreateConversationResponse) -> Bool {
-    if lhs._storage !== rhs._storage {
-      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
-        let _storage = _args.0
-        let rhs_storage = _args.1
-        if _storage._conversation != rhs_storage._conversation {return false}
-        if _storage._initialContext != rhs_storage._initialContext {return false}
-        if _storage._seedMessages != rhs_storage._seedMessages {return false}
-        return true
-      }
-      if !storagesAreEqual {return false}
-    }
+    if lhs._conversation != rhs._conversation {return false}
+    if lhs._initialContext != rhs._initialContext {return false}
+    if lhs.seedMessages != rhs.seedMessages {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1224,7 +1231,7 @@ nonisolated extension Psmith_V1_CreateConversationResponse: SwiftProtobuf.Messag
 
 nonisolated extension Psmith_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0\u{1}order\0\u{3}title_query\0\u{3}profile_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_size\0\u{3}page_token\0\u{1}order\0\u{3}title_query\0\u{3}profile_id\0\u{1}archived\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1237,6 +1244,7 @@ nonisolated extension Psmith_V1_ListConversationsRequest: SwiftProtobuf.Message,
       case 3: try { try decoder.decodeSingularEnumField(value: &self._order) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self._titleQuery) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self._profileID) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.archived) }()
       default: break
       }
     }
@@ -1262,6 +1270,9 @@ nonisolated extension Psmith_V1_ListConversationsRequest: SwiftProtobuf.Message,
     try { if let v = self._profileID {
       try visitor.visitSingularStringField(value: v, fieldNumber: 5)
     } }()
+    if self.archived != false {
+      try visitor.visitSingularBoolField(value: self.archived, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1271,6 +1282,7 @@ nonisolated extension Psmith_V1_ListConversationsRequest: SwiftProtobuf.Message,
     if lhs._order != rhs._order {return false}
     if lhs._titleQuery != rhs._titleQuery {return false}
     if lhs._profileID != rhs._profileID {return false}
+    if lhs.archived != rhs.archived {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1345,74 +1357,36 @@ nonisolated extension Psmith_V1_GetConversationResponse: SwiftProtobuf.Message, 
   public static let protoMessageName: String = _protobuf_package + ".GetConversationResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0\u{3}active_context\0")
 
-  fileprivate class _StorageClass {
-    var _conversation: Psmith_V1_Conversation? = nil
-    var _activeContext: Psmith_V1_Context? = nil
-
-      // This property is used as the initial default value for new instances of the type.
-      // The type itself is protecting the reference to its storage via CoW semantics.
-      // This will force a copy to be made of this reference when the first mutation occurs;
-      // hence, it is safe to mark this as `nonisolated(unsafe)`.
-      static nonisolated(unsafe) let defaultInstance = _StorageClass()
-
-    private init() {}
-
-    init(copying source: _StorageClass) {
-      _conversation = source._conversation
-      _activeContext = source._activeContext
-    }
-  }
-
-  fileprivate mutating func _uniqueStorage() -> _StorageClass {
-    if !isKnownUniquelyReferenced(&_storage) {
-      _storage = _StorageClass(copying: _storage)
-    }
-    return _storage
-  }
-
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    _ = _uniqueStorage()
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      while let fieldNumber = try decoder.nextFieldNumber() {
-        // The use of inline closures is to circumvent an issue where the compiler
-        // allocates stack space for every case branch when no optimizations are
-        // enabled. https://github.com/apple/swift-protobuf/issues/1034
-        switch fieldNumber {
-        case 1: try { try decoder.decodeSingularMessageField(value: &_storage._conversation) }()
-        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._activeContext) }()
-        default: break
-        }
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._conversation) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._activeContext) }()
+      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every if/case branch local when no optimizations
-      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-      // https://github.com/apple/swift-protobuf/issues/1182
-      try { if let v = _storage._conversation {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-      } }()
-      try { if let v = _storage._activeContext {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-      } }()
-    }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._conversation {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._activeContext {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_GetConversationResponse, rhs: Psmith_V1_GetConversationResponse) -> Bool {
-    if lhs._storage !== rhs._storage {
-      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
-        let _storage = _args.0
-        let rhs_storage = _args.1
-        if _storage._conversation != rhs_storage._conversation {return false}
-        if _storage._activeContext != rhs_storage._activeContext {return false}
-        return true
-      }
-      if !storagesAreEqual {return false}
-    }
+    if lhs._conversation != rhs._conversation {return false}
+    if lhs._activeContext != rhs._activeContext {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1540,6 +1514,104 @@ nonisolated extension Psmith_V1_DeleteConversationResponse: SwiftProtobuf.Messag
   }
 
   public static func ==(lhs: Psmith_V1_DeleteConversationResponse, rhs: Psmith_V1_DeleteConversationResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ArchiveConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ArchiveConversationRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ArchiveConversationRequest, rhs: Psmith_V1_ArchiveConversationRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ArchiveConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ArchiveConversationResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ArchiveConversationResponse, rhs: Psmith_V1_ArchiveConversationResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_UnarchiveConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UnarchiveConversationRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_UnarchiveConversationRequest, rhs: Psmith_V1_UnarchiveConversationRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_UnarchiveConversationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UnarchiveConversationResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_UnarchiveConversationResponse, rhs: Psmith_V1_UnarchiveConversationResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

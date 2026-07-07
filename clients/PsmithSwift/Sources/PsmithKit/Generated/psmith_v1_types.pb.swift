@@ -2033,66 +2033,78 @@ public nonisolated struct Psmith_V1_ConversationSettings: Sendable {
   fileprivate var _callSettings: Psmith_V1_CallSettings? = nil
 }
 
-public nonisolated struct Psmith_V1_Conversation: Sendable {
+public nonisolated struct Psmith_V1_Conversation: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: String = String()
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
-  public var profileID: String = String()
+  public var profileID: String {
+    get {_storage._profileID}
+    set {_uniqueStorage()._profileID = newValue}
+  }
 
   public var title: String {
-    get {_title ?? String()}
-    set {_title = newValue}
+    get {_storage._title ?? String()}
+    set {_uniqueStorage()._title = newValue}
   }
   /// Returns true if `title` has been explicitly set.
-  public var hasTitle: Bool {self._title != nil}
+  public var hasTitle: Bool {_storage._title != nil}
   /// Clears the value of `title`. Subsequent reads from it will return its default value.
-  public mutating func clearTitle() {self._title = nil}
+  public mutating func clearTitle() {_uniqueStorage()._title = nil}
 
   public var settings: Psmith_V1_ConversationSettings {
-    get {_settings ?? Psmith_V1_ConversationSettings()}
-    set {_settings = newValue}
+    get {_storage._settings ?? Psmith_V1_ConversationSettings()}
+    set {_uniqueStorage()._settings = newValue}
   }
   /// Returns true if `settings` has been explicitly set.
-  public var hasSettings: Bool {self._settings != nil}
+  public var hasSettings: Bool {_storage._settings != nil}
   /// Clears the value of `settings`. Subsequent reads from it will return its default value.
-  public mutating func clearSettings() {self._settings = nil}
+  public mutating func clearSettings() {_uniqueStorage()._settings = nil}
 
-  public var activeContextID: String = String()
+  public var activeContextID: String {
+    get {_storage._activeContextID}
+    set {_uniqueStorage()._activeContextID = newValue}
+  }
 
-  public var ownerUserID: String = String()
+  public var ownerUserID: String {
+    get {_storage._ownerUserID}
+    set {_uniqueStorage()._ownerUserID = newValue}
+  }
 
   public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_createdAt = newValue}
+    get {_storage._createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._createdAt = newValue}
   }
   /// Returns true if `createdAt` has been explicitly set.
-  public var hasCreatedAt: Bool {self._createdAt != nil}
+  public var hasCreatedAt: Bool {_storage._createdAt != nil}
   /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
-  public mutating func clearCreatedAt() {self._createdAt = nil}
+  public mutating func clearCreatedAt() {_uniqueStorage()._createdAt = nil}
 
   public var updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_updatedAt = newValue}
+    get {_storage._updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._updatedAt = newValue}
   }
   /// Returns true if `updatedAt` has been explicitly set.
-  public var hasUpdatedAt: Bool {self._updatedAt != nil}
+  public var hasUpdatedAt: Bool {_storage._updatedAt != nil}
   /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
-  public mutating func clearUpdatedAt() {self._updatedAt = nil}
+  public mutating func clearUpdatedAt() {_uniqueStorage()._updatedAt = nil}
 
   /// Most recent message timestamp across this conversation's contexts.
   /// Falls back to created_at when no messages exist yet, so a fresh
   /// conversation still sorts above older ones in "Recently Used".
   public var lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_lastActivityAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_lastActivityAt = newValue}
+    get {_storage._lastActivityAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._lastActivityAt = newValue}
   }
   /// Returns true if `lastActivityAt` has been explicitly set.
-  public var hasLastActivityAt: Bool {self._lastActivityAt != nil}
+  public var hasLastActivityAt: Bool {_storage._lastActivityAt != nil}
   /// Clears the value of `lastActivityAt`. Subsequent reads from it will return its default value.
-  public mutating func clearLastActivityAt() {self._lastActivityAt = nil}
+  public mutating func clearLastActivityAt() {_uniqueStorage()._lastActivityAt = nil}
 
   /// Resolved (tag → renderer-component) pairs from this conversation's
   /// plugin pipeline. Used by clients during streaming to render
@@ -2106,17 +2118,28 @@ public nonisolated struct Psmith_V1_Conversation: Sendable {
   /// lettered_choices in component mode) for its set, aggregate.
   /// Clients without inline-render support ignore this field with
   /// no behaviour change.
-  public var streamingComponents: [Psmith_V1_StreamingComponentTag] = []
+  public var streamingComponents: [Psmith_V1_StreamingComponentTag] {
+    get {_storage._streamingComponents}
+    set {_uniqueStorage()._streamingComponents = newValue}
+  }
+
+  /// Set while the conversation is archived: hidden from the default
+  /// list and read-only (every mutating RPC refuses it) until
+  /// unarchived.
+  public var archivedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_storage._archivedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._archivedAt = newValue}
+  }
+  /// Returns true if `archivedAt` has been explicitly set.
+  public var hasArchivedAt: Bool {_storage._archivedAt != nil}
+  /// Clears the value of `archivedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearArchivedAt() {_uniqueStorage()._archivedAt = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _title: String? = nil
-  fileprivate var _settings: Psmith_V1_ConversationSettings? = nil
-  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// One (tag-name, renderer-component) pair surfaced by a plugin in
@@ -4565,78 +4588,139 @@ nonisolated extension Psmith_V1_ConversationSettings: SwiftProtobuf.Message, Swi
 
 nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0\u{3}archived_at\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _profileID: String = String()
+    var _title: String? = nil
+    var _settings: Psmith_V1_ConversationSettings? = nil
+    var _activeContextID: String = String()
+    var _ownerUserID: String = String()
+    var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _lastActivityAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _streamingComponents: [Psmith_V1_StreamingComponentTag] = []
+    var _archivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _profileID = source._profileID
+      _title = source._title
+      _settings = source._settings
+      _activeContextID = source._activeContextID
+      _ownerUserID = source._ownerUserID
+      _createdAt = source._createdAt
+      _updatedAt = source._updatedAt
+      _lastActivityAt = source._lastActivityAt
+      _streamingComponents = source._streamingComponents
+      _archivedAt = source._archivedAt
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.profileID) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self._title) }()
-      case 4: try { try decoder.decodeSingularMessageField(value: &self._settings) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.activeContextID) }()
-      case 6: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
-      case 7: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
-      case 8: try { try decoder.decodeSingularStringField(value: &self.ownerUserID) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._lastActivityAt) }()
-      case 10: try { try decoder.decodeRepeatedMessageField(value: &self.streamingComponents) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._profileID) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._title) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._settings) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._activeContextID) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._createdAt) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._updatedAt) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._ownerUserID) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._lastActivityAt) }()
+        case 10: try { try decoder.decodeRepeatedMessageField(value: &_storage._streamingComponents) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._archivedAt) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
-    }
-    if !self.profileID.isEmpty {
-      try visitor.visitSingularStringField(value: self.profileID, fieldNumber: 2)
-    }
-    try { if let v = self._title {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
-    } }()
-    try { if let v = self._settings {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-    } }()
-    if !self.activeContextID.isEmpty {
-      try visitor.visitSingularStringField(value: self.activeContextID, fieldNumber: 5)
-    }
-    try { if let v = self._createdAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
-    } }()
-    try { if let v = self._updatedAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
-    } }()
-    if !self.ownerUserID.isEmpty {
-      try visitor.visitSingularStringField(value: self.ownerUserID, fieldNumber: 8)
-    }
-    try { if let v = self._lastActivityAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    if !self.streamingComponents.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.streamingComponents, fieldNumber: 10)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._profileID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._profileID, fieldNumber: 2)
+      }
+      try { if let v = _storage._title {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+      } }()
+      try { if let v = _storage._settings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      if !_storage._activeContextID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._activeContextID, fieldNumber: 5)
+      }
+      try { if let v = _storage._createdAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._updatedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+      if !_storage._ownerUserID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ownerUserID, fieldNumber: 8)
+      }
+      try { if let v = _storage._lastActivityAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      if !_storage._streamingComponents.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._streamingComponents, fieldNumber: 10)
+      }
+      try { if let v = _storage._archivedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_Conversation, rhs: Psmith_V1_Conversation) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.profileID != rhs.profileID {return false}
-    if lhs._title != rhs._title {return false}
-    if lhs._settings != rhs._settings {return false}
-    if lhs.activeContextID != rhs.activeContextID {return false}
-    if lhs.ownerUserID != rhs.ownerUserID {return false}
-    if lhs._createdAt != rhs._createdAt {return false}
-    if lhs._updatedAt != rhs._updatedAt {return false}
-    if lhs._lastActivityAt != rhs._lastActivityAt {return false}
-    if lhs.streamingComponents != rhs.streamingComponents {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._profileID != rhs_storage._profileID {return false}
+        if _storage._title != rhs_storage._title {return false}
+        if _storage._settings != rhs_storage._settings {return false}
+        if _storage._activeContextID != rhs_storage._activeContextID {return false}
+        if _storage._ownerUserID != rhs_storage._ownerUserID {return false}
+        if _storage._createdAt != rhs_storage._createdAt {return false}
+        if _storage._updatedAt != rhs_storage._updatedAt {return false}
+        if _storage._lastActivityAt != rhs_storage._lastActivityAt {return false}
+        if _storage._streamingComponents != rhs_storage._streamingComponents {return false}
+        if _storage._archivedAt != rhs_storage._archivedAt {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -51,6 +51,9 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[psmithv1
 		}
 		return nil, err
 	}
+	if err := s.requireNotArchived(conv); err != nil {
+		return nil, err
+	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
 		return nil, err
 	}
@@ -115,6 +118,9 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[psmith
 		if errors.As(err, &ce) && ce.Code() == connect.CodeNotFound {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("message not found"))
 		}
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
@@ -195,6 +201,9 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 		if errors.As(err, &ce) && ce.Code() == connect.CodeNotFound {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("message not found"))
 		}
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
@@ -313,6 +322,9 @@ func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[
 	}
 	conv, err := s.fetchOwnedConversation(ctx, convID, caller.ID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {

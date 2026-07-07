@@ -279,6 +279,14 @@ struct ChatsRoot: View {
             }
             LoadMoreFooter(token: convos.nextPageToken) { await convos.loadMore() }
         }
+        Section {
+            NavigationLink {
+                ArchivedConversationsScreen()
+            } label: {
+                Label("Archived", systemImage: "archivebox")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder
@@ -333,6 +341,12 @@ struct ChatsRoot: View {
                 Label("Delete", systemImage: "trash")
             }
             Button {
+                Task { await convos.archive(c.id) }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            .tint(.orange)
+            Button {
                 renameDraft = c.title ?? ""
                 renameCandidate = c
             } label: {
@@ -346,6 +360,11 @@ struct ChatsRoot: View {
                 renameCandidate = c
             } label: {
                 Label("Rename", systemImage: "pencil")
+            }
+            Button {
+                Task { await convos.archive(c.id) }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
             }
             Button(role: .destructive) {
                 deleteCandidate = c

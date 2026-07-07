@@ -348,6 +348,8 @@ type Querier interface {
 	// we ever scale to many users per Psmith instance the index would
 	// need partitioning, but that's a future-us problem.
 	SearchMessagesByEmbedding(ctx context.Context, arg SearchMessagesByEmbeddingParams) ([]SearchMessagesByEmbeddingRow, error)
+	// Archive (TRUE → archived_at = now()) or unarchive (FALSE → NULL).
+	SetConversationArchived(ctx context.Context, arg SetConversationArchivedParams) error
 	// Worker writes the embedding triple. Idempotent: the CHECK constraint
 	// enforces all-three-or-none on every row already, so calling with the
 	// same triple over and over is fine.

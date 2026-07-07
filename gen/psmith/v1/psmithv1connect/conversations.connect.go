@@ -48,6 +48,12 @@ const (
 	// ConversationsServiceDeleteConversationProcedure is the fully-qualified name of the
 	// ConversationsService's DeleteConversation RPC.
 	ConversationsServiceDeleteConversationProcedure = "/psmith.v1.ConversationsService/DeleteConversation"
+	// ConversationsServiceArchiveConversationProcedure is the fully-qualified name of the
+	// ConversationsService's ArchiveConversation RPC.
+	ConversationsServiceArchiveConversationProcedure = "/psmith.v1.ConversationsService/ArchiveConversation"
+	// ConversationsServiceUnarchiveConversationProcedure is the fully-qualified name of the
+	// ConversationsService's UnarchiveConversation RPC.
+	ConversationsServiceUnarchiveConversationProcedure = "/psmith.v1.ConversationsService/UnarchiveConversation"
 	// ConversationsServiceListContextsProcedure is the fully-qualified name of the
 	// ConversationsService's ListContexts RPC.
 	ConversationsServiceListContextsProcedure = "/psmith.v1.ConversationsService/ListContexts"
@@ -106,6 +112,11 @@ type ConversationsServiceClient interface {
 	GetConversation(context.Context, *connect.Request[v1.GetConversationRequest]) (*connect.Response[v1.GetConversationResponse], error)
 	UpdateConversation(context.Context, *connect.Request[v1.UpdateConversationRequest]) (*connect.Response[v1.UpdateConversationResponse], error)
 	DeleteConversation(context.Context, *connect.Request[v1.DeleteConversationRequest]) (*connect.Response[v1.DeleteConversationResponse], error)
+	// Archive removes the conversation from the default list and makes it
+	// read-only; Unarchive restores it. Deleting an archived conversation
+	// stays allowed.
+	ArchiveConversation(context.Context, *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error)
+	UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
 	// Make the given context the active one (sets activation_time = now).
@@ -219,6 +230,18 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("DeleteConversation")),
 			connect.WithClientOptions(opts...),
 		),
+		archiveConversation: connect.NewClient[v1.ArchiveConversationRequest, v1.ArchiveConversationResponse](
+			httpClient,
+			baseURL+ConversationsServiceArchiveConversationProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("ArchiveConversation")),
+			connect.WithClientOptions(opts...),
+		),
+		unarchiveConversation: connect.NewClient[v1.UnarchiveConversationRequest, v1.UnarchiveConversationResponse](
+			httpClient,
+			baseURL+ConversationsServiceUnarchiveConversationProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("UnarchiveConversation")),
+			connect.WithClientOptions(opts...),
+		),
 		listContexts: connect.NewClient[v1.ListContextsRequest, v1.ListContextsResponse](
 			httpClient,
 			baseURL+ConversationsServiceListContextsProcedure,
@@ -325,6 +348,8 @@ type conversationsServiceClient struct {
 	getConversation               *connect.Client[v1.GetConversationRequest, v1.GetConversationResponse]
 	updateConversation            *connect.Client[v1.UpdateConversationRequest, v1.UpdateConversationResponse]
 	deleteConversation            *connect.Client[v1.DeleteConversationRequest, v1.DeleteConversationResponse]
+	archiveConversation           *connect.Client[v1.ArchiveConversationRequest, v1.ArchiveConversationResponse]
+	unarchiveConversation         *connect.Client[v1.UnarchiveConversationRequest, v1.UnarchiveConversationResponse]
 	listContexts                  *connect.Client[v1.ListContextsRequest, v1.ListContextsResponse]
 	activateContext               *connect.Client[v1.ActivateContextRequest, v1.ActivateContextResponse]
 	setCurrentLeaf                *connect.Client[v1.SetCurrentLeafRequest, v1.SetCurrentLeafResponse]
@@ -366,6 +391,16 @@ func (c *conversationsServiceClient) UpdateConversation(ctx context.Context, req
 // DeleteConversation calls psmith.v1.ConversationsService.DeleteConversation.
 func (c *conversationsServiceClient) DeleteConversation(ctx context.Context, req *connect.Request[v1.DeleteConversationRequest]) (*connect.Response[v1.DeleteConversationResponse], error) {
 	return c.deleteConversation.CallUnary(ctx, req)
+}
+
+// ArchiveConversation calls psmith.v1.ConversationsService.ArchiveConversation.
+func (c *conversationsServiceClient) ArchiveConversation(ctx context.Context, req *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error) {
+	return c.archiveConversation.CallUnary(ctx, req)
+}
+
+// UnarchiveConversation calls psmith.v1.ConversationsService.UnarchiveConversation.
+func (c *conversationsServiceClient) UnarchiveConversation(ctx context.Context, req *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error) {
+	return c.unarchiveConversation.CallUnary(ctx, req)
 }
 
 // ListContexts calls psmith.v1.ConversationsService.ListContexts.
@@ -456,6 +491,11 @@ type ConversationsServiceHandler interface {
 	GetConversation(context.Context, *connect.Request[v1.GetConversationRequest]) (*connect.Response[v1.GetConversationResponse], error)
 	UpdateConversation(context.Context, *connect.Request[v1.UpdateConversationRequest]) (*connect.Response[v1.UpdateConversationResponse], error)
 	DeleteConversation(context.Context, *connect.Request[v1.DeleteConversationRequest]) (*connect.Response[v1.DeleteConversationResponse], error)
+	// Archive removes the conversation from the default list and makes it
+	// read-only; Unarchive restores it. Deleting an archived conversation
+	// stays allowed.
+	ArchiveConversation(context.Context, *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error)
+	UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
 	// Make the given context the active one (sets activation_time = now).
@@ -563,6 +603,18 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		ConversationsServiceDeleteConversationProcedure,
 		svc.DeleteConversation,
 		connect.WithSchema(conversationsServiceMethods.ByName("DeleteConversation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceArchiveConversationHandler := connect.NewUnaryHandler(
+		ConversationsServiceArchiveConversationProcedure,
+		svc.ArchiveConversation,
+		connect.WithSchema(conversationsServiceMethods.ByName("ArchiveConversation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceUnarchiveConversationHandler := connect.NewUnaryHandler(
+		ConversationsServiceUnarchiveConversationProcedure,
+		svc.UnarchiveConversation,
+		connect.WithSchema(conversationsServiceMethods.ByName("UnarchiveConversation")),
 		connect.WithHandlerOptions(opts...),
 	)
 	conversationsServiceListContextsHandler := connect.NewUnaryHandler(
@@ -673,6 +725,10 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceUpdateConversationHandler.ServeHTTP(w, r)
 		case ConversationsServiceDeleteConversationProcedure:
 			conversationsServiceDeleteConversationHandler.ServeHTTP(w, r)
+		case ConversationsServiceArchiveConversationProcedure:
+			conversationsServiceArchiveConversationHandler.ServeHTTP(w, r)
+		case ConversationsServiceUnarchiveConversationProcedure:
+			conversationsServiceUnarchiveConversationHandler.ServeHTTP(w, r)
 		case ConversationsServiceListContextsProcedure:
 			conversationsServiceListContextsHandler.ServeHTTP(w, r)
 		case ConversationsServiceActivateContextProcedure:
@@ -732,6 +788,14 @@ func (UnimplementedConversationsServiceHandler) UpdateConversation(context.Conte
 
 func (UnimplementedConversationsServiceHandler) DeleteConversation(context.Context, *connect.Request[v1.DeleteConversationRequest]) (*connect.Response[v1.DeleteConversationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.DeleteConversation is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) ArchiveConversation(context.Context, *connect.Request[v1.ArchiveConversationRequest]) (*connect.Response[v1.ArchiveConversationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.ArchiveConversation is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) UnarchiveConversation(context.Context, *connect.Request[v1.UnarchiveConversationRequest]) (*connect.Response[v1.UnarchiveConversationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.UnarchiveConversation is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error) {

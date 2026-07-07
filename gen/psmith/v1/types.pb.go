@@ -2761,8 +2761,12 @@ type Conversation struct {
 	// Clients without inline-render support ignore this field with
 	// no behaviour change.
 	StreamingComponents []*StreamingComponentTag `protobuf:"bytes,10,rep,name=streaming_components,json=streamingComponents,proto3" json:"streaming_components,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Set while the conversation is archived: hidden from the default
+	// list and read-only (every mutating RPC refuses it) until
+	// unarchived.
+	ArchivedAt    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=archived_at,json=archivedAt,proto3,oneof" json:"archived_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Conversation) Reset() {
@@ -2861,6 +2865,13 @@ func (x *Conversation) GetLastActivityAt() *timestamppb.Timestamp {
 func (x *Conversation) GetStreamingComponents() []*StreamingComponentTag {
 	if x != nil {
 		return x.StreamingComponents
+	}
+	return nil
+}
+
+func (x *Conversation) GetArchivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ArchivedAt
 	}
 	return nil
 }
@@ -4352,7 +4363,7 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x14_default_provider_idB\x13\n" +
 	"\x11_default_model_idB\x1e\n" +
 	"\x1c_include_thinking_in_historyB\x10\n" +
-	"\x0e_call_settings\"\x92\x04\n" +
+	"\x0e_call_settings\"\xe4\x04\n" +
 	"\fConversation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4367,9 +4378,12 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12D\n" +
 	"\x10last_activity_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0elastActivityAt\x12S\n" +
 	"\x14streaming_components\x18\n" +
-	" \x03(\v2 .psmith.v1.StreamingComponentTagR\x13streamingComponentsB\b\n" +
+	" \x03(\v2 .psmith.v1.StreamingComponentTagR\x13streamingComponents\x12@\n" +
+	"\varchived_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x02R\n" +
+	"archivedAt\x88\x01\x01B\b\n" +
 	"\x06_titleB\v\n" +
-	"\t_settings\"G\n" +
+	"\t_settingsB\x0e\n" +
+	"\f_archived_at\"G\n" +
 	"\x15StreamingComponentTag\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1c\n" +
 	"\tcomponent\x18\x02 \x01(\tR\tcomponent\"\x96\x04\n" +
@@ -4694,26 +4708,27 @@ var file_psmith_v1_types_proto_depIdxs = []int32{
 	44, // 40: psmith.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
 	44, // 41: psmith.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
 	33, // 42: psmith.v1.Conversation.streaming_components:type_name -> psmith.v1.StreamingComponentTag
-	44, // 43: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	44, // 44: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 45: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
-	44, // 46: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	39, // 47: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
-	44, // 48: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	38, // 49: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
-	37, // 50: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
-	36, // 51: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
-	6,  // 52: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
-	7,  // 53: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
-	44, // 54: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	44, // 55: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 56: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
-	9,  // 57: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	44, // 43: psmith.v1.Conversation.archived_at:type_name -> google.protobuf.Timestamp
+	44, // 44: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	44, // 45: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 46: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
+	44, // 47: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	39, // 48: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
+	44, // 49: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	38, // 50: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
+	37, // 51: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
+	36, // 52: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
+	6,  // 53: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
+	7,  // 54: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
+	44, // 55: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	44, // 56: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 57: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
+	9,  // 58: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
+	59, // [59:59] is the sub-list for method output_type
+	59, // [59:59] is the sub-list for method input_type
+	59, // [59:59] is the sub-list for extension type_name
+	59, // [59:59] is the sub-list for extension extendee
+	0,  // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_types_proto_init() }

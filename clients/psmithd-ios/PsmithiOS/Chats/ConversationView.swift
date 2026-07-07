@@ -261,7 +261,11 @@ private struct ConversationBody: View {
                 loadErrorBanner(err)
             }
             messageScroll
-            Composer(model: model)
+            if let archivedAt = liveConversation.archivedAt {
+                archivedBar(archivedAt)
+            } else {
+                Composer(model: model)
+            }
         }
         .refreshable {
             await model.load()
@@ -1164,5 +1168,54 @@ private struct StreamingArea: View {
                 streamingRowHeight = newHeight
             }
         }
+    }
+}
+
+
+// MARK: - Archived (read-only) state
+
+private struct ArchivedBar: View {
+    let conversationID: String
+    let archivedAt: Date
+    @Environment(AppModel.self) private var app
+    @Environment(ConversationsModel.self) private var convos
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "archivebox")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Archived")
+                    .font(.callout.weight(.semibold))
+                Text(archivedAt, style: .date)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Unarchive") {
+                Task {
+                    try? await app.client.conversations.unarchive(id: conversationID)
+                    await convos.refresh()
+                    dismiss()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.thinMaterial)
+    }
+}
+
+extension ConversationBody {
+    /// Replaces the composer while the conversation is archived. The
+    /// server refuses every mutation on archived conversations, so the
+    /// transcript above is view-only; Unarchive restores it to the
+    /// active list and pops back.
+    @ViewBuilder
+    fileprivate func archivedBar(_ archivedAt: Date) -> some View {
+        ArchivedBar(conversationID: liveConversation.id, archivedAt: archivedAt)
     }
 }

@@ -294,6 +294,41 @@ struct ConversationsModelTests {
         #expect(model.hasMore)
     }
 
+    @Test("archive removes from the active list; archived list serves it read-only; unarchive restores")
+    func archiveFlow() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-arch")
+        let keep = try await client.conversations.create(profileID: profile.id, title: "keep")
+        let shelve = try await client.conversations.create(profileID: profile.id, title: "shelve")
+        _ = keep
+
+        let model = ConversationsModel(client: client)
+        await model.refresh()
+        #expect(model.conversations.count == 2)
+
+        await model.archive(shelve.id)
+        #expect(model.conversations.count == 1)
+        #expect(model.conversations.first?.title == "keep")
+        #expect(model.loadError == nil)
+
+        // The archived listing carries it, stamped.
+        let archived = try await client.conversations.list(archived: true)
+        #expect(archived.items.count == 1)
+        #expect(archived.items.first?.id == shelve.id)
+        #expect(archived.items.first?.archivedAt != nil)
+
+        // Read-only: the server refuses mutations.
+        await #expect(throws: (any Error).self) {
+            _ = try await client.conversations.sendMessage(conversationID: shelve.id, content: "hi")
+        }
+
+        // Unarchive restores it to the active list.
+        try await client.conversations.unarchive(id: shelve.id)
+        await model.refresh()
+        #expect(model.conversations.count == 2)
+        let archivedAfter = try await client.conversations.list(archived: true)
+        #expect(archivedAfter.items.isEmpty)
+    }
+
     private func freshUserWithProfile(prefix: String) async throws -> (PsmithClient, PsmithProfile) {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: prefix)
         let profile = try await client.profiles.create(Fixtures.minimalProfilePatch())

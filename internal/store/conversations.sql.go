@@ -18,7 +18,7 @@ INSERT INTO conversations (
 ) VALUES (
     $1, $2, $3, $4, $5
 )
-RETURNING id, user_id, profile_id, title, settings, created_at, updated_at
+RETURNING id, user_id, profile_id, title, settings, created_at, updated_at, archived_at
 `
 
 type CreateConversationParams struct {
@@ -46,6 +46,7 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 		&i.Settings,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -60,7 +61,7 @@ func (q *Queries) DeleteConversation(ctx context.Context, id uuid.UUID) error {
 }
 
 const getConversationByID = `-- name: GetConversationByID :one
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at FROM conversations WHERE id = $1
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at FROM conversations WHERE id = $1
 `
 
 func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error) {
@@ -74,12 +75,13 @@ func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conver
 		&i.Settings,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const listConversationsByUser = `-- name: ListConversationsByUser :many
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at FROM conversations
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at FROM conversations
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -101,6 +103,7 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, userID uuid.UUID)
 			&i.Settings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -114,7 +117,7 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, userID uuid.UUID)
 
 const listConversationsByUserRecentlyCreated = `-- name: ListConversationsByUserRecentlyCreated :many
 SELECT
-    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
+    c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at,
     COALESCE(
         (SELECT MAX(m.created_at) FROM messages m
          JOIN contexts ctx ON ctx.id = m.context_id
@@ -123,19 +126,21 @@ SELECT
     ) AS last_activity_at
 FROM conversations c
 WHERE c.user_id = $1
-  AND ($2::text IS NULL
+  AND (c.archived_at IS NOT NULL) = $2::bool
+  AND ($3::text IS NULL
        OR (c.title IS NOT NULL
-           AND c.title ILIKE '%' || $2::text || '%'))
-  AND ($3::uuid IS NULL
-       OR c.profile_id = $3::uuid)
-  AND ($4::timestamptz IS NULL
-       OR (c.created_at, c.id) < ($4::timestamptz, $5::uuid))
+           AND c.title ILIKE '%' || $3::text || '%'))
+  AND ($4::uuid IS NULL
+       OR c.profile_id = $4::uuid)
+  AND ($5::timestamptz IS NULL
+       OR (c.created_at, c.id) < ($5::timestamptz, $6::uuid))
 ORDER BY c.created_at DESC, c.id DESC
-LIMIT $6
+LIMIT $7
 `
 
 type ListConversationsByUserRecentlyCreatedParams struct {
 	UserID     uuid.UUID
+	Archived   bool
 	TitleQuery *string
 	ProfileID  *uuid.UUID
 	CursorKey  *time.Time
@@ -151,6 +156,7 @@ type ListConversationsByUserRecentlyCreatedRow struct {
 	Settings       []byte
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	ArchivedAt     *time.Time
 	LastActivityAt time.Time
 }
 
@@ -163,6 +169,7 @@ type ListConversationsByUserRecentlyCreatedRow struct {
 func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, arg ListConversationsByUserRecentlyCreatedParams) ([]ListConversationsByUserRecentlyCreatedRow, error) {
 	rows, err := q.db.Query(ctx, listConversationsByUserRecentlyCreated,
 		arg.UserID,
+		arg.Archived,
 		arg.TitleQuery,
 		arg.ProfileID,
 		arg.CursorKey,
@@ -184,6 +191,7 @@ func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, ar
 			&i.Settings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
@@ -199,7 +207,7 @@ func (q *Queries) ListConversationsByUserRecentlyCreated(ctx context.Context, ar
 const listConversationsByUserRecentlyUsed = `-- name: ListConversationsByUserRecentlyUsed :many
 WITH convs AS (
     SELECT
-        c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at,
+        c.id, c.user_id, c.profile_id, c.title, c.settings, c.created_at, c.updated_at, c.archived_at,
         COALESCE(
             (SELECT MAX(m.created_at) FROM messages m
              JOIN contexts ctx ON ctx.id = m.context_id
@@ -208,13 +216,14 @@ WITH convs AS (
         ) AS last_activity_at
     FROM conversations c
     WHERE c.user_id = $1
-      AND ($5::text IS NULL
+      AND (c.archived_at IS NOT NULL) = $5::bool
+      AND ($6::text IS NULL
            OR (c.title IS NOT NULL
-               AND c.title ILIKE '%' || $5::text || '%'))
-      AND ($6::uuid IS NULL
-           OR c.profile_id = $6::uuid)
+               AND c.title ILIKE '%' || $6::text || '%'))
+      AND ($7::uuid IS NULL
+           OR c.profile_id = $7::uuid)
 )
-SELECT id, user_id, profile_id, title, settings, created_at, updated_at, last_activity_at FROM convs
+SELECT id, user_id, profile_id, title, settings, created_at, updated_at, archived_at, last_activity_at FROM convs
 WHERE ($2::timestamptz IS NULL
        OR (last_activity_at, id) < ($2::timestamptz, $3::uuid))
 ORDER BY last_activity_at DESC, id DESC
@@ -226,6 +235,7 @@ type ListConversationsByUserRecentlyUsedParams struct {
 	CursorKey  *time.Time
 	CursorID   *uuid.UUID
 	PageLimit  int32
+	Archived   bool
 	TitleQuery *string
 	ProfileID  *uuid.UUID
 }
@@ -238,6 +248,7 @@ type ListConversationsByUserRecentlyUsedRow struct {
 	Settings       []byte
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	ArchivedAt     *time.Time
 	LastActivityAt time.Time
 }
 
@@ -257,6 +268,7 @@ func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg L
 		arg.CursorKey,
 		arg.CursorID,
 		arg.PageLimit,
+		arg.Archived,
 		arg.TitleQuery,
 		arg.ProfileID,
 	)
@@ -275,6 +287,7 @@ func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg L
 			&i.Settings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 			&i.LastActivityAt,
 		); err != nil {
 			return nil, err
@@ -285,6 +298,24 @@ func (q *Queries) ListConversationsByUserRecentlyUsed(ctx context.Context, arg L
 		return nil, err
 	}
 	return items, nil
+}
+
+const setConversationArchived = `-- name: SetConversationArchived :exec
+UPDATE conversations
+SET archived_at = CASE WHEN $2::bool THEN NOW() ELSE NULL END,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type SetConversationArchivedParams struct {
+	ID       uuid.UUID
+	Archived bool
+}
+
+// Archive (TRUE → archived_at = now()) or unarchive (FALSE → NULL).
+func (q *Queries) SetConversationArchived(ctx context.Context, arg SetConversationArchivedParams) error {
+	_, err := q.db.Exec(ctx, setConversationArchived, arg.ID, arg.Archived)
+	return err
 }
 
 const updateConversationSettings = `-- name: UpdateConversationSettings :exec

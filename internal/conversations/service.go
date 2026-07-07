@@ -413,6 +413,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
 			ProfileID:  profileFilter,
+			Archived:   req.Msg.GetArchived(),
 			CursorKey:  cursorKey,
 			CursorID:   cursorID,
 			PageLimit:  int32(limit + 1),
@@ -427,6 +428,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
 					Title: r.Title, Settings: r.Settings,
 					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					ArchivedAt: r.ArchivedAt,
 				},
 				LastActivityAt: r.LastActivityAt,
 			}
@@ -436,6 +438,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 			UserID:     caller.ID,
 			TitleQuery: titleQuery,
 			ProfileID:  profileFilter,
+			Archived:   req.Msg.GetArchived(),
 			CursorKey:  cursorKey,
 			CursorID:   cursorID,
 			PageLimit:  int32(limit + 1),
@@ -450,6 +453,7 @@ func (s *Service) ListConversations(ctx context.Context, req *connect.Request[ps
 					ID: r.ID, UserID: r.UserID, ProfileID: r.ProfileID,
 					Title: r.Title, Settings: r.Settings,
 					CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					ArchivedAt: r.ArchivedAt,
 				},
 				LastActivityAt: r.LastActivityAt,
 			}
@@ -526,7 +530,11 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
 	}
-	if _, err := s.fetchOwnedConversation(ctx, id, caller.ID); err != nil {
+	conv, err := s.fetchOwnedConversation(ctx, id, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, id); err != nil {
@@ -647,7 +655,11 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
 	}
-	if _, err := s.fetchOwnedConversation(ctx, convID, caller.ID); err != nil {
+	conv, err := s.fetchOwnedConversation(ctx, convID, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 
@@ -798,6 +810,9 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[psmi
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireNotArchived(conv); err != nil {
+		return nil, err
+	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
 		return nil, err
 	}
@@ -831,6 +846,9 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[psmit
 	}
 	cxRow, conv, err := s.fetchOwnedContext(ctx, cxID, caller.ID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
@@ -882,6 +900,9 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[psmith
 	}
 	cxRow, conv, err := s.fetchOwnedContext(ctx, cxID, caller.ID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
@@ -1068,6 +1089,59 @@ func (s *Service) fetchOwnedConversation(ctx context.Context, id, userID uuid.UU
 	return row, nil
 }
 
+// requireNotArchived rejects mutations against archived conversations —
+// "archived" means read-only until unarchived, enforced here rather than
+// left to client courtesy. Reads, DeleteConversation, and
+// UnarchiveConversation stay open.
+func (s *Service) requireNotArchived(conv store.Conversation) error {
+	if conv.ArchivedAt != nil {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("conversation is archived"))
+	}
+	return nil
+}
+
+// ArchiveConversation hides the conversation from the default list and
+// freezes it read-only. Refused mid-stream: the active run finishes (or
+// is cancelled) first, so archive can't orphan a streaming turn.
+func (s *Service) ArchiveConversation(ctx context.Context, req *connect.Request[psmithv1.ArchiveConversationRequest]) (*connect.Response[psmithv1.ArchiveConversationResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	id, err := uuid.Parse(req.Msg.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
+	}
+	if _, err := s.fetchOwnedConversation(ctx, id, caller.ID); err != nil {
+		return nil, err
+	}
+	if err := s.requireNoActiveStream(ctx, id); err != nil {
+		return nil, err
+	}
+	if err := s.queries.SetConversationArchived(ctx, store.SetConversationArchivedParams{
+		ID: id, Archived: true,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&psmithv1.ArchiveConversationResponse{}), nil
+}
+
+// UnarchiveConversation restores an archived conversation to the active
+// list. Idempotent on an already-active conversation.
+func (s *Service) UnarchiveConversation(ctx context.Context, req *connect.Request[psmithv1.UnarchiveConversationRequest]) (*connect.Response[psmithv1.UnarchiveConversationResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	id, err := uuid.Parse(req.Msg.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
+	}
+	if _, err := s.fetchOwnedConversation(ctx, id, caller.ID); err != nil {
+		return nil, err
+	}
+	if err := s.queries.SetConversationArchived(ctx, store.SetConversationArchivedParams{
+		ID: id, Archived: false,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&psmithv1.UnarchiveConversationResponse{}), nil
+}
+
 // fetchOwnedContext loads a context and the conversation it belongs to,
 // asserting that the caller owns the conversation. Returns NotFound on
 // missing-or-cross-user with a "context not found" message — same don't-leak
@@ -1123,6 +1197,9 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	}
 	conv, err := s.fetchOwnedConversation(ctx, convID, user.ID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
@@ -2360,6 +2437,9 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	}
 	conv, err := s.fetchOwnedConversation(ctx, convID, user.ID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
 		return nil, err
 	}
 	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {

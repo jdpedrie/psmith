@@ -194,6 +194,19 @@ public final class ConversationsModel {
         }
     }
 
+    /// Archives the conversation and drops it from the active list —
+    /// mirrors delete's local behavior; the row lives on in the
+    /// Archived screen.
+    public func archive(_ id: String) async {
+        do {
+            try await client.conversations.archive(id: id)
+            conversations.removeAll { $0.id == id }
+            if selectedID == id { selectedID = nil }
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
     public func delete(_ id: String) async {
         do {
             try await client.conversations.delete(id: id)

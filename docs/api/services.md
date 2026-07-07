@@ -35,6 +35,7 @@ Conversations:
 | `GetConversation` | The conversation and its active context. |
 | `UpdateConversation` | Sparse: title, settings. |
 | `DeleteConversation` | Delete. |
+| `ArchiveConversation` / `UnarchiveConversation` | Archive hides the conversation from the default list and freezes it read-only (every mutating RPC returns FailedPrecondition until unarchived; reads and DeleteConversation stay open). Refused mid-stream. `ListConversations` takes `archived` to fetch the archive. |
 
 Contexts:
 

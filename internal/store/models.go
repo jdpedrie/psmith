@@ -23,13 +23,14 @@ type Context struct {
 }
 
 type Conversation struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	ProfileID uuid.UUID
-	Title     *string
-	Settings  []byte
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	ProfileID  uuid.UUID
+	Title      *string
+	Settings   []byte
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	ArchivedAt *time.Time
 }
 
 type ConversationPlugin struct {

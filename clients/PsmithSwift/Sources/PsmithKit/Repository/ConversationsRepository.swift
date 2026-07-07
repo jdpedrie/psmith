@@ -18,7 +18,8 @@ public final class ConversationsRepository: Sendable {
         pageToken: String? = nil,
         order: PsmithConversationOrder? = nil,
         titleQuery: String? = nil,
-        profileID: String? = nil
+        profileID: String? = nil,
+        archived: Bool = false
     ) async throws -> (items: [PsmithConversation], nextPageToken: String?) {
         var req = Psmith_V1_ListConversationsRequest()
         req.pageSize = pageSize
@@ -26,6 +27,7 @@ public final class ConversationsRepository: Sendable {
         if let order { req.order = order.proto }
         if let titleQuery, !titleQuery.isEmpty { req.titleQuery = titleQuery }
         if let profileID { req.profileID = profileID }
+        req.archived = archived
 
         // Bounded by a short timeout: on a dead server the default
         // URLSession wait is ~60s, which pins the launch spinner.
@@ -95,6 +97,22 @@ public final class ConversationsRepository: Sendable {
         let resp = await client.createConversation(request: req, headers: [:])
         guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("create conversation") }
         return PsmithConversation(from: msg.conversation)
+    }
+
+    /// Archives a conversation: hidden from the default list and
+    /// read-only server-side until unarchived.
+    public func archive(id: String) async throws {
+        var req = Psmith_V1_ArchiveConversationRequest()
+        req.id = id
+        let resp = await client.archiveConversation(request: req, headers: [:])
+        if let err = resp.error { throw PsmithError.from(err) }
+    }
+
+    public func unarchive(id: String) async throws {
+        var req = Psmith_V1_UnarchiveConversationRequest()
+        req.id = id
+        let resp = await client.unarchiveConversation(request: req, headers: [:])
+        if let err = resp.error { throw PsmithError.from(err) }
     }
 
     public func delete(id: String) async throws {

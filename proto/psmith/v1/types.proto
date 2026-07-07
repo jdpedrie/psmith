@@ -467,6 +467,10 @@ message Conversation {
   // Clients without inline-render support ignore this field with
   // no behaviour change.
   repeated StreamingComponentTag streaming_components = 10;
+  // Set while the conversation is archived: hidden from the default
+  // list and read-only (every mutating RPC refuses it) until
+  // unarchived.
+  optional google.protobuf.Timestamp archived_at = 11;
 }
 
 // One (tag-name, renderer-component) pair surfaced by a plugin in

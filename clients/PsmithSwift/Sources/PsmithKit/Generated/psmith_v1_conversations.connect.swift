@@ -27,6 +27,15 @@ public protocol Psmith_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `deleteConversation`(request: Psmith_V1_DeleteConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_DeleteConversationResponse>
 
+    /// Archive removes the conversation from the default list and makes it
+    /// read-only; Unarchive restores it. Deleting an archived conversation
+    /// stays allowed.
+    @available(iOS 13, *)
+    func `archiveConversation`(request: Psmith_V1_ArchiveConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ArchiveConversationResponse>
+
+    @available(iOS 13, *)
+    func `unarchiveConversation`(request: Psmith_V1_UnarchiveConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_UnarchiveConversationResponse>
+
     /// Contexts.
     @available(iOS 13, *)
     func `listContexts`(request: Psmith_V1_ListContextsRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ListContextsResponse>
@@ -162,6 +171,16 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
     }
 
     @available(iOS 13, *)
+    public func `archiveConversation`(request: Psmith_V1_ArchiveConversationRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ArchiveConversationResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/ArchiveConversation", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `unarchiveConversation`(request: Psmith_V1_UnarchiveConversationRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_UnarchiveConversationResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/UnarchiveConversation", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listContexts`(request: Psmith_V1_ListContextsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ListContextsResponse> {
         return await self.client.unary(path: "/psmith.v1.ConversationsService/ListContexts", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -248,6 +267,8 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
             public static let getConversation = Connect.MethodSpec(name: "GetConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let updateConversation = Connect.MethodSpec(name: "UpdateConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let deleteConversation = Connect.MethodSpec(name: "DeleteConversation", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let archiveConversation = Connect.MethodSpec(name: "ArchiveConversation", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let unarchiveConversation = Connect.MethodSpec(name: "UnarchiveConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let listContexts = Connect.MethodSpec(name: "ListContexts", service: "psmith.v1.ConversationsService", type: .unary)
             public static let activateContext = Connect.MethodSpec(name: "ActivateContext", service: "psmith.v1.ConversationsService", type: .unary)
             public static let setCurrentLeaf = Connect.MethodSpec(name: "SetCurrentLeaf", service: "psmith.v1.ConversationsService", type: .unary)

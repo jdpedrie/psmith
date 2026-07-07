@@ -14,6 +14,12 @@ service ConversationsService {
   rpc UpdateConversation(UpdateConversationRequest) returns (UpdateConversationResponse);
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
 
+  // Archive removes the conversation from the default list and makes it
+  // read-only; Unarchive restores it. Deleting an archived conversation
+  // stays allowed.
+  rpc ArchiveConversation(ArchiveConversationRequest) returns (ArchiveConversationResponse);
+  rpc UnarchiveConversation(UnarchiveConversationRequest) returns (UnarchiveConversationResponse);
+
   // Contexts.
   rpc ListContexts(ListContextsRequest) returns (ListContextsResponse);
   // Make the given context the active one (sets activation_time = now).
@@ -130,6 +136,9 @@ message ListConversationsRequest {
   // Filter to conversations belonging to a specific profile. Used by the
   // sidebar's "By Profile" view to render one section per profile.
   optional string profile_id = 5;
+  // false (default): the active list, as always. true: archived
+  // conversations only, newest archive first by the usual ordering.
+  bool archived = 6;
 }
 message ListConversationsResponse {
   repeated Conversation conversations = 1;
@@ -157,6 +166,15 @@ message DeleteConversationRequest {
   string id = 1;
 }
 message DeleteConversationResponse {}
+
+message ArchiveConversationRequest {
+  string id = 1;
+}
+message ArchiveConversationResponse {}
+message UnarchiveConversationRequest {
+  string id = 1;
+}
+message UnarchiveConversationResponse {}
 
 // --- Contexts ---
 

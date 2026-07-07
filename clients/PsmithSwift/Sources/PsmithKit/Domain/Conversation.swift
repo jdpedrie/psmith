@@ -23,6 +23,9 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
     /// (most profiles before component_builder / lettered_choices in
     /// component mode are attached).
     public let streamingComponents: [PsmithStreamingComponentTag]
+    /// Set while the conversation is archived: hidden from the default
+    /// list and read-only on the server until unarchived.
+    public let archivedAt: Date?
 
     public init(
         id: String,
@@ -34,7 +37,8 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         updatedAt: Date,
         lastActivityAt: Date? = nil,
         settings: PsmithConversationSettings? = nil,
-        streamingComponents: [PsmithStreamingComponentTag] = []
+        streamingComponents: [PsmithStreamingComponentTag] = [],
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.profileID = profileID
@@ -46,6 +50,7 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         self.lastActivityAt = lastActivityAt ?? createdAt
         self.settings = settings
         self.streamingComponents = streamingComponents
+        self.archivedAt = archivedAt
     }
 }
 
@@ -78,7 +83,8 @@ extension PsmithConversation {
             updatedAt: p.hasUpdatedAt ? p.updatedAt.date : Date(timeIntervalSince1970: 0),
             lastActivityAt: p.hasLastActivityAt ? p.lastActivityAt.date : nil,
             settings: p.hasSettings ? PsmithConversationSettings(from: p.settings) : nil,
-            streamingComponents: p.streamingComponents.map(PsmithStreamingComponentTag.init(from:))
+            streamingComponents: p.streamingComponents.map(PsmithStreamingComponentTag.init(from:)),
+            archivedAt: p.hasArchivedAt ? p.archivedAt.date : nil
         )
     }
 }

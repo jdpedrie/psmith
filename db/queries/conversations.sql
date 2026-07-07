@@ -36,6 +36,7 @@ WITH convs AS (
         ) AS last_activity_at
     FROM conversations c
     WHERE c.user_id = $1
+      AND (c.archived_at IS NOT NULL) = sqlc.arg('archived')::bool
       AND (sqlc.narg('title_query')::text IS NULL
            OR (c.title IS NOT NULL
                AND c.title ILIKE '%' || sqlc.narg('title_query')::text || '%'))
@@ -65,6 +66,7 @@ SELECT
     ) AS last_activity_at
 FROM conversations c
 WHERE c.user_id = $1
+  AND (c.archived_at IS NOT NULL) = sqlc.arg('archived')::bool
   AND (sqlc.narg('title_query')::text IS NULL
        OR (c.title IS NOT NULL
            AND c.title ILIKE '%' || sqlc.narg('title_query')::text || '%'))
@@ -74,6 +76,13 @@ WHERE c.user_id = $1
        OR (c.created_at, c.id) < (sqlc.narg('cursor_key')::timestamptz, sqlc.narg('cursor_id')::uuid))
 ORDER BY c.created_at DESC, c.id DESC
 LIMIT sqlc.arg('page_limit');
+
+-- name: SetConversationArchived :exec
+-- Archive (TRUE → archived_at = now()) or unarchive (FALSE → NULL).
+UPDATE conversations
+SET archived_at = CASE WHEN sqlc.arg(archived)::bool THEN NOW() ELSE NULL END,
+    updated_at = NOW()
+WHERE id = $1;
 
 -- name: UpdateConversationTitle :exec
 UPDATE conversations SET title = $2, updated_at = NOW() WHERE id = $1;

@@ -132,6 +132,7 @@ func conversationToProtoWithActivity(c store.Conversation, activeContextID strin
 		ActiveContextId: activeContextID,
 		OwnerUserId:     c.UserID.String(),
 		CreatedAt:       timestamppb.New(c.CreatedAt),
+		ArchivedAt:      tsOrNil(c.ArchivedAt),
 		UpdatedAt:       timestamppb.New(c.UpdatedAt),
 		LastActivityAt:  timestamppb.New(lastActivityAt),
 	}, nil
@@ -667,4 +668,12 @@ func roleStringToEnum(s string) psmithv1.MessageRole {
 	default:
 		return psmithv1.MessageRole_MESSAGE_ROLE_UNSPECIFIED
 	}
+}
+
+// tsOrNil converts an optional time to an optional proto timestamp.
+func tsOrNil(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
+		return nil
+	}
+	return timestamppb.New(*t)
 }
