@@ -7,7 +7,9 @@ import (
 	"fmt"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 
 	"github.com/jdpedrie/psmith/internal/providers"
 )
@@ -24,142 +26,175 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 		return nil, err
 	}
 
-	// NewStreaming returns a *Stream that lazily decodes; errors surface via
-	// stream.Err() during iteration. We hand the iteration to a goroutine and
-	// translate events into Psmith's chunk vocabulary.
-	stream := d.client.Messages.NewStreaming(ctx, params)
+	// Thinking is applied per-attempt rather than in buildMessageParams:
+	// the wire shape differs by model generation (see thinking_shape.go)
+	// and a shape-mismatch 400 triggers one retry with the other shape.
+	thinkingOn := req.Settings.Thinking != nil &&
+		req.Settings.Thinking.Enabled != nil && *req.Settings.Thinking.Enabled
+	budget := 0
+	if thinkingOn && req.Settings.Thinking.BudgetTokens != nil {
+		budget = *req.Settings.Thinking.BudgetTokens
+	}
+	useAdaptive := requiresAdaptiveThinking(req.ModelID)
 
 	out := make(chan providers.Chunk, 16)
 	go func() {
 		defer close(out)
-		// toolBlocks indexes content blocks that opened as tool_use so the
-		// later input_json_delta / content_block_stop events can be translated
-		// correctly. Index is the SDK's per-block sequence number.
-		toolBlocks := map[int64]bool{}
-
-		// Accumulate usage across MessageStart + MessageDelta. Both carry the
-		// same four token counters; deltas are cumulative so the last delta
-		// wins. We emit a single ChunkUsage right before ChunkDone.
-		var usage providers.Usage
-		var usageRaw json.RawMessage
-		captureUsage := func(input, output, cacheRead, cacheCreate int64, raw any) {
-			i, o, r, c := int(input), int(output), int(cacheRead), int(cacheCreate)
-			usage.InputTokens = &i
-			usage.OutputTokens = &o
-			usage.CacheReadTokens = &r
-			usage.CacheWriteTokens = &c
-			if b, err := json.Marshal(raw); err == nil {
-				usageRaw = b
+		for attempt := 0; ; attempt++ {
+			p := params
+			var opts []option.RequestOption
+			if thinkingOn {
+				opts = thinkingRequestConfig(&p, useAdaptive, budget)
 			}
-		}
-
-		for stream.Next() {
-			ev := stream.Current()
-			switch v := ev.AsAny().(type) {
-			case sdk.MessageStartEvent:
-				u := v.Message.Usage
-				captureUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens, u)
-			case sdk.ContentBlockStartEvent:
-				if cb := v.ContentBlock; cb.Type == "tool_use" {
-					toolBlocks[v.Index] = true
-					payload, _ := json.Marshal(map[string]string{
-						"id":   cb.ID,
-						"name": cb.Name,
-					})
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkToolUseStart, Payload: payload,
-					}) {
-						return
-					}
-				}
-				// text/thinking block opens emit no chunk; their deltas follow.
-			case sdk.ContentBlockDeltaEvent:
-				switch d := v.Delta.AsAny().(type) {
-				case sdk.TextDelta:
-					payload, _ := json.Marshal(map[string]string{"text": d.Text})
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkText, Payload: payload,
-					}) {
-						return
-					}
-				case sdk.ThinkingDelta:
-					payload, _ := json.Marshal(map[string]string{"text": d.Thinking})
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkThinking, Payload: payload,
-					}) {
-						return
-					}
-				case sdk.InputJSONDelta:
-					payload, _ := json.Marshal(map[string]string{
-						"partial_json": d.PartialJSON,
-					})
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkToolUseDelta, Payload: payload,
-					}) {
-						return
-					}
-				case sdk.SignatureDelta:
-					// Anthropic emits one signature_delta per thinking block,
-					// at the end of the block. Psmith forwards it so the
-					// conversations-side tool loop can pair it with the
-					// preceding thinking text and round-trip the signed pair
-					// back on the next request.
-					payload, _ := json.Marshal(map[string]string{"signature": d.Signature})
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkThinkingSignature, Payload: payload,
-					}) {
-						return
-					}
-				default:
-					// citations_delta and other future deltas don't have a
-					// normalized chunk type yet — stay silent rather than
-					// fabricating one.
-				}
-			case sdk.ContentBlockStopEvent:
-				if toolBlocks[v.Index] {
-					delete(toolBlocks, v.Index)
-					if !sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkToolUseEnd, Payload: []byte(`{}`),
-					}) {
-						return
-					}
-				}
-			case sdk.MessageDeltaEvent:
-				u := v.Usage
-				captureUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens, u)
-				// stop_reason on the message_delta is Anthropic's
-				// termination signal — end_turn / max_tokens /
-				// stop_sequence / tool_use / refusal. Captured here
-				// (last one wins) so the Usage chunk carries it on
-				// MessageStopEvent.
-				if sr := string(v.Delta.StopReason); sr != "" {
-					srCopy := sr
-					usage.FinishReason = &srCopy
-				}
-			case sdk.MessageStopEvent:
-				if usage.InputTokens != nil || usage.OutputTokens != nil {
-					usage.ProviderRaw = usageRaw
-					payload, _ := json.Marshal(usage)
-					_ = sendChunk(ctx, out, providers.Chunk{
-						Type: providers.ChunkUsage, Payload: payload,
-					})
-				}
-				_ = sendChunk(ctx, out, providers.Chunk{
-					Type: providers.ChunkDone, Payload: []byte(`{}`),
-				})
+			// NewStreaming returns a *Stream that lazily decodes; errors
+			// surface via stream.Err() during iteration.
+			stream := d.client.Messages.NewStreaming(ctx, p, opts...)
+			emitted, finished := pumpStream(ctx, out, stream)
+			if finished {
 				return
 			}
-		}
-
-		if err := stream.Err(); err != nil {
+			err := stream.Err()
+			if err == nil {
+				return // upstream closed without a stop event; nothing more to say
+			}
+			// Wrong thinking shape for this model generation: flip and
+			// retry, once, and only if the downstream hasn't seen output.
+			if attempt == 0 && thinkingOn && !emitted && isThinkingShapeError(err) {
+				useAdaptive = !useAdaptive
+				continue
+			}
 			payload, _ := json.Marshal(map[string]string{"message": err.Error()})
 			_ = sendChunk(ctx, out, providers.Chunk{
 				Type: providers.ChunkError, Payload: payload,
 			})
+			return
 		}
 	}()
 
 	return out, nil
+}
+
+// pumpStream translates one upstream SSE stream into chunks on out.
+// emitted reports whether anything was delivered downstream; finished
+// reports a terminal outcome (message_stop reached, or the downstream
+// went away) — when false, the caller consults stream.Err() and may
+// retry with a different request shape.
+func pumpStream(ctx context.Context, out chan<- providers.Chunk, stream *ssestream.Stream[sdk.MessageStreamEventUnion]) (emitted, finished bool) {
+	// push delivers one chunk downstream, tracking that output has been
+	// seen (which forecloses a silent retry) and whether the consumer is
+	// still there.
+	push := func(c providers.Chunk) bool {
+		if !sendChunk(ctx, out, c) {
+			return false
+		}
+		emitted = true
+		return true
+	}
+
+	// toolBlocks indexes content blocks that opened as tool_use so the
+	// later input_json_delta / content_block_stop events can be translated
+	// correctly. Index is the SDK's per-block sequence number.
+	toolBlocks := map[int64]bool{}
+
+	// Accumulate usage across MessageStart + MessageDelta. Both carry the
+	// same four token counters; deltas are cumulative so the last delta
+	// wins. We emit a single ChunkUsage right before ChunkDone.
+	var usage providers.Usage
+	var usageRaw json.RawMessage
+	captureUsage := func(input, output, cacheRead, cacheCreate int64, raw any) {
+		i, o, r, c := int(input), int(output), int(cacheRead), int(cacheCreate)
+		usage.InputTokens = &i
+		usage.OutputTokens = &o
+		usage.CacheReadTokens = &r
+		usage.CacheWriteTokens = &c
+		if b, err := json.Marshal(raw); err == nil {
+			usageRaw = b
+		}
+	}
+
+	for stream.Next() {
+		ev := stream.Current()
+		switch v := ev.AsAny().(type) {
+		case sdk.MessageStartEvent:
+			u := v.Message.Usage
+			captureUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens, u)
+		case sdk.ContentBlockStartEvent:
+			if cb := v.ContentBlock; cb.Type == "tool_use" {
+				toolBlocks[v.Index] = true
+				payload, _ := json.Marshal(map[string]string{
+					"id":   cb.ID,
+					"name": cb.Name,
+				})
+				if !push(providers.Chunk{Type: providers.ChunkToolUseStart, Payload: payload}) {
+					return emitted, true
+				}
+			}
+			// text/thinking block opens emit no chunk; their deltas follow.
+		case sdk.ContentBlockDeltaEvent:
+			switch d := v.Delta.AsAny().(type) {
+			case sdk.TextDelta:
+				payload, _ := json.Marshal(map[string]string{"text": d.Text})
+				if !push(providers.Chunk{Type: providers.ChunkText, Payload: payload}) {
+					return emitted, true
+				}
+			case sdk.ThinkingDelta:
+				payload, _ := json.Marshal(map[string]string{"text": d.Thinking})
+				if !push(providers.Chunk{Type: providers.ChunkThinking, Payload: payload}) {
+					return emitted, true
+				}
+			case sdk.InputJSONDelta:
+				payload, _ := json.Marshal(map[string]string{
+					"partial_json": d.PartialJSON,
+				})
+				if !push(providers.Chunk{Type: providers.ChunkToolUseDelta, Payload: payload}) {
+					return emitted, true
+				}
+			case sdk.SignatureDelta:
+				// Anthropic emits one signature_delta per thinking block,
+				// at the end of the block. Psmith forwards it so the
+				// conversations-side tool loop can pair it with the
+				// preceding thinking text and round-trip the signed pair
+				// back on the next request.
+				payload, _ := json.Marshal(map[string]string{"signature": d.Signature})
+				if !push(providers.Chunk{Type: providers.ChunkThinkingSignature, Payload: payload}) {
+					return emitted, true
+				}
+			default:
+				// citations_delta and other future deltas don't have a
+				// normalized chunk type yet — stay silent rather than
+				// fabricating one.
+			}
+		case sdk.ContentBlockStopEvent:
+			if toolBlocks[v.Index] {
+				delete(toolBlocks, v.Index)
+				if !push(providers.Chunk{Type: providers.ChunkToolUseEnd, Payload: []byte(`{}`)}) {
+					return emitted, true
+				}
+			}
+		case sdk.MessageDeltaEvent:
+			u := v.Usage
+			captureUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens, u)
+			// stop_reason on the message_delta is Anthropic's
+			// termination signal — end_turn / max_tokens /
+			// stop_sequence / tool_use / refusal. Captured here
+			// (last one wins) so the Usage chunk carries it on
+			// MessageStopEvent.
+			if sr := string(v.Delta.StopReason); sr != "" {
+				srCopy := sr
+				usage.FinishReason = &srCopy
+			}
+		case sdk.MessageStopEvent:
+			if usage.InputTokens != nil || usage.OutputTokens != nil {
+				usage.ProviderRaw = usageRaw
+				payload, _ := json.Marshal(usage)
+				_ = push(providers.Chunk{Type: providers.ChunkUsage, Payload: payload})
+			}
+			_ = push(providers.Chunk{Type: providers.ChunkDone, Payload: []byte(`{}`)})
+			return emitted, true
+		}
+	}
+
+	return emitted, false
 }
 
 // sendChunk pushes one chunk to out, honouring ctx cancellation. Returns
@@ -220,13 +255,6 @@ func buildMessageParams(req providers.SendRequest) (sdk.MessageNewParams, error)
 	}
 	if len(req.Settings.StopSequences) > 0 {
 		out.StopSequences = append([]string(nil), req.Settings.StopSequences...)
-	}
-	if t := req.Settings.Thinking; t != nil && t.Enabled != nil && *t.Enabled {
-		budget := int64(0)
-		if t.BudgetTokens != nil {
-			budget = int64(*t.BudgetTokens)
-		}
-		out.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
 	}
 	if len(req.Tools) > 0 {
 		tools, err := translateTools(req.Tools)
