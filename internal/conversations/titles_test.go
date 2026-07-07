@@ -407,3 +407,109 @@ func TestUpdateContext_CrossUserNotFound(t *testing.T) {
 	}))
 	assertCode(t, err, connect.CodeNotFound)
 }
+
+// TestTitle_E2E_ReplacesPreseededFallback — CreateConversation pre-seeds
+// the title with the derived "ProfileName (YYYY-MM-DD)" fallback so the
+// sidebar isn't "Untitled". Generation on the first turn must treat that
+// pre-seed as replaceable — this is the exact path that silently broke
+// while the direct-insert fixtures (NULL title) kept the old tests green.
+func TestTitle_E2E_ReplacesPreseededFallback(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "Sure."}}})
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "Generated Title"}}})
+
+	svc, q, sup := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, fake.URL())
+	sup.SetOnAssistantMaterialized(svc.MaybeGenerateTitle)
+	configureProfileTitle(t, q, f.profile.ID, f.provider.ID, f.modelID, nil)
+
+	// Mirror the RPC's pre-seed exactly.
+	preseed := derivedTitle(f.profile.Name, time.Now().UTC())
+	if err := q.UpdateConversationTitle(context.Background(), store.UpdateConversationTitleParams{
+		ID: f.conv.ID, Title: &preseed,
+	}); err != nil {
+		t.Fatalf("preseed: %v", err)
+	}
+
+	_, _ = runOneTurn(t, svc, sup, q, f, "help me plan")
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		row, _ := q.GetConversationByID(context.Background(), f.conv.ID)
+		if row.Title != nil && *row.Title == "Generated Title" {
+			break
+		}
+		if time.Now().After(deadline) {
+			got := "<nil>"
+			if row.Title != nil {
+				got = *row.Title
+			}
+			t.Fatalf("pre-seeded fallback was not replaced; title = %q", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestTitle_E2E_UserTitlePreserved — a title the user supplied at create
+// (or set later) is never overwritten, even while the context still
+// generates its own title on the first turn.
+func TestTitle_E2E_UserTitlePreserved(t *testing.T) {
+	t.Parallel()
+
+	fake := fakellm.NewServer(t, fakellm.FlavorAnthropic)
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "ok"}}})
+	fake.Enqueue(fakellm.Script{Events: []fakellm.Event{{Type: fakellm.EventText, Text: "Model Title"}}})
+
+	svc, q, sup := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, fake.URL())
+	sup.SetOnAssistantMaterialized(svc.MaybeGenerateTitle)
+	configureProfileTitle(t, q, f.profile.ID, f.provider.ID, f.modelID, nil)
+
+	userTitle := "My planning thread"
+	if err := q.UpdateConversationTitle(context.Background(), store.UpdateConversationTitleParams{
+		ID: f.conv.ID, Title: &userTitle,
+	}); err != nil {
+		t.Fatalf("set user title: %v", err)
+	}
+
+	_, _ = runOneTurn(t, svc, sup, q, f, "hi")
+
+	// Context titles on the first turn; the conversation title must not move.
+	_ = waitForContextTitle(t, q, f.contextID, 3*time.Second)
+	row, _ := q.GetConversationByID(context.Background(), f.conv.ID)
+	if row.Title == nil || *row.Title != userTitle {
+		t.Errorf("user title overwritten: %+v", row.Title)
+	}
+}
+
+func TestLooksDateSuffixed(t *testing.T) {
+	yes := []string{"General (2026-07-08)", "My Profile (2025-01-01)", "x (2024-12-31)"}
+	for _, s := range yes {
+		if !looksDateSuffixed(s) {
+			t.Errorf("should match: %q", s)
+		}
+	}
+	no := []string{"", "General", "General (yesterday)", "General (2026-7-8)", "General (2026-07-08) extra", "(2026-07-08)"}
+	for _, s := range no {
+		if looksDateSuffixed(s) {
+			t.Errorf("should NOT match: %q", s)
+		}
+	}
+}
+
+func TestTitleIsDerivedFallback(t *testing.T) {
+	if !titleIsDerivedFallback("General (2026-07-08)", "General") {
+		t.Error("exact fallback should match")
+	}
+	if !titleIsDerivedFallback("General (2020-01-01)", "General") {
+		t.Error("fallback with any date should match (midnight-boundary tolerance)")
+	}
+	if titleIsDerivedFallback("Trip notes (2026-07-08)", "General") {
+		t.Error("different name must not match")
+	}
+	if titleIsDerivedFallback("General (not a date)", "General") {
+		t.Error("non-date must not match")
+	}
+}

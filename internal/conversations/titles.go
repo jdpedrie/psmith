@@ -49,15 +49,25 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 		s.logger.Warn("title: load context failed", "err", err, "context_id", params.ContextID)
 		return
 	}
-	needConvTitle := conv.Title == nil || *conv.Title == ""
+	// CreateConversation pre-seeds the title with the derived
+	// "ProfileName (YYYY-MM-DD)" fallback so the sidebar never shows
+	// "Untitled". That pre-seed must still count as "needs a title" here
+	// — treating any non-empty title as final is how conversation
+	// auto-titling silently stopped working while context titles (never
+	// pre-seeded) kept generating.
+	convTitleEmpty := conv.Title == nil || *conv.Title == ""
+	convTitleFallback := !convTitleEmpty && looksDateSuffixed(*conv.Title)
+	needConvTitle := convTitleEmpty || convTitleFallback
 	needCtxTitle := cx.Title == nil || *cx.Title == ""
 	if !needConvTitle && !needCtxTitle {
 		return
 	}
-	// Only generate the context title on the FIRST assistant turn of the
-	// context. Otherwise we'd regenerate (and pay) on every turn until the
-	// title sticks, which is the wrong cost shape.
-	if needCtxTitle {
+	// Only generate on the FIRST assistant turn of the context. Otherwise
+	// we'd regenerate (and pay) on every turn until the title sticks,
+	// which is the wrong cost shape. The same gate covers replacing the
+	// pre-seeded conversation fallback: a failed generation writes the
+	// fallback back, and without the gate every later turn would retry.
+	if needCtxTitle || convTitleFallback {
 		first, err := s.isFirstAssistantInContext(ctx, params.ContextID, assistantMsgID)
 		if err != nil {
 			s.logger.Warn("title: first-assistant check failed", "err", err)
@@ -65,6 +75,7 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 		}
 		if !first {
 			needCtxTitle = false
+			needConvTitle = convTitleEmpty
 		}
 	}
 	if !needConvTitle && !needCtxTitle {
@@ -76,6 +87,16 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	if err != nil {
 		s.logger.Warn("title: load profile failed", "err", err)
 		return
+	}
+	// With the profile name in hand, tighten the fallback match: only
+	// OUR pre-seed ("<profile name> (date)") is replaceable. A
+	// user-authored title that merely ends in a parenthesized date is
+	// theirs to keep.
+	if convTitleFallback && !titleIsDerivedFallback(*conv.Title, prof.Name) {
+		needConvTitle = convTitleEmpty
+		if !needConvTitle && !needCtxTitle {
+			return
+		}
 	}
 	resolved, err := profiles.Resolve(ctx, s.queries, prof)
 	if err != nil {
@@ -285,6 +306,38 @@ func (s *Service) callTitleModel(ctx context.Context, providerID uuid.UUID, mode
 // independent date so titles are consistent across users / installs.
 func derivedTitle(profileName string, t time.Time) string {
 	return fmt.Sprintf("%s (%s)", profileName, t.Format("2006-01-02"))
+}
+
+// looksDateSuffixed reports whether a title ends in " (YYYY-MM-DD)" —
+// the shape of derivedTitle's output. A cheap pre-check usable before
+// the profile row (and so the profile name) has been loaded.
+func looksDateSuffixed(title string) bool {
+	if !strings.HasSuffix(title, ")") {
+		return false
+	}
+	open := strings.LastIndex(title, " (")
+	if open < 0 {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", title[open+2:len(title)-1])
+	return err == nil
+}
+
+// titleIsDerivedFallback reports whether title is exactly the derived
+// fallback for the given profile name (any date). Date-agnostic on
+// purpose: the pre-seed stamps creation day, and matching it later must
+// not depend on which side of midnight either write landed.
+func titleIsDerivedFallback(title, profileName string) bool {
+	rest, ok := strings.CutPrefix(title, profileName+" (")
+	if !ok {
+		return false
+	}
+	rest, ok = strings.CutSuffix(rest, ")")
+	if !ok {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", rest)
+	return err == nil
 }
 
 // persistFallbacks writes the derived fallback titles for whichever

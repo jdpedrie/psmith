@@ -20,6 +20,8 @@ If the resolved profile carries a non-empty title provider kind, a client owns t
 
 If titling is not configured, or the model call fails, or the transcript is empty, or the sanitized title is unusable, the server writes a derived fallback instead of leaving a row "Untitled": `"{ProfileName} ({YYYY-MM-DD})"`, using the conversation or context creation date. Each fallback write is independent and best-effort. The point is that an untitled row always surfaces with persona plus date, never a blank.
 
+CreateConversation pre-seeds the conversation title with this same fallback so the sidebar is coherent from the moment the row exists. The generation hook therefore treats a fallback-shaped title (the profile's name plus a parenthesized date — date-agnostic, so a midnight boundary between the two writes can't break the match) as still needing a title, gated to the first assistant turn of the context so a failed generation doesn't retry on every turn. A user-authored title never matches (the profile-name prefix must be exact), so it is never overwritten.
+
 ## Cost tracking
 
 Cost lives in two places: per-message columns on `messages`, which are the source of truth for a single turn, and an append-only `cost_events` ledger, which backs the rolled-up per-provider view in Settings.
