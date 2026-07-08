@@ -22,6 +22,7 @@ How the system works, one subsystem per document.
 - [design/auth-and-users.md](design/auth-and-users.md) — sessions, the interceptor, bootstrap, admin, ownership, the events bus.
 - [design/encryption.md](design/encryption.md) — at-rest encryption, the master key, the file-URL sub-key, threat tiers.
 - [design/titles-cost-observability.md](design/titles-cost-observability.md) — auto-titles, the cost ledger, Langfuse tracing.
+- [design/speech.md](design/speech.md) — text-to-speech: the sentence-chunked synthesis paradigm, the driver interface, the /tts endpoint, on-device default. Draft for review.
 
 ## API
 
