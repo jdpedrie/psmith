@@ -72,10 +72,20 @@ Provider kinds at v1:
 |---|---|---|
 | `apple_local` | on-device | default; free, private, instant |
 | `grok` | server HTTP | $4.20/1M chars; 26 voices; speech tags; WS upgrade path |
-| `openai` | server HTTP | $15/1M chars; simple; keys often already on file |
+| `openai-compatible` | server HTTP | OpenAI itself ($15/1M chars) or any self-hosted server speaking the same API |
 
-ElevenLabs and Cartesia follow the same shape later (premium voices,
-lowest latency respectively).
+`openai-compatible` mirrors the chat-driver naming deliberately: the
+self-hosted TTS ecosystem (Kokoro via kokoro-fastapi, openedai-speech
+fronting Piper and XTTS, LocalAI, speaches) converged on OpenAI's
+`/v1/audio/speech` shape the same way chat servers converged on
+chat-completions. The config carries a base URL (default
+api.openai.com) and an optional key (a LAN Kokoro needs none), and
+voice/model are free-form strings — never validated against OpenAI's
+voice list, because a self-hosted server's voices are its own.
+Self-hosted synthesis is therefore a v1 capability, not a follow-up.
+
+ElevenLabs and Cartesia follow the same driver shape later (premium
+voices, lowest latency respectively).
 
 **Credential reuse:** for kinds whose vendor is already a configured
 chat provider (xAI, OpenAI), the config references the existing
@@ -149,7 +159,10 @@ plain text in v1; tag emission could become a per-profile knob later.
 Synthesis spend lands in the existing ledger: a `cost_events` row per
 `/tts` call (provider, characters synthesized, USD derived from a hardcoded
 per-kind price table — the constraints-table pattern; revisit if a
-vendor reprices). `apple_local` costs nothing and records nothing.
+vendor reprices). `apple_local` costs nothing and records nothing, and
+neither does an `openai-compatible` config pointed at a custom base
+URL — self-hosted synthesis is free and the ledger shouldn't invent
+OpenAI prices for it.
 
 ## Caching and replay
 
@@ -187,4 +200,6 @@ Settled 2026-07-08: per-user config in v1 with the conversation >
 profile > user resolution chain as the designed-for follow-up; PCM
 s16le 24kHz on the wire; code fences announced as "code omitted";
 hardcoded per-kind pricing; v1 providers `apple_local` + `grok` +
-`openai` with ElevenLabs later; client-side replay cache only.
+`openai-compatible` (which covers self-hosted servers — Kokoro, Piper,
+XTTS — via a custom base URL) with ElevenLabs later; client-side
+replay cache only.
