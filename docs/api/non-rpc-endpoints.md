@@ -31,6 +31,17 @@ How a client returns a user's answer to an elicitation the server raised mid-run
 
 The elicited content flows to the waiting tool and never enters the model's context or the persisted transcript.
 
+## `POST /tts`
+
+Read-aloud synthesis for one message ([speech.md](../design/speech.md)). Bearer-authenticated. Audio streams through and is never persisted server-side — this response is the only copy the server ever holds.
+
+- Body: `{"message_id": "<uuid>"}`. Ownership is checked through message → context → conversation; cross-user or missing returns the same `404`.
+- Success streams `audio/pcm` (s16le mono) with `X-Speech-Sample-Rate` (24000) and `X-Speech-Normalizer` (the normalizer version, part of the client replay-cache key). Chunks flush as the provider synthesizes each text segment, so playback can start on the first one.
+- `412` when the user's speech config is `apple_local` — that kind synthesizes on-device and the client should not have called.
+- `422` when the message has no speakable text after normalization.
+- Provider failure before any audio is a `502` carrying the provider's error excerpt; failure mid-stream truncates the audio (the 200 is already committed) and logs server-side.
+- Each successful call writes a `cost_events` row when the config references a chat provider; self-hosted and standalone-key configs skip the ledger.
+
 ## `/mcp`
 
 Psmith's own MCP server surface, mounted for dogfooding through the `mcp` plugin. `POST`-only (other methods `405`), Streamable-HTTP transport with JSON responses (no SSE), and the same bearer session as the RPCs (a `401` on a bad token). It exposes a curated subset of Psmith's RPCs as MCP tools (profile, plugin-pipeline, conversation, and model/provider operations), all scoped to the authenticated user. The same dispatcher is also reachable in-process by the `mcp` plugin without a network hop, which is the transport elicitation runs over. Protocol and tool detail are in [tools.md](../design/tools.md).

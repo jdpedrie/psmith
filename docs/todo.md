@@ -235,6 +235,14 @@ Deferred:
 
 - **Anthropic SDK upgrade for native `ttl` field.** The `AnthropicExtras.cache_ttl` follow-up shipped the 1-hour TTL via the SDK's `metadata.SetExtraFields` escape hatch (anthropic-sdk-go v1.4 doesn't expose `ttl` on the non-beta `CacheControlEphemeralParam` directly — the beta path does). The escape hatch produces the correct wire payload (`"cache_control":{"type":"ephemeral","ttl":"1h"}`), but it's brittle: if the SDK adds a typed `TTL` field in a later release, the marshalling could double-emit or conflict. Drop the `SetExtraFields` call in `internal/providers/anthropic/send.go::applyAutoCacheControl` once the SDK exposes a typed `TTL` field, or alternatively switch the driver to the `betamessage` API (which already has `BetaCacheControlEphemeralTTL`).
 
+- **Speech (TTS) — v1 shipped 2026-07-08; deferred pieces** ([design/speech.md](design/speech.md)):
+  - **Mac + web read-aloud UI.** PsmithKit's `SpeechRepository` / `SpeechSettingsModel` / `SpeechPlaybackModel` are platform-neutral; the Mac needs a speaker affordance + Settings pane (mirror `clients/psmithd-ios/PsmithiOS/Settings/SpeechDetailView.swift`), the web needs a cookie-authed `/tts` fetch + MediaSource playback.
+  - **Live tee (`GET /tts?run_id`)** — speak-as-it-streams; v2 in the design doc.
+  - **WS drivers** (Grok WS, ElevenLabs stream-input, Cartesia) behind the same `Synthesizer` interface.
+  - **Voice resolution chain** (conversation > profile > user) + multi-voice conversations.
+  - **Standalone-key cost attribution** — `cost_events.provider_id` is a FK to `user_model_providers`, so synthesis with a standalone key (no `provider_ref`) skips the ledger. Fine while credential-reuse is the recommended path; revisit if ElevenLabs (never a chat provider) lands.
+  - **iOS visual QA pass pending** — built against the generic simulator destination (CoreSimulator broken on the dev Mac); the speaker affordance + Speech settings screen compile and the models are L1-tested, but nobody has eyeballed the running UI yet.
+
 - **Mac profile editor lacks welcome-message editing.** iOS gained a Welcome message row (Prompt section) plus viewer display; `PsmithProfilePatch.welcomeMessage` is wired through the repository, so the Mac form just needs the field + clear handling. (Mac is knowingly behind; see iOS ProfilesListView for the shape.)
 
 - **Mac SnapshotHarness is broken on HEAD** (pre-existing, unrelated to current work): `Tests/SnapshotHarness/Stubs.swift` assigns `streamRunID` / `streamingText` / `streamingToolCalls`, which became get-only computed properties on ConversationViewModel — 8 compile errors, so `make swift-test-l2` can't run. Fix the stubs to drive the hub-backed state instead.

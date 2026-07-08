@@ -1,7 +1,9 @@
 # Speech (text-to-speech)
 
-**Status: v1 scope agreed (2026-07-08).** Nothing here is built yet;
-this is the contract the implementation follows.
+**Status: v1 built (2026-07-08)** — server pipeline, SpeechService,
+`POST /tts`, PsmithKit playback/settings models, and the iOS surface
+are shipped. Mac and web read-aloud UI are deferred (see
+[todo](../todo.md)). This doc reflects the as-built contract.
 
 Psmith speaks assistant turns aloud: on demand for a finished message
 (read-aloud), and eventually live as a turn streams. Synthesis is
@@ -43,10 +45,15 @@ has no replay value — even opus would bloat it. Instead, a dedicated
 non-RPC streaming endpoint (the `/files/{id}` pattern):
 
 - **`POST /tts`** with `{message_id}` — read-aloud. The server loads
-  the message text, normalizes it for speech, pipes segments through
-  the configured driver with its stored key, and streams audio back in
-  one HTTP response. Bearer or cookie auth, same as the other non-RPC
-  endpoints.
+  the message text (ownership checked through message → context →
+  conversation, cross-user masked as 404), normalizes it for speech,
+  pipes segments through the configured driver with its stored key,
+  and streams `audio/pcm` back in one flushed HTTP response with
+  `X-Speech-Sample-Rate` and `X-Speech-Normalizer` headers. Bearer
+  auth. An `apple_local` config is refused with 412 — that kind never
+  round-trips. Provider failure before any audio is a 502 carrying
+  the provider's error excerpt; mid-stream failure truncates (the
+  response is already committed as audio) and logs.
 - **`GET /tts?run_id=...`** (phase 2) — speak-as-it-streams. The
   server subscribes to the live run internally (Subscribe already
   replays-then-tails), segments text as it lands, and streams audio.
@@ -62,9 +69,15 @@ key, no cost. It is the default, so speech works out of the box.
 ## Configuration
 
 A per-user speech config in the embedder/Langfuse mold
-(`user_tts_config`: kind, voice, model, speed, encrypted config blob),
-managed by a small `SpeechService` (get/set/test/delete RPCs with
-dedicated request/response messages).
+(`user_tts_config`: kind, config JSONB for voice/model/speed/base_url,
+encrypted standalone key, optional `provider_ref` FK to
+`user_model_providers`), managed by `SpeechService`:
+`GetSpeechConfig` / `UpdateSpeechConfig` (sparse; `api_key` and
+`provider_ref` are tri-state — absent leaves alone, `""` clears) /
+`DeleteSpeechConfig` / `TestSpeechConfig` (synthesizes one phrase,
+returns ok/latency/bytes) / `ListSpeechKinds`. The config echoes
+`normalizer_version` so clients can key their replay cache without a
+second RPC.
 
 Provider kinds at v1:
 
@@ -109,8 +122,10 @@ and waits for the tag/component machinery to drive it.
 type Synthesizer interface {
     // Synthesize streams audio for text segments arriving on in.
     // HTTP drivers make one provider request per segment; WS drivers
-    // forward incrementally. Frames are PCM s16le 24kHz mono.
-    Synthesize(ctx context.Context, req Request, in <-chan string) (<-chan Frame, error)
+    // forward incrementally. Frames are PCM s16le 24kHz mono. The
+    // error channel delivers at most one terminal error after the
+    // frame channel closes.
+    Synthesize(ctx context.Context, req Request, in <-chan string) (<-chan Frame, <-chan error)
 }
 ```
 
@@ -140,39 +155,53 @@ plain text in v1; tag emission could become a per-profile knob later.
 
 ## Client behavior (iOS first)
 
-- A speaker action on assistant message bubbles (context menu + a
-  small affordance on the newest message). Tap → play; tap again →
-  stop. One playback at a time, owned by a `SpeechPlaybackModel` in
-  PsmithKit.
+- A speaker action on assistant message bubbles: a Read aloud item in
+  the long-press menu on every assistant turn, plus an inline speaker
+  in the header of the newest one (and of whichever message is
+  currently speaking, so a visible stop control always exists). Tap →
+  play; tap again → stop. One playback at a time app-wide, owned by
+  `SpeechPlaybackModel` on the `AppModel`.
 - Cloud path: stream `POST /tts` into `AVAudioEngine` +
-  `AVAudioPlayerNode`, scheduling PCM buffers as they arrive.
-  `AVAudioSession` category `.playback` so audio continues when the
-  screen locks.
-- `apple_local` path: `AVSpeechSynthesizer` fed the normalized text
-  directly; it manages its own queue.
-- Mac and web follow: the web client gets the cloud path nearly free
-  (cookie-authenticated endpoint + MediaSource on an `<audio>`
-  element).
+  `AVAudioPlayerNode`, scheduling PCM buffers as chunks arrive.
+  `AVAudioSession` category `.playback` / mode `.spokenAudio` so audio
+  continues when the screen locks. A 412 from the server (config raced
+  to apple_local) falls back to on-device synthesis instead of erroring.
+- `apple_local` path: `AVSpeechSynthesizer` fed through
+  `SpeechText.liteNormalize`, a client-side regex strip that stands in
+  for the server normalizer (code fences → "Code omitted.", tables
+  announced, links speak their label). Deliberately simpler than the
+  server pass — apple_local audio never enters the versioned cache, so
+  the two don't need to match byte-for-byte.
+- Settings → Speech mirrors the Embedder screen: kind picker, voice /
+  model / speed, base URL for openai-compatible, credential entry or
+  provider-reuse picker, test button against the saved config.
+- Mac and web follow (deferred, see [todo](../todo.md)): the web
+  client gets the cloud path nearly free (cookie-authenticated
+  endpoint + MediaSource on an `<audio>` element).
 
 ## Cost
 
 Synthesis spend lands in the existing ledger: a `cost_events` row per
-`/tts` call (provider, characters synthesized, USD derived from a hardcoded
-per-kind price table — the constraints-table pattern; revisit if a
-vendor reprices). `apple_local` costs nothing and records nothing, and
-neither does an `openai-compatible` config pointed at a custom base
-URL — self-hosted synthesis is free and the ledger shouldn't invent
-OpenAI prices for it.
+`/tts` call (USD = normalized character count × a hardcoded per-kind
+price — the constraints-table pattern; revisit if a vendor reprices).
+`cost_events.provider_id` is a foreign key, so a row is only written
+when the config's `provider_ref` points at a real chat-provider row —
+standalone-key configs synthesize fine but skip the ledger.
+`apple_local` costs nothing and records nothing, and neither does an
+`openai-compatible` config pointed at a custom base URL — self-hosted
+synthesis is free and the ledger shouldn't invent OpenAI prices for
+it.
 
 ## Caching and replay
 
 Synthesized audio is cached on the client, not the server. After one
 playback the client already holds the full PCM; keeping it in the
-existing PsmithKit cache (a capped LRU alongside CacheKind.profiles et
-al., ~50MB budget) makes replay instant and free with no new server
-machinery. The key is (message id, content hash, provider kind, voice,
-normalizer version) — the content hash guarantees an edited message
-never replays stale audio, and a voice change naturally misses. Cache
+existing PsmithKit cache (`CacheKind.speechAudio`, sharing the
+user-tunable LRU cap with the other kinds) makes replay instant and
+free with no new server machinery. The key is (message id, content
+hash, provider kind, voice, model, normalizer version) — the content
+hash guarantees an edited message never replays stale audio, and a
+voice change naturally misses. Cache
 misses (app restart eviction, another device) just re-synthesize:
 fractions of a cent and ~2s. A server-side audio cache is deliberately
 rejected for v1 — TTL sweeping, invalidation, and a new on-disk
@@ -181,11 +210,11 @@ artifact class buy nothing over re-synthesis at these prices.
 
 ## Phasing
 
-1. **v1 — read-aloud:** `internal/speech` package + segmenter +
-   normalizer, `grok` + `openai` drivers, `user_tts_config` +
-   SpeechService RPCs, `POST /tts` endpoint, iOS speaker action with
-   both paths, `apple_local` default. Tests at every layer per
-   CLAUDE.md.
+1. **v1 — read-aloud (built):** `internal/speech` package + segmenter
+   + normalizer, `grok` + `openai-compatible` drivers,
+   `user_tts_config` + SpeechService RPCs, `POST /tts` endpoint, iOS
+   speaker action with both paths, `apple_local` default. Tests at
+   every layer per CLAUDE.md.
 2. **v2 — live tee:** `GET /tts?run_id`, client "speak this reply"
    toggle that starts audio while the turn streams.
 3. **Later:** WS drivers (Cartesia, Grok WS, ElevenLabs) behind the
