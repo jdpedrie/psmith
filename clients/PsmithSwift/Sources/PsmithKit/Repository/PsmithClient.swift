@@ -14,6 +14,7 @@ public final class PsmithClient: Sendable {
     public let embedder: EmbedderRepository
     public let deviceTools: DeviceToolsRepository
     public let events: EventsSubscriber
+    public let speech: SpeechRepository
 
     /// Optional on-device read-through cache. When non-nil,
     /// repositories write successful fetches into it and fall back
@@ -89,6 +90,11 @@ public final class PsmithClient: Sendable {
         )
         self.events = EventsSubscriber(
             client: Psmith_V1_EventsServiceClient(client: protocolClient)
+        )
+        self.speech = SpeechRepository(
+            client: Psmith_V1_SpeechServiceClient(client: protocolClient),
+            host: host,
+            tokenStore: tokenStore
         )
     }
 }

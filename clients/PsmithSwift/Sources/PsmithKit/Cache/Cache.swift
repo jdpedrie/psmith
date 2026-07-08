@@ -160,4 +160,11 @@ public enum CacheKind {
     /// the server is unreachable on launch (otherwise they'd be
     /// bounced to Login and never see their cached conversations).
     public static let currentUser = "currentUser"
+    /// Synthesized PCM for replay. The id encodes everything that
+    /// invalidates the audio: message id, content hash, speech kind,
+    /// voice, and the server's normalizer version — an edit, a
+    /// config change, or a normalizer bump all miss cleanly. Audio
+    /// is never stored server-side, so this cache is the only replay
+    /// path that avoids re-billing synthesis.
+    public static let speechAudio = "speechAudio"
 }
