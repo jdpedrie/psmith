@@ -1,7 +1,7 @@
 # Speech (text-to-speech)
 
-**Status: draft for review.** Nothing here is built. Open questions are
-marked inline and collected at the end.
+**Status: v1 scope agreed (2026-07-08).** Nothing here is built yet;
+this is the contract the implementation follows.
 
 Psmith speaks assistant turns aloud: on demand for a finished message
 (read-aloud), and eventually live as a turn streams. Synthesis is
@@ -83,10 +83,13 @@ chat provider (xAI, OpenAI), the config references the existing
 copy — one key, encrypted once, used by both drivers. Standalone-key
 entry exists for vendors that aren't chat providers (ElevenLabs).
 
-**OPEN:** per-user only, or per-profile override? Profiles are
-personas; a voice per persona (the title-model pattern:
-`tts_voice`/`tts_provider` on the profile, falling back to the user
-config) is more work but matches how everything else resolves.
+Scope is per-user in v1. The designed-for follow-up is the standard
+resolution chain: conversation override > profile override > user
+default — a voice per persona, and a voice per conversation on top
+(the title-model pattern, one resolution function). Further out:
+multiple voices within one conversation (interactive fiction —
+character-tagged dialogue mapped to voices), which is plugin-shaped
+and waits for the tag/component machinery to drive it.
 
 ## The driver interface
 
@@ -105,14 +108,10 @@ type Synthesizer interface {
 (mutex-guarded). Drivers are tested against `httptest` servers with
 body-level assertions, the anthropic-driver style.
 
-**Audio format — OPEN:** PCM s16le 24kHz mono end-to-end is the draft
-choice. It concatenates gaplessly across segment boundaries with zero
-codecs anywhere in our stack; the cost is bandwidth (~48KB/s, ~21MB
-per hour of listening). Opus at ~6KB/s is the alternative, but
-streaming opus needs an ogg demuxer on the client and either an
-encoder dependency server-side or per-provider passthrough with messy
-segment joins. Recommendation: PCM for v1, revisit if cellular data
-bills complain.
+Audio format: PCM s16le 24kHz mono end-to-end (decided). It
+concatenates gaplessly across segment boundaries with zero codecs
+anywhere in our stack; the cost is bandwidth (~48KB/s, ~21MB per hour
+of listening), which we accept. Revisit opus only if that ever bites.
 
 ## Segmentation and normalization
 
@@ -121,7 +120,8 @@ terminators and paragraph breaks, minimum ~40 chars per segment,
 force-flush on markdown block boundaries and at end of input.
 
 A markdown-to-speech normalizer runs first: code fences reduce to
-"code omitted" (**OPEN:** or skip silently), links speak their text,
+"code omitted" (decided: announce, don't skip — the narration stays
+honest about what it isn't reading), links speak their text,
 emphasis/heading markers strip, tables reduce to a short notice.
 Thinking blocks and tool-call bodies are never spoken.
 
@@ -147,10 +147,24 @@ plain text in v1; tag emission could become a per-profile knob later.
 ## Cost
 
 Synthesis spend lands in the existing ledger: a `cost_events` row per
-`/tts` call (provider, characters synthesized, derived USD from the
-config's price. **OPEN:** hardcode per-kind prices like the catalog
-does, or a price field on the config?). `apple_local` costs nothing
-and records nothing.
+`/tts` call (provider, characters synthesized, USD derived from a hardcoded
+per-kind price table — the constraints-table pattern; revisit if a
+vendor reprices). `apple_local` costs nothing and records nothing.
+
+## Caching and replay
+
+Synthesized audio is cached on the client, not the server. After one
+playback the client already holds the full PCM; keeping it in the
+existing PsmithKit cache (a capped LRU alongside CacheKind.profiles et
+al., ~50MB budget) makes replay instant and free with no new server
+machinery. The key is (message id, content hash, provider kind, voice,
+normalizer version) — the content hash guarantees an edited message
+never replays stale audio, and a voice change naturally misses. Cache
+misses (app restart eviction, another device) just re-synthesize:
+fractions of a cent and ~2s. A server-side audio cache is deliberately
+rejected for v1 — TTL sweeping, invalidation, and a new on-disk
+artifact class buy nothing over re-synthesis at these prices.
+`apple_local` bypasses the cache entirely (synthesis is instant).
 
 ## Phasing
 
@@ -162,14 +176,15 @@ and records nothing.
 2. **v2 — live tee:** `GET /tts?run_id`, client "speak this reply"
    toggle that starts audio while the turn streams.
 3. **Later:** WS drivers (Cartesia, Grok WS, ElevenLabs) behind the
-   same interface; per-profile voices; expressive-tag emission; STT /
-   voice input (a separate design).
+   same interface; the voice resolution chain (conversation > profile
+   > user); multi-voice conversations (interactive fiction via tagged
+   dialogue); expressive-tag emission; STT / voice input (a separate
+   design).
 
-## Open questions
+## Decisions log
 
-1. Config scope: per-user only, or per-profile voice override?
-2. Wire format: PCM s16le 24kHz (draft) vs opus passthrough?
-3. Code blocks: announce "code omitted" (draft) or skip silently?
-4. Cost: hardcoded per-kind prices (draft) or user-editable?
-5. v1 provider set: `apple_local` + `grok` + `openai` (draft) — add
-   ElevenLabs now or later?
+Settled 2026-07-08: per-user config in v1 with the conversation >
+profile > user resolution chain as the designed-for follow-up; PCM
+s16le 24kHz on the wire; code fences announced as "code omitted";
+hardcoded per-kind pricing; v1 providers `apple_local` + `grok` +
+`openai` with ElevenLabs later; client-side replay cache only.
