@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package psmith.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
+
+// SpeechService manages the per-user text-to-speech config — which
+// synthesis backend reads assistant turns aloud. See
+// docs/design/speech.md.
+//
+// Storage: one row per user in user_tts_config (migration 00040).
+// Non-secret fields (voice, model, speed, base_url) live in a
+// plaintext JSONB blob; a standalone api_key is AES-GCM encrypted in
+// its own column; alternatively provider_ref points at an existing
+// chat-provider row whose key the speech driver reuses.
+//
+// Absence of a row means kind "apple_local": the client synthesizes
+// on-device and the server is not involved. Cloud kinds are consumed
+// through the non-RPC POST /tts streaming endpoint.
+service SpeechService {
+  // GetSpeechConfig returns the caller's config, or the apple_local
+  // default shape when no row exists. Never NotFound. The api_key is
+  // never returned; api_key_set reports its presence.
+  rpc GetSpeechConfig(GetSpeechConfigRequest) returns (GetSpeechConfigResponse);
+
+  // UpdateSpeechConfig upserts sparsely: any unset optional preserves
+  // the existing value. api_key: nil = unchanged, "" = clear, other =
+  // encrypt + replace. provider_ref: nil = unchanged, "" = clear,
+  // other = must be a chat provider the caller owns.
+  rpc UpdateSpeechConfig(UpdateSpeechConfigRequest) returns (UpdateSpeechConfigResponse);
+
+  // DeleteSpeechConfig removes the row — back to the apple_local
+  // default.
+  rpc DeleteSpeechConfig(DeleteSpeechConfigRequest) returns (DeleteSpeechConfigResponse);
+
+  // TestSpeechConfig synthesizes one short phrase through the saved
+  // config and reports round-trip health, latency, and audio bytes
+  // produced. For apple_local it reports ok without a network call —
+  // there is nothing server-side to test.
+  rpc TestSpeechConfig(TestSpeechConfigRequest) returns (TestSpeechConfigResponse);
+
+  // ListSpeechKinds returns the registered server-side kinds plus the
+  // apple_local sentinel, for the settings picker.
+  rpc ListSpeechKinds(ListSpeechKindsRequest) returns (ListSpeechKindsResponse);
+}
+
+message SpeechConfig {
+  // "apple_local", "grok", "openai-compatible".
+  string kind = 1;
+  // Free-form: a self-hosted server's voices are its own.
+  string voice = 2;
+  string model = 3;
+  // Speaking-rate multiplier; 0 = provider default.
+  double speed = 4;
+  // openai-compatible only: overrides api.openai.com for self-hosted
+  // servers (Kokoro, Piper shims, LocalAI).
+  string base_url = 5;
+  // True when a standalone api_key is stored. The value itself is
+  // never returned.
+  bool api_key_set = 6;
+  // Chat-provider row whose credential the speech driver reuses.
+  // Empty when unset.
+  string provider_ref = 7;
+  bool enabled = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // The server's speech-normalizer version. Participates in client
+  // replay-cache keys so cached audio synthesized under older
+  // normalization misses instead of replaying stale narration.
+  int32 normalizer_version = 11;
+}
+
+message GetSpeechConfigRequest {}
+message GetSpeechConfigResponse {
+  SpeechConfig config = 1;
+}
+
+message UpdateSpeechConfigRequest {
+  optional string kind = 1;
+  optional string voice = 2;
+  optional string model = 3;
+  optional double speed = 4;
+  optional string base_url = 5;
+  // nil = unchanged; "" = clear; other = encrypt + replace.
+  optional string api_key = 6;
+  // nil = unchanged; "" = clear; other = a chat-provider id the
+  // caller owns.
+  optional string provider_ref = 7;
+  optional bool enabled = 8;
+}
+message UpdateSpeechConfigResponse {
+  SpeechConfig config = 1;
+}
+
+message DeleteSpeechConfigRequest {}
+message DeleteSpeechConfigResponse {}
+
+message TestSpeechConfigRequest {}
+message TestSpeechConfigResponse {
+  bool ok = 1;
+  string error_message = 2;
+  int64 latency_ms = 3;
+  // Audio bytes the test synthesis produced — zero bytes with ok=true
+  // would itself be suspicious, so the client surfaces it.
+  int64 audio_bytes = 4;
+}
+
+message ListSpeechKindsRequest {}
+message ListSpeechKindsResponse {
+  // Sorted; always includes "apple_local".
+  repeated string kinds = 1;
+}

@@ -32,6 +32,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/modelmeta"
 	"github.com/jdpedrie/psmith/internal/modelproviders"
 	"github.com/jdpedrie/psmith/internal/profiles"
+	"github.com/jdpedrie/psmith/internal/speechsvc"
 	"github.com/jdpedrie/psmith/internal/storage"
 	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/jdpedrie/psmith/internal/stream"
@@ -46,6 +47,10 @@ import (
 
 	// Embedder packages self-register in init() too.
 	_ "github.com/jdpedrie/psmith/internal/embeddings/openai"
+
+	// Speech drivers register themselves the same way.
+	_ "github.com/jdpedrie/psmith/internal/speech/grok"
+	_ "github.com/jdpedrie/psmith/internal/speech/openaicompat"
 )
 
 // stubServices is empty now that all five services have implementations.
@@ -242,6 +247,8 @@ func run() error {
 	embedderSvc := embeddersvc.NewService(queries, cipher,
 		embedderCachingResolver.Invalidate, slog.Default())
 
+	speechSvc := speechsvc.NewService(queries, cipher, slog.Default())
+
 	streamsSvc := streamsvc.NewService(queries, supervisor)
 	filesSvc := files.NewService(queries, fileStorage, urlSigningKey, baseURL)
 
@@ -254,6 +261,7 @@ func run() error {
 	mux.Handle(psmithv1connect.NewFilesServiceHandler(filesSvc, opts))
 	mux.Handle(psmithv1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
 	mux.Handle(psmithv1connect.NewEmbedderServiceHandler(embedderSvc, opts))
+	mux.Handle(psmithv1connect.NewSpeechServiceHandler(speechSvc, opts))
 	mux.Handle(psmithv1connect.NewDeviceToolsServiceHandler(
 		conversationsSvc.DeviceToolsService(), opts))
 	mux.Handle(psmithv1connect.NewEventsServiceHandler(eventsSvc, opts))
@@ -289,6 +297,9 @@ func run() error {
 	// against the conversation row. See
 	// internal/conversations/elicit_handler.go for the handler.
 	mux.Handle("POST /conversations/{id}/elicitations/{eid}/respond", conversationsSvc.ElicitHandler())
+	// Speech synthesis: bearer-authenticated audio streaming for one
+	// message. Non-RPC because the response is raw chunked PCM.
+	mux.HandleFunc("POST /tts", speechSvc.TTSHandler())
 	// Device-tool response endpoint — the connected client POSTs the
 	// result of a CHUNK_TYPE_DEVICE_TOOL_USE here, which unblocks the
 	// server-side `app_tools` plugin's ExecuteTool. Same auth shape +

@@ -83,6 +83,7 @@ type Querier interface {
 	DeleteUserModel(ctx context.Context, arg DeleteUserModelParams) error
 	DeleteUserModelProvider(ctx context.Context, id uuid.UUID) error
 	DeleteUserPluginSettings(ctx context.Context, arg DeleteUserPluginSettingsParams) error
+	DeleteUserTTSConfig(ctx context.Context, userID uuid.UUID) error
 	// Sets a terminal status, ended_at, optional result_message_id /
 	// result_context_id (compression sets the latter) / error_payload.
 	FinalizeStreamRun(ctx context.Context, arg FinalizeStreamRunParams) (StreamRun, error)
@@ -136,6 +137,9 @@ type Querier interface {
 	// means (sqlc emits ErrNoRows on no match; the service layer treats that
 	// as an empty config and returns `{}` to the wire).
 	GetUserPluginSettings(ctx context.Context, arg GetUserPluginSettingsParams) (UserPluginSetting, error)
+	// pgx ErrNoRows on missing — callers treat absence as the apple_local
+	// default (on-device synthesis, nothing to configure).
+	GetUserTTSConfig(ctx context.Context, userID uuid.UUID) (UserTtsConfig, error)
 	// True iff the context contains at least one role=compression_summary row that
 	// did NOT fail (error_payload IS NULL). SendMessage / Compact use this as a
 	// precondition: a clean pending summary must be promoted
@@ -451,6 +455,10 @@ type Querier interface {
 	// decrypts incoming reads and falls back to plaintext when
 	// config_encrypted is NULL on legacy rows.
 	UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPluginSettingsParams) (UserPluginSetting, error)
+	// Single-row upsert keyed by user_id; conflict replaces every field
+	// (the service sparse-merges before calling, and "clear my api_key"
+	// must work via an empty bytea).
+	UpsertUserTTSConfig(ctx context.Context, arg UpsertUserTTSConfigParams) (UserTtsConfig, error)
 }
 
 var _ Querier = (*Queries)(nil)

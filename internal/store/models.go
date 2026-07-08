@@ -288,3 +288,14 @@ type UserPluginSetting struct {
 	UpdatedAt       time.Time
 	ConfigEncrypted []byte
 }
+
+type UserTtsConfig struct {
+	UserID          uuid.UUID
+	Kind            string
+	Config          []byte
+	ApiKeyEncrypted []byte
+	ProviderRef     *uuid.UUID
+	Enabled         bool
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
