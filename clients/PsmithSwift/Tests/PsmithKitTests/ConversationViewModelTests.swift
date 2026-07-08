@@ -696,8 +696,11 @@ struct ConversationViewModelTests {
         await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
 
         // After the fork, branchInfo should report 2 siblings for the
-        // active branch's terminal user message.
+        // active branch's terminal user message. load() populates the
+        // tree caches asynchronously — await loadTree() explicitly so
+        // branchInfo is deterministic (same as reloadFromUserForks).
         await r.vm.load()
+        await r.vm.loadTree()
         guard let activeUser = r.vm.messages.last(where: { $0.role == .user }) else {
             Issue.record("no active user after load"); return
         }

@@ -409,8 +409,16 @@ public final class StreamHub {
         // Idempotent — the handler's hub.clear already removed
         // these, but cleaning up here too means a handler that
         // didn't call clear (legacy / tests without a VM) still
-        // results in a settled state.
-        streams.removeValue(forKey: conversationID)
-        activeConversationIDs.remove(conversationID)
+        // results in a settled state. Guarded on the entry still
+        // belonging to THIS run: the handler's early clear flips
+        // `streamRunID == nil`, which un-gates Send — a next turn
+        // can register a NEW entry for this conversation before we
+        // resume here, and removing it unconditionally would kill
+        // the live stream's hub state mid-turn (the UI freezes and
+        // the send gate lies until the chain reload).
+        if streams[conversationID]?.runID == run.id {
+            streams.removeValue(forKey: conversationID)
+            activeConversationIDs.remove(conversationID)
+        }
     }
 }
