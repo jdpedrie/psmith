@@ -25,6 +25,8 @@ public final class SpeechPlaybackModel {
     public private(set) var loadingMessageID: String?
     public private(set) var playbackError: String?
 
+    public func clearError() { playbackError = nil }
+
     private var streamTask: Task<Void, Never>?
     private var player: PCMStreamPlayer?
     private let localSpeaker = LocalSpeaker()
@@ -203,6 +205,9 @@ public final class SpeechPlaybackModel {
 
 /// Thin AVSpeechSynthesizer wrapper. Exists because the delegate
 /// must be an NSObject and the model itself is @Observable.
+/// Main-actor isolated; the delegate callbacks (which AVFoundation
+/// may deliver off-main) are nonisolated and hop back.
+@MainActor
 private final class LocalSpeaker: NSObject, AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
     var onFinish: (@MainActor () -> Void)?
@@ -231,14 +236,12 @@ private final class LocalSpeaker: NSObject, AVSpeechSynthesizerDelegate {
         synthesizer.stopSpeaking(at: .immediate)
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        let cb = onFinish
-        Task { @MainActor in cb?() }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.onFinish?() }
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        let cb = onFinish
-        Task { @MainActor in cb?() }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.onFinish?() }
     }
 }
 

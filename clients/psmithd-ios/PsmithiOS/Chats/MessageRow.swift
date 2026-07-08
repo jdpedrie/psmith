@@ -17,6 +17,7 @@ import PsmithUI
 struct MessageRow: View {
     let message: PsmithMessage
     let model: ConversationViewModel
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
     @Environment(\.clipboard) private var clipboard
@@ -559,7 +560,52 @@ struct MessageRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            if showsSpeakerAffordance {
+                speakerButton
+            }
         }
+    }
+
+    // MARK: - Read aloud
+
+    /// Inline speaker on the newest assistant turn (the one the user
+    /// most likely wants read back), and on any message currently
+    /// speaking/loading so there's always a visible stop control.
+    /// Older turns keep the action in the long-press menu.
+    private var showsSpeakerAffordance: Bool {
+        guard message.role == .assistant, !isErrored, !model.isStreaming else { return false }
+        return message.id == model.latestAssistantMessageID
+            || app.speech.isPlaying(messageID: message.id)
+            || app.speech.isLoading(messageID: message.id)
+    }
+
+    @ViewBuilder
+    private var speakerButton: some View {
+        Button {
+            toggleSpeech()
+        } label: {
+            if app.speech.isLoading(messageID: message.id) {
+                ProgressView()
+                    .controlSize(.mini)
+            } else if app.speech.isPlaying(messageID: message.id) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.caption)
+                    .foregroundStyle(theme.accent)
+                    .symbolEffect(.variableColor.iterative, options: .repeating)
+            } else {
+                Image(systemName: "speaker.wave.2")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(app.speech.isPlaying(messageID: message.id) ? "Stop speaking" : "Read aloud")
+    }
+
+    private func toggleSpeech() {
+        Haptics.impact(.light)
+        let text = message.displayContent ?? message.content
+        app.speech.toggle(messageID: message.id, content: text)
     }
 
     /// In-bubble footer — assistant turns get cache dot + token
@@ -662,6 +708,19 @@ struct MessageRow: View {
             copyToClipboard()
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
+        }
+
+        if message.role == .assistant && !isErrored {
+            Button {
+                toggleSpeech()
+            } label: {
+                if app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id) {
+                    Label("Stop speaking", systemImage: "speaker.slash")
+                } else {
+                    Label("Read aloud", systemImage: "speaker.wave.2")
+                }
+            }
+            .disabled(model.isStreaming)
         }
 
         Divider()

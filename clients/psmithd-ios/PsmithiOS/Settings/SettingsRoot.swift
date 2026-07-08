@@ -69,6 +69,11 @@ struct SettingsRoot: View {
                     categoryRow("Embedder", systemImage: "point.3.connected.trianglepath.dotted")
                 }
                 NavigationLink {
+                    SpeechDetailView()
+                } label: {
+                    categoryRow("Speech", systemImage: "speaker.wave.2")
+                }
+                NavigationLink {
                     ObsidianVaultView()
                 } label: {
                     categoryRow("Obsidian", systemImage: "doc.text.below.ecg")

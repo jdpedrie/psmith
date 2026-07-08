@@ -62,6 +62,11 @@ public final class AppModel {
     /// `DeviceToolRegistry.shared`.
     public let deviceTools: DeviceToolDispatcher
 
+    /// App-wide read-aloud playback — one message speaking at a
+    /// time across every conversation, so it lives here rather
+    /// than per-ConversationViewModel.
+    public let speech: SpeechPlaybackModel
+
     public init(
         host: URL,
         tokenStore: TokenStore,
@@ -100,6 +105,7 @@ public final class AppModel {
         self.elicitations = ElicitationsRepository(host: host, tokenStore: tokenStore)
         let dispatcher = DeviceToolDispatcher(client: c)
         self.deviceTools = dispatcher
+        self.speech = SpeechPlaybackModel(client: c)
         // Hook the hub's chunk router to the dispatcher so
         // ChunkDeviceToolUse events flow through native handlers
         // without each capability module wiring its own observer.

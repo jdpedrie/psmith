@@ -140,6 +140,7 @@ struct ConversationView: View {
 private struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: PsmithConversation
+    @Environment(AppModel.self) private var app
 
     /// Auto-follow tracking. While streaming, we keep the streaming
     /// row's bottom in view *until* its height reaches the viewport's
@@ -259,6 +260,9 @@ private struct ConversationBody: View {
             statusStrip
             if let err = model.loadError, !model.messages.isEmpty {
                 loadErrorBanner(err)
+            }
+            if let speechErr = app.speech.playbackError {
+                speechErrorBanner(speechErr)
             }
             messageScroll
             if let archivedAt = liveConversation.archivedAt {
@@ -466,6 +470,23 @@ private struct ConversationBody: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Dismiss") { model.loadError = nil }
+                .font(.caption)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.10))
+    }
+
+    private func speechErrorBanner(_ err: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "speaker.slash.fill")
+                .foregroundStyle(.orange)
+            Text(err)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Dismiss") { app.speech.clearError() }
                 .font(.caption)
         }
         .padding(.horizontal, 12)
