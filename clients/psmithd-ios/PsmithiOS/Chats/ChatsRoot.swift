@@ -188,24 +188,29 @@ struct ChatsRoot: View {
     // MARK: - List body
 
     /// With a default profile set, tapping + starts a conversation with
-    /// it immediately — the chooser stays reachable by press-and-hold
-    /// (Menu primaryAction). Without a default, tap opens the chooser as
-    /// before.
+    /// it immediately — the chooser stays reachable by press-and-hold.
+    /// Without a default, tap opens the chooser as before.
+    ///
+    /// Not a Menu(primaryAction:): inside a ToolbarItem on iOS 26 the
+    /// primary-action tap is silently swallowed (the long-press menu
+    /// still opens) — same class of Menu breakage as the Mac rendering
+    /// bug. Plain tap + long-press gestures on the label are reliable.
     @ViewBuilder
     private var newConversationButton: some View {
         if let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
-            Menu {
-                Button {
-                    showingNewConversation = true
-                } label: {
-                    Label("Choose Profile…", systemImage: "person.crop.circle")
+            Image(systemName: "plus")
+                .foregroundStyle(.tint)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    Task { await createWithProfile(def) }
                 }
-            } label: {
-                Image(systemName: "plus")
-            } primaryAction: {
-                Task { await createWithProfile(def) }
-            }
-            .accessibilityLabel("New conversation")
+                .onLongPressGesture {
+                    Haptics.impact(.light)
+                    showingNewConversation = true
+                }
+                .accessibilityLabel("New conversation")
+                .accessibilityHint("Starts a chat with \(def.name). Long-press to choose a profile.")
+                .accessibilityAddTraits(.isButton)
         } else {
             Button {
                 showingNewConversation = true
