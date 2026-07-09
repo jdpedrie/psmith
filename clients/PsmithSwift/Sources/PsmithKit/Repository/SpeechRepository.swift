@@ -218,6 +218,10 @@ public final class SpeechRepository: Sendable {
         case 404: return .notFound
         case 412: return .failedPrecondition
         case 422: return .invalidArgument
+        // 502 relays a synthesis-provider failure; .internalError
+        // renders as "Server error: <provider detail>" rather than
+        // the misleading "Server unreachable".
+        case 502: return .internalError
         default: return .unavailable
         }
     }

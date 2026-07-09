@@ -51,9 +51,16 @@ non-RPC streaming endpoint (the `/files/{id}` pattern):
   and streams `audio/pcm` back in one flushed HTTP response with
   `X-Speech-Sample-Rate` and `X-Speech-Normalizer` headers. Bearer
   auth. An `apple_local` config is refused with 412 — that kind never
-  round-trips. Provider failure before any audio is a 502 carrying
-  the provider's error excerpt; mid-stream failure truncates (the
-  response is already committed as audio) and logs.
+  round-trips. Each segment's provider fetch retries transient
+  failures (network errors, 5xx, 429) twice with backoff before the
+  stream gives up — xAI's edge intermittently refuses connections,
+  and without retries one blip cut the narration at a sentence
+  boundary. Provider failure before any audio is a 502 carrying the
+  provider's error excerpt. Failure mid-stream ABORTS the connection
+  (`http.ErrAbortHandler`) instead of ending cleanly: the 200 is
+  already committed, and a clean EOF would be indistinguishable from
+  complete audio — the client would cache the truncation and replay
+  it forever. A transport error is the truncation signal.
 - **`GET /tts?run_id=...`** (phase 2) — speak-as-it-streams. The
   server subscribes to the live run internally (Subscribe already
   replays-then-tails), segments text as it lands, and streams audio.
@@ -175,6 +182,14 @@ plain text in v1; tag emission could become a per-profile knob later.
 - Settings → Speech mirrors the Embedder screen: kind picker, voice /
   model / speed, base URL for openai-compatible, credential entry or
   provider-reuse picker, test button against the saved config.
+- Auto-speak: a device-local toggle ("Speak replies as they arrive",
+  `SpeechPreferences.autoSpeakEnabled`, UserDefaults) reads each
+  cleanly-completed assistant turn aloud in the conversation being
+  viewed, fired from the view model's stream-terminal handler.
+  Deliberately not server config — whether replies speak out loud is
+  a property of the device you're holding, and the phone toggling it
+  shouldn't make the iPad start talking. The proper live tee (audio
+  before the turn finishes) stays the v2 `GET /tts?run_id` design.
 - Mac and web follow (deferred, see [todo](../todo.md)): the web
   client gets the cloud path nearly free (cookie-authenticated
   endpoint + MediaSource on an `<audio>` element).

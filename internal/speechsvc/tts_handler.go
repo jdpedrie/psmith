@@ -114,9 +114,14 @@ func (s *Service) TTSHandler() http.HandlerFunc {
 				return
 			}
 			// Mid-stream failure: the response is already committed as
-			// audio. Log and truncate; the client retries if it cares.
+			// audio, so no status can signal it. Abort the connection
+			// instead of returning cleanly — a clean return sends the
+			// terminal chunk and the client cannot tell truncated audio
+			// from complete audio (and would cache the truncation for
+			// every future replay). ErrAbortHandler makes net/http drop
+			// the connection so the client sees a transport error.
 			s.logger.Warn("tts: synthesis failed mid-stream", "err", err, "message_id", msgID)
-			return
+			panic(http.ErrAbortHandler)
 		}
 
 		s.recordCost(r, user.ID, msgID, kind, normalized)

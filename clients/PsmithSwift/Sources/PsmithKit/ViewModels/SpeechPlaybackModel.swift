@@ -2,6 +2,30 @@ import Foundation
 import AVFoundation
 import CryptoKit
 
+/// Device-local speech behavior knobs, UserDefaults-backed (the
+/// CachePreferences pattern). Deliberately NOT part of the server
+/// speech config: whether replies speak out loud is a property of
+/// the device you're holding, not of the account — a phone with
+/// auto-speak on shouldn't make the iPad start talking.
+public enum SpeechPreferences {
+    public static let autoSpeakKey = "psmith.speech.autoSpeak"
+
+    /// When true, each completed assistant reply in the conversation
+    /// being viewed is spoken as it arrives.
+    public static var autoSpeakEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: autoSpeakKey) }
+        set { UserDefaults.standard.set(newValue, forKey: autoSpeakKey) }
+    }
+}
+
+/// The playback surface ConversationViewModel needs for auto-speak.
+/// A protocol so VM tests can record play calls without touching
+/// AVFoundation (which would audibly speak on the test host).
+@MainActor
+public protocol SpeechPlayer: AnyObject {
+    func play(messageID: String, content: String)
+}
+
 /// Drives read-aloud for assistant messages. One playback at a time,
 /// app-wide: starting a message stops whatever else is speaking.
 ///
@@ -15,7 +39,7 @@ import CryptoKit
 ///   play again is free — audio is never stored server-side.
 @Observable
 @MainActor
-public final class SpeechPlaybackModel {
+public final class SpeechPlaybackModel: SpeechPlayer {
     private let client: PsmithClient
 
     /// Message currently being spoken (either path). nil = silent.
@@ -54,6 +78,14 @@ public final class SpeechPlaybackModel {
             stop()
             return
         }
+        play(messageID: messageID, content: content)
+    }
+
+    /// Unconditionally start speaking this message, replacing any
+    /// current playback. Auto-speak uses this rather than toggle so
+    /// a reply landing while its own bubble is somehow mid-speech
+    /// restarts instead of going silent.
+    public func play(messageID: String, content: String) {
         stop()
         playbackError = nil
         loadingMessageID = messageID
@@ -101,6 +133,7 @@ public final class SpeechPlaybackModel {
             return
         }
 
+        var started = false
         do {
             let stream = try await client.speech.synthesize(messageID: messageID)
             guard !Task.isCancelled else { return }
@@ -115,7 +148,6 @@ public final class SpeechPlaybackModel {
                 }
             }
             var full = Data()
-            var started = false
             for try await chunk in stream {
                 if Task.isCancelled { return }
                 full.append(chunk)
@@ -143,7 +175,13 @@ public final class SpeechPlaybackModel {
                 return
             }
             stop()
-            playbackError = PsmithError.display(error)
+            // A transport error after audio started is the server's
+            // truncation signal (it aborts the connection when
+            // synthesis fails mid-stream) — say that, not the raw
+            // "network connection was lost".
+            playbackError = started
+                ? "Speech stopped early — the voice service failed mid-message."
+                : PsmithError.display(error)
         }
     }
 
@@ -178,6 +216,13 @@ public final class SpeechPlaybackModel {
         return lastConfig ?? PsmithSpeechConfig(kind: PsmithSpeechConfig.kindAppleLocal)
     }
 
+    /// Client-side cache schema version. Bumped when the caching
+    /// CONTRACT changes, orthogonal to the server's normalizer
+    /// version. v2: before the server aborted the connection on
+    /// mid-stream synthesis failure, truncated audio was cached as
+    /// if complete — bumping invalidates any poisoned v1 entries.
+    private static let cacheKeyVersion = "2"
+
     /// Replay-cache identity: any input that changes the audio
     /// changes the key. Content is hashed (message bodies are big;
     /// keys are indexed).
@@ -185,8 +230,8 @@ public final class SpeechPlaybackModel {
         let contentHash = SHA256.hash(data: Data(content.utf8))
             .map { String(format: "%02x", $0) }.joined()
         return [
-            messageID, contentHash, config.kind, config.voice,
-            config.model, String(config.normalizerVersion),
+            cacheKeyVersion, messageID, contentHash, config.kind,
+            config.voice, config.model, String(config.normalizerVersion),
         ].joined(separator: "|")
     }
 

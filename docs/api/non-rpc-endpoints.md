@@ -39,7 +39,8 @@ Read-aloud synthesis for one message ([speech.md](../design/speech.md)). Bearer-
 - Success streams `audio/pcm` (s16le mono) with `X-Speech-Sample-Rate` (24000) and `X-Speech-Normalizer` (the normalizer version, part of the client replay-cache key). Chunks flush as the provider synthesizes each text segment, so playback can start on the first one.
 - `412` when the user's speech config is `apple_local` — that kind synthesizes on-device and the client should not have called.
 - `422` when the message has no speakable text after normalization.
-- Provider failure before any audio is a `502` carrying the provider's error excerpt; failure mid-stream truncates the audio (the 200 is already committed) and logs server-side.
+- Per-segment provider fetches retry transient failures (network errors, 5xx, 429) twice with backoff before the stream gives up.
+- Provider failure before any audio is a `502` carrying the provider's error excerpt. Failure mid-stream aborts the connection rather than ending cleanly — a transport error is the truncation signal, so clients never mistake (or cache) truncated audio as complete.
 - Each successful call writes a `cost_events` row when the config references a chat provider; self-hosted and standalone-key configs skip the ledger.
 
 ## `/mcp`

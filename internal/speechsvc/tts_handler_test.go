@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -191,5 +192,65 @@ func TestTTSHandler_ProviderFailureBeforeAudio(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "voice service down") {
 		t.Errorf("provider error should surface: %s", rec.Body.String())
+	}
+}
+
+// TestTTSHandler_MidStreamFailureAbortsConnection pins the truncation
+// contract the client replay cache depends on: when synthesis fails
+// after audio has streamed, the server must NOT end the response
+// cleanly — a clean EOF is indistinguishable from complete audio and
+// the client would cache the truncation. Runs against a real
+// http.Server because ErrAbortHandler is handled by the server's conn
+// loop, not by httptest.ResponseRecorder.
+func TestTTSHandler_MidStreamFailureAbortsConnection(t *testing.T) {
+	t.Parallel()
+	svc, q, cipher := newTestSvc(t)
+	_ = cipher
+
+	var providerCalls int
+	var mu sync.Mutex
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		providerCalls++
+		n := providerCalls
+		mu.Unlock()
+		if n == 1 {
+			_, _ = w.Write(make([]byte, 9600))
+			return
+		}
+		// Every later segment fails, through the retry budget.
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"voice service down"}`))
+	}))
+	defer fake.Close()
+
+	msgID, token, user := seedSpokenMessage(t, q, "alice",
+		"Here is the first full sentence of the reply for synthesis. And a second one follows to force two segments.")
+	if _, err := svc.UpdateSpeechConfig(ctxAs(user), connect.NewRequest(&psmithv1.UpdateSpeechConfigRequest{
+		Kind: strPtr("openai-compatible"), BaseUrl: strPtr(fake.URL),
+	})); err != nil {
+		t.Fatalf("config: %v", err)
+	}
+
+	srv := httptest.NewServer(svc.TTSHandler())
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"message_id": msgID.String()})
+	req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(string(body)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d (headers commit before the failure)", resp.StatusCode)
+	}
+	got, readErr := io.ReadAll(resp.Body)
+	if readErr == nil {
+		t.Fatalf("want a transport error signalling truncation, got clean EOF with %d bytes", len(got))
+	}
+	if len(got) == 0 {
+		t.Error("first segment's audio should have streamed before the abort")
 	}
 }
