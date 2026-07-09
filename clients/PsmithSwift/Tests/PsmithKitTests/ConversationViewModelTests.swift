@@ -734,4 +734,45 @@ struct ConversationViewModelTests {
         #expect(!r.vm.expandedLiveToolCallIDs.contains("call-a"))
         #expect(r.vm.expandedLiveToolCallIDs.contains("call-b"))
     }
+
+    // MARK: - Auto-speak
+
+    /// Records play calls in place of the real SpeechPlaybackModel so
+    /// the test asserts the trigger without AVFoundation speaking on
+    /// the test host.
+    @MainActor
+    private final class RecordingSpeechPlayer: SpeechPlayer {
+        var played: [(messageID: String, content: String)] = []
+        func play(messageID: String, content: String) {
+            played.append((messageID, content))
+        }
+    }
+
+    @Test("auto-speak plays the materialized assistant turn when enabled")
+    func autoSpeakOnTerminal() async throws {
+        let previous = SpeechPreferences.autoSpeakEnabled
+        defer { SpeechPreferences.autoSpeakEnabled = previous }
+
+        let r = try await makeReadyVM(usernamePrefix: "vm-autospeak")
+        await r.vm.load()
+        let recorder = RecordingSpeechPlayer()
+        r.vm.speechPlayer = recorder
+
+        // Off: a completed turn stays silent. The terminal handler's
+        // tail (where auto-speak fires) keeps running briefly after
+        // streamRunID clears, so give it time to prove the negative.
+        SpeechPreferences.autoSpeakEnabled = false
+        await sendAndAwait(r.vm, text: "first")
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        #expect(recorder.played.isEmpty)
+
+        // On: the next turn speaks its materialized message.
+        SpeechPreferences.autoSpeakEnabled = true
+        await sendAndAwait(r.vm, text: "second")
+        await waitFor { !recorder.played.isEmpty }
+        #expect(recorder.played.count == 1)
+        guard let call = recorder.played.first else { return }
+        #expect(call.messageID == r.vm.latestAssistantMessageID)
+        #expect(!call.content.isEmpty)
+    }
 }

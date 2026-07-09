@@ -1400,8 +1400,30 @@ public final class ConversationViewModel {
         await onTerminal()
         if purpose == .assistantResponse {
             fireAssistantTurnComplete()
+            maybeAutoSpeak(run)
             await maybeGenerateLocalTitle(profilesByID: localTitleProfilesByID)
         }
+    }
+
+    /// Read the just-materialized assistant turn aloud when the
+    /// device-local auto-speak preference is on. Clean completions
+    /// only — an errored or cancelled turn's partial text isn't
+    /// worth narrating. The player is injected by the view layer
+    /// (it lives app-wide on AppModel); nil means the platform
+    /// hasn't wired speech and this is a no-op.
+    public var speechPlayer: SpeechPlayer?
+
+    private func maybeAutoSpeak(_ run: PsmithStreamRun) {
+        guard let player = speechPlayer,
+              SpeechPreferences.autoSpeakEnabled,
+              run.status == .completed,
+              let resultID = run.resultMessageID, !resultID.isEmpty,
+              let msg = messages.first(where: { $0.id == resultID }),
+              msg.errorText == nil
+        else { return }
+        let body = msg.displayContent ?? msg.content
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        player.play(messageID: resultID, content: body)
     }
 
     /// Returns the most recently-created assistant message in the loaded

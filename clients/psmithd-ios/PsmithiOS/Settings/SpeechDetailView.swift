@@ -10,6 +10,9 @@ struct SpeechDetailView: View {
     @State private var model: SpeechSettingsModel?
     @State private var revealAPIKey = false
     @State private var showingDeleteConfirm = false
+    /// Device-local (not part of the server config): whether replies
+    /// speak as they arrive. Same key SpeechPreferences reads.
+    @AppStorage(SpeechPreferences.autoSpeakKey) private var autoSpeak = false
 
     var body: some View {
         Group {
@@ -117,6 +120,14 @@ struct SpeechDetailView: View {
                 } footer: {
                     Text("A key typed here wins over the provider reference. Reusing a chat provider's credential also attributes synthesis cost to it on the Cost screen.")
                 }
+            }
+
+            Section {
+                Toggle("Speak replies as they arrive", isOn: $autoSpeak)
+            } header: {
+                Text("Playback")
+            } footer: {
+                Text("Reads each completed reply aloud in the conversation you're viewing. This device only.")
             }
 
             if model.isDirty {

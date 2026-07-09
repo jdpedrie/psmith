@@ -101,6 +101,7 @@ struct ConversationView: View {
                     )
                 }
             )
+            m.speechPlayer = app.speech
             self.model = m
             await m.load()
             // Loaded alongside the message list so the model chip
