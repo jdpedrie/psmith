@@ -1,6 +1,8 @@
 import SwiftUI
 import PsmithKit
 import PsmithUI
+import UniformTypeIdentifiers
+import AppKit
 
 // MARK: - Outer shell
 
@@ -92,6 +94,9 @@ struct ConversationBody: View {
     /// immediately focused." The bool is the focus payload (single-field
     /// scope); flipping false→true re-focuses.
     @FocusState private var composerFocused: Bool
+    /// System open panel for the paperclip. Drag-and-drop onto the
+    /// composer is the other attach path.
+    @State private var showingFileImporter = false
 
     /// While true, the scroll view auto-pins to the streaming bubble's
     /// bottom as new tokens arrive. Flipped false the moment the user
@@ -592,6 +597,9 @@ struct ConversationBody: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
             }
+            if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
+                pendingAttachmentStrip
+            }
             // One floating glass surface: input on top, model picker + send
             // button on a footer row inside the same capsule. Reads as a
             // single Messages-style composer instead of a stack of widgets.
@@ -626,6 +634,7 @@ struct ConversationBody: View {
                         .padding(.top, 10)
 
                     HStack(spacing: 8) {
+                        paperclipButton
                         modelPickerChip
                         Spacer()
                         sendOrStopButton
@@ -637,6 +646,155 @@ struct ConversationBody: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+        }
+        .fileImporter(
+            isPresented: $showingFileImporter,
+            allowedContentTypes: attachableTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls {
+                Task { @MainActor in await attach(url: url) }
+            }
+        }
+        // Drag-and-drop is the Mac-native attach path: files from
+        // Finder land on the composer.
+        .dropDestination(for: URL.self) { urls, _ in
+            guard attachmentsSupported else { return false }
+            for url in urls {
+                Task { @MainActor in await attach(url: url) }
+            }
+            return true
+        }
+    }
+
+    // MARK: - Attachments
+
+    /// Kinds the active provider accepts — same table the iOS composer
+    /// gates on: Anthropic images+PDFs, Google everything, OpenAI-
+    /// compatible images only.
+    private var acceptedAttachmentTypes: (image: Bool, document: Bool, audioVideo: Bool) {
+        guard let pid = model.selectedProviderID else { return (false, false, false) }
+        switch model.providerTypes[pid] {
+        case "anthropic":          return (true, true, false)
+        case "google":             return (true, true, true)
+        case "openai-compatible":  return (true, false, false)
+        default:                   return (false, false, false)
+        }
+    }
+
+    private var attachmentsSupported: Bool {
+        let ok = acceptedAttachmentTypes
+        return ok.image || ok.document || ok.audioVideo
+    }
+
+    private var attachableTypes: [UTType] {
+        let ok = acceptedAttachmentTypes
+        var types: [UTType] = []
+        if ok.image { types.append(.image) }
+        if ok.document { types.append(.pdf) }
+        if ok.audioVideo { types.append(contentsOf: [.audio, .movie]) }
+        return types
+    }
+
+    /// Routes a picked/dropped file to the right VM upload: images go
+    /// through the preprocessor (resize + thumbnail), everything else
+    /// uploads verbatim.
+    @MainActor
+    private func attach(url: URL) async {
+        let isImage = (UTType(filenameExtension: url.pathExtension)?.conforms(to: .image)) ?? false
+        if isImage {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { return }
+            await model.attachImage(data: data, originalFilename: url.lastPathComponent)
+        } else {
+            await model.attachFile(from: url)
+        }
+    }
+
+    private var paperclipButton: some View {
+        Button {
+            showingFileImporter = true
+        } label: {
+            Image(systemName: "paperclip")
+                .font(.callout)
+                .foregroundStyle(attachmentsSupported ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                .frame(width: 26, height: 26)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!attachmentsSupported)
+        .help(attachmentsSupported
+            ? "Attach files — or drop them on the composer"
+            : "Attachments not supported by this model")
+    }
+
+    /// Pending-attachment strip above the composer: image thumbnails
+    /// from the in-memory preview bytes, icon chips for the rest, an
+    /// inline ✕ per chip, and a spinner chip while uploads are in
+    /// flight.
+    private var pendingAttachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(model.pendingAttachments) { att in
+                    pendingChip(att)
+                }
+                if model.attachmentUploadCount > 0 {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Uploading…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func pendingChip(_ att: PendingAttachment) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if att.mimeType.hasPrefix("image/"), let nsImage = NSImage(data: att.previewData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    )
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: att.mimeType == "application/pdf" ? "doc.richtext" : "doc")
+                        .foregroundStyle(.secondary)
+                    Text(att.originalFilename ?? "File")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 56)
+                .frame(maxWidth: 180)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            }
+            Button {
+                model.removePendingAttachment(fileID: att.fileID)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .font(.system(size: 14))
+            }
+            .buttonStyle(.plain)
+            .offset(x: 5, y: -5)
+            .help("Remove attachment")
         }
     }
 
@@ -691,8 +849,13 @@ struct ConversationBody: View {
             }
             .buttonStyle(.glassProminent)
             .keyboardShortcut(.return, modifiers: [.command])
+            // Attachment-only sends are legal (empty text + ≥1 pending
+            // attachment); in-flight uploads block Send so a message
+            // can't race its own attachment.
             .disabled(
-                model.draft.trimmingCharacters(in: .whitespaces).isEmpty
+                (model.draft.trimmingCharacters(in: .whitespaces).isEmpty
+                    && model.pendingAttachments.isEmpty)
+                || model.attachmentUploadCount > 0
                 || model.sending
                 || model.hasPendingCompression
                 || model.isCompacting
@@ -1005,6 +1168,29 @@ private struct MessageRow: View {
                         isExpanded: toolCallExpandedBinding(index: idx)
                     )
                 }
+            }
+            // Attachments — images as inline thumbnails ahead of the
+            // text (matches the wire order drivers emit), other kinds
+            // as icon-and-filename chips.
+            if !isEditing, !imageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(imageAttachments) { att in
+                            MessageAttachmentImageMac(attachment: att)
+                        }
+                    }
+                }
+                .padding(.bottom, 2)
+            }
+            if !isEditing, !nonImageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(nonImageAttachments) { att in
+                            MessageAttachmentChipMac(attachment: att)
+                        }
+                    }
+                }
+                .padding(.bottom, 2)
             }
             if isEditing {
                 inlineEditor
@@ -1644,6 +1830,14 @@ private struct MessageRow: View {
     private var isSpeaking: Bool {
         app.speech.isPlaying(messageID: message.id)
             || app.speech.isLoading(messageID: message.id)
+    }
+
+    private var imageAttachments: [PsmithMessageAttachment] {
+        message.attachments.filter { $0.kind == "image" }
+    }
+
+    private var nonImageAttachments: [PsmithMessageAttachment] {
+        message.attachments.filter { $0.kind != "image" }
     }
 
     /// Click-handler for Edit (hover menu + right-click menu both call
