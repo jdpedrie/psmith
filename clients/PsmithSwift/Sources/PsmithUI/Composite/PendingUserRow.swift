@@ -10,11 +10,15 @@ import SwiftUI
 /// "still in flight" and the 0.7 opacity reinforces it.
 public struct PendingUserRow: View {
     let text: String
+    /// Optional label rendered next to the spinner — "Queued" for
+    /// offline-queue entries, nil for in-flight sends.
+    let badge: String?
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
 
-    public init(text: String) {
+    public init(text: String, badge: String? = nil) {
         self.text = text
+        self.badge = badge
     }
 
     public var body: some View {
@@ -35,6 +39,11 @@ public struct PendingUserRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 ProgressView().controlSize(.mini)
+                if let badge {
+                    Text(badge)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.orange)
+                }
             }
             MarkdownText(text)
         }

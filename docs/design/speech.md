@@ -1,9 +1,10 @@
 # Speech (text-to-speech)
 
-**Status: v1 built (2026-07-08)** — server pipeline, SpeechService,
-`POST /tts`, PsmithKit playback/settings models, and the iOS surface
-are shipped. Mac and web read-aloud UI are deferred (see
-[todo](../todo.md)). This doc reflects the as-built contract.
+**Status: v1 built (2026-07-08; Mac UI 2026-07-10)** — server
+pipeline, SpeechService, `POST /tts`, PsmithKit playback/settings
+models, and the iOS + Mac surfaces are shipped. Web read-aloud UI is
+deferred (see [todo](../todo.md)). This doc reflects the as-built
+contract.
 
 Psmith speaks assistant turns aloud: on demand for a finished message
 (read-aloud), and eventually live as a turn streams. Synthesis is
@@ -190,9 +191,13 @@ plain text in v1; tag emission could become a per-profile knob later.
   a property of the device you're holding, and the phone toggling it
   shouldn't make the iPad start talking. The proper live tee (audio
   before the turn finishes) stays the v2 `GET /tts?run_id` design.
-- Mac and web follow (deferred, see [todo](../todo.md)): the web
-  client gets the cloud path nearly free (cookie-authenticated
-  endpoint + MediaSource on an `<audio>` element).
+- Mac shipped (2026-07-10): a Speech settings pane in the settings
+  shell, a speaker button in the message hover pill (kept visible
+  while speaking so stop is always reachable), auto-speak, and the
+  playback-error strip — all on the same shared PsmithKit models.
+  Web follows (see [todo](../todo.md)): the cloud path is nearly
+  free there (cookie-authenticated endpoint + MediaSource on an
+  `<audio>` element).
 
 ## Cost
 

@@ -402,6 +402,7 @@ private struct ProfileForm: View {
     @State private var parentOnly = false
     @State private var parentID: String?
     @State private var systemMessage = ""
+    @State private var welcomeMessage = ""
     @State private var defaultUserMessage = ""
     @State private var defaultProviderID: String?
     @State private var defaultModelID: String?
@@ -559,6 +560,10 @@ private struct ProfileForm: View {
                         formRow(label: "Default user message",
                                 description: "Pre-filled into the composer when a new conversation is started.") {
                             multilineEditor($defaultUserMessage).frame(minHeight: 60)
+                        }
+                        formRow(label: "Welcome message",
+                                description: "Shown as the assistant's first message in every new conversation — a greeting, not a prompt; it isn't sent to the model as an instruction.") {
+                            multilineEditor($welcomeMessage).frame(minHeight: 60)
                         }
                     }
 
@@ -962,6 +967,7 @@ private struct ProfileForm: View {
         parentOnly = p.parentOnly
         parentID = p.parentProfileID
         systemMessage = p.systemMessage ?? ""
+        welcomeMessage = p.welcomeMessage ?? ""
         defaultUserMessage = p.defaultUserMessage ?? ""
         defaultProviderID = p.defaultSettings?.defaultProviderID
         defaultModelID    = p.defaultSettings?.defaultModelID
@@ -1025,6 +1031,8 @@ private struct ProfileForm: View {
         patch.parentProfileID = parentID
         patch.systemMessage = trimmedSystem.isEmpty ? nil : trimmedSystem
         patch.defaultUserMessage = trimmedDefault.isEmpty ? nil : trimmedDefault
+        let trimmedWelcome = welcomeMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        patch.welcomeMessage = trimmedWelcome.isEmpty ? nil : trimmedWelcome
 
         // Build the ProfileDefaults patch lazily — only set it when at least
         // one of the inner fields is populated, otherwise the server treats
@@ -1064,6 +1072,7 @@ private struct ProfileForm: View {
             // server reverts them to inherit-from-parent semantics.
             if patch.systemMessage == nil         { clearFields.append("system_message") }
             if patch.defaultUserMessage == nil    { clearFields.append("default_user_message") }
+            if patch.welcomeMessage == nil        { clearFields.append("welcome_message") }
             if patch.defaultSettings == nil       { clearFields.append("default_settings") }
             if patch.parentProfileID == nil       { clearFields.append("parent_profile_id") }
             if patch.compressionMode == nil       { clearFields.append("compression_mode") }

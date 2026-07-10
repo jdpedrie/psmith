@@ -53,6 +53,8 @@ struct ConversationView: View {
                 conversation: conversation,
                 client: app.client,
                 hub: app.streamHub,
+                outboundQueue: app.outboundQueue,
+                connectivity: app.connectivity,
                 onTerminal: { [weak convos] in await convos?.refresh() },
                 onAssistantTurnComplete: { convID, title, msgID, preview in
                     liveNotifier.generationCompleted(
@@ -511,6 +513,14 @@ struct ConversationBody: View {
                             PendingUserRow(text: pending)
                                 .id("__pending__")
                         }
+                        // Offline queue — sends captured while the server
+                        // was unreachable, waiting for connectivity to
+                        // drain them. Rendered like pending user turns so
+                        // the user sees their words weren't lost.
+                        ForEach(model.queuedEntries) { entry in
+                            PendingUserRow(text: entry.content, badge: "Queued")
+                                .id("__queued_\(entry.id)__")
+                        }
                         if model.isCompacting {
                             CompactingRow(text: model.streamingText).id("__compacting__")
                         } else if !model.streamingText.isEmpty || model.isStreaming {
@@ -596,6 +606,20 @@ struct ConversationBody: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 .padding(.top, 8)
+            }
+            if app.connectivity.state == .offline {
+                HStack(spacing: 6) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(.caption2)
+                    Text("Server unreachable — messages queue and send when it's back")
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.10))
             }
             if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
                 pendingAttachmentStrip

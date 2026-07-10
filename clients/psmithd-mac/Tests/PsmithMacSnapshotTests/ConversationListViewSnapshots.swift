@@ -19,7 +19,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -31,7 +31,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -41,7 +41,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -51,7 +51,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -68,7 +68,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -84,7 +84,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -107,7 +107,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -123,7 +123,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -140,7 +140,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 
@@ -154,7 +154,7 @@ struct ConversationListViewSnapshots {
         let view = PsmithMacEnvironment(
             app: env.app, convos: env.convos,
             navigator: env.navigator, windowState: env.windowState
-        ) { ConversationListView() }
+        ) { ConversationListView(showingArchived: .constant(false)) }
         assertViewSnapshots(view, sizes: columnSizes)
     }
 }
