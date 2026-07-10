@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 @testable import PsmithMac
 import PsmithKit
+import PsmithUI
 import SnapshotHarness
 
 /// Snapshots for the profiles settings surfaces — the detail column of
@@ -286,7 +287,8 @@ struct ProfilePickerRowSnapshotWrapper: View {
                 model: model,
                 selectedID: $selectedID,
                 includeNoneOption: includeNoneOption,
-                allowParentOnly: allowParentOnly
+                allowParentOnly: allowParentOnly,
+                onOpenSettings: { _ in }
             )
             .padding(.horizontal, 12)
             .padding(.vertical, 12)

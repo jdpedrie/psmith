@@ -115,10 +115,19 @@ public enum SnapshotStubs {
         vm.contextWindow = contextWindow
         vm.loading = loading
         vm.sending = sending
-        vm.streamRunID = streamRunID
-        vm.streamingText = streamingText
-        vm.streamingToolCalls = streamingToolCalls
-        vm.isCompacting = isCompacting
+        // Streaming state moved into StreamHub (the VM's streamRunID /
+        // streamingText / isCompacting are hub-backed computed reads).
+        // Seed an inert ActiveStream when the snapshot wants one.
+        if streamRunID != nil || !streamingText.isEmpty || !streamingToolCalls.isEmpty || isCompacting {
+            hub.seedForPreview(StreamHub.ActiveStream(
+                runID: streamRunID ?? "snapshot-run",
+                conversationID: conversation.id,
+                contextID: vm.activeContext?.id ?? contexts.first?.id ?? "snapshot-ctx",
+                purpose: isCompacting ? .compression : .assistantResponse,
+                streamingText: streamingText,
+                streamingToolCalls: streamingToolCalls
+            ))
+        }
         vm.showingCompactView = showingCompactView
         vm.showingContextList = showingContextList
         vm.showingSettingsView = showingSettingsView

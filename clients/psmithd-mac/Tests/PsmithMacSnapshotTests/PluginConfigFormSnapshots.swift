@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 @testable import PsmithMac
 import PsmithKit
+import PsmithUI
 import SnapshotHarness
 
 /// `PluginConfigForm` is the shared plugin-config editor used wherever a

@@ -50,6 +50,43 @@ public final class StreamHub {
         public var pendingElicitations: [PendingElicit] = []
 
         public var id: String { runID }
+
+        /// Public memberwise init — snapshot tests and SwiftUI previews
+        /// construct fully-formed streams to seed via `seedForPreview`.
+        public init(
+            runID: String,
+            conversationID: String,
+            contextID: String,
+            purpose: PsmithStreamPurpose,
+            streamingText: String = "",
+            streamingThinking: String = "",
+            streamingThinkingStartedAt: Date? = nil,
+            streamingThinkingFinishedAt: Date? = nil,
+            streamingToolCalls: [LiveToolCall] = [],
+            lastSequence: Int64 = 0,
+            pendingElicitations: [PendingElicit] = []
+        ) {
+            self.runID = runID
+            self.conversationID = conversationID
+            self.contextID = contextID
+            self.purpose = purpose
+            self.streamingText = streamingText
+            self.streamingThinking = streamingThinking
+            self.streamingThinkingStartedAt = streamingThinkingStartedAt
+            self.streamingThinkingFinishedAt = streamingThinkingFinishedAt
+            self.streamingToolCalls = streamingToolCalls
+            self.lastSequence = lastSequence
+            self.pendingElicitations = pendingElicitations
+        }
+    }
+
+    /// Snapshot/preview seam: injects a fully-formed ActiveStream so
+    /// snapshot tests and SwiftUI previews can render streaming states
+    /// without a live run. No subscriber task is spawned — the seeded
+    /// entry is inert display state. Not for production paths.
+    public func seedForPreview(_ stream: ActiveStream) {
+        streams[stream.conversationID] = stream
+        activeConversationIDs.insert(stream.conversationID)
     }
 
     /// One in-flight MCP elicitation request waiting for a user response.

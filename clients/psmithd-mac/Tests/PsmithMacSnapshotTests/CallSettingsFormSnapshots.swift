@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 @testable import PsmithMac
 import PsmithKit
+import PsmithUI
 import SnapshotHarness
 
 /// `CallSettingsForm` is the shared call-settings editor reused across the

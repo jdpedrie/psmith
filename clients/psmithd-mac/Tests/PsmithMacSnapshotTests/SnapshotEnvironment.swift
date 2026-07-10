@@ -37,6 +37,11 @@ struct PsmithMacEnvironment<Content: View>: View {
             .environment(convos)
             .environment(navigator)
             .environment(windowState)
+            // Views that surface the account switcher (HomeView,
+            // RootView, LoginView) read AccountManager. A fresh
+            // instance renders the zero-account state, which is what
+            // deterministic snapshots want.
+            .environment(AccountManager())
             .preferredColorScheme(.dark)
     }
 }
