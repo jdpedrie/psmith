@@ -54,6 +54,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case langfuse
     case embedder
     case speech
+    case deviceTools
 
     var label: String {
         switch self {
@@ -68,6 +69,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .langfuse:      return "Langfuse"
         case .embedder:      return "Embedder"
         case .speech:        return "Speech"
+        case .deviceTools:   return "Device tools"
         }
     }
 
@@ -84,6 +86,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .langfuse:      return "chart.line.uptrend.xyaxis"
         case .embedder:      return "point.3.connected.trianglepath.dotted"
         case .speech:        return "speaker.wave.2"
+        case .deviceTools:   return "wrench.and.screwdriver"
         }
     }
 
@@ -96,7 +99,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     var isAppSettings: Bool {
         switch self {
         case .general, .appearance, .notifications, .privacy, .cost,
-             .langfuse, .embedder, .speech:
+             .langfuse, .embedder, .speech, .deviceTools:
             return true
         default: return false
         }

@@ -13,7 +13,7 @@ import Foundation
 /// `url.startAccessingSecurityScopedResource()` /
 /// `stopAccessingSecurityScopedResource()` — the helper here
 /// centralises that dance so handlers don't forget.
-enum ObsidianVaultBookmark {
+public enum ObsidianVaultBookmark {
     private static let key = "psmith.obsidian.vaultBookmark.v1"
 
     /// True when a vault bookmark is currently saved. Drives the
@@ -23,7 +23,7 @@ enum ObsidianVaultBookmark {
     /// returns a friendly "open Settings → Obsidian" error to the
     /// model instead of letting the call land on an unbookmarked
     /// device.
-    static var isSet: Bool {
+    public static var isSet: Bool {
         return UserDefaults.standard.data(forKey: key) != nil
     }
 
@@ -32,7 +32,7 @@ enum ObsidianVaultBookmark {
     /// the URL (UIDocumentPicker hands back URLs that need that
     /// dance). Throws on bookmark-creation failure (rare; the URL
     /// must be valid + the user must have actually granted access).
-    static func save(folderURL: URL) throws {
+    public static func save(folderURL: URL) throws {
         let data = try folderURL.bookmarkData(
             options: .minimalBookmark,
             includingResourceValuesForKeys: nil,
@@ -43,7 +43,7 @@ enum ObsidianVaultBookmark {
 
     /// Remove the saved bookmark — settings UI's "forget vault"
     /// affordance.
-    static func clear() {
+    public static func clear() {
         UserDefaults.standard.removeObject(forKey: key)
     }
 
@@ -57,7 +57,7 @@ enum ObsidianVaultBookmark {
     /// the bookmark requires re-prompting the user with
     /// UIDocumentPicker, which can't happen from a background
     /// handler.
-    static func resolve() -> URL? {
+    public static func resolve() -> URL? {
         guard let data = UserDefaults.standard.data(forKey: key) else {
             return nil
         }
@@ -82,7 +82,7 @@ enum ObsidianVaultBookmark {
     /// scoped resource access. Returns whatever the block returns;
     /// throws if no bookmark is saved or the resource can't be
     /// accessed.
-    static func withVault<T>(_ block: (URL) throws -> T) throws -> T {
+    public static func withVault<T>(_ block: (URL) throws -> T) throws -> T {
         guard let url = resolve() else {
             throw ObsidianVaultError.notConfigured
         }

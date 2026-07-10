@@ -1,16 +1,15 @@
 import Foundation
 import EventKit
-import PsmithKit
 
 /// Reminders handlers — same EKEventStore as CalendarTools, but
 /// EventKit's permission for reminders is independent from
 /// calendars (the user can grant one without the other), so the
 /// permission check lives separately.
-enum RemindersTools {
+public enum RemindersTools {
 
     nonisolated(unsafe) private static let store = EKEventStore()
 
-    static func register() {
+    public static func register() {
         let r = DeviceToolRegistry.shared
         r.register(name: "reminders_list", handler: listReminders)
         r.register(name: "reminders_create", handler: createReminder)

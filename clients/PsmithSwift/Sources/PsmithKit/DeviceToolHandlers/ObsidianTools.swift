@@ -1,5 +1,4 @@
 import Foundation
-import PsmithKit
 
 /// Handlers for the Obsidian-vault device tools. Each handler
 /// resolves the security-scoped bookmark via
@@ -11,7 +10,7 @@ import PsmithKit
 /// model writing outside the bookmarked folder), and paths must
 /// end in `.md` for read/write operations to keep the surface
 /// scoped to the actual notes.
-enum ObsidianTools {
+public enum ObsidianTools {
 
     private static let toolNames = [
         "obsidian_list_notes",
@@ -21,7 +20,7 @@ enum ObsidianTools {
         "obsidian_search_text",
     ]
 
-    static func register() {
+    public static func register() {
         let r = DeviceToolRegistry.shared
         r.register(name: "obsidian_list_notes", handler: listNotes)
         r.register(name: "obsidian_read_note", handler: readNote)
@@ -34,7 +33,7 @@ enum ObsidianTools {
     /// the shared registry. Called when the user forgets their
     /// vault so the iOS RegisterCapabilities pass stops advertising
     /// these tools to the server.
-    static func unregister() {
+    public static func unregister() {
         let r = DeviceToolRegistry.shared
         for name in toolNames {
             r.unregister(name: name)
@@ -45,7 +44,7 @@ enum ObsidianTools {
     /// Call from app boot and after any vault-bookmark change so
     /// the dispatcher's registeredNames() always reflects what
     /// this device can actually fulfill.
-    static func syncRegistration() {
+    public static func syncRegistration() {
         if isAvailable {
             register()
         } else {

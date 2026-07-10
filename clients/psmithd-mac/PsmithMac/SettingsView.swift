@@ -193,6 +193,13 @@ struct SettingsView: View {
                 blurb: "Voice synthesis for assistant replies — on-device by default, cloud or self-hosted by choice.",
                 onBack: onBack
             )
+        case .deviceTools:
+            PlainMiddleColumn(
+                title: "Device tools",
+                blurbTitle: "This Mac's tools",
+                blurb: "Calendar, Reminders, and Obsidian tools the model can run here, plus the call audit.",
+                onBack: onBack
+            )
         }
     }
 
@@ -223,6 +230,8 @@ struct SettingsView: View {
             CostSettingsView()
         case .speech:
             SpeechSettingsView(client: app.client)
+        case .deviceTools:
+            DeviceToolsSettingsView()
         }
     }
 }

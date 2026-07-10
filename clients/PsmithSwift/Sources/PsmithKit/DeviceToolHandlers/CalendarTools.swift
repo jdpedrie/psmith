@@ -1,6 +1,5 @@
 import Foundation
 import EventKit
-import PsmithKit
 
 /// Handlers + registration for the EventKit-backed device tools:
 /// `calendar_list_events`, `calendar_create_event`,
@@ -15,7 +14,7 @@ import PsmithKit
 /// stack. Permission state is queried per call (cheap, cached) so
 /// each handler can short-circuit with a clean error before the
 /// EventKit call.
-enum CalendarTools {
+public enum CalendarTools {
 
     // EKEventStore manages its own Core Data stack and is documented
     // as thread-safe for the methods we call; @unchecked Sendable
@@ -26,7 +25,7 @@ enum CalendarTools {
     /// Registers all calendar handlers with the shared
     /// DeviceToolRegistry. Called from the iOS app's bootstrap.
     /// Idempotent — `register(name:handler:)` replaces by name.
-    static func register() {
+    public static func register() {
         let r = DeviceToolRegistry.shared
         r.register(name: "calendar_list_events", handler: listEvents)
         r.register(name: "calendar_create_event", handler: createEvent)
@@ -204,7 +203,7 @@ enum CalendarTools {
 /// dispatcher will wrap whatever's thrown into the response.error
 /// the model sees).
 @inline(__always)
-func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+public func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
     if data.isEmpty { return try JSONDecoder.iso8601.decode(T.self, from: "{}".data(using: .utf8)!) }
     return try JSONDecoder.iso8601.decode(T.self, from: data)
 }
@@ -213,14 +212,14 @@ func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
 /// handler can give a clean reason. The dispatcher catches anything
 /// thrown and stringifies via `String(describing:)`, so a custom
 /// description here is what the model sees.
-enum DeviceToolError: Error, CustomStringConvertible {
+public enum DeviceToolError: Error, CustomStringConvertible {
     case permissionDenied(String)
     case message(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .permissionDenied(let what):
-            return "permission denied: \(what) — the user can grant access in iOS Settings → Privacy"
+            return "permission denied: \(what) — the user can grant access in system privacy settings"
         case .message(let m):
             return m
         }
@@ -229,7 +228,7 @@ enum DeviceToolError: Error, CustomStringConvertible {
 
 // MARK: - Shared JSON config
 
-extension JSONEncoder {
+public extension JSONEncoder {
     /// ISO-8601 timestamps everywhere — matches the catalog's
     /// schema descriptions and what every model emits when asked
     /// for a date.
@@ -240,7 +239,7 @@ extension JSONEncoder {
     }()
 }
 
-extension JSONDecoder {
+public extension JSONDecoder {
     static let iso8601: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601

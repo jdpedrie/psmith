@@ -32,5 +32,11 @@
     <false/>
     <key>NSSupportsSuddenTermination</key>
     <false/>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>The assistant can list, create, and update calendar events when you ask it to. Access is only used for tool calls you can audit in Settings → Device tools.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>The assistant can list, create, and complete reminders when you ask it to. Access is only used for tool calls you can audit in Settings → Device tools.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>When the location fact is enabled in Privacy settings, an approximate location rides along with your messages so the assistant can ground answers.</string>
 </dict>
 </plist>

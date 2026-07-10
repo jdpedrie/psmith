@@ -222,6 +222,14 @@ struct PsmithMacApp: App {
         // force the policy and pull the window to the front.
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        // Device-tool handlers register once per process, before any
+        // AppModel boots. Registration only seeds the registry —
+        // EventKit stores + permission prompts stay lazy until the
+        // model actually calls a tool. Obsidian registers only when a
+        // vault bookmark exists (re-synced by the settings pane).
+        CalendarTools.register()
+        RemindersTools.register()
+        ObsidianTools.syncRegistration()
     }
 
     var body: some Scene {
