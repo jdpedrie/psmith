@@ -46,20 +46,28 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case providers
     case profiles
     case plugins
+    case general
     case appearance
     case notifications
+    case privacy
+    case cost
     case langfuse
     case embedder
+    case speech
 
     var label: String {
         switch self {
         case .providers:     return "Providers"
         case .profiles:      return "Profiles"
         case .plugins:       return "Plugins"
+        case .general:       return "General"
         case .appearance:    return "Appearance"
         case .notifications: return "Notifications"
+        case .privacy:       return "Privacy"
+        case .cost:          return "Cost"
         case .langfuse:      return "Langfuse"
         case .embedder:      return "Embedder"
+        case .speech:        return "Speech"
         }
     }
 
@@ -68,10 +76,14 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .providers:     return "cpu"
         case .profiles:      return "person.crop.rectangle"
         case .plugins:       return "puzzlepiece.extension"
+        case .general:       return "gearshape"
         case .appearance:    return "paintpalette"
         case .notifications: return "bell"
+        case .privacy:       return "hand.raised"
+        case .cost:          return "dollarsign.circle"
         case .langfuse:      return "chart.line.uptrend.xyaxis"
         case .embedder:      return "point.3.connected.trianglepath.dotted"
+        case .speech:        return "speaker.wave.2"
         }
     }
 
@@ -83,7 +95,9 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     /// needing a tree-style sidebar widget.
     var isAppSettings: Bool {
         switch self {
-        case .appearance, .notifications, .langfuse, .embedder: return true
+        case .general, .appearance, .notifications, .privacy, .cost,
+             .langfuse, .embedder, .speech:
+            return true
         default: return false
         }
     }

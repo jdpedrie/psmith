@@ -165,6 +165,34 @@ struct SettingsView: View {
             LangfuseMiddleColumn(onBack: onBack)
         case .embedder:
             EmbedderMiddleColumn(onBack: onBack)
+        case .general:
+            PlainMiddleColumn(
+                title: "General",
+                blurbTitle: "App preferences",
+                blurb: "On-device cache and other app-level defaults.",
+                onBack: onBack
+            )
+        case .privacy:
+            PlainMiddleColumn(
+                title: "Privacy",
+                blurbTitle: "Device facts",
+                blurb: "Opt-in facts this Mac may attach to outgoing messages, like location.",
+                onBack: onBack
+            )
+        case .cost:
+            PlainMiddleColumn(
+                title: "Cost",
+                blurbTitle: "Spend rollup",
+                blurb: "Per-provider totals from the server's cost ledger.",
+                onBack: onBack
+            )
+        case .speech:
+            PlainMiddleColumn(
+                title: "Speech",
+                blurbTitle: "Read aloud",
+                blurb: "Voice synthesis for assistant replies — on-device by default, cloud or self-hosted by choice.",
+                onBack: onBack
+            )
         }
     }
 
@@ -187,6 +215,51 @@ struct SettingsView: View {
             LangfuseSettingsView(client: app.client)
         case .embedder:
             EmbedderSettingsView(client: app.client)
+        case .general:
+            GeneralSettingsView()
+        case .privacy:
+            PrivacySettingsView()
+        case .cost:
+            CostSettingsView()
+        case .speech:
+            SpeechSettingsView(client: app.client)
+        }
+    }
+}
+
+/// Header-only middle column for categories without sub-sections: a
+/// back chevron + the category name, then a short description. Same
+/// visual shape LangfuseMiddleColumn established.
+private struct PlainMiddleColumn: View {
+    let title: String
+    let blurbTitle: String
+    let blurb: String
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
+                Text(title)
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: paneHeaderHeight)
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(blurbTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                Text(blurb)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }

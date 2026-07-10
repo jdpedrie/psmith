@@ -62,6 +62,7 @@ struct ConversationView: View {
                 },
                 localTitler: AppleFoundationTitler()
             )
+            m.speechPlayer = app.speech
             self.model = m
             await m.load()
             // After the message list is in hand, decide whether to fire the
@@ -127,6 +128,9 @@ struct ConversationBody: View {
                 // empty (true initial-load failure).
                 if let err = model.loadError, !model.messages.isEmpty {
                     loadErrorBanner(err)
+                }
+                if let speechErr = app.speech.playbackError {
+                    speechErrorBanner(speechErr)
                 }
                 messageScroll
                 if let archivedAt = liveConversation.archivedAt {
@@ -424,6 +428,24 @@ struct ConversationBody: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Dismiss") { model.loadError = nil }
+                .buttonStyle(.borderless)
+                .font(.caption)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.12))
+    }
+
+    /// Read-aloud failure strip. App-wide state (one playback at a
+    /// time) surfaced in whichever conversation is frontmost.
+    private func speechErrorBanner(_ message: String) -> some View {
+        HStack(alignment: .top) {
+            Image(systemName: "speaker.slash.fill").foregroundStyle(.orange)
+            Text(message)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Dismiss") { app.speech.clearError() }
                 .buttonStyle(.borderless)
                 .font(.caption)
         }
@@ -768,6 +790,7 @@ struct ConversationBody: View {
 private struct MessageRow: View {
     let message: PsmithMessage
     let model: ConversationViewModel
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.clipboard) private var clipboard
     @State private var showDeleteConfirm = false
@@ -1076,7 +1099,9 @@ private struct MessageRow: View {
         // in the top-right of the bubble. Overlay (not inline) so it
         // never changes the bubble's footprint as the user mouses over.
         .overlay(alignment: .topTrailing) {
-            if isHovering, isEditableRole, !isEditing {
+            // Kept visible while speaking so a stop control always
+            // exists without hunting for the hover position.
+            if (isHovering || isSpeaking), isEditableRole, !isEditing {
                 hoverActions
                     .padding(6)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1119,6 +1144,18 @@ private struct MessageRow: View {
                 help: "Copy to clipboard"
             ) {
                 copyToClipboard()
+            }
+            if message.role == .assistant, message.errorText == nil {
+                hoverButton(
+                    systemImage: isSpeaking ? "speaker.slash" : "speaker.wave.2",
+                    help: isSpeaking ? "Stop speaking" : "Read aloud",
+                    tint: isSpeaking ? theme.accent : nil
+                ) {
+                    app.speech.toggle(
+                        messageID: message.id,
+                        content: message.displayContent ?? message.content
+                    )
+                }
             }
             hoverButton(
                 systemImage: "trash",
@@ -1601,6 +1638,12 @@ private struct MessageRow: View {
     /// editable. Disabled mid-stream so the user can't double-fire.
     private var isReloadable: Bool {
         isEditableRole && !model.isStreaming
+    }
+
+    /// This row is currently being read aloud (or its audio is loading).
+    private var isSpeaking: Bool {
+        app.speech.isPlaying(messageID: message.id)
+            || app.speech.isLoading(messageID: message.id)
     }
 
     /// Click-handler for Edit (hover menu + right-click menu both call
