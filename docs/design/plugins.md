@@ -8,11 +8,11 @@ Every plugin implements the base `Plugin` interface (a name and not much else). 
 
 - **Configurable** — accepts per-profile config JSON. Without it, a plugin is config-free.
 - **SystemPrompter** — contributes text to the system slot (prepend or append to the persona's system prompt). Runs in the history builder.
-- **OutgoingUserTransformer** — rewrites a user message on the way out, before it is persisted and sent.
+- **MessageEnvelope** — contributes header/trailer blocks for a user message on the way out, persisted beside the content (in `message_headers` / `message_trailers`) and composed into the wire text by the history builder. The user's own `content` is never touched, so edit/display/TTS/embeddings see clean text while the envelope stays frozen for prefix-cache stability. (The wire proto still calls this capability `outgoing_user_transformer`; the field predates the design.)
 - **HistoryTransformer** — mutates a user or assistant message at prefix-build time, given its position relative to the head. Runs in the history builder.
 - **ChunkTransformer** — processes the live chunk stream inside the supervisor. Returns a fresh `InboundProcessor` per stream so per-stream state stays isolated; the processor can buffer and emit zero or more chunks per input and flush residue on close.
 - **DisplayTransformer** — rewrites stored content for display at fetch time. Non-persistent and position-independent: same input, same output.
-- **AssistantContentTransformer** — rewrites the assistant's finalized text before the row is inserted, so the persisted bytes are the post-transform output forever. The persistent mirror of OutgoingUserTransformer for the assistant side.
+- **AssistantContentTransformer** — rewrites the assistant's finalized text before the row is inserted, so the persisted bytes are the post-transform output forever.
 - **ContentRenderer** — turns display content into a structured list of content parts the client renders with native UI instead of plain markdown. Runs after DisplayTransformer and chains: each renderer sees the previous one's parts.
 - **StreamingTagProvider** — declares tags the client should treat specially while streaming.
 - **MessageLifecycleHook** — runs at message lifecycle points.
@@ -26,7 +26,7 @@ The split keeps plugins small. A plugin that only injects a system prompt implem
 A turn touches the pipeline at several points, and each capability has exactly one of them:
 
 - **Prefix build** (history builder): SystemPrompter contributions and HistoryTransformer rewrites. This is the only place these two run. See [history-builder.md](history-builder.md).
-- **Outgoing user message**: OutgoingUserTransformer, before persist and send.
+- **Outgoing user message**: MessageEnvelope, rendered before persist; composed onto the wire at prefix build.
 - **Live stream** (supervisor): ChunkTransformer processors, transforming chunks as they flow.
 - **Assistant finalize**: AssistantContentTransformer, before the assistant row is written.
 - **Tool dispatch**: ToolProvider execution, inside the tool loop.

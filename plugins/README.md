@@ -16,7 +16,7 @@ Four concrete plugins live alongside this README:
 |---|---|---|
 | `lettered_choices` | Asks the model to wrap interactive choices in delimiters; strips them from older history; renders them clean for display | `Configurable`, `SystemPrompter`, `HistoryTransformer`, `DisplayTransformer` |
 | `brave_search` | Exposes `web_search` as a model-callable tool backed by the Brave API | `Configurable`, `ToolProvider` |
-| `basic_grounding` | Prepends grounding facts (current time, …) to outgoing user messages and hides them on display | `Configurable`, `OutgoingUserTransformer`, `DisplayTransformer` |
+| `basic_grounding` | Adds a grounding-facts header (current time, locale, platform, location) beside outgoing user messages | `Configurable`, `MessageEnvelope`, `DisplayTransformer` (legacy-row strip) |
 | `mcp` | Bridges any [Model Context Protocol](https://modelcontextprotocol.io/) server's tools into Psmith. Two transports: **stdio** (spawn a local subprocess and exchange JSON-RPC over stdin/stdout) and **http** (POST JSON-RPC to a remote URL — Streamable HTTP transport, both `application/json` and `text/event-stream` responses; honours `Mcp-Session-Id`). Pool keeps connections alive across sends; idle entries reaped after 5 min. One plugin instance per server | `Configurable`, `ToolProvider` |
 
 Read those for working examples before / while building a new one.
@@ -68,13 +68,13 @@ type SystemPrompter interface {
 ```
 Contributes to the system slot at prefix-build time. Empty string = no contribution. Multiple plugins compose; framework joins with blank-line separators.
 
-### `OutgoingUserTransformer`
+### `MessageEnvelope`
 ```go
-type OutgoingUserTransformer interface {
-    TransformOutgoingUserMessage(content string) string
+type MessageEnvelope interface {
+    OutgoingMessageEnvelope(facts map[string]string) (header, trailer string)
 }
 ```
-Rewrites the user's outgoing content **at SEND time**, before the row is persisted. The post-transform output is what lands in `messages.content` and is what every subsequent history build replays. Prefix-cache stable: the value is frozen at write time, so re-rendered prefixes don't tick forward each turn. Use for grounding facts, redaction, or any "freeze it on write" rewrite.
+Contributes header/trailer blocks for the outgoing user message, rendered **at SEND time** and persisted in the dedicated `messages.message_headers` / `message_trailers` columns — `content` stays exactly what the user typed. The history builder composes headers + content + trailers into the wire text; edit, display, TTS, and embeddings all read bare `content`. Prefix-cache stable: the envelope is frozen at write time (never re-rendered), and edits to content leave it untouched. Use for grounding facts or any "freeze it on write" contribution.
 
 ### `HistoryTransformer`
 ```go

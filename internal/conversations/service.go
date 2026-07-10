@@ -1424,23 +1424,31 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 			return nil, err
 		}
 
-		// Apply OutgoingUserTransformer plugins (basic_grounding,
-		// future siblings) to the raw user content so the rewritten
-		// text is what we persist. Empty pipeline → identity transform.
-		// Device-fact envelope from the request is translated from the
-		// proto enum to the plugin-side string keys; plugins ignore
+		// Collect MessageEnvelope plugin contributions (basic_grounding,
+		// future siblings). They persist in the dedicated header/trailer
+		// columns — content stays exactly what the user typed, so edits,
+		// display, TTS, and embeddings never see the envelope. The
+		// history builder composes headers + content + trailers for the
+		// wire. Device-fact envelope from the request is translated from
+		// the proto enum to the plugin-side string keys; plugins ignore
 		// keys they don't recognize.
-		persistedContent := pipeline.TransformOutgoingUser(
-			req.Msg.Content,
-			deviceFactsFromProto(req.Msg.DeviceFacts),
-		)
+		headers, trailers := pipeline.OutgoingEnvelope(deviceFactsFromProto(req.Msg.DeviceFacts))
+		var headersPtr, trailersPtr *string
+		if headers != "" {
+			headersPtr = &headers
+		}
+		if trailers != "" {
+			trailersPtr = &trailers
+		}
 
 		row, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
-			ID:        userMsgID,
-			ContextID: lockedCtx.ID,
-			ParentID:  parentMessageID,
-			Role:      "user",
-			Content:   persistedContent,
+			ID:              userMsgID,
+			ContextID:       lockedCtx.ID,
+			ParentID:        parentMessageID,
+			Role:            "user",
+			Content:         req.Msg.Content,
+			MessageHeaders:  headersPtr,
+			MessageTrailers: trailersPtr,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)

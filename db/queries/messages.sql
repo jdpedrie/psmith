@@ -2,11 +2,11 @@
 INSERT INTO messages (
     id, context_id, parent_id, role, content,
     raw_content, thinking, thinking_provider_type, thinking_rendered_text,
-    provider_id, model_id
+    provider_id, model_id, message_headers, message_trailers
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
-    $10, $11
+    $10, $11, $12, $13
 )
 RETURNING *;
 

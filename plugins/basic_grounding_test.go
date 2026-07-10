@@ -66,35 +66,35 @@ func TestBasicGrounding_DefaultsAndDescriptor(t *testing.T) {
 	}
 }
 
-func TestBasicGrounding_PrependsGroundingBlock(t *testing.T) {
+func TestBasicGrounding_HeaderBlock(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
-	out := bg.TransformOutgoingUserMessage("what's the weather like?", nil)
-	if !strings.HasPrefix(out, "<grounding>\n") {
-		t.Errorf("expected grounding block at start, got %q", out)
+	header, trailer := bg.OutgoingMessageEnvelope(nil)
+	if trailer != "" {
+		t.Errorf("basic_grounding contributes headers only, got trailer %q", trailer)
 	}
-	if !strings.Contains(out, "Current time: 2026-05-02T14:45:00Z") {
-		t.Errorf("expected ISO timestamp line, got %q", out)
+	if !strings.HasPrefix(header, "<grounding>\n") {
+		t.Errorf("expected grounding block at start, got %q", header)
 	}
-	if !strings.HasSuffix(out, "what's the weather like?") {
-		t.Errorf("user content must be preserved verbatim at the tail, got %q", out)
+	if !strings.Contains(header, "Current time: 2026-05-02T14:45:00Z") {
+		t.Errorf("expected ISO timestamp line, got %q", header)
 	}
-	// The block must end before the user's content (separated by a
-	// blank line) — a model reading this should see a clean break
-	// between framing and the actual ask.
-	if !strings.Contains(out, "</grounding>\n\nwhat's the weather like?") {
-		t.Errorf("expected blank line between block and content, got %q", out)
+	if !strings.HasSuffix(header, "</grounding>") {
+		t.Errorf("header should end with the close tag (the history builder owns the blank-line join), got %q", header)
 	}
 }
 
-func TestBasicGrounding_RoundTripStripsForDisplay(t *testing.T) {
+func TestBasicGrounding_DisplayStripsLegacyEmbeddedBlock(t *testing.T) {
 	t.Parallel()
+	// Rows written before message_headers existed carry the block
+	// inline in content. The display strip must keep working for them.
 	bg := newFixedClockGrounding(t, ``)
 	original := "what's the weather like?"
-	transformed := bg.TransformOutgoingUserMessage(original, nil)
-	displayed := bg.TransformForDisplay(transformed)
+	header, _ := bg.OutgoingMessageEnvelope(nil)
+	legacy := header + "\n\n" + original
+	displayed := bg.TransformForDisplay(legacy)
 	if displayed != original {
-		t.Errorf("round-trip mismatch:\n  in:  %q\n  out: %q", original, displayed)
+		t.Errorf("legacy strip mismatch:\n  in:  %q\n  out: %q", legacy, displayed)
 	}
 }
 
@@ -112,16 +112,16 @@ func TestBasicGrounding_DisplayLeavesUserGroundingTextAlone(t *testing.T) {
 func TestBasicGrounding_DisableSkipsBlock(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"include_date_time":false}`)
-	out := bg.TransformOutgoingUserMessage("hi", nil)
-	if out != "hi" {
-		t.Errorf("with all facts disabled, content must pass through unchanged; got %q", out)
+	header, trailer := bg.OutgoingMessageEnvelope(nil)
+	if header != "" || trailer != "" {
+		t.Errorf("with all facts disabled, no envelope should render; got header %q trailer %q", header, trailer)
 	}
 }
 
 func TestBasicGrounding_TimezoneFactUsedWhenConfigEmpty(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, ``)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyTimezone: "America/New_York",
 	})
 	// fixedTime is 2026-05-02T14:45:00Z; in NYC that's 10:45 AM EDT
@@ -136,7 +136,7 @@ func TestBasicGrounding_ConfigTimezoneBeatsFact(t *testing.T) {
 	// Explicit config wins over the device fact — predictable for users
 	// who deliberately pinned a zone (e.g. a server-side smoke profile).
 	bg := newFixedClockGrounding(t, `{"timezone":"Asia/Tokyo"}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyTimezone: "America/New_York",
 	})
 	if !strings.Contains(out, "Current time: 2026-05-02T23:45:00+09:00") {
@@ -150,7 +150,7 @@ func TestBasicGrounding_NoTimezoneFallsBackToUTC(t *testing.T) {
 	// whole point of the change: a cloud-hosted clarkd's "local"
 	// time is meaningless to the user.
 	bg := newFixedClockGrounding(t, ``)
-	out := bg.TransformOutgoingUserMessage("hi", nil)
+	out, _ := bg.OutgoingMessageEnvelope(nil)
 	if !strings.Contains(out, "Current time: 2026-05-02T14:45:00Z") {
 		t.Errorf("expected UTC timestamp, got %q", out)
 	}
@@ -162,7 +162,7 @@ func TestBasicGrounding_BadTimezoneFactFallsBackToUTC(t *testing.T) {
 	// is fine because the constructor already validates user-supplied
 	// config and the device value comes from an untrusted client.
 	bg := newFixedClockGrounding(t, ``)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyTimezone: "Pluto/Olympus",
 	})
 	if !strings.Contains(out, "Current time: 2026-05-02T14:45:00Z") {
@@ -245,7 +245,7 @@ func TestBasicGrounding_TimeFormats(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bg := newFixedClockGrounding(t, tc.config)
-			out := bg.TransformOutgoingUserMessage("hi", nil)
+			out, _ := bg.OutgoingMessageEnvelope(nil)
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("output missing %q\nfull: %q", tc.want, out)
 			}
@@ -263,7 +263,7 @@ func TestBasicGrounding_BadTimezoneRejected(t *testing.T) {
 func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_locale":true,"include_platform":true,"include_location":true}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyLocale:         "en-US",
 		DeviceFactKeyPlatform:       "iOS 26.5 / iPhone 17 Pro",
 		DeviceFactKeyLocationCity:   "Brooklyn, NY",
@@ -294,7 +294,7 @@ func TestBasicGrounding_RendersDeviceFacts(t *testing.T) {
 func TestBasicGrounding_LocationRendersByDefault(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyLocationCity:   "Brooklyn, NY",
 		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
 	})
@@ -308,7 +308,7 @@ func TestBasicGrounding_LocationRendersByDefault(t *testing.T) {
 func TestBasicGrounding_LocationExplicitOptOut(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":false}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyLocationCity:   "Brooklyn, NY",
 		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
 	})
@@ -322,7 +322,7 @@ func TestBasicGrounding_LocationCityOnly(t *testing.T) {
 	// City present but no coords (e.g. before reverse-geocode finished
 	// or in a region where the gateway suppresses coords).
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":true,"include_date_time":false}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyLocationCity: "Brooklyn, NY",
 	})
 	if !strings.Contains(out, "Location: Brooklyn, NY\n") && !strings.HasSuffix(out, "Location: Brooklyn, NY") {
@@ -336,7 +336,7 @@ func TestBasicGrounding_LocationCityOnly(t *testing.T) {
 func TestBasicGrounding_LocationFallsBackToCoords(t *testing.T) {
 	t.Parallel()
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_location":true,"include_date_time":false}`)
-	out := bg.TransformOutgoingUserMessage("hi", map[string]string{
+	out, _ := bg.OutgoingMessageEnvelope(map[string]string{
 		DeviceFactKeyLocationCoords: "40.6782,-73.9442",
 	})
 	if !strings.Contains(out, "Location (coords): 40.6782,-73.9442") {
@@ -350,7 +350,7 @@ func TestBasicGrounding_FactsMissing_NoLine(t *testing.T) {
 	// supply them — the lines should be silently omitted, not
 	// rendered as "Locale: ".
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC","include_locale":true,"include_platform":true}`)
-	out := bg.TransformOutgoingUserMessage("hi", nil)
+	out, _ := bg.OutgoingMessageEnvelope(nil)
 	if strings.Contains(out, "Locale:") || strings.Contains(out, "Platform:") {
 		t.Errorf("missing facts must skip their lines, got %q", out)
 	}
@@ -402,24 +402,22 @@ func TestBasicGrounding_RequestedFactsReflectsConfig(t *testing.T) {
 	}
 }
 
-func TestBasicGrounding_PrependedContentSurvivesAcrossTurns(t *testing.T) {
+func TestBasicGrounding_HeaderRendersOnceAtWriteTime(t *testing.T) {
 	t.Parallel()
-	// The whole point of the design: if we re-rendered the wire prefix
-	// from a stored message that already contained a grounding block,
-	// the OutgoingUserTransformer is NOT re-run — the block is part of
-	// the persisted content. This test simulates the round-trip the
-	// supervisor actually performs.
+	// The cache-stability contract: the envelope is rendered exactly
+	// once, at SEND time, and persisted in message_headers. History
+	// builds compose the STORED header — they never re-invoke the
+	// plugin — so the wall-clock value is frozen and the provider-side
+	// prefix cache stays warm as the conversation grows. This test
+	// pins the render side; the compose side lives in the history
+	// builder's tests.
 	bg := newFixedClockGrounding(t, `{"timezone":"UTC"}`)
-	stored := bg.TransformOutgoingUserMessage("hi", nil)
-	// Frozen text — what subsequent turns see in the wire prefix.
+	stored, _ := bg.OutgoingMessageEnvelope(nil)
 	if !strings.HasPrefix(stored, "<grounding>") {
-		t.Fatalf("stored content should have prefix, got %q", stored)
+		t.Fatalf("stored header should carry the block, got %q", stored)
 	}
-	// History build doesn't re-run the outgoing transformer, so the
-	// content is still byte-stable on the next turn. Same input ⇒
-	// same persisted bytes ⇒ provider-side prefix cache stays warm.
-	again := stored
+	again, _ := bg.OutgoingMessageEnvelope(nil)
 	if again != stored {
-		t.Errorf("history-time content must be byte-stable")
+		t.Errorf("same clock ⇒ byte-identical header; got drift:\n  %q\n  %q", stored, again)
 	}
 }

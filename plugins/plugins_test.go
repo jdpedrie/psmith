@@ -109,14 +109,14 @@ func (f *fakeDisplayTransformer) TransformForDisplay(content string) string {
 	return f.prefix + content + f.suffix
 }
 
-// fakeOutgoingTransformer prefixes outgoing user content.
-type fakeOutgoingTransformer struct {
+// fakeEnvelope contributes fixed header/trailer blocks.
+type fakeEnvelope struct {
 	dummyPlugin
-	prefix string
+	header, trailer string
 }
 
-func (f *fakeOutgoingTransformer) TransformOutgoingUserMessage(content string, _ map[string]string) string {
-	return f.prefix + content
+func (f *fakeEnvelope) OutgoingMessageEnvelope(_ map[string]string) (string, string) {
+	return f.header, f.trailer
 }
 
 func TestPipeline_Empty(t *testing.T) {
@@ -129,8 +129,8 @@ func TestPipeline_Empty(t *testing.T) {
 	if prep != "" || app != "" {
 		t.Errorf("empty SystemPrompts should be (\"\", \"\"); got (%q, %q)", prep, app)
 	}
-	if got := p.TransformOutgoingUser("x", nil); got != "x" {
-		t.Errorf("empty TransformOutgoingUser should be no-op; got %q", got)
+	if h, tr := p.OutgoingEnvelope(nil); h != "" || tr != "" {
+		t.Errorf("empty OutgoingEnvelope should contribute nothing; got (%q, %q)", h, tr)
 	}
 	if got := p.TransformForDisplay("x"); got != "x" {
 		t.Errorf("empty TransformForDisplay should be no-op; got %q", got)
@@ -157,15 +157,19 @@ func TestPipeline_SystemPromptsConcatenateInOrder(t *testing.T) {
 	}
 }
 
-func TestPipeline_TransformOutgoingUser_AppliesInOrder(t *testing.T) {
+func TestPipeline_OutgoingEnvelope_JoinsInOrder(t *testing.T) {
 	t.Parallel()
 	p := Pipeline{
-		&fakeOutgoingTransformer{dummyPlugin{name: "a"}, "[A]"},
-		&fakeOutgoingTransformer{dummyPlugin{name: "b"}, "[B]"},
+		&fakeEnvelope{dummyPlugin{name: "a"}, "HEAD-A", "TAIL-A"},
+		&fakeEnvelope{dummyPlugin{name: "b"}, "", "TAIL-B"},
+		&fakeEnvelope{dummyPlugin{name: "c"}, "HEAD-C", ""},
 	}
-	got := p.TransformOutgoingUser("hi", nil)
-	if got != "[B][A]hi" {
-		t.Errorf("got %q want %q", got, "[B][A]hi")
+	h, tr := p.OutgoingEnvelope(nil)
+	if h != "HEAD-A\n\nHEAD-C" {
+		t.Errorf("headers = %q want %q", h, "HEAD-A\n\nHEAD-C")
+	}
+	if tr != "TAIL-A\n\nTAIL-B" {
+		t.Errorf("trailers = %q want %q", tr, "TAIL-A\n\nTAIL-B")
 	}
 }
 
@@ -212,9 +216,9 @@ func TestPipeline_PluginsWithoutCapabilityAreSkipped(t *testing.T) {
 	if pre != "PRE" || post != "POST" {
 		t.Errorf("got (%q, %q) want (PRE, POST)", pre, post)
 	}
-	// And TransformOutgoingUser is a no-op since neither plugin implements it.
-	if got := p.TransformOutgoingUser("x", nil); got != "x" {
-		t.Errorf("got %q want %q", got, "x")
+	// And OutgoingEnvelope contributes nothing since neither plugin implements it.
+	if h, tr := p.OutgoingEnvelope(nil); h != "" || tr != "" {
+		t.Errorf("got (%q, %q) want empty", h, tr)
 	}
 }
 

@@ -175,9 +175,17 @@ type SystemPrompter interface {
 	AppendSystemMessage() string
 }
 
-// OutgoingUserTransformer rewrites the user's outgoing content in
-// SendMessage before the row is persisted, so future renders + history
-// builds see the transformed form.
+// MessageEnvelope contributes header/trailer blocks for the outgoing
+// user message. SendMessage persists them in the dedicated
+// message_headers / message_trailers columns BESIDE the user's
+// content — content stays exactly what the user typed, so edits,
+// display, TTS, and embeddings never see the envelope. The history
+// builder composes headers + content + trailers into the wire text.
+//
+// Values are frozen at write time (the same cache-stability contract
+// the old persist-the-rewrite approach had): a header carrying "now"
+// stays byte-stable on every later prefix build, and edits to the
+// content leave the envelope untouched.
 //
 // The `facts` argument carries device-side context the plugin
 // requested via `DeviceFactRequester` (e.g. user locale, current
@@ -185,8 +193,8 @@ type SystemPrompter interface {
 // plugin returned from `RequestedDeviceFacts`. Map may be nil if
 // the client didn't supply any — plugins should treat missing
 // keys as "not available" rather than failing.
-type OutgoingUserTransformer interface {
-	TransformOutgoingUserMessage(content string, facts map[string]string) string
+type MessageEnvelope interface {
+	OutgoingMessageEnvelope(facts map[string]string) (header, trailer string)
 }
 
 // DeviceFactRequester is the opt-in interface for plugins that
@@ -271,8 +279,7 @@ type DisplayTransformer interface {
 }
 
 // AssistantContentTransformer rewrites the assistant's just-finalised
-// text BEFORE the message row is inserted. Mirror of
-// OutgoingUserTransformer for the assistant side: the persisted bytes
+// text BEFORE the message row is inserted: the persisted bytes
 // are the post-transform output, so subsequent history builds and
 // display reads see the rewritten content forever.
 //
@@ -647,18 +654,26 @@ func (p Pipeline) SystemPrompts() (prepend, appendStr string) {
 	return
 }
 
-// TransformOutgoingUser walks the pipeline, applying every
-// OutgoingUserTransformer in order. `facts` is the device-fact
-// envelope (may be nil) — passed verbatim to each transformer so
-// plugins requesting facts can read them. Plugins that don't
-// implement the interface are skipped.
-func (p Pipeline) TransformOutgoingUser(content string, facts map[string]string) string {
+// OutgoingEnvelope collects every MessageEnvelope plugin's header and
+// trailer contributions in pipeline order, each side joined with blank
+// lines. `facts` is the device-fact envelope (may be nil) — passed
+// verbatim to each plugin so those requesting facts can read them.
+// Plugins that don't implement the interface are skipped. Empty
+// strings mean "no contribution on that side."
+func (p Pipeline) OutgoingEnvelope(facts map[string]string) (headers, trailers string) {
+	var hs, ts []string
 	for _, pl := range p {
-		if t, ok := pl.(OutgoingUserTransformer); ok {
-			content = t.TransformOutgoingUserMessage(content, facts)
+		if t, ok := pl.(MessageEnvelope); ok {
+			h, tr := t.OutgoingMessageEnvelope(facts)
+			if h != "" {
+				hs = append(hs, h)
+			}
+			if tr != "" {
+				ts = append(ts, tr)
+			}
 		}
 	}
-	return content
+	return joinNonEmpty(hs, "\n\n"), joinNonEmpty(ts, "\n\n")
 }
 
 // TransformHistoryMessage walks the pipeline, applying every
@@ -825,7 +840,11 @@ var ErrUnknownPlugin = errors.New("plugins: unknown plugin")
 type Capabilities struct {
 	Configurable                bool
 	SystemPrompter              bool
-	OutgoingUserTransformer     bool
+	// MessageEnvelope: contributes persisted header/trailer blocks to
+	// outgoing user messages. Rides the proto's legacy
+	// `outgoing_user_transformer` field — same meaning ("this plugin
+	// touches the outgoing user message"), stable field number.
+	MessageEnvelope             bool
 	HistoryTransformer          bool
 	ChunkTransformer            bool
 	DisplayTransformer          bool
@@ -944,8 +963,8 @@ func Describe(name string) (TypeDescriptor, error) {
 	if _, ok := inst.(SystemPrompter); ok {
 		desc.Capabilities.SystemPrompter = true
 	}
-	if _, ok := inst.(OutgoingUserTransformer); ok {
-		desc.Capabilities.OutgoingUserTransformer = true
+	if _, ok := inst.(MessageEnvelope); ok {
+		desc.Capabilities.MessageEnvelope = true
 	}
 	if _, ok := inst.(HistoryTransformer); ok {
 		desc.Capabilities.HistoryTransformer = true

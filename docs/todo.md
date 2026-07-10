@@ -228,6 +228,8 @@ Deferred:
 - **`ListProviderTypes` `display_name`** — currently humanized via `humanizeName`. Could come from driver metadata if drivers exposed a `DisplayName()` method.
 - **`ListProviderTypes` `config_schema`** — empty bytes for v1; UI hardcodes config forms. JSON Schema generation per-driver is a future ergonomic win.
 - **Unit-tested `internal/store` queries** — no direct tests of the sqlc-generated layer (covered transitively by every service test).
+- **`messages.raw_content` is dormant** — in the schema since 00001, plumbed through the proto, never written. Superseded by the `message_headers`/`message_trailers` envelope design (00041): content stays the user's words, plugin contributions live beside it. Dropping the column needs a proto-field deprecation pass; not urgent.
+- **Legacy grounding rows** — messages written before 00041 carry the `<grounding>` block inline in `content`; basic_grounding's DisplayTransformer strip stays wired for them (display is clean, but editing such a row still shows the block, and its TTS/embedding text includes it). A one-shot backfill migration (split block out of content into message_headers) would let the strip retire; skipped for now.
 - **Web conversation settings: JSON-oneof call-settings editors not built** (`internal/web/convsettings.go`). The Call settings tab covers the scalar/tri-state knobs (temperature, top_p, max output, top_k, stop sequences, thinking, explicit cache, include-thinking-in-history) plus per-provider scalar extras (Anthropic prompt-cache, OpenAI seed/penalties/parallel-tools, Google candidate count). Skipped: OpenAI `response_format` (text/json-object/json-schema oneof) and `logit_bias`, Anthropic `cache_ttl`, and Google `safety_settings`/`response_schema`. Add these as JSON/structured editors when a user needs them; iOS has them in `CallSettingsForm`.
 - **Web model picker has no provider logos.** iOS shows a `ProviderLogo` per group header; the web picker uses the provider label text. Add logo assets if/when we vendor them.
 
@@ -255,7 +257,7 @@ Deferred:
 
 ## Plugin hook ideas
 
-Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, `SystemPrompter`, `OutgoingUserTransformer`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `AssistantContentTransformer`, `ToolProvider`, `MessageLifecycleHook`).
+Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, `SystemPrompter`, `MessageEnvelope`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `AssistantContentTransformer`, `ToolProvider`, `MessageLifecycleHook`).
 
 ### Worth designing now
 

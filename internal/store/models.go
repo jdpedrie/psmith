@@ -134,6 +134,8 @@ type Message struct {
 	Embedding             *pgvector.Vector
 	EmbeddingModel        *string
 	EmbeddingAt           *time.Time
+	MessageHeaders        *string
+	MessageTrailers       *string
 }
 
 type MessageAttachment struct {

@@ -304,21 +304,20 @@ func TestPlugins_PipelineResolverNoPluginsAnywhere(t *testing.T) {
 }
 
 // TestPlugins_E2E_BasicGroundingRewritesPersistedUser walks the
-// OutgoingUserTransformer path:
+// MessageEnvelope path:
 //  1. Attach basic_grounding to the profile.
 //  2. SendMessage with a plain user message.
-//  3. Confirm the persisted user row contains the `<grounding>` block
-//     and the stable wall-clock value (proves the transform ran at
-//     write time, not at history-build time).
+//  3. Confirm the persisted user row keeps CONTENT verbatim and carries
+//     the `<grounding>` block in message_headers (proves the envelope
+//     rendered at write time, beside — not inside — the user's words).
 //  4. Confirm the wire body to the LLM contains the `<grounding>` block
-//     (proves the rewritten content propagates onto the wire prefix).
-//  5. Confirm SendMessage response's UserMessage.DisplayContent has the
-//     block stripped (proves the DisplayTransformer fires for the just-
-//     inserted user row).
-//  6. Confirm ListMessages returns the same display-stripped content for
-//     the user row.
+//     (proves the history builder composes headers + content).
+//  5. Confirm SendMessage response's UserMessage.DisplayContent is the
+//     original text (content never had the block to strip).
+//  6. Confirm ListMessages returns the same clean content for the user
+//     row.
 //
-// This guards against the regression where `pipeline.TransformOutgoingUser`
+// This guards against the regression where `pipeline.OutgoingEnvelope`
 // was never called, leaving basic_grounding silently inert.
 func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 	t.Parallel()
@@ -358,20 +357,26 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 		t.Fatalf("status=%q want completed; err=%s", final.Status, string(final.ErrorPayload))
 	}
 
-	// (1) The persisted user row carries the grounding block + original text.
+	// (1) The persisted user row keeps content verbatim; the grounding
+	// block rides beside it in message_headers.
 	userMsgID, _ := uuid.Parse(resp.Msg.UserMessage.Id)
 	userRow, err := q.GetMessageByID(context.Background(), userMsgID)
 	if err != nil {
 		t.Fatalf("GetMessageByID(user): %v", err)
 	}
-	if !strings.Contains(userRow.Content, "<grounding>") || !strings.Contains(userRow.Content, "</grounding>") {
-		t.Errorf("persisted user content missing grounding block: %q", userRow.Content)
+	if userRow.Content != original {
+		t.Errorf("persisted user content must be the user's words verbatim; got %q want %q", userRow.Content, original)
 	}
-	if !strings.Contains(userRow.Content, "Current time:") {
-		t.Errorf("persisted user content missing 'Current time:' line: %q", userRow.Content)
+	if userRow.MessageHeaders == nil {
+		t.Fatalf("persisted user row missing message_headers")
 	}
-	if !strings.Contains(userRow.Content, original) {
-		t.Errorf("persisted user content lost original text %q: got %q", original, userRow.Content)
+	if !strings.Contains(*userRow.MessageHeaders, "<grounding>") ||
+		!strings.Contains(*userRow.MessageHeaders, "</grounding>") ||
+		!strings.Contains(*userRow.MessageHeaders, "Current time:") {
+		t.Errorf("message_headers missing grounding block: %q", *userRow.MessageHeaders)
+	}
+	if userRow.MessageTrailers != nil {
+		t.Errorf("basic_grounding should not write trailers, got %q", *userRow.MessageTrailers)
 	}
 
 	// (2) The wire body sent to the fake LLM contains the grounding block.
@@ -432,8 +437,10 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 		if strings.Contains(m.DisplayContent, "<grounding>") || strings.Contains(m.DisplayContent, "</grounding>") {
 			t.Errorf("user display_content still has grounding tags: %q", m.DisplayContent)
 		}
-		if !strings.Contains(m.Content, "<grounding>") {
-			t.Errorf("user content lost grounding tags between persist and list: %q", m.Content)
+		// Content is the user's words verbatim — the envelope lives in
+		// message_headers and never reaches the client's edit surface.
+		if m.Content != original {
+			t.Errorf("user content should be verbatim %q, got %q", original, m.Content)
 		}
 		sawUserStripped = true
 	}

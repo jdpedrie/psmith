@@ -931,7 +931,10 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *psmithv1.PluginType {
 		Capabilities: &psmithv1.PluginCapabilities{
 			Configurable:                d.Capabilities.Configurable,
 			SystemPrompter:              d.Capabilities.SystemPrompter,
-			OutgoingUserTransformer:     d.Capabilities.OutgoingUserTransformer,
+			// Proto field name predates the MessageEnvelope rename;
+			// the meaning ("touches the outgoing user message") and
+			// field number are stable.
+			OutgoingUserTransformer:     d.Capabilities.MessageEnvelope,
 			HistoryTransformer:          d.Capabilities.HistoryTransformer,
 			ChunkTransformer:            d.Capabilities.ChunkTransformer,
 			DisplayTransformer:          d.Capabilities.DisplayTransformer,

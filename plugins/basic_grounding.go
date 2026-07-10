@@ -26,19 +26,21 @@ const (
 //
 // Implements the existing plugin interfaces:
 //
-//   - OutgoingUserTransformer: prepends a `<grounding>…</grounding>` block
-//     to the outgoing user message at SEND time. The framework persists
-//     the rewritten content on the user row, so the same wall-clock
-//     value lands in history exactly once and stays put on every
-//     subsequent build of the wire prefix. Re-rendering at history-build
-//     time would tick "current time" forward each turn and bust the
-//     provider-side prefix cache — which is the whole reason the value
-//     is frozen at write time.
-//   - DisplayTransformer: strips its own `<grounding>` block (delimiters
-//     and content) so the chat UI never shows the framing.
+//   - MessageEnvelope: contributes a `<grounding>…</grounding>` header
+//     block, rendered at SEND time and persisted in the user row's
+//     message_headers column — never in content, so editing / display /
+//     TTS / embeddings all see the user's own words. Rendering once at
+//     write time is what freezes the wall-clock value: re-rendering at
+//     history-build time would tick "current time" forward each turn
+//     and bust the provider-side prefix cache.
+//   - DisplayTransformer: strips a `<grounding>` block from content.
+//     Only fires on LEGACY rows — before message_headers existed the
+//     plugin rewrote content directly, and those rows still carry the
+//     block inline. New rows have clean content and the anchored regex
+//     never matches.
 //
-// CacheStable: the persisted user message row is byte-stable after write,
-// so the plugin's contribution doesn't bust the prefix cache as the
+// CacheStable: the persisted header is byte-stable after write, so the
+// plugin's contribution doesn't bust the prefix cache as the
 // conversation grows.
 type basicGrounding struct {
 	cfg basicGroundingConfig
@@ -205,12 +207,12 @@ func (p *basicGrounding) RequestedDeviceFacts() []string {
 	return keys
 }
 
-// --- OutgoingUserTransformer ---
+// --- MessageEnvelope ---
 
-func (p *basicGrounding) TransformOutgoingUserMessage(content string, facts map[string]string) string {
+func (p *basicGrounding) OutgoingMessageEnvelope(facts map[string]string) (header, trailer string) {
 	lines := p.factLines(facts)
 	if len(lines) == 0 {
-		return content
+		return "", ""
 	}
 	var b strings.Builder
 	b.WriteString(groundingOpenTag)
@@ -220,9 +222,7 @@ func (p *basicGrounding) TransformOutgoingUserMessage(content string, facts map[
 		b.WriteByte('\n')
 	}
 	b.WriteString(groundingCloseTag)
-	b.WriteString("\n\n")
-	b.WriteString(content)
-	return b.String()
+	return b.String(), ""
 }
 
 // --- DisplayTransformer ---

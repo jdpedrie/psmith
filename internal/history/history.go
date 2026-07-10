@@ -473,7 +473,7 @@ func toWireMessage(m store.Message, destProviderType string, includeThinking boo
 
 	wm := providers.WireMessage{
 		Role:    wireRole,
-		Content: m.Content,
+		Content: composeEnvelope(m),
 	}
 
 	if m.Role != roleAssistant {
@@ -533,6 +533,39 @@ func splitStoredToolCalls(payload []byte) ([]providers.ToolUseBlock, []providers
 		})
 	}
 	return uses, results, true
+}
+
+// composeEnvelope assembles the wire text for one stored message:
+// message_headers + content + message_trailers, blank-line separated.
+// The envelope columns carry plugin contributions (grounding facts,
+// future siblings) persisted beside the user's own words — this is
+// the ONLY place they join; display, edit, TTS, and embeddings all
+// read bare content. Values were frozen at write time, so the
+// composed text is byte-stable across prefix builds (prompt-cache
+// friendly).
+func composeEnvelope(m store.Message) string {
+	header := ""
+	if m.MessageHeaders != nil {
+		header = *m.MessageHeaders
+	}
+	trailer := ""
+	if m.MessageTrailers != nil {
+		trailer = *m.MessageTrailers
+	}
+	if header == "" && trailer == "" {
+		return m.Content
+	}
+	var parts []string
+	if header != "" {
+		parts = append(parts, header)
+	}
+	if m.Content != "" {
+		parts = append(parts, m.Content)
+	}
+	if trailer != "" {
+		parts = append(parts, trailer)
+	}
+	return joinParts(parts)
 }
 
 // wireRoleFor maps a stored role to its wire-side role. role=context is
