@@ -129,7 +129,14 @@ struct ConversationBody: View {
                     loadErrorBanner(err)
                 }
                 messageScroll
-                composer
+                if let archivedAt = liveConversation.archivedAt {
+                    // The server refuses every mutation on an archived
+                    // conversation — the transcript is view-only, so the
+                    // composer gives way to the restore affordance.
+                    ArchivedBarMac(conversationID: liveConversation.id, archivedAt: archivedAt)
+                } else {
+                    composer
+                }
             }
         }
         // Top inset keeps scroll content from bleeding up into the
@@ -1827,3 +1834,36 @@ private struct MessageUsagePopover: View {
 /// to `.containerRelativeFrame`, which we tried first and which silently
 /// failed to constrain bubble width in this layout.
 
+
+/// Replaces the composer while the conversation is archived: a
+/// thin-material band naming the state, with the restore action. The
+/// transcript above stays readable; every mutating control is moot
+/// because the server rejects writes on archived conversations.
+struct ArchivedBarMac: View {
+    let conversationID: String
+    let archivedAt: Date
+    @Environment(ConversationsModel.self) private var convos
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "archivebox")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Archived")
+                    .font(.callout.weight(.semibold))
+                Text(archivedAt, style: .date)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Unarchive") {
+                Task { await convos.unarchive(conversationID) }
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.thinMaterial)
+    }
+}

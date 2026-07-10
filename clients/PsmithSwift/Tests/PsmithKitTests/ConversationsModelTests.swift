@@ -351,6 +351,47 @@ struct ConversationsModelTests {
         #expect(model.loadError == nil)
     }
 
+    // MARK: - Archived browsing
+
+    @Test("archive moves a conversation into the archived list; unarchive restores it")
+    func archiveRoundTrip() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-arch")
+        let convos = ConversationsModel(client: client)
+        let a = try await client.conversations.create(profileID: profile.id, title: "keep")
+        let b = try await client.conversations.create(profileID: profile.id, title: "shelve")
+        await convos.refresh()
+        #expect(convos.conversations.count == 2)
+
+        await convos.archive(b.id)
+        #expect(!convos.conversations.contains(where: { $0.id == b.id }))
+
+        await convos.loadArchived()
+        #expect(convos.archivedConversations.map(\.id) == [b.id])
+        #expect(convos.archivedLoading == false)
+
+        await convos.unarchive(b.id)
+        #expect(convos.archivedConversations.isEmpty)
+        #expect(convos.conversations.contains(where: { $0.id == b.id }))
+        #expect(convos.conversations.contains(where: { $0.id == a.id }))
+    }
+
+    @Test("deleteArchived removes the row for good and clears a matching selection")
+    func deleteArchived() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-archdel")
+        let convos = ConversationsModel(client: client)
+        let c = try await client.conversations.create(profileID: profile.id, title: "doomed")
+        await convos.refresh()
+        await convos.archive(c.id)
+        await convos.loadArchived()
+        convos.selectedID = c.id
+
+        await convos.deleteArchived(c.id)
+        #expect(convos.archivedConversations.isEmpty)
+        #expect(convos.selectedID == nil)
+        await convos.refresh()
+        #expect(!convos.conversations.contains(where: { $0.id == c.id }))
+    }
+
     private func freshUserWithProfile(prefix: String) async throws -> (PsmithClient, PsmithProfile) {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: prefix)
         let profile = try await client.profiles.create(Fixtures.minimalProfilePatch())

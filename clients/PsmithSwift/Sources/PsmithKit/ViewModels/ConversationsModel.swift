@@ -248,6 +248,65 @@ public final class ConversationsModel {
         }
     }
 
+    // MARK: - Archived browsing
+
+    /// The archive, loaded on demand (loadArchived) — never part of the
+    /// active list. iOS renders it on a pushed screen, Mac swaps the
+    /// sidebar list into archive mode; both read this state.
+    public private(set) var archivedConversations: [PsmithConversation] = []
+    public private(set) var archivedNextPageToken: String?
+    public private(set) var archivedLoading = false
+
+    public func loadArchived() async {
+        archivedLoading = true
+        defer { archivedLoading = false }
+        do {
+            let page = try await client.conversations.list(pageSize: 50, archived: true)
+            archivedConversations = page.items
+            archivedNextPageToken = page.nextPageToken
+        } catch {
+            if PsmithError.isCancellation(error) { return }
+            loadError = PsmithError.display(error)
+        }
+    }
+
+    public func loadMoreArchived() async {
+        guard let token = archivedNextPageToken else { return }
+        do {
+            let page = try await client.conversations.list(pageSize: 50, pageToken: token, archived: true)
+            let known = Set(archivedConversations.map(\.id))
+            archivedConversations.append(contentsOf: page.items.filter { !known.contains($0.id) })
+            archivedNextPageToken = page.nextPageToken
+        } catch {
+            if PsmithError.isCancellation(error) { return }
+            loadError = PsmithError.display(error)
+        }
+    }
+
+    /// Restores an archived conversation to the active list: removed
+    /// from the archive state, active page one re-fetched so it lands
+    /// in server order.
+    public func unarchive(_ id: String) async {
+        do {
+            try await client.conversations.unarchive(id: id)
+            archivedConversations.removeAll { $0.id == id }
+            await refresh()
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
+    /// Deletes a conversation that lives in the archive list.
+    public func deleteArchived(_ id: String) async {
+        do {
+            try await client.conversations.delete(id: id)
+            archivedConversations.removeAll { $0.id == id }
+            if selectedID == id { selectedID = nil }
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
     public var clientRef: PsmithClient { client }
 
     private func adoptActiveRuns(into hub: StreamHub) async {

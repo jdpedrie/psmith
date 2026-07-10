@@ -11,6 +11,10 @@ struct HomeView: View {
     @State private var showingUserMenu: Bool = false
     @State private var showingAddAccount: Bool = false
     @State private var accountToRemove: Account? = nil
+    /// Sidebar archive-browsing mode. Lives here (not in the list view)
+    /// because the detail pane must resolve selections against the
+    /// archive list while it's active.
+    @State private var showingArchived: Bool = false
 
     private var mode: AppMode { navigator.mode }
 
@@ -34,7 +38,7 @@ struct HomeView: View {
         @Bindable var convos = convos
         return NavigationSplitView(columnVisibility: $sidebarVisibility) {
             VStack(spacing: 0) {
-                ConversationListView()
+                ConversationListView(showingArchived: $showingArchived)
                     .frame(maxHeight: .infinity)
                 Divider()
                 sidebarTray
@@ -45,7 +49,8 @@ struct HomeView: View {
             if navigator.composingNewConversation {
                 NewConversationView()
             } else if let id = convos.selectedID,
-                      let conversation = convos.conversations.first(where: { $0.id == id }) {
+                      let conversation = convos.conversations.first(where: { $0.id == id })
+                          ?? convos.archivedConversations.first(where: { $0.id == id }) {
                 ConversationView(conversation: conversation, profiles: app.profiles)
                     .id(id)
             } else {
@@ -156,18 +161,39 @@ struct HomeView: View {
                     .help("Settings (⌘,)")
 
                     Button {
-                        navigator.composingNewConversation = true
+                        // With a default profile set, plain click starts a
+                        // chat with it immediately; ⌥-click (or no default)
+                        // opens the full compose pane with profile/model/
+                        // settings choices. Mirrors iOS's tap vs long-press.
+                        let optionHeld = NSEvent.modifierFlags.contains(.option)
+                        if !optionHeld,
+                           let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
+                            Task {
+                                if let c = await convos.newConversation(profileID: def.id, title: nil, settings: nil) {
+                                    convos.selectedID = c.id
+                                }
+                            }
+                        } else {
+                            navigator.composingNewConversation = true
+                        }
                     } label: {
                         Image(systemName: "plus.bubble")
                     }
                     .buttonStyle(.glass)
                     .disabled(!convos.profiles.contains(where: { !$0.parentOnly }))
-                    .help("New conversation")
+                    .help(newConversationHelp)
                 }
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+    }
+
+    private var newConversationHelp: String {
+        if let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
+            return "New conversation with \(def.name) — ⌥-click to choose"
+        }
+        return "New conversation"
     }
 
     // MARK: - Account switcher popover
