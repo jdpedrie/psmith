@@ -524,15 +524,23 @@ struct ConversationBody: View {
                         if model.isCompacting {
                             CompactingRow(text: model.streamingText).id("__compacting__")
                         } else if !model.streamingText.isEmpty || model.isStreaming {
-                            StreamingRow(
-                                text: model.streamingText,
-                                thinkingText: model.streamingThinking,
-                                thinkingStartedAt: model.streamingThinkingStartedAt,
-                                thinkingFinishedAt: model.streamingThinkingFinishedAt,
-                                thinkingExpanded: $model.streamingThinkingExpanded,
-                                toolCalls: model.streamingToolCalls,
-                                streamingComponents: model.conversation.streamingComponents
-                            )
+                            // The shared StreamingRow renders bare (that
+                            // matches iOS, where settled assistant turns
+                            // have no bubble). The Mac's settled rows DO
+                            // bubble, so wrap the live row in the same
+                            // chrome — otherwise the text streams naked
+                            // and visibly snaps into a bubble at terminal.
+                            AssistantBubbleChrome {
+                                StreamingRow(
+                                    text: model.streamingText,
+                                    thinkingText: model.streamingThinking,
+                                    thinkingStartedAt: model.streamingThinkingStartedAt,
+                                    thinkingFinishedAt: model.streamingThinkingFinishedAt,
+                                    thinkingExpanded: $model.streamingThinkingExpanded,
+                                    toolCalls: model.streamingToolCalls,
+                                    streamingComponents: model.conversation.streamingComponents
+                                )
+                            }
                             .id("__streaming__")
                         }
                     }
@@ -2126,5 +2134,35 @@ struct ArchivedBarMac: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.thinMaterial)
+    }
+}
+
+
+/// Wraps live streaming content in exactly the chrome the settled
+/// assistant MessageRow bubble uses — width cap, material, hairline
+/// border, clip — so the StreamingRow → MessageRow swap at terminal
+/// is invisible. Keep the values in lockstep with MessageRow's
+/// `roleAlignedContainer` + `bubble`; a drift here is a visible jolt
+/// at the end of every turn.
+struct AssistantBubbleChrome<Content: View>: View {
+    @ViewBuilder var content: Content
+    @Environment(\.chatPaneWidth) private var paneWidth
+
+    var body: some View {
+        let cap: CGFloat = paneWidth > 0 ? paneWidth * 0.85 : 720
+        HStack(alignment: .top, spacing: 8) {
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(maxWidth: cap, alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
