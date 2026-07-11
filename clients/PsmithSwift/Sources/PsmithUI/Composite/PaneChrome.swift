@@ -44,11 +44,11 @@ public struct PaneHeader<Trailing: View>: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.title3.weight(.semibold))
+                        .scaledFont(.title3, weight: .semibold)
                         .lineLimit(1)
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -88,15 +88,15 @@ public struct EmptyStateView: View {
     public var body: some View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 28, weight: .light))
+                .scaledFont(size: 28, weight: .light)
                 .foregroundStyle(.tertiary)
             Text(title)
-                .font(.callout)
+                .scaledFont(.callout)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
             if let description {
                 Text(description)
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
             }

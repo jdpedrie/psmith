@@ -38,17 +38,17 @@ public struct CompressionSummaryCard: View {
                       : "wand.and.stars")
                     .foregroundStyle(.orange)
                 Text(isErrored ? "Compression failed" : "Compression summary")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                 Spacer()
                 if !isErrored {
                     Text("Review and promote or delete")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else if let label = compressionModelLabel {
                     Text(label)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
@@ -58,10 +58,10 @@ public struct CompressionSummaryCard: View {
                 erroredBody
             } else {
                 MarkdownText(message.content, cacheKey: markdownCacheKey)
-                    .font(.callout)
+                    .scaledFont(.callout)
                 if let summary = usageSummaryLine {
                     Text(summary)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -150,19 +150,19 @@ public struct CompressionSummaryCard: View {
         VStack(alignment: .leading, spacing: 8) {
             if let errText = message.errorText, !errText.isEmpty {
                 Text(errText)
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
             }
             if !message.content.isEmpty {
                 DisclosureGroup(isExpanded: $showPartialContent) {
                     MarkdownText(message.content, cacheKey: markdownCacheKey)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
                 } label: {
                     Text("Partial summary streamed before failure")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 }
             }

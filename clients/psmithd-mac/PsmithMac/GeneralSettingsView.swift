@@ -17,9 +17,9 @@ struct GeneralSettingsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("General")
-                        .font(.title2.weight(.semibold))
+                        .scaledFont(.title2, weight: .semibold)
                     Text("Psmith keeps recent conversations on this Mac so they stay readable when the server is unreachable.")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -111,7 +111,7 @@ struct GeneralSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()

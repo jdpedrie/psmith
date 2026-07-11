@@ -42,7 +42,7 @@ public struct ImageRenderer: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     case .failure:
                         Text(props?.alt ?? "Image failed to load")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                     @unknown default:
                         EmptyView()
@@ -51,7 +51,7 @@ public struct ImageRenderer: View {
                 .accessibilityLabel(props?.alt ?? "")
                 if let caption = props?.caption, !caption.isEmpty {
                     Text(caption)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }

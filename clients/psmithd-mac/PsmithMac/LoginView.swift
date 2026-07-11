@@ -84,7 +84,7 @@ struct LoginView: View {
                     .fill(.tertiary)
                     .frame(height: 1)
                 Text("OR CONTINUE AS")
-                    .font(.caption2.weight(.semibold))
+                    .scaledFont(.caption2, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .fixedSize()
                 Rectangle()
@@ -99,21 +99,21 @@ struct LoginView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "person.crop.circle")
-                            .font(.system(size: 24, weight: .light))
+                            .scaledFont(size: 24, weight: .light)
                             .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(account.resolvedDisplayLabel)
-                                .font(.callout.weight(.semibold))
+                                .scaledFont(.callout, weight: .semibold)
                                 .foregroundStyle(.primary)
                             Text(account.host.host ?? account.host.absoluteString)
-                                .font(.caption)
+                                .scaledFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .scaledFont(.caption, weight: .semibold)
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 12)
@@ -153,9 +153,9 @@ private struct ServerURLEntry: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Connect to psmithd")
-                .font(.title2)
+                .scaledFont(.title2)
             Text("Enter the URL where your Psmith server is running.")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
@@ -206,7 +206,7 @@ private struct ServerURLEntry: View {
                 ProgressView().controlSize(.small)
                 Text("Probing…").foregroundStyle(.secondary)
             }
-            .font(.callout)
+            .scaledFont(.callout)
         } else {
             switch status {
             case .idle:
@@ -214,19 +214,19 @@ private struct ServerURLEntry: View {
             case .ok(let version):
                 Label(version.isEmpty ? "Reachable — psmithd answered." : "Reachable — psmithd \(version).",
                       systemImage: "checkmark.circle.fill")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.green)
             case .wrong(let detail):
                 Label("Server responded but isn't a Psmith server: \(detail)",
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: 380)
             case .unreachable(let detail):
                 Label("Couldn't reach this URL: \(detail)",
                       systemImage: "xmark.octagon.fill")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: 380)
@@ -288,20 +288,20 @@ private struct CredentialsEntry: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Sign in to Psmith")
-                .font(.title2)
+                .scaledFont(.title2)
 
             HStack(spacing: 6) {
                 Image(systemName: "server.rack")
                     .foregroundStyle(.secondary)
                 Text(serverURL.absoluteString)
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let onChangeServer {
                     Button("Change") { onChangeServer() }
                         .buttonStyle(.link)
-                        .font(.callout)
+                        .scaledFont(.callout)
                 }
             }
             .frame(maxWidth: 380)
@@ -321,7 +321,7 @@ private struct CredentialsEntry: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 320)

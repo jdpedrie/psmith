@@ -99,7 +99,7 @@ public struct StreamingRow: View {
                 Image(systemName: "wand.and.stars")
                     .foregroundStyle(.orange)
                 Text("Compression summary")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                 ProgressView().controlSize(.mini)
@@ -128,7 +128,7 @@ public struct StreamingRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("ASSISTANT")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                 ProgressView().controlSize(.mini)
             }
@@ -184,7 +184,7 @@ public struct StreamingRow: View {
                 switch segment {
                 case .text(let s):
                     MarkdownText(s)
-                        .font(isCompression ? .callout : nil)
+                        .scaledFont(isCompression ? .callout : .body)
                 case .fragment(let frag):
                     FragmentView(fragments: [frag], onAction: { _ in })
                 case .pendingBlock:

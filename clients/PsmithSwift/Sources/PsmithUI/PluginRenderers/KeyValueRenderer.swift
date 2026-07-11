@@ -48,11 +48,11 @@ public struct KeyValueRenderer: View {
             ForEach(pairs, id: \.self) { pair in
                 HStack(alignment: .firstTextBaseline) {
                     Text(pair.key)
-                        .font(.callout.weight(.medium))
+                        .scaledFont(.callout, weight: .medium)
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 100, alignment: .leading)
                     Text(pair.value)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .textSelection(.enabled)
                     Spacer(minLength: 0)
                 }

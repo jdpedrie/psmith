@@ -42,7 +42,7 @@ struct NewConversationView: View {
                 chatSettingsSection
                 if let errorMessage {
                     Text(errorMessage)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.red)
                 }
             }
@@ -127,7 +127,7 @@ struct NewConversationView: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Model override")
             Text("Use a different model for this conversation than the profile's default.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             modelRowList
         }
@@ -206,7 +206,7 @@ struct NewConversationView: View {
                     }
                     if !needle.isEmpty && filtered.isEmpty {
                         Text("No models match \"\(modelSearch)\"")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 12)
@@ -221,7 +221,7 @@ struct NewConversationView: View {
 
     private func groupHeader(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.caption2.weight(.semibold))
+            .scaledFont(.caption2, weight: .semibold)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)
@@ -244,23 +244,23 @@ struct NewConversationView: View {
             Button(action: action) {
                 HStack(spacing: 10) {
                     Image(systemName: systemImage)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(isSelected ? .primary : .secondary)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.primary)
                         if let subtitle {
                             Text(subtitle)
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark")
-                            .font(.callout.weight(.semibold))
+                            .scaledFont(.callout, weight: .semibold)
                             .foregroundStyle(.tint)
                     }
                 }
@@ -276,7 +276,7 @@ struct NewConversationView: View {
                     Task { await app.profiles.toggleModelFavorite(providerID: model.providerID, modelID: model.modelID) }
                 } label: {
                     Image(systemName: model.favorite ? "star.fill" : "star")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundStyle(model.favorite ? Color.yellow : Color.secondary)
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
@@ -299,9 +299,9 @@ struct NewConversationView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Include thinking in history")
-                    .font(.callout)
+                    .scaledFont(.callout)
                 Text("Whether assistant chain-of-thought is sent back as context on follow-up turns.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                 Picker("Include thinking in history", selection: thinkingBinding) {
                     Text("Inherit from profile").tag(Bool?.none)
@@ -346,7 +346,7 @@ struct NewConversationView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.caption.weight(.semibold))
+            .scaledFont(.caption, weight: .semibold)
             .foregroundStyle(.secondary)
     }
 

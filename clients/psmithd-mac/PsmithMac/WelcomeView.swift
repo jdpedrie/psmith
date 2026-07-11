@@ -17,16 +17,16 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 40, weight: .light))
+                .scaledFont(size: 40, weight: .light)
                 .foregroundStyle(.tertiary)
             Text("Welcome to Psmith")
-                .font(.title3)
+                .scaledFont(.title3)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
             Text(canCreateConversation
                  ? "Start a new conversation, or pick one from the sidebar."
                  : "Add a profile in Settings to start your first conversation.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
             Button {

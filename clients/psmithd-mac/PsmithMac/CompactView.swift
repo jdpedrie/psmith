@@ -41,7 +41,7 @@ struct CompactPane: View {
                 modelSection
                 if let err = model.compactError {
                     Text("Last attempt: \(err)")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.red)
                 }
             }
@@ -69,15 +69,15 @@ struct CompactPane: View {
         let realCount = model.messages.filter { $0.role == .user || $0.role == .assistant }.count
         VStack(alignment: .leading, spacing: 4) {
             Text("\(realCount) message\(realCount == 1 ? "" : "s") will be summarized.")
-                .font(.callout)
+                .scaledFont(.callout)
             if let count = model.tokenCount, let window = model.contextWindow, window > 0 {
                 let pct = Int(Double(count) / Double(window) * 100)
                 Text("Current: \(count.formatted()) / \(window.formatted()) tokens (\(pct)%).")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
             }
             Text("You'll review the summary before it replaces the active context.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -88,10 +88,10 @@ struct CompactPane: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Prompt")
             Text("System prompt sent to the compression model. Pre-filled from the profile; this edit is per-call only.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             TextEditor(text: $model.compactPromptDraft)
-                .font(.callout)
+                .scaledFont(.callout)
                 .scrollContentBackground(.hidden)
                 .padding(10)
                 .background(Color.primary.opacity(0.04))
@@ -107,7 +107,7 @@ struct CompactPane: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Compression model")
             Text("Used to write the summary. Pre-selected from the profile; pick another enabled model to override for this run.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             if pickingModel {
                 modelRowList
@@ -129,28 +129,28 @@ struct CompactPane: View {
         }
         HStack(spacing: 10) {
             Image(systemName: selected == nil ? "exclamationmark.triangle" : "cpu")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(selected == nil ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 if let s = selected {
                     Text(s.displayName)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.primary)
                     Text(providerLabels[s.providerID] ?? s.providerID)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Model not found")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.primary)
                     if let mid = model.compactModelID, !mid.isEmpty {
                         Text("Profile points at \"\(mid)\", which isn't enabled. Pick another to continue.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.secondary)
                     } else {
                         Text("No model resolved from the profile. Pick one to continue.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -231,14 +231,14 @@ struct CompactPane: View {
                     }
                     if !needle.isEmpty && filtered.isEmpty {
                         Text("No models match \"\(modelSearch)\"")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 12)
                     }
                     if all.isEmpty {
                         Text("No enabled models. Enable one in Settings → Providers first.")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 12)
@@ -253,7 +253,7 @@ struct CompactPane: View {
 
     private func groupHeader(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.caption2.weight(.semibold))
+            .scaledFont(.caption2, weight: .semibold)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)
@@ -274,23 +274,23 @@ struct CompactPane: View {
             Button(action: action) {
                 HStack(spacing: 10) {
                     Image(systemName: "cpu")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(isSelected ? .primary : .secondary)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.primary)
                         if let subtitle {
                             Text(subtitle)
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark")
-                            .font(.callout.weight(.semibold))
+                            .scaledFont(.callout, weight: .semibold)
                             .foregroundStyle(.tint)
                     }
                 }
@@ -305,7 +305,7 @@ struct CompactPane: View {
                 Task { await app.profiles.toggleModelFavorite(providerID: model.providerID, modelID: model.modelID) }
             } label: {
                 Image(systemName: model.favorite ? "star.fill" : "star")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundStyle(model.favorite ? Color.yellow : Color.secondary)
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
@@ -325,7 +325,7 @@ struct CompactPane: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.caption.weight(.semibold))
+            .scaledFont(.caption, weight: .semibold)
             .foregroundStyle(.secondary)
     }
 }

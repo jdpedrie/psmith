@@ -39,7 +39,7 @@ public struct ErrorRenderer: View {
                 Spacer(minLength: 0)
                 if let code = props?.code, !code.isEmpty {
                     Text(code)
-                        .font(.caption.monospaced())
+                        .scaledFont(.caption, design: .monospaced)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(.regularMaterial, in: Capsule())

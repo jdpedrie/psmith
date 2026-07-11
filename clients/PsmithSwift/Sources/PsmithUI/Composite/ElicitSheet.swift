@@ -42,7 +42,7 @@ public struct ElicitSheet: View {
             }
             if let error {
                 Text(error)
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -58,10 +58,10 @@ public struct ElicitSheet: View {
                 Image(systemName: "key.fill")
                     .foregroundStyle(.tint)
                 Text("Psmith needs input")
-                    .font(.headline)
+                    .scaledFont(.headline)
             }
             Text(pending.message)
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -72,10 +72,10 @@ public struct ElicitSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Text(field.displayLabel)
-                    .font(.caption.weight(.medium))
+                    .scaledFont(.caption, weight: .medium)
                 if required {
                     Text("required")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -96,7 +96,7 @@ public struct ElicitSheet: View {
             }
             if let desc = field.description, !desc.isEmpty {
                 Text(desc)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }

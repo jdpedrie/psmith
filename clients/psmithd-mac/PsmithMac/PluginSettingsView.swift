@@ -104,17 +104,17 @@ private struct PluginListRow: View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
                 Image(systemName: "puzzlepiece.extension")
-                    .font(.system(size: 13, weight: .regular))
+                    .scaledFont(size: 13, weight: .regular)
                     .foregroundStyle(.secondary)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(plugin.displayName)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                     if !plugin.description.isEmpty {
                         Text(plugin.description)
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(.secondary))
                             .lineLimit(2)
                     }
@@ -122,7 +122,7 @@ private struct PluginListRow: View {
                 Spacer(minLength: 0)
                 if hasUnsetRequiredGlobals {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .scaledFont(size: 10, weight: .semibold)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.orange))
                         .help("Required global settings missing.")
                 }
@@ -181,7 +181,7 @@ private struct PluginSettingsForm: View {
                 VStack(alignment: .leading, spacing: 18) {
                     if !plugin.description.isEmpty {
                         Text(plugin.description)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -192,7 +192,7 @@ private struct PluginSettingsForm: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Shared settings — apply to every profile that attaches \(plugin.displayName).")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
                         PluginConfigEditor(
@@ -210,18 +210,18 @@ private struct PluginSettingsForm: View {
                         Divider().padding(.vertical, 4)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Per-profile settings")
-                                .font(.caption.weight(.semibold))
+                                .scaledFont(.caption, weight: .semibold)
                                 .foregroundStyle(.secondary)
                                 .textCase(.uppercase)
                             Text("\(plugin.displayName) also exposes \(profileScoped.count) field\(profileScoped.count == 1 ? "" : "s") that live on each profile that attaches this plugin. Edit those from the profile editor.")
-                                .font(.caption)
+                                .scaledFont(.caption)
                                 .foregroundStyle(.tertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 
                     if let saveError {
-                        Text(saveError).font(.caption).foregroundStyle(.red)
+                        Text(saveError).scaledFont(.caption).foregroundStyle(.red)
                     }
                 }
                 .padding(.leading, 24)
@@ -248,21 +248,21 @@ private struct PluginSettingsForm: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "puzzlepiece.extension")
-                .font(.system(size: 14, weight: .regular))
+                .scaledFont(size: 14, weight: .regular)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(plugin.displayName)
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Text(plugin.name)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
             Spacer()
             if isSaving {
                 HStack(spacing: 5) {
                     ProgressView().controlSize(.mini)
-                    Text("Saving…").font(.caption).foregroundStyle(.secondary)
+                    Text("Saving…").scaledFont(.caption).foregroundStyle(.secondary)
                 }
             }
         }

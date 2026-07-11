@@ -61,7 +61,7 @@ private struct ProfileRow: View {
             Text(profile.name).lineLimit(1)
             if !ancestorNames.isEmpty {
                 Text(ancestorNames.joined(separator: " ‹ "))
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -161,11 +161,11 @@ private struct ProfileViewer: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 6) {
                         Text(profile.name)
-                            .font(.headline)
+                            .scaledFont(.headline)
                             .lineLimit(1)
                         if profile.parentOnly {
                             Text("PARENT ONLY")
-                                .font(.caption2.weight(.semibold))
+                                .scaledFont(.caption2, weight: .semibold)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -174,7 +174,7 @@ private struct ProfileViewer: View {
                         }
                     }
                     Text(parentName.map { "Inherits from \($0)" } ?? "Standalone profile")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -229,15 +229,15 @@ private struct ProfileViewer: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 if let mode = profile.compressionMode {
                                     HStack(spacing: 4) {
-                                        Text("Mode:").foregroundStyle(.secondary).font(.caption)
-                                        Text(modeLabel(mode)).font(.callout)
+                                        Text("Mode:").foregroundStyle(.secondary).scaledFont(.caption)
+                                        Text(modeLabel(mode)).scaledFont(.callout)
                                     }
                                 }
                                 if profile.compressionProviderID != nil || profile.compressionModelID != nil {
                                     HStack(spacing: 4) {
-                                        Text("Model:").foregroundStyle(.secondary).font(.caption)
+                                        Text("Model:").foregroundStyle(.secondary).scaledFont(.caption)
                                         modelDescription(profile.compressionProviderID, profile.compressionModelID)
-                                            .font(.callout)
+                                            .scaledFont(.callout)
                                     }
                                 }
                                 if let g = profile.compressionGuide, !g.isEmpty {
@@ -255,9 +255,9 @@ private struct ProfileViewer: View {
                                         Image(systemName: "apple.logo")
                                             .foregroundStyle(theme.accent)
                                         Text("Apple Foundation Models")
-                                            .font(.callout)
+                                            .scaledFont(.callout)
                                         Text("ON DEVICE")
-                                            .font(.caption2.weight(.semibold))
+                                            .scaledFont(.caption2, weight: .semibold)
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 5)
                                             .padding(.vertical, 1)
@@ -266,9 +266,9 @@ private struct ProfileViewer: View {
                                     }
                                 } else if profile.titleProviderID != nil || profile.titleModelID != nil {
                                     HStack(spacing: 4) {
-                                        Text("Model:").foregroundStyle(.secondary).font(.caption)
+                                        Text("Model:").foregroundStyle(.secondary).scaledFont(.caption)
                                         modelDescription(profile.titleProviderID, profile.titleModelID)
-                                            .font(.callout)
+                                            .scaledFont(.callout)
                                     }
                                 }
                                 if let g = profile.titleGuide, !g.isEmpty {
@@ -280,7 +280,7 @@ private struct ProfileViewer: View {
 
                     if isFullyInherited {
                         Text("This profile inherits everything from \(parentName ?? "the default").")
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -291,7 +291,7 @@ private struct ProfileViewer: View {
             if let err = model.profilesModel.error {
                 PaneFooter {
                     Label(err, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.red)
                         .lineLimit(1)
                     Spacer()
@@ -362,7 +362,7 @@ private struct ProfileViewer: View {
     private func section(_ title: String, @ViewBuilder body: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             body()
@@ -371,7 +371,7 @@ private struct ProfileViewer: View {
 
     private func multilineText(_ s: String) -> some View {
         Text(s)
-            .font(.callout)
+            .scaledFont(.callout)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
             .background(Color.primary.opacity(0.04))
@@ -488,7 +488,7 @@ private struct ProfileForm: View {
             // for column-to-column visual rhythm.
             HStack(alignment: .center, spacing: 8) {
                 Text(isEdit ? "Edit profile" : "Add profile")
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
@@ -576,7 +576,7 @@ private struct ProfileForm: View {
 
                     formSection("Default call settings") {
                         Text("Per-profile generation knobs (temperature, max tokens, thinking, …). Any unset field inherits from the model and provider layers below at send time.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
 
@@ -629,7 +629,7 @@ private struct ProfileForm: View {
                     }
 
                     if let formError {
-                        Text(formError).font(.caption).foregroundStyle(.red)
+                        Text(formError).scaledFont(.caption).foregroundStyle(.red)
                     }
                 }
                 .padding(20)
@@ -674,7 +674,7 @@ private struct ProfileForm: View {
     private func formSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.caption)
+                .scaledFont(.caption)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -697,7 +697,7 @@ private struct ProfileForm: View {
             VStack(alignment: .leading, spacing: 4) {
                 content()
                 Text(description)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -706,7 +706,7 @@ private struct ProfileForm: View {
 
     private func multilineEditor(_ binding: Binding<String>) -> some View {
         TextEditor(text: binding)
-            .font(.callout)
+            .scaledFont(.callout)
             .scrollContentBackground(.hidden)
             .padding(8)
             .background(Color.primary.opacity(0.04))
@@ -736,13 +736,13 @@ private struct ProfileForm: View {
                         ProviderLogo(slug: slug, size: 14)
                             .foregroundStyle(.secondary)
                     } else {
-                        Image(systemName: "cpu").font(.caption2)
+                        Image(systemName: "cpu").scaledFont(.caption2)
                     }
                     Text(modelLabel(provider: provider.wrappedValue, model: modelBinding.wrappedValue))
                     Image(systemName: expandedPicker == slot ? "chevron.up" : "chevron.down")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                 }
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 // contentShape forces the entire HStack frame
                 // (including the chevron and any padding) to be hit-
@@ -900,15 +900,15 @@ private struct ProfileForm: View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: systemImage)
-                    .font(.title3)
+                    .scaledFont(.title3)
                     .foregroundStyle(isSelected ? tint : .secondary)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(title).font(.callout.weight(.medium))
+                        Text(title).scaledFont(.callout, weight: .medium)
                         if let badge {
                             Text(badge)
-                                .font(.caption2.weight(.semibold))
+                                .scaledFont(.caption2, weight: .semibold)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -917,7 +917,7 @@ private struct ProfileForm: View {
                         }
                     }
                     Text(subtitle)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -1144,14 +1144,14 @@ private struct ProfileForm: View {
             if !pluginsLoaded {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Loading plugins…").font(.caption).foregroundStyle(.secondary)
+                    Text("Loading plugins…").scaledFont(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 if pluginsDraft.isEmpty {
                     Text(isEdit
                          ? "No plugins. Inherits from parent profile."
                          : "No plugins yet. Add one below.")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
@@ -1190,7 +1190,7 @@ private struct ProfileForm: View {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(title).font(.callout.weight(.medium))
+                        Text(title).scaledFont(.callout, weight: .medium)
                         if unsatisfiedCount > 0 {
                             warningChip(text: "\(unsatisfiedCount) required")
                         }
@@ -1201,7 +1201,7 @@ private struct ProfileForm: View {
                     }
                     if !description.isEmpty {
                         Text(description)
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
@@ -1216,7 +1216,7 @@ private struct ProfileForm: View {
                 )
                 if drillable {
                     Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1244,9 +1244,9 @@ private struct ProfileForm: View {
     private func warningChip(text: String) -> some View {
         HStack(spacing: 3) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 9, weight: .semibold))
+                .scaledFont(size: 9, weight: .semibold)
             Text(text)
-                .font(.caption2.weight(.medium))
+                .scaledFont(.caption2, weight: .medium)
         }
         .foregroundStyle(.orange)
     }
@@ -1283,7 +1283,7 @@ private struct ProfileForm: View {
 
     private func miniChip(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .medium))
+            .scaledFont(size: 9, weight: .medium)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 5)
             .padding(.vertical, 1.5)
@@ -1302,7 +1302,7 @@ private struct ProfileForm: View {
                     Image(systemName: showingAddPluginPicker ? "chevron.up" : "plus")
                     Text(showingAddPluginPicker ? "Cancel" : "Add plugin")
                 }
-                .font(.callout)
+                .scaledFont(.callout)
             }
             .controlSize(.small)
             .buttonStyle(.glass)
@@ -1315,7 +1315,7 @@ private struct ProfileForm: View {
                     VStack(alignment: .leading, spacing: 6) {
                         if available.isEmpty {
                             Text("Every available plugin is already attached.")
-                                .font(.caption)
+                                .scaledFont(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.vertical, 4)
                         } else {
@@ -1339,15 +1339,15 @@ private struct ProfileForm: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(pluginType.displayName).font(.callout.weight(.medium))
+                    Text(pluginType.displayName).scaledFont(.callout, weight: .medium)
                     Spacer()
                     Image(systemName: "plus.circle")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.tertiary)
                 }
                 if !pluginType.description.isEmpty {
                     Text(pluginType.description)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -1416,18 +1416,18 @@ private struct ProfileForm: View {
                         Image(systemName: "chevron.left")
                         Text("Back")
                     }
-                    .font(.callout)
+                    .scaledFont(.callout)
                 }
                 .controlSize(.small)
                 .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
 
                 Text(pluginType?.displayName ?? plugin.pluginName)
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Spacer()
                 Text("Edits flow into the parent profile draft. Save on the profile screen to persist.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                     .frame(maxWidth: 320, alignment: .trailing)
@@ -1441,7 +1441,7 @@ private struct ProfileForm: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let pluginType, !pluginType.description.isEmpty {
                         Text(pluginType.description)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1459,7 +1459,7 @@ private struct ProfileForm: View {
                                 Text("All of this plugin's settings live at user scope.")
                                     .foregroundStyle(.secondary)
                                 Text("Open Plugin Settings (in the app's main settings) to configure them once across every profile that uses this plugin.")
-                                    .font(.caption)
+                                    .scaledFont(.caption)
                                     .foregroundStyle(.tertiary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -1479,7 +1479,7 @@ private struct ProfileForm: View {
                             if !globalFields.isEmpty {
                                 Divider().padding(.vertical, 6)
                                 Text("Other settings for this plugin (such as credentials) live at user scope. Edit them in the app's Plugin Settings — they apply to every profile that uses this plugin.")
-                                    .font(.caption)
+                                    .scaledFont(.caption)
                                     .foregroundStyle(.tertiary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }

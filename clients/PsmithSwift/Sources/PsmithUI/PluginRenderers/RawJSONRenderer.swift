@@ -18,7 +18,7 @@ public struct RawJSONRenderer: View {
         let pretty = prettyJSON(fragment.props) ?? String(data: fragment.props, encoding: .utf8) ?? ""
         ScrollView(.horizontal) {
             Text(pretty)
-                .font(.callout.monospaced())
+                .scaledFont(.callout, design: .monospaced)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -47,7 +47,7 @@ public struct UnknownComponentRenderer: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Unknown component: \(fragment.component)")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
             RawJSONRenderer(fragment: fragment)
         }

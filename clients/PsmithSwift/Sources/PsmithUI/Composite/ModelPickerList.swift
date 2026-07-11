@@ -91,7 +91,7 @@ public struct ModelPickerList: View {
                 ProviderLogo(slug: group.logoSlug, size: 18)
                     .foregroundStyle(.secondary)
                 Text(group.label)
-                    .font(.subheadline.weight(.semibold))
+                    .scaledFont(.subheadline, weight: .semibold)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 4)
@@ -182,13 +182,13 @@ private struct PickerModelRow: View {
                         if isSelected {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(theme.accent)
-                                .font(.caption)
+                                .scaledFont(.caption)
                         }
                     }
                     ModelMetaStrip(snapshot: model.metaSnapshot(providerLabel: providerLabel))
                     if isDisabled {
                         Text("Needs: " + missingCapabilities.joined(separator: ", "))
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.orange)
                     }
                 }
@@ -238,14 +238,14 @@ private struct UnsetRow: View {
                     Text("Unset — inherit")
                         .fontWeight(isSelected ? .semibold : .regular)
                     Text(description)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(accent)
-                        .font(.caption)
+                        .scaledFont(.caption)
                 }
             }
             .padding(.horizontal, 12)

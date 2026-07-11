@@ -44,13 +44,13 @@ public struct ProfileCard: View {
                 titleRow
                 if !parentChain.isEmpty {
                     Text(parentChain)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 if !profile.description.isEmpty {
                     Text(profile.description)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -76,11 +76,11 @@ public struct ProfileCard: View {
     private var titleRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(profile.name)
-                .font(.headline)
+                .scaledFont(.headline)
                 .lineLimit(1)
             if profile.parentOnly {
                 Text("PARENT")
-                    .font(.caption2.weight(.semibold))
+                    .scaledFont(.caption2, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
@@ -90,14 +90,14 @@ public struct ProfileCard: View {
             Spacer(minLength: 4)
             Button(action: onToggleFavorite) {
                 Image(systemName: profile.favorite ? "star.fill" : "star")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundStyle(profile.favorite ? Color.yellow : Color.secondary)
             }
             .buttonStyle(.plain)
             .help(profile.favorite ? "Unfavorite" : "Mark as favorite")
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -133,10 +133,10 @@ public struct NoneProfileCard: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Standalone")
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .foregroundStyle(.secondary)
                 Text("No parent profile.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer(minLength: 0)
             }
@@ -250,7 +250,7 @@ public struct ProfilePickerRow: View {
                     }
                     if filtered.isEmpty && !includeNoneOption {
                         Text("No profiles match.")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
                     }

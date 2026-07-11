@@ -43,7 +43,7 @@ public struct ConversationRow: View {
             HStack(spacing: 6) {
                 if conversation.pinnedAt != nil {
                     Image(systemName: "pin.fill")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Pinned")
                 }
@@ -62,12 +62,12 @@ public struct ConversationRow: View {
             }
             if let profileChainName, !profileChainName.isEmpty {
                 Text(profileChainName)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             } else if isGenerating {
                 Text("Generating…")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

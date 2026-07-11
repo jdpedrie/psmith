@@ -66,6 +66,21 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func userAndAssistantPairScaled130() {
+        // Pins the app-wide fontScale plumbing: every label and the
+        // markdown body must render ~30% larger. If this snapshot ever
+        // matches the unscaled pair, a migration regressed a call
+        // site back to a fixed .font().
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.sampleMessages()
+        )
+        assertViewSnapshots(
+            body(for: model).environment(\.fontScale, 1.3),
+            sizes: columnSizes
+        )
+    }
+
+    @Test
     func withThinkingEnabled() {
         // Assistant message that carries reasoning_tokens — the usage
         // chip's monospaced summary picks it up.

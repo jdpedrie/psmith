@@ -50,7 +50,7 @@ public struct ProviderLogo: View {
             // the "Custom" template tile and any preset whose slug
             // didn't resolve to a bundled SVG.
             Image(systemName: "globe")
-                .font(.system(size: size * 0.7, weight: .regular))
+                .scaledFont(size: size * 0.7, weight: .regular)
                 .foregroundStyle(.secondary)
                 .frame(width: size, height: size)
         }

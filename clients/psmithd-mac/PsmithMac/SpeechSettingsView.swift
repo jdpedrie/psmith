@@ -36,7 +36,7 @@ struct SpeechSettingsView: View {
                     playbackSection
                     if let err = model.saveError {
                         Text(err)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.red)
                             .padding(10)
                             .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -65,9 +65,9 @@ struct SpeechSettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Speech")
-                .font(.title2.weight(.semibold))
+                .scaledFont(.title2, weight: .semibold)
             Text("Read assistant replies aloud. On-device synthesis works with zero setup; configure a cloud or self-hosted voice for higher quality. Keys are encrypted at rest and audio is never stored.")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -82,7 +82,7 @@ struct SpeechSettingsView: View {
                     }
                 }
                 Text(kindFooter(model.kindDraft))
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -109,7 +109,7 @@ struct SpeechSettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Speed").font(.callout.weight(.medium))
+                        Text("Speed").scaledFont(.callout, weight: .medium)
                         Spacer()
                         Text(String(format: "%.1f×", model.speedDraft))
                             .monospacedDigit()
@@ -136,9 +136,9 @@ struct SpeechSettingsView: View {
         sectionCard("Credentials") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("API key").font(.callout.weight(.medium))
+                    Text("API key").scaledFont(.callout, weight: .medium)
                     Text("A key typed here wins over the provider reference below.")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                        .scaledFont(.caption2).foregroundStyle(.tertiary)
                     HStack(spacing: 6) {
                         if revealAPIKey {
                             TextField(apiKeyPlaceholder, text: $model.apiKeyDraft)
@@ -156,7 +156,7 @@ struct SpeechSettingsView: View {
                     }
                     if let saved = model.saved, saved.apiKeySet, model.apiKeyDraft.isEmpty {
                         Label("Key saved (replace by typing a new one)", systemImage: "lock.fill")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -169,7 +169,7 @@ struct SpeechSettingsView: View {
                             }
                         }
                         Text("Reusing a chat provider's credential also attributes synthesis cost to it on the Cost screen.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -182,7 +182,7 @@ struct SpeechSettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("Speak replies as they arrive", isOn: $autoSpeak)
                 Text("Reads each completed reply aloud in the conversation you're viewing. This Mac only.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -207,7 +207,7 @@ struct SpeechSettingsView: View {
                     .buttonStyle(.glass)
                     .disabled(model.testing)
                     Text("Synthesizes one short phrase through the saved config.")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 if let r = model.testResult {
@@ -224,24 +224,24 @@ struct SpeechSettingsView: View {
                 .foregroundStyle(r.ok ? .green : .red)
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.ok ? "Synthesis OK" : "Test failed")
-                    .font(.callout.weight(.medium))
+                    .scaledFont(.callout, weight: .medium)
                 if !r.errorMessage.isEmpty {
                     Text(r.errorMessage)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                         .textSelection(.enabled)
                 }
                 if r.ok, r.audioBytes > 0 {
                     Text("\(r.audioBytes.formatted()) bytes of audio")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
             if r.latencyMs > 0 {
                 Text("\(r.latencyMs)ms")
-                    .font(.caption2.monospacedDigit())
+                    .scaledFont(.caption2, monospacedDigit: true)
                     .foregroundStyle(.secondary)
             }
         }
@@ -278,7 +278,7 @@ struct SpeechSettingsView: View {
         sectionCard("Danger zone") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Removes the configuration and credentials. Read-aloud falls back to the on-device voice.")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                 Button {
                     showingResetConfirm = true
@@ -357,7 +357,7 @@ struct SpeechSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -369,8 +369,8 @@ struct SpeechSettingsView: View {
     @ViewBuilder
     private func fieldRow<Field: View>(title: String, description: String, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.callout.weight(.medium))
-            Text(description).font(.caption2).foregroundStyle(.tertiary)
+            Text(title).scaledFont(.callout, weight: .medium)
+            Text(description).scaledFont(.caption2).foregroundStyle(.tertiary)
             field
         }
     }

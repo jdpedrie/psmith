@@ -78,7 +78,7 @@ struct MessageAttachmentImageMac: View {
         ZStack {
             Color.primary.opacity(0.05)
             Image(systemName: systemImage)
-                .font(.title2)
+                .scaledFont(.title2)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -93,15 +93,15 @@ struct MessageAttachmentChipMac: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: iconName)
-                .font(.title3)
+                .scaledFont(.title3)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(attachment.originalFilename ?? defaultName)
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(sizeLabel)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -164,10 +164,10 @@ struct MessageAttachmentLightboxMac: View {
                     case .failure:
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.largeTitle)
+                                .scaledFont(.largeTitle)
                                 .foregroundStyle(.orange)
                             Text("Couldn't load image")
-                                .font(.callout)
+                                .scaledFont(.callout)
                                 .foregroundStyle(.white.opacity(0.8))
                         }
                         .padding(60)
@@ -187,7 +187,7 @@ struct MessageAttachmentLightboxMac: View {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, .black.opacity(0.4))
-                    .font(.title)
+                    .scaledFont(.title)
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)

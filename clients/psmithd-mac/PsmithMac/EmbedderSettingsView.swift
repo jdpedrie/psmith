@@ -27,7 +27,7 @@ struct EmbedderSettingsView: View {
                     stateSection
                     if let err = model.saveError {
                         Text(err)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.red)
                             .padding(10)
                             .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -56,9 +56,9 @@ struct EmbedderSettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Embedder")
-                .font(.title2.weight(.semibold))
+                .scaledFont(.title2, weight: .semibold)
             Text("Run every message through a vector embedder and let the memory plugin pull older context back into long conversations. Per-user; off by default. API keys are encrypted at rest.")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -75,7 +75,7 @@ struct EmbedderSettingsView: View {
                     }
                 }
                 Text("\"openai\" works against real OpenAI, Ollama via /v1/embeddings, Voyage, Together, or any OpenAI-compatible API.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -117,9 +117,9 @@ struct EmbedderSettingsView: View {
     @ViewBuilder
     private var apiKeyField: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("API key").font(.callout.weight(.medium))
+            Text("API key").scaledFont(.callout, weight: .medium)
             Text("Leave empty for local Ollama (no auth). Encrypted at rest; the server never echoes the saved value back.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
             HStack(spacing: 6) {
                 if revealAPIKey {
                     TextField(apiKeyPlaceholder, text: $model.apiKeyDraft)
@@ -137,7 +137,7 @@ struct EmbedderSettingsView: View {
             }
             if let saved = model.saved, saved.apiKeySet, model.apiKeyDraft.isEmpty {
                 Label("Key saved (replace by typing a new one)", systemImage: "lock.fill")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -163,19 +163,19 @@ struct EmbedderSettingsView: View {
                         Spacer()
                         if stats.workerActive {
                             Text("Worker active")
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(.green.opacity(0.15), in: Capsule())
                                 .foregroundStyle(.green)
                         } else {
                             Text("Worker idle")
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(.secondary.opacity(0.15), in: Capsule())
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .font(.caption)
+                    .scaledFont(.caption)
                 }
                 if model.saved != nil, !model.isDirty {
                     HStack(spacing: 8) {
@@ -194,7 +194,7 @@ struct EmbedderSettingsView: View {
                         .buttonStyle(.glass)
                         .disabled(model.testing)
                         Text("Sends one Embed(\"ping\") through the saved config.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -209,10 +209,10 @@ struct EmbedderSettingsView: View {
                 .foregroundStyle(r.ok ? .green : .red)
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.ok ? "Connection OK" : "Test failed")
-                    .font(.callout.weight(.medium))
+                    .scaledFont(.callout, weight: .medium)
                 if !r.errorMessage.isEmpty {
                     Text(r.errorMessage)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                         .textSelection(.enabled)
@@ -221,7 +221,7 @@ struct EmbedderSettingsView: View {
             Spacer()
             if r.latencyMs > 0 {
                 Text("\(r.latencyMs)ms")
-                    .font(.caption2.monospacedDigit())
+                    .scaledFont(.caption2, monospacedDigit: true)
                     .foregroundStyle(.secondary)
             }
         }
@@ -262,7 +262,7 @@ struct EmbedderSettingsView: View {
         sectionCard("Danger zone") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Delete removes the row entirely. Already-embedded messages stay searchable; toggle off above instead if you want to pause embedding without forgetting the credentials.")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                 Button {
                     showingDeleteConfirm = true
@@ -300,7 +300,7 @@ struct EmbedderSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -312,8 +312,8 @@ struct EmbedderSettingsView: View {
     @ViewBuilder
     private func fieldRow<Field: View>(title: String, description: String, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.callout.weight(.medium))
-            Text(description).font(.caption2).foregroundStyle(.tertiary)
+            Text(title).scaledFont(.callout, weight: .medium)
+            Text(description).scaledFont(.caption2).foregroundStyle(.tertiary)
             field
         }
     }

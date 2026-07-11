@@ -94,7 +94,7 @@ struct ContextListPane: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.caption.weight(.semibold))
+            .scaledFont(.caption, weight: .semibold)
             .foregroundStyle(.secondary)
     }
 }
@@ -117,30 +117,30 @@ private struct ContextRow_Legacy: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: isActive ? "checkmark.circle.fill" : "tray.full")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(isActive ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(number). \(title)")
-                            .font(.headline)
+                            .scaledFont(.headline)
                             .foregroundStyle(.primary)
                             .lineLimit(2)
                         if let parentLabel {
                             Text(parentLabel)
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         if isActive {
                             Text("Active")
-                                .font(.caption2.weight(.semibold))
+                                .scaledFont(.caption2, weight: .semibold)
                                 .foregroundStyle(.tint)
                         }
                     }
                     Spacer(minLength: 0)
                     if isActive {
                         Image(systemName: "checkmark")
-                            .font(.callout.weight(.semibold))
+                            .scaledFont(.callout, weight: .semibold)
                             .foregroundStyle(.tint)
                     }
                 }
@@ -200,7 +200,7 @@ private struct ContextRow_Legacy: View {
                 .imageScale(.small)
             Text(text)
         }
-        .font(.caption2)
+        .scaledFont(.caption2)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)

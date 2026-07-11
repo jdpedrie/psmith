@@ -36,7 +36,7 @@ struct LangfuseSettingsView: View {
                     stateSection
                     if let err = model.saveError {
                         Text(err)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.red)
                             .padding(10)
                             .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -65,9 +65,9 @@ struct LangfuseSettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Langfuse")
-                .font(.title2.weight(.semibold))
+                .scaledFont(.title2, weight: .semibold)
             Text("Mirror every assistant turn into your Langfuse instance for observability + cost tracking. Per-user; off by default. Credentials are encrypted at rest.")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -99,16 +99,16 @@ struct LangfuseSettingsView: View {
     private var secretKeyField: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Secret key").font(.callout.weight(.medium))
+                Text("Secret key").scaledFont(.callout, weight: .medium)
                 Spacer()
                 if let saved = model.saved, saved.secretKeySet, model.secretKeyDraft.isEmpty {
                     Label("Saved", systemImage: "lock.fill")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
             Text("From Langfuse → Settings → API Keys (sk-…). Stored encrypted; the server never returns it.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             HStack(spacing: 6) {
                 Group {
@@ -147,22 +147,22 @@ struct LangfuseSettingsView: View {
                     .disabled(!enableEligible)
                 if !enableEligible {
                     Text("Save a public key + secret first.")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.orange)
                 }
                 if let last = model.saved?.lastEmittedAt {
                     HStack(spacing: 6) {
                         Image(systemName: "clock")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                         Text("Last successful emit \(last.formatted(.relative(presentation: .numeric)))")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.secondary)
                         Text("·")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                         Text(last.formatted(date: .omitted, time: .shortened))
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -191,7 +191,7 @@ struct LangfuseSettingsView: View {
                     Spacer()
                 }
                 Text(testHelpText)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -228,17 +228,17 @@ struct LangfuseSettingsView: View {
             HStack(spacing: 8) {
                 Image(systemName: icon).foregroundStyle(tint)
                 Text(r.ok ? "Test trace sent" : "Test failed")
-                    .font(.callout.weight(.semibold))
+                    .scaledFont(.callout, weight: .semibold)
                 Spacer()
                 if r.latencyMs > 0 {
                     Text("\(r.latencyMs)ms")
-                        .font(.caption2.monospacedDigit())
+                        .scaledFont(.caption2, monospacedDigit: true)
                         .foregroundStyle(.secondary)
                 }
             }
             if !r.errorMessage.isEmpty {
                 Text(r.errorMessage)
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -279,7 +279,7 @@ struct LangfuseSettingsView: View {
         sectionCard("Danger zone") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Delete removes the row entirely. Toggle off above if you want to keep the credentials saved but pause emit.")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                 Button {
                     showingDeleteConfirm = true
@@ -317,7 +317,7 @@ struct LangfuseSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -329,8 +329,8 @@ struct LangfuseSettingsView: View {
     @ViewBuilder
     private func fieldRow<Field: View>(title: String, description: String, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.callout.weight(.medium))
-            Text(description).font(.caption2).foregroundStyle(.tertiary)
+            Text(title).scaledFont(.callout, weight: .medium)
+            Text(description).scaledFont(.caption2).foregroundStyle(.tertiary)
             field
         }
     }

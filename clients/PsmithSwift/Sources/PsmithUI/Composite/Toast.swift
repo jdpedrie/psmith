@@ -31,7 +31,7 @@ public struct Toast: View {
                     .imageScale(.small)
             }
             Text(text)
-                .font(.callout)
+                .scaledFont(.callout)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
         }

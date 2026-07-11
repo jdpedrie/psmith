@@ -25,9 +25,9 @@ struct DeviceToolsSettingsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Device tools")
-                        .font(.title2.weight(.semibold))
+                        .scaledFont(.title2, weight: .semibold)
                     Text("Tools the model runs on this Mac: Calendar, Reminders, and Obsidian notes. macOS asks for Calendar/Reminders access the first time the model uses them; Obsidian needs a folder picked below.")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -61,10 +61,10 @@ struct DeviceToolsSettingsView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Folder saved")
-                                .font(.callout.weight(.medium))
+                                .scaledFont(.callout, weight: .medium)
                             if let bookmarkedDisplayPath {
                                 Text(bookmarkedDisplayPath)
-                                    .font(.caption2)
+                                    .scaledFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
                             }
@@ -101,12 +101,12 @@ struct DeviceToolsSettingsView: View {
                 }
                 if let pickerError {
                     Text(pickerError)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
                 Text("Pick your Obsidian vault (or a subfolder). Psmith stores a bookmark so the model can read and write notes inside it — no Obsidian plugin required.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -144,13 +144,13 @@ struct DeviceToolsSettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let callsError {
                     Text(callsError)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.red)
                         .padding(.bottom, 8)
                 }
                 if calls.isEmpty && !loadingCalls {
                     Text("No device-tool activity yet. Calls the model makes through your devices will show up here.")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(calls) { call in
@@ -204,7 +204,7 @@ struct DeviceToolsSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -227,15 +227,15 @@ private struct DeviceToolCallRowMac: View {
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
                 Text(call.toolName)
-                    .font(.callout.weight(.medium))
+                    .scaledFont(.callout, weight: .medium)
                     .monospaced()
                 Spacer()
                 Text(relativeWhen)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .foregroundStyle(.tertiary)
-                    .font(.caption)
+                    .scaledFont(.caption)
             }
             .contentShape(Rectangle())
             .onTapGesture { expanded.toggle() }
@@ -243,7 +243,7 @@ private struct DeviceToolCallRowMac: View {
             if expanded {
                 if !call.errorMessage.isEmpty {
                     Text(call.errorMessage)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
@@ -259,10 +259,10 @@ private struct DeviceToolCallRowMac: View {
         if !raw.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption2.weight(.semibold))
+                    .scaledFont(.caption2, weight: .semibold)
                     .foregroundStyle(.tertiary)
                 Text(prettyJSON(raw))
-                    .font(.caption.monospaced())
+                    .scaledFont(.caption, design: .monospaced)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .lineLimit(12)

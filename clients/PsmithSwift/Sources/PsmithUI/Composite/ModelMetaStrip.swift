@@ -148,7 +148,7 @@ public struct ModelMetaStrip: View {
 
     private func metaChip(_ label: String, _ color: Color = .secondary, help: String) -> some View {
         Text(label)
-            .font(.caption2)
+            .scaledFont(.caption2)
             .foregroundStyle(color)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -161,7 +161,7 @@ public struct ModelMetaStrip: View {
 
     private func capabilityIcon(_ name: String, _ color: Color, _ help: String) -> some View {
         Image(systemName: name)
-            .font(.caption2)
+            .scaledFont(.caption2)
             .foregroundStyle(color)
             .help(help)
     }
@@ -263,7 +263,7 @@ private struct ModelDetailPopover: View {
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -282,7 +282,7 @@ private struct ModelDetailPopover: View {
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
         }
-        .font(.callout)
+        .scaledFont(.callout)
     }
 
     /// Capability row: icon + name on the left, prose explanation on
@@ -292,14 +292,14 @@ private struct ModelDetailPopover: View {
     private func capabilityRow(_ icon: String, _ name: String, _ description: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
-                    .font(.callout)
+                    .scaledFont(.callout)
                 Text(description)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
             Spacer()

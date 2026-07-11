@@ -87,8 +87,8 @@ struct ConversationListView: View {
             .overlay {
                 if let err = convos.loadError {
                     VStack(spacing: 8) {
-                        Text("Failed to load").font(.headline)
-                        Text(err).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        Text("Failed to load").scaledFont(.headline)
+                        Text(err).scaledFont(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         Button("Retry") { Task { await convos.refresh() } }
                     }
                     .padding()
@@ -127,7 +127,7 @@ struct ConversationListView: View {
             Task { await convos.refresh() }
         } label: {
             Text(label)
-                .font(.caption)
+                .scaledFont(.caption)
                 .fontWeight(active ? .semibold : .regular)
                 .foregroundStyle(active ? Color.white : Color.primary)
                 .padding(.horizontal, 8)
@@ -257,7 +257,7 @@ struct ConversationListView: View {
             showingArchived = true
         } label: {
             Label("Archived", systemImage: "archivebox")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
@@ -293,7 +293,7 @@ struct ConversationListView: View {
                 showingArchived = false
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "chevron.left").font(.caption2)
+                    Image(systemName: "chevron.left").scaledFont(.caption2)
                     Text("Archived")
                 }
             }
@@ -316,7 +316,7 @@ struct ConversationListView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(convos.listOrder == .recentlyUsed ? "Recently Used" : "Recently Created")
-                Image(systemName: "chevron.down").font(.caption2)
+                Image(systemName: "chevron.down").scaledFont(.caption2)
             }
         }
         .buttonStyle(.plain)
@@ -350,7 +350,7 @@ struct ConversationListView: View {
                 if active {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.secondary)
-                        .font(.caption)
+                        .scaledFont(.caption)
                 }
             }
             .padding(.horizontal, 14)
@@ -397,7 +397,7 @@ struct ConversationRowMac: View {
                 actionsShown = true
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 12, weight: .regular))
+                    .scaledFont(size: 12, weight: .regular)
                     .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
@@ -472,7 +472,7 @@ struct ArchivedRowMac: View {
                 actionsShown = true
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 12, weight: .regular))
+                    .scaledFont(size: 12, weight: .regular)
                     .foregroundStyle(.secondary)
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())

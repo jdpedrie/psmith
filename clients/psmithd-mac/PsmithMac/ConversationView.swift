@@ -262,7 +262,7 @@ struct ConversationBody: View {
             } icon: {
                 Image(systemName: "text.word.spacing")
             }
-            .font(.caption)
+            .scaledFont(.caption)
             .foregroundStyle(color)
         }
     }
@@ -406,12 +406,12 @@ struct ConversationBody: View {
         HStack {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             Text("Compaction failed: \(message)")
-                .font(.caption)
+                .scaledFont(.caption)
                 .lineLimit(2)
             Spacer()
             Button("Dismiss") { model.compactError = nil }
                 .buttonStyle(.borderless)
-                .font(.caption)
+                .scaledFont(.caption)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)
@@ -431,12 +431,12 @@ struct ConversationBody: View {
             // noun the user needs to see. fixedSize wins against the
             // HStack layout pressure from the Dismiss button.
             Text(message)
-                .font(.caption)
+                .scaledFont(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Dismiss") { model.loadError = nil }
                 .buttonStyle(.borderless)
-                .font(.caption)
+                .scaledFont(.caption)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)
@@ -449,12 +449,12 @@ struct ConversationBody: View {
         HStack(alignment: .top) {
             Image(systemName: "speaker.slash.fill").foregroundStyle(.orange)
             Text(message)
-                .font(.caption)
+                .scaledFont(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Dismiss") { app.speech.clearError() }
                 .buttonStyle(.borderless)
-                .font(.caption)
+                .scaledFont(.caption)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)
@@ -608,7 +608,7 @@ struct ConversationBody: View {
                 HStack(spacing: 6) {
                     Image(systemName: "wand.and.stars").foregroundStyle(.orange)
                     Text("Review the compression summary above before sending.")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -618,9 +618,9 @@ struct ConversationBody: View {
             if app.connectivity.state == .offline {
                 HStack(spacing: 6) {
                     Image(systemName: "wifi.exclamationmark")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                     Text("Server unreachable — messages queue and send when it's back")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .lineLimit(1)
                 }
                 .foregroundStyle(.orange)
@@ -640,7 +640,7 @@ struct ConversationBody: View {
                     TextField("Send a message — shift-return for newline", text: $model.draft, axis: .vertical)
                         .lineLimit(1...8)
                         .textFieldStyle(.plain)
-                        .font(.body)
+                        .scaledFont(.body)
                         .focused($composerFocused)
                         .onKeyPress(.return) {
                             // shift+Return → insert a literal newline. We
@@ -750,7 +750,7 @@ struct ConversationBody: View {
             showingFileImporter = true
         } label: {
             Image(systemName: "paperclip")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(attachmentsSupported ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
                 .frame(width: 26, height: 26)
                 .contentShape(Circle())
@@ -776,7 +776,7 @@ struct ConversationBody: View {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
                         Text("Uploading…")
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 10)
@@ -807,7 +807,7 @@ struct ConversationBody: View {
                     Image(systemName: att.mimeType == "application/pdf" ? "doc.richtext" : "doc")
                         .foregroundStyle(.secondary)
                     Text(att.originalFilename ?? "File")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -822,7 +822,7 @@ struct ConversationBody: View {
                 Image(systemName: "xmark.circle.fill")
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, .black.opacity(0.55))
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
             }
             .buttonStyle(.plain)
             .offset(x: 5, y: -5)
@@ -950,7 +950,7 @@ struct ConversationBody: View {
                         .imageScale(.small)
                         .foregroundStyle(.tertiary)
                 }
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -1108,13 +1108,13 @@ private struct MessageRow: View {
                     Task { await model.switchToBranch(siblingID: info.siblingIDs[prevIdx]) }
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                 }
                 .buttonStyle(.plain)
                 .help("Previous branch")
 
                 Text("\(info.index + 1)/\(info.siblingIDs.count)")
-                    .font(.caption2.monospacedDigit())
+                    .scaledFont(.caption2, monospacedDigit: true)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
@@ -1123,7 +1123,7 @@ private struct MessageRow: View {
                     Task { await model.switchToBranch(siblingID: info.siblingIDs[nextIdx]) }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                 }
                 .buttonStyle(.plain)
                 .help("Next branch")
@@ -1153,24 +1153,24 @@ private struct MessageRow: View {
                         .imageScale(.small)
                 }
                 Text(roleLabel)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(isErrored ? .orange : .secondary)
                     .fontWeight(isErrored ? .semibold : .regular)
                 if isErrored {
                     Text("FAILED")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .fontWeight(.semibold)
                         .foregroundStyle(.orange)
                 }
                 if message.editedAt != nil {
                     Text("edited")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.orange)
                 }
                 Spacer()
                 if let label = modelDisplayLabel {
                     Text(label)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
@@ -1271,7 +1271,7 @@ private struct MessageRow: View {
                                 .help(grade.tooltip)
                         }
                         Text(usageSummary(usage))
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -1395,7 +1395,7 @@ private struct MessageRow: View {
         .overlay(alignment: .topTrailing) {
             if showCopiedToast {
                 Text("Copied")
-                    .font(.caption2.weight(.medium))
+                    .scaledFont(.caption2, weight: .medium)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(.thickMaterial))
@@ -1421,7 +1421,7 @@ private struct MessageRow: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .semibold))
+                .scaledFont(size: 11, weight: .semibold)
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
@@ -1443,7 +1443,7 @@ private struct MessageRow: View {
         message.role == .system || message.role == .context
     }
 
-    /// Approx height for ~4 lines of body text. Body uses .font(.body)
+    /// Approx height for ~4 lines of body text. Body uses .scaledFont(.body)
     /// (~13pt + line spacing); 80pt fits comfortably.
     private static let collapsedBodyHeight: CGFloat = 80
 
@@ -1471,7 +1471,7 @@ private struct MessageRow: View {
                     Image(systemName: bodyExpanded ? "chevron.up" : "chevron.down")
                     Text(bodyExpanded ? "Show less" : "Show more")
                 }
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 // Without contentShape, Button hits register only on
                 // opaque pixels — taps in the gap between the
@@ -1532,7 +1532,7 @@ private struct MessageRow: View {
         VStack(alignment: .leading, spacing: 8) {
             if let errText = message.errorText, !errText.isEmpty {
                 Text(errText)
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
             }
@@ -1540,12 +1540,12 @@ private struct MessageRow: View {
             if !partial.isEmpty {
                 DisclosureGroup(isExpanded: $showPartialContent) {
                     MarkdownText(partial)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
                 } label: {
                     Text("Partial output streamed before failure")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1556,7 +1556,7 @@ private struct MessageRow: View {
                         Task { await model.reloadFromMessage(id: message.id) }
                     } label: {
                         Label("Retry", systemImage: "arrow.clockwise")
-                            .font(.callout)
+                            .scaledFont(.callout)
                     }
                     .buttonStyle(.glassProminent)
                     .controlSize(.small)
@@ -1583,7 +1583,7 @@ private struct MessageRow: View {
                 .frame(maxWidth: 220)
             }
             TextEditor(text: $editDraft)
-                .font(.body)
+                .scaledFont(.body)
                 .frame(minHeight: 100)
                 .scrollContentBackground(.hidden)
                 .padding(8)
@@ -1915,17 +1915,17 @@ private struct CompactingRow: View {
                 Image(systemName: "wand.and.stars")
                     .foregroundStyle(.orange)
                 Text("COMPACTING")
-                    .font(.caption2.weight(.semibold))
+                    .scaledFont(.caption2, weight: .semibold)
                     .foregroundStyle(.orange)
                 ProgressView().controlSize(.mini)
             }
             if text.isEmpty {
                 Text("Summarizing conversation…")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.secondary)
             } else {
                 MarkdownText(text)
-                    .font(.callout)
+                    .scaledFont(.callout)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2073,7 +2073,7 @@ private struct MessageUsagePopover: View {
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
@@ -2090,7 +2090,7 @@ private struct MessageUsagePopover: View {
                 .fontWeight(bold ? .semibold : .regular)
                 .foregroundStyle(bold ? .primary : .secondary)
         }
-        .font(.callout)
+        .scaledFont(.callout)
     }
 }
 
@@ -2119,9 +2119,9 @@ struct ArchivedBarMac: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Archived")
-                    .font(.callout.weight(.semibold))
+                    .scaledFont(.callout, weight: .semibold)
                 Text(archivedAt, style: .date)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
             }
             Spacer()

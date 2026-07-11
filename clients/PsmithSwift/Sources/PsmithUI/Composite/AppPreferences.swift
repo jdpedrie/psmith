@@ -17,14 +17,34 @@ public final class AppPreferences {
         didSet { UserDefaults.standard.set(notifyOnUnfocusedCompletion, forKey: Self.keyNotifyUnfocused) }
     }
 
+    /// App-wide text scale, 1.0 = platform default. Driven by the
+    /// Appearance pane's slider and the ⌘+/⌘−/⌘0 menu commands on
+    /// the Mac; iOS leaves it alone (Dynamic Type covers it there).
+    /// Clamped so nobody sliders themselves into an unusable UI.
+    public var fontScale: Double = 1.0 {
+        didSet {
+            let clamped = min(max(fontScale, Self.minFontScale), Self.maxFontScale)
+            if clamped != fontScale { fontScale = clamped; return }
+            UserDefaults.standard.set(fontScale, forKey: Self.keyFontScale)
+        }
+    }
+
+    public static let minFontScale: Double = 0.8
+    public static let maxFontScale: Double = 1.6
+    public static let fontScaleStep: Double = 0.1
+
     public init() {
         let d = UserDefaults.standard
         if d.object(forKey: Self.keyNotifyUnfocused) != nil {
             notifyOnUnfocusedCompletion = d.bool(forKey: Self.keyNotifyUnfocused)
         }
+        if d.object(forKey: Self.keyFontScale) != nil {
+            fontScale = d.double(forKey: Self.keyFontScale)
+        }
     }
 
     private static let keyNotifyUnfocused = "psmith.appPrefs.notifyOnUnfocusedCompletion"
+    private static let keyFontScale = "psmith.appPrefs.fontScale"
 }
 
 /// Shared module-level instance — module-scope helpers (Mac's

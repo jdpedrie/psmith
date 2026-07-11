@@ -45,7 +45,7 @@ public struct OnboardingView: View {
                 }
                 if let msg = errorMessage {
                     Text(msg)
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.red)
                 }
             }
@@ -63,9 +63,9 @@ public struct OnboardingView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Welcome to Psmith")
-                .font(.largeTitle.weight(.semibold))
+                .scaledFont(.largeTitle, weight: .semibold)
             Text("To get started, connect at least one AI provider and enable a model. Psmith stores your credentials locally on this machine and routes every chat through providers you control.")
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -89,16 +89,16 @@ public struct OnboardingView: View {
                     .frame(width: 22, height: 22)
                 if done {
                     Image(systemName: "checkmark")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                         .foregroundStyle(.white)
                 } else {
                     Text("\(n)")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                         .foregroundStyle(active ? Color.accentColor : .secondary)
                 }
             }
             Text(label)
-                .font(.caption.weight(active ? .semibold : .regular))
+                .scaledFont(.caption, weight: active ? .semibold : .regular)
                 .foregroundStyle(active ? .primary : .secondary)
         }
     }
@@ -109,9 +109,9 @@ public struct OnboardingView: View {
     private var pickProviderStep: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose a provider")
-                .font(.title3.weight(.semibold))
+                .scaledFont(.title3, weight: .semibold)
             Text("Psmith supports the major LLM providers plus any OpenAI-compatible endpoint. Pick one to start — you can add more later.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if app.providers.templates.isEmpty {
@@ -142,10 +142,10 @@ public struct OnboardingView: View {
                 ProviderLogo(slug: tmpl.logoSlug, size: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tmpl.name)
-                        .font(.callout.weight(.semibold))
+                        .scaledFont(.callout, weight: .semibold)
                         .foregroundStyle(.primary)
                     Text(tmpl.driverType)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -171,7 +171,7 @@ public struct OnboardingView: View {
                 if let tmpl = selectedTemplate {
                     ProviderLogo(slug: tmpl.logoSlug, size: 22)
                     Text(tmpl.name)
-                        .font(.title3.weight(.semibold))
+                        .scaledFont(.title3, weight: .semibold)
                 }
                 Spacer()
                 Button("Back") {
@@ -181,28 +181,28 @@ public struct OnboardingView: View {
                 .buttonStyle(.borderless)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("Label").font(.caption.weight(.medium))
+                Text("Label").scaledFont(.caption, weight: .medium)
                 TextField("e.g. Anthropic", text: $label)
                     .textFieldStyle(.roundedBorder)
                 Text("Display name shown in pickers.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .scaledFont(.caption2).foregroundStyle(.tertiary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("API key").font(.caption.weight(.medium))
+                Text("API key").scaledFont(.caption, weight: .medium)
                 SecureField("sk-…", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
                 if let envKey = selectedTemplate?.envKey {
                     Text("Often set via the \(envKey) environment variable.")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                        .scaledFont(.caption2).foregroundStyle(.tertiary)
                 }
             }
             if let tmpl = selectedTemplate, tmpl.driverType == "openai-compatible" {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("API base URL").font(.caption.weight(.medium))
+                    Text("API base URL").scaledFont(.caption, weight: .medium)
                     TextField("https://api.example.com/v1", text: $baseURL)
                         .textFieldStyle(.roundedBorder)
                     Text("Required for OpenAI-compatible providers.")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                        .scaledFont(.caption2).foregroundStyle(.tertiary)
                 }
             }
             HStack {
@@ -291,7 +291,7 @@ public struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Enable models")
-                    .font(.title3.weight(.semibold))
+                    .scaledFont(.title3, weight: .semibold)
                 Spacer()
                 Button("Back") {
                     step = .enterCredentials
@@ -300,7 +300,7 @@ public struct OnboardingView: View {
                 .buttonStyle(.borderless)
             }
             Text("Pick one or more models to make available for chat. You can add more later from Settings → Providers.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if discovered.isEmpty {
@@ -353,14 +353,14 @@ public struct OnboardingView: View {
                     .foregroundStyle(selected ? Color.accentColor : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(m.displayName)
-                        .font(.callout.weight(.medium))
+                        .scaledFont(.callout, weight: .medium)
                     HStack(spacing: 6) {
                         Text(m.modelID)
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.secondary)
                         if m.alreadyEnabled {
                             Text("(already enabled)")
-                                .font(.caption2)
+                                .scaledFont(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
                     }

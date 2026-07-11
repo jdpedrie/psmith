@@ -90,16 +90,16 @@ public struct ThinkingDisclosure: View {
     private func pillContent(label: String, ticking: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: ticking ? "brain" : "brain.head.profile")
-                .font(.caption.weight(.regular))
+                .scaledFont(.caption, weight: .regular)
                 .foregroundStyle(.secondary)
             Text(label)
-                .font(.caption.weight(.medium))
+                .scaledFont(.caption, weight: .medium)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .lineLimit(1)
             if isExpandable {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .scaledFont(size: 9, weight: .semibold)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -149,7 +149,7 @@ public struct ThinkingDisclosure: View {
     private var blockquote: some View {
         ScrollView {
             Text(renderedText)
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

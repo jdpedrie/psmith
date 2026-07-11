@@ -159,11 +159,11 @@ public struct ToolCallLivePill: View {
     private func liveSection(title: String, body: String, tint: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .scaledFont(.caption2, weight: .semibold)
                 .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
             Text(body)
-                .font(.system(.caption, design: .monospaced))
+                .scaledFont(.caption, design: .monospaced)
                 .foregroundStyle(tint ?? .secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -234,11 +234,11 @@ public struct ToolCallSettledDisclosure: View {
     private func section(title: String, body: String, tint: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .scaledFont(.caption2, weight: .semibold)
                 .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
             Text(body)
-                .font(.system(.caption, design: .monospaced))
+                .scaledFont(.caption, design: .monospaced)
                 .foregroundStyle(tint ?? .secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -260,10 +260,10 @@ private struct ToolPillChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: iconName)
-                .font(.caption.weight(.regular))
+                .scaledFont(.caption, weight: .regular)
                 .foregroundStyle(accentTint ?? .secondary)
             Text(label)
-                .font(.caption.weight(.medium))
+                .scaledFont(.caption, weight: .medium)
                 .foregroundStyle(accentTint ?? .secondary)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -272,11 +272,11 @@ private struct ToolPillChip: View {
                 EmptyView()
             case .right:
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .scaledFont(size: 9, weight: .semibold)
                     .foregroundStyle(.tertiary)
             case .down:
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .scaledFont(size: 9, weight: .semibold)
                     .foregroundStyle(.tertiary)
             }
         }

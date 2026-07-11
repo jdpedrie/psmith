@@ -47,8 +47,15 @@ struct SettingsView: View {
         HSplitView {
             categoriesColumn
                 .frame(minWidth: 180, idealWidth: 220, maxWidth: 240)
-            insetWrap(middleColumn)
-                .frame(minWidth: 220, idealWidth: 280, maxWidth: 340)
+            // The middle items column only earns its keep for the data
+            // categories (Providers / Profiles / Plugins), where it
+            // lists the user's rows. App-settings panes have no item
+            // list — they render two-pane, detail flush against the
+            // categories sidebar.
+            if !category.isAppSettings {
+                insetWrap(middleColumn)
+                    .frame(minWidth: 220, idealWidth: 280, maxWidth: 340)
+            }
             insetWrap(detailColumn)
                 .frame(minWidth: 540)
         }
@@ -95,6 +102,17 @@ struct SettingsView: View {
         let topLevel = SettingsCategory.allCases.filter { !$0.isAppSettings }
         let appSettings = SettingsCategory.allCases.filter { $0.isAppSettings }
         return VStack(alignment: .leading, spacing: 2) {
+            // Exit affordance lives here now — the app-settings panes
+            // render two-pane and no longer carry a middle column's
+            // back chevron.
+            HStack(spacing: 8) {
+                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back to chats")
+                Text("Settings")
+                    .scaledFont(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
             ForEach(topLevel) { c in
                 categoryRow(c)
             }
@@ -115,7 +133,7 @@ struct SettingsView: View {
 
     private var settingsSectionHeader: some View {
         Text("Settings")
-            .font(.caption2.weight(.semibold))
+            .scaledFont(.caption2, weight: .semibold)
             .foregroundStyle(.tertiary)
             .textCase(.uppercase)
             .padding(.horizontal, 12)
@@ -131,7 +149,7 @@ struct SettingsView: View {
         } label: {
             Label(c.label, systemImage: c.systemImage)
                 .labelStyle(.titleAndIcon)
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
@@ -157,49 +175,10 @@ struct SettingsView: View {
             ProfilesMiddleColumn(model: profilesModel, onBack: onBack)
         case .plugins:
             PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
-        case .appearance:
-            AppearanceMiddleColumn(onBack: onBack, selection: $appearanceSection)
-        case .notifications:
-            NotificationsMiddleColumn(onBack: onBack, selection: $notificationsSection)
-        case .langfuse:
-            LangfuseMiddleColumn(onBack: onBack)
-        case .embedder:
-            EmbedderMiddleColumn(onBack: onBack)
-        case .general:
-            PlainMiddleColumn(
-                title: "General",
-                blurbTitle: "App preferences",
-                blurb: "On-device cache and other app-level defaults.",
-                onBack: onBack
-            )
-        case .privacy:
-            PlainMiddleColumn(
-                title: "Privacy",
-                blurbTitle: "Device facts",
-                blurb: "Opt-in facts this Mac may attach to outgoing messages, like location.",
-                onBack: onBack
-            )
-        case .cost:
-            PlainMiddleColumn(
-                title: "Cost",
-                blurbTitle: "Spend rollup",
-                blurb: "Per-provider totals from the server's cost ledger.",
-                onBack: onBack
-            )
-        case .speech:
-            PlainMiddleColumn(
-                title: "Speech",
-                blurbTitle: "Read aloud",
-                blurb: "Voice synthesis for assistant replies — on-device by default, cloud or self-hosted by choice.",
-                onBack: onBack
-            )
-        case .deviceTools:
-            PlainMiddleColumn(
-                title: "Device tools",
-                blurbTitle: "This Mac's tools",
-                blurb: "Calendar, Reminders, and Obsidian tools the model can run here, plus the call audit.",
-                onBack: onBack
-            )
+        default:
+            // App-settings categories render two-pane; this column is
+            // never mounted for them (see the HSplitView condition).
+            EmptyView()
         }
     }
 
@@ -236,149 +215,13 @@ struct SettingsView: View {
     }
 }
 
-/// Header-only middle column for categories without sub-sections: a
-/// back chevron + the category name, then a short description. Same
-/// visual shape LangfuseMiddleColumn established.
-private struct PlainMiddleColumn: View {
-    let title: String
-    let blurbTitle: String
-    let blurb: String
-    let onBack: () -> Void
 
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text(title)
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: paneHeaderHeight)
-            Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Text(blurbTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                Text(blurb)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
-
-/// Header-only middle column for the Langfuse pane. The settings
-/// itself has no sub-sections so the middle column just shows the
-/// back button + a name. Mirrors the visual shape the appearance
-/// + notifications middle columns established.
-private struct LangfuseMiddleColumn: View {
-    let onBack: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text("Langfuse")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: paneHeaderHeight)
-            Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Per-user observability")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                Text("Mirror assistant turns into Langfuse for traces, costs, and evaluation.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
 
 // MARK: - Embedder middle column
 
-/// Header-only middle column for the Embedder pane. Mirrors
-/// LangfuseMiddleColumn — no sub-sections, just a back chevron + the
-/// category name and a one-line description.
-private struct EmbedderMiddleColumn: View {
-    let onBack: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text("Embedder")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: paneHeaderHeight)
-            Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Per-user search backend")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                Text("Pick the OpenAI-compatible embedder that powers message search and the memory plugin's recall tool.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
 
 // MARK: - Notifications middle column
 
-/// Lists every Notifications sub-section so the middle pane is doing
-/// real work — clicking a row swaps the detail pane to that section's
-/// content. Mirrors the visual shape of ProvidersMiddleColumn /
-/// ProfilesMiddleColumn (header band + selectable rows).
-private struct NotificationsMiddleColumn: View {
-    let onBack: () -> Void
-    @Binding var selection: NotificationsSection
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text("Notifications")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: paneHeaderHeight)
-            Divider()
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(NotificationsSection.allCases) { s in
-                    sectionRow(s, selection: $selection, theme: theme)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
 
 @MainActor
 @ViewBuilder
@@ -395,7 +238,7 @@ private func sectionRow<S: Hashable & Identifiable>(
     } label: {
         Label(label, systemImage: systemImage)
             .labelStyle(.titleAndIcon)
-            .font(.callout)
+            .scaledFont(.callout)
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -433,37 +276,6 @@ private func sectionRow(
 
 // MARK: - Appearance middle column
 
-/// Lists every Appearance sub-section (Theme, Font size, …). Same shape
-/// as NotificationsMiddleColumn — header band + selectable rows.
-private struct AppearanceMiddleColumn: View {
-    let onBack: () -> Void
-    @Binding var selection: AppearanceSection
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                GlassCircleButton(systemImage: "chevron.left", action: onBack, help: "Back")
-                Text("Appearance")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .frame(height: paneHeaderHeight)
-            Divider()
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(AppearanceSection.allCases) { s in
-                    sectionRow(s, selection: $selection, theme: theme)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
 
 // MARK: - Middle-column header (shared)
 
@@ -485,10 +297,10 @@ struct SettingsListHeader: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Text("\(count) \(countNoun)\(count == 1 ? "" : "s")")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -526,7 +338,7 @@ struct GlassCircleButton: View {
             ZStack {
                 Color.clear
                 Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(size: 11, weight: .semibold)
             }
             .frame(width: 26, height: 26)
             .contentShape(Circle())

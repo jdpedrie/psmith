@@ -22,16 +22,16 @@ struct CostSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Cost")
-                            .font(.title2.weight(.semibold))
+                            .scaledFont(.title2, weight: .semibold)
                         Spacer()
                         if !loading || !rows.isEmpty {
                             Text(formatUSD(grandTotal))
-                                .font(.title3.monospacedDigit().weight(.medium))
+                                .scaledFont(.title3, weight: .medium, monospacedDigit: true)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     Text("Spend recorded per assistant turn (including compression and speech synthesis). Free-tier and subscription models don't contribute.")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -52,14 +52,14 @@ struct CostSettingsView: View {
                             }
                         }
                         Text(rangeFooter)
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
 
                 if let errorText {
                     Text(errorText)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.red)
                         .padding(10)
                         .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -69,7 +69,7 @@ struct CostSettingsView: View {
                 sectionCard("By provider") {
                     if rows.isEmpty && !loading {
                         Text("No cost events in this window yet.")
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.secondary)
                     } else {
                         VStack(spacing: 0) {
@@ -78,7 +78,7 @@ struct CostSettingsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(row.providerLabel)
                                         Text(subtitle(for: row))
-                                            .font(.caption)
+                                            .scaledFont(.caption)
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 8)
@@ -173,7 +173,7 @@ struct CostSettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()

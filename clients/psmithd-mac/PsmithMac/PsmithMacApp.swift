@@ -248,6 +248,14 @@ struct PsmithMacApp: App {
                 .environment(\.theme, themeStore.current)
                 .environment(\.clipboard, AppKitClipboard())
                 .environment(\.notifier, sharedNotifier)
+                // App-wide text scale. The fontScale env drives every
+                // .scaledFont call site; the default \.font catches
+                // unstyled Text (and MarkdownUI's base size, which
+                // cascades its em-relative styles from it).
+                .environment(\.fontScale, prefs.fontScale)
+                .environment(\.font, prefs.fontScale == 1.0
+                    ? nil
+                    : .system(size: baseSize(for: .body) * prefs.fontScale))
                 .tint(themeStore.current.accent)
                 .frame(minWidth: 1080, minHeight: 560)
                 .background(themeStore.current.chrome.ignoresSafeArea())
@@ -283,6 +291,25 @@ struct PsmithMacApp: App {
                     sharedNavigator.mode = .settings
                 }
                 .keyboardShortcut(",", modifiers: .command)
+            }
+            // Text-size zoom under the View menu. ⌘= is what the
+            // "⌘+" keystroke produces unshifted; ⌘0 resets — the
+            // browser convention.
+            CommandGroup(after: .sidebar) {
+                Divider()
+                Button("Increase Text Size") {
+                    sharedAppPreferences.fontScale += AppPreferences.fontScaleStep
+                }
+                .keyboardShortcut("=", modifiers: .command)
+                Button("Decrease Text Size") {
+                    sharedAppPreferences.fontScale -= AppPreferences.fontScaleStep
+                }
+                .keyboardShortcut("-", modifiers: .command)
+                Button("Actual Text Size") {
+                    sharedAppPreferences.fontScale = 1.0
+                }
+                .keyboardShortcut("0", modifiers: .command)
+                Divider()
             }
         }
     }

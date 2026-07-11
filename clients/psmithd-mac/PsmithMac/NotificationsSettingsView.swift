@@ -29,15 +29,15 @@ struct NotificationsSettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Generation finished")
-                    .font(.title2.weight(.semibold))
+                    .scaledFont(.title2, weight: .semibold)
                 Text("Posts a macOS notification when an assistant turn completes while Psmith is in the background. Suppressed when Psmith is the active app — you're already looking at the result. Permission is requested the first time a notification would fire. Stored locally on this Mac; not synced.")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Toggle(isOn: $p.notifyOnUnfocusedCompletion) {
                 Text("Ring on generation finish")
-                    .font(.callout.weight(.medium))
+                    .scaledFont(.callout, weight: .medium)
             }
             .toggleStyle(.switch)
             .controlSize(.small)

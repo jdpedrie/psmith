@@ -103,13 +103,13 @@ private struct AvailableProviderRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Text("Not configured")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 Image(systemName: "plus.circle")
                     .foregroundStyle(.tertiary)
-                    .font(.caption)
+                    .scaledFont(.caption)
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
@@ -208,7 +208,7 @@ private struct ProviderRow: View {
                 .foregroundStyle(.primary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.label).lineLimit(1)
-                Text(provider.type).font(.caption2).foregroundStyle(.secondary)
+                Text(provider.type).scaledFont(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
             // Small green dot reads as "configured / enabled" — pairs
@@ -335,11 +335,11 @@ private struct ProviderHeader: View {
                 // getting clipped on the leading edge — silently — when the
                 // trailing buttons + test chip ate the row's horizontal budget).
                 Text(provider.label)
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(provider.type)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -386,26 +386,26 @@ private struct ProviderTestControl: View {
             case .idle:
                 Label("Test", systemImage: "bolt.fill")
                     .labelStyle(.titleAndIcon)
-                    .font(.caption)
+                    .scaledFont(.caption)
             case .testing:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Testing…").font(.caption)
+                    Text("Testing…").scaledFont(.caption)
                 }
             case .success(let result) where result.ok:
                 Label("\(result.modelCount) models · \(result.latencyMs)ms",
                       systemImage: "checkmark.circle.fill")
-                    .font(.caption)
+                    .scaledFont(.caption)
             case .success(let result):
                 // ok=false comes back as .success with the failure body —
                 // render orange like other failures.
                 Label(failureLabel(result.errorMessage),
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .lineLimit(1)
             case .failure(let msg):
                 Label(failureLabel(msg), systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .lineLimit(1)
             }
         }
@@ -514,7 +514,7 @@ private struct ModelRow: View {
             ModelTestButton(model: model, providersModel: providersModel)
             Button(action: onToggleFavorite) {
                 Image(systemName: model.favorite ? "star.fill" : "star")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundStyle(model.favorite ? Color.yellow : Color.secondary)
             }
             .buttonStyle(.plain)
@@ -577,7 +577,7 @@ private struct ModelTestButton: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "play.circle")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                 }
             }
             .frame(width: 26, height: 26)
@@ -650,9 +650,9 @@ private struct ModelTestResultChip: View {
     private func chip(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.caption2)
+                .scaledFont(.caption2)
             Text(text)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -729,7 +729,7 @@ private struct AddProviderForm: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 Text("Add provider")
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
@@ -760,7 +760,7 @@ private struct AddProviderForm: View {
                     credentialsSection
                     if let formError {
                         Text(formError)
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.red)
                     }
                 }
@@ -831,11 +831,11 @@ private struct AddProviderForm: View {
                     switch selection {
                     case .template(let t):
                         Text(t.name).fontWeight(.semibold)
-                        Text(t.driverType).font(.caption2).foregroundStyle(.secondary)
+                        Text(t.driverType).scaledFont(.caption2).foregroundStyle(.secondary)
                     case .custom:
                         Text("Custom provider").fontWeight(.semibold)
                         Text("Pick a driver type and configure manually")
-                            .font(.caption2).foregroundStyle(.secondary)
+                            .scaledFont(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -904,7 +904,7 @@ private struct AddProviderForm: View {
 
     private func sectionTitle(_ s: String) -> some View {
         Text(s)
-            .font(.caption)
+            .scaledFont(.caption)
             .fontWeight(.semibold)
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
@@ -976,7 +976,7 @@ private struct EditProviderForm: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 Text("Edit provider")
-                    .font(.headline)
+                    .scaledFont(.headline)
                     .lineLimit(1)
                 Spacer()
                 Button("Cancel") {
@@ -1029,7 +1029,7 @@ private struct EditProviderForm: View {
                         }
                     } label: {
                         Text(catalogLabel)
-                            .font(.callout)
+                            .scaledFont(.callout)
                             .foregroundStyle(.secondary)
                     }
                     .menuStyle(.borderlessButton)
@@ -1037,7 +1037,7 @@ private struct EditProviderForm: View {
                 }
             }
             if let formError {
-                Text(formError).font(.caption).foregroundStyle(.red)
+                Text(formError).scaledFont(.caption).foregroundStyle(.red)
             }
             }
             .padding(12)
@@ -1120,7 +1120,7 @@ private struct DiscoverModelsInline: View {
                     model.detailMode = .addingManualModel
                 } label: {
                     Label("Add custom model", systemImage: "plus")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .labelStyle(.titleAndIcon)
                 }
                 .controlSize(.small)
@@ -1133,7 +1133,7 @@ private struct DiscoverModelsInline: View {
 
             // List
             if let inlineError {
-                Text(inlineError).foregroundStyle(.red).font(.caption).padding()
+                Text(inlineError).foregroundStyle(.red).scaledFont(.caption).padding()
             } else if isLoading {
                 ProgressView().padding(40)
             } else if filtered.isEmpty {
@@ -1164,7 +1164,7 @@ private struct DiscoverModelsInline: View {
             PaneFooter {
                 if !discovered.isEmpty {
                     Text("\(selected.count) of \(discovered.count) selected")
-                        .font(.caption)
+                        .scaledFont(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -1216,7 +1216,7 @@ private struct DiscoveredModelRow: View {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? theme.accent : Color.secondary)
-                    .font(.title3)
+                    .scaledFont(.title3)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(model.displayName).fontWeight(.medium).lineLimit(1)
@@ -1238,7 +1238,7 @@ private struct DiscoveredModelRow: View {
 private struct EnabledBadge: View {
     var body: some View {
         Text("enabled")
-            .font(.caption2)
+            .scaledFont(.caption2)
             .foregroundStyle(.green)
             .lineLimit(1)
             .fixedSize()
@@ -1273,7 +1273,7 @@ private struct CredField<Content: View>: View {
             }
             if let hint {
                 Text(hint)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 90)
             }
@@ -1339,9 +1339,9 @@ private struct ProviderDefaultSettingsTab: View {
     private var headerNote: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Provider defaults")
-                .font(.headline)
+                .scaledFont(.headline)
             Text("Bottom layer of the resolution chain — any field set here is used unless a per-model, profile, or conversation override is set. Changes auto-save when you leave this tab.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1451,7 +1451,7 @@ private struct ModelEditForm: View {
                         defaultSettingsSection
                         if let formError {
                             Text(formError)
-                                .font(.caption)
+                                .scaledFont(.caption)
                                 .foregroundStyle(.red)
                                 .padding(.top, 4)
                         }
@@ -1470,7 +1470,7 @@ private struct ModelEditForm: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             Text(isEditing ? "Edit model" : "Add custom model")
-                .font(.headline)
+                .scaledFont(.headline)
                 .lineLimit(1)
             Spacer()
             Button("Cancel") {
@@ -1498,12 +1498,12 @@ private struct ModelEditForm: View {
     private var introCaption: some View {
         if isEditing {
             Text("Edit any field. The model ID is the wire identifier and is locked — change it by removing the row and adding a new one.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text("Manually describe a model on \"\(provider.label)\" — for private fine-tunes, renamed-but-real models, or anything the provider doesn't list via discovery.")
-                .font(.caption)
+                .scaledFont(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1620,7 +1620,7 @@ private struct ModelEditForm: View {
                 Text(isEditing
                      ? "Resolves above the provider defaults but below profile and conversation overrides. Leave fields unset to inherit."
                      : "Optional — sets the per-model defaults layer of the call-settings chain. Leave collapsed to inherit normally.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if isEditing {
@@ -1646,7 +1646,7 @@ private struct ModelEditForm: View {
                         .padding(.top, 8)
                     } label: {
                         Text(defaultSettingsExpanded ? "Hide defaults" : "Configure defaults…")
-                            .font(.caption)
+                            .scaledFont(.caption)
                     }
                 }
             }
@@ -1692,7 +1692,7 @@ private struct ModelEditForm: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.caption)
+                .scaledFont(.caption)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -1811,9 +1811,9 @@ private struct ModalityChip: View {
         Button(action: onTap) {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                 Text(label)
-                    .font(.caption)
+                    .scaledFont(.caption)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

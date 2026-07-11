@@ -21,17 +21,17 @@ public struct ThemeCard: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(theme.name)
-                            .font(.headline)
+                            .scaledFont(.headline)
                             .foregroundStyle(.primary)
                         Text(theme.blurb)
-                            .font(.caption)
+                            .scaledFont(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
+                        .scaledFont(.title3)
                         .foregroundStyle(isSelected ? AnyShapeStyle(theme.accent) : AnyShapeStyle(Color.secondary.opacity(0.5)))
                 }
 
@@ -69,7 +69,7 @@ public struct ThemeCard: View {
     @ViewBuilder
     private func previewBubble(text: String, role: PreviewRole) -> some View {
         Text(text)
-            .font(.caption)
+            .scaledFont(.caption)
             .foregroundStyle(.primary)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -105,7 +105,7 @@ public struct ThemeCard: View {
                 )
                 .frame(height: 22)
             Text(label)
-                .font(.system(size: 9))
+                .scaledFont(size: 9)
                 .foregroundStyle(.tertiary)
         }
     }

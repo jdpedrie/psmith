@@ -62,7 +62,7 @@ public struct PluginConfigForm: View {
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(category)
-                            .font(.caption.weight(.semibold))
+                            .scaledFont(.caption, weight: .semibold)
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
                         VStack(alignment: .leading, spacing: 14) {
@@ -108,16 +108,16 @@ public struct PluginConfigForm: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Text(field.display.isEmpty ? field.name : field.display)
-                    .font(.callout.weight(.medium))
+                    .scaledFont(.callout, weight: .medium)
                 if field.required {
                     Text("*")
-                        .font(.callout.weight(.semibold))
+                        .scaledFont(.callout, weight: .semibold)
                         .foregroundStyle(unsatisfied ? .red : .secondary)
                         .help("Required")
                 }
                 if field.merge == .appendString {
                     Text("Appends")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(
@@ -131,12 +131,12 @@ public struct PluginConfigForm: View {
             control(for: field)
             if unsatisfied {
                 Text("Required.")
-                    .font(.caption2.weight(.medium))
+                    .scaledFont(.caption2, weight: .medium)
                     .foregroundStyle(.red)
             }
             if !field.description.isEmpty {
                 Text(field.description)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -251,7 +251,7 @@ public struct PluginConfigForm: View {
             }
         )
         return TextEditor(text: binding)
-            .font(.callout)
+            .scaledFont(.callout)
             .scrollContentBackground(.hidden)
             .padding(8)
             .background(Color.primary.opacity(0.04))
@@ -365,7 +365,7 @@ private struct ModelPickerFieldControl: View {
         let models = matchingModels
         if models.isEmpty {
             Text(emptyHint)
-                .font(.callout)
+                .scaledFont(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 4)
         } else {
@@ -374,7 +374,7 @@ private struct ModelPickerFieldControl: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(currentLabel)
-                    Image(systemName: "chevron.down").font(.caption2)
+                    Image(systemName: "chevron.down").scaledFont(.caption2)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -427,7 +427,7 @@ private struct ModelPickerSheetContent: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if !models.isEmpty {
                         Text("\(models.count) model\(models.count == 1 ? "" : "s") across \(providerCount) provider\(providerCount == 1 ? "" : "s")")
-                            .font(.caption.weight(.semibold))
+                            .scaledFont(.caption, weight: .semibold)
                             .foregroundStyle(.tertiary)
                             .textCase(.uppercase)
                             .padding(.horizontal, 4)
@@ -495,7 +495,7 @@ private struct SelectFieldPopover: View {
         } label: {
             HStack(spacing: 4) {
                 Text(currentLabel)
-                Image(systemName: "chevron.down").font(.caption2)
+                Image(systemName: "chevron.down").scaledFont(.caption2)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -522,7 +522,7 @@ private struct SelectFieldPopover: View {
                                 if opt.value == selection {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(.secondary)
-                                        .font(.caption)
+                                        .scaledFont(.caption)
                                 }
                             }
                             .padding(.horizontal, 14)

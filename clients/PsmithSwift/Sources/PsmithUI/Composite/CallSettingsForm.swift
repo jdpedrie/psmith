@@ -124,7 +124,7 @@ public struct CallSettingsForm: View {
     private var tabbedProviderExtras: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("PROVIDER EXTRAS")
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
             Picker("Provider extras", selection: $extrasTab) {
                 ForEach(ProviderExtrasTab.allCases) { t in
@@ -134,7 +134,7 @@ public struct CallSettingsForm: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             Text(extrasTabCaption)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
             switch extrasTab {
@@ -292,7 +292,7 @@ public struct CallSettingsForm: View {
                 )
             }
             Text("Strings that, when generated, end the response.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(settings.stopSequences.enumerated()), id: \.offset) { idx, _ in
@@ -318,7 +318,7 @@ public struct CallSettingsForm: View {
                     settings.stopSequences.append("")
                 } label: {
                     Label("Add stop sequence", systemImage: "plus.circle")
-                        .font(.caption)
+                        .scaledFont(.caption)
                 }
                 .buttonStyle(.plain)
             }
@@ -326,7 +326,7 @@ public struct CallSettingsForm: View {
                let inherited = inheritedSettings?.stopSequences,
                !inherited.isEmpty {
                 Text("Inherits \(inheritedListSummary(inherited))")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -345,7 +345,7 @@ public struct CallSettingsForm: View {
                     "The selected model doesn't support thinking — these are saved but ignored until you switch to one that does.",
                     systemImage: "info.circle"
                 )
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.secondary)
             }
             // Enabled toggle
@@ -437,7 +437,7 @@ public struct CallSettingsForm: View {
                 .fixedSize()
             }
             Text("When off, no cache_control marker is sent — useful for one-off conversations or privacy.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
 
@@ -458,7 +458,7 @@ public struct CallSettingsForm: View {
                 .fixedSize()
             }
             Text("1 hour costs more to write but survives stop-and-resume workflows.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .opacity(cacheTTLDisabled ? 0.45 : 1.0)
@@ -768,7 +768,7 @@ public struct CallSettingsForm: View {
                 )
             }
             Text("JSON object mapping token IDs (integers) to bias values (doubles, [-100, 100]).")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             jsonEditor(
                 title: "Logit bias JSON",
@@ -858,7 +858,7 @@ public struct CallSettingsForm: View {
                     )
                 }
                 Text("JSON schema bytes; constrains the response shape.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
                 jsonEditor(
                     title: "Response schema (JSON)",
@@ -904,14 +904,14 @@ public struct CallSettingsForm: View {
                 )
             }
             Text(description)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             Toggle(isOn: Binding(
                 get: { value.wrappedValue ?? inherited ?? false },
                 set: { value.wrappedValue = $0 }
             )) {
                 Text(boolToggleLabel(value: value.wrappedValue, inherited: inherited))
-                    .font(.callout)
+                    .scaledFont(.callout)
             }
             .toggleStyle(.switch)
             .controlSize(.small)
@@ -1023,15 +1023,15 @@ public struct CallSettingsForm: View {
                 Spacer()
                 if let v = value.wrappedValue {
                     Text(format(v))
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.primary)
                 } else if let inherited {
                     Text("\(format(inherited)) (Inherited)")
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("—")
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.tertiary)
                 }
                 resetButton(
@@ -1041,7 +1041,7 @@ public struct CallSettingsForm: View {
                 )
             }
             Text(description)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             // A SwiftUI Slider FATAL-ERRORS when its bounds aren't
             // strictly increasing (zero-width range). That happens for
@@ -1064,10 +1064,10 @@ public struct CallSettingsForm: View {
             } else {
                 HStack {
                     Text(format(range.lowerBound))
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.secondary)
                     Text("locked")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                     Spacer()
                 }
@@ -1091,15 +1091,15 @@ public struct CallSettingsForm: View {
                 Spacer()
                 if let v = value.wrappedValue {
                     Text(v.formatted())
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.primary)
                 } else if let inherited {
                     Text("\(inherited.formatted()) (Inherited)")
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("—")
-                        .font(.callout.monospacedDigit())
+                        .scaledFont(.callout, monospacedDigit: true)
                         .foregroundStyle(.tertiary)
                 }
                 Stepper(
@@ -1120,7 +1120,7 @@ public struct CallSettingsForm: View {
                 )
             }
             Text(description)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .opacity(disabled ? 0.45 : 1.0)
@@ -1144,7 +1144,7 @@ public struct CallSettingsForm: View {
                 )
             }
             Text(description)
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.tertiary)
             TextField(inherited.map { "Inherits \($0)" } ?? "(unset)", text: value)
                 .textFieldStyle(.roundedBorder)
@@ -1197,7 +1197,7 @@ public struct CallSettingsForm: View {
     private func formSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
             content()
         }
@@ -1205,7 +1205,7 @@ public struct CallSettingsForm: View {
 
     private func fieldLabel(_ s: String) -> some View {
         Text(s)
-            .font(.callout)
+            .scaledFont(.callout)
             .foregroundStyle(.primary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -1226,7 +1226,7 @@ private struct JSONTextEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             TextEditor(text: $text)
-                .font(.callout.monospaced())
+                .scaledFont(.callout, design: .monospaced)
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(Color.primary.opacity(0.04))
@@ -1237,7 +1237,7 @@ private struct JSONTextEditor: View {
                 .onChange(of: text) { _, newValue in onChange(newValue) }
             if !text.isEmpty, !isValidJSON(text) {
                 Label("Doesn't parse as JSON.", systemImage: "exclamationmark.triangle")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.red)
             }
         }

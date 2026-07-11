@@ -57,7 +57,7 @@ public struct ComponentBuilderConfigForm: View {
                 persist()
             } label: {
                 Label("Add component definition", systemImage: "plus.circle")
-                    .font(.callout)
+                    .scaledFont(.callout)
             }
             .buttonStyle(.glass)
 
@@ -73,9 +73,9 @@ public struct ComponentBuilderConfigForm: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Component definitions")
-                .font(.callout.weight(.semibold))
+                .scaledFont(.callout, weight: .semibold)
             Text("Each definition teaches the model to wrap structured output in your tags. The Content Renderer pipeline parses the tags + emits a UIFragment the client renders natively.")
-                .font(.caption2)
+                .scaledFont(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -129,11 +129,11 @@ public struct ComponentBuilderConfigForm: View {
         DisclosureGroup(isExpanded: $pasteExpanded) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Paste a JSON array of definitions, or a `{\"components\": [...]}` wrapper. Replaces the entire list.")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 TextEditor(text: $pasteText)
-                    .font(.callout.monospaced())
+                    .scaledFont(.callout, design: .monospaced)
                     .frame(minHeight: 120)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
@@ -141,7 +141,7 @@ public struct ComponentBuilderConfigForm: View {
                     )
                 if let err = pasteError {
                     Text(err)
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -157,7 +157,7 @@ public struct ComponentBuilderConfigForm: View {
             .padding(.top, 6)
         } label: {
             Text("Paste JSON")
-                .font(.callout.weight(.medium))
+                .scaledFont(.callout, weight: .medium)
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -341,7 +341,7 @@ private struct DefinitionEditor: View {
     private var header: some View {
         HStack {
             Text(definition.name.isEmpty ? "(unnamed)" : definition.name)
-                .font(.callout.weight(.semibold))
+                .scaledFont(.callout, weight: .semibold)
                 .foregroundStyle(.secondary)
             Spacer()
             Button(role: .destructive) {
@@ -356,17 +356,17 @@ private struct DefinitionEditor: View {
 
     private var nameRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Name").font(.caption.weight(.medium))
+            Text("Name").scaledFont(.caption, weight: .medium)
             TextField("e.g. combat_choices", text: $definition.name)
                 .textFieldStyle(.roundedBorder)
             Text("Identifier the system message + reminders reference. Must be unique within this plugin instance.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
         }
     }
 
     private var componentRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Component").font(.caption.weight(.medium))
+            Text("Component").scaledFont(.caption, weight: .medium)
             HStack(spacing: 6) {
                 TextField("component_name", text: $definition.component)
                     .textFieldStyle(.roundedBorder)
@@ -379,19 +379,19 @@ private struct DefinitionEditor: View {
                 .frame(width: 140)
             }
             Text("A name from the shipped renderer set, or any custom string (custom names render via the unknown-component fallback).")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
         }
     }
 
     private var tagRow: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Open tag").font(.caption.weight(.medium))
+                Text("Open tag").scaledFont(.caption, weight: .medium)
                 TextField("<choices>", text: $definition.openTag)
                     .textFieldStyle(.roundedBorder)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("Close tag").font(.caption.weight(.medium))
+                Text("Close tag").scaledFont(.caption, weight: .medium)
                 TextField("</choices>", text: $definition.closeTag)
                     .textFieldStyle(.roundedBorder)
             }
@@ -400,7 +400,7 @@ private struct DefinitionEditor: View {
 
     private var positionRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Position hint").font(.caption.weight(.medium))
+            Text("Position hint").scaledFont(.caption, weight: .medium)
             Picker("", selection: $definition.position) {
                 ForEach(Definition.positions, id: \.self) { p in
                     Text(p).tag(p)
@@ -409,28 +409,28 @@ private struct DefinitionEditor: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             Text("Hint for the system instructions only — the parser doesn't enforce position.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
         }
     }
 
     private var instructionsRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Instructions").font(.caption.weight(.medium))
+            Text("Instructions").scaledFont(.caption, weight: .medium)
             TextEditor(text: $definition.instructions)
-                .font(.callout.monospaced())
+                .scaledFont(.callout, design: .monospaced)
                 .frame(minHeight: 80)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
                 )
             Text("Free-form system-message snippet teaching the model when + how to use this component (the body shape it should emit, when to choose it).")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
         }
     }
 
     private var reminderRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Per-turn user reminder").font(.caption.weight(.medium))
+            Text("Per-turn user reminder").scaledFont(.caption, weight: .medium)
             Picker("", selection: $definition.reminderMode) {
                 ForEach(Definition.reminderModes, id: \.value) { option in
                     Text(option.label).tag(option.value)
@@ -439,7 +439,7 @@ private struct DefinitionEditor: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             Text("Wraps a [system_reminder] tail onto the most-recent user message (not persisted) — re-grounds the convention every turn. The reminder text is auto-generated from the component name.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .scaledFont(.caption2).foregroundStyle(.tertiary)
         }
     }
 }

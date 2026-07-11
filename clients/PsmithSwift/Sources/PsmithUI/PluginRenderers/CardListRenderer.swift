@@ -54,7 +54,7 @@ public struct CardListRenderer: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.title)
-                    .font(.callout.weight(.semibold))
+                    .scaledFont(.callout, weight: .semibold)
                     .lineLimit(2)
                 Spacer()
                 if let urlString = item.url, let url = URL(string: urlString) {
@@ -62,7 +62,7 @@ public struct CardListRenderer: View {
                         onAction?(.external(url))
                     } label: {
                         Image(systemName: "arrow.up.right.square")
-                            .font(.caption)
+                            .scaledFont(.caption)
                     }
                     .buttonStyle(.borderless)
                     .help(urlString)
@@ -72,7 +72,7 @@ public struct CardListRenderer: View {
                 HStack(spacing: 4) {
                     ForEach(badges, id: \.self) { badge in
                         Text(badge)
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(.regularMaterial, in: Capsule())
@@ -81,7 +81,7 @@ public struct CardListRenderer: View {
             }
             if let description = item.description, !description.isEmpty {
                 Text(description)
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
             }

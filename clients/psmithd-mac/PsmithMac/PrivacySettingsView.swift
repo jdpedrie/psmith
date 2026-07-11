@@ -16,9 +16,9 @@ struct PrivacySettingsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Privacy")
-                        .font(.title2.weight(.semibold))
+                        .scaledFont(.title2, weight: .semibold)
                     Text("Facts this Mac may attach to outgoing messages. Everything here is off until you turn it on, and stops immediately when you turn it off.")
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -39,7 +39,7 @@ struct PrivacySettingsView: View {
                             locationPreview
                         }
                         Text("When enabled, an approximate location (e.g. \"Brooklyn, NY\") is included with each message this Mac sends. Only basic_grounding (or other plugins that explicitly request it) will use it.")
-                            .font(.caption2)
+                            .scaledFont(.caption2)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -71,7 +71,7 @@ struct PrivacySettingsView: View {
                     }
                 }
                 .buttonStyle(.link)
-                .font(.callout)
+                .scaledFont(.callout)
             }
         case .authorizedAlways:
             statusRow("System permission", value: "Authorized", color: .green)
@@ -122,7 +122,7 @@ struct PrivacySettingsView: View {
     private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .scaledFont(.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()

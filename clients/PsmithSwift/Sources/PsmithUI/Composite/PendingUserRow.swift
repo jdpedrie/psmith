@@ -36,12 +36,12 @@ public struct PendingUserRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("USER")
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
                 ProgressView().controlSize(.mini)
                 if let badge {
                     Text(badge)
-                        .font(.caption2.weight(.medium))
+                        .scaledFont(.caption2, weight: .medium)
                         .foregroundStyle(.orange)
                 }
             }

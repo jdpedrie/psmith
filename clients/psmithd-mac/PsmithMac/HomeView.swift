@@ -94,10 +94,10 @@ struct HomeView: View {
                     Image(systemName: "person.crop.circle")
                         .foregroundStyle(.secondary)
                     Text(user.username)
-                        .font(.callout)
+                        .scaledFont(.callout)
                         .foregroundStyle(.primary)
                     Image(systemName: "chevron.down")
-                        .font(.caption2)
+                        .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, 10)
@@ -117,7 +117,7 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text("Add account")
-                            .font(.title3.weight(.semibold))
+                            .scaledFont(.title3, weight: .semibold)
                         Spacer()
                         Button("Cancel") { showingAddAccount = false }
                             .keyboardShortcut(.cancelAction)
@@ -264,9 +264,9 @@ private struct AccountSwitcherRow: View {
                 .foregroundStyle(isActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
             VStack(alignment: .leading, spacing: 1) {
                 Text(account.username)
-                    .font(.callout)
+                    .scaledFont(.callout)
                 Text(account.host.host ?? account.host.absoluteString)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)

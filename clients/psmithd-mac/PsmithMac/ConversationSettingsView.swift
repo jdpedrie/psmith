@@ -70,7 +70,7 @@ struct ConversationSettingsView: View {
                     tab = t
                 } label: {
                     Text(t.rawValue)
-                        .font(.callout.weight(t == tab ? .semibold : .regular))
+                        .scaledFont(.callout, weight: t == tab ? .semibold : .regular)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
@@ -91,9 +91,9 @@ struct ConversationSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Conversation overrides")
-                    .font(.headline)
+                    .scaledFont(.headline)
                 Text("Any field left unset inherits from the resolved profile (and below). Changes auto-save when you go back.")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -113,16 +113,16 @@ struct ConversationSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Plugin pipeline")
-                    .font(.headline)
+                    .scaledFont(.headline)
                 Text("Each row shows a plugin that's currently active for this conversation, with where it came from. Disable a row to subtract it from this conversation only — the profile chain stays intact for everyone else.")
-                    .font(.caption)
+                    .scaledFont(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if model.resolvedPluginPipeline.isEmpty && subtractedRows.isEmpty {
                 Text("No plugins are active for this conversation.")
-                    .font(.callout)
+                    .scaledFont(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
             } else {
@@ -142,7 +142,7 @@ struct ConversationSettingsView: View {
                     Task { await model.clearAllConversationOverrides() }
                 } label: {
                     Label("Clear all conversation overrides", systemImage: "arrow.uturn.backward")
-                        .font(.callout)
+                        .scaledFont(.callout)
                 }
                 .buttonStyle(.borderless)
             }
@@ -168,11 +168,11 @@ struct ConversationSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(displayName)
-                        .font(.callout.weight(.medium))
+                        .scaledFont(.callout, weight: .medium)
                     sourceBadge(for: source)
                 }
                 Text(entry.pluginName)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
             Spacer()
@@ -205,11 +205,11 @@ struct ConversationSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(displayName)
-                        .font(.callout.weight(.medium))
+                        .scaledFont(.callout, weight: .medium)
                         .foregroundStyle(.secondary)
                         .strikethrough()
                     Text("Disabled for this conversation")
-                        .font(.caption2.weight(.semibold))
+                        .scaledFont(.caption2, weight: .semibold)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
@@ -219,7 +219,7 @@ struct ConversationSettingsView: View {
                         .foregroundStyle(Color.orange)
                 }
                 Text(pluginName)
-                    .font(.caption2)
+                    .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
             Spacer()
@@ -247,7 +247,7 @@ struct ConversationSettingsView: View {
             }
         }()
         Text(label)
-            .font(.caption2.weight(.semibold))
+            .scaledFont(.caption2, weight: .semibold)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(

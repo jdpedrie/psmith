@@ -53,7 +53,7 @@ struct ConversationModelPicker: View {
     @ViewBuilder
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .scaledFont(.caption, weight: .semibold)
             .foregroundStyle(.tertiary)
             .textCase(.uppercase)
     }
