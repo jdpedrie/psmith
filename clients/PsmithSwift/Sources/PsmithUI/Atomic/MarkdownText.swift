@@ -19,6 +19,7 @@ public struct MarkdownText: View {
         case cached(key: String, source: String)
     }
     private let source: Source
+    @Environment(\.fontScale) private var fontScale
 
     public init(_ content: String) {
         self.source = .raw(content)
@@ -37,6 +38,16 @@ public struct MarkdownText: View {
     public var body: some View {
         Markdown(parsedContent)
             .markdownTheme(.clarkChat)
+            // MarkdownUI's base size is a library constant (13pt on
+            // macOS) — it does NOT inherit the SwiftUI environment
+            // font, so the app-wide fontScale has to be threaded in
+            // explicitly. Appending an absolute FontSize here rescales
+            // the whole document; the theme's em-relative styles (code
+            // spans, code blocks) cascade from it. At scale 1.0 this
+            // is exactly the library default, byte-identical rendering.
+            .markdownTextStyle {
+                FontSize(FontProperties.defaultSize * fontScale)
+            }
             .textSelection(.enabled)
     }
 
