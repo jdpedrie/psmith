@@ -32,6 +32,14 @@
     <false/>
     <key>NSSupportsSuddenTermination</key>
     <false/>
+    <!-- Self-hosted psmithd instances live on tailnets and LANs over
+         plain HTTP; ATS would otherwise refuse every non-TLS host that
+         isn't localhost. Mirrors the iOS app's setting. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>The assistant can list, create, and update calendar events when you ask it to. Access is only used for tool calls you can audit in Settings → Device tools.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
