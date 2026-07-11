@@ -116,6 +116,6 @@ private struct AppShell: View {
     /// the Mac client — keeps both platforms aligned on the
     /// "can you actually chat?" precondition.
     private var needsOnboarding: Bool {
-        app.providers.providers.isEmpty || app.providers.enabledModels.isEmpty
+        app.providers.providers.isEmpty || !app.providers.hasAnyEnabledModel
     }
 }

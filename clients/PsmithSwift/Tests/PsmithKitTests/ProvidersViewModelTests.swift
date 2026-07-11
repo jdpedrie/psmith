@@ -31,6 +31,30 @@ struct ProvidersViewModelTests {
         #expect(!vm.isLoadingProviders)
     }
 
+    @Test("hasAnyEnabledModel: false with a modeless provider, true once one exists, sticky across selection")
+    func onboardingGateFlag() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvw-gate")
+        // Provider with zero enabled models: the account still needs
+        // onboarding.
+        let (modeless, _) = try await Fixtures.seedFakeProvider(client: client, label: "Modeless")
+        let vm = ProvidersViewModel(client: client)
+        await vm.load()
+        #expect(vm.hasAnyEnabledModel == false)
+
+        // A second provider WITH a model flips the flag on reload —
+        // and selecting the modeless provider afterwards must NOT
+        // flip it back (that selection-scoped read was the bug that
+        // dumped signed-in users into the onboarding wizard).
+        let (_, provider, _, _) = try await Fixtures.seedReadyToChat(client: client)
+        _ = provider
+        await vm.load()
+        #expect(vm.hasAnyEnabledModel == true)
+
+        await vm.selectProvider(modeless.id)
+        #expect(vm.enabledModels.isEmpty)
+        #expect(vm.hasAnyEnabledModel == true)
+    }
+
     // MARK: - selectProvider (case 2)
 
     @Test("selectProvider switches selectedID, fetches enabled models, resets detailMode")

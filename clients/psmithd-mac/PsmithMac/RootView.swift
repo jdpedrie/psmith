@@ -82,6 +82,6 @@ struct RootView: View {
     /// completes the wizard the parent re-renders and HomeView takes
     /// over.
     private var needsOnboarding: Bool {
-        app.providers.providers.isEmpty || app.providers.enabledModels.isEmpty
+        app.providers.providers.isEmpty || !app.providers.hasAnyEnabledModel
     }
 }

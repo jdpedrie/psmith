@@ -108,6 +108,19 @@ public final class ProvidersViewModel {
     /// flashes on every cold start before the list lands.
     public private(set) var hasLoadedOnce: Bool = false
 
+    /// Account-wide "at least one enabled model exists on SOME
+    /// provider." This — not `enabledModels` — is what the clients'
+    /// onboarding gates read. `enabledModels` is scoped to the
+    /// provider selected in the settings pane, so keying onboarding
+    /// off it tore the whole app down to the setup wizard whenever
+    /// the user clicked a provider row with zero enabled models.
+    /// Deliberately sticky within a session: recomputed on load(),
+    /// flipped true by enable/add, but never flipped false by
+    /// selection changes or disables — kicking a signed-in user
+    /// into onboarding mid-session is always worse than letting
+    /// them fix an empty model list from settings.
+    public private(set) var hasAnyEnabledModel: Bool = false
+
     public func load() async {
         isLoadingProviders = true
         defer {
@@ -119,6 +132,18 @@ public final class ProvidersViewModel {
             error = nil
             if selectedID == nil, let first = providers.first {
                 await selectProvider(first.id)
+            }
+            // Probe for the onboarding gate: stop at the first
+            // provider that has any enabled model. Sequential worst
+            // case is one get() per provider, but real accounts hit
+            // the first or second.
+            if !hasAnyEnabledModel {
+                for p in providers {
+                    if let (_, models) = try? await client.modelProviders.get(id: p.id), !models.isEmpty {
+                        hasAnyEnabledModel = true
+                        break
+                    }
+                }
             }
         } catch {
             self.error = PsmithError.display(error)
@@ -345,6 +370,7 @@ public final class ProvidersViewModel {
     @discardableResult
     public func enableModels(providerID: String, modelIDs: [String]) async throws -> [PsmithUserModel] {
         let enabled = try await client.modelProviders.enableModels(providerID: providerID, modelIDs: modelIDs)
+        if !enabled.isEmpty { hasAnyEnabledModel = true }
         let existing = Set(enabledModels.map(\.modelID))
         let fresh = enabled.filter { !existing.contains($0.modelID) }
         enabledModels.append(contentsOf: fresh)
@@ -380,6 +406,7 @@ public final class ProvidersViewModel {
             knowledgeCutoff: knowledgeCutoff,
             defaultSettings: defaultSettings
         )
+        hasAnyEnabledModel = true
         // Only add when this is the currently-selected provider; otherwise the
         // caller will refresh through selectProvider on its own.
         if selectedID == providerID {
