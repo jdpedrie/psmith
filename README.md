@@ -1,5 +1,7 @@
 # Psmith
 
+*Pronounced "Smith". The P is silent, as in pshrimp.*
+
 Psmith is a self-hosted AI chat orchestrator. It mixes cloud APIs (Anthropic, OpenAI, Google, OpenRouter, anything OpenAI-compatible) and — eventually — local agentic CLIs behind a single chat UI, with a server that owns history so clients can disconnect and reconnect without losing tokens mid-stream.
 
 It's a personal project. The roadmap, scope, and tradeoffs are biased toward "one developer using this every day," not "platform for many tenants."
