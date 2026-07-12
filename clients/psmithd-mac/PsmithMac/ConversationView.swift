@@ -661,6 +661,16 @@ struct ConversationBody: View {
                             }
                             return .handled
                         }
+                        .onKeyPress(KeyEquivalent("v")) {
+                            // ⌘V with a file or image on the pasteboard
+                            // attaches it (same route as drag-and-drop);
+                            // plain text falls through to the field's own
+                            // paste. onKeyPress is the working seam here —
+                            // onPasteCommand never fires while the AppKit
+                            // field editor is first responder.
+                            guard NSEvent.modifierFlags.contains(.command) else { return .ignored }
+                            return pasteAttachmentIfPresent()
+                        }
                         .disabled(model.sending || model.hasPendingCompression || model.isCompacting)
                         .padding(.horizontal, 14)
                         .padding(.top, 10)
@@ -743,6 +753,39 @@ struct ConversationBody: View {
         } else {
             await model.attachFile(from: url)
         }
+    }
+
+    /// Attach whatever file/image content is on the general pasteboard.
+    /// Returns .handled when an attachment was taken (the field must not
+    /// also paste), .ignored for text-only pasteboards so the normal
+    /// paste proceeds. Files win over image data — a Finder copy puts
+    /// both a file URL and a preview image on the pasteboard, and the
+    /// URL is the real payload.
+    private func pasteAttachmentIfPresent() -> KeyPress.Result {
+        guard attachmentsSupported else { return .ignored }
+        let pb = NSPasteboard.general
+        if let urls = pb.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty {
+            for url in urls {
+                Task { @MainActor in await attach(url: url) }
+            }
+            return .handled
+        }
+        // Raw image bytes — a screenshot on the clipboard, or "Copy
+        // Image" from a browser. Normalized to PNG; the VM's
+        // preprocessor handles resize + thumbnail from there.
+        if acceptedAttachmentTypes.image,
+           pb.canReadItem(withDataConformingToTypes: [UTType.image.identifier]),
+           let img = NSImage(pasteboard: pb),
+           let tiff = img.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            Task { @MainActor in await model.attachImage(data: png, originalFilename: nil) }
+            return .handled
+        }
+        return .ignored
     }
 
     private var paperclipButton: some View {
