@@ -66,6 +66,38 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func wideBlocksContained() {
+        // Pins the horizontal containment of the two content-driven
+        // wide block classes: fenced code and markdown tables. Both
+        // render inside their own horizontal scroller (`.clarkChat`
+        // codeBlock/table themes) so a wide block can never widen the
+        // chat pane — the iOS "margins shift left during generation"
+        // bug rode exactly this overflow. If this snapshot ever shows
+        // the table or code grid running past the bubble edge, the
+        // containment regressed.
+        let wide = """
+        A wide table:
+
+        | alpha | bravo | charlie | delta | echo | foxtrot | golf | hotel |
+        |---|---|---|---|---|---|---|---|
+        | some longer cell content | more cell content here | and again for width | keeps going wider | even wider now | almost there | nearly done | last column |
+
+        And wide code:
+
+        ```text
+        row-0: \(String(repeating: "column-data ", count: 24))END
+        ```
+        """
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "show me wide output"),
+                SnapshotFixtures.assistantMessage(content: wide),
+            ]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
     func userAndAssistantPairScaled130() {
         // Pins the app-wide fontScale plumbing: every label and the
         // markdown body must render ~30% larger. If this snapshot ever

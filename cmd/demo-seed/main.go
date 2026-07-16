@@ -19,8 +19,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -43,17 +45,127 @@ Psmith keeps **credentials on the server** and lets every client — Mac, iOS, w
 
 That's the tour. Ask me anything else.`
 
+// pickResponse routes a prompt to a repro payload. The scroll-debug
+// prompts each stress a distinct client behavior:
+//
+//	"count …"  → numbered words, one per chunk — viewport position is
+//	             readable off any screenshot frame (identical filler
+//	             text made mid-stream frames indistinguishable and
+//	             burned debugging rounds).
+//	"wide …"   → unbreakable token + wide code fence + wide table —
+//	             the horizontal break-out / margin-loss trigger.
+//	"essay …"  → long multi-section markdown — exercises the
+//	             follow-then-park path on a response taller than the
+//	             viewport.
+//	"filler K" → short varied-height markdown, streamed fast — bulk
+//	             seeding of long conversations.
+//
+// Returns the full text, the chunk size (0 = word-per-chunk), and a
+// delay override (<0 = use the flag value).
+func pickResponse(prompt string) (text string, chunkSize int, delayOverride time.Duration) {
+	p := strings.ToLower(prompt)
+	switch {
+	case strings.Contains(p, "count"):
+		var b strings.Builder
+		b.WriteString("Counting run for scroll tracing.\n\n")
+		for i := 0; i < 400; i++ {
+			fmt.Fprintf(&b, "w%03d ", i)
+			if i%20 == 19 {
+				b.WriteString("\n\n")
+			}
+		}
+		b.WriteString("\nDone counting.")
+		return b.String(), 0, -1
+	case strings.Contains(p, "wide"):
+		var b strings.Builder
+		b.WriteString("Wide-content stress test coming up.\n\nFirst an unbreakable inline token:\n\n")
+		b.WriteString(strings.Repeat("Wxyz0123", 30))
+		b.WriteString("\n\nNow a wide code block:\n\n```text\n")
+		for i := 0; i < 8; i++ {
+			fmt.Fprintf(&b, "row-%d: %s END\n", i, strings.Repeat("column-data ", 24))
+		}
+		b.WriteString("```\n\nAnd a wide table:\n\n")
+		b.WriteString("| alpha | bravo | charlie | delta | echo | foxtrot | golf | hotel |\n")
+		b.WriteString("|---|---|---|---|---|---|---|---|\n")
+		for i := 0; i < 4; i++ {
+			b.WriteString("| some longer cell content | more cell content here | and again for width | keeps going wider | even wider now | almost there | nearly done | last column |\n")
+		}
+		b.WriteString("\nIf the margins held through all of that, the clamp works.")
+		return b.String(), 24, -1
+	case strings.Contains(p, "essay"):
+		var b strings.Builder
+		b.WriteString("# A Long Essay for Scroll Testing\n\n")
+		for s := 1; s <= 8; s++ {
+			fmt.Fprintf(&b, "## Section %d\n\n", s)
+			for para := 0; para < 2; para++ {
+				fmt.Fprintf(&b, "Paragraph %d.%d — this is deliberately verbose filler that wraps across several lines so each section contributes real height to the transcript, letting the follow-then-park behavior engage well before the stream finishes. ", s, para)
+				b.WriteString("The quick brown fox jumps over the lazy dog while the scroll anchor holds the bottom edge pinned.\n\n")
+			}
+			if s%2 == 0 {
+				fmt.Fprintf(&b, "```go\nfunc section%d() int {\n    total := 0\n    for i := 0; i < %d; i++ {\n        total += i\n    }\n    return total\n}\n```\n\n", s, s*10)
+			}
+		}
+		b.WriteString("That concludes the essay.")
+		return b.String(), 24, -1
+	case strings.Contains(p, "filler"):
+		var b strings.Builder
+		n := len(prompt) // cheap deterministic variance per prompt
+		fmt.Fprintf(&b, "Reply for %q.\n\n", prompt)
+		for para := 0; para <= n%3; para++ {
+			b.WriteString("A short paragraph of settled history so the seeded conversation has believable, varied-height rows for scroll testing.\n\n")
+		}
+		if n%3 == 0 {
+			b.WriteString("```sh\necho seeded\n```\n")
+		} else if n%5 == 0 {
+			b.WriteString("| k | v |\n|---|---|\n| a | 1 |\n| b | 2 |\n")
+		} else if n%7 == 0 {
+			b.WriteString("> A blockquote for height variance.\n")
+		}
+		return b.String(), 512, time.Millisecond
+	default:
+		return canned, 24, -1
+	}
+}
+
+// lastUserContent digs the newest user message's text out of an
+// OpenAI-compatible chat-completions request body. String content
+// only — the demo seed never sends multi-part payloads.
+func lastUserContent(body []byte) string {
+	var req struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return ""
+	}
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role != "user" {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(req.Messages[i].Content, &s); err == nil {
+			return s
+		}
+	}
+	return ""
+}
+
 func main() {
 	addr := flag.String("addr", "http://127.0.0.1:18080", "psmithd base URL")
 	user := flag.String("u", "admin", "username")
 	pass := flag.String("p", "", "password")
 	llmPort := flag.Int("llm-port", 19090, "port for the embedded fake LLM")
 	keep := flag.Bool("keep", false, "stay alive serving the fake LLM after seeding")
+	chunkDelay := flag.Duration("chunk-delay", 20*time.Millisecond, "delay between streamed chunks (scroll-debug prompts honor this; filler streams fast regardless)")
+	xl := flag.Int("xl", 0, "also seed a long conversation with this many turns (scroll testing)")
 	flag.Parse()
 
 	// --- Embedded fake OpenAI-compatible streaming endpoint ---
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "text/event-stream")
 		fl, _ := w.(http.Flusher)
 		emit := func(delta string) {
@@ -68,15 +180,27 @@ func main() {
 			}
 		}
 		// Stream in small pieces so clients exercise their live path.
-		text := canned
+		text, chunkSize, delay := pickResponse(lastUserContent(body))
+		if delay < 0 {
+			delay = *chunkDelay
+		}
 		for len(text) > 0 {
-			n := 24
+			n := chunkSize
+			if n == 0 {
+				// Word-per-chunk: split at the next space so each
+				// emitted delta is one readable token.
+				if idx := strings.IndexByte(text[1:], ' '); idx >= 0 {
+					n = idx + 2
+				} else {
+					n = len(text)
+				}
+			}
 			if n > len(text) {
 				n = len(text)
 			}
 			emit(text[:n])
 			text = text[n:]
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(delay)
 		}
 		done := map[string]any{
 			"id": "demo", "object": "chat.completion.chunk",
@@ -200,6 +324,41 @@ func main() {
 			time.Sleep(300 * time.Millisecond)
 		}
 		log.Printf("seeded conversation %q", p.title)
+	}
+
+	// --- Optional long conversation for scroll testing ---
+	if *xl > 0 {
+		title := fmt.Sprintf("Scroll XL — %d turns", *xl)
+		conv, err := convc.CreateConversation(ctx, connect.NewRequest(&psmithv1.CreateConversationRequest{
+			ProfileId: profID, Title: &title,
+		}))
+		if err != nil {
+			log.Fatalf("create xl conversation: %v", err)
+		}
+		streamc := psmithv1connect.NewStreamsServiceClient(hc, *addr, auth)
+		for i := 0; i < *xl; i++ {
+			ask := fmt.Sprintf("filler %d — %s", i, strings.Repeat("padding ", i%9))
+			send, err := convc.SendMessage(ctx, connect.NewRequest(&psmithv1.SendMessageRequest{
+				ConversationId: conv.Msg.Conversation.Id,
+				Content:        ask,
+			}))
+			if err != nil {
+				log.Fatalf("xl send %d: %v", i, err)
+			}
+			runID := send.Msg.StreamRun.Id
+			deadline := time.Now().Add(30 * time.Second)
+			for time.Now().Before(deadline) {
+				got, err := streamc.GetStreamRun(ctx, connect.NewRequest(&psmithv1.GetStreamRunRequest{StreamRunId: runID}))
+				if err == nil && got.Msg.StreamRun.Status != psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING {
+					break
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			if (i+1)%20 == 0 {
+				log.Printf("xl: %d/%d turns", i+1, *xl)
+			}
+		}
+		log.Printf("seeded %q", title)
 	}
 
 	log.Printf("done — provider, model, default profile, and %d conversations seeded", len(prompts))

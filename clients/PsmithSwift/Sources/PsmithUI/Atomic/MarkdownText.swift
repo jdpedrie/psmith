@@ -211,4 +211,19 @@ extension MarkdownUI.Theme {
                     .foregroundStyle(.secondary)
             }
         }
+        .table { configuration in
+            // Same containment strategy as codeBlock: tables are the
+            // other block class whose minimum width is content-driven
+            // (MarkdownUI lays them out as a Grid — the column minima
+            // can exceed the chat pane, and a mid-transition layout
+            // pass with a loose width proposal renders the grid at its
+            // ideal width, flush past both screen edges). A horizontal
+            // scroller gives wide tables their natural width inside a
+            // viewport-bounded strip: readable cells, and the chat
+            // pane can never be dragged sideways.
+            ScrollView(.horizontal, showsIndicators: false) {
+                configuration.label
+            }
+            .markdownMargin(top: .em(0.5), bottom: .em(0.5))
+        }
 }
