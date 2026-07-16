@@ -289,12 +289,17 @@ private struct ConversationBody: View {
     /// pathological geometry can't blank the pane.
     @State private var entrySettled = false
 
-    /// Whether the sticky scroll position has been upgraded from the
-    /// cold-entry `Edge.bottom` seek (which re-solves center-x; see
-    /// seekBottom) to an x-honest id pin. Flips once, when the
-    /// geometry handler first observes bottom-settled with the
-    /// message array final.
-    @State private var stickyUpgraded = false
+    /// True while the ScrollPosition binding holds an explicit
+    /// position (entry seek, past-bottom clamp, pill seek, park pin).
+    /// A held position keeps re-solving on every content change — and
+    /// the `Edge.bottom` flavor re-solves center-x against estimated
+    /// widths, drifting the transcript 16pt left. The follow behavior
+    /// itself is fully covered by the sizeChanges anchor, so the
+    /// geometry handler DROPS any live position (replaces the binding)
+    /// the next time it observes settled-at-bottom-while-following:
+    /// from then on nothing re-solves x at all. Park pins are exempt
+    /// (autoFollow is false while parked, so the drop never fires).
+    @State private var stickyLive = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -780,11 +785,31 @@ private struct ConversationBody: View {
 
                 // First settle → lift the entry curtain. distance<8
                 // means the bottom seek has landed on real (realized)
-                // content, so the frame we reveal is the correct one.
-                if !entrySettled, distance < 8, m.contentHeight > 0 {
+                // content, and the x check means the entry seek's
+                // center-x re-solves haven't left the content shifted
+                // — so the frame we reveal is the correct one both
+                // vertically AND horizontally. (Revealing on y alone
+                // showed drifted margins for ~1s until the position
+                // machinery caught up — user-reported on device.)
+                if !entrySettled, distance < 8, m.contentHeight > 0,
+                   abs(m.offsetX) <= 0.5 {
                     withAnimation(.easeIn(duration: 0.12)) {
                         entrySettled = true
                     }
+                }
+
+                // Settled at the bottom while following: the anchor
+                // owns the follow from here, so any live explicit
+                // position is pure liability (its re-solves are the
+                // x-drift engine). Drop it. Park pins never hit this
+                // (autoFollow is false while parked); the pill or
+                // clamp may re-install one later and it gets dropped
+                // again at the next settle.
+                if stickyLive, entrySettled, autoFollow, distance < 8,
+                   !scrollPosition.isPositionedByUser {
+                    stickyLive = false
+                    scrollPosition = ScrollPosition()
+                    scrollLog.notice("sticky dropped; anchor owns follow")
                 }
 
                 // Silent staged expansion: the moment we observe the
@@ -855,6 +880,7 @@ private struct ConversationBody: View {
                 if parkedMessageID != nil, scrollPosition.isPositionedByUser {
                     scrollLog.notice("park released: user took over")
                     parkedMessageID = nil
+                    stickyLive = false
                     scrollPosition = ScrollPosition()
                 }
 
@@ -946,16 +972,18 @@ private struct ConversationBody: View {
                     // sizeChanges anchor ignores) is covered by the
                     // past-bottom clamp in the geometry handler.
                     //
-                    // The sticky position DOES need re-targeting: an
-                    // id pin left on the pre-send last message would
-                    // hold that row's bottom pinned while the anchor
-                    // pulls toward the growing content below — two
-                    // solvers fighting one viewport. The pending row
-                    // mounts in this same update, so the pin resolves.
-                    var ts = Transaction()
-                    ts.disablesAnimations = true
-                    withTransaction(ts) {
-                        scrollPosition.scrollTo(id: "__pending__", anchor: UnitPoint(x: 0, y: 1))
+                    // If a pill or clamp seek left a live position
+                    // (an id pin on what is about to stop being the
+                    // last row), re-target it to the pending row so
+                    // it can't hold the viewport against the anchor.
+                    // Usually stickyLive is false here (dropped at
+                    // the last settle) and the anchor alone drives.
+                    if stickyLive {
+                        var ts = Transaction()
+                        ts.disablesAnimations = true
+                        withTransaction(ts) {
+                            scrollPosition.scrollTo(id: "__pending__", anchor: UnitPoint(x: 0, y: 1))
+                        }
                     }
                 }
             }
@@ -964,33 +992,20 @@ private struct ConversationBody: View {
                     scrollLog.notice("stream start: follow on")
                     autoFollow = true
                     streamingRowHeight = 0
-                    stickyUpgraded = true
-                    // Hand the sticky pin from __pending__ to the
-                    // streaming row so it tracks the same target the
-                    // anchor is following (see the send handler for
-                    // why the pin must move with the bottom-most row).
-                    var tp = Transaction()
-                    tp.disablesAnimations = true
-                    withTransaction(tp) {
-                        scrollPosition.scrollTo(id: "__streaming__", anchor: UnitPoint(x: 0, y: 1))
+                    // Hand any live pin from __pending__ to the
+                    // streaming row so it can't hold the viewport
+                    // against the anchor (see the send handler).
+                    // Usually there is no live position and the
+                    // anchor alone follows the stream.
+                    if stickyLive {
+                        var tp = Transaction()
+                        tp.disablesAnimations = true
+                        withTransaction(tp) {
+                            scrollPosition.scrollTo(id: "__streaming__", anchor: UnitPoint(x: 0, y: 1))
+                        }
                     }
                 } else if wasStreaming && !isStreaming {
                     scrollLog.notice("stream terminal (follow=\(autoFollow, privacy: .public) parked=\(parkedMessageID != nil, privacy: .public))")
-                    if autoFollow, parkedMessageID == nil {
-                        // Following through terminal: the streaming
-                        // row unmounts, taking the sticky pin's
-                        // target with it. Re-pin the settled last
-                        // message once the reload lands (same 300ms
-                        // settle window as the parked re-assert).
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(300))
-                            guard autoFollow, parkedMessageID == nil,
-                                  !model.isStreaming else { return }
-                            var tt = Transaction()
-                            tt.disablesAnimations = true
-                            withTransaction(tt) { seekBottom() }
-                        }
-                    }
                     // Terminal edge: reset the streaming-row
                     // bookkeeping and NOTHING ELSE about the layout.
                     // The mounted set stays exactly as it was — the
@@ -1120,31 +1135,6 @@ private struct ConversationBody: View {
                     mountedFromIndex = 0
                 }
             }
-            // Sticky x-honest upgrade. The cold-entry edge seek's
-            // re-pins solve center-x (the margin-shift engine); this
-            // waits until the message array is FINAL (load done +
-            // backfill complete) and the entry settled, then swaps in
-            // the id pin. A polling task, not geometry-driven — once
-            // the content is static there are no more geometry ticks
-            // to piggyback on (that gap is exactly where the previous
-            // attempt silently never ran). Bails if the user or a
-            // stream takes over first: both install their own
-            // x-honest positions.
-            .task {
-                for _ in 0..<100 {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    if stickyUpgraded { return }
-                    if scrollPosition.isPositionedByUser || model.isStreaming { return }
-                    if !model.loading, mountedFromIndex == 0, !backfilling, entrySettled {
-                        stickyUpgraded = true
-                        scrollLog.notice("sticky upgraded to id pin")
-                        var t = Transaction()
-                        t.disablesAnimations = true
-                        withTransaction(t) { seekBottom() }
-                        return
-                    }
-                }
-            }
     }
 
     /// Bottom seek that keeps the position solver's x anchored at the
@@ -1163,6 +1153,7 @@ private struct ConversationBody: View {
     /// seek; the post-settle upgrade in the geometry handler replaces
     /// it as soon as the id becomes trustworthy.
     private func seekBottom() {
+        stickyLive = true
         if model.isStreaming || model.isCompacting || !model.streamingText.isEmpty {
             scrollPosition.scrollTo(id: "__streaming__", anchor: UnitPoint(x: 0, y: 1))
         } else if model.pendingUserText != nil {
@@ -1238,6 +1229,7 @@ private struct ConversationBody: View {
     /// viewport off (its point is not a raw content offset).
     private func disengageFollow() {
         autoFollow = false
+        stickyLive = true
         var t = Transaction()
         t.disablesAnimations = true
         withTransaction(t) {
