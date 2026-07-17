@@ -851,6 +851,30 @@ private struct ConversationBody: View {
                     return
                 }
 
+                // Bottom-seek convergence — the mirror of the clamp
+                // above, for landing SHORT. A seek issued from far
+                // above (the pill, a send while scrolled up) solves
+                // its target against estimated coordinates; at
+                // hundreds-of-heavy-messages scale it can land well
+                // shy of the real bottom with nothing to finish the
+                // job (the "scroll to bottom doesn't work" report).
+                // While following, idle, and visibly short, re-seek:
+                // each pass realizes rows near the landing zone and
+                // refines the solve until the bottom is reached.
+                // Gated on entrySettled so cold-entry mechanics keep
+                // their own seek untouched.
+                if autoFollow, entrySettled, distance > 64,
+                   scrollPhase == .idle,
+                   !scrollPosition.isPositionedByUser {
+                    scrollLog.notice("bottom convergence re-seek (distance=\(Int(distance), privacy: .public))")
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
+                        seekBottom()
+                    }
+                    return
+                }
+
                 // Disengage follow ONLY for user-driven motion.
                 // `ScrollPosition.isPositionedByUser` tracks position
                 // provenance: true after a finger drag, false after
@@ -897,18 +921,23 @@ private struct ConversationBody: View {
             // Pill is always-rendered with opacity, not conditional view
             // insertion, so SwiftUI doesn't tear down and rebuild the
             // overlay subtree per state change. Hit testing is gated so
-            // a hidden pill can't intercept taps. Anchored at the
-            // BOTTOM, just above the composer: the pill shows exactly
-            // when the newest content is below the viewport, so the
-            // bottom edge is where the eye already is — and the park
-            // pins the just-sent message at the viewport TOP, which a
-            // top-anchored pill sat directly on top of (video-verified
-            // overlap during every parked stream).
-            .overlay(alignment: .bottom) {
+            // a hidden pill can't intercept taps. Anchored at the TOP
+            // (user preference — it floats over the parked message
+            // when one is pinned there, and that's the accepted
+            // trade).
+            .overlay(alignment: .top) {
                 Button {
                     Haptics.impact(.light)
                     autoFollow = true
-                    withAnimation(.easeInOut(duration: 0.22)) {
+                    // Non-animated: from hundreds of messages up, an
+                    // animated seek tweens across estimated
+                    // coordinates for no benefit. The instant jump
+                    // lands, then the convergence clamp in the
+                    // geometry handler finishes the job if the
+                    // estimate-solved target fell short.
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
                         seekBottom()
                     }
                 } label: {

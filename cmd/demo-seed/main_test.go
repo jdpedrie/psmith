@@ -16,6 +16,7 @@ func TestPickResponseRoutesByKeyword(t *testing.T) {
 		{"please count to 400", "w000", 0, -1},
 		{"show me wide output", "Wxyz0123", 24, -1},
 		{"show me bullets", "Latency versus throughput", 24, -1},
+		{"heavy filler 12", "Paragraph", 2048, time.Millisecond},
 		{"write me a long essay", "Section 8", 24, -1},
 		{"filler 12 — padding", "settled history", 512, time.Millisecond},
 		{"anything else", "Psmith keeps", 24, -1},

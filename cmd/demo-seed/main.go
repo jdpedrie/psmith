@@ -92,6 +92,29 @@ func pickResponse(prompt string) (text string, chunkSize int, delayOverride time
 		}
 		b.WriteString("\nIf the margins held through all of that, the clamp works.")
 		return b.String(), 24, -1
+	case strings.Contains(p, "heavy"):
+		// ~800 words of varied markdown per reply — the user's real
+		// conversation scale (200 messages × ~800 words) where
+		// LazyVStack estimate churn becomes user-visible. Streams
+		// fast: these exist to be SEEDED in bulk.
+		var b strings.Builder
+		n := len(prompt)
+		fmt.Fprintf(&b, "## Reply %d\n\n", n)
+		for para := 0; para < 8; para++ {
+			fmt.Fprintf(&b, "Paragraph %d.%d — ", n, para)
+			for s := 0; s < 6; s++ {
+				b.WriteString("the quick brown fox jumps over the lazy dog while the estimate machinery realizes rows and refines the content height it previously guessed at. ")
+			}
+			b.WriteString("\n\n")
+		}
+		if n%3 == 0 {
+			b.WriteString("```go\nfunc measure(rows []Row) int {\n    total := 0\n    for _, r := range rows {\n        total += r.height\n    }\n    return total\n}\n```\n\n")
+		}
+		if n%4 == 0 {
+			b.WriteString("- **A bulleted point** that wraps across a few lines to vary the block structure between replies in the seeded conversation\n- Another item with `inline code` for measurement variety\n\n")
+		}
+		b.WriteString("That is the end of this reply.")
+		return b.String(), 2048, time.Millisecond
 	case strings.Contains(p, "bullet"):
 		// Mimics real model output shape: long list items with bold
 		// leads, inline code, links, and source-wrapped continuation
@@ -173,6 +196,7 @@ func main() {
 	keep := flag.Bool("keep", false, "stay alive serving the fake LLM after seeding")
 	chunkDelay := flag.Duration("chunk-delay", 20*time.Millisecond, "delay between streamed chunks (scroll-debug prompts honor this; filler streams fast regardless)")
 	xl := flag.Int("xl", 0, "also seed a long conversation with this many turns (scroll testing)")
+	heavy := flag.Int("heavy", 0, "also seed a conversation with this many ~800-word replies (real-scale scroll testing)")
 	llmOnly := flag.Bool("llm-only", false, "serve the fake LLM only; skip seeding (for re-serving an already-seeded environment)")
 	flag.Parse()
 
@@ -266,44 +290,81 @@ func main() {
 		"base_url": "http://" + llmAddr + "/v1",
 		"api_key":  "demo-key",
 	})
+	var provID string
+	var reusing bool
 	prov, err := provc.CreateUserModelProvider(ctx, connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
 		Type: "openai-compatible", Label: "Demo LLM", Config: cfg,
 	}))
 	if err != nil {
-		log.Fatalf("create provider: %v", err)
+		// Repeat runs against the same scratch server hit the unique
+		// (user, type, label) constraint — reuse the existing seeded
+		// provider so `-heavy` / `-xl` can extend an environment
+		// without wiping it.
+		list, lerr := provc.ListUserModelProviders(ctx, connect.NewRequest(&psmithv1.ListUserModelProvidersRequest{}))
+		if lerr != nil {
+			log.Fatalf("create provider: %v (list fallback failed: %v)", err, lerr)
+		}
+		for _, p := range list.Msg.Providers {
+			if p.Label == "Demo LLM" {
+				provID = p.Id
+				reusing = true
+			}
+		}
+		if provID == "" {
+			log.Fatalf("create provider: %v", err)
+		}
+		log.Printf("reusing existing Demo LLM provider")
+	} else {
+		provID = prov.Msg.Provider.Id
 	}
-	provID := prov.Msg.Provider.Id
 	ctxWindow := int32(128_000)
 	maxOut := int32(8_192)
-	model, err := provc.AddManualModel(ctx, connect.NewRequest(&psmithv1.AddManualModelRequest{
+	if _, err := provc.AddManualModel(ctx, connect.NewRequest(&psmithv1.AddManualModelRequest{
 		UserModelProviderId: provID,
 		ModelId:             "demo-model-1",
 		DisplayName:         "Demo Model",
 		ContextWindow:       &ctxWindow,
 		MaxOutputTokens:     &maxOut,
 		Modalities:          []string{"text"},
-	}))
-	if err != nil {
+	})); err != nil && !reusing {
 		log.Fatalf("add model: %v", err)
 	}
-	_ = model
 
 	// --- Profile (default, with welcome) ---
 	system := "You are a concise, helpful assistant used for demo screenshots."
 	welcome := "Welcome! I'm the demo profile — ask me anything and I'll stream back a canned but pretty answer."
-	profile, err := profc.CreateProfile(ctx, connect.NewRequest(&psmithv1.CreateProfileRequest{
-		Name:           "Demo Assistant",
-		SystemMessage:  &system,
-		WelcomeMessage: &welcome,
-		DefaultSettings: &psmithv1.ProfileDefaults{
-			DefaultProviderId: &provID,
-			DefaultModelId:    func() *string { s := "demo-model-1"; return &s }(),
-		},
-	}))
-	if err != nil {
-		log.Fatalf("create profile: %v", err)
+	var profID string
+	if reusing {
+		// Profile names aren't unique server-side; on reuse runs,
+		// find the existing Demo Assistant instead of stacking
+		// duplicates.
+		plist, perr := profc.ListProfiles(ctx, connect.NewRequest(&psmithv1.ListProfilesRequest{}))
+		if perr == nil {
+			for _, p := range plist.Msg.Profiles {
+				if p.Name == "Demo Assistant" {
+					profID = p.Id
+				}
+			}
+		}
+		if profID != "" {
+			log.Printf("reusing existing Demo Assistant profile")
+		}
 	}
-	profID := profile.Msg.Profile.Id
+	if profID == "" {
+		profile, err := profc.CreateProfile(ctx, connect.NewRequest(&psmithv1.CreateProfileRequest{
+			Name:           "Demo Assistant",
+			SystemMessage:  &system,
+			WelcomeMessage: &welcome,
+			DefaultSettings: &psmithv1.ProfileDefaults{
+				DefaultProviderId: &provID,
+				DefaultModelId:    func() *string { s := "demo-model-1"; return &s }(),
+			},
+		}))
+		if err != nil {
+			log.Fatalf("create profile: %v", err)
+		}
+		profID = profile.Msg.Profile.Id
+	}
 	if _, err := profc.SetDefaultProfile(ctx, connect.NewRequest(&psmithv1.SetDefaultProfileRequest{
 		ProfileId: profID,
 	})); err != nil {
@@ -311,10 +372,15 @@ func main() {
 	}
 
 	// --- Conversations with real streamed turns ---
-	prompts := []struct{ title, ask string }{
-		{"Architecture tour", "Give me a quick tour of how this app works."},
-		{"Branching demo", "How do conversation forks work?"},
-		{"Markdown showcase", "Show me some formatted output."},
+	// Skipped on reuse runs: they exist from the first seeding, and
+	// re-seeding them just clutters the sidebar.
+	prompts := []struct{ title, ask string }{}
+	if !reusing {
+		prompts = []struct{ title, ask string }{
+			{"Architecture tour", "Give me a quick tour of how this app works."},
+			{"Branching demo", "How do conversation forks work?"},
+			{"Markdown showcase", "Show me some formatted output."},
+		}
 	}
 	for _, p := range prompts {
 		title := p.title
@@ -343,6 +409,41 @@ func main() {
 			time.Sleep(300 * time.Millisecond)
 		}
 		log.Printf("seeded conversation %q", p.title)
+	}
+
+	// --- Optional heavy conversation: real-scale rows ---
+	if *heavy > 0 {
+		title := fmt.Sprintf("Scroll Heavy — %d × 800w", *heavy)
+		conv, err := convc.CreateConversation(ctx, connect.NewRequest(&psmithv1.CreateConversationRequest{
+			ProfileId: profID, Title: &title,
+		}))
+		if err != nil {
+			log.Fatalf("create heavy conversation: %v", err)
+		}
+		streamc := psmithv1connect.NewStreamsServiceClient(hc, *addr, auth)
+		for i := 0; i < *heavy; i++ {
+			ask := fmt.Sprintf("heavy filler %d — %s", i, strings.Repeat("q", i%7))
+			send, err := convc.SendMessage(ctx, connect.NewRequest(&psmithv1.SendMessageRequest{
+				ConversationId: conv.Msg.Conversation.Id,
+				Content:        ask,
+			}))
+			if err != nil {
+				log.Fatalf("heavy send %d: %v", i, err)
+			}
+			runID := send.Msg.StreamRun.Id
+			deadline := time.Now().Add(60 * time.Second)
+			for time.Now().Before(deadline) {
+				got, err := streamc.GetStreamRun(ctx, connect.NewRequest(&psmithv1.GetStreamRunRequest{StreamRunId: runID}))
+				if err == nil && got.Msg.StreamRun.Status != psmithv1.StreamRunStatus_STREAM_RUN_STATUS_RUNNING {
+					break
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			if (i+1)%20 == 0 {
+				log.Printf("heavy: %d/%d turns", i+1, *heavy)
+			}
+		}
+		log.Printf("seeded %q", title)
 	}
 
 	// --- Optional long conversation for scroll testing ---
