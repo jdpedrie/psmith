@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 @testable import PsmithMac
 import PsmithKit
+import PsmithUI
 import SnapshotHarness
 
 /// ConversationView snapshots. Renders the internal `ConversationBody`
@@ -95,6 +96,68 @@ struct ConversationViewSnapshots {
             ]
         )
         assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
+    func longBullets() {
+        // Pins multi-line wrap inside markdown list items. Bullets
+        // whose text wraps past ~2 lines were truncating with an
+        // ellipsis on Mac (user-reported) — a height mismatch, not a
+        // lineLimit; this snapshot fails if any bullet shows "…"
+        // instead of its full wrapped text.
+        let bullets = """
+        Here are the tradeoffs to weigh:
+
+        - **Latency versus throughput** — batching requests amortizes connection setup and lets the server pipeline work, but every request in the batch waits for the slowest member, so p99 latency degrades exactly when the queue is deepest and users notice it most
+        - **The `staged backfill` approach** keeps the viewport anchored while history mounts in small batches, which bounds the estimate error any single re-solve can observe, at the cost of a short window where scrolling up hits the mounted boundary
+        - Short one for contrast
+        - **Cache locality** matters more than algorithmic
+          complexity for these row sizes, because the whole working set
+          fits in L2 and the branch predictor learns the access pattern
+          within a few iterations of the inner loop
+        - A final long item written without any inline styling at all so we can tell whether the truncation correlates with formatting spans or applies to any list item that wraps past the second line of rendered text
+        """
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "list the tradeoffs"),
+                SnapshotFixtures.assistantMessage(content: bullets),
+            ]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
+    func longBulletsScaled110() {
+        // Real-model content shapes at the user's scale (1.1),
+        // mirroring the APP's exact scaled environment: PsmithMacApp
+        // injects BOTH `\.fontScale` AND a root `\.font` when scale
+        // ≠ 1.0. Bold leads, inline code, and source-wrapped
+        // continuation lines — the shapes real assistant bullets
+        // carry.
+        let bullets = """
+        Here are the tradeoffs to weigh:
+
+        - **Latency versus throughput** — batching requests amortizes connection setup and lets the server pipeline work, but every request in the batch waits for the slowest member, so p99 latency degrades exactly when the queue is deepest and users notice it most
+        - **The `staged backfill` approach** keeps the viewport anchored while history mounts in small batches, which bounds the estimate error any single re-solve can observe, at the cost of a short window where scrolling up hits the mounted boundary
+        - Short one for contrast
+        - **Cache locality** matters more than algorithmic
+          complexity for these row sizes, because the whole working set
+          fits in L2 and the branch predictor learns the access pattern
+          within a few iterations of the inner loop
+        - A final long item written without any inline styling at all so we can tell whether the truncation correlates with formatting spans or applies to any list item that wraps past the second line of rendered text
+        """
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "list the tradeoffs"),
+                SnapshotFixtures.assistantMessage(content: bullets),
+            ]
+        )
+        assertViewSnapshots(
+            body(for: model)
+                .environment(\.fontScale, 1.1)
+                .environment(\.font, .system(size: baseSize(for: .body) * 1.1)),
+            sizes: columnSizes
+        )
     }
 
     @Test

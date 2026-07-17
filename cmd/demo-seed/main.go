@@ -92,6 +92,19 @@ func pickResponse(prompt string) (text string, chunkSize int, delayOverride time
 		}
 		b.WriteString("\nIf the margins held through all of that, the clamp works.")
 		return b.String(), 24, -1
+	case strings.Contains(p, "bullet"):
+		// Mimics real model output shape: long list items with bold
+		// leads, inline code, links, and source-wrapped continuation
+		// lines — the Mac bullet-truncation report class.
+		var b strings.Builder
+		b.WriteString("Here are the tradeoffs to weigh:\n\n")
+		b.WriteString("- **Latency versus throughput** — batching requests amortizes connection setup and lets the server pipeline work, but every request in the batch waits for the slowest member, so p99 latency degrades exactly when the queue is deepest and users notice it most\n")
+		b.WriteString("- **The `staged backfill` approach** keeps the viewport anchored while history mounts in small batches, which bounds the estimate error any single re-solve can observe, at the cost of a short window where scrolling up hits the mounted boundary before the next batch lands\n")
+		b.WriteString("- Short one for contrast\n")
+		b.WriteString("- **Cache locality** matters more than algorithmic\n  complexity for these row sizes, because the whole working set\n  fits in L2 and the branch predictor learns the access pattern\n  within a few iterations of the inner loop\n")
+		b.WriteString("- A final long item written without any inline styling at all so we can tell whether the truncation correlates with formatting spans or applies to any list item that wraps past the second line of rendered text\n")
+		b.WriteString("\nThat's the full list.")
+		return b.String(), 24, -1
 	case strings.Contains(p, "essay"):
 		var b strings.Builder
 		b.WriteString("# A Long Essay for Scroll Testing\n\n")
@@ -160,6 +173,7 @@ func main() {
 	keep := flag.Bool("keep", false, "stay alive serving the fake LLM after seeding")
 	chunkDelay := flag.Duration("chunk-delay", 20*time.Millisecond, "delay between streamed chunks (scroll-debug prompts honor this; filler streams fast regardless)")
 	xl := flag.Int("xl", 0, "also seed a long conversation with this many turns (scroll testing)")
+	llmOnly := flag.Bool("llm-only", false, "serve the fake LLM only; skip seeding (for re-serving an already-seeded environment)")
 	flag.Parse()
 
 	// --- Embedded fake OpenAI-compatible streaming endpoint ---
@@ -220,6 +234,11 @@ func main() {
 			log.Fatalf("fake llm: %v", err)
 		}
 	}()
+
+	if *llmOnly {
+		log.Printf("llm-only mode: serving the fake LLM, no seeding (ctrl-c to stop)")
+		select {}
+	}
 
 	ctx := context.Background()
 	hc := http.DefaultClient

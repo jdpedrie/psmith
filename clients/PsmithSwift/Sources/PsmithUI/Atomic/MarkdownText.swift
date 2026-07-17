@@ -46,7 +46,16 @@ public struct MarkdownText: View {
             // spans, code blocks) cascade from it. At scale 1.0 this
             // is exactly the library default, byte-identical rendering.
             .markdownTextStyle {
-                FontSize(FontProperties.defaultSize * fontScale)
+                // Rounded to an integral point size: fractional bases
+                // (13 × 1.1 = 14.3pt) made multi-line list items
+                // MEASURE shorter than they RENDER on macOS — across a
+                // long bulleted answer the drift accumulated to a full
+                // line and the bubble clipped the tail mid-glyph
+                // (snapshot-verified at scale 1.1, narrow pane — the
+                // Mac "bullets truncate" report). Integral sizes keep
+                // measurement and rendering in agreement; the visual
+                // cost is the scale snapping to the nearest point.
+                FontSize((FontProperties.defaultSize * fontScale).rounded())
             }
             .textSelection(.enabled)
     }
