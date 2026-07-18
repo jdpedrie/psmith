@@ -72,6 +72,9 @@ const (
 	// ConversationsServiceUpdateContextProcedure is the fully-qualified name of the
 	// ConversationsService's UpdateContext RPC.
 	ConversationsServiceUpdateContextProcedure = "/psmith.v1.ConversationsService/UpdateContext"
+	// ConversationsServiceDeleteContextProcedure is the fully-qualified name of the
+	// ConversationsService's DeleteContext RPC.
+	ConversationsServiceDeleteContextProcedure = "/psmith.v1.ConversationsService/DeleteContext"
 	// ConversationsServiceGetConversationPluginsProcedure is the fully-qualified name of the
 	// ConversationsService's GetConversationPlugins RPC.
 	ConversationsServiceGetConversationPluginsProcedure = "/psmith.v1.ConversationsService/GetConversationPlugins"
@@ -141,6 +144,13 @@ type ConversationsServiceClient interface {
 	// Edit a context's metadata (currently just title). Used to override the
 	// auto-generated title or set one when auto-titles aren't configured.
 	UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error)
+	// DeleteContext permanently removes a context and every message in it.
+	// The ACTIVE context cannot be deleted (FailedPrecondition) — which also
+	// protects the last remaining context, since the active one always
+	// exists. Child contexts are re-parented to the deleted context's
+	// parent so compaction lineage stays connected. The client is
+	// responsible for confirming the destructive action.
+	DeleteContext(context.Context, *connect.Request[v1.DeleteContextRequest]) (*connect.Response[v1.DeleteContextResponse], error)
 	// Per-conversation plugin overrides. Merged on top of the
 	// profile-chain pipeline at resolve time. Get returns the LITERAL
 	// stored rows for this conversation (not the merged view); the
@@ -289,6 +299,12 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("UpdateContext")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteContext: connect.NewClient[v1.DeleteContextRequest, v1.DeleteContextResponse](
+			httpClient,
+			baseURL+ConversationsServiceDeleteContextProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("DeleteContext")),
+			connect.WithClientOptions(opts...),
+		),
 		getConversationPlugins: connect.NewClient[v1.GetConversationPluginsRequest, v1.GetConversationPluginsResponse](
 			httpClient,
 			baseURL+ConversationsServiceGetConversationPluginsProcedure,
@@ -379,6 +395,7 @@ type conversationsServiceClient struct {
 	activateContext               *connect.Client[v1.ActivateContextRequest, v1.ActivateContextResponse]
 	setCurrentLeaf                *connect.Client[v1.SetCurrentLeafRequest, v1.SetCurrentLeafResponse]
 	updateContext                 *connect.Client[v1.UpdateContextRequest, v1.UpdateContextResponse]
+	deleteContext                 *connect.Client[v1.DeleteContextRequest, v1.DeleteContextResponse]
 	getConversationPlugins        *connect.Client[v1.GetConversationPluginsRequest, v1.GetConversationPluginsResponse]
 	setConversationPlugins        *connect.Client[v1.SetConversationPluginsRequest, v1.SetConversationPluginsResponse]
 	resolveConversationPipeline   *connect.Client[v1.ResolveConversationPipelineRequest, v1.ResolveConversationPipelineResponse]
@@ -456,6 +473,11 @@ func (c *conversationsServiceClient) SetCurrentLeaf(ctx context.Context, req *co
 // UpdateContext calls psmith.v1.ConversationsService.UpdateContext.
 func (c *conversationsServiceClient) UpdateContext(ctx context.Context, req *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error) {
 	return c.updateContext.CallUnary(ctx, req)
+}
+
+// DeleteContext calls psmith.v1.ConversationsService.DeleteContext.
+func (c *conversationsServiceClient) DeleteContext(ctx context.Context, req *connect.Request[v1.DeleteContextRequest]) (*connect.Response[v1.DeleteContextResponse], error) {
+	return c.deleteContext.CallUnary(ctx, req)
 }
 
 // GetConversationPlugins calls psmith.v1.ConversationsService.GetConversationPlugins.
@@ -549,6 +571,13 @@ type ConversationsServiceHandler interface {
 	// Edit a context's metadata (currently just title). Used to override the
 	// auto-generated title or set one when auto-titles aren't configured.
 	UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error)
+	// DeleteContext permanently removes a context and every message in it.
+	// The ACTIVE context cannot be deleted (FailedPrecondition) — which also
+	// protects the last remaining context, since the active one always
+	// exists. Child contexts are re-parented to the deleted context's
+	// parent so compaction lineage stays connected. The client is
+	// responsible for confirming the destructive action.
+	DeleteContext(context.Context, *connect.Request[v1.DeleteContextRequest]) (*connect.Response[v1.DeleteContextResponse], error)
 	// Per-conversation plugin overrides. Merged on top of the
 	// profile-chain pipeline at resolve time. Get returns the LITERAL
 	// stored rows for this conversation (not the merged view); the
@@ -693,6 +722,12 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("UpdateContext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServiceDeleteContextHandler := connect.NewUnaryHandler(
+		ConversationsServiceDeleteContextProcedure,
+		svc.DeleteContext,
+		connect.WithSchema(conversationsServiceMethods.ByName("DeleteContext")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceGetConversationPluginsHandler := connect.NewUnaryHandler(
 		ConversationsServiceGetConversationPluginsProcedure,
 		svc.GetConversationPlugins,
@@ -793,6 +828,8 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceSetCurrentLeafHandler.ServeHTTP(w, r)
 		case ConversationsServiceUpdateContextProcedure:
 			conversationsServiceUpdateContextHandler.ServeHTTP(w, r)
+		case ConversationsServiceDeleteContextProcedure:
+			conversationsServiceDeleteContextHandler.ServeHTTP(w, r)
 		case ConversationsServiceGetConversationPluginsProcedure:
 			conversationsServiceGetConversationPluginsHandler.ServeHTTP(w, r)
 		case ConversationsServiceSetConversationPluginsProcedure:
@@ -876,6 +913,10 @@ func (UnimplementedConversationsServiceHandler) SetCurrentLeaf(context.Context, 
 
 func (UnimplementedConversationsServiceHandler) UpdateContext(context.Context, *connect.Request[v1.UpdateContextRequest]) (*connect.Response[v1.UpdateContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.UpdateContext is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) DeleteContext(context.Context, *connect.Request[v1.DeleteContextRequest]) (*connect.Response[v1.DeleteContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.DeleteContext is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error) {

@@ -230,7 +230,8 @@ public final class ConversationsRepository: Sendable {
     public func listMessages(
         contextID: String,
         leafMessageID: String? = nil,
-        fullTree: Bool = false
+        fullTree: Bool = false,
+        structureOnly: Bool = false
     ) async throws -> [PsmithMessage] {
         var req = Psmith_V1_ListMessagesRequest()
         req.contextID = contextID
@@ -238,8 +239,13 @@ public final class ConversationsRepository: Sendable {
         // `full_tree=true` swaps the server from the linear-ancestor-chain
         // CTE to a flat ListMessagesByContext dump — used by the branch
         // switcher in the client to discover sibling IDs and walk down to
-        // the deepest descendant of a chosen fork.
+        // the deepest descendant of a chosen fork. `structure_only`
+        // strips the payload to id/parent/role/created_at skeletons —
+        // the tree fetch used to re-transfer the entire history's
+        // bodies on every load, which dominated open time on large
+        // conversations.
         req.fullTree = fullTree
+        req.structureOnly = structureOnly
         let resp = await client.listMessages(request: req, headers: [:])
         if let msg = resp.message {
             let items = msg.messages.map(PsmithMessage.init(from:))
@@ -272,6 +278,17 @@ public final class ConversationsRepository: Sendable {
         // Empty string is the "clear" sentinel per the proto comment.
         req.messageID = messageID ?? ""
         let resp = await client.setCurrentLeaf(request: req, headers: [:])
+        if resp.message == nil, let err = resp.error { throw PsmithError.from(err) }
+    }
+
+    /// Permanently deletes a context and every message in it. The server
+    /// refuses the ACTIVE context (FailedPrecondition) — callers should
+    /// gate the affordance on non-active rows and confirm the
+    /// destructive action with the user first.
+    public func deleteContext(id: String) async throws {
+        var req = Psmith_V1_DeleteContextRequest()
+        req.contextID = id
+        let resp = await client.deleteContext(request: req, headers: [:])
         if resp.message == nil, let err = resp.error { throw PsmithError.from(err) }
     }
 

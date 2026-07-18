@@ -17,6 +17,12 @@ import PsmithUI
 /// the page; tapping the already-active row just dismisses.
 struct ContextListPane: View {
     @Bindable var model: ConversationViewModel
+    /// Row the pointer is over — drives the hover-revealed delete
+    /// button. (An inline button, not a context menu: row context
+    /// menus render as a window-wide black box on macOS 26.)
+    @State private var hoveredContextID: String?
+    /// Context id awaiting delete confirmation.
+    @State private var pendingDeleteContextID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,13 +38,14 @@ struct ContextListPane: View {
                         sectionLabel("\(model.contexts.count) context\(model.contexts.count == 1 ? "" : "s")")
                             .padding(.horizontal, 4)
                         ForEach(sorted) { ctx in
+                            let isActive = ctx.id == model.activeContext?.id
                             ContextRow(
                                 context: ctx,
                                 number: numbering[ctx.id] ?? 0,
                                 parentLabel: parentLabel(for: ctx),
-                                isActive: ctx.id == model.activeContext?.id
+                                isActive: isActive
                             ) {
-                                if ctx.id != model.activeContext?.id {
+                                if !isActive {
                                     Task {
                                         await model.activateContext(ctx.id)
                                         model.showingContextList = false
@@ -46,6 +53,29 @@ struct ContextListPane: View {
                                 } else {
                                     model.showingContextList = false
                                 }
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                // Delete lives on non-active rows only —
+                                // the server refuses the active context
+                                // (it's the conversation's live surface).
+                                if !isActive, hoveredContextID == ctx.id {
+                                    Button {
+                                        pendingDeleteContextID = ctx.id
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .scaledFont(size: 11, weight: .semibold)
+                                            .foregroundStyle(.red)
+                                            .frame(width: 26, height: 26)
+                                            .contentShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .glassEffect(.regular.interactive(), in: .circle)
+                                    .help("Delete context and all of its messages")
+                                    .padding(8)
+                                }
+                            }
+                            .onHover { inside in
+                                hoveredContextID = inside ? ctx.id : (hoveredContextID == ctx.id ? nil : hoveredContextID)
                             }
                         }
                     }
@@ -57,6 +87,23 @@ struct ContextListPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .confirmationDialog(
+            "Delete this context?",
+            isPresented: Binding(
+                get: { pendingDeleteContextID != nil },
+                set: { if !$0 { pendingDeleteContextID = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDeleteContextID
+        ) { ctxID in
+            Button("Delete Context and Messages", role: .destructive) {
+                Task { await model.deleteContext(ctxID) }
+                pendingDeleteContextID = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteContextID = nil }
+        } message: { _ in
+            Text("Every message in this context is permanently deleted. This can't be undone.")
+        }
     }
 
     /// Rows are listed newest-first by creation date so the freshly created

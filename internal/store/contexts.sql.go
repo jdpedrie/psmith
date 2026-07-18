@@ -48,6 +48,18 @@ func (q *Queries) CreateContext(ctx context.Context, arg CreateContextParams) (C
 	return i, err
 }
 
+const deleteContext = `-- name: DeleteContext :exec
+DELETE FROM contexts WHERE id = $1
+`
+
+// Messages (and their attachments / explicit-cache rows) go via
+// ON DELETE CASCADE. Callers must clear stream_runs references first
+// (their context FKs have no cascade).
+func (q *Queries) DeleteContext(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteContext, id)
+	return err
+}
+
 const getActiveContextByConversation = `-- name: GetActiveContextByConversation :one
 SELECT id, conversation_id, parent_context_id, context_activation_time, created_at, current_leaf_message_id, title FROM contexts
 WHERE conversation_id = $1
@@ -192,6 +204,23 @@ func (q *Queries) ListContextsByConversation(ctx context.Context, conversationID
 		return nil, err
 	}
 	return items, nil
+}
+
+const reparentChildContexts = `-- name: ReparentChildContexts :exec
+UPDATE contexts SET parent_context_id = $2 WHERE parent_context_id = $1
+`
+
+type ReparentChildContextsParams struct {
+	ParentContextID   *uuid.UUID
+	ParentContextID_2 *uuid.UUID
+}
+
+// Points children of a context about to be deleted at their
+// grandparent, keeping compaction lineage connected. NULL parent is
+// valid (the deleted context was a root).
+func (q *Queries) ReparentChildContexts(ctx context.Context, arg ReparentChildContextsParams) error {
+	_, err := q.db.Exec(ctx, reparentChildContexts, arg.ParentContextID, arg.ParentContextID_2)
+	return err
 }
 
 const updateContextActivationTime = `-- name: UpdateContextActivationTime :one

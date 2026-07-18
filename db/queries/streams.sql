@@ -125,3 +125,13 @@ WITH eligible AS (
 )
 DELETE FROM stream_chunks
 WHERE stream_run_id IN (SELECT id FROM eligible);
+
+-- name: DeleteStreamRunsByContext :exec
+-- Rows whose run happened in this context; stream_chunks cascade.
+DELETE FROM stream_runs WHERE context_id = $1;
+
+-- name: ClearStreamRunResultContext :exec
+-- Compaction runs in OTHER contexts can point at this context as
+-- their result; the FK has no ON DELETE action, so null the pointer
+-- before the context row goes.
+UPDATE stream_runs SET result_context_id = NULL WHERE result_context_id = $1;

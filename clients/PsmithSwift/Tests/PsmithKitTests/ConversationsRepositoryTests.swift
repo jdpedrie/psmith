@@ -657,6 +657,75 @@ struct ConversationsRepositoryTests {
         #expect(all.contains(where: { $0.id == ctxBefore.id }))
     }
 
+    @Test("deleteContext removes a non-active context and its messages")
+    func deleteContextRemovesNonActive() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-delctx")
+        let (fake, _, _, profile) = try await Fixtures.seedReadyToChat(
+            client: client, withCompression: true, compressionMode: .append
+        )
+        _ = fake
+        let c = try await client.conversations.create(profileID: profile.id, title: "delctx")
+        _ = try await client.conversations.sendMessage(conversationID: c.id, content: "u1")
+        try await waitNoActiveStream(client: client, conversationID: c.id)
+        let run = try await client.conversations.compact(conversationID: c.id)
+        try await drainStream(client: client, runID: run.id)
+        let (_, original) = try await client.conversations.get(id: c.id)
+        let msgs = try await client.conversations.listMessages(contextID: original.id)
+        guard let summary = msgs.first(where: { $0.role == .compressionSummary }) else {
+            Issue.record("no compression-summary after append-mode compact")
+            return
+        }
+        // Promote → new context becomes active; the original is deletable.
+        _ = try await client.conversations.promoteCompactionToNewContext(messageID: summary.id)
+
+        try await client.conversations.deleteContext(id: original.id)
+
+        let remaining = try await client.conversations.listContexts(conversationID: c.id)
+        #expect(!remaining.contains(where: { $0.id == original.id }))
+        #expect(remaining.count == 1)
+    }
+
+    @Test("deleteContext refuses the active context with FailedPrecondition")
+    func deleteContextRefusesActive() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-delctx-act")
+        let (fake, _, _, profile) = try await Fixtures.seedReadyToChat(client: client)
+        _ = fake
+        let c = try await client.conversations.create(profileID: profile.id, title: "delctx-active")
+        let (_, active) = try await client.conversations.get(id: c.id)
+        await #expect(throws: PsmithError.self) {
+            try await client.conversations.deleteContext(id: active.id)
+        }
+        // Still listed.
+        let all = try await client.conversations.listContexts(conversationID: c.id)
+        #expect(all.contains(where: { $0.id == active.id }))
+    }
+
+    @Test("listMessages structureOnly returns skeleton rows without content")
+    func listMessagesStructureOnly() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-skel")
+        let (fake, _, _, profile) = try await Fixtures.seedReadyToChat(client: client)
+        _ = fake
+        let c = try await client.conversations.create(profileID: profile.id, title: "skeleton")
+        let (_, run) = try await client.conversations.sendMessage(conversationID: c.id, content: "a message with real body text")
+        try await drainStream(client: client, runID: run.id)
+
+        let (_, ctx) = try await client.conversations.get(id: c.id)
+        let full = try await client.conversations.listMessages(contextID: ctx.id, fullTree: true)
+        let skel = try await client.conversations.listMessages(contextID: ctx.id, fullTree: true, structureOnly: true)
+
+        #expect(skel.count == full.count)
+        #expect(skel.count >= 2)
+        for m in skel {
+            #expect(m.content.isEmpty)
+        }
+        // Shape survives: same ids and parent links as the full tree.
+        let fullByID = Dictionary(uniqueKeysWithValues: full.map { ($0.id, $0) })
+        for m in skel {
+            #expect(fullByID[m.id] != nil)
+            #expect(fullByID[m.id]?.parentID == m.parentID)
+        }
+    }
+
     // MARK: - helpers
 
     /// Subscribe to a stream and consume events until the terminal event

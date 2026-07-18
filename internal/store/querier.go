@@ -22,6 +22,10 @@ type Querier interface {
 	// Backfill picks the row up via ListUnembeddedMessages on the next
 	// pass. CHECK invariant still holds (all three back to NULL).
 	ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
+	// Compaction runs in OTHER contexts can point at this context as
+	// their result; the FK has no ON DELETE action, so null the pointer
+	// before the context row goes.
+	ClearStreamRunResultContext(ctx context.Context, resultContextID *uuid.UUID) error
 	// For the "X calls in the last 7 days" chip on settings.
 	CountDeviceToolCallsByUser(ctx context.Context, arg CountDeviceToolCallsByUserParams) (int32, error)
 	// Drives the "X / Y embedded" progress chip in the settings UI.
@@ -63,6 +67,10 @@ type Querier interface {
 	// not a system instruction) and is_welcome is set so clients can
 	// gate a fake-stream reveal animation on first open.
 	CreateWelcomeMessage(ctx context.Context, arg CreateWelcomeMessageParams) (Message, error)
+	// Messages (and their attachments / explicit-cache rows) go via
+	// ON DELETE CASCADE. Callers must clear stream_runs references first
+	// (their context FKs have no cascade).
+	DeleteContext(ctx context.Context, id uuid.UUID) error
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExplicitCache(ctx context.Context, arg DeleteExplicitCacheParams) error
@@ -74,6 +82,8 @@ type Querier interface {
 	DeleteMessageByID(ctx context.Context, id uuid.UUID) error
 	DeleteProfile(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, tokenHash string) error
+	// Rows whose run happened in this context; stream_chunks cascade.
+	DeleteStreamRunsByContext(ctx context.Context, contextID uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserEmbedderConfig(ctx context.Context, userID uuid.UUID) error
 	// Removes the entire row. Drops both credentials and the enabled
@@ -244,6 +254,10 @@ type Querier interface {
 	// branches forking off the same parent. The UI uses it to render fork
 	// indicators alongside the linear chain.
 	ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([]ListMessageAncestorChainRow, error)
+	// Skeleton rows for the branch switcher: the tree SHAPE without
+	// content. Selecting only these columns keeps TOASTed message bodies
+	// entirely unread.
+	ListMessageTreeStructure(ctx context.Context, contextID uuid.UUID) ([]ListMessageTreeStructureRow, error)
 	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]Message, error)
 	// When the user swaps embedders (different Model() than what's on
 	// existing rows), backfill re-embeds. Returns the rows that need
@@ -323,6 +337,10 @@ type Querier interface {
 	// chunk rows pruned so the caller can log a trickle of housekeeping
 	// activity (or skip the log entirely on zero-row runs).
 	PruneFinalizedStreamChunks(ctx context.Context, retention pgtype.Interval) (int64, error)
+	// Points children of a context about to be deleted at their
+	// grandparent, keeping compaction lineage connected. NULL parent is
+	// valid (the deleted context was a root).
+	ReparentChildContexts(ctx context.Context, arg ReparentChildContextsParams) error
 	// Promotes every direct child of $1 to point at $2 (which may be NULL — that
 	// makes them roots in the context). Used by DeleteMessage(cascade=false) just
 	// before the DELETE, so the FK's ON DELETE CASCADE has nothing to find.

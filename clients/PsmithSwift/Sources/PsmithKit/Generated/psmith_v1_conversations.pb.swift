@@ -592,6 +592,28 @@ public nonisolated struct Psmith_V1_UpdateContextResponse: Sendable {
   fileprivate var _context: Psmith_V1_Context? = nil
 }
 
+public nonisolated struct Psmith_V1_DeleteContextRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var contextID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_DeleteContextResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Psmith_V1_ListMessagesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -617,6 +639,14 @@ public nonisolated struct Psmith_V1_ListMessagesRequest: Sendable {
   /// chosen fork. Default false (chain mode) preserves the original
   /// behaviour for callers that don't opt in.
   public var fullTree: Bool = false
+
+  /// When true (only meaningful with full_tree), return skeleton
+  /// messages: id, parent_id, role, created_at — no content, thinking,
+  /// attachments, or display transforms. The branch switcher needs only
+  /// the tree SHAPE; shipping full bodies made every conversation open
+  /// and terminal reload transfer the whole history a second time,
+  /// which dominated load time on large conversations.
+  public var structureOnly: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2025,9 +2055,58 @@ nonisolated extension Psmith_V1_UpdateContextResponse: SwiftProtobuf.Message, Sw
   }
 }
 
+nonisolated extension Psmith_V1_DeleteContextRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteContextRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.contextID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.contextID.isEmpty {
+      try visitor.visitSingularStringField(value: self.contextID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_DeleteContextRequest, rhs: Psmith_V1_DeleteContextRequest) -> Bool {
+    if lhs.contextID != rhs.contextID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_DeleteContextResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteContextResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_DeleteContextResponse, rhs: Psmith_V1_DeleteContextResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Psmith_V1_ListMessagesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListMessagesRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}leaf_message_id\0\u{3}full_tree\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}context_id\0\u{3}leaf_message_id\0\u{3}full_tree\0\u{3}structure_only\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2038,6 +2117,7 @@ nonisolated extension Psmith_V1_ListMessagesRequest: SwiftProtobuf.Message, Swif
       case 1: try { try decoder.decodeSingularStringField(value: &self.contextID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self._leafMessageID) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.fullTree) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.structureOnly) }()
       default: break
       }
     }
@@ -2057,6 +2137,9 @@ nonisolated extension Psmith_V1_ListMessagesRequest: SwiftProtobuf.Message, Swif
     if self.fullTree != false {
       try visitor.visitSingularBoolField(value: self.fullTree, fieldNumber: 3)
     }
+    if self.structureOnly != false {
+      try visitor.visitSingularBoolField(value: self.structureOnly, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2064,6 +2147,7 @@ nonisolated extension Psmith_V1_ListMessagesRequest: SwiftProtobuf.Message, Swif
     if lhs.contextID != rhs.contextID {return false}
     if lhs._leafMessageID != rhs._leafMessageID {return false}
     if lhs.fullTree != rhs.fullTree {return false}
+    if lhs.structureOnly != rhs.structureOnly {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

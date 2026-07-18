@@ -955,6 +955,65 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[psmith
 	return connect.NewResponse(&psmithv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
 }
 
+func (s *Service) DeleteContext(ctx context.Context, req *connect.Request[psmithv1.DeleteContextRequest]) (*connect.Response[psmithv1.DeleteContextResponse], error) {
+	caller := auth.MustFromContext(ctx)
+
+	cxID, err := uuid.Parse(req.Msg.ContextId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid context_id: %w", err))
+	}
+	cxRow, conv, err := s.fetchOwnedContext(ctx, cxID, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
+		return nil, err
+	}
+	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
+		return nil, err
+	}
+	// The active context is the conversation's live surface — deleting
+	// it would strand the chat (and "active" always exists, so this
+	// also guarantees a conversation keeps at least one context).
+	active, err := s.queries.GetActiveContextByConversation(ctx, conv.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if active.ID == cxID {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot delete the active context; activate another context first"))
+	}
+
+	// Messages cascade off the context row, but two stream_runs FKs and
+	// the child-context lineage have no ON DELETE action — clear them
+	// in the same transaction so the delete can't half-apply.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.queries.WithTx(tx)
+
+	if err := qtx.ReparentChildContexts(ctx, store.ReparentChildContextsParams{
+		ParentContextID:   &cxID,
+		ParentContextID_2: cxRow.ParentContextID,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("reparent children: %w", err))
+	}
+	if err := qtx.ClearStreamRunResultContext(ctx, &cxID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("clear result refs: %w", err))
+	}
+	if err := qtx.DeleteStreamRunsByContext(ctx, cxID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete stream runs: %w", err))
+	}
+	if err := qtx.DeleteContext(ctx, cxID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete context: %w", err))
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&psmithv1.DeleteContextResponse{}), nil
+}
+
 // --- ListMessages ---
 
 func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv1.ListMessagesRequest]) (*connect.Response[psmithv1.ListMessagesResponse], error) {
@@ -979,6 +1038,31 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv
 	// discover sibling IDs and walk down to the deepest descendant of a
 	// chosen fork. The recursive CTE used in chain mode doesn't apply
 	// here — we just dump all rows for the context.
+	if req.Msg.FullTree && req.Msg.StructureOnly {
+		// Skeleton rows: the tree SHAPE only. No content columns are
+		// read from disk, no attachments are joined, and the display
+		// pipeline never runs — this path exists because the branch
+		// switcher was paying a full-history transfer on every load.
+		rows, err := s.queries.ListMessageTreeStructure(ctx, contextID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		out := make([]*psmithv1.Message, 0, len(rows))
+		for _, r := range rows {
+			m := &psmithv1.Message{
+				Id:        r.ID.String(),
+				ContextId: r.ContextID.String(),
+				Role:      roleStringToEnum(r.Role),
+				CreatedAt: timestamppb.New(r.CreatedAt),
+			}
+			if r.ParentID != nil {
+				pid := r.ParentID.String()
+				m.ParentId = &pid
+			}
+			out = append(out, m)
+		}
+		return connect.NewResponse(&psmithv1.ListMessagesResponse{Messages: out}), nil
+	}
 	if req.Msg.FullTree {
 		all, err := s.queries.ListMessagesByContext(ctx, contextID)
 		if err != nil {

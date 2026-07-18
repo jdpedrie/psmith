@@ -66,6 +66,15 @@ public protocol Psmith_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `updateContext`(request: Psmith_V1_UpdateContextRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_UpdateContextResponse>
 
+    /// DeleteContext permanently removes a context and every message in it.
+    /// The ACTIVE context cannot be deleted (FailedPrecondition) — which also
+    /// protects the last remaining context, since the active one always
+    /// exists. Child contexts are re-parented to the deleted context's
+    /// parent so compaction lineage stays connected. The client is
+    /// responsible for confirming the destructive action.
+    @available(iOS 13, *)
+    func `deleteContext`(request: Psmith_V1_DeleteContextRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_DeleteContextResponse>
+
     /// Per-conversation plugin overrides. Merged on top of the
     /// profile-chain pipeline at resolve time. Get returns the LITERAL
     /// stored rows for this conversation (not the merged view); the
@@ -220,6 +229,11 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
     }
 
     @available(iOS 13, *)
+    public func `deleteContext`(request: Psmith_V1_DeleteContextRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_DeleteContextResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/DeleteContext", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `getConversationPlugins`(request: Psmith_V1_GetConversationPluginsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_GetConversationPluginsResponse> {
         return await self.client.unary(path: "/psmith.v1.ConversationsService/GetConversationPlugins", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -294,6 +308,7 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
             public static let activateContext = Connect.MethodSpec(name: "ActivateContext", service: "psmith.v1.ConversationsService", type: .unary)
             public static let setCurrentLeaf = Connect.MethodSpec(name: "SetCurrentLeaf", service: "psmith.v1.ConversationsService", type: .unary)
             public static let updateContext = Connect.MethodSpec(name: "UpdateContext", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let deleteContext = Connect.MethodSpec(name: "DeleteContext", service: "psmith.v1.ConversationsService", type: .unary)
             public static let getConversationPlugins = Connect.MethodSpec(name: "GetConversationPlugins", service: "psmith.v1.ConversationsService", type: .unary)
             public static let setConversationPlugins = Connect.MethodSpec(name: "SetConversationPlugins", service: "psmith.v1.ConversationsService", type: .unary)
             public static let resolveConversationPipeline = Connect.MethodSpec(name: "ResolveConversationPipeline", service: "psmith.v1.ConversationsService", type: .unary)

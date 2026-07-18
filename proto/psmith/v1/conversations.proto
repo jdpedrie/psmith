@@ -41,6 +41,14 @@ service ConversationsService {
   // auto-generated title or set one when auto-titles aren't configured.
   rpc UpdateContext(UpdateContextRequest) returns (UpdateContextResponse);
 
+  // DeleteContext permanently removes a context and every message in it.
+  // The ACTIVE context cannot be deleted (FailedPrecondition) — which also
+  // protects the last remaining context, since the active one always
+  // exists. Child contexts are re-parented to the deleted context's
+  // parent so compaction lineage stays connected. The client is
+  // responsible for confirming the destructive action.
+  rpc DeleteContext(DeleteContextRequest) returns (DeleteContextResponse);
+
   // Per-conversation plugin overrides. Merged on top of the
   // profile-chain pipeline at resolve time. Get returns the LITERAL
   // stored rows for this conversation (not the merged view); the
@@ -226,6 +234,11 @@ message UpdateContextResponse {
   Context context = 1;
 }
 
+message DeleteContextRequest {
+  string context_id = 1;
+}
+message DeleteContextResponse {}
+
 // --- Messages ---
 
 message ListMessagesRequest {
@@ -240,6 +253,13 @@ message ListMessagesRequest {
   // chosen fork. Default false (chain mode) preserves the original
   // behaviour for callers that don't opt in.
   bool full_tree = 3;
+  // When true (only meaningful with full_tree), return skeleton
+  // messages: id, parent_id, role, created_at — no content, thinking,
+  // attachments, or display transforms. The branch switcher needs only
+  // the tree SHAPE; shipping full bodies made every conversation open
+  // and terminal reload transfer the whole history a second time,
+  // which dominated load time on large conversations.
+  bool structure_only = 4;
 }
 message ListMessagesResponse {
   repeated Message messages = 1;

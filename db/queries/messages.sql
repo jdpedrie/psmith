@@ -283,3 +283,12 @@ WHERE c.user_id = $2
   AND m.embedding IS NOT NULL
 ORDER BY m.embedding <=> $1
 LIMIT $4;
+
+-- name: ListMessageTreeStructure :many
+-- Skeleton rows for the branch switcher: the tree SHAPE without
+-- content. Selecting only these columns keeps TOASTed message bodies
+-- entirely unread.
+SELECT id, context_id, parent_id, role, created_at
+FROM messages
+WHERE context_id = $1
+ORDER BY created_at ASC, id ASC;

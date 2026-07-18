@@ -618,9 +618,19 @@ struct ConversationViewModelTests {
         await r.vm.sendForking(content: "second-alt", parentMessageID: parentID)
         await waitFor { r.vm.streamRunID == nil && !r.vm.sending }
 
+        // The VM's treeMessages are structure-only skeletons (no
+        // content — the payload fix for large conversations), so
+        // shape asserts go through them and the content assert
+        // fetches the full tree explicitly.
         await r.vm.loadTree()
-        let userSiblings = r.vm.treeMessages.filter { $0.role == .user && $0.parentID == parentID }
-        #expect(userSiblings.count == 2, "expected two sibling user turns; got \(userSiblings.count)")
+        let skeletonSiblings = r.vm.treeMessages.filter { $0.role == .user && $0.parentID == parentID }
+        #expect(skeletonSiblings.count == 2, "expected two sibling user turns; got \(skeletonSiblings.count)")
+        guard let ctx = r.vm.activeContext else {
+            Issue.record("no active context after fork")
+            return
+        }
+        let fullTree = try await r.client.conversations.listMessages(contextID: ctx.id, fullTree: true)
+        let userSiblings = fullTree.filter { $0.role == .user && $0.parentID == parentID }
         #expect(userSiblings.map(\.content).sorted() == ["second", "second-alt"])
     }
 

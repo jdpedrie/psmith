@@ -399,11 +399,12 @@ public final class ConversationViewModel {
                 selectedProviderID = target.providerID
                 selectedModelID    = target.modelID
             }
-            await refreshTokenCount()
-            // Refresh the full message tree alongside the active chain so
-            // the branch switcher knows about every fork. Failures are
-            // non-blocking — chain mode keeps working without it.
-            await loadTree()
+            // Advisory refreshes (status-strip token count, branch-switcher
+            // tree). Concurrent: neither depends on the other, both are
+            // display sugar behind the already-rendered chain.
+            async let tokens: Void = refreshTokenCount()
+            async let tree: Void = loadTree()
+            _ = await (tokens, tree)
         } catch {
             self.loadError = PsmithError.display(error)
         }
@@ -593,6 +594,22 @@ public final class ConversationViewModel {
 
     public func refreshTokenCount() async {
         guard let ctx = activeContext, let target = tokenCountTarget else { return }
+        // The count is fully determined by (context, chain tip, model):
+        // the server rebuilds the wire prefix from the chain and ships
+        // it to the provider's count endpoint — linear in history size,
+        // and on every load() that meant re-uploading the entire
+        // conversation just to refresh an unchanged number. The tip
+        // only moves on send/terminal/branch-switch, so cache on it.
+        let leaf = messages.last?.id ?? ""
+        let key = TokenCountCache.Key(
+            contextID: ctx.id, leafID: leaf,
+            providerID: target.providerID, modelID: target.modelID
+        )
+        if let cached = TokenCountCache.shared.lookup(key) {
+            self.tokenCount = cached.tokenCount
+            self.contextWindow = cached.contextWindow
+            return
+        }
         do {
             let result = try await client.conversations.countContextTokens(
                 contextID: ctx.id,
@@ -601,6 +618,7 @@ public final class ConversationViewModel {
             )
             self.tokenCount = result.tokenCount
             self.contextWindow = result.contextWindow
+            TokenCountCache.shared.store(key, tokenCount: result.tokenCount, contextWindow: result.contextWindow)
         } catch {
             // Token count is advisory; don't surface errors
         }
@@ -1174,6 +1192,20 @@ public final class ConversationViewModel {
         }
     }
 
+    /// Permanently deletes a context and all of its messages. The server
+    /// refuses the active context; the UI should only offer this on
+    /// non-active rows (and confirm — there is no undo). On success the
+    /// contexts list is refreshed so the row disappears in place.
+    public func deleteContext(_ contextID: String) async {
+        do {
+            try await client.conversations.deleteContext(id: contextID)
+            TokenCountCache.shared.invalidate(contextID: contextID)
+            await loadContexts()
+        } catch {
+            loadError = PsmithError.display(error)
+        }
+    }
+
     /// Manually create a new active context in this conversation, bypassing
     /// the compress-then-promote flow. The new context becomes active and
     /// the conversation is reloaded so the seeded user message (if any) is
@@ -1200,6 +1232,9 @@ public final class ConversationViewModel {
     // MARK: Message mutations
 
     public func editMessage(id: String, content: String, role: PsmithMessageRole? = nil) async {
+        if let ctx = activeContext {
+            TokenCountCache.shared.invalidate(contextID: ctx.id)
+        }
         do {
             let updated = try await client.conversations.editMessage(id: id, content: content, role: role)
             if let idx = messages.firstIndex(where: { $0.id == id }) {
@@ -1333,6 +1368,9 @@ public final class ConversationViewModel {
     }
 
     public func deleteMessage(id: String, cascade: Bool = false) async {
+        if let ctx = activeContext {
+            TokenCountCache.shared.invalidate(contextID: ctx.id)
+        }
         do {
             try await client.conversations.deleteMessage(id: id, cascade: cascade)
             await load()
@@ -1591,7 +1629,8 @@ public final class ConversationViewModel {
         do {
             self.treeMessages = try await client.conversations.listMessages(
                 contextID: activeContext.id,
-                fullTree: true
+                fullTree: true,
+                structureOnly: true
             )
         } catch {
             // The branch switcher is the only consumer of `treeMessages` —

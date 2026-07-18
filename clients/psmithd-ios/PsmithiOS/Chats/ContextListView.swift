@@ -11,6 +11,9 @@ struct ContextListView: View {
     @Bindable var model: ConversationViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showingNewContext = false
+    /// Context id awaiting delete confirmation. Set by the row's
+    /// long-press menu; cleared when the dialog resolves either way.
+    @State private var pendingDeleteContextID: String?
 
     var body: some View {
         Group {
@@ -24,13 +27,14 @@ struct ContextListView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(sorted) { ctx in
+                            let isActive = ctx.id == model.activeContext?.id
                             ContextRow(
                                 context: ctx,
                                 number: numbering[ctx.id] ?? 0,
                                 parentLabel: parentLabel(for: ctx),
-                                isActive: ctx.id == model.activeContext?.id
+                                isActive: isActive
                             ) {
-                                if ctx.id != model.activeContext?.id {
+                                if !isActive {
                                     Task {
                                         await model.activateContext(ctx.id)
                                         dismiss()
@@ -39,12 +43,43 @@ struct ContextListView: View {
                                     dismiss()
                                 }
                             }
+                            .contextMenu {
+                                if isActive {
+                                    // The server refuses deleting the
+                                    // active context; say why instead
+                                    // of hiding the concept.
+                                    Label("Active context can't be deleted", systemImage: "info.circle")
+                                } else {
+                                    Button(role: .destructive) {
+                                        pendingDeleteContextID = ctx.id
+                                    } label: {
+                                        Label("Delete Context…", systemImage: "trash")
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
                 }
             }
+        }
+        .confirmationDialog(
+            "Delete this context?",
+            isPresented: Binding(
+                get: { pendingDeleteContextID != nil },
+                set: { if !$0 { pendingDeleteContextID = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDeleteContextID
+        ) { ctxID in
+            Button("Delete Context and Messages", role: .destructive) {
+                Task { await model.deleteContext(ctxID) }
+                pendingDeleteContextID = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteContextID = nil }
+        } message: { _ in
+            Text("Every message in this context is permanently deleted. This can't be undone.")
         }
         .navigationTitle("Contexts")
         .navigationBarTitleDisplayMode(.inline)

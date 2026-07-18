@@ -76,3 +76,15 @@ UPDATE contexts
 SET current_leaf_message_id = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: ReparentChildContexts :exec
+-- Points children of a context about to be deleted at their
+-- grandparent, keeping compaction lineage connected. NULL parent is
+-- valid (the deleted context was a root).
+UPDATE contexts SET parent_context_id = $2 WHERE parent_context_id = $1;
+
+-- name: DeleteContext :exec
+-- Messages (and their attachments / explicit-cache rows) go via
+-- ON DELETE CASCADE. Callers must clear stream_runs references first
+-- (their context FKs have no cascade).
+DELETE FROM contexts WHERE id = $1;

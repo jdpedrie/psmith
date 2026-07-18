@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearStreamRunResultContext = `-- name: ClearStreamRunResultContext :exec
+UPDATE stream_runs SET result_context_id = NULL WHERE result_context_id = $1
+`
+
+// Compaction runs in OTHER contexts can point at this context as
+// their result; the FK has no ON DELETE action, so null the pointer
+// before the context row goes.
+func (q *Queries) ClearStreamRunResultContext(ctx context.Context, resultContextID *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearStreamRunResultContext, resultContextID)
+	return err
+}
+
 const createStreamRun = `-- name: CreateStreamRun :one
 INSERT INTO stream_runs (
     id, conversation_id, context_id, parent_message_id,
@@ -66,6 +78,16 @@ func (q *Queries) CreateStreamRun(ctx context.Context, arg CreateStreamRunParams
 		&i.CacheTrailingDepth,
 	)
 	return i, err
+}
+
+const deleteStreamRunsByContext = `-- name: DeleteStreamRunsByContext :exec
+DELETE FROM stream_runs WHERE context_id = $1
+`
+
+// Rows whose run happened in this context; stream_chunks cascade.
+func (q *Queries) DeleteStreamRunsByContext(ctx context.Context, contextID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteStreamRunsByContext, contextID)
+	return err
 }
 
 const finalizeStreamRun = `-- name: FinalizeStreamRun :one

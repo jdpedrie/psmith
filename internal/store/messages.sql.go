@@ -723,6 +723,50 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 	return items, nil
 }
 
+const listMessageTreeStructure = `-- name: ListMessageTreeStructure :many
+SELECT id, context_id, parent_id, role, created_at
+FROM messages
+WHERE context_id = $1
+ORDER BY created_at ASC, id ASC
+`
+
+type ListMessageTreeStructureRow struct {
+	ID        uuid.UUID
+	ContextID uuid.UUID
+	ParentID  *uuid.UUID
+	Role      string
+	CreatedAt time.Time
+}
+
+// Skeleton rows for the branch switcher: the tree SHAPE without
+// content. Selecting only these columns keeps TOASTed message bodies
+// entirely unread.
+func (q *Queries) ListMessageTreeStructure(ctx context.Context, contextID uuid.UUID) ([]ListMessageTreeStructureRow, error) {
+	rows, err := q.db.Query(ctx, listMessageTreeStructure, contextID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessageTreeStructureRow
+	for rows.Next() {
+		var i ListMessageTreeStructureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ContextID,
+			&i.ParentID,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMessagesByContext = `-- name: ListMessagesByContext :many
 SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
 WHERE context_id = $1
