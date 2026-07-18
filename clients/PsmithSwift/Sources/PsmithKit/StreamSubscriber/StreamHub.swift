@@ -293,6 +293,7 @@ public final class StreamHub {
     /// switch when we want a fresh slate.
     public func clear(conversationID: String) {
         cancelLocalSubscription(forConversation: conversationID)
+        discardPendingDeltas(conversationID: conversationID)
         streams.removeValue(forKey: conversationID)
         activeConversationIDs.remove(conversationID)
     }
@@ -300,6 +301,11 @@ public final class StreamHub {
     /// Stop every subscription and clear all state. Logout path.
     public func reset() {
         for (_, task) in tasks { task.cancel() }
+        for (_, task) in flushTasks { task.cancel() }
+        flushTasks.removeAll()
+        pendingText.removeAll()
+        pendingThinking.removeAll()
+        pendingSequence.removeAll()
         tasks.removeAll()
         streams.removeAll()
         activeConversationIDs.removeAll()
@@ -311,8 +317,69 @@ public final class StreamHub {
 
     // MARK: - Private machinery
 
+    // Chunk-rate prose is COALESCED before it touches the observable
+    // stream state: every `streams[...]` write invalidates every
+    // observer — the streaming row re-parses its whole markdown, the
+    // transcript re-lays, the scroll geometry re-ticks — so at wire
+    // rates of 20–50 deltas/s the app paid a full render pipeline per
+    // delta, quadratic in reply length for the parse alone. Text and
+    // thinking deltas accumulate here and flush at most every
+    // `flushInterval`; structural events (tool calls, elicitation,
+    // thinking transitions, terminal, teardown) flush immediately so
+    // ordering is preserved.
+    private var pendingText: [String: String] = [:]
+    private var pendingThinking: [String: String] = [:]
+    private var pendingSequence: [String: Int64] = [:]
+    private var flushTasks: [String: Task<Void, Never>] = [:]
+    private let flushInterval: Duration = .milliseconds(100)
+
+    private func bufferDelta(conversationID: String, text: String? = nil, thinking: String? = nil, sequence: Int64) {
+        if let text { pendingText[conversationID, default: ""] += text }
+        if let thinking { pendingThinking[conversationID, default: ""] += thinking }
+        pendingSequence[conversationID] = max(pendingSequence[conversationID] ?? 0, sequence)
+        guard flushTasks[conversationID] == nil else { return }
+        flushTasks[conversationID] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.flushInterval)
+            guard !Task.isCancelled else { return }
+            self.flushTasks.removeValue(forKey: conversationID)
+            self.flushDeltas(conversationID: conversationID)
+        }
+    }
+
+    private func flushDeltas(conversationID: String) {
+        flushTasks[conversationID]?.cancel()
+        flushTasks.removeValue(forKey: conversationID)
+        let text = pendingText.removeValue(forKey: conversationID)
+        let thinking = pendingThinking.removeValue(forKey: conversationID)
+        let seq = pendingSequence.removeValue(forKey: conversationID)
+        guard text != nil || thinking != nil || seq != nil else { return }
+        guard var s = streams[conversationID] else { return }
+        if let text { s.streamingText += text }
+        if let thinking { s.streamingThinking += thinking }
+        if let seq { s.lastSequence = max(s.lastSequence, seq) }
+        streams[conversationID] = s
+    }
+
+    /// Drop buffered-but-unflushed deltas WITHOUT applying them. Used
+    /// when the stream state itself is being discarded — flushing
+    /// into a removed stream would be a no-op anyway, but the timers
+    /// must not linger.
+    private func discardPendingDeltas(conversationID: String) {
+        flushTasks[conversationID]?.cancel()
+        flushTasks.removeValue(forKey: conversationID)
+        pendingText.removeValue(forKey: conversationID)
+        pendingThinking.removeValue(forKey: conversationID)
+        pendingSequence.removeValue(forKey: conversationID)
+    }
+
     private func cancelLocalSubscription(forConversation conversationID: String) {
         guard let prev = streams[conversationID] else { return }
+        // Flush, don't discard: a suspended subscription resumes from
+        // the FLUSHED lastSequence — dropping buffered chunks silently
+        // here would rely on server replay, while leaving them
+        // unflushed would replay-duplicate them.
+        flushDeltas(conversationID: conversationID)
         tasks[prev.runID]?.cancel()
         tasks.removeValue(forKey: prev.runID)
     }
@@ -341,23 +408,42 @@ public final class StreamHub {
     }
 
     private func applyChunk(_ c: PsmithChunk, runID: String, conversationID: String) {
+        guard let current = streams[conversationID], current.runID == runID else { return }
+        // Prose deltas go through the coalescing buffer — see the
+        // machinery above. Transition edges (first thinking delta,
+        // thinking→text) mutate visible timestamps, so they flush and
+        // write immediately; everything else buffered here never
+        // touches the observable state.
+        switch c.type {
+        case .textDelta:
+            guard let str = c.textIfDelta else { return }
+            if current.streamingThinkingStartedAt != nil, current.streamingThinkingFinishedAt == nil {
+                flushDeltas(conversationID: conversationID)
+                if var s = streams[conversationID], s.runID == runID {
+                    s.streamingThinkingFinishedAt = Date()
+                    streams[conversationID] = s
+                }
+            }
+            bufferDelta(conversationID: conversationID, text: str, sequence: c.sequence)
+            return
+        case .thinkingDelta:
+            guard let str = c.textIfDelta else { return }
+            if current.streamingThinkingStartedAt == nil {
+                flushDeltas(conversationID: conversationID)
+                if var s = streams[conversationID], s.runID == runID {
+                    s.streamingThinkingStartedAt = Date()
+                    streams[conversationID] = s
+                }
+            }
+            bufferDelta(conversationID: conversationID, thinking: str, sequence: c.sequence)
+            return
+        default:
+            // Structural chunk: order it after any buffered prose.
+            flushDeltas(conversationID: conversationID)
+        }
         guard var s = streams[conversationID], s.runID == runID else { return }
         s.lastSequence = max(s.lastSequence, c.sequence)
         switch c.type {
-        case .textDelta:
-            if let str = c.textIfDelta {
-                if s.streamingThinkingStartedAt != nil, s.streamingThinkingFinishedAt == nil {
-                    s.streamingThinkingFinishedAt = Date()
-                }
-                s.streamingText += str
-            }
-        case .thinkingDelta:
-            if let str = c.textIfDelta {
-                if s.streamingThinkingStartedAt == nil {
-                    s.streamingThinkingStartedAt = Date()
-                }
-                s.streamingThinking += str
-            }
         case .toolUseStart:
             if let info = c.toolUseStartInfo {
                 s.streamingToolCalls.append(LiveToolCall(id: info.id, name: info.name, startedAt: Date()))
@@ -408,6 +494,10 @@ public final class StreamHub {
     }
 
     private func handleTerminal(run: PsmithStreamRun, conversationID: String) async {
+        // Any coalesced prose lands before terminal handling so the
+        // streaming row shows the complete text through the swap to
+        // the settled message.
+        flushDeltas(conversationID: conversationID)
         let handler = terminalHandlers[conversationID]
         tasks.removeValue(forKey: run.id)
 

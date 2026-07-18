@@ -143,32 +143,28 @@ private struct ConversationBody: View {
     let liveConversation: PsmithConversation
     @Environment(AppModel.self) private var app
 
-    /// Auto-follow tracking. While streaming, we keep the streaming
-    /// row's bottom in view *until* its height reaches the viewport's
-    /// height — at which point we stop following so the user can read
-    /// the top of a long response without it being scrolled away.
-    /// User-driven scrolling disengages follow — detected via
-    /// `scrollPosition.isPositionedByUser` in the geometry handler
-    /// (deliberately NOT scroll-phase or gesture based; see the
-    /// comments in `paneScrollBody`).
-    @State private var autoFollow = true
-    /// Scroll handle for the explicit `scrollTo(edge: .bottom)` jumps
-    /// (send, scroll-to-bottom pill). The continuous bottom-pin while
-    /// streaming is NOT driven through this — it's delegated to
-    /// `defaultScrollAnchor(.bottom, for: .sizeChanges)`, which pins
-    /// inside the scroll view's own layout pass. See the comment on
-    /// that modifier in `paneScrollBody` for why every hand-computed
-    /// alternative overshot into blank space.
+    /// There is NO auto-follow. A send pins the just-sent question at
+    /// the viewport top and the response streams in below with the
+    /// viewport motionless — reading starts at the top of a reply, so
+    /// chasing its tail was pure motion (and, at heavy conversation
+    /// scale, visibly janky motion solved against layout estimates).
+    /// The only remaining scroll movers: the cold-entry seek, the
+    /// one pin at send, the scroll-to-bottom pill, and two idle-time
+    /// clamps.
+    ///
+    /// Scroll handle for the explicit seeks (entry, send pin, pill).
     @State private var scrollPosition = ScrollPosition()
     @State private var showingMissingCostInfo = false
-    /// Live height of the in-flight streaming bubble. Updated via
-    /// `.onGeometryChange` on the StreamingRow. Used to decide when
-    /// to stop auto-follow.
-    @State private var streamingRowHeight: CGFloat = 0
+    /// True while the pill's jump-to-bottom is converging: seeks from
+    /// far above solve against estimated coordinates and can land
+    /// short, so the geometry handler keeps re-seeking until the
+    /// bottom is actually reached. Cleared on arrival or on any user
+    /// grab. (Its predecessor re-used the follow flag here, and the
+    /// user-scroll disengage raced the re-seek loop to death — the
+    /// "pill does nothing" report.)
+    @State private var seekingBottom = false
     /// Viewport height of the message scroll, measured via
-    /// `onGeometryChange`. Used as the cap above which auto-follow
-    /// disengages so a long response stops scrolling once the bubble
-    /// fills the screen.
+    /// `onGeometryChange`.
     @State private var viewportHeight: CGFloat = 0
     /// Width of the message pane, measured via `onGeometryChange` and
     /// injected as `chatPaneWidth` for bubble width caps. Measured
@@ -197,28 +193,21 @@ private struct ConversationBody: View {
     /// misread that caused the original stranding bug.
     @State private var scrollPhase: ScrollPhase = .idle
 
-    /// Latest scroll offset, stored OUTSIDE SwiftUI invalidation (a
-    /// reference-type box mutated from the geometry handler at tick
-    /// rate without re-rendering anything). Read exactly once per
-    /// park to freeze the viewport at its current offset.
-    @State private var liveOffset = LiveOffsetBox()
 
-
-    /// The message id the mid-stream park pinned at the viewport top.
-    /// Used to RE-ASSERT the pin across the terminal reload — the
-    /// content swap at stream end re-triggers the scroll position and
-    /// yanked a parked viewport to the response bottom (simulator-
-    /// verified: park held for 15s of streaming, then jumped at
-    /// terminal). Cleared on any user scroll / new send.
-    @State private var parkedMessageID: String?
-
-    /// Arms the sent-message-top cutoff. The preference reporter
-    /// emits garbage during the send-time relayout (logged minY=-458
-    /// on the first frame of a stream, which parked follow at t=0),
-    /// so the cutoff only honors a top-crossing after at least one
-    /// sane on-screen reading (minY comfortably below the viewport
-    /// top) has been observed for the current stream.
-    @State private var cutoffArmed = false
+    // NOTE on the send pin: there is deliberately NO scroll-based
+    // pinning machinery. Every strategy that positions the question
+    // by scrolling was tried at heavy scale (406 × 800-word
+    // messages) and failed on LazyVStack estimate instability:
+    // id-solves landed ~3,000pt short and wandered; a held edge
+    // position oscillated ±1,713pt/tick against the UIKit clamp;
+    // convergence re-seeking closed into a feedback loop with the
+    // re-estimator (content estimate swung 1.29M→343k, main thread
+    // 100% in AG::Graph). The pin that works never scrolls: the
+    // send collapses `mountedFromIndex` to the new question, which
+    // makes it the topmost mounted content — viewport top by
+    // construction — and the staged backfill remounts history above
+    // after the terminal, under the entry anchor's verified
+    // lockstep.
 
     /// First mounted index into `model.messages`, or nil while the
     /// cold-entry tail window (newest `coldEntryTail` rows) is active.
@@ -277,6 +266,15 @@ private struct ConversationBody: View {
         return model.messages.count > coldEntryTail
     }
 
+    /// True from cold entry until the staged backfill fully
+    /// completes (or pauses, or a send starts). Gates the sizeChanges
+    /// bottom anchor: a SINGLE stable Bool, deliberately not a
+    /// composite expression — an earlier gate that swapped which
+    /// subterm supplied `true` mid-entry killed the anchor the tick
+    /// the subterms crossed, and the backfill prepends then pushed
+    /// the viewport to mid-conversation under a frozen offset.
+    @State private var entryAnchorActive = true
+
     /// Entry curtain. The transcript renders at opacity 0 (layout
     /// fully live) until the geometry handler first observes the
     /// viewport settled at the bottom, then fades in. Even the 12-row
@@ -290,15 +288,14 @@ private struct ConversationBody: View {
     @State private var entrySettled = false
 
     /// True while the ScrollPosition binding holds an explicit
-    /// position (entry seek, past-bottom clamp, pill seek, park pin).
+    /// position (entry seek, past-bottom clamp, pill seek, send pin).
     /// A held position keeps re-solving on every content change — and
     /// the `Edge.bottom` flavor re-solves center-x against estimated
-    /// widths, drifting the transcript 16pt left. The follow behavior
-    /// itself is fully covered by the sizeChanges anchor, so the
-    /// geometry handler DROPS any live position (replaces the binding)
-    /// the next time it observes settled-at-bottom-while-following:
-    /// from then on nothing re-solves x at all. Park pins are exempt
-    /// (autoFollow is false while parked, so the drop never fires).
+    /// widths, drifting the transcript 16pt left. So the geometry
+    /// handler DROPS any live position (replaces the binding) the
+    /// next time it observes settled-at-bottom at rest: from then on
+    /// nothing re-solves x at all. Send pins survive to the terminal
+    /// because the stream spacer keeps `distance` deep until then.
     @State private var stickyLive = false
 
     var body: some View {
@@ -587,10 +584,7 @@ private struct ConversationBody: View {
                     // reason — observes only pendingUserText, not the
                     // chunk-rate streaming state.
                     PendingUserArea(model: model)
-                    StreamingArea(
-                        model: model,
-                        streamingRowHeight: $streamingRowHeight
-                    )
+                    StreamingArea(model: model)
                 }
                 .padding()
                 // Width clamp on the scroll content, one layer of the
@@ -663,66 +657,39 @@ private struct ConversationBody: View {
                 // `scrollPosition.isPositionedByUser`.
                 //
                 // scrollTargetLayout exposes row identities so the
-                // park's `scrollTo(id:anchor:)` can pin the sent
-                // message at the viewport top (see disengageFollow).
+                // send pin's `scrollTo(id:anchor:)` can hold the sent
+                // message at the viewport top.
                 .scrollTargetLayout()
             }
             .scrollPosition($scrollPosition)
-            // Auto-follow is delegated to the SYSTEM bottom anchor, not
-            // hand-computed scrollTo(point:) math. Every prior attempt
-            // (sentinel anchors, delta scrolls, "real geometry" pins)
-            // overshot into blank space for the same root reason:
-            // LazyVStack's contentSize is an ESTIMATE while rows above
-            // the viewport are unrealised, so any target computed from
-            // it can land past the real content end. Worse, the
-            // overshoot's clamp-back bounce reported as `.decelerating`
-            // to onScrollPhaseChange, which read it as a user drag and
-            // killed autoFollow — stranding the viewport in the blank
-            // band below the last message.
+            // The sizeChanges bottom anchor exists ONLY for the
+            // entry/backfill window: it pins the bottom edge from
+            // INSIDE the scroll view's layout pass, which is what
+            // makes the staged history prepends land invisibly above
+            // the viewport (any hand-computed alternative solves
+            // against LazyVStack's estimates and overshoots into
+            // blank space). Once the backfill completes it detaches
+            // for good — streaming no longer follows anything.
             //
-            // `defaultScrollAnchor(.bottom, for: .sizeChanges)` pins
-            // the bottom edge from INSIDE the scroll view's layout
-            // pass, after row realisation, so there is no estimate to
-            // overshoot and no programmatic scroll for the phase
-            // handler to misread. Passing nil detaches the anchor when
-            // follow is disengaged (user dragged, or the streaming
-            // bubble outgrew the viewport).
-            // ONLY the role-specific sizeChanges anchor — deliberately
-            // no all-roles `defaultScrollAnchor(.bottom)`. The
-            // all-roles variant covers sizeChanges too, and its
-            // composition with the conditional override below is
-            // ambiguous: logging showed the view still bottom-pinning
-            // after the override flipped to nil. Initial placement
-            // comes from the onAppear edge seek below instead (the
-            // sizeChanges anchor does NOT cover the empty→loaded
-            // transition — verified: cold entry landed at the top
-            // without it).
             // Bottom-LEADING, not `.bottom`: `.bottom` is
             // UnitPoint(x: 0.5, y: 1) and the anchor solves BOTH
             // axes. When a relayout pass transiently over-estimates
             // the content width (backfill batches, keyboard show),
             // the x:0.5 anchor re-centers the content against the
             // oversized estimate — a lasting 16pt leftward shift the
-            // moment the width settles back (probe-verified: the
-            // content unit's global x oscillated 0→-16 per batch and
-            // stuck at -16; the user sees it as "the margins shifted
-            // left"). x:0 pins the leading edge so the width estimate
-            // can't move the transcript horizontally at all.
+            // moment the width settles back (probe-verified). x:0
+            // pins the leading edge so the width estimate can't move
+            // the transcript horizontally at all.
             .defaultScrollAnchor(
-                autoFollow ? UnitPoint(x: 0, y: 1) : nil,
+                entryAnchorActive ? UnitPoint(x: 0, y: 1) : nil,
                 for: .sizeChanges
             )
             .onAppear {
                 // Sticky bottom position for cold entry: holds the
-                // bottom through load + tail-window settle + backfill.
-                // The stickiness is exactly the follow behavior we
-                // want while autoFollow is true; it is explicitly
-                // broken at park (disengageFollow resets the binding)
-                // and replaced by any user drag. seekBottom targets an
-                // id when messages are already cached and only falls
-                // back to the center-x edge seek pre-content; the
-                // entry-settle handler upgrades the sticky position
-                // to the x-honest id pin either way.
+                // bottom through load + tail-window settle + backfill,
+                // then the settle handler drops it. seekBottom targets
+                // an id when messages are already cached and only
+                // falls back to the center-x edge seek pre-content.
                 seekBottom()
             }
             .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
@@ -735,7 +702,6 @@ private struct ConversationBody: View {
                     offsetX: geometry.contentOffset.x
                 )
             } action: { old, m in
-                liveOffset.y = m.offset
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
 
@@ -757,13 +723,13 @@ private struct ConversationBody: View {
                     let dOff = m.offset - old.offset
                     let dContent = m.contentHeight - old.contentHeight
                     if abs(dOff) > 48 {
-                        scrollLog.notice("JUMP dOff=\(Int(dOff), privacy: .public) off=\(Int(old.offset), privacy: .public)→\(Int(m.offset), privacy: .public) content=\(Int(m.contentHeight), privacy: .public) vp=\(Int(m.viewportHeight), privacy: .public) follow=\(autoFollow, privacy: .public) user=\(scrollPosition.isPositionedByUser, privacy: .public) parked=\(parkedMessageID != nil, privacy: .public) streaming=\(model.isStreaming, privacy: .public)")
+                        scrollLog.notice("JUMP dOff=\(Int(dOff), privacy: .public) off=\(Int(old.offset), privacy: .public)→\(Int(m.offset), privacy: .public) content=\(Int(m.contentHeight), privacy: .public) vp=\(Int(m.viewportHeight), privacy: .public) seeking=\(seekingBottom, privacy: .public) user=\(scrollPosition.isPositionedByUser, privacy: .public) streaming=\(model.isStreaming, privacy: .public)")
                     }
                     if abs(dContent) > 120, abs(dContent) > abs(dOff) {
                         scrollLog.notice("CONTENT-LURCH dContent=\(Int(dContent), privacy: .public) content=\(Int(old.contentHeight), privacy: .public)→\(Int(m.contentHeight), privacy: .public) off=\(Int(m.offset), privacy: .public)")
                     }
                     if distance < -8, systemDriven {
-                        scrollLog.notice("PAST-END distance=\(Int(distance), privacy: .public) off=\(Int(m.offset), privacy: .public) content=\(Int(m.contentHeight), privacy: .public) follow=\(autoFollow, privacy: .public)")
+                        scrollLog.notice("PAST-END distance=\(Int(distance), privacy: .public) off=\(Int(m.offset), privacy: .public) content=\(Int(m.contentHeight), privacy: .public)")
                     }
                 }
                 // The horizontal break-out ("margins shift left"):
@@ -804,32 +770,36 @@ private struct ConversationBody: View {
                     }
                 }
 
-                // Settled at the bottom while following: the anchor
-                // owns the follow from here, so any live explicit
-                // position is pure liability (its re-solves are the
-                // x-drift engine). Drop it. Park pins never hit this
-                // (autoFollow is false while parked); the pill or
-                // clamp may re-install one later and it gets dropped
-                // again at the next settle.
-                if stickyLive, entrySettled, autoFollow, distance < 8,
+                // Settled at the bottom with nothing in flight: any
+                // live explicit position is pure liability (its
+                // re-solves are the x-drift engine). Drop it. NO
+                // `!backfilling` term: the entry anchor alone holds
+                // the bottom through the backfill (verified lockstep),
+                // and deferring the drop leaves the center-x edge
+                // position live for the backfill to re-poison — the
+                // v21 "margins collapsed through entry" burst frames.
+                if stickyLive, entrySettled, distance < 8,
+                   !seekingBottom,
                    !scrollPosition.isPositionedByUser {
                     stickyLive = false
                     scrollPosition = ScrollPosition()
-                    scrollLog.notice("sticky dropped; anchor owns follow")
+                    scrollLog.notice("sticky dropped")
                 }
 
                 // Silent staged expansion: the moment we observe the
                 // viewport settled at the bottom of the cold-entry tail
                 // window (the seek has landed on the small, fully-
                 // realized set), start mounting the rest of the
-                // history in batches. The bottom edge is anchor-pinned
-                // over realized rows, so each prepend lands entirely
-                // above the viewport and is invisible. Gated on
-                // autoFollow so we only expand while genuinely
-                // bottom-pinned, never mid-scroll; if the user grabs
-                // the view mid-backfill the loop pauses and this
-                // trigger resumes it on the next settle.
-                if needsBackfill, !backfilling, autoFollow, distance < 8 {
+                // history in batches. `backfilling` re-attaches the
+                // sizeChanges anchor, so each prepend lands entirely
+                // above the viewport and is invisible. Only while
+                // settled at the bottom, never mid-scroll, never while
+                // a park holds; if the user grabs the view mid-backfill
+                // the loop pauses and this trigger resumes it on the
+                // next settle.
+                if needsBackfill, !backfilling, distance < 8,
+                   !model.sending, !model.isStreaming,
+                   !scrollPosition.isPositionedByUser {
                     startHistoryBackfill()
                 }
 
@@ -845,7 +815,7 @@ private struct ConversationBody: View {
                 // the send path's own scroll animation mid-flight, and
                 // `!isPositionedByUser` so a user's at-bottom rubber-
                 // band (also briefly negative) is never fought.
-                if autoFollow, distance < -1,
+                if distance < -1,
                    scrollPhase == .idle,
                    !scrollPosition.isPositionedByUser {
                     scrollLog.notice("past-bottom clamp fired (distance=\(Int(distance), privacy: .public))")
@@ -857,66 +827,50 @@ private struct ConversationBody: View {
                     return
                 }
 
-                // Bottom-seek convergence — the mirror of the clamp
-                // above, for landing SHORT. A seek issued from far
-                // above (the pill, a send while scrolled up) solves
-                // its target against estimated coordinates; at
-                // hundreds-of-heavy-messages scale it can land well
-                // shy of the real bottom with nothing to finish the
-                // job (the "scroll to bottom doesn't work" report).
-                // While following, idle, and visibly short, re-seek:
-                // each pass realizes rows near the landing zone and
-                // refines the solve until the bottom is reached.
-                // Gated on entrySettled so cold-entry mechanics keep
-                // their own seek untouched.
-                if autoFollow, entrySettled, distance > 64,
-                   scrollPhase == .idle,
-                   !scrollPosition.isPositionedByUser {
-                    scrollLog.notice("bottom convergence re-seek (distance=\(Int(distance), privacy: .public))")
-                    var t = Transaction()
-                    t.disablesAnimations = true
-                    withTransaction(t) {
-                        seekBottom()
+                // Pill convergence. A jump-to-bottom from far above
+                // solves its target against estimated coordinates; at
+                // hundreds-of-heavy-messages scale it lands well shy
+                // of the real bottom. While `seekingBottom` is armed,
+                // keep re-seeking — each pass realizes rows near the
+                // landing zone and refines the solve — until arrival
+                // (distance settles) or the user takes the viewport.
+                // A dedicated flag, NOT the old follow flag: the
+                // user-scroll disengage used to race the re-seek loop
+                // and kill it after the first short landing, which is
+                // exactly why the pill "did nothing" from far away.
+                if seekingBottom {
+                    if scrollPosition.isPositionedByUser {
+                        seekingBottom = false
+                        scrollLog.notice("bottom seek cancelled: user took over")
+                    } else if distance < 8 {
+                        seekingBottom = false
+                        scrollLog.notice("bottom seek arrived")
+                    } else if distance > 64, scrollPhase == .idle {
+                        scrollLog.notice("bottom convergence re-seek (distance=\(Int(distance), privacy: .public))")
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            seekBottom()
+                        }
+                        return
                     }
-                    return
                 }
 
-                // Disengage follow ONLY for user-driven motion.
-                // `ScrollPosition.isPositionedByUser` tracks position
-                // provenance: true after a finger drag, false after
-                // programmatic scrolls and the system anchor's own
-                // repositioning. Every signal we tried before
-                // misattributed system motion to the user —
-                // onScrollPhaseChange reports .tracking/.decelerating
-                // for clamp-back bounces during cold-entry settle of a
-                // long chat (verified in the sim with no touch input),
-                // and a simultaneous DragGesture blocks ScrollView's
-                // pan outright. The small distance floor keeps
-                // at-bottom overscroll rubber-banding from counting as
-                // "scrolled away."
-                if autoFollow, scrollPosition.isPositionedByUser, distance > 4 {
-                    autoFollow = false
-                    scrollLog.notice("follow off: user scrolled (distance=\(Int(distance), privacy: .public))")
-                }
-
-                // Release the mid-stream park the moment the user
-                // takes over. The id-pin is STICKY — the scroll view
-                // re-applies it on every arriving chunk, which
-                // snapped the viewport back against the user's drag
+                // Release any live pin the moment the user takes
+                // over. An id-pin is STICKY — the scroll view
+                // re-applies it on every arriving chunk, which snaps
+                // the viewport back against the user's drag
                 // (verified: repeated drags barely moved while a
-                // stream was parked). Replacing the binding while the
+                // stream pin held). Replacing the binding while the
                 // user's gesture owns the viewport breaks the pin
                 // without the at-rest one-viewport rewind.
-                if parkedMessageID != nil, scrollPosition.isPositionedByUser {
-                    scrollLog.notice("park released: user took over")
-                    parkedMessageID = nil
+                if stickyLive, scrollPosition.isPositionedByUser {
+                    scrollLog.notice("pin released: user took over")
                     stickyLive = false
                     scrollPosition = ScrollPosition()
                 }
 
-                // Pill visibility — only meaningful once follow is off
-                // (while anchored, distance hovers near zero).
-                guard !autoFollow else { return }
+                // Pill visibility.
                 let newFar = distance > scrollToBottomThreshold
                 if newFar != isFarFromBottom {
                     withAnimation(.easeInOut(duration: 0.22)) {
@@ -934,13 +888,12 @@ private struct ConversationBody: View {
             .overlay(alignment: .top) {
                 Button {
                     Haptics.impact(.light)
-                    autoFollow = true
-                    // Non-animated: from hundreds of messages up, an
-                    // animated seek tweens across estimated
-                    // coordinates for no benefit. The instant jump
-                    // lands, then the convergence clamp in the
-                    // geometry handler finishes the job if the
-                    // estimate-solved target fell short.
+                    // Arm the convergence loop BEFORE the seek: the
+                    // jump is non-animated (tweening across estimated
+                    // coordinates buys nothing), and the geometry
+                    // handler keeps re-seeking while `seekingBottom`
+                    // holds until the bottom is actually reached.
+                    seekingBottom = true
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) {
@@ -960,9 +913,9 @@ private struct ConversationBody: View {
                     .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 10)
-                .opacity(isFarFromBottom && !autoFollow ? 1 : 0)
-                .allowsHitTesting(isFarFromBottom && !autoFollow)
+                .padding(.top, 8)
+                .opacity(isFarFromBottom ? 1 : 0)
+                .allowsHitTesting(isFarFromBottom)
                 .animation(.easeInOut(duration: 0.22), value: isFarFromBottom)
                 .accessibilityLabel("Scroll to bottom of conversation")
                 .accessibilityHidden(!isFarFromBottom)
@@ -979,159 +932,48 @@ private struct ConversationBody: View {
             // and delete now hold the user's current scroll position.
             .onChange(of: model.pendingUserText) { _, text in
                 if text != nil {
-                    scrollLog.notice("send: follow on")
-                    autoFollow = true
-                    streamingRowHeight = 0
-                    cutoffArmed = false
-                    parkedMessageID = nil
-                    // Freeze the mounted window to an index anchor if
-                    // the send arrived before the backfill ever ran —
-                    // a dynamic newest-N suffix would unmount the
-                    // window's oldest row when this send appends (the
-                    // v5.1 "unloading messages at the top" sin).
-                    if mountedFromIndex == nil {
+                    // Send = collapse the mounted window to the new
+                    // turn. With nothing mounted above it, the
+                    // question is the topmost content — at the
+                    // viewport top by construction, offset ~0 — and
+                    // the response streams in below a motionless
+                    // viewport. NO scrolling happens here (see the
+                    // NOTE by mountedFromIndex: every scroll-based
+                    // pin failed on estimate instability at heavy
+                    // scale). History remounts via the staged
+                    // backfill after the terminal, exactly like cold
+                    // entry; the trade is that mid-stream the user
+                    // can't scroll above the question, which matches
+                    // the reference apps' new-turn framing.
+                    scrollLog.notice("send: collapse window to new turn")
+                    entryAnchorActive = false
+                    seekingBottom = false
+                    stickyLive = false
+                    mountedFromIndex = model.messages.count
+                    scrollPosition = ScrollPosition()
+                } else if !model.sending && !model.isStreaming {
+                    // pendingUserText cleared with nothing in flight:
+                    // the send failed before a run started, so the
+                    // collapsed window would show an empty
+                    // transcript. Restore the cold-entry tail.
+                    if let idx = mountedFromIndex, idx >= model.messages.count {
                         mountedFromIndex = max(0, model.messages.count - coldEntryTail)
-                    }
-                    // NO explicit bottom-EDGE seek here. The pending
-                    // row's insertion is a content size change, and
-                    // with autoFollow re-engaged the sizeChanges
-                    // anchor pins the bottom from INSIDE that layout
-                    // pass — offset and content move in lockstep,
-                    // nothing visible. The explicit edge seek this
-                    // replaces solved its target against the
-                    // pre-layout estimated content height in a
-                    // SEPARATE pass; the estimate then refined and
-                    // the two passes rendered as an offset flicker
-                    // (log-verified ±763pt at send). Keyboard
-                    // dismissal (container growth, which the
-                    // sizeChanges anchor ignores) is covered by the
-                    // past-bottom clamp in the geometry handler.
-                    //
-                    // If a pill or clamp seek left a live position
-                    // (an id pin on what is about to stop being the
-                    // last row), re-target it to the pending row so
-                    // it can't hold the viewport against the anchor.
-                    // Usually stickyLive is false here (dropped at
-                    // the last settle) and the anchor alone drives.
-                    if stickyLive {
-                        var ts = Transaction()
-                        ts.disablesAnimations = true
-                        withTransaction(ts) {
-                            scrollPosition.scrollTo(id: "__pending__", anchor: UnitPoint(x: 0, y: 1))
-                        }
                     }
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
                 if !wasStreaming && isStreaming {
-                    scrollLog.notice("stream start: follow on")
-                    autoFollow = true
-                    streamingRowHeight = 0
-                    // Hand any live pin from __pending__ to the
-                    // streaming row so it can't hold the viewport
-                    // against the anchor (see the send handler).
-                    // Usually there is no live position and the
-                    // anchor alone follows the stream.
-                    if stickyLive {
-                        var tp = Transaction()
-                        tp.disablesAnimations = true
-                        withTransaction(tp) {
-                            scrollPosition.scrollTo(id: "__streaming__", anchor: UnitPoint(x: 0, y: 1))
-                        }
-                    }
+                    scrollLog.notice("stream start")
                 } else if wasStreaming && !isStreaming {
-                    scrollLog.notice("stream terminal (follow=\(autoFollow, privacy: .public) parked=\(parkedMessageID != nil, privacy: .public))")
-                    // Terminal edge: reset the streaming-row
-                    // bookkeeping and NOTHING ELSE about the layout.
-                    // The mounted set stays exactly as it was — the
-                    // old design expanded the history window here,
-                    // which mounted hundreds of estimated rows in one
-                    // structural relayout, and the sticky bottom edge
-                    // solved into the resulting phantom space below
-                    // the conversation on every stream close (user-
-                    // reported, consistent). With the boundary frozen
-                    // there is no relayout at terminal at all: the
-                    // streaming row settles into a real message row of
-                    // the same content and the viewport doesn't move.
-                    // When we followed to the end, the sticky bottom
-                    // edge holds the viewport through the terminal
-                    // reload on its own. (Replacing the binding here
-                    // would rewind a viewport; see disengageFollow.)
-                    streamingRowHeight = 0
-                    if !autoFollow, let parkedID = parkedMessageID {
-                        // Parked mid-response: the terminal content
-                        // swap re-fires the scroll position and yanks
-                        // the viewport to the bottom. Re-assert the
-                        // pin now and once more after the reload
-                        // settles.
-                        var t = Transaction()
-                        t.disablesAnimations = true
-                        withTransaction(t) {
-                            scrollPosition.scrollTo(id: parkedID, anchor: UnitPoint(x: 0, y: 0))
-                        }
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(300))
-                            guard !autoFollow, parkedMessageID == parkedID else { return }
-                            var t2 = Transaction()
-                            t2.disablesAnimations = true
-                            withTransaction(t2) {
-                                scrollPosition.scrollTo(id: parkedID, anchor: UnitPoint(x: 0, y: 0))
-                            }
-                        }
-                    }
-                }
-            }
-            // Primary streaming stop condition: follow the growing
-            // response until the just-sent USER message reaches the
-            // top of the viewport, then park — the question stays
-            // visible while the answer keeps writing below (the pill
-            // appears once the bottom runs away). The preference is
-            // emitted only while a streaming turn is active, by the
-            // last (user) row in ChatHistoryArea; minY is in the
-            // scroll view's visible space, so <= threshold means the
-            // row's top is at/above the viewport top.
-            .onPreferenceChange(SentMessageTopPreferenceKey.self) { minY in
-                guard let minY else { return }
-                Task { @MainActor in
-                    guard model.isStreaming else { return }
-                    if !cutoffArmed {
-                        // Arm only on a sane reading: the row top
-                        // visibly below the viewport top. Filters the
-                        // relayout garbage at stream start.
-                        if minY > 60 {
-                            cutoffArmed = true
-                            scrollLog.notice("cutoff armed (minY=\(Int(minY)))")
-                        }
-                        return
-                    }
-                    // Fire a little EARLY (24pt above the top) rather
-                    // than on the crossing: the preference emits at
-                    // chunk cadence, so a crossing check always lands
-                    // past the top by up to a chunk's growth and the
-                    // id-pin then yanks the content back DOWN
-                    // (log-verified minY=-8..-11 parks). Firing early
-                    // makes the pin a small continuation of the
-                    // motion already underway instead of a reversal.
-                    guard autoFollow, minY <= 24 else { return }
-                    scrollLog.notice("park: sent message reached top (minY=\(Int(minY)))")
-                    disengageFollow()
-                }
-            }
-            .onChange(of: streamingRowHeight) { _, newHeight in
-                // Backstop stop condition: the streaming row alone
-                // outgrew the viewport. Normally the sent-message-top
-                // preference (above) fires first — this covers turns
-                // where the preference can't (forked sends where the
-                // last row isn't the watched user message, a row that
-                // dematerialized, etc.). streamingRowHeight is used
-                // only for this check, not for driving scrolls — the
-                // bottom pin is the system anchor's job.
-                guard model.isStreaming, newHeight > 0 else { return }
-                let buffer: CGFloat = 24
-                let usableViewport = max(0, viewportHeight - buffer)
-                if usableViewport > 0, newHeight >= usableViewport, autoFollow {
-                    scrollLog.notice("park: streaming row outgrew viewport (h=\(Int(newHeight)))")
-                    disengageFollow()
+                    // Terminal edge: nothing positional and no eager
+                    // remount (expanding here was the historical
+                    // stream-close desert). The backfill trigger in
+                    // the geometry handler remounts history the next
+                    // time it observes settled-at-bottom — under the
+                    // entry anchor, so the prepends land invisibly
+                    // above the held viewport.
+                    scrollLog.notice("stream terminal")
+                    seekingBottom = false
                 }
             }
             // Phase TRACKING only — deliberately no disengage here.
@@ -1168,6 +1010,7 @@ private struct ConversationBody: View {
                 }
                 if model.messages.count <= coldEntryTail {
                     mountedFromIndex = 0
+                    entryAnchorActive = false
                 }
             }
     }
@@ -1216,14 +1059,24 @@ private struct ConversationBody: View {
     private func startHistoryBackfill() {
         guard !backfilling else { return }
         backfilling = true
+        entryAnchorActive = true
         scrollLog.notice("backfill start (count=\(model.messages.count, privacy: .public))")
         Task { @MainActor in
-            defer { backfilling = false }
+            defer {
+                backfilling = false
+                entryAnchorActive = false
+            }
             if mountedFromIndex == nil {
                 mountedFromIndex = max(0, model.messages.count - coldEntryTail)
             }
             while let idx = mountedFromIndex, idx > 0 {
-                guard autoFollow else {
+                // Prepends are only invisible while the entry anchor
+                // holds the bottom; pause on user grab, park, or a
+                // stream, and the geometry handler resumes on the
+                // next settled-at-bottom observation.
+                guard !scrollPosition.isPositionedByUser,
+                      !model.sending,
+                      !model.isStreaming else {
                     scrollLog.notice("backfill paused at \(idx, privacy: .public)")
                     return
                 }
@@ -1234,76 +1087,6 @@ private struct ConversationBody: View {
         }
     }
 
-    /// Stop following the stream and PARK the viewport where it is.
-    /// Four simulator-verified traps shape this:
-    ///
-    ///   1. Flipping `autoFollow` alone is not enough — the send
-    ///      path's `scrollTo(edge: .bottom)` leaves ScrollPosition
-    ///      holding a STICKY edge position that the scroll view keeps
-    ///      re-honoring on every content change, so the view chased
-    ///      the stream all the way to terminal.
-    ///   2. Replacing the binding with an empty ScrollPosition() to
-    ///      break the stickiness REWINDS the offset by exactly one
-    ///      viewport (logged park at minY=-4, frame showed the
-    ///      previous screenful).
-    ///   3. An offset park is only stable when the mounted history is
-    ///      SMALL: with the full chain mounted, LazyVStack's estimate
-    ///      churn for the unrealized mass above slid the parked
-    ///      viewport a full screen off.
-    ///   4. `scrollTo(id:anchor:)` is no better — it solves the
-    ///      target position from those same estimates and landed a
-    ///      screen above the row.
-    ///
-    /// So: overwrite the sticky edge with an ID-pin on the sent
-    /// message, anchored at the viewport top — which is also exactly
-    /// the desired UX (the question stays put while the answer keeps
-    /// writing below). Trap (4) doesn't apply here because the
-    /// mounted set (frozen entry tail + this session's turns) is all
-    /// realized rows, so the id solve is exact; an explicit
-    /// point-park was tried too and `scrollTo(point:)` landed a
-    /// viewport off (its point is not a raw content offset).
-    private func disengageFollow() {
-        autoFollow = false
-        stickyLive = true
-        var t = Transaction()
-        t.disablesAnimations = true
-        withTransaction(t) {
-            if let last = model.messages.last, last.role == .user {
-                parkedMessageID = last.id
-                scrollPosition.scrollTo(id: last.id, anchor: UnitPoint(x: 0, y: 0))
-            } else {
-                // Compaction / no watched row: freeze at the current
-                // offset as a best effort.
-                scrollPosition.scrollTo(point: CGPoint(x: 0, y: liveOffset.y))
-            }
-        }
-        // Second pass: the first scrollTo(id:) solves against row
-        // ESTIMATES when tall rows in the window aren't realized and
-        // can land up to a screen off; by the time this fires, the
-        // first pass has realized the target's neighborhood and the
-        // re-solve is exact. (Same two-pass trick as the terminal
-        // re-assert.)
-        if let parkedID = parkedMessageID {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(250))
-                guard !autoFollow, parkedMessageID == parkedID else { return }
-                var t2 = Transaction()
-                t2.disablesAnimations = true
-                withTransaction(t2) {
-                    scrollPosition.scrollTo(id: parkedID, anchor: UnitPoint(x: 0, y: 0))
-                }
-            }
-        }
-    }
-
-}
-
-/// Reference-type holder for the live scroll offset. Mutated from the
-/// geometry handler every tick WITHOUT invalidating any view (it's a
-/// class held in @State — stable identity, field writes are invisible
-/// to SwiftUI). Read once per park.
-final class LiveOffsetBox {
-    var y: CGFloat = 0
 }
 
 
@@ -1328,23 +1111,6 @@ private struct ScrollMetrics: Equatable, Sendable {
 // properties it actually consumes — so `model.streamingText` updating
 // 20-50× per second does NOT re-eval ChatHistoryArea's body and run
 // ForEach over hundreds of messages.
-
-/// Reports the just-sent user message's top edge in the scroll view's
-/// visible coordinate space while a response streams. ConversationBody
-/// watches this to stop auto-follow the moment the sent message
-/// reaches the viewport top — so the user's question stays on screen
-/// while the answer keeps writing below.
-///
-/// A preference (not a callback prop on ChatHistoryArea) so the
-/// history subview's stored properties stay equatable — a closure
-/// prop would defeat SwiftUI's body-skip and re-run the 500-message
-/// ForEach on every chunk-rate parent re-eval.
-struct SentMessageTopPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat? = nil
-    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
-        value = nextValue() ?? value
-    }
-}
 
 /// Renders the settled message + compression-summary timeline. Observes
 /// only `model.messages` (plus the rare isStreaming flip for the
@@ -1385,20 +1151,7 @@ private struct ChatHistoryArea: View {
         return Array(model.messages.suffix(tail))
     }
 
-    /// The message whose top edge gates auto-follow: the just-sent
-    /// user message, which is the LAST row in the chain for the
-    /// whole duration of a streaming turn (the assistant row only
-    /// materializes at terminal). nil outside streaming — the
-    /// geometry reporter detaches entirely.
-    private var followCutoffMessageID: String? {
-        guard model.isStreaming, !model.isCompacting,
-              let last = model.messages.last, last.role == .user
-        else { return nil }
-        return last.id
-    }
-
     var body: some View {
-        let cutoffID = followCutoffMessageID
         ForEach(visibleMessages) { msg in
             if msg.role == .compressionSummary {
                 CompressionSummaryCard(message: msg, model: model)
@@ -1408,16 +1161,6 @@ private struct ChatHistoryArea: View {
                 MessageRow(message: msg, model: model)
                     .frame(width: rowWidth, alignment: .leading)
                     .id(msg.id)
-                    .background {
-                        if msg.id == cutoffID {
-                            GeometryReader { g in
-                                Color.clear.preference(
-                                    key: SentMessageTopPreferenceKey.self,
-                                    value: g.frame(in: .scrollView).minY
-                                )
-                            }
-                        }
-                    }
             }
         }
     }
@@ -1504,7 +1247,6 @@ private struct QueuedUserRow: View {
 /// re-render this subview and ONLY this subview.
 private struct StreamingArea: View {
     @Bindable var model: ConversationViewModel
-    @Binding var streamingRowHeight: CGFloat
     @Environment(\.chatPaneWidth) private var paneWidth
 
     private var rowWidth: CGFloat? {
@@ -1537,17 +1279,6 @@ private struct StreamingArea: View {
             )
             .frame(width: rowWidth, alignment: .leading)
             .id("__streaming__")
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newHeight in
-                // Gate writes on actively streaming so an incidental
-                // layout pass on the disappearing row doesn't fire a
-                // state mutation that re-evals paneScrollBody for
-                // nothing.
-                guard model.isStreaming || model.isCompacting else { return }
-                guard newHeight != streamingRowHeight else { return }
-                streamingRowHeight = newHeight
-            }
         }
     }
 }
