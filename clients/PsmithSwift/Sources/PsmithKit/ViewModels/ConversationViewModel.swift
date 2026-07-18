@@ -399,12 +399,17 @@ public final class ConversationViewModel {
                 selectedProviderID = target.providerID
                 selectedModelID    = target.modelID
             }
-            // Advisory refreshes (status-strip token count, branch-switcher
-            // tree). Concurrent: neither depends on the other, both are
-            // display sugar behind the already-rendered chain.
+            // Advisory refreshes (status-strip token count + cost,
+            // branch-switcher tree). Concurrent: none depends on
+            // another, all are display sugar behind the
+            // already-rendered chain. Contexts ride along so the
+            // cost chip's per-context aggregate (which spans EVERY
+            // branch, not just the visible chain) stays fresh after
+            // each terminal.
             async let tokens: Void = refreshTokenCount()
             async let tree: Void = loadTree()
-            _ = await (tokens, tree)
+            async let ctxs: Void = loadContexts()
+            _ = await (tokens, tree, ctxs)
         } catch {
             self.loadError = PsmithError.display(error)
         }

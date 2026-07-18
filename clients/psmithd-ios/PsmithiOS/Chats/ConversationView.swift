@@ -451,14 +451,20 @@ private struct ConversationBody: View {
         }
     }
 
-    /// Sum of every assistant message's `totalCostUsd` in the active
-    /// context. Messages with nil cost contribute nothing — those
-    /// are the ones the warning chip surfaces. Computed off
-    /// `model.messages` (the linear chain currently visible) rather
-    /// than the contexts aggregate so the value reflects what's on
-    /// screen even on cold cache hits.
+    /// Total cost of the ACTIVE CONTEXT — every message in it,
+    /// including abandoned branches. The server's per-context
+    /// aggregate (ListContexts.cumulative_cost_usd) is the source:
+    /// a chain-local sum undercounts the moment the user forks,
+    /// because the messages array only holds the currently-viewed
+    /// branch (user-reported: "cost shows only the current tree").
+    /// The chain sum remains as the fallback for the window before
+    /// loadContexts lands (cold cache, first frames).
     private var accruedCost: Double {
-        model.messages.reduce(0) { acc, m in
+        if let ctx = model.activeContext,
+           let row = model.contexts.first(where: { $0.id == ctx.id }) {
+            return row.cumulativeCostUsd
+        }
+        return model.messages.reduce(0) { acc, m in
             acc + (m.usage?.totalCostUsd ?? 0)
         }
     }
