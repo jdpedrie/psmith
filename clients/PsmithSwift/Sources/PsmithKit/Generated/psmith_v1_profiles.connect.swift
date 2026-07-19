@@ -90,6 +90,14 @@ public protocol Psmith_V1_ProfilesServiceClientInterface: Sendable {
     /// to an unconfigured instance); editors can render them as dangling.
     @available(iOS 13, *)
     func `deleteMcpserver`(request: Psmith_V1_DeleteMCPServerRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_DeleteMCPServerResponse>
+
+    /// Live-probe one registered server: dial it, run the MCP initialize
+    /// handshake + tools/list, and report the advertised tool names.
+    /// Surfaces connection errors the send path deliberately swallows (a
+    /// dead server degrades to "no tools" mid-conversation). Failure is
+    /// reported in the response (ok=false), not as an RPC error.
+    @available(iOS 13, *)
+    func `testMcpserver`(request: Psmith_V1_TestMCPServerRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_TestMCPServerResponse>
 }
 
 /// Concrete implementation of `Psmith_V1_ProfilesServiceClientInterface`.
@@ -175,6 +183,11 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
         return await self.client.unary(path: "/psmith.v1.ProfilesService/DeleteMCPServer", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `testMcpserver`(request: Psmith_V1_TestMCPServerRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_TestMCPServerResponse> {
+        return await self.client.unary(path: "/psmith.v1.ProfilesService/TestMCPServer", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let createProfile = Connect.MethodSpec(name: "CreateProfile", service: "psmith.v1.ProfilesService", type: .unary)
@@ -192,6 +205,7 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
             public static let listMcpservers = Connect.MethodSpec(name: "ListMCPServers", service: "psmith.v1.ProfilesService", type: .unary)
             public static let upsertMcpserver = Connect.MethodSpec(name: "UpsertMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
             public static let deleteMcpserver = Connect.MethodSpec(name: "DeleteMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
+            public static let testMcpserver = Connect.MethodSpec(name: "TestMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
         }
     }
 }

@@ -78,6 +78,9 @@ const (
 	// ProfilesServiceDeleteMCPServerProcedure is the fully-qualified name of the ProfilesService's
 	// DeleteMCPServer RPC.
 	ProfilesServiceDeleteMCPServerProcedure = "/psmith.v1.ProfilesService/DeleteMCPServer"
+	// ProfilesServiceTestMCPServerProcedure is the fully-qualified name of the ProfilesService's
+	// TestMCPServer RPC.
+	ProfilesServiceTestMCPServerProcedure = "/psmith.v1.ProfilesService/TestMCPServer"
 )
 
 // ProfilesServiceClient is a client for the psmith.v1.ProfilesService service.
@@ -132,6 +135,12 @@ type ProfilesServiceClient interface {
 	// in place and degrade to a quiet no-op (the pseudo-plugin resolves
 	// to an unconfigured instance); editors can render them as dangling.
 	DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error)
+	// Live-probe one registered server: dial it, run the MCP initialize
+	// handshake + tools/list, and report the advertised tool names.
+	// Surfaces connection errors the send path deliberately swallows (a
+	// dead server degrades to "no tools" mid-conversation). Failure is
+	// reported in the response (ok=false), not as an RPC error.
+	TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error)
 }
 
 // NewProfilesServiceClient constructs a client for the psmith.v1.ProfilesService service. By
@@ -235,6 +244,12 @@ func NewProfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(profilesServiceMethods.ByName("DeleteMCPServer")),
 			connect.WithClientOptions(opts...),
 		),
+		testMCPServer: connect.NewClient[v1.TestMCPServerRequest, v1.TestMCPServerResponse](
+			httpClient,
+			baseURL+ProfilesServiceTestMCPServerProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("TestMCPServer")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -255,6 +270,7 @@ type profilesServiceClient struct {
 	listMCPServers           *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
 	upsertMCPServer          *connect.Client[v1.UpsertMCPServerRequest, v1.UpsertMCPServerResponse]
 	deleteMCPServer          *connect.Client[v1.DeleteMCPServerRequest, v1.DeleteMCPServerResponse]
+	testMCPServer            *connect.Client[v1.TestMCPServerRequest, v1.TestMCPServerResponse]
 }
 
 // CreateProfile calls psmith.v1.ProfilesService.CreateProfile.
@@ -332,6 +348,11 @@ func (c *profilesServiceClient) DeleteMCPServer(ctx context.Context, req *connec
 	return c.deleteMCPServer.CallUnary(ctx, req)
 }
 
+// TestMCPServer calls psmith.v1.ProfilesService.TestMCPServer.
+func (c *profilesServiceClient) TestMCPServer(ctx context.Context, req *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error) {
+	return c.testMCPServer.CallUnary(ctx, req)
+}
+
 // ProfilesServiceHandler is an implementation of the psmith.v1.ProfilesService service.
 type ProfilesServiceHandler interface {
 	CreateProfile(context.Context, *connect.Request[v1.CreateProfileRequest]) (*connect.Response[v1.CreateProfileResponse], error)
@@ -384,6 +405,12 @@ type ProfilesServiceHandler interface {
 	// in place and degrade to a quiet no-op (the pseudo-plugin resolves
 	// to an unconfigured instance); editors can render them as dangling.
 	DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error)
+	// Live-probe one registered server: dial it, run the MCP initialize
+	// handshake + tools/list, and report the advertised tool names.
+	// Surfaces connection errors the send path deliberately swallows (a
+	// dead server degrades to "no tools" mid-conversation). Failure is
+	// reported in the response (ok=false), not as an RPC error.
+	TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error)
 }
 
 // NewProfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -483,6 +510,12 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(profilesServiceMethods.ByName("DeleteMCPServer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profilesServiceTestMCPServerHandler := connect.NewUnaryHandler(
+		ProfilesServiceTestMCPServerProcedure,
+		svc.TestMCPServer,
+		connect.WithSchema(profilesServiceMethods.ByName("TestMCPServer")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/psmith.v1.ProfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProfilesServiceCreateProfileProcedure:
@@ -515,6 +548,8 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 			profilesServiceUpsertMCPServerHandler.ServeHTTP(w, r)
 		case ProfilesServiceDeleteMCPServerProcedure:
 			profilesServiceDeleteMCPServerHandler.ServeHTTP(w, r)
+		case ProfilesServiceTestMCPServerProcedure:
+			profilesServiceTestMCPServerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -582,4 +617,8 @@ func (UnimplementedProfilesServiceHandler) UpsertMCPServer(context.Context, *con
 
 func (UnimplementedProfilesServiceHandler) DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.DeleteMCPServer is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.TestMCPServer is not implemented"))
 }

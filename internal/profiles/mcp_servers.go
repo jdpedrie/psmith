@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -152,6 +153,47 @@ func (s *Service) DeleteMCPServer(ctx context.Context, req *connect.Request[psmi
 		return nil, connect.NewError(connect.CodeNotFound, mcpreg.ErrNotFound)
 	}
 	return connect.NewResponse(&psmithv1.DeleteMCPServerResponse{}), nil
+}
+
+// --- TestMCPServer ---
+
+// mcpTestTimeout bounds one live probe. Generous enough for an npx
+// cold start pulling a package; small enough that a dead remote
+// doesn't pin the settings UI.
+const mcpTestTimeout = 20 * time.Second
+
+func (s *Service) TestMCPServer(ctx context.Context, req *connect.Request[psmithv1.TestMCPServerRequest]) (*connect.Response[psmithv1.TestMCPServerResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	id, err := uuid.Parse(req.Msg.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
+	}
+	_, spec, err := mcpreg.Load(ctx, s.queries, s.cipher, caller.ID, id)
+	if errors.Is(err, mcpreg.ErrNotFound) {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	cfg, err := json.Marshal(spec)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	testCtx, cancel := context.WithTimeout(ctx, mcpTestTimeout)
+	defer cancel()
+	names, err := plugins.TestMCPConnection(testCtx, cfg)
+	if err != nil {
+		// Connection failure is the test's RESULT, not an RPC error —
+		// mirrors the embedder/Langfuse test contract.
+		return connect.NewResponse(&psmithv1.TestMCPServerResponse{
+			Ok:           false,
+			ErrorMessage: err.Error(),
+		}), nil
+	}
+	return connect.NewResponse(&psmithv1.TestMCPServerResponse{
+		Ok:        true,
+		ToolNames: names,
+	}), nil
 }
 
 // --- pseudo-plugin descriptors -------------------------------------------

@@ -281,6 +281,39 @@ func (p *mcpPlugin) ExecuteTool(ctx context.Context, name string, input json.Raw
 	return srv.callTool(callCtx, realName, input)
 }
 
+// TestMCPConnection dials the MCP server described by configBytes
+// (the mcp plugin's config-blob shape), runs the initialize handshake
+// plus tools/list through the shared pool, and returns the advertised
+// tool names (unprefixed). Unlike Plugin.Tools() — which swallows
+// connection errors so a dead server degrades to "no tools" mid-send
+// — this surfaces the failure, which is the whole point of a Test
+// button. A previously-pooled live connection answers from its cached
+// tools snapshot; a previously-failed spec retries from scratch (the
+// pool drops failed entries).
+func TestMCPConnection(ctx context.Context, configBytes json.RawMessage) ([]string, error) {
+	pl, err := Build(MCPName, configBytes)
+	if err != nil {
+		return nil, err
+	}
+	mp, ok := pl.(*mcpPlugin)
+	if !ok {
+		return nil, errors.New("mcp: unexpected plugin type")
+	}
+	if !mp.configValid() {
+		return nil, errors.New("mcp: transport configuration incomplete")
+	}
+	srv, err := mcpPool.get(ctx, mp.spec)
+	if err != nil {
+		return nil, err
+	}
+	tools := srv.toolsSnapshot()
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		names = append(names, t.Name)
+	}
+	return names, nil
+}
+
 // ---------------------------------------------------------------------------
 // Server pool
 // ---------------------------------------------------------------------------

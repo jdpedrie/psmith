@@ -67,6 +67,37 @@ struct MCPServersViewModelTests {
         #expect(vm.servers.count == 1)
     }
 
+    @Test("test button probes an inproc server end-to-end")
+    func testProbe() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "mcp-probe")
+        let vm = MCPServersViewModel(client: client)
+
+        // psmithd registers its own MCP surface as the inproc
+        // dispatcher, so an inproc registry row probes against a real
+        // server with a real tool catalog.
+        let created = await vm.upsert(id: nil, name: "This Psmith", transport: "inproc")
+        let server = try #require(created)
+
+        await vm.test(id: server.id)
+        guard case .result(let r) = vm.testStates[server.id] else {
+            Issue.record("no test result recorded")
+            return
+        }
+        #expect(r.ok, "probe failed: \(r.errorMessage)")
+        #expect(!r.toolNames.isEmpty)
+
+        // A dead remote reports failure in the result, not a throw.
+        let dead = await vm.upsert(id: nil, name: "Dead", transport: "http", url: "http://127.0.0.1:1/rpc")
+        let deadServer = try #require(dead)
+        await vm.test(id: deadServer.id)
+        guard case .result(let dr) = vm.testStates[deadServer.id] else {
+            Issue.record("no dead-test result recorded")
+            return
+        }
+        #expect(!dr.ok)
+        #expect(!dr.errorMessage.isEmpty)
+    }
+
     @Test("registered server appears as a pseudo-plugin in the picker list")
     func pseudoPluginSurfaces() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "mcp-pseudo")

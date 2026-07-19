@@ -63,6 +63,12 @@ service ProfilesService {
   // in place and degrade to a quiet no-op (the pseudo-plugin resolves
   // to an unconfigured instance); editors can render them as dangling.
   rpc DeleteMCPServer(DeleteMCPServerRequest) returns (DeleteMCPServerResponse);
+  // Live-probe one registered server: dial it, run the MCP initialize
+  // handshake + tools/list, and report the advertised tool names.
+  // Surfaces connection errors the send path deliberately swallows (a
+  // dead server degrades to "no tools" mid-conversation). Failure is
+  // reported in the response (ok=false), not as an RPC error.
+  rpc TestMCPServer(TestMCPServerRequest) returns (TestMCPServerResponse);
 }
 
 message CreateProfileRequest {
@@ -437,3 +443,14 @@ message DeleteMCPServerRequest {
   string id = 1;
 }
 message DeleteMCPServerResponse {}
+
+message TestMCPServerRequest {
+  string id = 1;
+}
+message TestMCPServerResponse {
+  bool ok = 1;
+  // Populated when ok is false.
+  string error_message = 2;
+  // The server's advertised tools (before any tool_prefix), when ok.
+  repeated string tool_names = 3;
+}

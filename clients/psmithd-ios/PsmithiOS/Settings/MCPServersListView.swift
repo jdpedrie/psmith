@@ -176,6 +176,52 @@ struct MCPServerFormScreen: View {
                 Text("Prepended to every tool name so two servers with identical tools don't collide. Overridable per attachment.")
             }
 
+            if let server {
+                Section {
+                    Button {
+                        Task { await app.mcpServers.test(id: server.id) }
+                    } label: {
+                        if case .testing = app.mcpServers.testStates[server.id] {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Probing…")
+                            }
+                        } else {
+                            Text("Test connection")
+                        }
+                    }
+                    .disabled(app.mcpServers.testStates[server.id] == .testing)
+                    if case .result(let r) = app.mcpServers.testStates[server.id] {
+                        if r.ok {
+                            Label {
+                                Text(r.toolNames.isEmpty
+                                    ? "Connected — no tools advertised"
+                                    : "Connected — \(r.toolNames.count) tools")
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            }
+                            .font(.footnote)
+                            if !r.toolNames.isEmpty {
+                                Text(r.toolNames.joined(separator: ", "))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Label {
+                                Text(r.errorMessage)
+                            } icon: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            .font(.footnote)
+                        }
+                    }
+                } footer: {
+                    Text("Dials the server, runs the MCP handshake, and lists its advertised tools.")
+                }
+            }
+
             if let err = app.mcpServers.error {
                 Section {
                     Text(err)

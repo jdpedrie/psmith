@@ -589,13 +589,14 @@ templ mcpServersPage(servers []mcpServerVM) {
 	}
 }
 
-templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
+templ mcpServerFormPage(vm mcpServerVM, errMsg string, result *testVM) {
 	@settingsShell(mcpServerFormTitle(vm)) {
 		<h1>{ mcpServerFormTitle(vm) }</h1>
 		<p class="muted">One server per entry. Attach it from any profile's or conversation's plugin picker afterwards.</p>
 		if errMsg != "" {
 			<div class="banner banner-err">{ errMsg }</div>
 		}
+		@resultBanner(result)
 		<form class="form" method="post" action="/settings/mcp-servers">
 			<input type="hidden" name="id" value={ vm.ID }/>
 			<label>
@@ -640,6 +641,7 @@ templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
 		</form>
 		if vm.ID != "" {
 			<div class="settings-actions">
+				<form method="post" action={ templ.SafeURL("/settings/mcp-servers/" + vm.ID + "/test") }><button class="btn-secondary" type="submit">Test</button></form>
 				<form method="post" action={ templ.SafeURL("/settings/mcp-servers/" + vm.ID + "/delete") } onsubmit="return confirm('Delete this MCP server? Pipelines referencing it will stop exposing its tools.')"><button class="btn-danger" type="submit">Delete</button></form>
 			</div>
 		}

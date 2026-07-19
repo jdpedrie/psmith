@@ -1,6 +1,9 @@
 package profiles
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -9,6 +12,7 @@ import (
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/internal/crypto"
 	"github.com/jdpedrie/psmith/internal/mcpreg"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 func TestMCPServers_CreateAndListWithheldSecrets(t *testing.T) {
@@ -204,6 +208,67 @@ func TestListPluginTypes_IncludesRegisteredMCPServersPerUser(t *testing.T) {
 			t.Error("another user's registry entry leaked into the plugin list")
 		}
 	}
+}
+
+// NOT parallel: RegisterInprocMCPDispatcher is process-global, and the
+// inproc transport's pool entry is shared across every inproc plugin
+// in the test binary.
+func TestMCPServers_TestProbe(t *testing.T) {
+	svc, qs := newTestSvc(t)
+	user := mustCreateUser(t, qs, "mcp-probe")
+	ctx := ctxAs(user)
+
+	plugins.RegisterInprocMCPDispatcher(func(_ context.Context, body []byte) ([]byte, error) {
+		var req struct {
+			ID     int64  `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			return nil, err
+		}
+		switch req.Method {
+		case "initialize":
+			return fmt.Appendf(nil, `{"jsonrpc":"2.0","id":%d,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"fake","version":"0"}}}`, req.ID), nil
+		case "tools/list":
+			return fmt.Appendf(nil, `{"jsonrpc":"2.0","id":%d,"result":{"tools":[{"name":"probe_tool","description":"d","inputSchema":{}}]}}`, req.ID), nil
+		default:
+			return nil, nil
+		}
+	})
+	t.Cleanup(func() { plugins.RegisterInprocMCPDispatcher(nil) })
+
+	created, err := svc.UpsertMCPServer(ctx, connect.NewRequest(&psmithv1.UpsertMCPServerRequest{
+		Name: "Inproc", Transport: "inproc",
+	}))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	resp, err := svc.TestMCPServer(ctx, connect.NewRequest(&psmithv1.TestMCPServerRequest{Id: created.Msg.Server.Id}))
+	if err != nil {
+		t.Fatalf("TestMCPServer: %v", err)
+	}
+	if !resp.Msg.Ok || len(resp.Msg.ToolNames) != 1 || resp.Msg.ToolNames[0] != "probe_tool" {
+		t.Errorf("probe = %+v want ok with [probe_tool]", resp.Msg)
+	}
+
+	// Unreachable http server: failure is the RESPONSE, not an RPC error.
+	dead, err := svc.UpsertMCPServer(ctx, connect.NewRequest(&psmithv1.UpsertMCPServerRequest{
+		Name: "Dead", Transport: "http", Url: "http://127.0.0.1:1/rpc",
+	}))
+	if err != nil {
+		t.Fatalf("create dead: %v", err)
+	}
+	deadResp, err := svc.TestMCPServer(ctx, connect.NewRequest(&psmithv1.TestMCPServerRequest{Id: dead.Msg.Server.Id}))
+	if err != nil {
+		t.Fatalf("TestMCPServer(dead): %v", err)
+	}
+	if deadResp.Msg.Ok || deadResp.Msg.ErrorMessage == "" {
+		t.Errorf("dead probe = %+v want ok=false with message", deadResp.Msg)
+	}
+
+	// Foreign/dangling id → NotFound.
+	_, err = svc.TestMCPServer(ctx, connect.NewRequest(&psmithv1.TestMCPServerRequest{Id: uuid.NewString()}))
+	assertConnectCode(t, err, connect.CodeNotFound)
 }
 
 func TestSetProfilePlugins_MCPRefs(t *testing.T) {

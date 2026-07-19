@@ -63,3 +63,19 @@ public struct PsmithMCPServer: Sendable, Hashable, Identifiable, Codable {
         }
     }
 }
+
+
+/// Result of a live probe against a registered server (initialize
+/// handshake + tools/list). `ok == false` carries the connection
+/// error; `ok == true` carries the advertised tool names.
+public struct PsmithMCPServerTestResult: Sendable, Hashable {
+    public let ok: Bool
+    public let errorMessage: String
+    public let toolNames: [String]
+
+    public init(ok: Bool, errorMessage: String, toolNames: [String]) {
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.toolNames = toolNames
+    }
+}

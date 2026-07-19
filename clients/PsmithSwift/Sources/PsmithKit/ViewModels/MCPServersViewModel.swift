@@ -86,6 +86,28 @@ public final class MCPServersViewModel {
         }
     }
 
+    /// Live-probe state per server id, for inline banners in the
+    /// settings forms.
+    public enum TestState: Sendable, Hashable {
+        case testing
+        case result(PsmithMCPServerTestResult)
+    }
+    public var testStates: [String: TestState] = [:]
+
+    public func test(id: String) async {
+        testStates[id] = .testing
+        do {
+            let result = try await client.profiles.testMCPServer(id: id)
+            testStates[id] = .result(result)
+        } catch {
+            testStates[id] = .result(PsmithMCPServerTestResult(
+                ok: false,
+                errorMessage: PsmithError.display(error),
+                toolNames: []
+            ))
+        }
+    }
+
     /// Returns true on success. The registry row disappears; pipeline
     /// rows referencing it degrade to a quiet no-op server-side.
     public func delete(id: String) async -> Bool {

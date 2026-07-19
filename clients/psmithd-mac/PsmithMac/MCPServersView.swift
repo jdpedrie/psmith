@@ -278,7 +278,24 @@ struct MCPServerForm: View {
 
     private var actionBar: some View {
         HStack {
+            if let state = server.flatMap({ model.testStates[$0.id] }) {
+                testBanner(state)
+            }
             Spacer()
+            if let server {
+                Button {
+                    Task { await model.test(id: server.id) }
+                } label: {
+                    if case .testing = model.testStates[server.id] {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Test")
+                    }
+                }
+                .buttonStyle(.glass)
+                .disabled(isSaving || model.testStates[server.id] == .testing)
+                .help("Dial the server, run the MCP handshake, and list its tools")
+            }
             Button {
                 Task { await save() }
             } label: {
@@ -290,6 +307,36 @@ struct MCPServerForm: View {
             }
             .buttonStyle(.glassProminent)
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+        }
+    }
+
+    @ViewBuilder
+    private func testBanner(_ state: MCPServersViewModel.TestState) -> some View {
+        switch state {
+        case .testing:
+            Text("Probing…")
+                .scaledFont(.caption)
+                .foregroundStyle(.secondary)
+        case .result(let r):
+            if r.ok {
+                Label {
+                    Text(r.toolNames.isEmpty
+                        ? "Connected — no tools advertised"
+                        : "Connected — \(r.toolNames.count) tools: \(r.toolNames.joined(separator: ", "))")
+                        .lineLimit(2)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+                .scaledFont(.caption)
+            } else {
+                Label {
+                    Text(r.errorMessage).lineLimit(2)
+                } icon: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                }
+                .scaledFont(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 

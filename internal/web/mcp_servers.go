@@ -73,7 +73,7 @@ func (h *Handler) handleMCPServers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleMCPServerNew(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, http.StatusOK, mcpServerFormPage(mcpServerVM{Transport: "http"}, ""))
+	h.render(w, r, http.StatusOK, mcpServerFormPage(mcpServerVM{Transport: "http"}, "", nil))
 }
 
 func (h *Handler) handleMCPServerEdit(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +85,7 @@ func (h *Handler) handleMCPServerEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, s := range resp.Msg.Servers {
 		if s.GetId() == id {
-			h.render(w, r, http.StatusOK, mcpServerFormPage(mcpServerVMFromProto(s), ""))
+			h.render(w, r, http.StatusOK, mcpServerFormPage(mcpServerVMFromProto(s), "", nil))
 			return
 		}
 	}
@@ -120,10 +120,41 @@ func (h *Handler) handleMCPServerSave(w http.ResponseWriter, r *http.Request) {
 			ID: req.Id, Name: req.Name, Transport: req.Transport,
 			Command: req.Command, Args: req.Args, URL: req.Url, ToolPrefix: req.ToolPrefix,
 		}
-		h.render(w, r, http.StatusOK, mcpServerFormPage(vm, err.Error()))
+		h.render(w, r, http.StatusOK, mcpServerFormPage(vm, err.Error(), nil))
 		return
 	}
 	http.Redirect(w, r, "/settings/mcp-servers", http.StatusSeeOther)
+}
+
+func (h *Handler) handleMCPServerTest(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	testResp, err := h.profiles.TestMCPServer(r.Context(), connect.NewRequest(&psmithv1.TestMCPServerRequest{Id: id}))
+	result := &testVM{}
+	if err != nil {
+		result.Message = err.Error()
+	} else if testResp.Msg.Ok {
+		result.OK = true
+		if len(testResp.Msg.ToolNames) == 0 {
+			result.Message = "Connected — no tools advertised"
+		} else {
+			result.Message = "Connected — " + strings.Join(testResp.Msg.ToolNames, ", ")
+		}
+	} else {
+		result.Message = testResp.Msg.ErrorMessage
+	}
+
+	listResp, err := h.profiles.ListMCPServers(r.Context(), connect.NewRequest(&psmithv1.ListMCPServersRequest{}))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, srv := range listResp.Msg.Servers {
+		if srv.GetId() == id {
+			h.render(w, r, http.StatusOK, mcpServerFormPage(mcpServerVMFromProto(srv), "", result))
+			return
+		}
+	}
+	http.NotFound(w, r)
 }
 
 func (h *Handler) handleMCPServerDelete(w http.ResponseWriter, r *http.Request) {

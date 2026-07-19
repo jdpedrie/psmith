@@ -207,6 +207,16 @@ public final class ProfilesRepository: Sendable {
         return PsmithMCPServer(from: msg.server)
     }
 
+    /// Live-probe a registered server. Connection failure comes back
+    /// as ok=false in the result, not a thrown error.
+    public func testMCPServer(id: String) async throws -> PsmithMCPServerTestResult {
+        var req = Psmith_V1_TestMCPServerRequest()
+        req.id = id
+        let resp = await client.testMcpserver(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("test mcp server") }
+        return PsmithMCPServerTestResult(ok: msg.ok, errorMessage: msg.errorMessage, toolNames: msg.toolNames)
+    }
+
     public func deleteMCPServer(id: String) async throws {
         var req = Psmith_V1_DeleteMCPServerRequest()
         req.id = id
