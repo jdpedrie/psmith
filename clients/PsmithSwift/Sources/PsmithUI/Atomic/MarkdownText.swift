@@ -213,12 +213,21 @@ extension MarkdownUI.Theme {
             .markdownMargin(top: .em(0.5), bottom: .em(0.5))
         }
         .blockquote { configuration in
-            HStack(spacing: 0) {
-                Rectangle().fill(Color.secondary).frame(width: 3)
-                configuration.label
-                    .padding(.leading, 8)
-                    .foregroundStyle(.secondary)
-            }
+            // Bar as a leading OVERLAY, not an HStack sibling: inside
+            // an HStack, a multi-paragraph quote's label (a VStack of
+            // paragraphs) gets a height-constrained proposal and each
+            // paragraph TRUNCATES to one line with "…" instead of
+            // wrapping (snapshot-verified at scale 1.1 — the Mac
+            // "blockquotes truncate" report, sibling of the bullet
+            // one). With the label as the direct block child there is
+            // no cross-axis negotiation to get wrong, and the overlay
+            // bar stretches to the label's full height for free.
+            configuration.label
+                .foregroundStyle(.secondary)
+                .padding(.leading, 11)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(Color.secondary).frame(width: 3)
+                }
         }
         .table { configuration in
             // Same containment strategy as codeBlock: tables are the

@@ -161,6 +161,42 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func longBlockquotesScaled110() {
+        // Blockquote sibling of longBulletsScaled110 — quotes whose
+        // text wraps past ~2 lines were truncating with an ellipsis on
+        // Mac (user-reported, same height-mismatch class as the bullet
+        // bug). Same triggering shapes: bold leads, inline code,
+        // wrapped continuation lines, at the user's 1.1 scale with the
+        // app's exact scaled environment. Fails if any quote line
+        // shows "…" instead of its full wrapped text.
+        let quotes = """
+        The design doc puts it this way:
+
+        > **Latency versus throughput** — batching requests amortizes connection setup and lets the server pipeline work, but every request in the batch waits for the slowest member, so p99 latency degrades exactly when the queue is deepest and users notice it most
+
+        And later, on the `staged backfill` approach:
+
+        > **The `staged backfill` approach** keeps the viewport anchored while history mounts in small batches, which bounds the estimate error any single re-solve can observe, at the cost of a short window where scrolling up hits the mounted boundary
+        >
+        > A second paragraph in the same quote written without any inline styling at all so we can tell whether the truncation correlates with formatting spans or applies to any quote that wraps past the second line of rendered text
+
+        > Short one for contrast
+        """
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "quote the doc"),
+                SnapshotFixtures.assistantMessage(content: quotes),
+            ]
+        )
+        assertViewSnapshots(
+            body(for: model)
+                .environment(\.fontScale, 1.1)
+                .environment(\.font, .system(size: baseSize(for: .body) * 1.1)),
+            sizes: columnSizes
+        )
+    }
+
+    @Test
     func userAndAssistantPairScaled130() {
         // Pins the app-wide fontScale plumbing: every label and the
         // markdown body must render ~30% larger. If this snapshot ever
