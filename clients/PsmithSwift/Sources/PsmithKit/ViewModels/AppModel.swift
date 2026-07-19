@@ -24,6 +24,7 @@ public final class AppModel {
     /// wait for them to materialise (which causes a visible layout flash).
     public let providers: ProvidersViewModel
     public let profiles: ProfilesViewModel
+    public let mcpServers: MCPServersViewModel
 
     /// Tracks reachability of `serverURL`. Composer reads this to
     /// disable Send when the server is unreachable; banners read it
@@ -98,6 +99,7 @@ public final class AppModel {
         self.client = c
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
+        self.mcpServers = MCPServersViewModel(client: c)
         self.outboundQueue = OutboundQueue()
         self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
         let hub = StreamHub(subscriber: c.streams)

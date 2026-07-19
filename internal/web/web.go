@@ -138,6 +138,12 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/profiles/{id}/plugins/add", h.requireUser(h.handlePluginAdd))
 	mux.HandleFunc("POST /settings/profiles/{id}/plugins/remove", h.requireUser(h.handlePluginRemove))
 
+	mux.HandleFunc("GET /settings/mcp-servers", h.requireUser(h.handleMCPServers))
+	mux.HandleFunc("GET /settings/mcp-servers/new", h.requireUser(h.handleMCPServerNew))
+	mux.HandleFunc("POST /settings/mcp-servers", h.requireUser(h.handleMCPServerSave))
+	mux.HandleFunc("GET /settings/mcp-servers/{id}", h.requireUser(h.handleMCPServerEdit))
+	mux.HandleFunc("POST /settings/mcp-servers/{id}/delete", h.requireUser(h.handleMCPServerDelete))
+
 	mux.HandleFunc("GET /settings/embedder", h.requireUser(h.handleEmbedder))
 	mux.HandleFunc("POST /settings/embedder", h.requireUser(h.handleEmbedderSave))
 	mux.HandleFunc("POST /settings/embedder/test", h.requireUser(h.handleEmbedderTest))

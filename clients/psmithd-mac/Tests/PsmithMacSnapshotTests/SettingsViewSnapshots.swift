@@ -37,6 +37,7 @@ struct SettingsViewSnapshots {
             SettingsView(
                 providersModel: providers,
                 profilesModel: profiles,
+                mcpServersModel: SnapshotStubs.makeMCPServersModel(),
                 onBack: {}
             )
         }
@@ -57,6 +58,7 @@ struct SettingsViewSnapshots {
             SettingsView(
                 providersModel: providers,
                 profilesModel: profiles,
+                mcpServersModel: SnapshotStubs.makeMCPServersModel(),
                 onBack: {}
             )
         }

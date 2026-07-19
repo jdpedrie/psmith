@@ -41,6 +41,16 @@ A profile owns an ordered list of plugin entries, each a plugin type plus its co
 
 Inheritance follows the profile parent chain ([data-model.md](data-model.md)). A child profile's pipeline is its parent's pipeline plus the child's own entries. A child cannot delete a parent's entry (it does not own it), but it can subtract one by marking it disabled, which drops it from the resolved pipeline. A conversation can override on top of its profile the same way: add a plugin for this conversation only, or disable an inherited one. The resolved view tags each entry with where it came from (profile or conversation) so the client can show the user what is inherited versus local.
 
+## The MCP server registry
+
+MCP is the one multi-instance plugin: one attachment per server, each with its own transport spec and credentials. Pasting that spec into every pipeline that wants the server was the friction, and worse, every attachment shared the pipeline name `mcp`, so the chain merge could not tell two servers apart — a child's Firecrawl row shadowed the parent's Linear row, and disabling "mcp" dropped every server at once.
+
+The registry fixes both. A user registers a server once (`user_mcp_servers`: name plus the same JSON spec shape the mcp plugin's config uses, encrypted at rest). Each registered server then surfaces as a pseudo-plugin named `mcp:<id>` in `ListPluginTypes` — "Firecrawl" appears in every plugin picker like a compiled-in plugin, attachable as a toggle. The pipeline row stores only that reference. At build time the services resolve it through `internal/mcpreg`: load the row (owner-checked), decrypt, merge the attach-time config over the spec (non-empty attach values win, which is how a per-attachment `tool_prefix` override works), and hand the result to the ordinary `mcp` constructor. The plugin itself never learns about the registry, and the connection pool still keys on the resolved spec, so two profiles referencing the same server share one live connection.
+
+Reference semantics differ by moment. Attach time resolves strictly — a dangling or foreign id is rejected as `InvalidArgument`. Build time resolves leniently — a reference whose registry row was deleted becomes an unconfigured mcp instance, which no-ops (tools vanish) instead of failing every send on the profile. Secrets are write-only on the wire: list/get return `has_env` / `has_headers` flags, and an absent env/headers field on upsert keeps the stored value, so edit forms never round-trip credentials.
+
+The bare `mcp` type stays registered as the inline-configured escape hatch (one-off local servers, existing rows). Ids, not names, are the identity so renames are free and shared/household registry entries remain possible later.
+
 ## Capability requirements
 
 A plugin can require model capabilities through CapabilityRequirer. The canonical case is any ToolProvider requiring `tool_use`. The service combines the requirements of every plugin in the resolved pipeline and checks them against the selected model's capability snapshot before the send. If the model is missing a required capability, the send is rejected with `FailedPrecondition` naming what is missing, so the failure is clear and pre-stream rather than a confusing mid-turn error. This is also why the client filters the model picker to capable models when a tool plugin is attached.
@@ -58,7 +68,7 @@ The registered plugins:
 - **imagegen** (`imagegen`) — ToolProvider. One server tool, `generate_image`. The only plugin that reports a cost.
 - **app_tools** (`app_tools`) — ToolProvider over the device-tools catalog (Calendar, Reminders, Health), routed through the device-tool broker. See [tools.md](tools.md).
 - **obsidian** (`obsidian`) — ToolProvider over a bookmarked Obsidian vault on the device, its own five-tool catalog, sharing the device-tool broker.
-- **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Psmith tools. The in-process transport is the elicitation path. See [tools.md](tools.md) and the MCP section of the API docs.
+- **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Psmith tools. The in-process transport is the elicitation path. Usually attached via the MCP server registry's `mcp:<id>` pseudo-plugins (see above) rather than configured inline. See [tools.md](tools.md) and the MCP section of the API docs.
 
 Alongside these, a few non-plugin support files in the same package are wiring shims rather than registered plugins: `caller_info` and `provider_resolver` and `searcher` thread caller, provider-resolution, and search dependencies onto the dispatch context for tools to pull, and `device_tool_broker` is the broker handle. They are not attachable to a profile.
 

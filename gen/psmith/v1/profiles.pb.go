@@ -2184,6 +2184,449 @@ func (x *UpsertUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
 	return nil
 }
 
+// One registered MCP server. The stored spec uses the same field
+// vocabulary as the mcp plugin's config blob, so pipeline-build
+// resolution is a straight merge. Secret-bearing fields (env, headers)
+// are write-only on this surface: reads return has_env / has_headers
+// flags instead of values, mirroring how provider API keys are
+// withheld from clients.
+type MCPServer struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Display name, unique per user. Doubles as the pseudo-plugin's
+	// display_name in ListPluginTypes.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// "stdio", "http", or "inproc".
+	Transport string `protobuf:"bytes,3,opt,name=transport,proto3" json:"transport,omitempty"`
+	// stdio: executable resolved against PATH.
+	Command string `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
+	// stdio: one CLI arg per line.
+	Args string `protobuf:"bytes,5,opt,name=args,proto3" json:"args,omitempty"`
+	// stdio: KEY=VALUE lines are stored (encrypted) but never returned.
+	HasEnv bool `protobuf:"varint,6,opt,name=has_env,json=hasEnv,proto3" json:"has_env,omitempty"`
+	// http: JSON-RPC endpoint.
+	Url string `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
+	// http: "KEY: VALUE" header lines are stored (encrypted) but never
+	// returned.
+	HasHeaders bool `protobuf:"varint,8,opt,name=has_headers,json=hasHeaders,proto3" json:"has_headers,omitempty"`
+	// Default tool-name prefix wherever this server is attached; a
+	// per-attachment config can still override it.
+	ToolPrefix    string `protobuf:"bytes,9,opt,name=tool_prefix,json=toolPrefix,proto3" json:"tool_prefix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPServer) Reset() {
+	*x = MCPServer{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPServer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPServer) ProtoMessage() {}
+
+func (x *MCPServer) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPServer.ProtoReflect.Descriptor instead.
+func (*MCPServer) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *MCPServer) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MCPServer) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MCPServer) GetTransport() string {
+	if x != nil {
+		return x.Transport
+	}
+	return ""
+}
+
+func (x *MCPServer) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *MCPServer) GetArgs() string {
+	if x != nil {
+		return x.Args
+	}
+	return ""
+}
+
+func (x *MCPServer) GetHasEnv() bool {
+	if x != nil {
+		return x.HasEnv
+	}
+	return false
+}
+
+func (x *MCPServer) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *MCPServer) GetHasHeaders() bool {
+	if x != nil {
+		return x.HasHeaders
+	}
+	return false
+}
+
+func (x *MCPServer) GetToolPrefix() string {
+	if x != nil {
+		return x.ToolPrefix
+	}
+	return ""
+}
+
+type ListMCPServersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMCPServersRequest) Reset() {
+	*x = ListMCPServersRequest{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMCPServersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMCPServersRequest) ProtoMessage() {}
+
+func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMCPServersRequest.ProtoReflect.Descriptor instead.
+func (*ListMCPServersRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{32}
+}
+
+type ListMCPServersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Servers       []*MCPServer           `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMCPServersResponse) Reset() {
+	*x = ListMCPServersResponse{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMCPServersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMCPServersResponse) ProtoMessage() {}
+
+func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMCPServersResponse.ProtoReflect.Descriptor instead.
+func (*ListMCPServersResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ListMCPServersResponse) GetServers() []*MCPServer {
+	if x != nil {
+		return x.Servers
+	}
+	return nil
+}
+
+type UpsertMCPServerRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty = create; non-empty = update that row (NotFound unless the
+	// caller owns it).
+	Id        string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name      string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Transport string `protobuf:"bytes,3,opt,name=transport,proto3" json:"transport,omitempty"`
+	Command   string `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
+	Args      string `protobuf:"bytes,5,opt,name=args,proto3" json:"args,omitempty"`
+	// KEY=VALUE per line. ABSENT keeps the stored value — an edit form
+	// that never displays secrets can save without wiping them.
+	// Present-but-empty clears.
+	Env *string `protobuf:"bytes,6,opt,name=env,proto3,oneof" json:"env,omitempty"`
+	Url string  `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
+	// "KEY: VALUE" per line. Same absent-keeps semantics as env.
+	Headers       *string `protobuf:"bytes,8,opt,name=headers,proto3,oneof" json:"headers,omitempty"`
+	ToolPrefix    string  `protobuf:"bytes,9,opt,name=tool_prefix,json=toolPrefix,proto3" json:"tool_prefix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertMCPServerRequest) Reset() {
+	*x = UpsertMCPServerRequest{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertMCPServerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertMCPServerRequest) ProtoMessage() {}
+
+func (x *UpsertMCPServerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertMCPServerRequest.ProtoReflect.Descriptor instead.
+func (*UpsertMCPServerRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *UpsertMCPServerRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetTransport() string {
+	if x != nil {
+		return x.Transport
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetArgs() string {
+	if x != nil {
+		return x.Args
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetEnv() string {
+	if x != nil && x.Env != nil {
+		return *x.Env
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetHeaders() string {
+	if x != nil && x.Headers != nil {
+		return *x.Headers
+	}
+	return ""
+}
+
+func (x *UpsertMCPServerRequest) GetToolPrefix() string {
+	if x != nil {
+		return x.ToolPrefix
+	}
+	return ""
+}
+
+type UpsertMCPServerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Server        *MCPServer             `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertMCPServerResponse) Reset() {
+	*x = UpsertMCPServerResponse{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertMCPServerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertMCPServerResponse) ProtoMessage() {}
+
+func (x *UpsertMCPServerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertMCPServerResponse.ProtoReflect.Descriptor instead.
+func (*UpsertMCPServerResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *UpsertMCPServerResponse) GetServer() *MCPServer {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
+type DeleteMCPServerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMCPServerRequest) Reset() {
+	*x = DeleteMCPServerRequest{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMCPServerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMCPServerRequest) ProtoMessage() {}
+
+func (x *DeleteMCPServerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMCPServerRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMCPServerRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *DeleteMCPServerRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteMCPServerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMCPServerResponse) Reset() {
+	*x = DeleteMCPServerResponse{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMCPServerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMCPServerResponse) ProtoMessage() {}
+
+func (x *DeleteMCPServerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMCPServerResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMCPServerResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{37}
+}
+
 var File_psmith_v1_profiles_proto protoreflect.FileDescriptor
 
 const file_psmith_v1_profiles_proto_rawDesc = "" +
@@ -2388,7 +2831,42 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"pluginName\x12\x16\n" +
 	"\x06config\x18\x02 \x01(\fR\x06config\"]\n" +
 	" UpsertUserPluginSettingsResponse\x129\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1d.psmith.v1.UserPluginSettingsR\bsettings2\xf3\b\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1d.psmith.v1.UserPluginSettingsR\bsettings\"\xe8\x01\n" +
+	"\tMCPServer\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\ttransport\x18\x03 \x01(\tR\ttransport\x12\x18\n" +
+	"\acommand\x18\x04 \x01(\tR\acommand\x12\x12\n" +
+	"\x04args\x18\x05 \x01(\tR\x04args\x12\x17\n" +
+	"\ahas_env\x18\x06 \x01(\bR\x06hasEnv\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\x12\x1f\n" +
+	"\vhas_headers\x18\b \x01(\bR\n" +
+	"hasHeaders\x12\x1f\n" +
+	"\vtool_prefix\x18\t \x01(\tR\n" +
+	"toolPrefix\"\x17\n" +
+	"\x15ListMCPServersRequest\"H\n" +
+	"\x16ListMCPServersResponse\x12.\n" +
+	"\aservers\x18\x01 \x03(\v2\x14.psmith.v1.MCPServerR\aservers\"\x85\x02\n" +
+	"\x16UpsertMCPServerRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\ttransport\x18\x03 \x01(\tR\ttransport\x12\x18\n" +
+	"\acommand\x18\x04 \x01(\tR\acommand\x12\x12\n" +
+	"\x04args\x18\x05 \x01(\tR\x04args\x12\x15\n" +
+	"\x03env\x18\x06 \x01(\tH\x00R\x03env\x88\x01\x01\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\x12\x1d\n" +
+	"\aheaders\x18\b \x01(\tH\x01R\aheaders\x88\x01\x01\x12\x1f\n" +
+	"\vtool_prefix\x18\t \x01(\tR\n" +
+	"toolPrefixB\x06\n" +
+	"\x04_envB\n" +
+	"\n" +
+	"\b_headers\"G\n" +
+	"\x17UpsertMCPServerResponse\x12,\n" +
+	"\x06server\x18\x01 \x01(\v2\x14.psmith.v1.MCPServerR\x06server\"(\n" +
+	"\x16DeleteMCPServerRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x19\n" +
+	"\x17DeleteMCPServerResponse2\xfe\n" +
+	"\n" +
 	"\x0fProfilesService\x12R\n" +
 	"\rCreateProfile\x12\x1f.psmith.v1.CreateProfileRequest\x1a .psmith.v1.CreateProfileResponse\x12O\n" +
 	"\fListProfiles\x12\x1e.psmith.v1.ListProfilesRequest\x1a\x1f.psmith.v1.ListProfilesResponse\x12I\n" +
@@ -2402,7 +2880,10 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x11SetProfilePlugins\x12#.psmith.v1.SetProfilePluginsRequest\x1a$.psmith.v1.SetProfilePluginsResponse\x12j\n" +
 	"\x15GetUserPluginSettings\x12'.psmith.v1.GetUserPluginSettingsRequest\x1a(.psmith.v1.GetUserPluginSettingsResponse\x12m\n" +
 	"\x16ListUserPluginSettings\x12(.psmith.v1.ListUserPluginSettingsRequest\x1a).psmith.v1.ListUserPluginSettingsResponse\x12s\n" +
-	"\x18UpsertUserPluginSettings\x12*.psmith.v1.UpsertUserPluginSettingsRequest\x1a+.psmith.v1.UpsertUserPluginSettingsResponseB3Z1github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1b\x06proto3"
+	"\x18UpsertUserPluginSettings\x12*.psmith.v1.UpsertUserPluginSettingsRequest\x1a+.psmith.v1.UpsertUserPluginSettingsResponse\x12U\n" +
+	"\x0eListMCPServers\x12 .psmith.v1.ListMCPServersRequest\x1a!.psmith.v1.ListMCPServersResponse\x12X\n" +
+	"\x0fUpsertMCPServer\x12!.psmith.v1.UpsertMCPServerRequest\x1a\".psmith.v1.UpsertMCPServerResponse\x12X\n" +
+	"\x0fDeleteMCPServer\x12!.psmith.v1.DeleteMCPServerRequest\x1a\".psmith.v1.DeleteMCPServerResponseB3Z1github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1b\x06proto3"
 
 var (
 	file_psmith_v1_profiles_proto_rawDescOnce sync.Once
@@ -2417,7 +2898,7 @@ func file_psmith_v1_profiles_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_profiles_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_psmith_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_psmith_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_psmith_v1_profiles_proto_goTypes = []any{
 	(ConfigField_Type)(0),                    // 0: psmith.v1.ConfigField.Type
 	(ConfigField_Merge)(0),                   // 1: psmith.v1.ConfigField.Merge
@@ -2452,26 +2933,33 @@ var file_psmith_v1_profiles_proto_goTypes = []any{
 	(*ListUserPluginSettingsResponse)(nil),   // 30: psmith.v1.ListUserPluginSettingsResponse
 	(*UpsertUserPluginSettingsRequest)(nil),  // 31: psmith.v1.UpsertUserPluginSettingsRequest
 	(*UpsertUserPluginSettingsResponse)(nil), // 32: psmith.v1.UpsertUserPluginSettingsResponse
-	(CompressionMode)(0),                     // 33: psmith.v1.CompressionMode
-	(*ProfileDefaults)(nil),                  // 34: psmith.v1.ProfileDefaults
-	(*Profile)(nil),                          // 35: psmith.v1.Profile
-	(DeviceFactKey)(0),                       // 36: psmith.v1.DeviceFactKey
-	(*ModelCapabilities)(nil),                // 37: psmith.v1.ModelCapabilities
+	(*MCPServer)(nil),                        // 33: psmith.v1.MCPServer
+	(*ListMCPServersRequest)(nil),            // 34: psmith.v1.ListMCPServersRequest
+	(*ListMCPServersResponse)(nil),           // 35: psmith.v1.ListMCPServersResponse
+	(*UpsertMCPServerRequest)(nil),           // 36: psmith.v1.UpsertMCPServerRequest
+	(*UpsertMCPServerResponse)(nil),          // 37: psmith.v1.UpsertMCPServerResponse
+	(*DeleteMCPServerRequest)(nil),           // 38: psmith.v1.DeleteMCPServerRequest
+	(*DeleteMCPServerResponse)(nil),          // 39: psmith.v1.DeleteMCPServerResponse
+	(CompressionMode)(0),                     // 40: psmith.v1.CompressionMode
+	(*ProfileDefaults)(nil),                  // 41: psmith.v1.ProfileDefaults
+	(*Profile)(nil),                          // 42: psmith.v1.Profile
+	(DeviceFactKey)(0),                       // 43: psmith.v1.DeviceFactKey
+	(*ModelCapabilities)(nil),                // 44: psmith.v1.ModelCapabilities
 }
 var file_psmith_v1_profiles_proto_depIdxs = []int32{
-	33, // 0: psmith.v1.CreateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
-	34, // 1: psmith.v1.CreateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
-	35, // 2: psmith.v1.CreateProfileResponse.profile:type_name -> psmith.v1.Profile
-	35, // 3: psmith.v1.ListProfilesResponse.profiles:type_name -> psmith.v1.Profile
-	35, // 4: psmith.v1.GetProfileResponse.profile:type_name -> psmith.v1.Profile
-	35, // 5: psmith.v1.GetProfileResponse.resolved:type_name -> psmith.v1.Profile
-	33, // 6: psmith.v1.UpdateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
-	34, // 7: psmith.v1.UpdateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
-	35, // 8: psmith.v1.UpdateProfileResponse.profile:type_name -> psmith.v1.Profile
+	40, // 0: psmith.v1.CreateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
+	41, // 1: psmith.v1.CreateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
+	42, // 2: psmith.v1.CreateProfileResponse.profile:type_name -> psmith.v1.Profile
+	42, // 3: psmith.v1.ListProfilesResponse.profiles:type_name -> psmith.v1.Profile
+	42, // 4: psmith.v1.GetProfileResponse.profile:type_name -> psmith.v1.Profile
+	42, // 5: psmith.v1.GetProfileResponse.resolved:type_name -> psmith.v1.Profile
+	40, // 6: psmith.v1.UpdateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
+	41, // 7: psmith.v1.UpdateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
+	42, // 8: psmith.v1.UpdateProfileResponse.profile:type_name -> psmith.v1.Profile
 	16, // 9: psmith.v1.PluginType.config_fields:type_name -> psmith.v1.ConfigField
 	14, // 10: psmith.v1.PluginType.capabilities:type_name -> psmith.v1.PluginCapabilities
-	36, // 11: psmith.v1.PluginType.requested_device_facts:type_name -> psmith.v1.DeviceFactKey
-	37, // 12: psmith.v1.PluginType.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
+	43, // 11: psmith.v1.PluginType.requested_device_facts:type_name -> psmith.v1.DeviceFactKey
+	44, // 12: psmith.v1.PluginType.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
 	0,  // 13: psmith.v1.ConfigField.type:type_name -> psmith.v1.ConfigField.Type
 	17, // 14: psmith.v1.ConfigField.options:type_name -> psmith.v1.ConfigOption
 	18, // 15: psmith.v1.ConfigField.model_picker_filter:type_name -> psmith.v1.ModelPickerFilter
@@ -2483,35 +2971,43 @@ var file_psmith_v1_profiles_proto_depIdxs = []int32{
 	26, // 21: psmith.v1.GetUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
 	26, // 22: psmith.v1.ListUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
 	26, // 23: psmith.v1.UpsertUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	2,  // 24: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
-	4,  // 25: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
-	6,  // 26: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
-	8,  // 27: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
-	10, // 28: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
-	12, // 29: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
-	20, // 30: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
-	22, // 31: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
-	24, // 32: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
-	27, // 33: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
-	29, // 34: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
-	31, // 35: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
-	3,  // 36: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
-	5,  // 37: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
-	7,  // 38: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
-	9,  // 39: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
-	11, // 40: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
-	13, // 41: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
-	21, // 42: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
-	23, // 43: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
-	25, // 44: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
-	28, // 45: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
-	30, // 46: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
-	32, // 47: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
-	36, // [36:48] is the sub-list for method output_type
-	24, // [24:36] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	33, // 24: psmith.v1.ListMCPServersResponse.servers:type_name -> psmith.v1.MCPServer
+	33, // 25: psmith.v1.UpsertMCPServerResponse.server:type_name -> psmith.v1.MCPServer
+	2,  // 26: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
+	4,  // 27: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
+	6,  // 28: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
+	8,  // 29: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
+	10, // 30: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
+	12, // 31: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
+	20, // 32: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
+	22, // 33: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
+	24, // 34: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
+	27, // 35: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
+	29, // 36: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
+	31, // 37: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
+	34, // 38: psmith.v1.ProfilesService.ListMCPServers:input_type -> psmith.v1.ListMCPServersRequest
+	36, // 39: psmith.v1.ProfilesService.UpsertMCPServer:input_type -> psmith.v1.UpsertMCPServerRequest
+	38, // 40: psmith.v1.ProfilesService.DeleteMCPServer:input_type -> psmith.v1.DeleteMCPServerRequest
+	3,  // 41: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
+	5,  // 42: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
+	7,  // 43: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
+	9,  // 44: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
+	11, // 45: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
+	13, // 46: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
+	21, // 47: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
+	23, // 48: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
+	25, // 49: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
+	28, // 50: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
+	30, // 51: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
+	32, // 52: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
+	35, // 53: psmith.v1.ProfilesService.ListMCPServers:output_type -> psmith.v1.ListMCPServersResponse
+	37, // 54: psmith.v1.ProfilesService.UpsertMCPServer:output_type -> psmith.v1.UpsertMCPServerResponse
+	39, // 55: psmith.v1.ProfilesService.DeleteMCPServer:output_type -> psmith.v1.DeleteMCPServerResponse
+	41, // [41:56] is the sub-list for method output_type
+	26, // [26:41] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_profiles_proto_init() }
@@ -2525,13 +3021,14 @@ func file_psmith_v1_profiles_proto_init() {
 	file_psmith_v1_profiles_proto_msgTypes[6].OneofWrappers = []any{}
 	file_psmith_v1_profiles_proto_msgTypes[13].OneofWrappers = []any{}
 	file_psmith_v1_profiles_proto_msgTypes[14].OneofWrappers = []any{}
+	file_psmith_v1_profiles_proto_msgTypes[34].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_profiles_proto_rawDesc), len(file_psmith_v1_profiles_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   31,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

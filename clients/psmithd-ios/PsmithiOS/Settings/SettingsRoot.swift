@@ -30,6 +30,11 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Plugins", systemImage: "puzzlepiece.extension")
                 }
+                NavigationLink {
+                    MCPServersListView()
+                } label: {
+                    categoryRow("MCP Servers", systemImage: "server.rack")
+                }
             }
 
             Section("Settings") {

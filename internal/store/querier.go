@@ -90,6 +90,7 @@ type Querier interface {
 	// toggle in one shot — for users who want to fully sever the
 	// integration rather than just disable it.
 	DeleteUserLangfuseConfig(ctx context.Context, userID uuid.UUID) error
+	DeleteUserMCPServer(ctx context.Context, arg DeleteUserMCPServerParams) (int64, error)
 	DeleteUserModel(ctx context.Context, arg DeleteUserModelParams) error
 	DeleteUserModelProvider(ctx context.Context, id uuid.UUID) error
 	DeleteUserPluginSettings(ctx context.Context, arg DeleteUserPluginSettingsParams) error
@@ -141,6 +142,7 @@ type Querier interface {
 	// absent — service layer maps that to "tracing disabled" rather than
 	// a hard error so the GET RPC can return the default-disabled shape.
 	GetUserLangfuseConfig(ctx context.Context, userID uuid.UUID) (UserLangfuseConfig, error)
+	GetUserMCPServer(ctx context.Context, id uuid.UUID) (UserMcpServer, error)
 	GetUserModel(ctx context.Context, arg GetUserModelParams) (UserModel, error)
 	GetUserModelProvider(ctx context.Context, id uuid.UUID) (UserModelProvider, error)
 	// Returns the row for one (user, plugin) — caller decides what "missing"
@@ -187,6 +189,7 @@ type Querier interface {
 	// subtract escape hatch for the merge resolver).
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
+	InsertUserMCPServer(ctx context.Context, arg InsertUserMCPServerParams) (UserMcpServer, error)
 	// Live runs for a specific conversation. Used by ConversationViewModel
 	// on view entry to detect "there's an in-flight assistant turn the
 	// previous view didn't finish receiving" — typically zero rows, at
@@ -310,6 +313,7 @@ type Querier interface {
 	// assistant turn after a restart, not just after the first
 	// LangfuseService.Update RPC of the new process.
 	ListUserLangfuseConfigs(ctx context.Context) ([]UserLangfuseConfig, error)
+	ListUserMCPServers(ctx context.Context, userID uuid.UUID) ([]UserMcpServer, error)
 	ListUserModelProvidersByUser(ctx context.Context, userID uuid.UUID) ([]UserModelProvider, error)
 	ListUserModelsByProvider(ctx context.Context, userModelProviderID uuid.UUID) ([]UserModel, error)
 	ListUserModelsByUser(ctx context.Context, userID uuid.UUID) ([]UserModel, error)
@@ -432,6 +436,7 @@ type Querier interface {
 	UpdateProfileWelcomeMessage(ctx context.Context, arg UpdateProfileWelcomeMessageParams) error
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	UpdateUserIsAdmin(ctx context.Context, arg UpdateUserIsAdminParams) error
+	UpdateUserMCPServer(ctx context.Context, arg UpdateUserMCPServerParams) (UserMcpServer, error)
 	// Replaces (not merges) the per-model default_settings JSONB blob. NULL
 	// clears it. metadata_snapshot_at is bumped so consumers polling for row
 	// changes notice the update — the row's metadata identity hasn't changed,

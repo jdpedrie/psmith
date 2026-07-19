@@ -26,6 +26,7 @@ import (
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/mcpreg"
 	"github.com/jdpedrie/psmith/internal/devicetools"
 	"github.com/jdpedrie/psmith/internal/history"
 	"github.com/jdpedrie/psmith/internal/langfuse"
@@ -696,16 +697,26 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 		if p.PluginName == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d]: empty plugin_name", i))
 		}
-		// Disabled entries get a registry-only check; enabled
-		// entries get a full build against the config so a malformed
-		// blob fails at the API boundary rather than at send time.
+		// Disabled entries get a name-shape check; enabled entries get
+		// a full build against the config so a malformed blob fails at
+		// the API boundary rather than at send time. MCP registry
+		// references ("mcp:<id>") resolve strictly here — dangling ids
+		// are attach-time mistakes; only later deletion of the registry
+		// row degrades to the build-time no-op.
 		if p.Disabled {
+			if _, ok := mcpreg.RefID(p.PluginName); ok {
+				continue
+			}
 			if !plugins.IsRegistered(p.PluginName) {
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): unknown plugin name", i, p.PluginName))
 			}
 			continue
 		}
-		if _, err := plugins.Build(p.PluginName, p.Config); err != nil {
+		name, cfg, err := mcpreg.Resolve(ctx, s.queries, s.cipher, caller.ID, p.PluginName, p.Config, true)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
+		}
+		if _, err := plugins.Build(name, cfg); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
 	}
@@ -2498,7 +2509,15 @@ func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uui
 		if err != nil {
 			return nil, fmt.Errorf("merge globals for %q: %w", r.Name, err)
 		}
-		specs = append(specs, plugins.Spec{Name: r.Name, Config: merged})
+		// MCP registry references resolve LENIENTLY at build time: a
+		// row whose registry entry was deleted becomes an unconfigured
+		// mcp instance (quiet no-op) instead of failing every send on
+		// the profile.
+		name, cfg, err := mcpreg.Resolve(ctx, s.queries, s.cipher, owner, r.Name, merged, false)
+		if err != nil {
+			return nil, fmt.Errorf("resolve mcp reference %q: %w", r.Name, err)
+		}
+		specs = append(specs, plugins.Spec{Name: name, Config: cfg})
 	}
 	return plugins.Resolve(specs)
 }

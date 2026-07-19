@@ -1,6 +1,6 @@
 # Database schema
 
-The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00036. This document reflects the state after all of them.
+The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00043. This document reflects the state after all of them.
 
 Conventions across the schema: UUIDs for IDs (UUIDv7 where the application mints them, for sortability). Enumerations are `TEXT` with a `CHECK` constraint, never native Postgres `ENUM`, to keep schema evolution painless. `updated_at` is maintained by application code, not a trigger; there are no triggers anywhere.
 
@@ -54,6 +54,8 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00034 | message_embeddings | `messages.embedding` `vector(768)`, `embedding_model`, `embedding_at`; the triple-NULL CHECK; an HNSW partial index and an unembedded partial index. Requires pgvector. |
 | 00035 | user_embedder_config | `user_embedder_config` (per-user singleton, encrypted api key). |
 | 00036 | device_tool_calls | `device_tool_calls` audit log plus two indexes. |
+| 00037–00042 | (undocumented) | Rows not yet backfilled into this table — see docs/todo.md. |
+| 00043 | user_mcp_servers | `user_mcp_servers` (user-level MCP server registry, encrypted specs) plus a user index and per-user name uniqueness. |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020).
 
@@ -112,6 +114,8 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 **user_langfuse_config** — `user_id` PK (one row per user); FK ON DELETE CASCADE; `host` (default the Langfuse US cloud host); `public_key` (default empty); `secret_key_encrypted` BYTEA nullable; `enabled` (default false); timestamps.
 
 **user_embedder_config** — `user_id` PK (one row per user); FK ON DELETE CASCADE; `type`; `config` JSONB (default empty object); `api_key_encrypted` BYTEA nullable; `enabled` (default true); timestamps.
+
+**user_mcp_servers** — `id` PK; `user_id` FK ON DELETE CASCADE; `name` (UNIQUE per user via `(user_id, name)`); `config` JSONB nullable (legacy plaintext fallback); `config_encrypted` BYTEA nullable; timestamps. Index on `user_id`. One row per registered MCP server; the spec JSON matches the mcp plugin's config blob shape so pipeline resolution merges it directly. Referenced from pipeline rows by `plugin_name = 'mcp:<id>'`; deleting a row leaves references dangling by design (they degrade to a no-op at build time).
 
 **device_tool_calls** — `id` PK; `user_id` FK ON DELETE CASCADE; `conversation_id` FK ON DELETE CASCADE; `message_id` FK ON DELETE SET NULL; `tool_name`; `input_json`, `output_json` JSONB nullable; `status` CHECK in (`ok`, `error`, `timeout`); `error_message` nullable; `invoked_at`, `completed_at`. Indexes on `(user_id, invoked_at DESC)` and `(conversation_id, invoked_at DESC)`. The audit trail for on-device tool calls.
 

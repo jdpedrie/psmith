@@ -250,6 +250,16 @@ type UserLangfuseConfig struct {
 	UpdatedAt          time.Time
 }
 
+type UserMcpServer struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Name            string
+	Config          []byte
+	ConfigEncrypted []byte
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type UserModel struct {
 	UserModelProviderID   uuid.UUID
 	ModelID               string

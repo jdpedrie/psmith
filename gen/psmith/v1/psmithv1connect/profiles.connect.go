@@ -69,6 +69,15 @@ const (
 	// ProfilesServiceUpsertUserPluginSettingsProcedure is the fully-qualified name of the
 	// ProfilesService's UpsertUserPluginSettings RPC.
 	ProfilesServiceUpsertUserPluginSettingsProcedure = "/psmith.v1.ProfilesService/UpsertUserPluginSettings"
+	// ProfilesServiceListMCPServersProcedure is the fully-qualified name of the ProfilesService's
+	// ListMCPServers RPC.
+	ProfilesServiceListMCPServersProcedure = "/psmith.v1.ProfilesService/ListMCPServers"
+	// ProfilesServiceUpsertMCPServerProcedure is the fully-qualified name of the ProfilesService's
+	// UpsertMCPServer RPC.
+	ProfilesServiceUpsertMCPServerProcedure = "/psmith.v1.ProfilesService/UpsertMCPServer"
+	// ProfilesServiceDeleteMCPServerProcedure is the fully-qualified name of the ProfilesService's
+	// DeleteMCPServer RPC.
+	ProfilesServiceDeleteMCPServerProcedure = "/psmith.v1.ProfilesService/DeleteMCPServer"
 )
 
 // ProfilesServiceClient is a client for the psmith.v1.ProfilesService service.
@@ -109,6 +118,20 @@ type ProfilesServiceClient interface {
 	// stored value — it means "the user explicitly cleared every global
 	// field" and overrides the absence-is-empty fallback at merge time.
 	UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error)
+	// --- User-level MCP server registry ------------------------------------
+	// Registered servers surface as pseudo-plugins named "mcp:<id>" in
+	// ListPluginTypes. Attaching one to a profile/conversation pipeline
+	// stores only that reference; the server resolves the full (secret-
+	// bearing) spec from the registry at pipeline-build time, so auth
+	// headers and env vars live in exactly one encrypted row.
+	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
+	// Create (empty id) or update (owner-checked id) one registered
+	// server. See UpsertMCPServerRequest for the secret-field semantics.
+	UpsertMCPServer(context.Context, *connect.Request[v1.UpsertMCPServerRequest]) (*connect.Response[v1.UpsertMCPServerResponse], error)
+	// Delete a registered server. Pipeline rows referencing it are left
+	// in place and degrade to a quiet no-op (the pseudo-plugin resolves
+	// to an unconfigured instance); editors can render them as dangling.
+	DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error)
 }
 
 // NewProfilesServiceClient constructs a client for the psmith.v1.ProfilesService service. By
@@ -194,6 +217,24 @@ func NewProfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(profilesServiceMethods.ByName("UpsertUserPluginSettings")),
 			connect.WithClientOptions(opts...),
 		),
+		listMCPServers: connect.NewClient[v1.ListMCPServersRequest, v1.ListMCPServersResponse](
+			httpClient,
+			baseURL+ProfilesServiceListMCPServersProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("ListMCPServers")),
+			connect.WithClientOptions(opts...),
+		),
+		upsertMCPServer: connect.NewClient[v1.UpsertMCPServerRequest, v1.UpsertMCPServerResponse](
+			httpClient,
+			baseURL+ProfilesServiceUpsertMCPServerProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("UpsertMCPServer")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMCPServer: connect.NewClient[v1.DeleteMCPServerRequest, v1.DeleteMCPServerResponse](
+			httpClient,
+			baseURL+ProfilesServiceDeleteMCPServerProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("DeleteMCPServer")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -211,6 +252,9 @@ type profilesServiceClient struct {
 	getUserPluginSettings    *connect.Client[v1.GetUserPluginSettingsRequest, v1.GetUserPluginSettingsResponse]
 	listUserPluginSettings   *connect.Client[v1.ListUserPluginSettingsRequest, v1.ListUserPluginSettingsResponse]
 	upsertUserPluginSettings *connect.Client[v1.UpsertUserPluginSettingsRequest, v1.UpsertUserPluginSettingsResponse]
+	listMCPServers           *connect.Client[v1.ListMCPServersRequest, v1.ListMCPServersResponse]
+	upsertMCPServer          *connect.Client[v1.UpsertMCPServerRequest, v1.UpsertMCPServerResponse]
+	deleteMCPServer          *connect.Client[v1.DeleteMCPServerRequest, v1.DeleteMCPServerResponse]
 }
 
 // CreateProfile calls psmith.v1.ProfilesService.CreateProfile.
@@ -273,6 +317,21 @@ func (c *profilesServiceClient) UpsertUserPluginSettings(ctx context.Context, re
 	return c.upsertUserPluginSettings.CallUnary(ctx, req)
 }
 
+// ListMCPServers calls psmith.v1.ProfilesService.ListMCPServers.
+func (c *profilesServiceClient) ListMCPServers(ctx context.Context, req *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error) {
+	return c.listMCPServers.CallUnary(ctx, req)
+}
+
+// UpsertMCPServer calls psmith.v1.ProfilesService.UpsertMCPServer.
+func (c *profilesServiceClient) UpsertMCPServer(ctx context.Context, req *connect.Request[v1.UpsertMCPServerRequest]) (*connect.Response[v1.UpsertMCPServerResponse], error) {
+	return c.upsertMCPServer.CallUnary(ctx, req)
+}
+
+// DeleteMCPServer calls psmith.v1.ProfilesService.DeleteMCPServer.
+func (c *profilesServiceClient) DeleteMCPServer(ctx context.Context, req *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error) {
+	return c.deleteMCPServer.CallUnary(ctx, req)
+}
+
 // ProfilesServiceHandler is an implementation of the psmith.v1.ProfilesService service.
 type ProfilesServiceHandler interface {
 	CreateProfile(context.Context, *connect.Request[v1.CreateProfileRequest]) (*connect.Response[v1.CreateProfileResponse], error)
@@ -311,6 +370,20 @@ type ProfilesServiceHandler interface {
 	// stored value — it means "the user explicitly cleared every global
 	// field" and overrides the absence-is-empty fallback at merge time.
 	UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error)
+	// --- User-level MCP server registry ------------------------------------
+	// Registered servers surface as pseudo-plugins named "mcp:<id>" in
+	// ListPluginTypes. Attaching one to a profile/conversation pipeline
+	// stores only that reference; the server resolves the full (secret-
+	// bearing) spec from the registry at pipeline-build time, so auth
+	// headers and env vars live in exactly one encrypted row.
+	ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error)
+	// Create (empty id) or update (owner-checked id) one registered
+	// server. See UpsertMCPServerRequest for the secret-field semantics.
+	UpsertMCPServer(context.Context, *connect.Request[v1.UpsertMCPServerRequest]) (*connect.Response[v1.UpsertMCPServerResponse], error)
+	// Delete a registered server. Pipeline rows referencing it are left
+	// in place and degrade to a quiet no-op (the pseudo-plugin resolves
+	// to an unconfigured instance); editors can render them as dangling.
+	DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error)
 }
 
 // NewProfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -392,6 +465,24 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(profilesServiceMethods.ByName("UpsertUserPluginSettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profilesServiceListMCPServersHandler := connect.NewUnaryHandler(
+		ProfilesServiceListMCPServersProcedure,
+		svc.ListMCPServers,
+		connect.WithSchema(profilesServiceMethods.ByName("ListMCPServers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profilesServiceUpsertMCPServerHandler := connect.NewUnaryHandler(
+		ProfilesServiceUpsertMCPServerProcedure,
+		svc.UpsertMCPServer,
+		connect.WithSchema(profilesServiceMethods.ByName("UpsertMCPServer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profilesServiceDeleteMCPServerHandler := connect.NewUnaryHandler(
+		ProfilesServiceDeleteMCPServerProcedure,
+		svc.DeleteMCPServer,
+		connect.WithSchema(profilesServiceMethods.ByName("DeleteMCPServer")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/psmith.v1.ProfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProfilesServiceCreateProfileProcedure:
@@ -418,6 +509,12 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 			profilesServiceListUserPluginSettingsHandler.ServeHTTP(w, r)
 		case ProfilesServiceUpsertUserPluginSettingsProcedure:
 			profilesServiceUpsertUserPluginSettingsHandler.ServeHTTP(w, r)
+		case ProfilesServiceListMCPServersProcedure:
+			profilesServiceListMCPServersHandler.ServeHTTP(w, r)
+		case ProfilesServiceUpsertMCPServerProcedure:
+			profilesServiceUpsertMCPServerHandler.ServeHTTP(w, r)
+		case ProfilesServiceDeleteMCPServerProcedure:
+			profilesServiceDeleteMCPServerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -473,4 +570,16 @@ func (UnimplementedProfilesServiceHandler) ListUserPluginSettings(context.Contex
 
 func (UnimplementedProfilesServiceHandler) UpsertUserPluginSettings(context.Context, *connect.Request[v1.UpsertUserPluginSettingsRequest]) (*connect.Response[v1.UpsertUserPluginSettingsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.UpsertUserPluginSettings is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) ListMCPServers(context.Context, *connect.Request[v1.ListMCPServersRequest]) (*connect.Response[v1.ListMCPServersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.ListMCPServers is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) UpsertMCPServer(context.Context, *connect.Request[v1.UpsertMCPServerRequest]) (*connect.Response[v1.UpsertMCPServerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.UpsertMCPServer is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) DeleteMCPServer(context.Context, *connect.Request[v1.DeleteMCPServerRequest]) (*connect.Response[v1.DeleteMCPServerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.DeleteMCPServer is not implemented"))
 }

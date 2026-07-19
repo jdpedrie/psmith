@@ -170,6 +170,52 @@ public final class ProfilesRepository: Sendable {
         return msg.plugins.map(PsmithProfilePlugin.init(from:))
     }
 
+    // MARK: - MCP server registry
+
+    public func listMCPServers() async throws -> [PsmithMCPServer] {
+        let resp = await client.listMcpservers(request: Psmith_V1_ListMCPServersRequest(), headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("list mcp servers") }
+        return msg.servers.map(PsmithMCPServer.init(from:))
+    }
+
+    /// Create (nil id) or update one registered server. `env` /
+    /// `headers` nil = keep the stored value; empty string = clear —
+    /// matching the write-only secret contract on the wire.
+    public func upsertMCPServer(
+        id: String?,
+        name: String,
+        transport: String,
+        command: String = "",
+        args: String = "",
+        env: String? = nil,
+        url: String = "",
+        headers: String? = nil,
+        toolPrefix: String = ""
+    ) async throws -> PsmithMCPServer {
+        var req = Psmith_V1_UpsertMCPServerRequest()
+        req.id = id ?? ""
+        req.name = name
+        req.transport = transport
+        req.command = command
+        req.args = args
+        req.url = url
+        req.toolPrefix = toolPrefix
+        if let env { req.env = env }
+        if let headers { req.headers = headers }
+        let resp = await client.upsertMcpserver(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("upsert mcp server") }
+        return PsmithMCPServer(from: msg.server)
+    }
+
+    public func deleteMCPServer(id: String) async throws {
+        var req = Psmith_V1_DeleteMCPServerRequest()
+        req.id = id
+        let resp = await client.deleteMcpserver(request: req, headers: [:])
+        if resp.message == nil {
+            throw resp.error.map(PsmithError.from) ?? .missingPayload("delete mcp server")
+        }
+    }
+
     // MARK: - User-scoped global plugin settings
 
     public func getUserPluginSettings(pluginName: String) async throws -> PsmithUserPluginSettings {

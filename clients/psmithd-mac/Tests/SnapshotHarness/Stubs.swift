@@ -190,6 +190,34 @@ public enum SnapshotStubs {
         return m
     }
 
+    // MARK: - MCPServersViewModel
+
+    /// Pre-populated registry model — state as if `load()` returned the
+    /// fixture servers. No RPC is ever issued from snapshot renders.
+    @MainActor
+    public static func makeMCPServersModel(
+        servers: [PsmithMCPServer] = [
+            PsmithMCPServer(
+                id: "mcp-firecrawl", name: "Firecrawl", transport: "http",
+                url: "https://mcp.firecrawl.dev/v2/mcp", toolPrefix: "firecrawl",
+                hasHeaders: true
+            ),
+            PsmithMCPServer(
+                id: "mcp-localfs", name: "Local files", transport: "stdio",
+                command: "npx", args: "-y\n@modelcontextprotocol/server-filesystem",
+                hasEnv: true
+            ),
+        ],
+        selectedID: String? = "mcp-firecrawl",
+        isAddingNew: Bool = false
+    ) -> MCPServersViewModel {
+        let m = MCPServersViewModel(client: makeClient())
+        m.servers = servers
+        m.selectedID = selectedID
+        m.isAddingNew = isAddingNew
+        return m
+    }
+
     // MARK: - ProfilesViewModel
 
     /// Builds a fully-loaded ProfilesViewModel for snapshot tests. Models +

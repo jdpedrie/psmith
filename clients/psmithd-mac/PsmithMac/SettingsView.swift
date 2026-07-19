@@ -11,6 +11,7 @@ import PsmithUI
 struct SettingsView: View {
     @Bindable var providersModel: ProvidersViewModel
     @Bindable var profilesModel: ProfilesViewModel
+    @Bindable var mcpServersModel: MCPServersViewModel
     let onBack: () -> Void
 
     @Environment(AppModel.self) private var app
@@ -175,6 +176,8 @@ struct SettingsView: View {
             ProfilesMiddleColumn(model: profilesModel, onBack: onBack)
         case .plugins:
             PluginSettingsMiddleColumn(model: profilesModel, onBack: onBack)
+        case .mcpServers:
+            MCPServersMiddleColumn(model: mcpServersModel, onBack: onBack)
         default:
             // App-settings categories render two-pane; this column is
             // never mounted for them (see the HSplitView condition).
@@ -193,6 +196,8 @@ struct SettingsView: View {
             ProfilesDetail(model: profilesModel)
         case .plugins:
             PluginSettingsDetail(model: profilesModel)
+        case .mcpServers:
+            MCPServersDetail(model: mcpServersModel)
         case .appearance:
             AppearanceSettingsView(section: appearanceSection)
         case .notifications:

@@ -74,6 +74,7 @@ struct HomeView: View {
         SettingsView(
             providersModel: app.providers,
             profilesModel: app.profiles,
+            mcpServersModel: app.mcpServers,
             onBack: { navigator.mode = .chats }
         )
     }

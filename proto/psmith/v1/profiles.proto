@@ -48,6 +48,21 @@ service ProfilesService {
   // stored value — it means "the user explicitly cleared every global
   // field" and overrides the absence-is-empty fallback at merge time.
   rpc UpsertUserPluginSettings(UpsertUserPluginSettingsRequest) returns (UpsertUserPluginSettingsResponse);
+
+  // --- User-level MCP server registry ------------------------------------
+  // Registered servers surface as pseudo-plugins named "mcp:<id>" in
+  // ListPluginTypes. Attaching one to a profile/conversation pipeline
+  // stores only that reference; the server resolves the full (secret-
+  // bearing) spec from the registry at pipeline-build time, so auth
+  // headers and env vars live in exactly one encrypted row.
+  rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
+  // Create (empty id) or update (owner-checked id) one registered
+  // server. See UpsertMCPServerRequest for the secret-field semantics.
+  rpc UpsertMCPServer(UpsertMCPServerRequest) returns (UpsertMCPServerResponse);
+  // Delete a registered server. Pipeline rows referencing it are left
+  // in place and degrade to a quiet no-op (the pseudo-plugin resolves
+  // to an unconfigured instance); editors can render them as dangling.
+  rpc DeleteMCPServer(DeleteMCPServerRequest) returns (DeleteMCPServerResponse);
 }
 
 message CreateProfileRequest {
@@ -360,3 +375,65 @@ message UpsertUserPluginSettingsRequest {
 message UpsertUserPluginSettingsResponse {
   UserPluginSettings settings = 1;
 }
+
+// --- User-level MCP server registry --------------------------------------
+
+// One registered MCP server. The stored spec uses the same field
+// vocabulary as the mcp plugin's config blob, so pipeline-build
+// resolution is a straight merge. Secret-bearing fields (env, headers)
+// are write-only on this surface: reads return has_env / has_headers
+// flags instead of values, mirroring how provider API keys are
+// withheld from clients.
+message MCPServer {
+  string id = 1;
+  // Display name, unique per user. Doubles as the pseudo-plugin's
+  // display_name in ListPluginTypes.
+  string name = 2;
+  // "stdio", "http", or "inproc".
+  string transport = 3;
+  // stdio: executable resolved against PATH.
+  string command = 4;
+  // stdio: one CLI arg per line.
+  string args = 5;
+  // stdio: KEY=VALUE lines are stored (encrypted) but never returned.
+  bool has_env = 6;
+  // http: JSON-RPC endpoint.
+  string url = 7;
+  // http: "KEY: VALUE" header lines are stored (encrypted) but never
+  // returned.
+  bool has_headers = 8;
+  // Default tool-name prefix wherever this server is attached; a
+  // per-attachment config can still override it.
+  string tool_prefix = 9;
+}
+
+message ListMCPServersRequest {}
+message ListMCPServersResponse {
+  repeated MCPServer servers = 1;
+}
+
+message UpsertMCPServerRequest {
+  // Empty = create; non-empty = update that row (NotFound unless the
+  // caller owns it).
+  string id = 1;
+  string name = 2;
+  string transport = 3;
+  string command = 4;
+  string args = 5;
+  // KEY=VALUE per line. ABSENT keeps the stored value — an edit form
+  // that never displays secrets can save without wiping them.
+  // Present-but-empty clears.
+  optional string env = 6;
+  string url = 7;
+  // "KEY: VALUE" per line. Same absent-keeps semantics as env.
+  optional string headers = 8;
+  string tool_prefix = 9;
+}
+message UpsertMCPServerResponse {
+  MCPServer server = 1;
+}
+
+message DeleteMCPServerRequest {
+  string id = 1;
+}
+message DeleteMCPServerResponse {}

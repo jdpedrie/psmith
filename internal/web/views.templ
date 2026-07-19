@@ -153,6 +153,7 @@ templ settingsPage() {
 			<div class="sgroup-card">
 				@settingsRow("/settings/embedder", "embedder", "Embedder", "Backend for semantic history search.")
 				@settingsRow("/settings/langfuse", "langfuse", "Langfuse", "Optional tracing of model calls.")
+				@settingsRow("/settings/mcp-servers", "plugin", "MCP servers", "Register once; attach anywhere as a plugin.")
 			</div>
 		</section>
 		<section class="sgroup">
@@ -556,6 +557,92 @@ templ langfusePage(vm langfuseVM) {
 			<form method="post" action="/settings/langfuse/test"><button class="btn-secondary" type="submit">Test</button></form>
 			<form method="post" action="/settings/langfuse/delete" onsubmit="return confirm('Delete Langfuse config?')"><button class="btn-danger" type="submit">Delete</button></form>
 		</div>
+	}
+}
+
+templ mcpServersPage(servers []mcpServerVM) {
+	@settingsShell("MCP servers") {
+		<div class="page-head">
+			<div>
+				<h1 class="page-title">MCP servers</h1>
+				<p class="page-sub">Register a server once; it appears in every plugin picker. Credentials stay here, encrypted.</p>
+			</div>
+			<a class="btn" href="/settings/mcp-servers/new">Add server</a>
+		</div>
+		<div class="sgroup">
+			<div class="sgroup-card">
+				if len(servers) == 0 {
+					<p class="muted pad">No servers yet. Register one to attach its tools to a profile or conversation.</p>
+				}
+				for _, srv := range servers {
+					<a class="srow" href={ templ.SafeURL("/settings/mcp-servers/" + srv.ID) }>
+						<span class="srow-icon">@sicon("plugin")</span>
+						<span class="srow-body">
+							<span class="srow-title">{ srv.Name }</span>
+							<span class="srow-desc">{ mcpServerSummary(srv) }</span>
+						</span>
+						<span class="srow-trail">@chevron()</span>
+					</a>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
+	@settingsShell(mcpServerFormTitle(vm)) {
+		<h1>{ mcpServerFormTitle(vm) }</h1>
+		<p class="muted">One server per entry. Attach it from any profile's or conversation's plugin picker afterwards.</p>
+		if errMsg != "" {
+			<div class="banner banner-err">{ errMsg }</div>
+		}
+		<form class="form" method="post" action="/settings/mcp-servers">
+			<input type="hidden" name="id" value={ vm.ID }/>
+			<label>
+				Name
+				<input name="name" value={ vm.Name } placeholder="Firecrawl" autocomplete="off" required/>
+			</label>
+			<label>
+				Transport
+				<select name="transport">
+					<option value="http" selected?={ vm.Transport == "http" }>HTTP (remote URL)</option>
+					<option value="stdio" selected?={ vm.Transport == "stdio" }>Stdio (subprocess)</option>
+					<option value="inproc" selected?={ vm.Transport == "inproc" }>In-process (this Psmith instance)</option>
+				</select>
+			</label>
+			<label>
+				URL <span class="muted">(http transport)</span>
+				<input name="url" value={ vm.URL } placeholder="https://mcp.firecrawl.dev/v2/mcp" autocomplete="off"/>
+			</label>
+			<label>
+				HTTP headers <span class="muted">{ keyHint(vm.HasHeaders) }</span>
+				<textarea name="headers" rows="2" placeholder="Authorization: Bearer YOUR_TOKEN" autocomplete="off"></textarea>
+			</label>
+			<label>
+				Command <span class="muted">(stdio transport)</span>
+				<input name="command" value={ vm.Command } placeholder="npx" autocomplete="off"/>
+			</label>
+			<label>
+				Arguments <span class="muted">(stdio, one per line)</span>
+				<textarea name="args" rows="3" placeholder="-y&#10;firecrawl-mcp">{ vm.Args }</textarea>
+			</label>
+			<label>
+				Environment variables <span class="muted">{ keyHint(vm.HasEnv) }</span>
+				<textarea name="env" rows="2" placeholder="FIRECRAWL_API_KEY=fc-..." autocomplete="off"></textarea>
+			</label>
+			<label>
+				Tool name prefix <span class="muted">(optional)</span>
+				<input name="tool_prefix" value={ vm.ToolPrefix } placeholder="firecrawl" autocomplete="off"/>
+			</label>
+			<div class="form-actions">
+				<button type="submit">Save</button>
+			</div>
+		</form>
+		if vm.ID != "" {
+			<div class="settings-actions">
+				<form method="post" action={ templ.SafeURL("/settings/mcp-servers/" + vm.ID + "/delete") } onsubmit="return confirm('Delete this MCP server? Pipelines referencing it will stop exposing its tools.')"><button class="btn-danger" type="submit">Delete</button></form>
+			</div>
+		}
 	}
 }
 

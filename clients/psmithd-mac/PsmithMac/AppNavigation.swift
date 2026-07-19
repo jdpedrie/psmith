@@ -46,6 +46,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
     case providers
     case profiles
     case plugins
+    case mcpServers
     case general
     case appearance
     case notifications
@@ -61,6 +62,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .providers:     return "Providers"
         case .profiles:      return "Profiles"
         case .plugins:       return "Plugins"
+        case .mcpServers:    return "MCP Servers"
         case .general:       return "General"
         case .appearance:    return "Appearance"
         case .notifications: return "Notifications"
@@ -78,6 +80,7 @@ enum SettingsCategory: Hashable, CaseIterable, Identifiable {
         case .providers:     return "cpu"
         case .profiles:      return "person.crop.rectangle"
         case .plugins:       return "puzzlepiece.extension"
+        case .mcpServers:    return "server.rack"
         case .general:       return "gearshape"
         case .appearance:    return "paintpalette"
         case .notifications: return "bell"

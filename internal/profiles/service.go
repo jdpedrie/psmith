@@ -18,6 +18,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/crypto"
 	"github.com/jdpedrie/psmith/internal/events"
+	"github.com/jdpedrie/psmith/internal/mcpreg"
 	"github.com/jdpedrie/psmith/internal/pagetoken"
 	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/jdpedrie/psmith/plugins"
@@ -691,9 +692,25 @@ func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[psmith
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("describe plugins: %w", err))
 	}
 	out := make([]*psmithv1.PluginType, 0, len(descs))
+	var mcpBase *psmithv1.PluginType
 	for _, d := range descs {
-		out = append(out, pluginTypeToProto(d))
+		pt := pluginTypeToProto(d)
+		if d.Name == mcpreg.BaseName {
+			mcpBase = pt
+		}
+		out = append(out, pt)
 	}
+	// The caller's registered MCP servers surface as pseudo-plugin
+	// entries so "Firecrawl" is attachable from the same picker as any
+	// compiled-in plugin. Identity is the registry row id — that's what
+	// makes the pipeline merge's by-name dedup/disable semantics work
+	// per server instead of collapsing every server onto "mcp".
+	caller := auth.MustFromContext(ctx)
+	pseudo, err := s.mcpServerPluginTypes(ctx, caller.ID, mcpBase)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list mcp servers: %w", err))
+	}
+	out = append(out, pseudo...)
 	return connect.NewResponse(&psmithv1.ListPluginTypesResponse{PluginTypes: out}), nil
 }
 
@@ -765,7 +782,15 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[ps
 		if p.PluginName == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d]: empty plugin_name", i))
 		}
-		if _, err := plugins.Build(p.PluginName, p.Config); err != nil {
+		// Registry references ("mcp:<id>") resolve STRICTLY here — a
+		// dangling or foreign id is a user-actionable mistake at attach
+		// time, unlike at pipeline-build time where it degrades to a
+		// no-op.
+		name, cfg, err := mcpreg.Resolve(ctx, s.queries, s.cipher, caller.ID, p.PluginName, p.Config, true)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
+		}
+		if _, err := plugins.Build(name, cfg); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
 	}
