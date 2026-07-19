@@ -458,6 +458,16 @@ private struct ProfileForm: View {
     @State private var configuringPluginLocalID: UUID?
     @State private var showingAddPluginPicker = false
 
+    /// The edit form spans seven sections — one scroll was unusably
+    /// long (user-reported). Grouped into four tabs on the providers
+    /// detail's segmented-bar idiom. Selection lives on the VM (see
+    /// ProfilesViewModel.profileFormTab), so it survives the plugin
+    /// drill-down body swap — drilling in happens from the Plugins
+    /// tab and back lands there — and snapshot tests can pin each tab.
+    private typealias FormTab = ProfilesViewModel.ProfileFormTab
+
+    private var activeTab: FormTab { model.profileFormTab }
+
     private var isEdit: Bool { editing != nil }
 
     private var canSave: Bool {
@@ -523,6 +533,19 @@ private struct ProfileForm: View {
 
             Divider()
 
+            Picker("", selection: $model.profileFormTab) {
+                ForEach(FormTab.allCases, id: \.self) { tab in
+                    Text(formTabLabel(tab)).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+
+            Divider()
+
             // GeometryReader pins the inner VStack's width to the column's
             // actual width — without it, the embedded CallSettingsForm's
             // wide segmented pickers force the VStack's intrinsic size
@@ -532,118 +555,26 @@ private struct ProfileForm: View {
             GeometryReader { geo in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        formSection("Basic") {
-                        formRow(label: "Name",
-                                description: "Short, memorable. Shown in the conversation list.") {
-                            TextField("e.g. Default, Coding, Brainstorm", text: $name)
-                                .textFieldStyle(.roundedBorder)
+                        switch activeTab {
+                        case .general:
+                            basicSection
+                            promptSection
+                        case .model:
+                            defaultModelSection
+                            callSettingsSection
+                        case .plugins:
+                            pluginsSection
+                        case .automation:
+                            compressionSection
+                            titlingSection
                         }
-                        formRow(label: "Description",
-                                description: "Optional. A sentence about when to reach for this profile.") {
-                            TextField("e.g. \"Concise, code-first answers\"", text: $profileDescription)
-                                .textFieldStyle(.roundedBorder)
-                        }
-                        formRow(label: "Inherits from",
-                                description: "Any field left blank below falls back to this parent. Templates (parent-only profiles) are eligible.") {
-                            ProfilePickerRow(
-                                model: model,
-                                selectedID: $parentID,
-                                includeNoneOption: true,
-                                allowParentOnly: true,
-                                excludeID: editing?.id,
-                                onOpenSettings: { id in sharedNavigator.openProfileSettings(id: id) }
-                            )
-                        }
-                        formRow(label: "Parent only",
-                                description: "When on, this profile is hidden from the new-conversation picker — only usable as a parent for inheritance.") {
-                            Toggle("", isOn: $parentOnly)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
+
+                        if let formError {
+                            Text(formError).scaledFont(.caption).foregroundStyle(.red)
                         }
                     }
-
-                    formSection("Prompt") {
-                        formRow(label: "System message",
-                                description: "Sent as the system prompt at the top of every request.") {
-                            multilineEditor($systemMessage).frame(minHeight: 80)
-                        }
-                        formRow(label: "Default user message",
-                                description: "Pre-filled into the composer when a new conversation is started.") {
-                            multilineEditor($defaultUserMessage).frame(minHeight: 60)
-                        }
-                        formRow(label: "Welcome message",
-                                description: "Shown as the assistant's first message in every new conversation — a greeting, not a prompt; it isn't sent to the model as an instruction.") {
-                            multilineEditor($welcomeMessage).frame(minHeight: 60)
-                        }
-                    }
-
-                    formSection("Default model") {
-                        formRow(label: "Model",
-                                description: "Used for normal turns when the conversation doesn't override.") {
-                            modelPicker(slot: .default, provider: $defaultProviderID, model: $defaultModelID)
-                        }
-                    }
-
-                    formSection("Default call settings") {
-                        Text("Per-profile generation knobs (temperature, max tokens, thinking, …). Any unset field inherits from the model and provider layers below at send time.")
-                            .scaledFont(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        CallSettingsForm(
-                            settings: $callSettingsDraft,
-                            inheritedSettings: profileInheritedCallSettings,
-                            driverType: profileDriverType,
-                            modelCapabilities: profileModelCapabilities
-                        )
-                    }
-
-                    formSection("Compression") {
-                        formRow(label: "Mode",
-                                description: "Replace replaces the context with a summary; Append keeps both.") {
-                            Picker("", selection: $compressionMode) {
-                                Text("(inherit)").tag(PsmithCompressionMode?.none)
-                                Text("Replace").tag(PsmithCompressionMode?.some(.replace))
-                                Text("Append").tag(PsmithCompressionMode?.some(.append))
-                            }
-                            .labelsHidden()
-                            .frame(maxWidth: 200)
-                        }
-                        formRow(label: "Model",
-                                description: "Model used to write the summary.") {
-                            modelPicker(slot: .compression, provider: $compressionProviderID, model: $compressionModelID)
-                        }
-                        formRow(label: "Guide",
-                                description: "Optional extra instruction for the summariser.") {
-                            multilineEditor($compressionGuide).frame(minHeight: 60)
-                        }
-                    }
-
-                    pluginsSection
-
-                    formSection("Auto-titling") {
-                        formRow(label: "Generator",
-                                description: "Apple Foundation Models runs locally on macOS 26+ — free, fast, private. Pick a cloud model below to use a paid LLM instead.") {
-                            titleGeneratorPicker
-                        }
-                        if titleProviderKind != PsmithTitleProviderKind.appleFoundation {
-                            formRow(label: "Cloud model",
-                                    description: "Used when the local generator is unavailable or you want a specific model.") {
-                                modelPicker(slot: .title, provider: $titleProviderID, model: $titleModelID)
-                            }
-                        }
-                        formRow(label: "Guide",
-                                description: "Optional extra instruction for the titler — e.g. \"prefer technical phrasing\".") {
-                            multilineEditor($titleGuide).frame(minHeight: 50)
-                        }
-                    }
-
-                    if let formError {
-                        Text(formError).scaledFont(.caption).foregroundStyle(.red)
-                    }
-                }
-                .padding(20)
-                .frame(width: geo.size.width, alignment: .topLeading)
+                    .padding(20)
+                    .frame(width: geo.size.width, alignment: .topLeading)
                 }
             }
         }
@@ -677,6 +608,139 @@ private struct ProfileForm: View {
             }
             pluginsLoaded = true
         }
+    }
+
+    private func formTabLabel(_ tab: FormTab) -> String {
+        switch tab {
+        case .general:    return "General"
+        case .model:      return "Model"
+        case .plugins:    return "Plugins"
+        case .automation: return "Automation"
+        }
+    }
+
+    // MARK: - Tab sections
+
+    @ViewBuilder
+    private var basicSection: some View {
+                        formSection("Basic") {
+                        formRow(label: "Name",
+                                description: "Short, memorable. Shown in the conversation list.") {
+                            TextField("e.g. Default, Coding, Brainstorm", text: $name)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        formRow(label: "Description",
+                                description: "Optional. A sentence about when to reach for this profile.") {
+                            TextField("e.g. \"Concise, code-first answers\"", text: $profileDescription)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        formRow(label: "Inherits from",
+                                description: "Any field left blank below falls back to this parent. Templates (parent-only profiles) are eligible.") {
+                            ProfilePickerRow(
+                                model: model,
+                                selectedID: $parentID,
+                                includeNoneOption: true,
+                                allowParentOnly: true,
+                                excludeID: editing?.id,
+                                onOpenSettings: { id in sharedNavigator.openProfileSettings(id: id) }
+                            )
+                        }
+                        formRow(label: "Parent only",
+                                description: "When on, this profile is hidden from the new-conversation picker — only usable as a parent for inheritance.") {
+                            Toggle("", isOn: $parentOnly)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+                    }
+    }
+
+    @ViewBuilder
+    private var promptSection: some View {
+                    formSection("Prompt") {
+                        formRow(label: "System message",
+                                description: "Sent as the system prompt at the top of every request.") {
+                            multilineEditor($systemMessage).frame(minHeight: 80)
+                        }
+                        formRow(label: "Default user message",
+                                description: "Pre-filled into the composer when a new conversation is started.") {
+                            multilineEditor($defaultUserMessage).frame(minHeight: 60)
+                        }
+                        formRow(label: "Welcome message",
+                                description: "Shown as the assistant's first message in every new conversation — a greeting, not a prompt; it isn't sent to the model as an instruction.") {
+                            multilineEditor($welcomeMessage).frame(minHeight: 60)
+                        }
+                    }
+    }
+
+    @ViewBuilder
+    private var defaultModelSection: some View {
+                    formSection("Default model") {
+                        formRow(label: "Model",
+                                description: "Used for normal turns when the conversation doesn't override.") {
+                            modelPicker(slot: .default, provider: $defaultProviderID, model: $defaultModelID)
+                        }
+                    }
+    }
+
+    @ViewBuilder
+    private var callSettingsSection: some View {
+                    formSection("Default call settings") {
+                        Text("Per-profile generation knobs (temperature, max tokens, thinking, …). Any unset field inherits from the model and provider layers below at send time.")
+                            .scaledFont(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        CallSettingsForm(
+                            settings: $callSettingsDraft,
+                            inheritedSettings: profileInheritedCallSettings,
+                            driverType: profileDriverType,
+                            modelCapabilities: profileModelCapabilities
+                        )
+                    }
+    }
+
+    @ViewBuilder
+    private var compressionSection: some View {
+                    formSection("Compression") {
+                        formRow(label: "Mode",
+                                description: "Replace replaces the context with a summary; Append keeps both.") {
+                            Picker("", selection: $compressionMode) {
+                                Text("(inherit)").tag(PsmithCompressionMode?.none)
+                                Text("Replace").tag(PsmithCompressionMode?.some(.replace))
+                                Text("Append").tag(PsmithCompressionMode?.some(.append))
+                            }
+                            .labelsHidden()
+                            .frame(maxWidth: 200)
+                        }
+                        formRow(label: "Model",
+                                description: "Model used to write the summary.") {
+                            modelPicker(slot: .compression, provider: $compressionProviderID, model: $compressionModelID)
+                        }
+                        formRow(label: "Guide",
+                                description: "Optional extra instruction for the summariser.") {
+                            multilineEditor($compressionGuide).frame(minHeight: 60)
+                        }
+                    }
+    }
+
+    @ViewBuilder
+    private var titlingSection: some View {
+                    formSection("Auto-titling") {
+                        formRow(label: "Generator",
+                                description: "Apple Foundation Models runs locally on macOS 26+ — free, fast, private. Pick a cloud model below to use a paid LLM instead.") {
+                            titleGeneratorPicker
+                        }
+                        if titleProviderKind != PsmithTitleProviderKind.appleFoundation {
+                            formRow(label: "Cloud model",
+                                    description: "Used when the local generator is unavailable or you want a specific model.") {
+                                modelPicker(slot: .title, provider: $titleProviderID, model: $titleModelID)
+                            }
+                        }
+                        formRow(label: "Guide",
+                                description: "Optional extra instruction for the titler — e.g. \"prefer technical phrasing\".") {
+                            multilineEditor($titleGuide).frame(minHeight: 50)
+                        }
+                    }
     }
 
 

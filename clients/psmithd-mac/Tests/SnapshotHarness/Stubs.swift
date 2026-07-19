@@ -232,12 +232,14 @@ public enum SnapshotStubs {
         availableModels: [PsmithUserModel] = SnapshotFixtures.enabledModels(),
         providers: [PsmithUserModelProvider] = SnapshotFixtures.providers(),
         pluginTypes: [PsmithPluginType] = [SnapshotFixtures.pluginType()],
-        profilePlugins: [String: [PsmithProfilePlugin]] = [:]
+        profilePlugins: [String: [PsmithProfilePlugin]] = [:],
+        formTab: ProfilesViewModel.ProfileFormTab = .general
     ) -> ProfilesViewModel {
         let m = ProfilesViewModel(client: makeClient())
         m.profiles = profiles
         m.selectedID = selectedID ?? profiles.first?.id
         m.detailMode = detailMode
+        m.profileFormTab = formTab
         m.availableModels = availableModels
         m.providerLabels = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.label) })
         m.providerTypes = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0.type) })

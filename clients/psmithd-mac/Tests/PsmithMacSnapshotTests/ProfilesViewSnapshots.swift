@@ -136,10 +136,7 @@ struct ProfilesViewSnapshots {
     // MARK: - ProfileForm — editing existing
 
     /// ProfileForm in `.editing` mode pre-populated with a chain leaf —
-    /// every field shows its seeded value, plugins section renders too.
-    /// CRITICAL: minColumn snapshot — the wide CallSettingsForm pickers
-    /// embedded inside this form were the original column-clipping
-    /// regression site.
+    /// the General tab: basic identity fields + the prompt editors.
     @Test
     func profileFormEditing() {
         let chain = SnapshotFixtures.profileChain()
@@ -147,6 +144,34 @@ struct ProfilesViewSnapshots {
             profiles: chain,
             selectedID: chain[1].id, // "Coding"
             detailMode: .editing
+        )
+        assertViewSnapshots(profilesDetail(model: model), sizes: columnSizes)
+    }
+
+    /// Model tab — default model picker + the embedded CallSettingsForm.
+    /// CRITICAL: minColumn snapshot — the wide CallSettingsForm pickers
+    /// were the original column-clipping regression site.
+    @Test
+    func profileFormModelTab() {
+        let chain = SnapshotFixtures.profileChain()
+        let model = SnapshotStubs.makeProfilesModel(
+            profiles: chain,
+            selectedID: chain[1].id,
+            detailMode: .editing,
+            formTab: .model
+        )
+        assertViewSnapshots(profilesDetail(model: model), sizes: columnSizes)
+    }
+
+    /// Automation tab — compression + auto-titling sections.
+    @Test
+    func profileFormAutomationTab() {
+        let chain = SnapshotFixtures.profileChain()
+        let model = SnapshotStubs.makeProfilesModel(
+            profiles: chain,
+            selectedID: chain[1].id,
+            detailMode: .editing,
+            formTab: .automation
         )
         assertViewSnapshots(profilesDetail(model: model), sizes: columnSizes)
     }
@@ -163,7 +188,8 @@ struct ProfilesViewSnapshots {
             profiles: chain,
             selectedID: leaf.id,
             detailMode: .editing,
-            profilePlugins: [leaf.id: [SnapshotFixtures.attachedPlugin()]]
+            profilePlugins: [leaf.id: [SnapshotFixtures.attachedPlugin()]],
+            formTab: .plugins
         )
         assertViewSnapshots(profilesDetail(model: model), sizes: columnSizes)
     }

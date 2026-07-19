@@ -31,6 +31,18 @@ public final class ProfilesViewModel {
     public var detailMode: ProfilesDetailMode = .viewing
     public var showDeleteConfirm = false
 
+    /// Active tab of the profile edit form (Mac splits the long form
+    /// into tabs). Lives on the VM, not view @State, for the same
+    /// reason detailMode does: master-detail hosts and snapshot tests
+    /// drive the form through the model. Deliberately never auto-reset
+    /// — the last tab persists across edit sessions, like the
+    /// providers detail tabs.
+    public var profileFormTab: ProfileFormTab = .general
+
+    public enum ProfileFormTab: String, Sendable, Hashable, CaseIterable {
+        case general, model, plugins, automation
+    }
+
     /// All enabled models across all providers, for the "default model" picker
     /// inside profile forms. Loaded lazily.
     public var availableModels: [PsmithUserModel] = []
