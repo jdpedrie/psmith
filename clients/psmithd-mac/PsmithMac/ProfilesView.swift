@@ -99,6 +99,7 @@ struct ProfilesDetail: View {
                 if let profile = model.selected() {
                     if model.detailMode == .editing {
                         ProfileForm(model: model, editing: profile)
+                            .id(profile.id)
                     } else {
                         ProfileViewer(profile: profile, model: model)
                     }
@@ -445,6 +446,15 @@ private struct ProfileForm: View {
     @State private var pluginsDraft: [DraftPlugin] = []
     @State private var pluginsBaseline: [PsmithProfilePlugin] = []
     @State private var pluginsLoaded = false
+    /// One-shot guards: the plugin-settings drill-down REPLACES
+    /// mainForm in `body`, so returning from it re-runs mainForm's
+    /// `.onAppear`/`.task`. Unguarded, those re-seeded every field and
+    /// the plugin draft from the stored profile — silently discarding
+    /// whatever the user had changed, including the plugin they just
+    /// attached (the Mac "add plugin does nothing" report). The form
+    /// is identity-keyed per profile id, so a different profile still
+    /// seeds fresh.
+    @State private var formSeeded = false
     @State private var configuringPluginLocalID: UUID?
     @State private var showingAddPluginPicker = false
 
@@ -649,9 +659,12 @@ private struct ProfileForm: View {
             // User-scoped global plugin settings power the per-card
             // "global setup needed" badge.
             await model.loadUserPluginSettings()
-            // Existing-profile plugins seed the draft baseline. New
-            // profiles start with an empty draft.
-            if let editing {
+            // Existing-profile plugins seed the draft baseline ONCE per
+            // form lifetime. New profiles start with an empty draft.
+            // (Re-seeding on every mainForm appearance wiped in-flight
+            // drafts when the plugin sub-screen swapped back — see
+            // formSeeded.)
+            if !pluginsLoaded, let editing {
                 await model.loadPlugins(forProfileID: editing.id)
                 let stored = model.profilePlugins[editing.id] ?? []
                 pluginsBaseline = stored
@@ -961,7 +974,8 @@ private struct ProfileForm: View {
     // MARK: Save
 
     private func seedFromEditing() {
-        guard let p = editing else { return }
+        guard !formSeeded, let p = editing else { return }
+        formSeeded = true
         name = p.name
         profileDescription = p.description
         parentOnly = p.parentOnly
