@@ -113,7 +113,7 @@ struct MCPServerFormScreen: View {
 
             if transport == "http" {
                 Section {
-                    TextField("https://mcp.firecrawl.dev/v2/mcp", text: $url)
+                    TextField("https://example.com/mcp", text: $url)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

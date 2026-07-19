@@ -171,7 +171,7 @@ struct MCPServerForm: View {
                     title: "Name",
                     description: "Shown as the plugin's name in every picker."
                 ) {
-                    TextField("Firecrawl", text: $name)
+                    TextField("Server name", text: $name)
                         .textFieldStyle(.roundedBorder)
                 }
                 fieldRow(
@@ -199,7 +199,7 @@ struct MCPServerForm: View {
                         title: "URL",
                         description: "JSON-RPC endpoint (Streamable HTTP transport)."
                     ) {
-                        TextField("https://mcp.firecrawl.dev/v2/mcp", text: $url)
+                        TextField("https://example.com/mcp", text: $url)
                             .textFieldStyle(.roundedBorder)
                             .autocorrectionDisabled()
                     }
@@ -269,7 +269,7 @@ struct MCPServerForm: View {
                 title: "Tool name prefix",
                 description: "Optional. Prepended to every tool name so two servers with identical tools don't collide. Overridable per attachment."
             ) {
-                TextField("firecrawl", text: $toolPrefix)
+                TextField("Optional", text: $toolPrefix)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
             }

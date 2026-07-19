@@ -2503,7 +2503,7 @@ func mcpServerFormPage(vm mcpServerVM, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 186, "\" placeholder=\"Firecrawl\" autocomplete=\"off\" required></label> <label>Transport <select name=\"transport\"><option value=\"http\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 186, "\" placeholder=\"Server name\" autocomplete=\"off\" required></label> <label>Transport <select name=\"transport\"><option value=\"http\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2546,7 +2546,7 @@ func mcpServerFormPage(vm mcpServerVM, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 193, "\" placeholder=\"https://mcp.firecrawl.dev/v2/mcp\" autocomplete=\"off\"></label> <label>HTTP headers <span class=\"muted\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 193, "\" placeholder=\"https://example.com/mcp\" autocomplete=\"off\"></label> <label>HTTP headers <span class=\"muted\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2572,14 +2572,14 @@ func mcpServerFormPage(vm mcpServerVM, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 195, "\" placeholder=\"npx\" autocomplete=\"off\"></label> <label>Arguments <span class=\"muted\">(stdio, one per line)</span> <textarea name=\"args\" rows=\"3\" placeholder=\"-y&#10;firecrawl-mcp\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 195, "\" placeholder=\"npx\" autocomplete=\"off\"></label> <label>Arguments <span class=\"muted\">(stdio, one per line)</span> <textarea name=\"args\" rows=\"3\" placeholder=\"-y&#10;your-mcp-server\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var119 string
 			templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(vm.Args)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 627, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views.templ`, Line: 627, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 			if templ_7745c5c3_Err != nil {
@@ -2598,7 +2598,7 @@ func mcpServerFormPage(vm mcpServerVM, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 197, "</span> <textarea name=\"env\" rows=\"2\" placeholder=\"FIRECRAWL_API_KEY=fc-...\" autocomplete=\"off\"></textarea></label> <label>Tool name prefix <span class=\"muted\">(optional)</span> <input name=\"tool_prefix\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 197, "</span> <textarea name=\"env\" rows=\"2\" placeholder=\"API_KEY=...\" autocomplete=\"off\"></textarea></label> <label>Tool name prefix <span class=\"muted\">(optional)</span> <input name=\"tool_prefix\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2611,7 +2611,7 @@ func mcpServerFormPage(vm mcpServerVM, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 198, "\" placeholder=\"firecrawl\" autocomplete=\"off\"></label><div class=\"form-actions\"><button type=\"submit\">Save</button></div></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 198, "\" placeholder=\"Optional\" autocomplete=\"off\"></label><div class=\"form-actions\"><button type=\"submit\">Save</button></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

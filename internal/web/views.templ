@@ -600,7 +600,7 @@ templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
 			<input type="hidden" name="id" value={ vm.ID }/>
 			<label>
 				Name
-				<input name="name" value={ vm.Name } placeholder="Firecrawl" autocomplete="off" required/>
+				<input name="name" value={ vm.Name } placeholder="Server name" autocomplete="off" required/>
 			</label>
 			<label>
 				Transport
@@ -612,7 +612,7 @@ templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
 			</label>
 			<label>
 				URL <span class="muted">(http transport)</span>
-				<input name="url" value={ vm.URL } placeholder="https://mcp.firecrawl.dev/v2/mcp" autocomplete="off"/>
+				<input name="url" value={ vm.URL } placeholder="https://example.com/mcp" autocomplete="off"/>
 			</label>
 			<label>
 				HTTP headers <span class="muted">{ keyHint(vm.HasHeaders) }</span>
@@ -624,15 +624,15 @@ templ mcpServerFormPage(vm mcpServerVM, errMsg string) {
 			</label>
 			<label>
 				Arguments <span class="muted">(stdio, one per line)</span>
-				<textarea name="args" rows="3" placeholder="-y&#10;firecrawl-mcp">{ vm.Args }</textarea>
+				<textarea name="args" rows="3" placeholder="-y&#10;your-mcp-server">{ vm.Args }</textarea>
 			</label>
 			<label>
 				Environment variables <span class="muted">{ keyHint(vm.HasEnv) }</span>
-				<textarea name="env" rows="2" placeholder="FIRECRAWL_API_KEY=fc-..." autocomplete="off"></textarea>
+				<textarea name="env" rows="2" placeholder="API_KEY=..." autocomplete="off"></textarea>
 			</label>
 			<label>
 				Tool name prefix <span class="muted">(optional)</span>
-				<input name="tool_prefix" value={ vm.ToolPrefix } placeholder="firecrawl" autocomplete="off"/>
+				<input name="tool_prefix" value={ vm.ToolPrefix } placeholder="Optional" autocomplete="off"/>
 			</label>
 			<div class="form-actions">
 				<button type="submit">Save</button>
