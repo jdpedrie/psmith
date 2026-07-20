@@ -194,20 +194,40 @@ private struct ConversationBody: View {
     @State private var scrollPhase: ScrollPhase = .idle
 
 
-    // NOTE on the send pin: there is deliberately NO scroll-based
-    // pinning machinery. Every strategy that positions the question
-    // by scrolling was tried at heavy scale (406 × 800-word
-    // messages) and failed on LazyVStack estimate instability:
-    // id-solves landed ~3,000pt short and wandered; a held edge
-    // position oscillated ±1,713pt/tick against the UIKit clamp;
-    // convergence re-seeking closed into a feedback loop with the
-    // re-estimator (content estimate swung 1.29M→343k, main thread
-    // 100% in AG::Graph). The pin that works never scrolls: the
-    // send collapses `mountedFromIndex` to the new question, which
-    // makes it the topmost mounted content — viewport top by
-    // construction — and the staged backfill remounts history above
-    // after the terminal, under the entry anchor's verified
-    // lockstep.
+    // THE SEND PIN, third design. History stays mounted (unmounting
+    // it read as data loss, and the post-terminal remount could
+    // strand the viewport in estimate-space at heavy scale). The
+    // question reaches the viewport top via exactly ONE absolute
+    // scroll computed from MEASURED geometry — the pending row
+    // reports its .scrollView-space minY, and the jump is
+    // scrollTo(y: offset + minY), both quantities real. No id or
+    // edge solving: every estimate-mediated strategy failed at 406
+    // heavy messages (id-solves ~3,000pt short and wandering; a held
+    // edge position oscillating ±1,713pt/tick against the UIKit
+    // clamp; convergence re-seeking storming the re-estimator at
+    // 100% main thread). After the jump the shrinking runway (see
+    // streamRunwayBudget) keeps content height constant, so the
+    // frozen offset IS the pin.
+
+    /// Runway budget below the streaming reply, fixed at send. The
+    /// rendered spacer is budget − (measured streaming height), so
+    /// question + reply + spacer stays CONSTANT while the reply
+    /// grows — no content-height change, no offset movement, the
+    /// reply visually fills the gap in place. Nonzero = send pin
+    /// live; zeroed at terminal, by the pill, and on send failure.
+    @State private var streamRunwayBudget: CGFloat = 0
+    /// The runway's rendered height (derived, see above).
+    @State private var streamSpacerHeight: CGFloat = 0
+    /// Armed at send; the geometry handler fires the one measured
+    /// jump when the pending row's reported position arrives, then
+    /// disarms. Cancelled by user grab or terminal.
+    @State private var pinJumpPending = false
+    /// Latest .scrollView-space minY reported by the pending row (or
+    /// the real user row it swaps into, via pinTargetMessageID).
+    @State private var pinReportedY: CGFloat?
+    /// Post-swap id of the just-sent user row, so it keeps reporting
+    /// if the swap lands before the jump fires.
+    @State private var pinTargetMessageID: String?
 
     /// First mounted index into `model.messages`, or nil while the
     /// cold-entry tail window (newest `coldEntryTail` rows) is active.
@@ -579,12 +599,38 @@ private struct ConversationBody: View {
                     // LazyVStack content closure — running ForEach over
                     // N messages and constructing N MessageRow values
                     // per chunk, even though none of them changed.
-                    ChatHistoryArea(model: model, fromIndex: mountedFromIndex, tail: coldEntryTail)
+                    ChatHistoryArea(
+                        model: model,
+                        fromIndex: mountedFromIndex,
+                        tail: coldEntryTail,
+                        pinTargetID: pinTargetMessageID,
+                        onPinTargetMove: { pinReportedY = $0 }
+                    )
                     // Pending user is its own subview for the same
                     // reason — observes only pendingUserText, not the
                     // chunk-rate streaming state.
-                    PendingUserArea(model: model)
+                    PendingUserArea(
+                        model: model,
+                        onPinTargetMove: { pinReportedY = $0 }
+                    )
                     StreamingArea(model: model)
+                        // The runway shrinks by exactly the streaming
+                        // row's measured growth — measured, not
+                        // estimated, so question+reply+spacer stays
+                        // an honest constant.
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { h in
+                            guard streamRunwayBudget > 0 else { return }
+                            streamSpacerHeight = max(0, streamRunwayBudget - h)
+                        }
+                    // Scroll runway for the send pin. Clear color,
+                    // not Spacer(): LazyVStack gives Spacer no height.
+                    if streamSpacerHeight > 0 {
+                        Color.clear
+                            .frame(height: streamSpacerHeight)
+                            .id("__streamspacer__")
+                    }
                 }
                 .padding()
                 // Width clamp on the scroll content, one layer of the
@@ -779,7 +825,7 @@ private struct ConversationBody: View {
                 // position live for the backfill to re-poison — the
                 // v21 "margins collapsed through entry" burst frames.
                 if stickyLive, entrySettled, distance < 8,
-                   !seekingBottom,
+                   streamRunwayBudget == 0, !seekingBottom,
                    !scrollPosition.isPositionedByUser {
                     stickyLive = false
                     scrollPosition = ScrollPosition()
@@ -815,14 +861,22 @@ private struct ConversationBody: View {
                 // the send path's own scroll animation mid-flight, and
                 // `!isPositionedByUser` so a user's at-bottom rubber-
                 // band (also briefly negative) is never fought.
-                if distance < -1,
+                // Absolute, not seekBottom(): contentHeight and
+                // viewportHeight here are measured, so the target is
+                // exact — an id/edge solve at heavy scale can land
+                // ABOVE the bottom where this guard never re-fires.
+                // Gated off while the send pin's runway is live (the
+                // spacer keeps distance positive; transient negatives
+                // during its layout must not yank the pin).
+                if distance < -1, streamRunwayBudget == 0,
                    scrollPhase == .idle,
                    !scrollPosition.isPositionedByUser {
                     scrollLog.notice("past-bottom clamp fired (distance=\(Int(distance), privacy: .public))")
+                    stickyLive = true
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) {
-                        seekBottom()
+                        scrollPosition.scrollTo(x: 0, y: max(0, m.contentHeight - m.viewportHeight))
                     }
                     return
                 }
@@ -869,9 +923,51 @@ private struct ConversationBody: View {
                     stickyLive = false
                     scrollPosition = ScrollPosition()
                 }
+                if pinJumpPending, scrollPosition.isPositionedByUser {
+                    // The user grabbed the viewport before the jump
+                    // fired — their position wins.
+                    pinJumpPending = false
+                }
 
-                // Pill visibility.
-                let newFar = distance > scrollToBottomThreshold
+                // The send pin's one measured jump: the pending row
+                // reported its top edge at `pinReportedY` (viewport
+                // space); offset + that delta puts it exactly at the
+                // viewport top. Both quantities are MEASURED — no
+                // LazyVStack estimate participates, which is why this
+                // works at 1.3M pt where every solver-based pin
+                // failed. Fires once; the frozen offset + constant
+                // content (shrinking runway) hold the pin afterwards.
+                if pinJumpPending, !scrollPosition.isPositionedByUser,
+                   let rowY = pinReportedY, rowY > 8 {
+                    // Fire only when the runway is IN these metrics:
+                    // the tick carrying the row's report can predate
+                    // the spacer's layout, and clamping against that
+                    // stale max eats most of the jump (measured: 568pt
+                    // asked, ~80 granted). Waiting costs one tick —
+                    // the spacer's own insertion generates it.
+                    let maxOff = max(0, m.contentHeight - m.viewportHeight)
+                    if m.offset + rowY <= maxOff + 4 {
+                        pinJumpPending = false
+                        stickyLive = true
+                        scrollLog.notice("send pin jump dy=\(Int(rowY), privacy: .public) off=\(Int(m.offset), privacy: .public)")
+                        var tj = Transaction()
+                        tj.disablesAnimations = true
+                        withTransaction(tj) {
+                            // −20: .scrollView-space minY doesn't
+                            // account for the top content inset under
+                            // the status strip; without the margin the
+                            // bubble's first line sits clipped behind
+                            // it (screenshot-verified).
+                            scrollPosition.scrollTo(x: 0, y: m.offset + rowY - 20)
+                        }
+                        return
+                    }
+                }
+
+                // Pill visibility. The runway is blank space, not
+                // content — subtract it or the pill lights on every
+                // send before anything is below the fold.
+                let newFar = (distance - streamSpacerHeight) > scrollToBottomThreshold
                 if newFar != isFarFromBottom {
                     withAnimation(.easeInOut(duration: 0.22)) {
                         isFarFromBottom = newFar
@@ -894,6 +990,12 @@ private struct ConversationBody: View {
                     // handler keeps re-seeking while `seekingBottom`
                     // holds until the bottom is actually reached.
                     seekingBottom = true
+                    // An explicit bottom-seek ends the pin contract:
+                    // reclaim the runway so "bottom" means the real
+                    // content end, not the blank band.
+                    streamRunwayBudget = 0
+                    streamSpacerHeight = 0
+                    pinJumpPending = false
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) {
@@ -932,48 +1034,70 @@ private struct ConversationBody: View {
             // and delete now hold the user's current scroll position.
             .onChange(of: model.pendingUserText) { _, text in
                 if text != nil {
-                    // Send = collapse the mounted window to the new
-                    // turn. With nothing mounted above it, the
-                    // question is the topmost content — at the
-                    // viewport top by construction, offset ~0 — and
-                    // the response streams in below a motionless
-                    // viewport. NO scrolling happens here (see the
-                    // NOTE by mountedFromIndex: every scroll-based
-                    // pin failed on estimate instability at heavy
-                    // scale). History remounts via the staged
-                    // backfill after the terminal, exactly like cold
-                    // entry; the trade is that mid-stream the user
-                    // can't scroll above the question, which matches
-                    // the reference apps' new-turn framing.
-                    scrollLog.notice("send: collapse window to new turn")
+                    // Send: arm the measured one-shot jump (fired by
+                    // the geometry handler once the pending row
+                    // reports where it landed) and lay the runway so
+                    // the question CAN sit at the top with the reply
+                    // streaming into view below. History stays
+                    // mounted throughout.
+                    scrollLog.notice("send: arm pin jump")
                     entryAnchorActive = false
                     seekingBottom = false
-                    stickyLive = false
-                    mountedFromIndex = model.messages.count
-                    scrollPosition = ScrollPosition()
-                } else if !model.sending && !model.isStreaming {
-                    // pendingUserText cleared with nothing in flight:
-                    // the send failed before a run started, so the
-                    // collapsed window would show an empty
-                    // transcript. Restore the cold-entry tail.
-                    if let idx = mountedFromIndex, idx >= model.messages.count {
+                    // A FULL viewport of runway: the jump puts the
+                    // question's top at the viewport top, which needs
+                    // ≥ vp of content below that point — the question
+                    // row itself plus this spacer always satisfies it,
+                    // so the jump target can never exceed max-scroll.
+                    // (vp − 120 was tried: the target landed past the
+                    // end, the held position sat at distance −18, and
+                    // the pending→real row swap yanked the viewport
+                    // −788 out of the unstable state.)
+                    streamRunwayBudget = max(240, viewportHeight)
+                    streamSpacerHeight = streamRunwayBudget
+                    pinJumpPending = true
+                    pinReportedY = nil
+                    pinTargetMessageID = nil
+                    // Freeze the mounted window to an index anchor if
+                    // the send arrived before the backfill ever ran —
+                    // a dynamic newest-N suffix would unmount the
+                    // window's oldest row when this send appends (the
+                    // v5.1 "unloading messages at the top" sin).
+                    if mountedFromIndex == nil {
                         mountedFromIndex = max(0, model.messages.count - coldEntryTail)
                     }
+                } else if model.sending || model.isStreaming {
+                    // Pending sentinel swapped for the real user row;
+                    // hand position-reporting to it in case the jump
+                    // hasn't fired yet.
+                    pinTargetMessageID = model.messages.last(where: { $0.role == .user })?.id
+                } else {
+                    // Send failed before a run started — the terminal
+                    // that normally reclaims the runway never fires.
+                    streamRunwayBudget = 0
+                    streamSpacerHeight = 0
+                    pinJumpPending = false
+                    pinTargetMessageID = nil
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
                 if !wasStreaming && isStreaming {
                     scrollLog.notice("stream start")
                 } else if wasStreaming && !isStreaming {
-                    // Terminal edge: nothing positional and no eager
-                    // remount (expanding here was the historical
-                    // stream-close desert). The backfill trigger in
-                    // the geometry handler remounts history the next
-                    // time it observes settled-at-bottom — under the
-                    // entry anchor, so the prepends land invisibly
-                    // above the held viewport.
+                    // Terminal edge: nothing positional — the offset
+                    // is numerically frozen and the streaming→settled
+                    // swap happens below the viewport top. Reclaim
+                    // the runway; it sits below the fold, so removal
+                    // can't move the frame. A reply shorter than the
+                    // runway leaves the viewport past the new content
+                    // end and the past-bottom clamp (live again once
+                    // the budget is zero) settles it with one
+                    // measured absolute scroll.
                     scrollLog.notice("stream terminal")
                     seekingBottom = false
+                    streamRunwayBudget = 0
+                    streamSpacerHeight = 0
+                    pinJumpPending = false
+                    pinTargetMessageID = nil
                 }
             }
             // Phase TRACKING only — deliberately no disengage here.
@@ -1126,6 +1250,11 @@ private struct ChatHistoryArea: View {
     @Bindable var model: ConversationViewModel
     let fromIndex: Int?
     let tail: Int
+    /// When set, the row with this id reports its `.scrollView`-space
+    /// minY through `onPinTargetMove` — the send pin's measured
+    /// ground truth (see pinReportedY on ConversationBody).
+    var pinTargetID: String? = nil
+    var onPinTargetMove: (CGFloat) -> Void = { _ in }
     @Environment(\.chatPaneWidth) private var paneWidth
 
     /// Exact per-row width: the pane minus the transcript padding.
@@ -1157,6 +1286,17 @@ private struct ChatHistoryArea: View {
                 CompressionSummaryCard(message: msg, model: model)
                     .frame(width: rowWidth, alignment: .leading)
                     .id(msg.id)
+            } else if msg.id == pinTargetID {
+                // The identity change from gaining the modifier is
+                // confined to the one pinned row, once per send.
+                MessageRow(message: msg, model: model)
+                    .frame(width: rowWidth, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .scrollView).minY
+                    } action: { y in
+                        onPinTargetMove(y)
+                    }
+                    .id(msg.id)
             } else {
                 MessageRow(message: msg, model: model)
                     .frame(width: rowWidth, alignment: .leading)
@@ -1178,6 +1318,10 @@ private struct ChatHistoryArea: View {
 /// `queuedEntries` — same one-frame swap as `pendingUserText`.
 private struct PendingUserArea: View {
     @Bindable var model: ConversationViewModel
+    /// Reports the pending row's `.scrollView`-space minY — the send
+    /// pin's measured target until the real user row replaces the
+    /// sentinel.
+    var onPinTargetMove: (CGFloat) -> Void = { _ in }
     @State private var queuedTick: Int = 0
     @Environment(\.chatPaneWidth) private var paneWidth
 
@@ -1190,6 +1334,11 @@ private struct PendingUserArea: View {
             if let pending = model.pendingUserText {
                 PendingUserRow(text: pending)
                     .frame(width: rowWidth, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .scrollView).minY
+                    } action: { y in
+                        onPinTargetMove(y)
+                    }
                     .id("__pending__")
             }
             ForEach(model.queuedEntries) { entry in
