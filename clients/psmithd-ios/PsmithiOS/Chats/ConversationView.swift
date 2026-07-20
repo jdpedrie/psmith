@@ -193,6 +193,12 @@ private struct ConversationBody: View {
     /// misread that caused the original stranding bug.
     @State private var scrollPhase: ScrollPhase = .idle
 
+    /// The scroll-content unit's global minX, from the layer probe.
+    /// The entry curtain gates on THIS being clean — the scroll
+    /// offset's x reads 0 while the content draws displaced (the
+    /// probes disagree by design; pixels follow the content unit).
+    @State private var contentUnitMinX: CGFloat = 0
+
 
     // THE SEND PIN, third design. History stays mounted (unmounting
     // it read as data loss, and the post-terminal remount could
@@ -696,6 +702,7 @@ private struct ConversationBody: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.frame(in: .global).minX
                 } action: { minX in
+                    contentUnitMinX = minX
                     scrollLog.notice("content-unit minX=\(Int(minX), privacy: .public)")
                 }
                 // Tap-to-dismiss for the composer keyboard.
@@ -750,12 +757,22 @@ private struct ConversationBody: View {
                 entryAnchorActive ? UnitPoint(x: 0, y: 1) : nil,
                 for: .sizeChanges
             )
+            // Deliberately NO second defaultScrollAnchor modifier (an
+            // .initialOffset one was tried): stacking anchor modifiers
+            // clobbers the sizeChanges role — same composition trap as
+            // the all-roles/sizeChanges conflict — which killed the
+            // backfill lockstep and stranded entry mid-conversation.
             .onAppear {
                 // Sticky bottom position for cold entry: holds the
-                // bottom through load + tail-window settle + backfill,
-                // then the settle handler drops it. seekBottom targets
-                // an id when messages are already cached and only
-                // falls back to the center-x edge seek pre-content.
+                // bottom through load + tail-window settle + backfill
+                // start, then the settle handler drops it. Edge.bottom
+                // is a CENTER-X solve whose re-solves can shimmy the
+                // transcript horizontally — the curtain exists to hide
+                // exactly that window, which is why its reveal gates
+                // on the content unit's measured x and why its timeout
+                // must comfortably outlast a heavy load (an absolute
+                // measured chase was tried instead of this seek and
+                // stranded entry on estimate-transient false bottoms).
                 seekBottom()
             }
             .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
@@ -830,7 +847,7 @@ private struct ConversationBody: View {
                 // showed drifted margins for ~1s until the position
                 // machinery caught up — user-reported on device.)
                 if !entrySettled, distance < 8, m.contentHeight > 0,
-                   abs(m.offsetX) <= 0.5 {
+                   abs(m.offsetX) <= 0.5, abs(contentUnitMinX) <= 0.5 {
                     withAnimation(.easeIn(duration: 0.12)) {
                         entrySettled = true
                     }
@@ -844,7 +861,12 @@ private struct ConversationBody: View {
                 // and deferring the drop leaves the center-x edge
                 // position live for the backfill to re-poison — the
                 // v21 "margins collapsed through entry" burst frames.
-                if stickyLive, entrySettled, distance < 8,
+                // Settled BAND, not `< 8`: a past-end transient
+                // (estimate collapse mid-walk logged distance −781)
+                // passes a one-sided check, and dropping the entry
+                // seek at that moment leaves nothing to re-solve the
+                // viewport back when the estimate re-inflates.
+                if stickyLive, entrySettled, distance < 8, distance > -8,
                    streamRunwayBudget == 0, !seekingBottom,
                    !scrollPosition.isPositionedByUser {
                     stickyLive = false
@@ -902,7 +924,14 @@ private struct ConversationBody: View {
                 // Gated off while the send pin's runway is live (the
                 // spacer keeps distance positive; transient negatives
                 // during its layout must not yank the pin).
+                // NEVER during the entry walk: the clamp's absolute
+                // target is only as good as the metrics, and mid-walk
+                // estimate collapses (content 750k→3k logged) make it
+                // write a garbage offset that strands the viewport
+                // mid-conversation once the estimate re-inflates. The
+                // entry seek + anchor own transients until settle.
                 if distance < -1, streamRunwayBudget == 0,
+                   entrySettled, !backfilling,
                    scrollPhase == .idle,
                    !scrollPosition.isPositionedByUser {
                     scrollLog.notice("past-bottom clamp fired (distance=\(Int(distance), privacy: .public))")
@@ -1162,7 +1191,12 @@ private struct ConversationBody: View {
             // leave the pane blank.
             .opacity(entrySettled ? 1 : 0)
             .task {
-                try? await Task.sleep(for: .milliseconds(700))
+                // Failsafe only. At 700ms a 400-message conversation's
+                // load+settle regularly outlasted it, revealing the
+                // transcript with the entry seek still live — the
+                // visible middle/left shimmy. Real settles reveal via
+                // the geometry gate well before this fires.
+                try? await Task.sleep(for: .milliseconds(2500))
                 if !entrySettled { entrySettled = true }
             }
             // No initial-load task needed for the mount: the geometry
