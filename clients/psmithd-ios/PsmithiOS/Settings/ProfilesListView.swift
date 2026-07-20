@@ -397,6 +397,12 @@ private struct ProfileEditSheet: View {
     @State private var saving = false
     @State private var errorMessage: String?
     @State private var seeded = false
+    /// Same four-group split as the Mac form (parity), local @State
+    /// because the sheet's lifetime IS the edit session — a fresh
+    /// sheet starts on General. Sub-screen pushes (call settings,
+    /// long-text editors, plugin config) ride the inner
+    /// NavigationStack, so the tab survives them untouched.
+    @State private var formTab: ProfilesViewModel.ProfileFormTab = .general
 
     private var existing: PsmithProfile? {
         guard let id = existingProfileID else { return nil }
@@ -405,7 +411,33 @@ private struct ProfileEditSheet: View {
 
     var body: some View {
         NavigationStack(path: $navPath) {
+            VStack(spacing: 0) {
+                tabPicker
+                editForm
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var tabPicker: some View {
+        Picker("", selection: $formTab) {
+            Text("General").tag(ProfilesViewModel.ProfileFormTab.general)
+            Text("Model").tag(ProfilesViewModel.ProfileFormTab.model)
+            Text("Plugins").tag(ProfilesViewModel.ProfileFormTab.plugins)
+            Text("Automation").tag(ProfilesViewModel.ProfileFormTab.automation)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private var editForm: some View {
             Form {
+                switch formTab {
+                case .general:
                 Section("Identity") {
                     TextField("Name", text: $name)
                     TextField("Description (optional)", text: $description, axis: .vertical)
@@ -429,6 +461,22 @@ private struct ProfileEditSheet: View {
                     .buttonStyle(.plain)
                 }
 
+                Section("Prompt") {
+                    LongTextEditorRow(label: "System message",
+                                      preview: systemMessage,
+                                      placeholder: "Optional — sent at the top of every conversation",
+                                      destination: .longTextEditor(field: .systemMessage))
+                    LongTextEditorRow(label: "Default user message",
+                                      preview: defaultUserMessage,
+                                      placeholder: "Optional — pre-fills the first user turn",
+                                      destination: .longTextEditor(field: .defaultUserMessage))
+                    LongTextEditorRow(label: "Welcome message",
+                                      preview: welcomeMessage,
+                                      placeholder: "Optional — first assistant bubble in new conversations",
+                                      destination: .longTextEditor(field: .welcomeMessage))
+                }
+
+                case .model:
                 Section("Default model") {
                     modelPickerRow(
                         label: "Model",
@@ -460,21 +508,33 @@ private struct ProfileEditSheet: View {
                     Text("Per-profile generation knobs (temperature, max tokens, thinking, …). Any unset field inherits at send time.")
                 }
 
-                Section("Prompt") {
-                    LongTextEditorRow(label: "System message",
-                                      preview: systemMessage,
-                                      placeholder: "Optional — sent at the top of every conversation",
-                                      destination: .longTextEditor(field: .systemMessage))
-                    LongTextEditorRow(label: "Default user message",
-                                      preview: defaultUserMessage,
-                                      placeholder: "Optional — pre-fills the first user turn",
-                                      destination: .longTextEditor(field: .defaultUserMessage))
-                    LongTextEditorRow(label: "Welcome message",
-                                      preview: welcomeMessage,
-                                      placeholder: "Optional — first assistant bubble in new conversations",
-                                      destination: .longTextEditor(field: .welcomeMessage))
+                case .plugins:
+                Section {
+                    if !pluginsLoaded {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Loading plugins…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ForEach(Array(pluginsDraft.enumerated()), id: \.element.localID) { idx, plugin in
+                            pluginRow(at: idx, plugin: plugin)
+                        }
+                        Button {
+                            addingPlugin = true
+                        } label: {
+                            Label("Add plugin", systemImage: "plus.circle")
+                        }
+                        .disabled(unattachedPluginTypes.isEmpty)
+                    }
+                } header: {
+                    Text("Plugins")
+                } footer: {
+                    Text("User-scoped plugin globals (api keys, etc.) are managed in Settings → Plugins.")
                 }
 
+                case .automation:
                 Section("Compression") {
                     Picker("Mode", selection: $compressionMode) {
                         Text("Inherit").tag(PsmithCompressionMode?.none)
@@ -534,29 +594,6 @@ private struct ProfileEditSheet: View {
                                       destination: .longTextEditor(field: .titleGuide))
                 }
 
-                Section {
-                    if !pluginsLoaded {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Loading plugins…")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        ForEach(Array(pluginsDraft.enumerated()), id: \.element.localID) { idx, plugin in
-                            pluginRow(at: idx, plugin: plugin)
-                        }
-                        Button {
-                            addingPlugin = true
-                        } label: {
-                            Label("Add plugin", systemImage: "plus.circle")
-                        }
-                        .disabled(unattachedPluginTypes.isEmpty)
-                    }
-                } header: {
-                    Text("Plugins")
-                } footer: {
-                    Text("User-scoped plugin globals (api keys, etc.) are managed in Settings → Plugins.")
                 }
 
                 if let errorMessage {
@@ -701,9 +738,6 @@ private struct ProfileEditSheet: View {
                 async let models: () = app.profiles.loadAvailableModels()
                 _ = await (plugins, models)
             }
-        }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     private var parentProfileName: String? {
