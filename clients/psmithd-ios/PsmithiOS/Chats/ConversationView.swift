@@ -228,6 +228,16 @@ private struct ConversationBody: View {
     /// Post-swap id of the just-sent user row, so it keeps reporting
     /// if the swap lands before the jump fires.
     @State private var pinTargetMessageID: String?
+    /// Set when the jump fires; the geometry handler releases the
+    /// held ScrollPosition binding as soon as the offset arrives at
+    /// this target. A position HELD through the stream re-solves x
+    /// against every coalesced re-lay and shimmies the transcript
+    /// ±16pt at flush cadence (probe-verified: minX oscillating
+    /// −16→0 at ~3Hz for the whole stream — the user-visible
+    /// "jitters left and right"), and held past terminal it parks
+    /// the margin shift permanently. The frozen offset needs no live
+    /// position: content is constant under the shrinking runway.
+    @State private var pinDropTarget: CGFloat?
 
     /// First mounted index into `model.messages`, or nil while the
     /// cold-entry tail window (newest `coldEntryTail` rows) is active.
@@ -626,9 +636,19 @@ private struct ConversationBody: View {
                         }
                     // Scroll runway for the send pin. Clear color,
                     // not Spacer(): LazyVStack gives Spacer no height.
+                    // Width pinned EXACTLY like every message row: an
+                    // unpinned child accepts a transition pass's loose
+                    // (oversized) width proposal, and since the runway
+                    // re-lays on every streaming flush, that turned
+                    // into a ±16pt horizontal shimmy at flush cadence
+                    // (probe-verified: minX −16→0 at ~3Hz all stream).
                     if streamSpacerHeight > 0 {
                         Color.clear
-                            .frame(height: streamSpacerHeight)
+                            .frame(
+                                width: paneWidth > 32 ? paneWidth - 32 : nil,
+                                height: streamSpacerHeight
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .id("__streamspacer__")
                     }
                 }
@@ -861,6 +881,20 @@ private struct ConversationBody: View {
                 // the send path's own scroll animation mid-flight, and
                 // `!isPositionedByUser` so a user's at-bottom rubber-
                 // band (also briefly negative) is never fought.
+                // Release the held pin position the tick the jump
+                // lands (see pinDropTarget). At-rest binding
+                // replacement — content is constant under the runway,
+                // so this is the verified-safe drop, not the
+                // mid-stream rewind case.
+                if let target = pinDropTarget,
+                   !scrollPosition.isPositionedByUser,
+                   abs(m.offset - target) < 64 {
+                    pinDropTarget = nil
+                    stickyLive = false
+                    scrollPosition = ScrollPosition()
+                    scrollLog.notice("send pin position dropped")
+                }
+
                 // Absolute, not seekBottom(): contentHeight and
                 // viewportHeight here are measured, so the target is
                 // exact — an id/edge solve at heavy scale can land
@@ -928,6 +962,11 @@ private struct ConversationBody: View {
                     // fired — their position wins.
                     pinJumpPending = false
                 }
+                if pinDropTarget != nil, scrollPosition.isPositionedByUser {
+                    // Release already handled by the block above; just
+                    // retire the pending drop.
+                    pinDropTarget = nil
+                }
 
                 // The send pin's one measured jump: the pending row
                 // reported its top edge at `pinReportedY` (viewport
@@ -949,6 +988,8 @@ private struct ConversationBody: View {
                     if m.offset + rowY <= maxOff + 4 {
                         pinJumpPending = false
                         stickyLive = true
+                        let target = m.offset + rowY - 20
+                        pinDropTarget = target
                         scrollLog.notice("send pin jump dy=\(Int(rowY), privacy: .public) off=\(Int(m.offset), privacy: .public)")
                         var tj = Transaction()
                         tj.disablesAnimations = true
@@ -958,7 +999,7 @@ private struct ConversationBody: View {
                             // the status strip; without the margin the
                             // bubble's first line sits clipped behind
                             // it (screenshot-verified).
-                            scrollPosition.scrollTo(x: 0, y: m.offset + rowY - 20)
+                            scrollPosition.scrollTo(x: 0, y: target)
                         }
                         return
                     }
@@ -996,6 +1037,7 @@ private struct ConversationBody: View {
                     streamRunwayBudget = 0
                     streamSpacerHeight = 0
                     pinJumpPending = false
+                    pinDropTarget = nil
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) {
@@ -1077,6 +1119,7 @@ private struct ConversationBody: View {
                     streamSpacerHeight = 0
                     pinJumpPending = false
                     pinTargetMessageID = nil
+                    pinDropTarget = nil
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
@@ -1098,6 +1141,7 @@ private struct ConversationBody: View {
                     streamSpacerHeight = 0
                     pinJumpPending = false
                     pinTargetMessageID = nil
+                    pinDropTarget = nil
                 }
             }
             // Phase TRACKING only — deliberately no disengage here.
