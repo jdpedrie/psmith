@@ -350,9 +350,6 @@ private struct ConversationBody: View {
                 Composer(model: model)
             }
         }
-        .refreshable {
-            await model.load()
-        }
         .onChange(of: model.messages.count) { _, _ in
             // Pre-warm parsed markdown for any newly-added messages
             // (terminal reloads, fork switches, manual refresh). Cache
@@ -891,6 +888,17 @@ private struct ConversationBody: View {
                     startHistoryBackfill()
                 }
 
+                // Scroll-up resume: if the user outruns (or paused) the
+                // walk and nears the top of the mounted window, mount
+                // the next chunks IMMEDIATELY — this is the "load older
+                // messages" affordance; without it a paused walk left
+                // history unreachable (user-reported). No user-position
+                // gate: the user scrolling up is exactly the signal.
+                if needsBackfill, !backfilling, m.offset < 2400,
+                   !model.sending, !model.isStreaming {
+                    startHistoryBackfill()
+                }
+
                 // Past-bottom clamp: when the viewport extends BELOW
                 // the content bottom while follow is engaged, re-pin.
                 // This is the keyboard-dismissal-on-submit case: the
@@ -1235,7 +1243,11 @@ private struct ConversationBody: View {
     private func seekBottom() {
         stickyLive = true
         if model.isStreaming || model.isCompacting || !model.streamingText.isEmpty {
-            scrollPosition.scrollTo(id: "__streaming__", anchor: UnitPoint(x: 0, y: 1))
+            // Edge, not the "__streaming__" id: an id-solve for a row
+            // far outside the realized band can silently no-op — the
+            // pill "did nothing" mid-stream. The edge solve always
+            // moves; convergence + the settled-band drop finish it.
+            scrollPosition.scrollTo(edge: .bottom)
         } else if model.pendingUserText != nil {
             scrollPosition.scrollTo(id: "__pending__", anchor: UnitPoint(x: 0, y: 1))
         } else if !model.loading, mountedFromIndex == 0, let last = model.messages.last {
@@ -1272,15 +1284,21 @@ private struct ConversationBody: View {
                 mountedFromIndex = max(0, model.messages.count - coldEntryTail)
             }
             while let idx = mountedFromIndex, idx > 0 {
-                // Prepends are only invisible while the entry anchor
-                // holds the bottom; pause on user grab, park, or a
-                // stream, and the geometry handler resumes on the
-                // next settled-at-bottom observation.
-                guard !scrollPosition.isPositionedByUser,
-                      !model.sending,
-                      !model.isStreaming else {
+                // A send or stream aborts the walk (prepends + the
+                // anchor would interact with the live turn); the
+                // geometry handler's triggers resume it afterwards.
+                guard !model.sending, !model.isStreaming else {
                     scrollLog.notice("backfill paused at \(idx, privacy: .public)")
                     return
+                }
+                // An ACTIVE finger just delays the next batch — a
+                // mid-gesture prepend re-solve can stutter the drag.
+                // isPositionedByUser is deliberately NOT an abort:
+                // it latches true after any grab, which stranded the
+                // walk (and all older history) until a rarely-reached
+                // settled-at-bottom. Phase misreads only cost 60ms.
+                while scrollPhase == .tracking || scrollPhase == .interacting {
+                    try? await Task.sleep(for: .milliseconds(60))
                 }
                 mountedFromIndex = max(0, idx - backfillBatch)
                 try? await Task.sleep(for: .milliseconds(80))
