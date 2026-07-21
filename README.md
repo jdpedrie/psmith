@@ -44,6 +44,10 @@ Deferred: APNs push on iOS, stateful subprocess providers (Claude Code, Codex), 
   <img src="docs/screenshots/ios-providers.png" alt="iOS providers and presets" width="270">
 </p>
 
+<p align="left">
+  <img src="docs/screenshots/mac-conversation.png" alt="A conversation in the Psmith macOS app" width="560">
+</p>
+
 ## Architecture
 
 ```
