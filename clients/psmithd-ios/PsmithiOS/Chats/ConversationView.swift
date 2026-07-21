@@ -1,6 +1,7 @@
 import SwiftUI
 import PsmithKit
 import PsmithUI
+import QuartzCore
 import os.log
 
 /// Diagnostic logger for the auto-follow state machine. Notice-level
@@ -154,7 +155,6 @@ private struct ConversationBody: View {
     ///
     /// Scroll handle for the explicit seeks (entry, send pin, pill).
     @State private var scrollPosition = ScrollPosition()
-    @State private var showingMissingCostInfo = false
     /// True while the pill's jump-to-bottom is converging: seeks from
     /// far above solve against estimated coordinates and can land
     /// short, so the geometry handler keeps re-seeking until the
@@ -163,6 +163,42 @@ private struct ConversationBody: View {
     /// user-scroll disengage raced the re-seek loop to death — the
     /// "pill does nothing" report.)
     @State private var seekingBottom = false
+
+    /// Governor for EVERY programmatic scroll command the geometry
+    /// handler can issue (convergence re-seek, past-bottom clamp).
+    /// Each command triggers a re-layout that re-estimates LazyVStack
+    /// content, which fires the geometry handler again — ungoverned,
+    /// that loop ran at tick rate against a flapping estimate and
+    /// never converged: the pill spin pinned the main thread at 100%
+    /// for minutes (sampled live; log showed the same JUMP repeating
+    /// every 43ms), and the post-delete clamp is the same disease.
+    /// The cooldown gives each solve a beat to realize rows before
+    /// the next command re-solves; the attempt caps convert "never
+    /// converges" into "lands nearby and stops".
+    @State private var lastAutoScrollAt: TimeInterval = 0
+    @State private var autoSeekAttempts = 0
+    @State private var clampAttempts = 0
+    private let autoScrollCooldown: TimeInterval = 0.25
+    private let maxAutoSeekAttempts = 8
+    private let maxClampAttempts = 4
+
+    /// Latest scroll metrics, readable OUTSIDE the geometry handler.
+    /// A reference-type box deliberately: writing it per tick must not
+    /// invalidate any view body (an @State struct write would — that
+    /// per-tick invalidation was the amplification engine behind the
+    /// 100%-CPU storms). `settleAtBottom` reads it to converge without
+    /// depending on the tick stream, because SwiftUI stops ticking the
+    /// instant layout stabilizes — including stabilizing in a WRONG
+    /// position (log-verified: parked past-end with a cooldown-blocked
+    /// clamp and zero further ticks to retry on).
+    private final class ScrollMetricsBox {
+        var latest = ScrollMetrics(
+            contentHeight: 0, offset: 0, viewportHeight: 0,
+            contentWidth: 0, viewportWidth: 0, offsetX: 0
+        )
+    }
+    @State private var metricsBox = ScrollMetricsBox()
+
     /// Viewport height of the message scroll, measured via
     /// `onGeometryChange`.
     @State private var viewportHeight: CGFloat = 0
@@ -350,18 +386,29 @@ private struct ConversationBody: View {
                 Composer(model: model)
             }
         }
-        .onChange(of: model.messages.count) { _, _ in
+        .onChange(of: model.messages.count) { old, new in
             // Pre-warm parsed markdown for any newly-added messages
             // (terminal reloads, fork switches, manual refresh). Cache
             // already-present entries skip — only the new assistant
             // turn(s) pay the parse cost, and that happens off the
-            // main thread.
+            // main thread. Keys MUST match MessageRow's render key.
             MarkdownCache.shared.prewarm(
                 model.messages.map {
-                    let stamp = $0.editedAt?.timeIntervalSince1970 ?? 0
-                    return (key: "\($0.id):\(stamp)", source: $0.displayContent ?? $0.content)
+                    let body = $0.displayContent ?? $0.content
+                    return (key: MessageRow.markdownKey(id: $0.id, body: body), source: body)
                 }
             )
+            // A shrink while system-positioned at the bottom (message
+            // delete) drops the content end out from under the
+            // viewport; if layout stabilizes past-end no tick ever
+            // fires to correct it. User-positioned offsets are
+            // excluded: UIKit clamps those natively when content
+            // shrinks, and a reader parked above the deletion isn't
+            // affected at all.
+            if new < old, !scrollPosition.isPositionedByUser,
+               !model.isStreaming, !model.sending, streamRunwayBudget == 0 {
+                Task { await settleAtBottom(reason: "shrink") }
+            }
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -402,7 +449,7 @@ private struct ConversationBody: View {
     @ViewBuilder
     private var statusStrip: some View {
         HStack(spacing: 8) {
-            costChip
+            CostChip(model: model)
             if let context = activeContextLabel {
                 NavigationLink {
                     ContextListView(model: model)
@@ -438,89 +485,6 @@ private struct ConversationBody: View {
         .padding(.vertical, 3)
         .background(Capsule().fill(Color.primary.opacity(0.05)))
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-    }
-
-    /// Cost chip with a best-effort total + a (!) tap target when
-    /// any assistant message in the active context has usage data
-    /// but no per-token price (subscription / flat-fee models like
-    /// Z.AI Coding Plan don't populate per-million pricing in
-    /// `user_models`, so the cost rolls up as $0). Tapping the
-    /// warning lists which models contributed cost-less turns so
-    /// the user can decide whether to wire prices in.
-    @ViewBuilder
-    private var costChip: some View {
-        // Show even when the rollup is zero — better than vanishing
-        // silently. The (!) makes the missing-data case legible.
-        let total = accruedCost
-        let label = String(format: "$%.4f", total)
-        HStack(spacing: 6) {
-            chipLabel(text: label, systemImage: "dollarsign.circle")
-            if !modelsMissingCost.isEmpty {
-                Button {
-                    showingMissingCostInfo = true
-                } label: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.orange.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Cost data missing")
-            }
-        }
-        .alert(
-            "Cost is approximate",
-            isPresented: $showingMissingCostInfo
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            let names = modelsMissingCost.joined(separator: "\n• ")
-            Text("Some turns ran on models without per-token pricing in your catalog, so they're not included in the running total:\n\n• \(names)")
-        }
-    }
-
-    /// Total cost of the ACTIVE CONTEXT — every message in it,
-    /// including abandoned branches. The server's per-context
-    /// aggregate (ListContexts.cumulative_cost_usd) is the source:
-    /// a chain-local sum undercounts the moment the user forks,
-    /// because the messages array only holds the currently-viewed
-    /// branch (user-reported: "cost shows only the current tree").
-    /// The chain sum remains as the fallback for the window before
-    /// loadContexts lands (cold cache, first frames).
-    private var accruedCost: Double {
-        if let ctx = model.activeContext,
-           let row = model.contexts.first(where: { $0.id == ctx.id }) {
-            return row.cumulativeCostUsd
-        }
-        return model.messages.reduce(0) { acc, m in
-            acc + (m.usage?.totalCostUsd ?? 0)
-        }
-    }
-
-    /// Distinct display-name list of models that produced an assistant
-    /// message with usage data (real LLM call) but no totalCostUsd
-    /// (no per-token price). Sorted, deduped.
-    private var modelsMissingCost: [String] {
-        var seen: Set<String> = []
-        var out: [String] = []
-        for m in model.messages {
-            guard m.role == .assistant,
-                  m.usage != nil,
-                  m.usage?.totalCostUsd == nil,
-                  let mid = m.modelID else { continue }
-            // Resolve to display name when we know it; otherwise fall
-            // back to the raw id so the user can still identify it.
-            let pid = m.providerID
-            let display = model.availableModels
-                .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
-                .displayName ?? mid
-            if seen.insert(display).inserted {
-                out.append(display)
-            }
-        }
-        return out.sorted()
     }
 
     /// Header pill label for the active context. Numbering matches the
@@ -617,8 +581,10 @@ private struct ConversationBody: View {
                         fromIndex: mountedFromIndex,
                         tail: coldEntryTail,
                         pinTargetID: pinTargetMessageID,
-                        onPinTargetMove: { pinReportedY = $0 }
+                        onPinTargetMove: { pinReportedY = $0 },
+                        entryActive: !entrySettled || backfilling || entryAnchorActive
                     )
+                    .equatable()
                     // Pending user is its own subview for the same
                     // reason — observes only pendingUserText, not the
                     // chunk-rate streaming state.
@@ -626,6 +592,7 @@ private struct ConversationBody: View {
                         model: model,
                         onPinTargetMove: { pinReportedY = $0 }
                     )
+                    .equatable()
                     StreamingArea(model: model)
                         // The runway shrinks by exactly the streaming
                         // row's measured growth — measured, not
@@ -770,6 +737,13 @@ private struct ConversationBody: View {
                 // must comfortably outlast a heavy load (an absolute
                 // measured chase was tried instead of this seek and
                 // stranded entry on estimate-transient false bottoms).
+                //
+                // Deliberately NO convergence arming here — the
+                // loop's re-seeks fight the load-growth the entry
+                // anchor rides (armed on appear it broke cold entry
+                // outright, reproduced). Entry lands via the sticky
+                // edge seek + anchor alone; the pill's remount path
+                // replays this same sequence.
                 seekBottom()
             }
             .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
@@ -782,6 +756,7 @@ private struct ConversationBody: View {
                     offsetX: geometry.contentOffset.x
                 )
             } action: { old, m in
+                metricsBox.latest = m
                 let bottomEdge = m.offset + m.viewportHeight
                 let distance = m.contentHeight - bottomEdge
 
@@ -863,40 +838,46 @@ private struct ConversationBody: View {
                 // passes a one-sided check, and dropping the entry
                 // seek at that moment leaves nothing to re-solve the
                 // viewport back when the estimate re-inflates.
-                if stickyLive, entrySettled, distance < 8, distance > -8,
+                // Drop band top is 64 (one bubble height), matching
+                // the seek arrival band — with < 8 an at-rest distance
+                // of ~41 (tail padding) left the sticky edge position
+                // LATCHED, and the first on-demand history mount
+                // re-solved it back to the new bottom: a yank to the
+                // tail the instant the user tried to read older
+                // messages.
+                if stickyLive, entrySettled, distance < 64, distance > -8,
                    streamRunwayBudget == 0, !seekingBottom,
                    !scrollPosition.isPositionedByUser {
                     stickyLive = false
+                    entryAnchorActive = false
                     scrollPosition = ScrollPosition()
                     scrollLog.notice("sticky dropped")
                 }
 
-                // Silent staged expansion: the moment we observe the
-                // viewport settled at the bottom of the cold-entry tail
-                // window (the seek has landed on the small, fully-
-                // realized set), start mounting the rest of the
-                // history in batches. `backfilling` re-attaches the
-                // sizeChanges anchor, so each prepend lands entirely
-                // above the viewport and is invisible. Only while
-                // settled at the bottom, never mid-scroll, never while
-                // a park holds; if the user grabs the view mid-backfill
-                // the loop pauses and this trigger resumes it on the
-                // next settle.
-                if needsBackfill, !backfilling, distance < 8,
-                   !model.sending, !model.isStreaming,
-                   !scrollPosition.isPositionedByUser {
-                    startHistoryBackfill()
-                }
-
-                // Scroll-up resume: if the user outruns (or paused) the
-                // walk and nears the top of the mounted window, mount
-                // the next chunks IMMEDIATELY — this is the "load older
-                // messages" affordance; without it a paused walk left
-                // history unreachable (user-reported). No user-position
-                // gate: the user scrolling up is exactly the signal.
+                // On-demand history mounting — the ONLY mount driver.
+                // The window stays at the cold-entry tail until the
+                // user scrolls near the top of what's mounted, then
+                // one batch prepends immediately (2400pt of lead means
+                // the mount lands before the edge is visible). The
+                // sizeChanges anchor pins the bottom for the batch so
+                // the prepend never moves the user's position.
+                //
+                // This REPLACES the eager settled-at-bottom walk that
+                // mounted all N rows after entry. At heavy scale that
+                // walk was the engine of the blank-pane / lockup
+                // family: hundreds of freshly-mounted unrealized rows
+                // put LazyVStack's content estimate in charge, the
+                // estimate collapsed under the walk (logged geometric
+                // decay 700k→3k with the viewport riding it down), and
+                // every corrective actor either chased it at tick rate
+                // (100% CPU lockup) or gave up past-end (blank park).
+                // A capped window keeps entry deterministic — 12 real
+                // rows, exact coordinates — and caps every later
+                // re-diff at the mounted count instead of N.
                 if needsBackfill, !backfilling, m.offset < 2400,
+                   entrySettled,
                    !model.sending, !model.isStreaming {
-                    startHistoryBackfill()
+                    mountOlderBatch()
                 }
 
                 // Past-bottom clamp: when the viewport extends BELOW
@@ -938,11 +919,21 @@ private struct ConversationBody: View {
                 // write a garbage offset that strands the viewport
                 // mid-conversation once the estimate re-inflates. The
                 // entry seek + anchor own transients until settle.
+                // Reset the failure counters whenever the viewport is
+                // actually settled near the bottom — the governor caps
+                // count SUCCESSIVE misfires, not lifetime ones.
+                if distance > -1, distance < 8 {
+                    clampAttempts = 0
+                }
                 if distance < -1, streamRunwayBudget == 0,
                    entrySettled, !backfilling,
                    scrollPhase == .idle,
-                   !scrollPosition.isPositionedByUser {
-                    scrollLog.notice("past-bottom clamp fired (distance=\(Int(distance), privacy: .public))")
+                   !scrollPosition.isPositionedByUser,
+                   clampAttempts < maxClampAttempts,
+                   CACurrentMediaTime() - lastAutoScrollAt >= autoScrollCooldown {
+                    scrollLog.notice("past-bottom clamp fired (distance=\(Int(distance), privacy: .public)) attempt=\(clampAttempts + 1, privacy: .public)")
+                    clampAttempts += 1
+                    lastAutoScrollAt = CACurrentMediaTime()
                     stickyLive = true
                     var t = Transaction()
                     t.disablesAnimations = true
@@ -966,12 +957,43 @@ private struct ConversationBody: View {
                 if seekingBottom {
                     if scrollPosition.isPositionedByUser {
                         seekingBottom = false
+                        autoSeekAttempts = 0
                         scrollLog.notice("bottom seek cancelled: user took over")
-                    } else if distance < 8 {
+                    } else if distance < 64 {
+                        // Arrival band = the re-seek trigger threshold.
+                        // With arrival at <8 and re-seek at >64, a rest
+                        // distance in 8..64 left the seek LATCHED
+                        // indefinitely — doing nothing until an estimate
+                        // collapse minutes later handed it a garbage
+                        // bottom to chase (log-verified: a latched seek
+                        // "arrived" at offset 51967 of a 736k-pt
+                        // conversation and blanked the pane). One
+                        // bubble-height short of exact is arrived.
                         seekingBottom = false
-                        scrollLog.notice("bottom seek arrived")
-                    } else if distance > 64, scrollPhase == .idle {
-                        scrollLog.notice("bottom convergence re-seek (distance=\(Int(distance), privacy: .public))")
+                        autoSeekAttempts = 0
+                        scrollLog.notice("bottom seek arrived (distance=\(Int(distance), privacy: .public))")
+                    } else if autoSeekAttempts >= maxAutoSeekAttempts {
+                        // The edge solve is oscillating against the
+                        // estimate flap (live repro: distance bounced
+                        // 1567→140→1567 at tick rate, forever). Stop
+                        // seeking and land with ONE absolute jump off
+                        // the current measured metrics — nearby beats
+                        // never.
+                        seekingBottom = false
+                        autoSeekAttempts = 0
+                        scrollLog.notice("bottom seek budget exhausted — absolute finisher (distance=\(Int(distance), privacy: .public))")
+                        stickyLive = true
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            scrollPosition.scrollTo(x: 0, y: max(0, m.contentHeight - m.viewportHeight))
+                        }
+                        return
+                    } else if distance > 64, scrollPhase == .idle,
+                              CACurrentMediaTime() - lastAutoScrollAt >= autoScrollCooldown {
+                        scrollLog.notice("bottom convergence re-seek (distance=\(Int(distance), privacy: .public)) attempt=\(autoSeekAttempts + 1, privacy: .public)")
+                        autoSeekAttempts += 1
+                        lastAutoScrollAt = CACurrentMediaTime()
                         var t = Transaction()
                         t.disablesAnimations = true
                         withTransaction(t) {
@@ -1068,6 +1090,7 @@ private struct ConversationBody: View {
                     // handler keeps re-seeking while `seekingBottom`
                     // holds until the bottom is actually reached.
                     seekingBottom = true
+                    autoSeekAttempts = 0
                     // An explicit bottom-seek ends the pin contract:
                     // reclaim the runway so "bottom" means the real
                     // content end, not the blank band.
@@ -1257,54 +1280,61 @@ private struct ConversationBody: View {
         }
     }
 
-    /// Walks `mountedFromIndex` down to 0 in `backfillBatch`-row steps,
-    /// one runloop beat apart, while the viewport stays anchor-pinned
-    /// at the bottom. The beat between batches lets each batch's rows
-    /// realize before the next prepend, so any bottom-edge re-solve
-    /// only ever sees one batch's worth of estimated rows — the
-    /// one-shot variant let the re-solve see 200+ estimated rows and
-    /// stranded the viewport tens of thousands of points past the
-    /// content end when the realized tail was tall.
-    ///
-    /// Pauses (breaks) if the user takes the viewport mid-walk —
-    /// prepends are only invisible while the bottom anchor holds. The
-    /// geometry handler restarts it on the next settled-at-bottom
-    /// observation.
-    private func startHistoryBackfill() {
+    /// Prepends ONE `backfillBatch`-row batch of older history to the
+    /// mounted window. Called from the near-top trigger each time the
+    /// user's scroll approaches the top of what's mounted; the
+    /// sizeChanges anchor holds the bottom for the batch so the
+    /// prepend is invisible, then detaches after a settle beat.
+    private func mountOlderBatch() {
         guard !backfilling else { return }
+        let idx = mountedFromIndex ?? max(0, model.messages.count - coldEntryTail)
+        guard idx > 0 else { return }
         backfilling = true
         entryAnchorActive = true
-        scrollLog.notice("backfill start (count=\(model.messages.count, privacy: .public))")
+        mountedFromIndex = max(0, idx - backfillBatch)
+        scrollLog.notice("mount older: \(idx, privacy: .public) → \(mountedFromIndex ?? 0, privacy: .public)")
         Task { @MainActor in
-            defer {
-                backfilling = false
-                entryAnchorActive = false
-            }
-            if mountedFromIndex == nil {
-                mountedFromIndex = max(0, model.messages.count - coldEntryTail)
-            }
-            while let idx = mountedFromIndex, idx > 0 {
-                // A send or stream aborts the walk (prepends + the
-                // anchor would interact with the live turn); the
-                // geometry handler's triggers resume it afterwards.
-                guard !model.sending, !model.isStreaming else {
-                    scrollLog.notice("backfill paused at \(idx, privacy: .public)")
-                    return
-                }
-                // An ACTIVE finger just delays the next batch — a
-                // mid-gesture prepend re-solve can stutter the drag.
-                // isPositionedByUser is deliberately NOT an abort:
-                // it latches true after any grab, which stranded the
-                // walk (and all older history) until a rarely-reached
-                // settled-at-bottom. Phase misreads only cost 60ms.
-                while scrollPhase == .tracking || scrollPhase == .interacting {
-                    try? await Task.sleep(for: .milliseconds(60))
-                }
-                mountedFromIndex = max(0, idx - backfillBatch)
-                try? await Task.sleep(for: .milliseconds(80))
-            }
-            scrollLog.notice("backfill complete")
+            // One settle beat: let the batch's rows realize under the
+            // anchor before the trigger may fire again — back-to-back
+            // prepends against unrealized rows are the estimate-storm
+            // recipe this design retired.
+            try? await Task.sleep(for: .milliseconds(120))
+            backfilling = false
+            entryAnchorActive = false
         }
+    }
+
+    /// Bounded bottom-convergence loop that does NOT depend on the
+    /// geometry tick stream. Each pass reads the latest measured
+    /// metrics from the box; if the viewport isn't settled at the
+    /// bottom band it re-asserts the bottom via seekBottom() — which
+    /// post-load resolves to the last-row ID PIN, the one position
+    /// immune to content-height estimates — then gives layout a beat
+    /// to respond. At most six commands 250ms apart: a deliberate,
+    /// bounded realization driver in place of the accidental per-tick
+    /// storm that used to converge entry (and pinned the CPU doing
+    /// it). Bails the moment the user owns the viewport.
+    private func settleAtBottom(reason: String) async {
+        for attempt in 1...6 {
+            let m = metricsBox.latest
+            let distance = m.contentHeight - (m.offset + m.viewportHeight)
+            if scrollPosition.isPositionedByUser {
+                scrollLog.notice("settle(\(reason, privacy: .public)) ceded to user at attempt \(attempt, privacy: .public)")
+                return
+            }
+            if m.contentHeight > 0, distance > -1, distance < 64 {
+                scrollLog.notice("settle(\(reason, privacy: .public)) done (distance=\(Int(distance), privacy: .public), attempts=\(attempt - 1, privacy: .public))")
+                return
+            }
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) {
+                seekBottom()
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        let m = metricsBox.latest
+        scrollLog.notice("settle(\(reason, privacy: .public)) budget exhausted (distance=\(Int(m.contentHeight - m.offset - m.viewportHeight), privacy: .public))")
     }
 
 }
@@ -1322,6 +1352,108 @@ private struct ScrollMetrics: Equatable, Sendable {
     var contentWidth: CGFloat
     var viewportWidth: CGFloat
     var offsetX: CGFloat
+}
+
+/// Cost chip with a best-effort total + a (!) tap target when any
+/// assistant message in the active context has usage data but no
+/// per-token price (subscription / flat-fee models like Z.AI Coding
+/// Plan don't populate per-million pricing in `user_models`, so the
+/// cost rolls up as $0). Tapping the warning lists which models
+/// contributed cost-less turns so the user can decide whether to wire
+/// prices in.
+///
+/// A standalone view (not a ConversationBody computed) so its O(N)
+/// message scans re-run only when the observed model data changes —
+/// inside ConversationBody they re-ran on every body evaluation,
+/// which during scroll-command storms meant per-tick.
+private struct CostChip: View {
+    @Bindable var model: ConversationViewModel
+    @State private var showingMissingCostInfo = false
+
+    var body: some View {
+        // Show even when the rollup is zero — better than vanishing
+        // silently. The (!) makes the missing-data case legible.
+        let label = String(format: "$%.4f", accruedCost)
+        HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "dollarsign.circle")
+                    .font(.caption2)
+                Text(label)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.primary.opacity(0.05)))
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+            if !modelsMissingCost.isEmpty {
+                Button {
+                    showingMissingCostInfo = true
+                } label: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.orange.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cost data missing")
+            }
+        }
+        .alert(
+            "Cost is approximate",
+            isPresented: $showingMissingCostInfo
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            let names = modelsMissingCost.joined(separator: "\n• ")
+            Text("Some turns ran on models without per-token pricing in your catalog, so they're not included in the running total:\n\n• \(names)")
+        }
+    }
+
+    /// Total cost of the ACTIVE CONTEXT — every message in it,
+    /// including abandoned branches. The server's per-context
+    /// aggregate (ListContexts.cumulative_cost_usd) is the source:
+    /// a chain-local sum undercounts the moment the user forks,
+    /// because the messages array only holds the currently-viewed
+    /// branch (user-reported: "cost shows only the current tree").
+    /// The chain sum remains as the fallback for the window before
+    /// loadContexts lands (cold cache, first frames).
+    private var accruedCost: Double {
+        if let ctx = model.activeContext,
+           let row = model.contexts.first(where: { $0.id == ctx.id }) {
+            return row.cumulativeCostUsd
+        }
+        return model.messages.reduce(0) { acc, m in
+            acc + (m.usage?.totalCostUsd ?? 0)
+        }
+    }
+
+    /// Distinct display-name list of models that produced an assistant
+    /// message with usage data (real LLM call) but no totalCostUsd
+    /// (no per-token price). Sorted, deduped.
+    private var modelsMissingCost: [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for m in model.messages {
+            guard m.role == .assistant,
+                  m.usage != nil,
+                  m.usage?.totalCostUsd == nil,
+                  let mid = m.modelID else { continue }
+            // Resolve to display name when we know it; otherwise fall
+            // back to the raw id so the user can still identify it.
+            let pid = m.providerID
+            let display = model.availableModels
+                .first(where: { $0.modelID == mid && (pid == nil || $0.providerID == pid) })?
+                .displayName ?? mid
+            if seen.insert(display).inserted {
+                out.append(display)
+            }
+        }
+        return out.sorted()
+    }
 }
 
 // MARK: - Decoupled scroll-content subviews
@@ -1342,7 +1474,7 @@ private struct ScrollMetrics: Equatable, Sendable {
 /// ConversationBody — the backfill walks it to 0 in batches). Message
 /// ids are stable, so every window growth is a pure prepend in
 /// ForEach's diff.
-private struct ChatHistoryArea: View {
+private struct ChatHistoryArea: View, @MainActor Equatable {
     @Bindable var model: ConversationViewModel
     let fromIndex: Int?
     let tail: Int
@@ -1351,7 +1483,33 @@ private struct ChatHistoryArea: View {
     /// ground truth (see pinReportedY on ConversationBody).
     var pinTargetID: String? = nil
     var onPinTargetMove: (CGFloat) -> Void = { _ in }
+    /// True while the entry machinery (curtain + staged backfill) is
+    /// live. Disables the memoization gate below for the entry window
+    /// ONLY: entry's estimate convergence depends on the per-tick
+    /// ForEach re-diff to keep realizing rows (with the gate on
+    /// through entry, the content estimate collapsed 700k→23k and
+    /// parked the pane blank — reproduced repeatedly). Entry is a
+    /// bounded few seconds; the storms this gate exists to kill are
+    /// the steady-state ones.
+    var entryActive: Bool = false
     @Environment(\.chatPaneWidth) private var paneWidth
+
+    /// Value-equality gate for parent-driven re-renders. The stored
+    /// closure (`onPinTargetMove`) defeats SwiftUI's reflection-based
+    /// diffing, so WITHOUT this conformance every ConversationBody
+    /// invalidation (each geometry tick during seeks and streams)
+    /// re-ran this body and re-diffed the full ForEach — at 446
+    /// messages that was 446 MessageRow constructions per frame, the
+    /// dominant cost in the live 100%-CPU sample. Message-content
+    /// changes still re-render: @Observable tracks `model.messages`
+    /// as this view's OWN dependency, independent of parent diffing;
+    /// same for the paneWidth environment.
+    static func == (a: ChatHistoryArea, b: ChatHistoryArea) -> Bool {
+        if a.entryActive || b.entryActive { return false }
+        return a.fromIndex == b.fromIndex
+            && a.tail == b.tail
+            && a.pinTargetID == b.pinTargetID
+    }
 
     /// Exact per-row width: the pane minus the transcript padding.
     /// The stack-level exact frame keeps the whole content honest,
@@ -1412,7 +1570,7 @@ private struct ChatHistoryArea: View {
 /// the OutboundQueue drains, the entry slides into `messages`
 /// via the normal SendMessage response path and disappears from
 /// `queuedEntries` — same one-frame swap as `pendingUserText`.
-private struct PendingUserArea: View {
+private struct PendingUserArea: View, @MainActor Equatable {
     @Bindable var model: ConversationViewModel
     /// Reports the pending row's `.scrollView`-space minY — the send
     /// pin's measured target until the real user row replaces the
@@ -1420,6 +1578,11 @@ private struct PendingUserArea: View {
     var onPinTargetMove: (CGFloat) -> Void = { _ in }
     @State private var queuedTick: Int = 0
     @Environment(\.chatPaneWidth) private var paneWidth
+
+    /// Same parent-diff gate as ChatHistoryArea: the closure defeats
+    /// reflection diffing; observation of pendingUserText / the queue
+    /// snapshot drives real updates.
+    static func == (_: PendingUserArea, _: PendingUserArea) -> Bool { true }
 
     private var rowWidth: CGFloat? {
         paneWidth > 32 ? paneWidth - 32 : nil

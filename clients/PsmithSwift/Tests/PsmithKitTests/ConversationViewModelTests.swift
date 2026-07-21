@@ -500,6 +500,30 @@ struct ConversationViewModelTests {
         #expect(r.vm.loadError == nil)
     }
 
+    @Test("stitch delete is in-place: survivors keep identity and order, no reload")
+    func deleteMessageInPlace() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-del-inplace")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "one")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "two")
+        await r.vm.load()
+        guard let doomed = r.vm.messages.last(where: { $0.role == .assistant }) else {
+            Issue.record("no assistant to delete")
+            return
+        }
+        // The non-cascade path must remove exactly the doomed row and
+        // leave every other element untouched IN PLACE — a wholesale
+        // array replacement (the old full-reload behavior) forces the
+        // transcript's ForEach to re-diff and LazyVStack to re-estimate
+        // every row, which is what armed the delete-lockup storms.
+        let survivors = r.vm.messages.map(\.id).filter { $0 != doomed.id }
+        await r.vm.deleteMessage(id: doomed.id, cascade: false)
+        #expect(r.vm.messages.map(\.id) == survivors)
+        #expect(r.vm.loading == false)
+        #expect(r.vm.loadError == nil)
+    }
+
     @Test("deleteMessage cascading removes descendants")
     func deleteMessageCascade() async throws {
         let r = try await makeReadyVM(usernamePrefix: "vm-del-cascade")

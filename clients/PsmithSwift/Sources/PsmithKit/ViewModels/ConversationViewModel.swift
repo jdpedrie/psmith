@@ -1378,7 +1378,28 @@ public final class ConversationViewModel {
         }
         do {
             try await client.conversations.deleteMessage(id: id, cascade: cascade)
-            await load()
+            if cascade {
+                // Cascade removes a subtree the client can't compute
+                // locally (descendant ids live server-side) — the full
+                // reload is the only correct source.
+                await load()
+                return
+            }
+            // Stitch delete: the visible chain is the old chain minus
+            // exactly this row (children reparent server-side). Remove
+            // it in place instead of re-fetching and REPLACING the
+            // whole messages array — the wholesale replacement forced
+            // a full ForEach re-diff plus a LazyVStack re-estimate of
+            // every row, and on heavy conversations that estimate flap
+            // is what armed the scroll machinery's clamp storm (the
+            // "deleting a compression message locks the app" report).
+            messages.removeAll { $0.id == id }
+            // Advisory refreshes, same set load() runs: token count +
+            // cost aggregates + branch tree all shifted with the row.
+            async let tokens: Void = refreshTokenCount()
+            async let tree: Void = loadTree()
+            async let ctxs: Void = loadContexts()
+            _ = await (tokens, tree, ctxs)
         } catch {
             loadError = PsmithError.display(error)
         }

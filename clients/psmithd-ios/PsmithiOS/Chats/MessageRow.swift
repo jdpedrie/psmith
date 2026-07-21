@@ -829,12 +829,23 @@ struct MessageRow: View {
     }
 
     /// Stable cache key for the message body's parsed MarkdownContent.
-    /// Includes the edited-at timestamp so an in-place edit invalidates
-    /// the cache automatically. Settled messages share this key with
-    /// every realization, so scroll-back skips parsing entirely.
+    /// Content-hash keyed (NOT edited-at keyed): the rendered string
+    /// itself decides identity, so an edit invalidates automatically
+    /// AND the edit sheet can pre-warm the new content's parse off the
+    /// main thread BEFORE the server assigns the edit timestamp — with
+    /// the timestamp key, the post-edit render always missed the cache
+    /// and paid a synchronous main-thread parse (the "editing lags"
+    /// report). Settled messages share this key with every
+    /// realization, so scroll-back skips parsing entirely.
     private var markdownCacheKey: String {
-        let stamp = message.editedAt?.timeIntervalSince1970 ?? 0
-        return "\(message.id):\(stamp)"
+        Self.markdownKey(id: message.id, body: message.displayContent ?? message.content)
+    }
+
+    /// Shared key builder — the prewarm sites (ConversationView's
+    /// count-change hook, EditMessageSheet's save) must produce the
+    /// exact key this row renders with.
+    static func markdownKey(id: String, body: String) -> String {
+        "\(id):\(body.count):\(body.hashValue)"
     }
 
     private var hasThinking: Bool {
@@ -1070,6 +1081,14 @@ struct EditMessageSheet: View {
     private func saveInPlace() {
         let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let roleChanged = showsRolePicker && editRoleDraft != message.role
+        // Pre-warm the edited body's parse off the main thread while
+        // the RPC is in flight — the content-hash cache key makes the
+        // post-edit render a guaranteed hit for the common case where
+        // no display transform rewrites the content, instead of a
+        // synchronous main-thread parse of the whole edited message.
+        MarkdownCache.shared.prewarm(
+            [(key: MessageRow.markdownKey(id: message.id, body: trimmed), source: trimmed)]
+        )
         Task {
             await model.editMessage(
                 id: message.id,
