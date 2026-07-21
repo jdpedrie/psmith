@@ -970,6 +970,14 @@ func generationConfigFromSettings(s providers.CallSettings) *generationConfig {
 		tc := &thinkingConfig{}
 		set := false
 		if t.Enabled != nil {
+			// includeThoughts only controls whether thought summaries
+			// appear in the response — Enabled=false does NOT stop a
+			// Gemini 2.5+ model from thinking, and its thought tokens
+			// still count toward maxOutputTokens. thinkingBudget:0
+			// would stop it but is rejected per-model (2.5 Pro floors
+			// at 128), so callers that must not lose output to hidden
+			// thinking size MaxOutputTokens for it instead (see the
+			// compression budget in conversations.Compact).
 			tc.IncludeThoughts = t.Enabled
 			set = true
 		}

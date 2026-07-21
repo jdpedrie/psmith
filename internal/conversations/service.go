@@ -2686,10 +2686,11 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	if err != nil || provRow.UserID != user.ID {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("compression provider not found"))
 	}
-	if _, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+	modelRow, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
 		UserModelProviderID: provRow.ID,
 		ModelID:             *modelID,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("compression model %q is not enabled", *modelID))
 	}
 
@@ -2742,19 +2743,36 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	// different job than the conversation model and the inherited
 	// settings tend to make compression fail:
 	//
-	//   - max_tokens defaults to 4096 in Anthropic without an explicit
-	//     value. A long conversation's summary easily exceeds that and
-	//     the model terminates mid-summary (the "compression stops
-	//     before finished" bug). Set a generous explicit cap.
+	//   - max_tokens must budget for hidden reasoning, not just the
+	//     visible summary. "Disable thinking" below is best-effort:
+	//     current reasoning models think by default and spend those
+	//     tokens from the SAME output budget as the summary (OpenAI
+	//     MaxOutputTokens covers reasoning + text; Gemini counts
+	//     thoughts toward maxOutputTokens; Anthropic adaptive models
+	//     count thinking toward max_tokens). A fixed 8192 cap was
+	//     routinely half-eaten by reasoning and the summary
+	//     hard-truncated mid-sentence with finish_reason=max_tokens.
+	//     Give the run the model's full output ceiling capped at 32k;
+	//     an unknown ceiling keeps the conservative 8192 (a bigger
+	//     guess would 400 on small-output models).
 	//   - thinking, if enabled on the conversation's profile, would
 	//     eat from the same output-token budget on Anthropic and crowd
 	//     out the actual summary. Compression produces a structural
-	//     document, not a reasoned answer — force-disable thinking.
+	//     document, not a reasoned answer — force-disable thinking
+	//     (drivers translate the disable as faithfully as each API
+	//     allows; the budget above is what actually prevents
+	//     truncation where it doesn't stick).
 	//   - temperature stays unset (driver default) — compression's
 	//     determinism doesn't need explicit lowering and forcing 0
 	//     can degrade output quality on some models.
-	const compressionMaxOutputTokens = 8192
-	maxOut := compressionMaxOutputTokens
+	const (
+		compressionMaxOutputTokens     = 32768
+		compressionDefaultOutputTokens = 8192
+	)
+	maxOut := compressionDefaultOutputTokens
+	if modelRow.MaxOutputTokens != nil && *modelRow.MaxOutputTokens > 0 {
+		maxOut = min(int(*modelRow.MaxOutputTokens), compressionMaxOutputTokens)
+	}
 	thinkingDisabled := false
 	compressionSettings := providers.CallSettings{
 		MaxOutputTokens: &maxOut,

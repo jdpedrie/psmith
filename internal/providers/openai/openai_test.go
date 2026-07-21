@@ -1026,3 +1026,53 @@ var (
 
 // quiet "imported and not used" if any test path is removed.
 var _ = errors.New
+
+// TestSend_Responses_ThinkingDisabled — an EXPLICIT thinking-disable
+// maps to effort=low on reasoning models (there's no off position, and
+// omitting the param means the default medium effort silently spends
+// output budget — the compression path depends on the low mapping).
+// Non-reasoning models keep omitting the reasoning param entirely
+// (they 400 on it), as does an unset Thinking.
+func TestSend_Responses_ThinkingDisabled(t *testing.T) {
+	disabled := false
+	cases := []struct {
+		name     string
+		modelID  string
+		thinking *providers.ThinkingSettings
+		wantLow  bool
+	}{
+		{"reasoning model gets low", "gpt-5", &providers.ThinkingSettings{Enabled: &disabled}, true},
+		{"o-series gets low", "o3", &providers.ThinkingSettings{Enabled: &disabled}, true},
+		{"non-reasoning model omits", "gpt-4o", &providers.ThinkingSettings{Enabled: &disabled}, false},
+		{"unset thinking omits", "gpt-5", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, captured := captureRequest(t, "/v1/responses",
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
+			p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			p = forceResponsesAPI(t, p)
+			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+				ModelID:  tc.modelID,
+				Messages: []providers.WireMessage{{Role: "user", Content: "x"}},
+				Settings: providers.CallSettings{Thinking: tc.thinking},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+			hasLow := strings.Contains(*captured, `"effort":"low"`)
+			hasReasoning := strings.Contains(*captured, `"reasoning"`)
+			if tc.wantLow && !hasLow {
+				t.Errorf("expected effort=low; body=%s", *captured)
+			}
+			if !tc.wantLow && hasReasoning {
+				t.Errorf("expected no reasoning param; body=%s", *captured)
+			}
+		})
+	}
+}

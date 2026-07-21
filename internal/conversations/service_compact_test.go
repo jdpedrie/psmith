@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -440,3 +441,119 @@ func TestCompact_TranscriptUsesActiveChainOnly(t *testing.T) {
 		}
 	}
 }
+
+// --- output budget + finish_reason ---
+
+// runCompactCapture drives one Compact run (override-configured, fake
+// driver) and returns the terminal run row, the SendRequest the driver
+// captured, and the store handle for follow-up assertions.
+func runCompactCapture(t *testing.T, maxOutputTokens *int32, chunks []providers.Chunk) (store.StreamRun, providers.SendRequest, *store.Queries) {
+	t.Helper()
+	svc, q, sup := newFullSvc(t)
+	driverType := registerFakeDriver(t, "compact-capture", chunks, nil)
+	f := seedSendable(t, q, driverType)
+	if maxOutputTokens != nil {
+		if _, err := q.UpsertUserModel(context.Background(), store.UpsertUserModelParams{
+			UserModelProviderID: f.provider.ID,
+			ModelID:             f.modelID,
+			DisplayName:         "Fake Model",
+			MaxOutputTokens:     maxOutputTokens,
+			MetadataSource:      "manual",
+			MetadataSnapshotAt:  time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("UpsertUserModel: %v", err)
+		}
+	}
+	parent := f.systemMsgID
+	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
+
+	guide := "Summarize."
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CompactRequest{
+		ConversationId:        f.conv.ID.String(),
+		CompressionGuide:      &guide,
+		CompressionProviderId: &pid,
+		CompressionModelId:    &mid,
+	}))
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	drv := fetchDriver(t, driverType)
+	drv.mu.Lock()
+	req := *drv.lastRequest
+	drv.mu.Unlock()
+	return final, req, q
+}
+
+// TestCompact_OutputBudget covers the model-aware max_tokens clamp:
+// hidden reasoning spends from the same output budget as the visible
+// summary on current-generation models, so the run gets the model's
+// full output ceiling capped at 32k. An unknown ceiling keeps the
+// conservative 8192 default (a bigger guess 400s small-output models).
+func TestCompact_OutputBudget(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		modelMax *int32
+		want     int
+	}{
+		{"small model ceiling wins", ptrInt32(4096), 4096},
+		{"large ceiling capped at 32k", ptrInt32(128000), 32768},
+		{"unknown ceiling keeps 8192", nil, 8192},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, req, _ := runCompactCapture(t, tc.modelMax,
+				[]providers.Chunk{textChunk("summary"), doneChunk()})
+			if req.Settings.MaxOutputTokens == nil {
+				t.Fatal("MaxOutputTokens not set on compression request")
+			}
+			if got := *req.Settings.MaxOutputTokens; got != tc.want {
+				t.Errorf("MaxOutputTokens=%d want %d", got, tc.want)
+			}
+			// Thinking stays force-disabled on the compression request;
+			// the budget above is what prevents truncation on models
+			// where the disable doesn't stick.
+			th := req.Settings.Thinking
+			if th == nil || th.Enabled == nil || *th.Enabled {
+				t.Errorf("expected thinking explicitly disabled, got %+v", th)
+			}
+		})
+	}
+}
+
+// TestCompact_PersistsFinishReason — the summary row records the
+// upstream stop cause, so a capped summary (finish_reason=max_tokens)
+// is distinguishable from a complete one (end_turn). This is the
+// diagnosis trail for the "compression stops mid-sentence" class of
+// failure.
+func TestCompact_PersistsFinishReason(t *testing.T) {
+	t.Parallel()
+	fr := "max_tokens"
+	out := 4096
+	usagePayload, _ := json.Marshal(providers.Usage{OutputTokens: &out, FinishReason: &fr})
+	final, _, q := runCompactCapture(t, ptrInt32(8192), []providers.Chunk{
+		textChunk("truncated summ"),
+		{Type: providers.ChunkUsage, Payload: usagePayload},
+		doneChunk(),
+	})
+	if final.Status != "completed" {
+		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
+	}
+	if final.ResultMessageID == nil {
+		t.Fatal("expected result_message_id")
+	}
+	summary, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID(summary): %v", err)
+	}
+	if summary.FinishReason == nil || *summary.FinishReason != "max_tokens" {
+		t.Errorf("finish_reason=%v want max_tokens", summary.FinishReason)
+	}
+}
+
+func ptrInt32(v int32) *int32 { return &v }

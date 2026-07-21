@@ -747,6 +747,14 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 	modelID := params.ModelID
 	// Compression turns never call tools today — pass nil for toolCost.
 	usageParams := buildUsageParams(insertCtx, s.queries, providerID, modelID, usage, nil, logger)
+	// finish_reason makes a truncated compaction diagnosable: a summary
+	// that stopped at the output cap carries max_tokens/length/MAX_TOKENS
+	// here, where a clean stop carries end_turn/stop/STOP. Without it a
+	// capped summary is indistinguishable from a complete one.
+	var finishReason *string
+	if usage != nil {
+		finishReason = usage.FinishReason
+	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                summaryID,
 		ContextID:         params.ContextID,
@@ -767,6 +775,7 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 		CacheWriteCostUsd: usageParams.CacheWriteCostUsd,
 		TotalCostUsd:      usageParams.TotalCostUsd,
 		ErrorPayload:      errPayload,
+		FinishReason:      finishReason,
 	}); err != nil {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insert compression_summary: %w", err)
 	}

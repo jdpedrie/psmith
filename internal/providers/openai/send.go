@@ -893,9 +893,25 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 	// Thinking: derive Reasoning.Effort from budget_tokens.
 	//   <2k → low; 2k-8k → medium; >8k → high. Falls back to medium when
 	//   thinking is enabled but no budget is specified.
-	if t := req.Settings.Thinking; t != nil && t.Enabled != nil && *t.Enabled {
-		params.Reasoning = shared.ReasoningParam{
-			Effort: derivedReasoningEffort(t.BudgetTokens),
+	//
+	// An EXPLICIT disable can't switch reasoning off on the o-series /
+	// gpt-5 family — the API has no off position — but omitting the
+	// param means the model's default (medium) effort, whose hidden
+	// tokens spend from the same MaxOutputTokens budget as the visible
+	// text. Low effort is the closest honest translation of "don't
+	// think" (the compression path depends on it). Gated on
+	// locksSampling because non-reasoning models reject the reasoning
+	// param outright.
+	if t := req.Settings.Thinking; t != nil && t.Enabled != nil {
+		switch {
+		case *t.Enabled:
+			params.Reasoning = shared.ReasoningParam{
+				Effort: derivedReasoningEffort(t.BudgetTokens),
+			}
+		case locksSampling(req.ModelID):
+			params.Reasoning = shared.ReasoningParam{
+				Effort: shared.ReasoningEffortLow,
+			}
 		}
 	}
 	// Always set the prompt cache key to the conversation_id so successive
