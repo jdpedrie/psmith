@@ -4,17 +4,18 @@ import UniformTypeIdentifiers
 import PsmithKit
 import PsmithUI
 
-/// iOS composer. Two-row layout per `docs/clients/ios-reference.md`
-/// (revised after Phase 5d shipped):
+/// iOS composer: one floating Liquid Glass island mirroring the Mac
+/// composer's design — input field on top, a footer row of bare-glyph
+/// controls (attach / model chip / settings, Send trailing) inside the
+/// same rounded glass surface. No divider, no edge-to-edge band, no
+/// per-control fills: the island is the only chrome surface.
 ///
-///   Top row: model chip — provider logo + model name. Always
-///     visible so the user knows what's about to be sent. Whole
-///     chip is the tap target for `ModelPickerSheet`. Sheet attached
-///     here at the trigger view (not on ConversationView's body)
-///     because SwiftUI doesn't reliably dispatch multiple
-///     `.sheet(isPresented:)` modifiers from the same anchor.
-///   Bottom row: TextField + Send/Stop button. Send morphs into a
-///     red Stop circle while `model.isStreaming`.
+/// The model chip is always visible so the user knows what's about to
+/// be sent; the whole chip is the tap target for `ModelPickerSheet`
+/// (sheet attached here at the trigger view, not on ConversationView's
+/// body, because SwiftUI doesn't reliably dispatch multiple
+/// `.sheet(isPresented:)` modifiers from the same anchor). Send morphs
+/// into a red Stop circle while `model.isStreaming`.
 struct Composer: View {
     @Bindable var model: ConversationViewModel
     @Environment(AppModel.self) private var app
@@ -52,29 +53,38 @@ struct Composer: View {
     @State private var showingCamera = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
+        VStack(spacing: 4) {
             if app.connectivity.state == .offline {
                 offlineBanner
             }
             if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
                 attachmentChips
             }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .bottom, spacing: 8) {
+            // One floating glass surface: input on top, attach / model /
+            // settings + send on a footer row inside the same rounded
+            // rect — mirrors the Mac composer's island so the two
+            // platforms read as one design. No divider, no edge-to-edge
+            // band: the island floats, the inner controls are bare
+            // glyphs (the island is the only chrome surface).
+            GlassEffectContainer(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     draftField
-                    sendButton
+                        .padding(.horizontal, 14)
+                        .padding(.top, 12)
+                    HStack(spacing: 12) {
+                        paperclipButton
+                        modelChip
+                        settingsButton
+                        Spacer(minLength: 0)
+                        sendButton
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
                 }
-                HStack(spacing: 8) {
-                    paperclipButton
-                    modelChip
-                    settingsButton
-                    Spacer(minLength: 0)
-                }
+                .glassEffect(.regular, in: .rect(cornerRadius: 24))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.thinMaterial)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
         }
         .onChange(of: model.draft) { _, newValue in
             // Persist on every keystroke. UserDefaults writes are
@@ -155,9 +165,8 @@ struct Composer: View {
         }
         .foregroundStyle(.orange)
         .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.10))
+        .padding(.vertical, 5)
+        .glassEffect(.regular.tint(.orange.opacity(0.18)), in: .capsule)
     }
 
     // MARK: - Paperclip + attachment chip strip
@@ -199,12 +208,13 @@ struct Composer: View {
                 }
             }
         } label: {
+            // Bare glyph — the composer island is the chrome surface;
+            // per-control fills and borders read as widget stacking.
             Image(systemName: "paperclip")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(anyOK ? .secondary : .tertiary)
-                .frame(width: 32, height: 32)
-                .background(Color.primary.opacity(0.06), in: Circle())
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -250,7 +260,6 @@ struct Composer: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
-        .background(.thinMaterial)
     }
 
     private func pendingChip(_ att: PendingAttachment) -> some View {
@@ -388,11 +397,10 @@ struct Composer: View {
             ConversationSettingsView(model: model)
         } label: {
             Image(systemName: "gearshape")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
-                .frame(width: 32, height: 32)
-                .background(Color.primary.opacity(0.06), in: Circle())
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Conversation settings")
@@ -412,6 +420,9 @@ struct Composer: View {
         let verticalInset: CGFloat = 16   // 8pt top + 8pt bottom
         let minHeight = lineHeight + verticalInset
         let maxHeight = lineHeight * 8 + verticalInset
+        // The field sits directly on the composer island's glass —
+        // no inner capsule fill or border. The placeholder carries
+        // the affordance; the island carries the surface.
         return ZStack(alignment: .topLeading) {
             PasteAwareTextField(
                 text: $model.draft,
@@ -433,13 +444,6 @@ struct Composer: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
     }
 
     // MARK: - Model chip (provider logo + model name + chevron)
@@ -448,21 +452,19 @@ struct Composer: View {
         Button {
             model.showingModelPicker = true
         } label: {
-            HStack(spacing: 8) {
-                ProviderLogo(slug: providerLogoSlug, size: 20)
+            HStack(spacing: 7) {
+                ProviderLogo(slug: providerLogoSlug, size: 18)
                 Text(modelChipLabel)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 6)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.06), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

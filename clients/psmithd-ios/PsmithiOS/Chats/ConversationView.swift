@@ -372,7 +372,6 @@ private struct ConversationBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            statusStrip
             if let err = model.loadError, !model.messages.isEmpty {
                 loadErrorBanner(err)
             }
@@ -449,47 +448,48 @@ private struct ConversationBody: View {
         // race.
     }
 
-    // MARK: - Status strip
+    // MARK: - Floating status chips
 
+    /// Cost + context as floating glass capsules over the transcript's
+    /// top-left corner — the transcript scrolls beneath them. Replaces
+    /// the full-width status BAND (thinMaterial + divider) that sat
+    /// between the nav bar and the messages: two rows of edge-to-edge
+    /// chrome before any content, exactly the dated look Liquid Glass
+    /// retires. An overlay rather than a safeAreaInset ON PURPOSE —
+    /// insets shift the scroll geometry (offsets, container size) that
+    /// the v11 scroll machinery is tuned against; an overlay is
+    /// geometry-invisible, same as the scroll-to-bottom pill.
     @ViewBuilder
-    private var statusStrip: some View {
-        HStack(spacing: 8) {
-            CostChip(model: model)
-            if let context = activeContextLabel {
-                NavigationLink {
-                    ContextListView(model: model)
-                } label: {
-                    HStack(spacing: 3) {
-                        chipLabel(text: context, systemImage: "tray.full")
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+    fileprivate var floatingStatusChips: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                CostChip(model: model)
+                if let context = activeContextLabel {
+                    NavigationLink {
+                        ContextListView(model: model)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "tray.full")
+                                .font(.caption2)
+                            Text(context)
+                                .font(.caption)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .glassEffect(.regular.interactive(), in: .capsule)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Open contexts")
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Open contexts")
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(.thinMaterial)
-        .overlay(alignment: .bottom) { Divider() }
-    }
-
-    private func chipLabel(text: String, systemImage: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: systemImage)
-                .font(.caption2)
-            Text(text)
-                .font(.caption)
-                .lineLimit(1)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(Color.primary.opacity(0.05)))
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+        .padding(.leading, 12)
+        .padding(.top, 8)
     }
 
     /// Header pill label for the active context. Numbering matches the
@@ -1118,8 +1118,7 @@ private struct ConversationBody: View {
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(.thinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+                    .glassEffect(.regular.interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 8)
@@ -1128,6 +1127,12 @@ private struct ConversationBody: View {
                 .animation(.easeInOut(duration: 0.22), value: isFarFromBottom)
                 .accessibilityLabel("Scroll to bottom of conversation")
                 .accessibilityHidden(!isFarFromBottom)
+            }
+            // Floating status chips (cost + context) over the top-left,
+            // paired with the pill's overlay: geometry-invisible chrome
+            // the transcript scrolls beneath.
+            .overlay(alignment: .topLeading) {
+                floatingStatusChips
             }
             // Initial position comes from `defaultScrollAnchor(.bottom)`
             // above — no onAppear scrollTo needed. The anchor applies
@@ -1388,10 +1393,9 @@ private struct CostChip: View {
                     .lineLimit(1)
             }
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.primary.opacity(0.05)))
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .glassEffect(.regular, in: .capsule)
             if !modelsMissingCost.isEmpty {
                 Button {
                     showingMissingCostInfo = true
@@ -1399,9 +1403,9 @@ private struct CostChip: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.orange.opacity(0.12)))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .glassEffect(.regular.tint(.orange.opacity(0.18)).interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cost data missing")
@@ -1725,12 +1729,14 @@ private struct ArchivedBar: View {
                     dismiss()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.small)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.thinMaterial)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
     }
 }
 

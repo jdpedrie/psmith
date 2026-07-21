@@ -78,6 +78,15 @@ public struct CompressionReviewBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        // iOS: a floating orange-tinted glass island matching the
+        // composer it replaces. Mac keeps its band idiom (the Mac
+        // composer region is a thinMaterial footer band; an island
+        // there would read as a foreign element).
+        #if os(iOS)
+        .glassEffect(.regular.tint(.orange.opacity(0.15)), in: .rect(cornerRadius: 24))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+        #else
         .background(.thinMaterial)
         .overlay(alignment: .top) { Divider() }
         .overlay(alignment: .top) {
@@ -85,5 +94,6 @@ public struct CompressionReviewBar: View {
             // band reads as part of the compaction flow at a glance.
             Rectangle().fill(Color.orange.opacity(0.5)).frame(height: 1)
         }
+        #endif
     }
 }
