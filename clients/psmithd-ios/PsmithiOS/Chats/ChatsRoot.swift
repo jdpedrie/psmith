@@ -17,11 +17,20 @@ struct ChatsRoot: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(ConversationsModel.self) private var convos
 
-    /// Local mode binding driven by the segmented picker. Search isn't
-    /// in this enum because `.searchable`'s "user is currently typing"
-    /// state drives the third mode implicitly.
+    /// Local mode binding driven by the filter menu. Search isn't in
+    /// this enum because a non-empty query drives the third mode
+    /// implicitly.
     @State private var pickerMode: PickerMode = .allChats
     @State private var searchText: String = ""
+    /// Focus for the pull-to-reveal search row. `.searchable` can't
+    /// express "hidden until over-scroll" on iOS 26 (every drawer
+    /// variant pins the field, verified live), so the field is the
+    /// list's FIRST ROW and the list starts scrolled just past it —
+    /// the classic table-header-search pattern.
+    @FocusState private var searchFocused: Bool
+    /// One-shot guard for the initial hide (re-fires per cold list
+    /// load, not per refresh).
+    @State private var didInitialSearchHide = false
     @State private var deleteCandidate: PsmithConversation?
     @State private var renameCandidate: PsmithConversation?
     @State private var renameDraft: String = ""
@@ -110,18 +119,6 @@ struct ChatsRoot: View {
                     // ChatsRoot mounted.
                     consumePendingConversation(navigator.pendingConversationSelection)
                 }
-                .searchable(
-                text: $searchText,
-                prompt: "Search conversations"
-            )
-            // iOS 26's minimized search: no field rides above the list
-            // by default — search lives as a compact glass control
-            // until invoked. (The navigationBarDrawer's "pull down to
-            // reveal" behavior no longer exists in SwiftUI: .automatic
-            // keeps the field pinned at rest regardless of content
-            // height, verified live on both short and scrollable
-            // lists.)
-            .searchToolbarBehavior(.minimize)
             .onChange(of: searchText) { _, newValue in
                 applySearchOrMode(newSearchText: newValue, newPicker: pickerMode)
             }
@@ -267,12 +264,87 @@ struct ChatsRoot: View {
             emptyState
         } else {
             // Chrome-free list: the mode/sort controls live in the
-            // toolbar's filter menu, search reveals on pull-down —
-            // conversations are the first thing on screen.
-            List {
-                modeBody
+            // toolbar's filter menu, and search is the list's first
+            // row with the list initially scrolled just past it —
+            // hidden at rest, revealed by pulling down a bit. This is
+            // hand-rolled because no iOS 26 `.searchable` placement
+            // hides the field at rest (every drawer variant pins it;
+            // verified live on short and scrollable lists).
+            ScrollViewReader { proxy in
+                List {
+                    Section {
+                        searchRow(proxy)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        Color.clear
+                            .frame(height: 1)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets())
+                            .id(Self.listTopAnchor)
+                    }
+                    modeBody
+                }
+                .listStyle(.plain)
+                .onAppear { tuckSearchIfNeeded(proxy) }
+                .onChange(of: convos.conversations.isEmpty) { _, isEmpty in
+                    if !isEmpty { tuckSearchIfNeeded(proxy) }
+                }
             }
-            .listStyle(.plain)
+        }
+    }
+
+    private static let listTopAnchor = "chats-list-top"
+
+    /// The pull-to-reveal search field. Styled after the system search
+    /// field (gray capsule, magnifier, clear button, Cancel while
+    /// active); binds straight into `searchText`, which the existing
+    /// search pipeline consumes identically to the old `.searchable`.
+    private func searchRow(_ proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search conversations", text: $searchText)
+                    .focused($searchFocused)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.primary.opacity(0.06), in: Capsule())
+            if searchFocused || !searchText.isEmpty {
+                Button("Cancel") {
+                    searchText = ""
+                    searchFocused = false
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(Self.listTopAnchor, anchor: .top)
+                    }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: searchFocused)
+    }
+
+    /// Initial tuck: scroll the list to the anchor just below the
+    /// search row so the field hides until the user over-scrolls.
+    /// One-shot per view lifetime, and never while a search is live.
+    private func tuckSearchIfNeeded(_ proxy: ScrollViewProxy) {
+        guard !didInitialSearchHide, !convos.conversations.isEmpty,
+              searchText.isEmpty, !searchFocused else { return }
+        didInitialSearchHide = true
+        // A beat so the rows exist before the id resolves.
+        DispatchQueue.main.async {
+            proxy.scrollTo(Self.listTopAnchor, anchor: .top)
         }
     }
 
@@ -323,7 +395,18 @@ struct ChatsRoot: View {
                     }
                 }
             } header: {
+                // Pinned headers in a plain list render as bare text
+                // that scrolls OVER row content — unreadable. A glass
+                // capsule keeps the label legible against whatever
+                // passes beneath and matches the floating-chrome
+                // language.
                 Text(profile.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .glassEffect(.regular, in: .capsule)
             }
         }
         // Paging pages the flat conversation list; groups above grow as
