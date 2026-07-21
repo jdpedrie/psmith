@@ -2000,16 +2000,14 @@ func (s *Service) resolveParent(ctx context.Context, q *store.Queries, activeCtx
 		return &pid, nil
 	}
 	// Fallback: pick the latest message in the active context as the chronological tip.
-	all, err := q.ListMessagesByContext(ctx, activeCtx.ID)
+	tipID, err := q.GetLatestMessageID(ctx, activeCtx.ID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if len(all) == 0 {
-		return nil, nil
-	}
-	// ListMessagesByContext is ordered by created_at ASC; take the last.
-	tip := all[len(all)-1]
-	return &tip.ID, nil
+	return &tipID, nil
 }
 
 // ---------------------------------------------------------------------------

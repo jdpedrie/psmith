@@ -30,6 +30,25 @@ func (q *Queries) ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const countAssistantMessagesCapped = `-- name: CountAssistantMessagesCapped :one
+SELECT COUNT(*) FROM (
+    SELECT 1 FROM messages
+    WHERE context_id = $1 AND role = 'assistant'
+    LIMIT 2
+) capped
+`
+
+// Capped at 2: the auto-title hook only distinguishes "exactly one
+// assistant turn exists" from everything else, and it fires on EVERY
+// assistant materialization — a full-context list per turn just to
+// count was the cost.
+func (q *Queries) CountAssistantMessagesCapped(ctx context.Context, contextID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssistantMessagesCapped, contextID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUnembeddedMessages = `-- name: CountUnembeddedMessages :one
 SELECT COUNT(*)::INT FROM messages m
 JOIN contexts ctx ON ctx.id = m.context_id
@@ -532,6 +551,24 @@ func (q *Queries) GetContextRoleMessageInContext(ctx context.Context, contextID 
 	return i, err
 }
 
+const getLatestMessageID = `-- name: GetLatestMessageID :one
+SELECT id FROM messages
+WHERE context_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// The chronological tip of a context — resolveParent's fallback when
+// no cursor is tracked. Only the id is needed; the previous
+// implementation listed the ENTIRE context (embeddings included) to
+// take the last element.
+func (q *Queries) GetLatestMessageID(ctx context.Context, contextID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLatestMessageID, contextID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getMessageByID = `-- name: GetMessageByID :one
 SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages WHERE id = $1
 `
@@ -601,6 +638,37 @@ func (q *Queries) HasCompressionSummaryInContext(ctx context.Context, contextID 
 	var has_summary bool
 	err := row.Scan(&has_summary)
 	return has_summary, err
+}
+
+const listContextLeafIDs = `-- name: ListContextLeafIDs :many
+SELECT m.id FROM messages m
+WHERE m.context_id = $1
+  AND NOT EXISTS (SELECT 1 FROM messages c WHERE c.parent_id = m.id)
+ORDER BY m.id DESC
+LIMIT 2
+`
+
+// Ids of childless messages in a context, capped at 2 — history
+// assembly only needs "none / exactly one / ambiguous" to preserve
+// its leafless-Build contract without listing the whole context.
+func (q *Queries) ListContextLeafIDs(ctx context.Context, contextID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listContextLeafIDs, contextID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMessageAncestorChain = `-- name: ListMessageAncestorChain :many

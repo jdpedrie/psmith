@@ -26,6 +26,11 @@ type Querier interface {
 	// their result; the FK has no ON DELETE action, so null the pointer
 	// before the context row goes.
 	ClearStreamRunResultContext(ctx context.Context, resultContextID *uuid.UUID) error
+	// Capped at 2: the auto-title hook only distinguishes "exactly one
+	// assistant turn exists" from everything else, and it fires on EVERY
+	// assistant materialization — a full-context list per turn just to
+	// count was the cost.
+	CountAssistantMessagesCapped(ctx context.Context, contextID uuid.UUID) (int64, error)
 	// For the "X calls in the last 7 days" chip on settings.
 	CountDeviceToolCallsByUser(ctx context.Context, arg CountDeviceToolCallsByUserParams) (int32, error)
 	// Drives the "X / Y embedded" progress chip in the settings UI.
@@ -128,6 +133,11 @@ type Querier interface {
 	GetExplicitCache(ctx context.Context, arg GetExplicitCacheParams) (ExplicitCach, error)
 	GetFile(ctx context.Context, id uuid.UUID) (File, error)
 	GetFileByUserAndSHA(ctx context.Context, arg GetFileByUserAndSHAParams) (File, error)
+	// The chronological tip of a context — resolveParent's fallback when
+	// no cursor is tracked. Only the id is needed; the previous
+	// implementation listed the ENTIRE context (embeddings included) to
+	// take the last element.
+	GetLatestMessageID(ctx context.Context, contextID uuid.UUID) (uuid.UUID, error)
 	// Returns the most recent stream_run for a context that recorded prefix
 	// hashes (skipping turns that errored before the prefix was assembled).
 	// Used by the next SendMessage to compute cache-stable prefix length.
@@ -207,6 +217,10 @@ type Querier interface {
 	ListAttachmentsForMessage(ctx context.Context, messageID uuid.UUID) ([]ListAttachmentsForMessageRow, error)
 	// Bulk variant for history builder: one query per chain instead of N.
 	ListAttachmentsForMessages(ctx context.Context, dollar_1 []uuid.UUID) ([]ListAttachmentsForMessagesRow, error)
+	// Ids of childless messages in a context, capped at 2 — history
+	// assembly only needs "none / exactly one / ambiguous" to preserve
+	// its leafless-Build contract without listing the whole context.
+	ListContextLeafIDs(ctx context.Context, contextID uuid.UUID) ([]uuid.UUID, error)
 	// Per-context aggregates (message_count, last_message_total_tokens,
 	// cumulative_cost_usd) are computed in a single query so the client can
 	// render context-list rows without N+1 round trips.

@@ -563,11 +563,28 @@ func (f *fakeQueries) GetActiveContextByConversation(_ context.Context, _ uuid.U
 	return f.active, nil
 }
 
-func (f *fakeQueries) ListMessagesByContext(_ context.Context, _ uuid.UUID) ([]store.Message, error) {
+// ListContextLeafIDs mirrors the real query: childless message ids in
+// the given context, capped at 2.
+func (f *fakeQueries) ListContextLeafIDs(_ context.Context, contextID uuid.UUID) ([]uuid.UUID, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	return f.messages, nil
+	hasChild := make(map[uuid.UUID]bool, len(f.messages))
+	for _, m := range f.messages {
+		if m.ParentID != nil {
+			hasChild[*m.ParentID] = true
+		}
+	}
+	var out []uuid.UUID
+	for _, m := range f.messages {
+		if m.ContextID == contextID && !hasChild[m.ID] {
+			out = append(out, m.ID)
+			if len(out) == 2 {
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 // ListMessageChainForHistory mirrors the real recursive CTE: walk

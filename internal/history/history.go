@@ -75,7 +75,7 @@ var (
 // pgtestdb when convenient — and documents the dependency surface.
 type queries interface {
 	GetActiveContextByConversation(ctx context.Context, conversationID uuid.UUID) (store.Context, error)
-	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]store.Message, error)
+	ListContextLeafIDs(ctx context.Context, contextID uuid.UUID) ([]uuid.UUID, error)
 	ListMessageChainForHistory(ctx context.Context, id uuid.UUID) ([]store.ListMessageChainForHistoryRow, error)
 	ListAttachmentsForMessages(ctx context.Context, messageIDs []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error)
 }
@@ -162,60 +162,53 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		return nil, fmt.Errorf("%w: %w", ErrNoActiveContext, err)
 	}
 
-	var chain []store.Message
-	if params.LeafMessageID != nil {
-		// Explicit leaf: fetch ONLY the ancestor chain — O(chain), not
-		// O(context). This is the hot path (SendMessage and
-		// CountContextTokens both resolve a leaf first), and forked
-		// contexts carry dead branches the chain never touches.
-		rows, err := q.ListMessageChainForHistory(ctx, *params.LeafMessageID)
+	// Resolve the leaf. Explicit via params (the hot path — SendMessage
+	// and CountContextTokens both resolve one first); otherwise probe
+	// the context's childless rows, capped at 2, preserving the
+	// leafless contract (empty → empty prefix, ambiguous → error)
+	// without listing the whole context.
+	leafID := params.LeafMessageID
+	if leafID == nil {
+		leafIDs, err := q.ListContextLeafIDs(ctx, active.ID)
 		if err != nil {
-			return nil, fmt.Errorf("history: list message chain: %w", err)
+			return nil, fmt.Errorf("history: list context leaves: %w", err)
 		}
-		if len(rows) == 0 {
-			// Leaf id doesn't exist at all — same contract as a leaf
-			// outside the active context.
-			return nil, ErrLeafNotInActiveContext
-		}
-		// The recursive walk follows parent_id without regard for
-		// context boundaries; enforce the original invariants here.
-		// Rows are root-first, so the LEAF is the last row.
-		if rows[len(rows)-1].Message.ContextID != active.ID {
-			return nil, ErrLeafNotInActiveContext
-		}
-		chain = make([]store.Message, 0, len(rows))
-		for _, r := range rows {
-			if r.Message.ContextID != active.ID {
-				return nil, ErrBrokenParentChain
-			}
-			chain = append(chain, r.Message)
-		}
-	} else {
-		msgs, err := q.ListMessagesByContext(ctx, active.ID)
-		if err != nil {
-			return nil, fmt.Errorf("history: list messages in active context: %w", err)
-		}
-		if len(msgs) == 0 {
+		switch len(leafIDs) {
+		case 0:
 			// Empty context — valid (e.g. before any system/context rows
 			// are seeded for a fresh Context). Return an empty slice
 			// rather than nil so callers can iterate without a nil check.
 			return []providers.WireMessage{}, nil
+		case 1:
+			leafID = &leafIDs[0]
+		default:
+			return nil, ErrAmbiguousLeaf
 		}
+	}
 
-		byID := make(map[uuid.UUID]store.Message, len(msgs))
-		for _, m := range msgs {
-			byID[m.ID] = m
+	// Fetch ONLY the ancestor chain — O(chain), not O(context); forked
+	// contexts carry dead branches the chain never touches.
+	rows, err := q.ListMessageChainForHistory(ctx, *leafID)
+	if err != nil {
+		return nil, fmt.Errorf("history: list message chain: %w", err)
+	}
+	if len(rows) == 0 {
+		// Leaf id doesn't exist at all — same contract as a leaf
+		// outside the active context.
+		return nil, ErrLeafNotInActiveContext
+	}
+	// The recursive walk follows parent_id without regard for context
+	// boundaries; enforce the original invariants here. Rows are
+	// root-first, so the LEAF is the last row.
+	if rows[len(rows)-1].Message.ContextID != active.ID {
+		return nil, ErrLeafNotInActiveContext
+	}
+	chain := make([]store.Message, 0, len(rows))
+	for _, r := range rows {
+		if r.Message.ContextID != active.ID {
+			return nil, ErrBrokenParentChain
 		}
-
-		leafID, err := selectLeaf(msgs, byID, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		chain, err = walkParentChain(byID, leafID)
-		if err != nil {
-			return nil, err
-		}
+		chain = append(chain, r.Message)
 	}
 
 	// Load attachments for every message in the chain in one round
@@ -423,70 +416,6 @@ func joinParts(parts []string) string {
 		out += "\n\n" + p
 	}
 	return out
-}
-
-// selectLeaf resolves the leaf message ID for the prefix. If explicit, it
-// validates the message belongs to the active context. Otherwise it looks
-// for the single childless message; multiple candidates are an error.
-func selectLeaf(msgs []store.Message, byID map[uuid.UUID]store.Message, explicit *uuid.UUID) (uuid.UUID, error) {
-	if explicit != nil {
-		if _, ok := byID[*explicit]; !ok {
-			return uuid.Nil, ErrLeafNotInActiveContext
-		}
-		return *explicit, nil
-	}
-
-	// A leaf is a message with no children in the active context.
-	hasChild := make(map[uuid.UUID]bool, len(msgs))
-	for _, m := range msgs {
-		if m.ParentID != nil {
-			hasChild[*m.ParentID] = true
-		}
-	}
-
-	var leaves []uuid.UUID
-	for _, m := range msgs {
-		if !hasChild[m.ID] {
-			leaves = append(leaves, m.ID)
-		}
-	}
-	switch len(leaves) {
-	case 0:
-		// Should be impossible for a non-empty context (at least one row
-		// must be a leaf if the tree is acyclic), but guard anyway.
-		return uuid.Nil, ErrAmbiguousLeaf
-	case 1:
-		return leaves[0], nil
-	default:
-		return uuid.Nil, ErrAmbiguousLeaf
-	}
-}
-
-// walkParentChain follows parent_id from leafID back to the root and returns
-// the chain in root-first order. Errors if the chain points outside the
-// supplied (single-context) message set.
-func walkParentChain(byID map[uuid.UUID]store.Message, leafID uuid.UUID) ([]store.Message, error) {
-	// Walk leaf → root.
-	var reverse []store.Message
-	current := leafID
-	for {
-		m, ok := byID[current]
-		if !ok {
-			return nil, ErrBrokenParentChain
-		}
-		reverse = append(reverse, m)
-		if m.ParentID == nil {
-			break
-		}
-		current = *m.ParentID
-	}
-
-	// Reverse to root-first order.
-	chain := make([]store.Message, len(reverse))
-	for i, m := range reverse {
-		chain[len(reverse)-1-i] = m
-	}
-	return chain, nil
 }
 
 // toWireMessage maps one stored Message to its wire representation, applying

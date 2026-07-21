@@ -316,3 +316,34 @@ SELECT sqlc.embed(messages)
 FROM messages
 JOIN chain ON chain.id = messages.id
 ORDER BY chain.depth DESC;
+
+-- name: GetLatestMessageID :one
+-- The chronological tip of a context — resolveParent's fallback when
+-- no cursor is tracked. Only the id is needed; the previous
+-- implementation listed the ENTIRE context (embeddings included) to
+-- take the last element.
+SELECT id FROM messages
+WHERE context_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: CountAssistantMessagesCapped :one
+-- Capped at 2: the auto-title hook only distinguishes "exactly one
+-- assistant turn exists" from everything else, and it fires on EVERY
+-- assistant materialization — a full-context list per turn just to
+-- count was the cost.
+SELECT COUNT(*) FROM (
+    SELECT 1 FROM messages
+    WHERE context_id = $1 AND role = 'assistant'
+    LIMIT 2
+) capped;
+
+-- name: ListContextLeafIDs :many
+-- Ids of childless messages in a context, capped at 2 — history
+-- assembly only needs "none / exactly one / ambiguous" to preserve
+-- its leafless-Build contract without listing the whole context.
+SELECT m.id FROM messages m
+WHERE m.context_id = $1
+  AND NOT EXISTS (SELECT 1 FROM messages c WHERE c.parent_id = m.id)
+ORDER BY m.id DESC
+LIMIT 2;

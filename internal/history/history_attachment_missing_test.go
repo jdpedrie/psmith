@@ -150,8 +150,23 @@ type stubQueries struct {
 func (s *stubQueries) GetActiveContextByConversation(_ context.Context, _ uuid.UUID) (store.Context, error) {
 	return s.activeCtx, nil
 }
-func (s *stubQueries) ListMessagesByContext(_ context.Context, _ uuid.UUID) ([]store.Message, error) {
-	return s.messages, nil
+func (s *stubQueries) ListContextLeafIDs(_ context.Context, contextID uuid.UUID) ([]uuid.UUID, error) {
+	hasChild := make(map[uuid.UUID]bool, len(s.messages))
+	for _, m := range s.messages {
+		if m.ParentID != nil {
+			hasChild[*m.ParentID] = true
+		}
+	}
+	var out []uuid.UUID
+	for _, m := range s.messages {
+		if m.ContextID == contextID && !hasChild[m.ID] {
+			out = append(out, m.ID)
+			if len(out) == 2 {
+				break
+			}
+		}
+	}
+	return out, nil
 }
 func (s *stubQueries) ListMessageChainForHistory(_ context.Context, id uuid.UUID) ([]store.ListMessageChainForHistoryRow, error) {
 	byID := make(map[uuid.UUID]store.Message, len(s.messages))

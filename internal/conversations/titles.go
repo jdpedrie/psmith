@@ -210,18 +210,12 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 // inserted, so if there's more than one assistant the new one is NOT the
 // first.
 func (s *Service) isFirstAssistantInContext(ctx context.Context, contextID uuid.UUID, assistantMsgID uuid.UUID) (bool, error) {
-	all, err := s.queries.ListMessagesByContext(ctx, contextID)
+	// Capped count (LIMIT 2 under the hood): this hook fires on every
+	// assistant materialization, and listing the whole context —
+	// embeddings included — per turn just to count was the cost.
+	count, err := s.queries.CountAssistantMessagesCapped(ctx, contextID)
 	if err != nil {
 		return false, err
-	}
-	count := 0
-	for _, m := range all {
-		if m.Role == roleAssistant {
-			count++
-			if count > 1 {
-				return false, nil
-			}
-		}
 	}
 	return count == 1, nil
 }
