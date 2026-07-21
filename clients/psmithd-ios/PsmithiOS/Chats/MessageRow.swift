@@ -276,13 +276,38 @@ struct MessageRow: View {
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .contextMenu { contextMenuItems }
+        .contextMenu { contextMenuItems } preview: { contextMenuPreview }
         // Swipe-tray temporarily disabled — its DragGesture
         // intercepted vertical scroll on long messages, making
         // the chat unusable. Long-press contextMenu (above) still
         // exposes the same actions. See MessageActionTray.swift
         // for the implementation; re-enable once the gesture
         // disambiguation is fixed.
+    }
+
+    /// Upright preview for the long-press context menu. The row
+    /// renders inside the inverted transcript's flip, and the
+    /// system's automatic preview snapshot degenerates on transformed
+    /// rows (a collapsed sliver — sim-verified); an explicit preview
+    /// renders outside the transform. Reuses the row's markdown cache
+    /// key, so the parse is a cache hit.
+    private var contextMenuPreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(roleLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            // A short excerpt, not the full body: the system sizes
+            // the preview card to fit, and a long document compresses
+            // every paragraph into an ellipsized line. Raw
+            // MarkdownText with a head cut, NOT BoundedMarkdownText —
+            // its "Show full text" affordance would render as a dead
+            // button inside the preview snapshot.
+            let body = message.displayContent ?? message.content
+            MarkdownText(MarkdownBudget.head(body, limit: 600) ?? body)
+        }
+        .padding(12)
+        .frame(maxWidth: 340, alignment: .leading)
+        .background(Color(.systemBackground))
     }
 
     /// First non-empty line of the message body, used as the
@@ -430,7 +455,7 @@ struct MessageRow: View {
                     )
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .contextMenu { contextMenuItems }
+            .contextMenu { contextMenuItems } preview: { contextMenuPreview }
             // Swipe-tray temporarily disabled — see other call site
             // for rationale; long-press contextMenu still exposes
             // the same actions.
@@ -489,7 +514,7 @@ struct MessageRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .contextMenu { contextMenuItems }
+            .contextMenu { contextMenuItems } preview: { contextMenuPreview }
             // Swipe-tray temporarily disabled — see other call site
             // for rationale; long-press contextMenu still exposes
             // the same actions.

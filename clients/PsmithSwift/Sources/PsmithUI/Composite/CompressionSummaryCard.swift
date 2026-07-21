@@ -150,6 +150,29 @@ public struct CompressionSummaryCard: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+        } preview: {
+            // Explicit upright preview: on iOS the card renders
+            // inside the inverted transcript's flip and the automatic
+            // preview snapshot degenerates on transformed rows.
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .foregroundStyle(.orange)
+                    Text("Compression summary")
+                        .scaledFont(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.orange)
+                }
+                // Raw head cut, not BoundedMarkdownText — its "Show
+                // full text" affordance would render as a dead button
+                // inside the preview snapshot.
+                MarkdownText(
+                    MarkdownBudget.head(message.content, limit: 600) ?? message.content
+                )
+                .scaledFont(.callout)
+            }
+            .padding(12)
+            .frame(maxWidth: 340, alignment: .leading)
         }
         .confirmationDialog(
             "Delete compression summary?",
