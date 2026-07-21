@@ -2,12 +2,15 @@ import SwiftUI
 import PsmithKit
 import PsmithUI
 
-/// Root of the Chats tab. Hosts the conversation list (search + mode
-/// picker + sectioned list) plus the toolbar account/new chrome.
+/// Root of the Chats tab. Hosts the conversation list plus the toolbar
+/// account / filter / new chrome.
 ///
-/// Per `docs/clients/ios-reference.md`: `.searchable` for search, segmented
-/// `Picker` for All Chats / By Profile, swipe-to-delete on rows,
-/// long-press context menu, pull-to-refresh.
+/// The list is deliberately chrome-free: search hides until the user
+/// pulls down (`.navigationBarDrawer(displayMode: .automatic)`), and
+/// the All Chats / By Profile mode plus the sort order live as two
+/// exclusive-picker sections inside the toolbar's filter menu — no
+/// segmented control or visible field rides above the conversations.
+/// Swipe-to-delete on rows, long-press context menu, pull-to-refresh.
 struct ChatsRoot: View {
     let user: PsmithUser
     @Environment(AppModel.self) private var app
@@ -56,7 +59,7 @@ struct ChatsRoot: View {
                         accountMenu
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        sortMenu
+                        filterMenu
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         newConversationButton
@@ -109,9 +112,16 @@ struct ChatsRoot: View {
                 }
                 .searchable(
                 text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search conversations"
             )
+            // iOS 26's minimized search: no field rides above the list
+            // by default — search lives as a compact glass control
+            // until invoked. (The navigationBarDrawer's "pull down to
+            // reveal" behavior no longer exists in SwiftUI: .automatic
+            // keeps the field pinned at rest regardless of content
+            // height, verified live on both short and scrollable
+            // lists.)
+            .searchToolbarBehavior(.minimize)
             .onChange(of: searchText) { _, newValue in
                 applySearchOrMode(newSearchText: newValue, newPicker: pickerMode)
             }
@@ -163,11 +173,22 @@ struct ChatsRoot: View {
         }  // closes NavigationStack
     }
 
-    /// Sort menu — Recently Used / Created / Title. Bound to
-    /// `convos.listOrder`; refresh fires after the write so the
-    /// server returns the new order.
-    private var sortMenu: some View {
+    /// Filter menu — two exclusive-choice sections: the list MODE
+    /// (All Chats / By Profile, formerly a segmented control riding
+    /// above the list) and the sort ORDER (Recently Used / Recently
+    /// Created, bound to `convos.listOrder`; refresh fires after the
+    /// write so the server returns the new order). Pickers inside a
+    /// Menu render as checkmarked exclusive groups, which is exactly
+    /// the semantic both choices carry.
+    private var filterMenu: some View {
         Menu {
+            Picker("Mode", selection: $pickerMode) {
+                Label("All Chats", systemImage: "bubble.left.and.bubble.right")
+                    .tag(PickerMode.allChats)
+                Label("By Profile", systemImage: "person.2")
+                    .tag(PickerMode.byProfile)
+            }
+            Divider()
             Picker("Sort", selection: Binding(
                 get: { convos.listOrder },
                 set: { newValue in
@@ -175,14 +196,15 @@ struct ChatsRoot: View {
                     Task { await convos.refresh() }
                 }
             )) {
-                Text("Recently Used").tag(PsmithConversationOrder.recentlyUsed)
-                Text("Recently Created").tag(PsmithConversationOrder.recentlyCreated)
+                Label("Recently Used", systemImage: "clock")
+                    .tag(PsmithConversationOrder.recentlyUsed)
+                Label("Recently Created", systemImage: "calendar.badge.plus")
+                    .tag(PsmithConversationOrder.recentlyCreated)
             }
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
+            Image(systemName: "line.3.horizontal.decrease")
         }
-        .accessibilityLabel("Sort conversations")
-        .disabled(pickerMode != .allChats || !searchText.isEmpty)
+        .accessibilityLabel("Filter and sort conversations")
     }
 
     // MARK: - List body
@@ -244,18 +266,10 @@ struct ChatsRoot: View {
         } else if convos.conversations.isEmpty && searchText.isEmpty {
             emptyState
         } else {
+            // Chrome-free list: the mode/sort controls live in the
+            // toolbar's filter menu, search reveals on pull-down —
+            // conversations are the first thing on screen.
             List {
-                if searchText.isEmpty {
-                    Section {
-                        Picker("Mode", selection: $pickerMode) {
-                            Text("All Chats").tag(PickerMode.allChats)
-                            Text("By Profile").tag(PickerMode.byProfile)
-                        }
-                        .pickerStyle(.segmented)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
-                    }
-                }
                 modeBody
             }
             .listStyle(.plain)
@@ -525,13 +539,12 @@ struct ChatsRoot: View {
             Text("Server unavailable — showing cached chats")
                 .font(.caption2)
                 .lineLimit(1)
-            Spacer(minLength: 4)
         }
         .foregroundStyle(.orange)
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.10))
+        .padding(.vertical, 5)
+        .glassEffect(.regular.tint(.orange.opacity(0.18)), in: .capsule)
+        .padding(.top, 4)
     }
 }
 
