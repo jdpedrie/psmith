@@ -243,40 +243,45 @@ private struct ConversationBody: View {
     @State private var contentUnitMinX: CGFloat = 0
 
 
-    // THE SEND PIN, fifth design (inverted, rest-edge). The lesson
-    // that killed the fourth (held id-anchor) design in one live
-    // test: ANY nonzero held offset is garbage during a structural
-    // re-estimate — inserting the runway rows at the head made
-    // LazyVStack re-map ±40k pt of estimates under a frozen offset
-    // and the viewport landed mid-history for the whole stream (the
-    // held id never re-solved). The only position that is exact by
-    // construction through every collapse is the REST EDGE: offset
-    // ~0 always shows the first viewport of content, realized by
-    // definition.
+    // STREAMING SCROLL, sixth design (follow-then-park). The user's
+    // spec, and the first design where the inverted list's native
+    // physics do ALL the work: follow the growing reply until its
+    // top reaches the viewport top, then park with further growth
+    // below the fold, and any user scroll detaches immediately and
+    // completely.
     //
-    // So the pin never scrolls. At send the runway spacer makes
-    // (spacer + reply + question) fill exactly one viewport, and the
-    // rest-edge frame IS "question at the top, runway below". While
-    // the reply fits the runway, the shrinking spacer keeps content
-    // constant — motionless. When it outgrows the runway, the
-    // streaming row is CLIPPED to the runway height showing the
-    // reply's beginning (the pre-inversion design kept the tail
-    // below the fold; this keeps it behind the clip) — content
-    // stays constant for the entire stream, zero scroll commands.
-    // At terminal the full reply lands and ONE id-solve puts the
-    // question back at the viewport top (for short replies it
-    // clamps to the rest edge — the same frame).
+    // Follow = the rest edge. At offset ~0 the viewport is glued to
+    // the newest content by construction, so the reply pours in
+    // above the composer and the transcript slides up — no anchor,
+    // no per-tick commands, nothing to fight. Park = the CLIP: when
+    // the streaming row's measured height reaches one viewport, its
+    // rendered height caps there (first lines visible — alignment
+    // .bottom reads as the reply's top through the flips), so
+    // content stops growing and the rest-edge frame freezes with
+    // the reply's top at the viewport top. The tail accumulates
+    // behind the clip — "below the fold". Zero scroll commands for
+    // the entire stream. Detach is inherent: there is no held
+    // position and no follow machinery, so the instant the user
+    // moves the viewport they own it (the terminal solve also
+    // yields to `isPositionedByUser`).
+    //
+    // At terminal the clip releases (full reply lands) and ONE
+    // exact id-solve restores the parked frame — the settled
+    // reply's top at the viewport top; short replies clamp to the
+    // rest edge, which is the same frame they streamed in.
+    //
+    // History: the fifth design jumped instantly to question-at-top
+    // over a viewport-sized runway spacer (this design deletes the
+    // spacer and the jump). The fourth (held id-anchor) died in one
+    // live test: any nonzero held offset is garbage during a
+    // structural re-estimate — LazyVStack re-mapped ±40k pt under a
+    // frozen offset and the viewport spent a whole stream lost in
+    // mid-history.
 
-    /// Runway budget, fixed at send. The rendered spacer is
-    /// budget − (measured streaming height), so question + reply +
-    /// spacer stays CONSTANT while the reply grows. In the flipped
-    /// stack the spacer sits FIRST (nearest offset 0): its shrink
-    /// exactly cancels the stream's growth at the origin. Nonzero =
-    /// send pin live; zeroed at terminal, by the pill, and on send
-    /// failure.
-    @State private var streamRunwayBudget: CGFloat = 0
-    /// The runway's rendered height (derived, see above).
-    @State private var streamSpacerHeight: CGFloat = 0
+    /// The streaming row's rendered-height cap, set when a stream
+    /// begins (~one viewport). Nonzero = a stream's park contract is
+    /// live; zeroed at terminal, by the pill, and on send failure.
+    @State private var streamClipBudget: CGFloat = 0
     /// True while the ScrollPosition binding holds a one-shot
     /// programmatic position (send catch-up, terminal solve, pill).
     /// Released (binding replaced) on user grab and by each solve's
@@ -418,6 +423,16 @@ private struct ConversationBody: View {
                     viewportHeight = v[1]
                     navClearance = v[2]
                 }
+                // Status-bar tap → scroll to the top of the context
+                // (the OLDEST message — the content end, inverted).
+                // The system gesture can't serve this: its native
+                // semantics target offset 0 (the NEWEST edge here),
+                // and eligibility is murky on the flipped scroll.
+                // The bridge claims it where the platform delivers
+                // it; the fade band below is the deterministic tap
+                // target either way.
+                .background(StatusBarTapBridge(onTap: scrollToOldest)
+                    .frame(width: 2, height: 2))
                 // Hand-rolled under-the-bar fade, drawn in SCREEN
                 // space where no transform can misplace it. The
                 // system scroll-edge fade is hidden on this scroll
@@ -425,6 +440,11 @@ private struct ConversationBody: View {
                 // FB20540755) and iOS 26 glass bars ignore
                 // toolbarBackground, so without this the title text
                 // sat directly on passing transcript content.
+                //
+                // The band doubles as the "tap the top to jump to
+                // the start of the context" target — the status-bar
+                // tap affordance, made deterministic. The pill
+                // overlays this band and wins its own taps.
                 .overlay(alignment: .top) {
                     LinearGradient(
                         stops: [
@@ -437,7 +457,8 @@ private struct ConversationBody: View {
                     )
                     .frame(height: navClearance + 28)
                     .ignoresSafeArea(edges: .top)
-                    .allowsHitTesting(false)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: scrollToOldest)
                 }
         }
     }
@@ -454,46 +475,21 @@ private struct ConversationBody: View {
                 // newest), and older rows realize on scroll — no mount
                 // window, no staged backfill, no entry curtain.
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    // Scroll runway for the send pin, FIRST (nearest
-                    // the origin = visual bottom). Clear color, not
-                    // Spacer(): LazyVStack gives Spacer no height.
-                    // Width pinned EXACTLY like every message row: an
-                    // unpinned child accepts a transition pass's loose
-                    // (oversized) width proposal, and since the runway
-                    // re-lays on every streaming flush, that turned
-                    // into a ±16pt horizontal shimmy at flush cadence
-                    // (probe-verified: minX −16→0 at ~3Hz all stream).
-                    if streamSpacerHeight > 0 {
-                        Color.clear
-                            .frame(
-                                width: paneWidth > 32 ? paneWidth - 32 : nil,
-                                height: streamSpacerHeight
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id("__streamspacer__")
-                    }
                     StreamingArea(model: model)
-                        // The runway shrinks by exactly the streaming
-                        // row's measured growth — measured, not
-                        // estimated, so question+reply+spacer stays
-                        // an honest constant.
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { h in
-                            guard streamRunwayBudget > 0 else { return }
-                            streamSpacerHeight = max(0, streamRunwayBudget - h)
-                        }
-                        // Clip to the runway once the reply outgrows
-                        // it: alignment .bottom in content space keeps
-                        // the row's content-space bottom — which the
-                        // flips render as the reply's FIRST lines —
-                        // visible, with the growing tail behind the
-                        // clip. Content contribution is capped at the
-                        // budget, so the stream can never move the
-                        // rest-edge frame. The full body lands at the
-                        // terminal swap.
+                        // The park: cap the streaming row's rendered
+                        // height at ~one viewport. While the reply is
+                        // shorter, the cap is inert and the rest edge
+                        // follows its growth natively; once it fills
+                        // the viewport, content stops growing and the
+                        // frame freezes with the reply's top at the
+                        // viewport top. Alignment .bottom in content
+                        // space keeps the row's content-space bottom
+                        // — the reply's FIRST lines through the flips
+                        // — visible, with the growing tail behind the
+                        // clip. The full body lands at the terminal
+                        // swap.
                         .frame(
-                            maxHeight: streamRunwayBudget > 0 ? streamRunwayBudget : nil,
+                            maxHeight: streamClipBudget > 0 ? streamClipBudget : nil,
                             alignment: .bottom
                         )
                         .clipped()
@@ -705,10 +701,9 @@ private struct ConversationBody: View {
                     scrollPosition = ScrollPosition()
                 }
 
-                // Pill visibility. The runway is blank space, not
-                // content — subtract it or the pill lights on every
-                // send before anything is below the fold.
-                let newFar = (m.offset - streamSpacerHeight) > scrollToBottomThreshold
+                // Pill visibility: inverted, "distance from the
+                // newest message" is simply the offset.
+                let newFar = m.offset > scrollToBottomThreshold
                 if newFar != isFarFromBottom {
                     withAnimation(.easeInOut(duration: 0.22)) {
                         isFarFromBottom = newFar
@@ -727,11 +722,9 @@ private struct ConversationBody: View {
                     Haptics.impact(.light)
                     // Inverted, "bottom" is offset 0 — one exact
                     // absolute scroll, no convergence, no estimates.
-                    // An explicit bottom-seek ends the pin contract:
-                    // reclaim the runway so "bottom" means the real
-                    // content end, not the blank band.
-                    streamRunwayBudget = 0
-                    streamSpacerHeight = 0
+                    // Mid-stream this returns to the PARKED frame
+                    // (the clip stays; the tail remains below the
+                    // fold until terminal, per the streaming design).
                     oneShotScroll(y: 0, reason: "pill")
                 } label: {
                     HStack(spacing: 6) {
@@ -760,14 +753,12 @@ private struct ConversationBody: View {
             // and delete hold the user's current scroll position.
             .onChange(of: model.pendingUserText) { _, text in
                 if text != nil {
-                    // Send: lay the runway. The rest-edge frame then
-                    // IS the pin (see the design comment on
-                    // streamRunwayBudget) — no scroll command unless
-                    // the user had scrolled away, in which case one
-                    // exact catch-up to the rest edge.
-                    scrollLog.notice("send: runway laid")
-                    streamRunwayBudget = max(240, viewportHeight)
-                    streamSpacerHeight = streamRunwayBudget
+                    // Send: no scroll command at all — the question
+                    // lands at the visible rest edge and the follow
+                    // is native. The only exception: the user had
+                    // scrolled away before sending, in which case
+                    // one exact catch-up to the rest edge shows them
+                    // their own message.
                     if metricsBox.latest.offset > 64 {
                         oneShotScroll(y: 0, reason: "send catch-up")
                     }
@@ -777,38 +768,41 @@ private struct ConversationBody: View {
                     // rest-edge frame doesn't move. Nothing to do.
                 } else {
                     // Send failed before a run started — the terminal
-                    // that normally reclaims the runway never fires.
-                    streamRunwayBudget = 0
-                    streamSpacerHeight = 0
+                    // that normally releases the clip never fires.
+                    streamClipBudget = 0
                 }
             }
             .onChange(of: model.isStreaming) { wasStreaming, isStreaming in
                 if !wasStreaming && isStreaming {
-                    scrollLog.notice("stream start")
+                    // Arm the park clip HERE, not at send: by stream
+                    // start the keyboard has dropped and
+                    // viewportHeight is the full pane, so "reply top
+                    // at viewport top" is measured against the frame
+                    // the user actually watches.
+                    streamClipBudget = max(240, viewportHeight)
+                    scrollLog.notice("stream start (clip=\(Int(streamClipBudget), privacy: .public))")
                 } else if wasStreaming && !isStreaming {
-                    // Terminal edge: reclaim the runway (the clip
-                    // releases with it — the settled row renders in
-                    // full), then one exact id-solve puts the
-                    // question at the viewport top so reading starts
-                    // where the reply does. Short replies clamp to
-                    // the rest edge — the same frame the stream
-                    // showed. Skipped entirely when the user owns the
-                    // viewport.
+                    // Terminal edge: release the clip (the settled
+                    // row renders in full), then one exact id-solve
+                    // restores the parked frame — the reply's top at
+                    // the viewport top, reading starts where the
+                    // reply does. Short replies clamp to the rest
+                    // edge, the same frame they streamed in. Skipped
+                    // entirely when the user owns the viewport.
                     scrollLog.notice("stream terminal")
-                    streamRunwayBudget = 0
-                    streamSpacerHeight = 0
-                    let questionID = model.messages.last(where: { $0.role == .user })?.id
+                    streamClipBudget = 0
                     Task { @MainActor in
-                        // One beat for the runway removal + settled
-                        // row swap to lay out before the solve.
+                        // One beat for the clip release + settled row
+                        // swap to lay out before the solve measures.
                         try? await Task.sleep(for: .milliseconds(150))
-                        guard !scrollPosition.isPositionedByUser, let qid = questionID else { return }
-                        scrollLog.notice("terminal: question-top solve")
+                        guard !scrollPosition.isPositionedByUser,
+                              let replyID = model.messages.last?.id else { return }
+                        scrollLog.notice("terminal: reply-top solve")
                         positionHeld = true
                         var t = Transaction()
                         t.disablesAnimations = true
                         withTransaction(t) {
-                            scrollPosition.scrollTo(id: qid, anchor: UnitPoint(x: 0, y: 1))
+                            scrollPosition.scrollTo(id: replyID, anchor: UnitPoint(x: 0, y: 1))
                         }
                         try? await Task.sleep(for: .milliseconds(300))
                         if positionHeld, !scrollPosition.isPositionedByUser {
@@ -819,6 +813,28 @@ private struct ConversationBody: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Jump to the start of the context — the oldest message, the
+    /// content END inverted. The far coordinate is estimated, so the
+    /// edge solve lands approximately and refines as rows realize;
+    /// fine for a jump affordance, and the one-shot release keeps
+    /// nothing solving afterwards.
+    private func scrollToOldest() {
+        scrollLog.notice("scroll to oldest (top tap)")
+        positionHeld = true
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            scrollPosition.scrollTo(edge: .bottom)
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            if positionHeld, !scrollPosition.isPositionedByUser {
+                positionHeld = false
+                scrollPosition = ScrollPosition()
+            }
+        }
     }
 
     /// One exact absolute scroll + at-rest release. The binding must
