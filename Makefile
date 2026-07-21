@@ -47,7 +47,7 @@ swift-build:
 # binds an ephemeral port and uses an isolated, per-process database that's
 # dropped at exit.
 swift-test-l1:
-	cd clients/PsmithSwift && swift test --filter PsmithKitTests
+	cd clients/PsmithSwift && swift test --filter PsmithKitTests --filter PsmithUITests
 
 # Layer 2 (layout) tests: PsmithMac SwiftUI snapshot tests. References live
 # in clients/psmithd-mac/Tests/PsmithMacSnapshotTests/__Snapshots__/ and are

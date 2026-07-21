@@ -1303,7 +1303,10 @@ private struct MessageRow: View {
                         model.welcomePlayed.insert(message.id)
                     }
                 } else {
-                    MarkdownText(displayText)
+                    // Bounded: same guard as the summary card — an
+                    // unbounded inline markdown layout freezes the app
+                    // past ~tens of KB (see MarkdownBudget).
+                    BoundedMarkdownText(displayText)
                 }
             }
             // Usage summary footer — assistant messages only, when data is present.
@@ -1506,7 +1509,11 @@ private struct MessageRow: View {
     private func collapsibleBody(_ text: String) -> some View {
         let collapsed = !bodyExpanded
         VStack(alignment: .leading, spacing: 6) {
-            MarkdownText(text)
+            // Bounded even though the collapsed state clips: the
+            // height cap is visual only — the full view tree is still
+            // built underneath the clip, so a giant system/context
+            // body would freeze the app collapsed or not.
+            BoundedMarkdownText(text)
                 .frame(
                     maxWidth: .infinity,
                     maxHeight: collapsed ? Self.collapsedBodyHeight : .infinity,
@@ -1588,7 +1595,7 @@ private struct MessageRow: View {
             let partial = message.displayContent ?? message.content
             if !partial.isEmpty {
                 DisclosureGroup(isExpanded: $showPartialContent) {
-                    MarkdownText(partial)
+                    BoundedMarkdownText(partial)
                         .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
@@ -1991,7 +1998,11 @@ private struct CompactingRow: View {
                     .scaledFont(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                MarkdownText(text)
+                // Tail-clamped live view — this re-renders on every
+                // stream flush, and a multi-leg summary outgrows what
+                // a per-tick full re-layout survives. The settled card
+                // renders the full (bounded) body at terminal.
+                MarkdownText(MarkdownBudget.tailClamped(text))
                     .scaledFont(.callout)
             }
         }

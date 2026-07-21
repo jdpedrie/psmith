@@ -65,6 +65,8 @@ Reproduced 2026-07-16 (original taxonomy) and 2026-07-18 (heavy-scale additions)
 | Seek/sticky latched forever, acts on garbage later | arrival band (<8) narrower than the trigger band (>64) leaves 8..64 as a dead zone | one band constant for arm/disarm everywhere |
 | Delete at bottom yanks or lurches the transcript | full `load()` replaced the whole messages array; ForEach re-diff + content shrink under a pinned offset | in-place removal for stitch deletes; count-shrink settle; cascade still reloads |
 | Edit stalls the main thread on save | markdown cache keyed by server `editedAt` — the post-edit render always missed and parsed synchronously | content-hash cache keys + pre-warm from the edit sheet while the RPC is in flight |
+| App hard-locks on ENTRY, chrome + bottom bar render but the transcript never does (reproduced 2026-07-21, 180KB pending summary) | one row hands MarkdownUI an unbounded document; the single layout pass builds the whole view tree and SwiftUI's `Update.enqueueAction` array copy goes quadratic — main thread never returns, so even the entry-curtain failsafe task can't run. Not a scroll-machinery bug: the governor can't help because no tick ever completes | `MarkdownBudget` (BoundedMarkdown.swift): head-preview + chunked LazyVStack viewer for settled rows, tail clamp for the live stream row. A single row must never be unbounded |
+| One giant row makes the content estimate flap by thousands of points at tick rate | the tallest row in the cold-entry window dominates LazyVStack's per-row average; realize/unrealize swings the total estimate ±its height | keep transcript rows height-bounded (the summary card's preview budget is deliberately small: 1,500 chars) |
 
 ## Repro harness
 

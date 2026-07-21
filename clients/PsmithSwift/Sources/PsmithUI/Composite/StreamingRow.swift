@@ -178,7 +178,19 @@ public struct StreamingRow: View {
     /// no surprise hiding of stray angle brackets in prose.
     @ViewBuilder
     private var streamingBody: some View {
-        let segments = parseStreamingSegments(text, components: streamingComponents)
+        // Tail-clamped: every flush re-renders this body, and a long
+        // run (a multi-leg compaction stream especially) accumulates
+        // past the point where a full markdown re-layout per tick
+        // freezes the app. Mid-stream only the tail is on screen
+        // anyway; the settled row renders the full body at terminal.
+        // Clamping before segment parsing also bounds the parse. A cut
+        // that lands inside a component block degrades that block to
+        // prose for the remainder of the stream — transient, and far
+        // cheaper than the alternative.
+        let segments = parseStreamingSegments(
+            MarkdownBudget.tailClamped(text),
+            components: streamingComponents
+        )
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {

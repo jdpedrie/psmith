@@ -356,7 +356,7 @@ struct MessageRow: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                 if !bodyText.isEmpty {
-                    MarkdownText(bodyText, cacheKey: markdownCacheKey)
+                    BoundedMarkdownText(bodyText, cacheKey: markdownCacheKey)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -395,7 +395,11 @@ struct MessageRow: View {
                         model.welcomePlayed.insert(message.id)
                     }
                 } else {
-                    MarkdownText(bodyText, cacheKey: markdownCacheKey)
+                    // Bounded: an assistant turn near a large
+                    // max_output_tokens can exceed what a single
+                    // MarkdownUI layout pass survives (see
+                    // MarkdownBudget) — same guard as the summary card.
+                    BoundedMarkdownText(bodyText, cacheKey: markdownCacheKey)
                 }
             }
 

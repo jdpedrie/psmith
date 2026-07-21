@@ -11,6 +11,11 @@ import PsmithKit
 /// The summary CONTENT lives in `CompressionSummaryCard` up in the
 /// transcript (editable via its standard context menu); this bar
 /// carries only the verdict. Orange accent ties the two together.
+///
+/// Layout: iOS stacks text above the action row — at phone widths a
+/// single row leaves the explainer ~140pt beside two buttons and it
+/// truncated mid-sentence (user-reported). The Mac band has the width
+/// for one row; its subtext wraps instead of truncating.
 public struct CompressionReviewBar: View {
     let message: PsmithMessage
     let model: ConversationViewModel
@@ -23,70 +28,39 @@ public struct CompressionReviewBar: View {
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "wand.and.stars")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Compression awaiting review")
-                    .scaledFont(.subheadline)
-                    .fontWeight(.semibold)
-                Text("Confirm to continue in a fresh context, or delete to resume here.")
-                    .scaledFont(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "wand.and.stars")
+                    .foregroundStyle(.orange)
+                textBlock
             }
-            Spacer(minLength: 8)
-
-            Button("Delete", role: .destructive) {
-                showDeleteConfirm = true
+            HStack(spacing: 10) {
+                Spacer(minLength: 0)
+                deleteButton
+                confirmButton
             }
-            .buttonStyle(.bordered)
-            .tint(.red)
-            .disabled(isPromoting)
-            .confirmationDialog(
-                "Delete compression summary?",
-                isPresented: $showDeleteConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Delete summary", role: .destructive) {
-                    Task { await model.deleteMessage(id: message.id) }
-                }
-            } message: {
-                Text("The conversation will resume in the current context as if compaction never happened.")
-            }
-
-            Button {
-                isPromoting = true
-                Task {
-                    await model.promoteCompaction(messageID: message.id)
-                    isPromoting = false
-                }
-            } label: {
-                if isPromoting {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(minWidth: 64)
-                } else {
-                    Text("Confirm")
-                        .frame(minWidth: 64)
-                }
-            }
-            .buttonStyle(.glassProminent)
-            .tint(.orange)
-            .disabled(isPromoting)
-            .help("Confirm the summary, open a fresh context, and continue from there")
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        // iOS: a floating orange-tinted glass island matching the
-        // composer it replaces. Mac keeps its band idiom (the Mac
-        // composer region is a thinMaterial footer band; an island
-        // there would read as a foreign element).
-        #if os(iOS)
+        .padding(.vertical, 12)
+        // A floating orange-tinted glass island matching the composer
+        // it replaces.
         .glassEffect(.regular.tint(.orange.opacity(0.15)), in: .rect(cornerRadius: 24))
         .padding(.horizontal, 10)
         .padding(.bottom, 4)
         #else
+        HStack(spacing: 12) {
+            Image(systemName: "wand.and.stars")
+                .foregroundStyle(.orange)
+            textBlock
+            Spacer(minLength: 8)
+            deleteButton
+            confirmButton
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        // The Mac composer region is a thinMaterial footer band; an
+        // island there would read as a foreign element.
         .background(.thinMaterial)
         .overlay(alignment: .top) { Divider() }
         .overlay(alignment: .top) {
@@ -95,5 +69,62 @@ public struct CompressionReviewBar: View {
             Rectangle().fill(Color.orange.opacity(0.5)).frame(height: 1)
         }
         #endif
+    }
+
+    private var textBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Compression awaiting review")
+                .scaledFont(.subheadline)
+                .fontWeight(.semibold)
+            Text("Confirm to continue in a fresh context, or delete to resume here.")
+                .scaledFont(.caption)
+                .foregroundStyle(.secondary)
+                // Wrap, never truncate — the verdict explainer is the
+                // one line of guidance this state offers.
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var deleteButton: some View {
+        Button("Delete", role: .destructive) {
+            showDeleteConfirm = true
+        }
+        .buttonStyle(.bordered)
+        .tint(.red)
+        .disabled(isPromoting)
+        .confirmationDialog(
+            "Delete compression summary?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete summary", role: .destructive) {
+                Task { await model.deleteMessage(id: message.id) }
+            }
+        } message: {
+            Text("The conversation will resume in the current context as if compaction never happened.")
+        }
+    }
+
+    private var confirmButton: some View {
+        Button {
+            isPromoting = true
+            Task {
+                await model.promoteCompaction(messageID: message.id)
+                isPromoting = false
+            }
+        } label: {
+            if isPromoting {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(minWidth: 64)
+            } else {
+                Text("Confirm")
+                    .frame(minWidth: 64)
+            }
+        }
+        .buttonStyle(.glassProminent)
+        .tint(.orange)
+        .disabled(isPromoting)
+        .help("Confirm the summary, open a fresh context, and continue from there")
     }
 }

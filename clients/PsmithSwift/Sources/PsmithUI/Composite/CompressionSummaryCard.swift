@@ -34,6 +34,15 @@ public struct CompressionSummaryCard: View {
         self.model = model
     }
 
+    /// Inline budget for the summary body — deliberately far below the
+    /// message-bubble default. The card's job is "the summary is ready,
+    /// review it"; a couple of paragraphs orient the user and the full
+    /// document is one tap away. Keeping the card short also keeps the
+    /// cold-entry window's tallest row bounded, which the transcript's
+    /// entry machinery depends on (a multi-thousand-point row makes
+    /// LazyVStack's content estimate flap at tick rate).
+    static let summaryPreviewLimit = 1_500
+
     private var isErrored: Bool {
         message.errorText != nil
     }
@@ -65,8 +74,18 @@ public struct CompressionSummaryCard: View {
             if isErrored {
                 erroredBody
             } else {
-                MarkdownText(message.content, cacheKey: markdownCacheKey)
-                    .scaledFont(.callout)
+                // Bounded, not raw MarkdownText: a multi-leg compaction
+                // summary can run past 100KB, and an unbounded inline
+                // render of that hard-locks the app on entry (the
+                // transcript's single layout pass never returns). The
+                // preview + full-text viewer keeps entry O(preview).
+                BoundedMarkdownText(
+                    message.content,
+                    cacheKey: markdownCacheKey,
+                    documentTitle: "Compression summary",
+                    limit: Self.summaryPreviewLimit
+                )
+                .scaledFont(.callout)
                 if let summary = usageSummaryLine {
                     Text(summary)
                         .scaledFont(.caption2)
@@ -167,10 +186,18 @@ public struct CompressionSummaryCard: View {
             }
             if !message.content.isEmpty {
                 DisclosureGroup(isExpanded: $showPartialContent) {
-                    MarkdownText(message.content, cacheKey: markdownCacheKey)
-                        .scaledFont(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
+                    // A failure after several continuation legs can
+                    // leave a partial as big as a full summary — same
+                    // bounded treatment as the success body.
+                    BoundedMarkdownText(
+                        message.content,
+                        cacheKey: markdownCacheKey,
+                        documentTitle: "Partial summary",
+                        limit: Self.summaryPreviewLimit
+                    )
+                    .scaledFont(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
                 } label: {
                     Text("Partial summary streamed before failure")
                         .scaledFont(.caption)

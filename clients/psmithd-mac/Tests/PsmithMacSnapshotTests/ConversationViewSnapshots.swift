@@ -82,6 +82,24 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func longCompressionSummaryPreview() {
+        // A summary past the card's inline budget renders as a head
+        // preview + "Show full text (…)" button instead of the whole
+        // document. Pins the bounded-markdown guard: if this snapshot
+        // ever shows section 30 of the summary inline, the guard
+        // regressed — and with it the giant-summary entry freeze
+        // (100% CPU, transcript never renders) it exists to prevent.
+        let long = (0..<30).map { section in
+            "## Section \(section)\n\nDecisions and constraints recorded for section \(section), kept verbose enough that thirty of these clear the preview budget comfortably."
+        }.joined(separator: "\n\n")
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.sampleMessages()
+                + [SnapshotFixtures.compressionSummaryMessage(content: long)]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
     func wideBlocksContained() {
         // Pins the horizontal containment of the two content-driven
         // wide block classes: fenced code and markdown tables. Both
