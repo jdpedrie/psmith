@@ -369,13 +369,44 @@ public final class ConversationViewModel {
         hub.attach(conversationID: conversation.id) { [weak self] run in
             await self?.handleStreamTerminal(run)
         }
+        // Server-push change observer: a ConversationChanged account
+        // event for THIS conversation (mutated from another client, or
+        // an echo of our own mutation) runs the cheap staleness check.
+        hub.attachChangeObserver(conversationID: conversation.id) { [weak self] in
+            await self?.refreshIfStale()
+        }
     }
 
     // MARK: Load
 
+    /// True once the network `load()` has completed at least once.
+    /// While false, the transcript may be showing cache-hydrated
+    /// content (see `hydrateFromCache`).
+    public private(set) var hasLoadedFromServer = false
+
+    /// Instant entry hydration: populate the transcript from the
+    /// offline cache synchronously-ish (one SwiftData read, no
+    /// network) so re-entering a conversation renders immediately;
+    /// the network load that follows replaces everything. Skips when
+    /// messages are already present (re-entry within a live VM) and
+    /// bails if the network beat it — the server result always wins.
+    public func hydrateFromCache() async {
+        guard messages.isEmpty, !hasLoadedFromServer else { return }
+        guard let (conv, ctx) = await client.conversations.cachedGet(id: conversation.id),
+              let cached = await client.conversations.cachedMessages(contextID: ctx.id)
+        else { return }
+        guard !hasLoadedFromServer else { return }
+        conversation = conv
+        activeContext = ctx
+        messages = cached
+    }
+
     public func load() async {
         loading = true
-        defer { loading = false }
+        defer {
+            loading = false
+            hasLoadedFromServer = true
+        }
         do {
             let (conv, ctx) = try await client.conversations.get(id: conversation.id)
             // Refresh the cached conversation snapshot so server-set
@@ -421,6 +452,44 @@ public final class ConversationViewModel {
             _ = await (tokens, tree, ctxs)
         } catch {
             self.loadError = PsmithError.display(error)
+        }
+    }
+
+    /// Cheap server-driven staleness check, run on ConversationChanged
+    /// account events and on app foreground/window focus. One
+    /// GetConversation round-trip decides whether anything message-
+    /// affecting moved; the full chain re-fetch only happens when it
+    /// did. This is also the echo suppressor: events fire for this
+    /// client's own mutations, and after the local update the check
+    /// sees nothing stale and stops at one small RPC.
+    ///
+    /// Staleness signals, all cheap fields on the conversation/context
+    /// rows: the active context changed (compaction promote,
+    /// activation), the context's leaf moved off our last message
+    /// (sends, terminals, branch switches elsewhere), or the
+    /// conversation's coarse mutation stamp moved (edits and deletes
+    /// bump it server-side precisely because they move neither).
+    public func refreshIfStale() async {
+        // A live local stream owns its own update path (in-place
+        // terminal append); reloading under it would fight the
+        // transcript at its most delicate moment.
+        guard !isStreaming, !sending, !loading else { return }
+        do {
+            let (conv, ctx) = try await client.conversations.get(id: conversation.id)
+            let contextChanged = ctx.id != activeContext?.id
+            let leafMoved = ctx.currentLeafMessageID != nil
+                && ctx.currentLeafMessageID != messages.last?.id
+            let stampMoved = conv.updatedAt != conversation.updatedAt
+            conversation = conv
+            if contextChanged || leafMoved || stampMoved {
+                // load() re-fetches the chain and runs the advisory
+                // refreshes (token count, tree, contexts) itself.
+                await load()
+            } else {
+                activeContext = ctx
+            }
+        } catch {
+            // Transient — the next event or focus trigger retries.
         }
     }
 

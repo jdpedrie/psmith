@@ -697,7 +697,7 @@ func TestCompact_ContinuesAfterLengthCap(t *testing.T) {
 	if second.Messages[2].Role != "assistant" || second.Messages[2].Content != "Part one," {
 		t.Errorf("continuation assistant turn: %+v", second.Messages[2])
 	}
-	if second.Messages[3].Role != "user" || !strings.Contains(second.Messages[3].Content, "Continue the summary") {
+	if second.Messages[3].Role != "user" || second.Messages[3].Content != compressionContinuePrompt {
 		t.Errorf("continuation user turn: %+v", second.Messages[3])
 	}
 	if second.Settings.MaxOutputTokens == nil || *second.Settings.MaxOutputTokens != *drv.requests[0].Settings.MaxOutputTokens {

@@ -797,6 +797,13 @@ enum ChunkType {
   // message content; the resulting `tool_result` chunk that follows
   // is the message-visible row.
   CHUNK_TYPE_DEVICE_TOOL_USE = 12;
+  // Synthetic — emitted by the compression continuation wrapper when a
+  // continuation leg RESTARTS the document instead of resuming it.
+  // Receivers discard all text accumulated so far for this run and
+  // start over from the next text delta. Clients that don't understand
+  // it show transiently duplicated live text and converge at terminal
+  // when they fetch the (clean) materialized row. Payload: `{}`.
+  CHUNK_TYPE_CONTENT_RESET = 13;
 }
 
 message Chunk {

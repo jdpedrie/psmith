@@ -424,6 +424,19 @@ func (q *Queries) SetConversationPinned(ctx context.Context, arg SetConversation
 	return err
 }
 
+const touchConversationUpdatedAt = `-- name: TouchConversationUpdatedAt :exec
+UPDATE conversations SET updated_at = NOW() WHERE id = $1
+`
+
+// Bump the coarse mutation stamp without changing any field. Message
+// edits and deletes call this so clients' cheap staleness check
+// (compare updated_at + active context + leaf) can detect content
+// mutations that move neither the leaf nor any conversation column.
+func (q *Queries) TouchConversationUpdatedAt(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchConversationUpdatedAt, id)
+	return err
+}
+
 const updateConversationSettings = `-- name: UpdateConversationSettings :exec
 UPDATE conversations SET settings = $2, updated_at = NOW() WHERE id = $1
 `

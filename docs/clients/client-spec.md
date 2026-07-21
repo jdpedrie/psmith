@@ -131,7 +131,9 @@ The protocol has no notion of multiple accounts; each account is just a (server 
 
 ## Account events
 
-`EventsService.SubscribeAccountEvents` is a server-streaming push channel for account-level changes (today, profile created/updated/deleted). It has no replay: a subscription delivers events from the moment it connects, and a reconnect starts fresh. Treat it as a hint to refresh, not as a source of truth; the recovery story for a missed event is the same re-fetch you do everywhere. A client can ignore this entirely and just re-fetch on screen entry.
+`EventsService.SubscribeAccountEvents` is a server-streaming push channel for account-level changes: `ProfileChanged` (profile created/updated/deleted) and `ConversationChanged` (any mutation of any conversation, from any client — including the subscriber's own). It has no replay: a subscription delivers events from the moment it connects, and a reconnect starts fresh. Treat it as a hint to refresh, not as a source of truth; the recovery story for a missed event is the same re-fetch you do everywhere. A client can ignore this entirely and just re-fetch on screen entry.
+
+The reference clients react to `ConversationChanged` two ways: a debounced conversations-list refresh, and — when the changed conversation is open — a staleness check that costs one `GetConversation` and only re-fetches the chain when the active context, its leaf, or the conversation's `updated_at` moved. That check is also the echo suppressor: the client's own mutations arrive as events too, and after the local update the check sees nothing stale. The server bumps `updated_at` on message edits and deletes precisely because those mutations move neither the leaf nor any conversation column — without the bump, a cross-client edit would be invisible to the cheap check. Foreground (iOS scene activation, Mac window focus, Mac ⌘R) runs the same pair of reactions, covering events lost while the push connection was suspended.
 
 ## Settings, providers, and profiles
 

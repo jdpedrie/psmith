@@ -86,8 +86,30 @@ func eventToProto(ev Event) *psmithv1.AccountEvent {
 				},
 			},
 		}
+	case ConversationChanged:
+		return &psmithv1.AccountEvent{
+			Kind: &psmithv1.AccountEvent_ConversationChanged{
+				ConversationChanged: &psmithv1.ConversationChanged{
+					ConversationId: ev.Conversation.ConversationID.String(),
+					Kind:           conversationChangeKindToProto(ev.Conversation.Kind),
+				},
+			},
+		}
 	default:
 		return nil
+	}
+}
+
+func conversationChangeKindToProto(k ConversationChangeKind) psmithv1.ConversationChangeKind {
+	switch k {
+	case ConversationChangeCreated:
+		return psmithv1.ConversationChangeKind_CONVERSATION_CHANGE_KIND_CREATED
+	case ConversationChangeUpdated:
+		return psmithv1.ConversationChangeKind_CONVERSATION_CHANGE_KIND_UPDATED
+	case ConversationChangeDeleted:
+		return psmithv1.ConversationChangeKind_CONVERSATION_CHANGE_KIND_DELETED
+	default:
+		return psmithv1.ConversationChangeKind_CONVERSATION_CHANGE_KIND_UNSPECIFIED
 	}
 }
 

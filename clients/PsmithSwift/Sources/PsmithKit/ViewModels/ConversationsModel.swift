@@ -98,6 +98,35 @@ public final class ConversationsModel {
         }
     }
 
+    /// Debounced refresh for server-push and focus triggers. Account
+    /// events arrive in bursts (a send fires one for the user row and
+    /// one for the terminal; a compaction fires several) — one refresh
+    /// a beat after the last caller covers the burst. Manual refresh
+    /// paths (pull-to-refresh, retry) keep calling `refresh()`
+    /// directly.
+    public func refreshSoon() {
+        guard refreshSoonTask == nil else { return }
+        refreshSoonTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            self?.refreshSoonTask = nil
+            await self?.refresh()
+        }
+    }
+    private var refreshSoonTask: Task<Void, Never>?
+
+    /// Instant launch hydration: populate the list from the cached
+    /// unfiltered first page (one local read) so the sidebar renders
+    /// immediately; the network refresh that follows replaces it.
+    /// Only meaningful before the first refresh completes and only
+    /// for the default listing.
+    public func hydrateFromCache() async {
+        guard conversations.isEmpty, listMode == .allChats else { return }
+        guard let cached = await client.conversations.cachedList() else { return }
+        if conversations.isEmpty {
+            conversations = cached
+        }
+    }
+
     public func refresh() async {
         isLoading = true
         defer { isLoading = false }

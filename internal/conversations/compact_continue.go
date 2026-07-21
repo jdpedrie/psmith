@@ -19,8 +19,12 @@ const maxCompressionLegs = 4
 
 // compressionContinuePrompt asks for a seamless resume. The partial
 // summary rides along as the preceding assistant turn, so "already
-// written" is unambiguous to the model.
-const compressionContinuePrompt = "Your summary was cut off when it hit the output limit. Continue the summary from the exact point where it stopped, mid-sentence if that is where it broke off. Do not repeat anything already written, and do not add a preamble or closing remarks."
+// written" is unambiguous to the model. The no-restart language is
+// load-bearing: a live compaction restarted the whole document on its
+// continuation leg (the partial ended mid-deliberation and the model
+// chose to start clean), duplicating every section in the persisted
+// summary. The restart probe below catches models that do it anyway.
+const compressionContinuePrompt = "Your summary was cut off when it hit the output limit. Continue from the EXACT point where the text above ends — mid-sentence if that is where it broke off. Your reply is appended verbatim to that text: do NOT restart the summary, do NOT rewrite or repeat earlier sections, do NOT add a preamble or closing remarks. Output only the continuation."
 
 // lengthCapped reports whether a finish reason means "stopped at the
 // output-token cap" in any driver's vocabulary: Anthropic max_tokens,
@@ -61,7 +65,16 @@ func continuationSendFunc(p providers.StatelessProvider, base providers.SendRequ
 			var merged providers.Usage
 			sawUsage := false
 			for leg := 1; ; leg++ {
-				switch pipeLeg(ctx, src, out, &partial, &merged, &sawUsage) {
+				// Continuation legs get a restart probe: if the model
+				// re-begins the document instead of resuming (observed
+				// live — the whole summary duplicated), the probe
+				// discards the superseded accumulation and tells
+				// downstream to do the same via ChunkContentReset.
+				var probe *restartProbe
+				if leg > 1 {
+					probe = newRestartProbe(partial.String())
+				}
+				switch pipeLeg(ctx, src, out, &partial, &merged, &sawUsage, probe) {
 				case legErrored, legAborted:
 					go drainChunks(src)
 					return
@@ -124,17 +137,37 @@ const (
 // owns usage emission so cross-leg totals stay correct. Done chunks are
 // captured (the wrapper emits exactly one, at the end). Error chunks
 // are forwarded and end the whole stream.
-func pipeLeg(ctx context.Context, src <-chan providers.Chunk, out chan<- providers.Chunk, partial *strings.Builder, merged *providers.Usage, sawUsage *bool) legStatus {
+//
+// probe (nil for the first leg) buffers the leg's opening text until a
+// restart verdict is possible. On a detected restart the superseded
+// accumulation is discarded (partial reset + ChunkContentReset sent
+// downstream) before the buffered text flows; on a clean resume the
+// buffer flushes with no side effects. A leg that ends before the
+// probe has enough text flushes undecided — too short to have
+// duplicated anything that matters.
+func pipeLeg(ctx context.Context, src <-chan providers.Chunk, out chan<- providers.Chunk, partial *strings.Builder, merged *providers.Usage, sawUsage *bool, probe *restartProbe) legStatus {
+	flushProbe := func() bool {
+		if probe == nil || probe.flushed {
+			return true
+		}
+		return probe.flush(ctx, out, partial, false)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return legAborted
 		case ch, ok := <-src:
 			if !ok {
+				if !flushProbe() {
+					return legAborted
+				}
 				return legClosed
 			}
 			switch ch.Type {
 			case providers.ChunkDone:
+				if !flushProbe() {
+					return legAborted
+				}
 				return legDone
 			case providers.ChunkUsage:
 				var u providers.Usage
@@ -143,6 +176,9 @@ func pipeLeg(ctx context.Context, src <-chan providers.Chunk, out chan<- provide
 					*sawUsage = true
 				}
 			case providers.ChunkError:
+				if !flushProbe() {
+					return legAborted
+				}
 				if !sendOne(ctx, out, ch) {
 					return legAborted
 				}
@@ -153,6 +189,17 @@ func pipeLeg(ctx context.Context, src <-chan providers.Chunk, out chan<- provide
 						Text string `json:"text"`
 					}
 					if err := json.Unmarshal(ch.Payload, &t); err == nil {
+						if probe != nil && !probe.flushed {
+							probe.buf.WriteString(t.Text)
+							if probe.ready() {
+								if !probe.flush(ctx, out, partial, true) {
+									return legAborted
+								}
+							}
+							// Buffered (or just flushed as part of the
+							// buffer) — don't forward the raw chunk.
+							continue
+						}
 						partial.WriteString(t.Text)
 					}
 				}
@@ -162,6 +209,90 @@ func pipeLeg(ctx context.Context, src <-chan providers.Chunk, out chan<- provide
 			}
 		}
 	}
+}
+
+// restartProbe holds back the head of a continuation leg long enough
+// to tell "resumed where it stopped" from "started the document over".
+// Comparison is whitespace-insensitive: the head of the new leg is
+// searched for within the head of the accumulated document.
+type restartProbe struct {
+	docHead string // normalized head of the accumulated document
+	buf     strings.Builder
+	flushed bool
+	// Restarted is recorded for tests/logging; the side effects
+	// (partial reset + downstream ChunkContentReset) happen in flush.
+	restarted bool
+}
+
+// probeNeed is how many normalized characters of the new leg we buffer
+// before deciding. Long enough that a match against the document head
+// can't be a coincidental phrase; short enough that the held-back
+// window is invisible at streaming cadence.
+const probeNeed = 48
+
+// probeDocHead is how much of the accumulated document's head the
+// probe searches. A restart reproduces the document's opening; a
+// legitimate continuation picks up deep in the tail, far past this
+// window.
+const probeDocHead = 600
+
+func newRestartProbe(accumulated string) *restartProbe {
+	head := normalizeForProbe(accumulated)
+	if len(head) > probeDocHead {
+		head = head[:probeDocHead]
+	}
+	return &restartProbe{docHead: head}
+}
+
+func (p *restartProbe) ready() bool {
+	return len(normalizeForProbe(p.buf.String())) >= probeNeed
+}
+
+// flush decides (when enough text is buffered), applies restart side
+// effects, and forwards the buffered text as one synthesized chunk.
+// decided=false callers (leg ended early) skip detection.
+func (p *restartProbe) flush(ctx context.Context, out chan<- providers.Chunk, partial *strings.Builder, decide bool) bool {
+	p.flushed = true
+	buffered := p.buf.String()
+	if decide {
+		head := normalizeForProbe(buffered)
+		if len(head) > probeNeed {
+			head = head[:probeNeed]
+		}
+		if len(head) >= probeNeed && p.docHead != "" && strings.Contains(p.docHead, head) {
+			p.restarted = true
+			partial.Reset()
+			if !sendOne(ctx, out, providers.Chunk{Type: providers.ChunkContentReset, Payload: []byte(`{}`)}) {
+				return false
+			}
+		}
+	}
+	if buffered == "" {
+		return true
+	}
+	partial.WriteString(buffered)
+	payload, err := json.Marshal(struct {
+		Text string `json:"text"`
+	}{Text: buffered})
+	if err != nil {
+		return true
+	}
+	return sendOne(ctx, out, providers.Chunk{Type: providers.ChunkText, Payload: payload})
+}
+
+// normalizeForProbe lowercases and strips all whitespace so chunk
+// boundaries and formatting jitter can't defeat the comparison.
+func normalizeForProbe(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case ' ', '\t', '\n', '\r':
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // accumulateUsage sums token counters (a continuation leg re-bills its

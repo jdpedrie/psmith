@@ -12,6 +12,7 @@ import (
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/internal/auth"
+	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/profiles"
 	"github.com/jdpedrie/psmith/internal/store"
 )
@@ -88,6 +89,13 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[psmithv1
 	pipeline, _ := s.resolvePipelineForConversation(ctx, conv)
 	proto := messageToProto(updated)
 	applyDisplay(proto, pipeline)
+	// Bump the coarse mutation stamp: an edit changes no conversation
+	// column and usually not the leaf, so without this the other
+	// clients' staleness check would see nothing to refresh.
+	if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
+		s.logger.Warn("touch conversation after edit failed", "err", err)
+	}
+	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.EditMessageResponse{Message: proto}), nil
 }
 
@@ -132,6 +140,10 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[psmith
 		if err := s.queries.DeleteMessageByID(ctx, id); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete (cascade): %w", err))
 		}
+		if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
+			s.logger.Warn("touch conversation after delete failed", "err", err)
+		}
+		s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
 		return connect.NewResponse(&psmithv1.DeleteMessageResponse{}), nil
 	}
 
@@ -162,6 +174,10 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[psmith
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
+	if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
+		s.logger.Warn("touch conversation after delete failed", "err", err)
+	}
+	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.DeleteMessageResponse{}), nil
 }
 
@@ -299,6 +315,7 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
+	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.PromoteCompactionToNewContextResponse{
 		Context: contextToProto(newCtx),
 	}), nil

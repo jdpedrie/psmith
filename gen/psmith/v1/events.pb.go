@@ -21,6 +21,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ConversationChangeKind int32
+
+const (
+	ConversationChangeKind_CONVERSATION_CHANGE_KIND_UNSPECIFIED ConversationChangeKind = 0
+	ConversationChangeKind_CONVERSATION_CHANGE_KIND_CREATED     ConversationChangeKind = 1
+	// Any mutation of an existing conversation: messages, title,
+	// settings, contexts, archive state. Clients refresh the list row
+	// and, if the conversation is open, run a staleness check.
+	ConversationChangeKind_CONVERSATION_CHANGE_KIND_UPDATED ConversationChangeKind = 2
+	ConversationChangeKind_CONVERSATION_CHANGE_KIND_DELETED ConversationChangeKind = 3
+)
+
+// Enum value maps for ConversationChangeKind.
+var (
+	ConversationChangeKind_name = map[int32]string{
+		0: "CONVERSATION_CHANGE_KIND_UNSPECIFIED",
+		1: "CONVERSATION_CHANGE_KIND_CREATED",
+		2: "CONVERSATION_CHANGE_KIND_UPDATED",
+		3: "CONVERSATION_CHANGE_KIND_DELETED",
+	}
+	ConversationChangeKind_value = map[string]int32{
+		"CONVERSATION_CHANGE_KIND_UNSPECIFIED": 0,
+		"CONVERSATION_CHANGE_KIND_CREATED":     1,
+		"CONVERSATION_CHANGE_KIND_UPDATED":     2,
+		"CONVERSATION_CHANGE_KIND_DELETED":     3,
+	}
+)
+
+func (x ConversationChangeKind) Enum() *ConversationChangeKind {
+	p := new(ConversationChangeKind)
+	*p = x
+	return p
+}
+
+func (x ConversationChangeKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConversationChangeKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_psmith_v1_events_proto_enumTypes[0].Descriptor()
+}
+
+func (ConversationChangeKind) Type() protoreflect.EnumType {
+	return &file_psmith_v1_events_proto_enumTypes[0]
+}
+
+func (x ConversationChangeKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConversationChangeKind.Descriptor instead.
+func (ConversationChangeKind) EnumDescriptor() ([]byte, []int) {
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{0}
+}
+
 type ProfileChangeKind int32
 
 const (
@@ -57,11 +112,11 @@ func (x ProfileChangeKind) String() string {
 }
 
 func (ProfileChangeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_events_proto_enumTypes[0].Descriptor()
+	return file_psmith_v1_events_proto_enumTypes[1].Descriptor()
 }
 
 func (ProfileChangeKind) Type() protoreflect.EnumType {
-	return &file_psmith_v1_events_proto_enumTypes[0]
+	return &file_psmith_v1_events_proto_enumTypes[1]
 }
 
 func (x ProfileChangeKind) Number() protoreflect.EnumNumber {
@@ -70,7 +125,7 @@ func (x ProfileChangeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProfileChangeKind.Descriptor instead.
 func (ProfileChangeKind) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{0}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{1}
 }
 
 type SubscribeAccountEventsRequest struct {
@@ -118,6 +173,7 @@ type AccountEvent struct {
 	// Types that are valid to be assigned to Kind:
 	//
 	//	*AccountEvent_ProfileChanged
+	//	*AccountEvent_ConversationChanged
 	Kind          isAccountEvent_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -169,6 +225,15 @@ func (x *AccountEvent) GetProfileChanged() *ProfileChanged {
 	return nil
 }
 
+func (x *AccountEvent) GetConversationChanged() *ConversationChanged {
+	if x != nil {
+		if x, ok := x.Kind.(*AccountEvent_ConversationChanged); ok {
+			return x.ConversationChanged
+		}
+	}
+	return nil
+}
+
 type isAccountEvent_Kind interface {
 	isAccountEvent_Kind()
 }
@@ -181,7 +246,72 @@ type AccountEvent_ProfileChanged struct {
 	ProfileChanged *ProfileChanged `protobuf:"bytes,1,opt,name=profile_changed,json=profileChanged,proto3,oneof"`
 }
 
+type AccountEvent_ConversationChanged struct {
+	// A conversation owned by the calling user was mutated — content
+	// (sends, terminals, edits, deletes, compaction), metadata
+	// (title, settings, archive state), or existence. Fires for
+	// mutations from EVERY server-side path, including the ones this
+	// client itself performed — receivers make their reaction cheap
+	// (staleness check before any heavy re-fetch) rather than rely
+	// on echo suppression.
+	ConversationChanged *ConversationChanged `protobuf:"bytes,2,opt,name=conversation_changed,json=conversationChanged,proto3,oneof"`
+}
+
 func (*AccountEvent_ProfileChanged) isAccountEvent_Kind() {}
+
+func (*AccountEvent_ConversationChanged) isAccountEvent_Kind() {}
+
+type ConversationChanged struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Kind           ConversationChangeKind `protobuf:"varint,2,opt,name=kind,proto3,enum=psmith.v1.ConversationChangeKind" json:"kind,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ConversationChanged) Reset() {
+	*x = ConversationChanged{}
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConversationChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConversationChanged) ProtoMessage() {}
+
+func (x *ConversationChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConversationChanged.ProtoReflect.Descriptor instead.
+func (*ConversationChanged) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ConversationChanged) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *ConversationChanged) GetKind() ConversationChangeKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ConversationChangeKind_CONVERSATION_CHANGE_KIND_UNSPECIFIED
+}
 
 type ProfileChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -193,7 +323,7 @@ type ProfileChanged struct {
 
 func (x *ProfileChanged) Reset() {
 	*x = ProfileChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -205,7 +335,7 @@ func (x *ProfileChanged) String() string {
 func (*ProfileChanged) ProtoMessage() {}
 
 func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -218,7 +348,7 @@ func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileChanged.ProtoReflect.Descriptor instead.
 func (*ProfileChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProfileChanged) GetProfileId() string {
@@ -240,14 +370,23 @@ var File_psmith_v1_events_proto protoreflect.FileDescriptor
 const file_psmith_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x16psmith/v1/events.proto\x12\tpsmith.v1\"\x1f\n" +
-	"\x1dSubscribeAccountEventsRequest\"\\\n" +
+	"\x1dSubscribeAccountEventsRequest\"\xb1\x01\n" +
 	"\fAccountEvent\x12D\n" +
-	"\x0fprofile_changed\x18\x01 \x01(\v2\x19.psmith.v1.ProfileChangedH\x00R\x0eprofileChangedB\x06\n" +
-	"\x04kind\"a\n" +
+	"\x0fprofile_changed\x18\x01 \x01(\v2\x19.psmith.v1.ProfileChangedH\x00R\x0eprofileChanged\x12S\n" +
+	"\x14conversation_changed\x18\x02 \x01(\v2\x1e.psmith.v1.ConversationChangedH\x00R\x13conversationChangedB\x06\n" +
+	"\x04kind\"u\n" +
+	"\x13ConversationChanged\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x125\n" +
+	"\x04kind\x18\x02 \x01(\x0e2!.psmith.v1.ConversationChangeKindR\x04kind\"a\n" +
 	"\x0eProfileChanged\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x120\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x1c.psmith.v1.ProfileChangeKindR\x04kind*\x9b\x01\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1c.psmith.v1.ProfileChangeKindR\x04kind*\xb4\x01\n" +
+	"\x16ConversationChangeKind\x12(\n" +
+	"$CONVERSATION_CHANGE_KIND_UNSPECIFIED\x10\x00\x12$\n" +
+	" CONVERSATION_CHANGE_KIND_CREATED\x10\x01\x12$\n" +
+	" CONVERSATION_CHANGE_KIND_UPDATED\x10\x02\x12$\n" +
+	" CONVERSATION_CHANGE_KIND_DELETED\x10\x03*\x9b\x01\n" +
 	"\x11ProfileChangeKind\x12#\n" +
 	"\x1fPROFILE_CHANGE_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bPROFILE_CHANGE_KIND_CREATED\x10\x01\x12\x1f\n" +
@@ -268,24 +407,28 @@ func file_psmith_v1_events_proto_rawDescGZIP() []byte {
 	return file_psmith_v1_events_proto_rawDescData
 }
 
-var file_psmith_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_psmith_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_psmith_v1_events_proto_goTypes = []any{
-	(ProfileChangeKind)(0),                // 0: psmith.v1.ProfileChangeKind
-	(*SubscribeAccountEventsRequest)(nil), // 1: psmith.v1.SubscribeAccountEventsRequest
-	(*AccountEvent)(nil),                  // 2: psmith.v1.AccountEvent
-	(*ProfileChanged)(nil),                // 3: psmith.v1.ProfileChanged
+	(ConversationChangeKind)(0),           // 0: psmith.v1.ConversationChangeKind
+	(ProfileChangeKind)(0),                // 1: psmith.v1.ProfileChangeKind
+	(*SubscribeAccountEventsRequest)(nil), // 2: psmith.v1.SubscribeAccountEventsRequest
+	(*AccountEvent)(nil),                  // 3: psmith.v1.AccountEvent
+	(*ConversationChanged)(nil),           // 4: psmith.v1.ConversationChanged
+	(*ProfileChanged)(nil),                // 5: psmith.v1.ProfileChanged
 }
 var file_psmith_v1_events_proto_depIdxs = []int32{
-	3, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
-	0, // 1: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
-	1, // 2: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
-	2, // 3: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
+	4, // 1: psmith.v1.AccountEvent.conversation_changed:type_name -> psmith.v1.ConversationChanged
+	0, // 2: psmith.v1.ConversationChanged.kind:type_name -> psmith.v1.ConversationChangeKind
+	1, // 3: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
+	2, // 4: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
+	3, // 5: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_events_proto_init() }
@@ -295,14 +438,15 @@ func file_psmith_v1_events_proto_init() {
 	}
 	file_psmith_v1_events_proto_msgTypes[1].OneofWrappers = []any{
 		(*AccountEvent_ProfileChanged)(nil),
+		(*AccountEvent_ConversationChanged)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_events_proto_rawDesc), len(file_psmith_v1_events_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   3,
+			NumEnums:      2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

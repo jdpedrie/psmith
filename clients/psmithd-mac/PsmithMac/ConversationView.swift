@@ -67,6 +67,9 @@ struct ConversationView: View {
                 localTitler: AppleFoundationTitler()
             )
             m.speechPlayer = app.speech
+            // Cache-first entry: cached transcript renders this
+            // frame; the network load replaces it.
+            await m.hydrateFromCache()
             self.model = m
             await m.load()
             // After the message list is in hand, decide whether to fire the
@@ -506,10 +509,17 @@ struct ConversationBody: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(model.messages) { msg in
-                            if msg.role == .compressionSummary {
+                            if msg.role == .compressionSummary,
+                               model.editingMessage?.id != msg.id {
                                 CompressionSummaryCard(message: msg, model: model)
                                     .id(msg.id)
                             } else {
+                                // MessageRow owns the inline editor —
+                                // routing an editing compression row
+                                // through it is what makes the card's
+                                // Edit action DO something on Mac
+                                // (iOS presents a sheet instead; Mac
+                                // edits in place).
                                 MessageRow(message: msg, model: model)
                                     .id(msg.id)
                             }

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/profiles"
 	"github.com/jdpedrie/psmith/internal/providers"
 	"github.com/jdpedrie/psmith/internal/store"
@@ -202,6 +203,9 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 			s.logger.Warn("title: persist context title failed", "err", err)
 		}
 	}
+	if needConvTitle || needCtxTitle {
+		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+	}
 }
 
 // isFirstAssistantInContext reports whether assistantMsgID is the only
@@ -363,6 +367,9 @@ func (s *Service) persistFallbacks(
 			s.logger.Warn("title: persist context fallback failed", "err", err,
 				"context_id", params.ContextID)
 		}
+	}
+	if needConv || needCtx {
+		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	}
 }
 

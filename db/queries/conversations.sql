@@ -124,6 +124,13 @@ LIMIT 100;
 -- name: UpdateConversationTitle :exec
 UPDATE conversations SET title = $2, updated_at = NOW() WHERE id = $1;
 
+-- name: TouchConversationUpdatedAt :exec
+-- Bump the coarse mutation stamp without changing any field. Message
+-- edits and deletes call this so clients' cheap staleness check
+-- (compare updated_at + active context + leaf) can detect content
+-- mutations that move neither the leaf nor any conversation column.
+UPDATE conversations SET updated_at = NOW() WHERE id = $1;
+
 -- name: UpdateConversationSettings :exec
 UPDATE conversations SET settings = $2, updated_at = NOW() WHERE id = $1;
 

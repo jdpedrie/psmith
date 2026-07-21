@@ -111,7 +111,12 @@ const (
 
 // StartParams is the input to Supervisor.Start.
 type StartParams struct {
-	ConversationID  uuid.UUID
+	ConversationID uuid.UUID
+	// UserID is the conversation owner. Carried so terminal-side hooks
+	// (account-event publishing) can attribute the mutation without a
+	// conversation→owner lookup per terminal. Zero value is tolerated
+	// (hooks that need it no-op on the bus side for unknown users).
+	UserID          uuid.UUID
 	ContextID       uuid.UUID
 	ParentMessageID *uuid.UUID
 	ProviderID      uuid.UUID
@@ -215,6 +220,15 @@ type Supervisor struct {
 	// materialization of an assistant message. See AssistantMaterializedHook.
 	onAssistantMaterialized AssistantMaterializedHook
 
+	// onRunMaterialized, if set, fires after ANY terminal
+	// materialization — assistant turn, compression summary, errored
+	// row. Coarser than onAssistantMaterialized: it exists so the
+	// conversations service can publish ConversationChanged account
+	// events for every persisted mutation. Called inline from the
+	// consume goroutine; implementations must be non-blocking (the
+	// event bus publish is).
+	onRunMaterialized func(params StartParams)
+
 	// runs holds the per-run live state for runs whose supervisor goroutine
 	// is currently active. Keyed by run ID. Entries are removed in the
 	// goroutine's defer after subscribers are closed.
@@ -229,6 +243,12 @@ type Supervisor struct {
 // concerns.
 func (s *Supervisor) SetOnAssistantMaterialized(cb AssistantMaterializedHook) {
 	s.onAssistantMaterialized = cb
+}
+
+// SetOnRunMaterialized installs the any-terminal materialization hook.
+// Pass nil to clear. See the field comment for semantics.
+func (s *Supervisor) SetOnRunMaterialized(cb func(params StartParams)) {
+	s.onRunMaterialized = cb
 }
 
 func New(queries *store.Queries, logger *slog.Logger) *Supervisor {

@@ -223,7 +223,7 @@ func run() error {
 	// with no DB hop). Wired before the conversations service so we
 	// can hand the emitter in.
 	langfuseEmitter := langfuse.NewEmitter(slog.Default(), langfuse.EmitterConfig{})
-	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, fileStorage, slog.Default())
+	conversationsSvc := conversations.NewService(queries, pool, catalog, supervisor, cipher, fileStorage, slog.Default()).WithBus(eventBus)
 	conversationsSvc.SetLangfuseEmitter(langfuseEmitter)
 	if embedSearcher != nil {
 		conversationsSvc.SetSearcher(embedSearcher)
@@ -234,6 +234,10 @@ func run() error {
 	// OnAssistantPersisted) so a slow titler doesn't gate
 	// observability emit (and vice versa).
 	supervisor.SetOnAssistantMaterialized(conversationsSvc.OnAssistantPersisted)
+	// Every terminal that persists a row (assistant, compression,
+	// errored) publishes ConversationChanged so other clients of the
+	// same account stay live.
+	supervisor.SetOnRunMaterialized(conversationsSvc.OnRunMaterialized)
 
 	langfuseSvc := langfusesvc.NewService(queries, cipher, langfuseEmitter, slog.Default())
 	// Prime the per-user credential cache from existing rows so the

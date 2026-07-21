@@ -25,6 +25,12 @@ public final class EventsSubscriber: @unchecked Sendable {
     /// Mutated only from MainActor (per AppModel wiring) so the
     /// @unchecked Sendable conformance is honest.
     public var onProfileChanged: (@Sendable (String) -> Void)?
+    /// Fired when the server pushes a ConversationChanged event —
+    /// any mutation of any of the user's conversations, from any
+    /// client INCLUDING this one (events carry no origin identity).
+    /// Consumers keep their reaction cheap: debounced list refresh
+    /// plus a staleness check on the open conversation.
+    public var onConversationChanged: (@Sendable (String) -> Void)?
 
     private var task: Task<Void, Never>?
 
@@ -97,6 +103,8 @@ public final class EventsSubscriber: @unchecked Sendable {
         switch kind {
         case .profileChanged(let payload):
             onProfileChanged?(payload.profileID)
+        case .conversationChanged(let payload):
+            onConversationChanged?(payload.conversationID)
         }
     }
 }

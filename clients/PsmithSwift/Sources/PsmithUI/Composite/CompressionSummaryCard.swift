@@ -59,11 +59,12 @@ public struct CompressionSummaryCard: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                 Spacer()
-                if !isErrored {
-                    Text("Awaiting review — actions below")
-                        .scaledFont(.caption2)
-                        .foregroundStyle(.secondary)
-                } else if let label = compressionModelLabel {
+                // Which model produced this summary — same trailing
+                // slot the assistant rows use for their model label.
+                // (This used to read "Awaiting review — actions
+                // below" on clean summaries, which duplicated the
+                // review bar's own title and hid the model.)
+                if let label = compressionModelLabel {
                     Text(label)
                         .scaledFont(.caption2)
                         .foregroundStyle(.tertiary)

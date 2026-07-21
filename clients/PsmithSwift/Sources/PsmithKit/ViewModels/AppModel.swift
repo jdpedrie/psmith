@@ -155,6 +155,15 @@ public final class AppModel {
     /// activation without piling up hooks.
     private var bootstrapped: Bool = false
 
+    /// Fired (on MainActor) whenever the server pushes a
+    /// ConversationChanged account event, for the LIST-level reaction:
+    /// the platform root wires this to its ConversationsModel's
+    /// debounced refresh at construction time (AppModel deliberately
+    /// doesn't own the ConversationsModel — it's scene-scoped on both
+    /// platforms). The per-conversation reaction routes through
+    /// StreamHub.notifyConversationChanged independently.
+    public var onConversationListChanged: (@MainActor () -> Void)?
+
     public func bootstrap() async {
         guard !bootstrapped else { return }
         bootstrapped = true
@@ -167,6 +176,19 @@ public final class AppModel {
         client.events.onProfileChanged = { [weak self] _ in
             guard let self else { return }
             Task { await self.profiles.load() }
+        }
+        // Conversation mutations fan out two ways: the list-level
+        // callback (debounced refresh, wired by the platform root)
+        // and the per-conversation observer registry on the hub
+        // (the open view model's staleness check). Events fire for
+        // this client's own mutations too — both reactions are cheap
+        // enough that echo suppression isn't worth its complexity.
+        client.events.onConversationChanged = { [weak self] conversationID in
+            guard let self else { return }
+            Task { @MainActor in
+                self.onConversationListChanged?()
+                self.streamHub.notifyConversationChanged(conversationID: conversationID)
+            }
         }
         client.events.start()
         _ = await client.auth.restoreSession()

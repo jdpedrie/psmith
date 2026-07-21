@@ -17,7 +17,8 @@ public enum TestSession {
     /// to populate the token store.
     public static func freshUser(
         server: TestPsmithdServer,
-        usernamePrefix: String = "test"
+        usernamePrefix: String = "test",
+        withCache: Bool = false
     ) async throws -> (client: PsmithClient, user: PsmithUser) {
         let admin = try await adminHandle(server: server)
 
@@ -33,7 +34,23 @@ public enum TestSession {
             throw PsmithError.from(err)
         }
 
-        let client = await makeClient(server: server)
+        // withCache wires a throwaway on-disk PsmithCache (temp dir,
+        // unique per call) — the cache-first hydration paths need one
+        // to exercise anything.
+        var cache: PsmithCache?
+        if withCache {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("psmith-test-cache-\(UUID().uuidString).sqlite")
+            cache = try PsmithCache(storeURL: url)
+        }
+        let tokenStore = InMemoryTokenStore()
+        let authState = await MainActor.run { AuthState() }
+        let client = PsmithClient(
+            host: server.baseURL,
+            tokenStore: tokenStore,
+            authState: authState,
+            cache: cache
+        )
         let user = try await client.auth.login(username: username, password: password)
         return (client, user)
     }

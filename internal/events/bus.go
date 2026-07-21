@@ -30,6 +30,9 @@ type Event struct {
 	// Profile carries data for ProfileChanged events. Zero-valued
 	// for other types.
 	Profile ProfilePayload
+	// Conversation carries data for ConversationChanged events.
+	// Zero-valued for other types.
+	Conversation ConversationPayload
 }
 
 // EventType discriminates the union. New types append.
@@ -39,6 +42,13 @@ const (
 	// ProfileChanged fires when a profile owned by UserID was created,
 	// updated, or deleted via any server-side path.
 	ProfileChanged EventType = iota + 1
+	// ConversationChanged fires when a conversation owned by UserID
+	// was mutated via any server-side path: sends and stream
+	// terminals, message edits and deletes, compaction and promote,
+	// title writes, settings updates, archive state, creation,
+	// deletion. Deliberately coarse — receivers run a cheap
+	// staleness check rather than interpreting fine-grained shapes.
+	ConversationChanged
 )
 
 // ProfileChangeKind mirrors the proto enum so callers don't need to
@@ -55,6 +65,22 @@ const (
 type ProfilePayload struct {
 	ProfileID uuid.UUID
 	Kind      ProfileChangeKind
+}
+
+// ConversationChangeKind mirrors the proto enum so callers don't
+// need to import the gen package just to publish.
+type ConversationChangeKind int
+
+const (
+	ConversationChangeUnspecified ConversationChangeKind = iota
+	ConversationChangeCreated
+	ConversationChangeUpdated
+	ConversationChangeDeleted
+)
+
+type ConversationPayload struct {
+	ConversationID uuid.UUID
+	Kind           ConversationChangeKind
 }
 
 // Logger is the minimal interface the bus needs for overflow warnings.

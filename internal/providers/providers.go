@@ -355,9 +355,19 @@ const (
 	// Not persisted as message content; the resulting tool_result
 	// chunk that follows is the message-visible row.
 	ChunkDeviceToolUse ChunkType = "device_tool_use"
-	ChunkUsage         ChunkType = "usage"
-	ChunkError         ChunkType = "error"
-	ChunkDone          ChunkType = "done"
+	// ChunkContentReset is synthesized by the compression continuation
+	// wrapper when a continuation leg RESTARTS the document instead of
+	// resuming it (detected by comparing the new leg's head against the
+	// text accumulated so far). Receivers discard accumulated text and
+	// start over from the next text delta — the restart leg is the
+	// complete document. Consumers that don't understand it (older
+	// clients) show transiently duplicated live text and converge at
+	// terminal, when they fetch the (clean) materialized row.
+	// Payload: {}
+	ChunkContentReset ChunkType = "content_reset"
+	ChunkUsage        ChunkType = "usage"
+	ChunkError        ChunkType = "error"
+	ChunkDone         ChunkType = "done"
 )
 
 // Usage is the normalized token-usage payload emitted via ChunkUsage.

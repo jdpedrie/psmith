@@ -147,6 +147,10 @@ public enum PsmithChunkType: Sendable, Hashable {
     case thinkingSignature
     case elicit
     case deviceToolUse
+    /// The compression continuation wrapper detected a document
+    /// restart: discard all streamed text accumulated so far for this
+    /// run and start over from the next text delta.
+    case contentReset
     case error, done, usage, unknown
 
     init(from p: Psmith_V1_ChunkType) {
@@ -160,6 +164,7 @@ public enum PsmithChunkType: Sendable, Hashable {
         case .thinkingSignature: self = .thinkingSignature
         case .elicit: self = .elicit
         case .deviceToolUse: self = .deviceToolUse
+        case .contentReset: self = .contentReset
         case .error: self = .error
         case .done: self = .done
         case .usage: self = .usage

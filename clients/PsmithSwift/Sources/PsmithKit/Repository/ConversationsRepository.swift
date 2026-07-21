@@ -60,6 +60,34 @@ public final class ConversationsRepository: Sendable {
         throw resp?.error.map(PsmithError.from) ?? .missingPayload("list conversations")
     }
 
+    // MARK: - Cached reads (instant hydration)
+    //
+    // The cache-first entry path: view models render these instantly
+    // and then revalidate against the network. Distinct from the
+    // in-band fallbacks below, which only fire when the network call
+    // FAILS — hydration must not wait the round-trip out.
+
+    /// Cached unfiltered first page of the conversations list, if any.
+    public func cachedList() async -> [PsmithConversation]? {
+        guard let cache else { return nil }
+        return await cache.get([PsmithConversation].self, kind: CacheKind.conversationsList, id: "all")
+    }
+
+    /// Cached conversation row + active context, if both are present.
+    public func cachedGet(id: String) async -> (PsmithConversation, PsmithContext)? {
+        guard let cache,
+              let conv: PsmithConversation = await cache.get(PsmithConversation.self, kind: "conversation", id: id),
+              let ctx: PsmithContext = await cache.get(PsmithContext.self, kind: "activeContext", id: id)
+        else { return nil }
+        return (conv, ctx)
+    }
+
+    /// Cached linear message chain for a context, if any.
+    public func cachedMessages(contextID: String) async -> [PsmithMessage]? {
+        guard let cache else { return nil }
+        return await cache.get([PsmithMessage].self, kind: CacheKind.messagesByContext, id: contextID)
+    }
+
     public func get(id: String) async throws -> (PsmithConversation, PsmithContext) {
         var req = Psmith_V1_GetConversationRequest()
         req.id = id

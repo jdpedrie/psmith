@@ -301,6 +301,12 @@ loop:
 		}
 	}
 
+	// Any materialized row — assistant, compression, errored — is a
+	// conversation mutation other clients should hear about.
+	if resultMessageID != nil && s.onRunMaterialized != nil {
+		s.onRunMaterialized(params)
+	}
+
 	// Finalize. Use context.Background so a cancelled run still gets its
 	// terminal row written.
 	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -363,6 +369,13 @@ func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, thi
 	switch ch.Type {
 	case providers.ChunkText:
 		content.WriteString(extractDeltaText(ch.Payload))
+	case providers.ChunkContentReset:
+		// The compression continuation wrapper detected a document
+		// restart: everything accumulated so far is superseded by
+		// the text that follows. Resetting here is what keeps the
+		// MATERIALIZED summary clean even though the live stream
+		// already carried the superseded text.
+		content.Reset()
 	case providers.ChunkThinking:
 		thinking.WriteString(extractDeltaText(ch.Payload))
 		now := time.Now()

@@ -20,6 +20,52 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+public nonisolated enum Psmith_V1_ConversationChangeKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case created // = 1
+
+  /// Any mutation of an existing conversation: messages, title,
+  /// settings, contexts, archive state. Clients refresh the list row
+  /// and, if the conversation is open, run a staleness check.
+  case updated // = 2
+  case deleted // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .created
+    case 2: self = .updated
+    case 3: self = .deleted
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .created: return 1
+    case .updated: return 2
+    case .deleted: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Psmith_V1_ConversationChangeKind] = [
+    .unspecified,
+    .created,
+    .updated,
+    .deleted,
+  ]
+
+}
+
 public nonisolated enum Psmith_V1_ProfileChangeKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
@@ -95,6 +141,21 @@ public nonisolated struct Psmith_V1_AccountEvent: Sendable {
     set {kind = .profileChanged(newValue)}
   }
 
+  /// A conversation owned by the calling user was mutated — content
+  /// (sends, terminals, edits, deletes, compaction), metadata
+  /// (title, settings, archive state), or existence. Fires for
+  /// mutations from EVERY server-side path, including the ones this
+  /// client itself performed — receivers make their reaction cheap
+  /// (staleness check before any heavy re-fetch) rather than rely
+  /// on echo suppression.
+  public var conversationChanged: Psmith_V1_ConversationChanged {
+    get {
+      if case .conversationChanged(let v)? = kind {return v}
+      return Psmith_V1_ConversationChanged()
+    }
+    set {kind = .conversationChanged(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Kind: Equatable, Sendable {
@@ -103,8 +164,30 @@ public nonisolated struct Psmith_V1_AccountEvent: Sendable {
     /// loaded can be targeted in its refresh; clients without that
     /// granularity can refresh the full list.
     case profileChanged(Psmith_V1_ProfileChanged)
+    /// A conversation owned by the calling user was mutated — content
+    /// (sends, terminals, edits, deletes, compaction), metadata
+    /// (title, settings, archive state), or existence. Fires for
+    /// mutations from EVERY server-side path, including the ones this
+    /// client itself performed — receivers make their reaction cheap
+    /// (staleness check before any heavy re-fetch) rather than rely
+    /// on echo suppression.
+    case conversationChanged(Psmith_V1_ConversationChanged)
 
   }
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ConversationChanged: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: String = String()
+
+  public var kind: Psmith_V1_ConversationChangeKind = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -126,6 +209,10 @@ public nonisolated struct Psmith_V1_ProfileChanged: Sendable {
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "psmith.v1"
+
+nonisolated extension Psmith_V1_ConversationChangeKind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_CHANGE_KIND_UNSPECIFIED\0\u{1}CONVERSATION_CHANGE_KIND_CREATED\0\u{1}CONVERSATION_CHANGE_KIND_UPDATED\0\u{1}CONVERSATION_CHANGE_KIND_DELETED\0")
+}
 
 nonisolated extension Psmith_V1_ProfileChangeKind: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PROFILE_CHANGE_KIND_UNSPECIFIED\0\u{1}PROFILE_CHANGE_KIND_CREATED\0\u{1}PROFILE_CHANGE_KIND_UPDATED\0\u{1}PROFILE_CHANGE_KIND_DELETED\0")
@@ -152,7 +239,7 @@ nonisolated extension Psmith_V1_SubscribeAccountEventsRequest: SwiftProtobuf.Mes
 
 nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AccountEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0\u{3}conversation_changed\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -173,6 +260,19 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
           self.kind = .profileChanged(v)
         }
       }()
+      case 2: try {
+        var v: Psmith_V1_ConversationChanged?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .conversationChanged(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .conversationChanged(v)
+        }
+      }()
       default: break
       }
     }
@@ -183,13 +283,56 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    try { if case .profileChanged(let v)? = self.kind {
+    switch self.kind {
+    case .profileChanged?: try {
+      guard case .profileChanged(let v)? = self.kind else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
+    }()
+    case .conversationChanged?: try {
+      guard case .conversationChanged(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
+    case nil: break
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_AccountEvent, rhs: Psmith_V1_AccountEvent) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ConversationChanged: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConversationChanged"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}kind\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularStringField(value: self.conversationID, fieldNumber: 1)
+    }
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ConversationChanged, rhs: Psmith_V1_ConversationChanged) -> Bool {
+    if lhs.conversationID != rhs.conversationID {return false}
     if lhs.kind != rhs.kind {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

@@ -488,6 +488,13 @@ const (
 	// message content; the resulting `tool_result` chunk that follows
 	// is the message-visible row.
 	ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE ChunkType = 12
+	// Synthetic — emitted by the compression continuation wrapper when a
+	// continuation leg RESTARTS the document instead of resuming it.
+	// Receivers discard all text accumulated so far for this run and
+	// start over from the next text delta. Clients that don't understand
+	// it show transiently duplicated live text and converge at terminal
+	// when they fetch the (clean) materialized row. Payload: `{}`.
+	ChunkType_CHUNK_TYPE_CONTENT_RESET ChunkType = 13
 )
 
 // Enum value maps for ChunkType.
@@ -506,6 +513,7 @@ var (
 		10: "CHUNK_TYPE_THINKING_SIGNATURE",
 		11: "CHUNK_TYPE_ELICIT",
 		12: "CHUNK_TYPE_DEVICE_TOOL_USE",
+		13: "CHUNK_TYPE_CONTENT_RESET",
 	}
 	ChunkType_value = map[string]int32{
 		"CHUNK_TYPE_UNSPECIFIED":        0,
@@ -521,6 +529,7 @@ var (
 		"CHUNK_TYPE_THINKING_SIGNATURE": 10,
 		"CHUNK_TYPE_ELICIT":             11,
 		"CHUNK_TYPE_DEVICE_TOOL_USE":    12,
+		"CHUNK_TYPE_CONTENT_RESET":      13,
 	}
 )
 
@@ -4592,7 +4601,7 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x10StreamRunPurpose\x12\"\n" +
 	"\x1eSTREAM_RUN_PURPOSE_UNSPECIFIED\x10\x00\x12)\n" +
 	"%STREAM_RUN_PURPOSE_ASSISTANT_RESPONSE\x10\x01\x12\"\n" +
-	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\xf3\x02\n" +
+	"\x1eSTREAM_RUN_PURPOSE_COMPRESSION\x10\x02*\x91\x03\n" +
 	"\tChunkType\x12\x1a\n" +
 	"\x16CHUNK_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CHUNK_TYPE_TEXT_DELTA\x10\x01\x12\x1d\n" +
@@ -4607,7 +4616,8 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x1dCHUNK_TYPE_THINKING_SIGNATURE\x10\n" +
 	"\x12\x15\n" +
 	"\x11CHUNK_TYPE_ELICIT\x10\v\x12\x1e\n" +
-	"\x1aCHUNK_TYPE_DEVICE_TOOL_USE\x10\f*\xd0\x01\n" +
+	"\x1aCHUNK_TYPE_DEVICE_TOOL_USE\x10\f\x12\x1c\n" +
+	"\x18CHUNK_TYPE_CONTENT_RESET\x10\r*\xd0\x01\n" +
 	"\rDeviceFactKey\x12\x1f\n" +
 	"\x1bDEVICE_FACT_KEY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEVICE_FACT_KEY_LOCALE\x10\x01\x12\x1c\n" +

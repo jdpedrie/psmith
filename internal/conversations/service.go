@@ -28,6 +28,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/crypto"
 	"github.com/jdpedrie/psmith/internal/mcpreg"
 	"github.com/jdpedrie/psmith/internal/devicetools"
+	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/history"
 	"github.com/jdpedrie/psmith/internal/langfuse"
 	"github.com/jdpedrie/psmith/internal/modelmeta"
@@ -83,6 +84,45 @@ type Service struct {
 	// in-memory; per-service-instance so test fixtures stay isolated.
 	deviceToolBroker   *devicetools.Broker
 	deviceToolRegistry *devicetools.Registry
+	// bus may be nil — when set, conversation mutations publish
+	// ConversationChanged events for subscribed clients (cross-client
+	// live sync). Same optional-wiring pattern as profiles.WithBus.
+	bus *events.Bus
+}
+
+// WithBus returns the service with the event bus wired in. Optional —
+// existing callers (tests, fixtures) keep working with no bus.
+func (s *Service) WithBus(bus *events.Bus) *Service {
+	s.bus = bus
+	return s
+}
+
+// publishConversationEvent is the single point that fires conversation
+// events onto the bus. Centralised so call sites stay one-liners and
+// adding new mutation paths doesn't risk forgetting the shape. Fires
+// for the ORIGINATING client too — events carry no origin identity, so
+// receivers keep their reaction cheap (staleness check) instead of
+// relying on echo suppression.
+func (s *Service) publishConversationEvent(userID, conversationID uuid.UUID, kind events.ConversationChangeKind) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(events.Event{
+		Type:   events.ConversationChanged,
+		UserID: userID,
+		Conversation: events.ConversationPayload{
+			ConversationID: conversationID,
+			Kind:           kind,
+		},
+	})
+}
+
+// OnRunMaterialized is installed as the supervisor's run-materialized
+// hook: every stream terminal that persists a message (assistant turn,
+// compression summary, errored row) is a conversation mutation the
+// other clients should hear about.
+func (s *Service) OnRunMaterialized(params stream.StartParams) {
+	s.publishConversationEvent(params.UserID, params.ConversationID, events.ConversationChangeUpdated)
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -358,6 +398,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, convoRow, convoProto)
+	s.publishConversationEvent(caller.ID, convoRow.ID, events.ConversationChangeCreated)
 	return connect.NewResponse(&psmithv1.CreateConversationResponse{
 		Conversation:   convoProto,
 		InitialContext: contextToProto(contextRow),
@@ -611,6 +652,7 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, updated, proto)
+	s.publishConversationEvent(updated.UserID, updated.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateConversationResponse{Conversation: proto}), nil
 }
 
@@ -632,6 +674,7 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[p
 	if err := s.queries.DeleteConversation(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, id, events.ConversationChangeDeleted)
 	return connect.NewResponse(&psmithv1.DeleteConversationResponse{}), nil
 }
 
@@ -760,6 +803,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
+	s.publishConversationEvent(caller.ID, convID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SetConversationPluginsResponse{Plugins: out}), nil
 }
 
@@ -864,6 +908,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[psmi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.ActivateContextResponse{Context: contextToProto(updated)}), nil
 }
 
@@ -923,6 +968,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[psmit
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
 }
 
@@ -963,6 +1009,7 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[psmith
 		cxRow.Title = title
 	}
 
+	s.publishConversationEvent(caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
 }
 
@@ -1022,6 +1069,7 @@ func (s *Service) DeleteContext(ctx context.Context, req *connect.Request[psmith
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.DeleteContextResponse{}), nil
 }
 
@@ -1244,6 +1292,7 @@ func (s *Service) ArchiveConversation(ctx context.Context, req *connect.Request[
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, id, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.ArchiveConversationResponse{}), nil
 }
 
@@ -1263,6 +1312,7 @@ func (s *Service) UnarchiveConversation(ctx context.Context, req *connect.Reques
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(caller.ID, id, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UnarchiveConversationResponse{}), nil
 }
 
@@ -1302,6 +1352,7 @@ func (s *Service) setPinned(ctx context.Context, rawID string, pinned bool) erro
 	}); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishConversationEvent(conv.UserID, id, events.ConversationChangeUpdated)
 	return nil
 }
 
@@ -1837,6 +1888,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 
 	runID, err := s.supervisor.Start(ctx, stream.StartParams{
 		ConversationID:  conv.ID,
+		UserID:          conv.UserID,
 		ContextID:       activeCtx.ID,
 		ParentMessageID: &userMsgRow.ID,
 		ProviderID:      providerID,
@@ -1880,6 +1932,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		userProto.Attachments = attBy[userProto.Id]
 	}
 	applyDisplay(userProto, pipeline)
+	// The user row + started run are already visible to other
+	// clients; the assistant terminal will publish separately via
+	// the supervisor's materialization hook.
+	s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SendMessageResponse{
 		UserMessage: userProto,
 		StreamRun:   streamRunToProto(runRow),
@@ -2782,7 +2838,13 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 		ModelID: *modelID,
 		Messages: []providers.WireMessage{
 			{Role: "system", Content: *guide},
-			{Role: "user", Content: "Here is the conversation to compress.\n\n" + transcript + "\n\nProduce the summary."},
+			// The output-discipline tail matters: thinking is only
+			// best-effort disabled (see compressionSettings), and a
+			// model with no thinking channel narrates its planning as
+			// visible prose instead — a live compaction persisted
+			// pages of "I'll set the POV as... Let me write." before
+			// the document. Demand the document and nothing else.
+			{Role: "user", Content: "Here is the conversation to compress.\n\n" + transcript + "\n\nProduce the summary now. Output ONLY the final summary document: no planning, no deliberation or notes to yourself, no preamble, no closing remarks. Begin directly with the summary's first line."},
 		},
 		Settings: compressionSettings,
 	}
@@ -2816,6 +2878,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 
 	runID, err := s.supervisor.Start(ctx, stream.StartParams{
 		ConversationID:            conv.ID,
+		UserID:                    conv.UserID,
 		ContextID:                 activeCtx.ID,
 		ParentMessageID:           parentID,
 		ProviderID:                provRow.ID,
@@ -2834,6 +2897,10 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Other clients gate their composer on the pending compaction —
+	// tell them it started; the summary terminal publishes separately
+	// via the supervisor's materialization hook.
+	s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
 }
 

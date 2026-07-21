@@ -32,7 +32,30 @@ message AccountEvent {
     // loaded can be targeted in its refresh; clients without that
     // granularity can refresh the full list.
     ProfileChanged profile_changed = 1;
+    // A conversation owned by the calling user was mutated — content
+    // (sends, terminals, edits, deletes, compaction), metadata
+    // (title, settings, archive state), or existence. Fires for
+    // mutations from EVERY server-side path, including the ones this
+    // client itself performed — receivers make their reaction cheap
+    // (staleness check before any heavy re-fetch) rather than rely
+    // on echo suppression.
+    ConversationChanged conversation_changed = 2;
   }
+}
+
+message ConversationChanged {
+  string conversation_id = 1;
+  ConversationChangeKind kind = 2;
+}
+
+enum ConversationChangeKind {
+  CONVERSATION_CHANGE_KIND_UNSPECIFIED = 0;
+  CONVERSATION_CHANGE_KIND_CREATED = 1;
+  // Any mutation of an existing conversation: messages, title,
+  // settings, contexts, archive state. Clients refresh the list row
+  // and, if the conversation is open, run a staleness check.
+  CONVERSATION_CHANGE_KIND_UPDATED = 2;
+  CONVERSATION_CHANGE_KIND_DELETED = 3;
 }
 
 message ProfileChanged {

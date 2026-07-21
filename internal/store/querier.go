@@ -426,6 +426,11 @@ type Querier interface {
 	// turn for a context — no comparison possible).
 	SetStreamRunPrefixHashes(ctx context.Context, arg SetStreamRunPrefixHashesParams) error
 	SetUserModelFavorite(ctx context.Context, arg SetUserModelFavoriteParams) error
+	// Bump the coarse mutation stamp without changing any field. Message
+	// edits and deletes call this so clients' cheap staleness check
+	// (compare updated_at + active context + leaf) can detect content
+	// mutations that move neither the leaf nor any conversation column.
+	TouchConversationUpdatedAt(ctx context.Context, id uuid.UUID) error
 	TouchSession(ctx context.Context, tokenHash string) error
 	UpdateContextActivationTime(ctx context.Context, arg UpdateContextActivationTimeParams) (Context, error)
 	// Sets the per-context cursor for "the tip the user is currently viewing."

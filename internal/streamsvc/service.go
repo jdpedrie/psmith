@@ -229,6 +229,8 @@ func chunkTypeToProto(t providers.ChunkType) psmithv1.ChunkType {
 		return psmithv1.ChunkType_CHUNK_TYPE_ELICIT
 	case providers.ChunkDeviceToolUse:
 		return psmithv1.ChunkType_CHUNK_TYPE_DEVICE_TOOL_USE
+	case providers.ChunkContentReset:
+		return psmithv1.ChunkType_CHUNK_TYPE_CONTENT_RESET
 	}
 	return psmithv1.ChunkType_CHUNK_TYPE_UNSPECIFIED
 }

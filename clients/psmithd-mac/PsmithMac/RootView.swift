@@ -1,6 +1,14 @@
+import AppKit
 import SwiftUI
 import PsmithKit
 import PsmithUI
+
+extension Notification.Name {
+    /// Posted by the View ▸ Reload From Server menu command (⌘R).
+    /// RootView owns the scene-scoped ConversationsModel, so the
+    /// command routes here by notification.
+    static let psmithReloadRequested = Notification.Name("psmith.reloadRequested")
+}
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
@@ -60,7 +68,14 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task {
                     if convos == nil {
-                        convos = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
+                        let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
+                        // Server-push conversation events drive the
+                        // sidebar's debounced refresh from here on.
+                        app.onConversationListChanged = { [weak m] in m?.refreshSoon() }
+                        // Cached page renders the sidebar instantly;
+                        // the first refresh replaces it.
+                        await m.hydrateFromCache()
+                        convos = m
                     }
                     if !app.providers.hasLoadedOnce {
                         await app.providers.load()
@@ -71,6 +86,32 @@ struct RootView: View {
         } else if let convos {
             HomeView(user: user)
                 .environment(convos)
+                // Window focus = pull refresh. Events cover the app
+                // while it's frontmost, but macOS can suspend the
+                // push connection while the app idles in the
+                // background, and the bus has no replay — focus
+                // reconciles the gap. Same handler as ⌘R.
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSWindow.didBecomeKeyNotification
+                )) { _ in
+                    reconcileWithServer()
+                }
+                .onReceive(NotificationCenter.default.publisher(
+                    for: .psmithReloadRequested
+                )) { _ in
+                    reconcileWithServer()
+                }
+        }
+    }
+
+    /// Refresh the sidebar list (debounced) and run the open
+    /// conversation's staleness check — the same cheap-get-then-
+    /// compare path the server-push events use.
+    private func reconcileWithServer() {
+        guard let convos else { return }
+        convos.refreshSoon()
+        if let sel = convos.selectedID {
+            app.streamHub.notifyConversationChanged(conversationID: sel)
         }
     }
 

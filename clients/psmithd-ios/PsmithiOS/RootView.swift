@@ -65,6 +65,7 @@ private struct AuthInterstitialView: View {
 private struct AppShell: View {
     let user: PsmithUser
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Owns the conversations + profile list for the active session.
     /// Held via `@State` so it survives tab switches and re-renders;
@@ -102,11 +103,27 @@ private struct AppShell: View {
         .task {
             if convos == nil {
                 let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
-                await m.refresh()
+                // Server-push conversation events drive the list's
+                // debounced refresh from here on.
+                app.onConversationListChanged = { [weak m] in m?.refreshSoon() }
+                // Cached page renders the list instantly; the network
+                // refresh replaces it.
+                await m.hydrateFromCache()
                 convos = m
+                await m.refresh()
             }
             if !app.providers.hasLoadedOnce {
                 await app.providers.load()
+            }
+        }
+        // Foreground pull: events cover the app while it's active,
+        // but anything pushed while iOS had the connection suspended
+        // is lost (the bus has no replay) — re-entering the
+        // foreground reconciles by refresh. The open conversation's
+        // own staleness check runs from its scene-phase handler.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                convos?.refreshSoon()
             }
         }
     }

@@ -65,6 +65,11 @@ struct ConversationView: View {
                 m.suspendActiveStream()
             case .active:
                 m.resumeStreamIfPaused()
+                // Reconcile anything mutated from another client
+                // while this device was suspended (account events
+                // don't replay). Cheap: one GetConversation unless
+                // something actually moved.
+                Task { await m.refreshIfStale() }
             @unknown default:
                 break
             }
@@ -107,6 +112,10 @@ struct ConversationView: View {
                 }
             )
             m.speechPlayer = app.speech
+            // Cache-first entry: cached transcript renders this frame;
+            // the network load replaces it (and the inverted list's
+            // rest edge makes the swap invisible at the bottom).
+            await m.hydrateFromCache()
             self.model = m
             await m.load()
             // Loaded alongside the message list so the model chip

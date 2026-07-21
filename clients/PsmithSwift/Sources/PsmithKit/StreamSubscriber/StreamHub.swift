@@ -205,6 +205,30 @@ public final class StreamHub {
         terminalHandlers.removeValue(forKey: conversationID)
     }
 
+    /// Per-conversation server-push change observers. Registered by
+    /// ConversationViewModel alongside its terminal handler (same
+    /// replace-on-remount semantics); invoked when the account event
+    /// stream reports a mutation of that conversation. Handlers hold
+    /// their VM weakly, so a stale registration for a closed
+    /// conversation no-ops.
+    private var changeHandlers: [String /* conversationID */: () async -> Void] = [:]
+
+    /// Register the change observer for a conversation. Replaces any
+    /// previously-registered observer for the same conversation.
+    public func attachChangeObserver(
+        conversationID: String,
+        _ handler: @escaping () async -> Void
+    ) {
+        changeHandlers[conversationID] = handler
+    }
+
+    /// Route a ConversationChanged account event to the open view
+    /// model, if one is registered. Fire-and-forget.
+    public func notifyConversationChanged(conversationID: String) {
+        guard let handler = changeHandlers[conversationID] else { return }
+        Task { await handler() }
+    }
+
     /// Marks the conversation as currently on screen (user has the
     /// conversation view open). Called from `ConversationView`'s
     /// `.onAppear`. Doubles as "user has seen it" — opening clears any
@@ -444,6 +468,12 @@ public final class StreamHub {
         guard var s = streams[conversationID], s.runID == runID else { return }
         s.lastSequence = max(s.lastSequence, c.sequence)
         switch c.type {
+        case .contentReset:
+            // The compression continuation restarted the document —
+            // everything accumulated so far is superseded (see the
+            // server's ChunkContentReset). Pending deltas were flushed
+            // above, so the wipe is complete.
+            s.streamingText = ""
         case .toolUseStart:
             if let info = c.toolUseStartInfo {
                 s.streamingToolCalls.append(LiveToolCall(id: info.id, name: info.name, startedAt: Date()))

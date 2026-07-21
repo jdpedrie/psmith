@@ -422,6 +422,14 @@ public nonisolated enum Psmith_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseItera
   /// message content; the resulting `tool_result` chunk that follows
   /// is the message-visible row.
   case deviceToolUse // = 12
+
+  /// Synthetic — emitted by the compression continuation wrapper when a
+  /// continuation leg RESTARTS the document instead of resuming it.
+  /// Receivers discard all text accumulated so far for this run and
+  /// start over from the next text delta. Clients that don't understand
+  /// it show transiently duplicated live text and converge at terminal
+  /// when they fetch the (clean) materialized row. Payload: `{}`.
+  case contentReset // = 13
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -443,6 +451,7 @@ public nonisolated enum Psmith_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseItera
     case 10: self = .thinkingSignature
     case 11: self = .elicit
     case 12: self = .deviceToolUse
+    case 13: self = .contentReset
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -462,6 +471,7 @@ public nonisolated enum Psmith_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseItera
     case .thinkingSignature: return 10
     case .elicit: return 11
     case .deviceToolUse: return 12
+    case .contentReset: return 13
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -481,6 +491,7 @@ public nonisolated enum Psmith_V1_ChunkType: SwiftProtobuf.Enum, Swift.CaseItera
     .thinkingSignature,
     .elicit,
     .deviceToolUse,
+    .contentReset,
   ]
 
 }
@@ -2973,7 +2984,7 @@ nonisolated extension Psmith_V1_StreamRunPurpose: SwiftProtobuf._ProtoNameProvid
 }
 
 nonisolated extension Psmith_V1_ChunkType: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0\u{1}CHUNK_TYPE_ELICIT\0\u{1}CHUNK_TYPE_DEVICE_TOOL_USE\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHUNK_TYPE_UNSPECIFIED\0\u{1}CHUNK_TYPE_TEXT_DELTA\0\u{1}CHUNK_TYPE_THINKING_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_START\0\u{1}CHUNK_TYPE_TOOL_USE_DELTA\0\u{1}CHUNK_TYPE_TOOL_USE_END\0\u{1}CHUNK_TYPE_ERROR\0\u{1}CHUNK_TYPE_DONE\0\u{1}CHUNK_TYPE_USAGE\0\u{1}CHUNK_TYPE_TOOL_RESULT\0\u{1}CHUNK_TYPE_THINKING_SIGNATURE\0\u{1}CHUNK_TYPE_ELICIT\0\u{1}CHUNK_TYPE_DEVICE_TOOL_USE\0\u{1}CHUNK_TYPE_CONTENT_RESET\0")
 }
 
 nonisolated extension Psmith_V1_DeviceFactKey: SwiftProtobuf._ProtoNameProviding {

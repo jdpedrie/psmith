@@ -297,6 +297,18 @@ struct PsmithMacApp: App {
             // browser convention.
             CommandGroup(after: .sidebar) {
                 Divider()
+                // Manual reconcile-with-server: refreshes the sidebar
+                // list and runs the open conversation's staleness
+                // check. The server-push events + window-focus pull
+                // make this rarely necessary; the command is the
+                // always-available backstop. Routed via notification
+                // because the ConversationsModel is scene-scoped
+                // (RootView owns it), not app-scoped.
+                Button("Reload From Server") {
+                    NotificationCenter.default.post(name: .psmithReloadRequested, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                Divider()
                 Button("Increase Text Size") {
                     sharedAppPreferences.fontScale += AppPreferences.fontScaleStep
                 }

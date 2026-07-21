@@ -218,6 +218,6 @@ Account-scoped server push. `proto/psmith/v1/events.proto`.
 
 | RPC | Notes |
 |---|---|
-| `SubscribeAccountEvents` | Server-streaming. Pushes `AccountEvent`s as they fire. No replay; a reconnect starts fresh. Today the only variant is `ProfileChanged` (profile id + kind: created / updated / deleted); the oneof leaves room for more. |
+| `SubscribeAccountEvents` | Server-streaming. Pushes `AccountEvent`s as they fire. No replay; a reconnect starts fresh. Variants: `ProfileChanged` (profile id + kind) and `ConversationChanged` (conversation id + kind) — the latter fires for every conversation mutation from every server-side path: sends and stream terminals, edits, deletes, compaction and promote, title writes, settings, archive/pin state, creation, deletion. Events carry no origin identity: the originating client hears its own mutations too and keeps its reaction cheap (staleness check) instead of relying on echo suppression. |
 
 Treat it as a refresh hint, not a source of truth; the recovery for a missed event is the same re-fetch used everywhere. See [auth-and-users.md](../design/auth-and-users.md) for the bus design.

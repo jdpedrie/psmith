@@ -52,7 +52,7 @@ In `PsmithKit/Repository/`, one facade per service:
 - **ElicitationsRepository** — the elicitation respond POST (plain HTTP, not Connect).
 - **EventsSubscriber** — the account-events stream.
 
-Repositories write successful list and get responses into the cache and fall back to it on network failure, so the relevant lists are available offline.
+Repositories write successful list and get responses into the cache, fall back to it on network failure (offline reading), and expose explicit `cached*` reads for the cache-first entry path: the conversations list and every conversation entry hydrate from cache instantly and then revalidate over the network. The server-push sync layer (2026-07-21): `EventsSubscriber` dispatches `ConversationChanged` account events into AppModel, which fans out to a debounced list refresh (wired by the platform root) and to the open conversation's `refreshIfStale()` via StreamHub's change-observer registry. The staleness check is one `GetConversation` compare (active context id, leaf, `updated_at`) — the full chain re-fetch only runs when something moved, which also makes the client's own event echoes cheap. Foreground triggers (iOS scene activation; Mac window focus and ⌘R "Reload From Server") run the same pair, covering events lost while the push stream was suspended.
 
 ## View models
 
