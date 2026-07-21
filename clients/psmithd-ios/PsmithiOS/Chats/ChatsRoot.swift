@@ -272,22 +272,25 @@ struct ChatsRoot: View {
             // verified live on short and scrollable lists).
             ScrollViewReader { proxy in
                 List {
-                    Section {
-                        searchRow(proxy)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        Color.clear
-                            .frame(height: 1)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets())
-                            .id(Self.listTopAnchor)
-                    }
-                    modeBody
+                    modeBody(proxy)
                 }
                 .listStyle(.plain)
+                // The 1pt tuck anchor must actually BE 1pt — List's
+                // default minimum row height (~44pt) would otherwise
+                // pad it into a visible dead band under the search
+                // row. Content-sized rows are unaffected.
+                .environment(\.defaultMinListRowHeight, 1)
                 .onAppear { tuckSearchIfNeeded(proxy) }
                 .onChange(of: convos.conversations.isEmpty) { _, isEmpty in
                     if !isEmpty { tuckSearchIfNeeded(proxy) }
+                }
+                // Mode switches rebuild the list content and reset the
+                // scroll to the true top, which would re-reveal the
+                // search row — re-tuck so "hidden by default" holds
+                // across All Chats ↔ By Profile.
+                .onChange(of: pickerMode) { _, _ in
+                    didInitialSearchHide = false
+                    tuckSearchIfNeeded(proxy)
                 }
             }
         }
@@ -348,23 +351,41 @@ struct ChatsRoot: View {
         }
     }
 
+    /// The pull-to-reveal leader rows: the search field + the 1pt
+    /// anchor the initial tuck scrolls to. These live INSIDE the
+    /// first content section — as their own Section, the inter-
+    /// section gap sat below the anchor and survived the tuck as a
+    /// dead band of top padding.
     @ViewBuilder
-    private var modeBody: some View {
+    private func listLeader(_ proxy: ScrollViewProxy) -> some View {
+        searchRow(proxy)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        Color.clear
+            .frame(height: 1)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
+            .id(Self.listTopAnchor)
+    }
+
+    @ViewBuilder
+    private func modeBody(_ proxy: ScrollViewProxy) -> some View {
         switch pickerMode {
         case .allChats:
-            allChatsBody
+            allChatsBody(proxy)
         case .byProfile:
             if !searchText.isEmpty {
-                allChatsBody  // search overrides mode grouping
+                allChatsBody(proxy)  // search overrides mode grouping
             } else {
-                byProfileBody
+                byProfileBody(proxy)
             }
         }
     }
 
     @ViewBuilder
-    private var allChatsBody: some View {
+    private func allChatsBody(_ proxy: ScrollViewProxy) -> some View {
         Section {
+            listLeader(proxy)
             ForEach(convos.conversations) { c in
                 conversationRowLink(c, hideProfile: false)
             }
@@ -381,10 +402,28 @@ struct ChatsRoot: View {
     }
 
     @ViewBuilder
-    private var byProfileBody: some View {
+    private func byProfileBody(_ proxy: ScrollViewProxy) -> some View {
+        Section {
+            listLeader(proxy)
+        }
+        .listSectionSpacing(2)
         ForEach(profilesSorted, id: \.id) { profile in
             let buckets = convos.conversations.filter { $0.profileID == profile.id }
             Section {
+                // The profile label is a ROW, not a Section header: a
+                // pinned plain-list header drags an opaque system band
+                // behind it (not suppressible), and its bare-text form
+                // scrolled illegibly over row content. As a row, the
+                // glass chip scrolls with its group — no band, no
+                // overlap.
+                Text(profile.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .glassEffect(.regular, in: .capsule)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 2, trailing: 16))
                 if buckets.isEmpty {
                     Text("No conversations.")
                         .foregroundStyle(.tertiary)
@@ -394,19 +433,6 @@ struct ChatsRoot: View {
                         conversationRowLink(c, hideProfile: true)
                     }
                 }
-            } header: {
-                // Pinned headers in a plain list render as bare text
-                // that scrolls OVER row content — unreadable. A glass
-                // capsule keeps the label legible against whatever
-                // passes beneath and matches the floating-chrome
-                // language.
-                Text(profile.name)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(nil)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .glassEffect(.regular, in: .capsule)
             }
         }
         // Paging pages the flat conversation list; groups above grow as
