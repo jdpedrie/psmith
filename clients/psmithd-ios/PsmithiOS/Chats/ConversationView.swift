@@ -32,6 +32,10 @@ struct ConversationView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // Edge-only back swipe while the conversation is up — the
+        // iOS 26 swipe-anywhere pop fires on rightward transcript
+        // drags (see BackSwipeLimiter).
+        .background(BackSwipeLimiter())
         .onAppear {
             // Mark this conversation as on-screen so a terminal arriving
             // while the user is looking at it doesn't raise the "new
