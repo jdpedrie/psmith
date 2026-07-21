@@ -163,6 +163,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditForm))
 	mux.HandleFunc("POST /c/{id}/message/{mid}/edit", h.requireUser(h.handleEditSave))
 	mux.HandleFunc("POST /c/{id}/regenerate", h.requireUser(h.handleRegenerate))
+	mux.HandleFunc("POST /c/{id}/message/{mid}/delete", h.requireUser(h.handleMessageDelete))
 
 	mux.HandleFunc("GET /c/{id}/compact", h.requireUser(h.handleCompactPage))
 	mux.HandleFunc("POST /c/{id}/compact", h.requireUser(h.handleCompactRun))

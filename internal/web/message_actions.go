@@ -62,3 +62,20 @@ func (h *Handler) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/c/"+convID+"?run="+resp.Msg.GetStreamRun().GetId(), http.StatusSeeOther)
 }
+
+// handleMessageDelete removes a message (non-cascading — children stitch
+// to the deleted row's parent, mirroring the native clients' default).
+// Today's primary caller is the compression review bar's Delete, which
+// discards a pending summary so the conversation resumes in the current
+// context.
+func (h *Handler) handleMessageDelete(w http.ResponseWriter, r *http.Request) {
+	convID := r.PathValue("id")
+	mid := r.PathValue("mid")
+	if _, err := h.convos.DeleteMessage(r.Context(), connect.NewRequest(&psmithv1.DeleteMessageRequest{
+		Id: mid,
+	})); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/c/"+convID, http.StatusSeeOther)
+}

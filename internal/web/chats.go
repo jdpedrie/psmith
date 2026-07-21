@@ -67,9 +67,19 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		msgs = append(msgs, msgVM{ID: m.GetId(), ConvID: id, ParentID: m.GetParentId(), Role: role, HTML: renderMarkdown(content), Images: images})
 	}
 
+	// A clean (non-errored) compression summary gates the conversation:
+	// the server refuses sends and compacts until it's promoted or
+	// deleted, so the composer gives way to the review bar.
+	var pendingSummaryID string
+	for _, m := range msgsResp.Msg.GetMessages() {
+		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY && m.GetErrorText() == "" {
+			pendingSummaryID = m.GetId()
+		}
+	}
+
 	convos, _ := h.listConvos(r.Context(), id)
 	pick := h.modelPicker(r.Context(), id, currentSettingsModel(conv), capsVM{})
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, pick.Current, r.URL.Query().Get("run")))
+	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, pick.Current, r.URL.Query().Get("run"), pendingSummaryID))
 }
 
 // handleSend sends a user turn. For htmx requests it returns an HTML fragment

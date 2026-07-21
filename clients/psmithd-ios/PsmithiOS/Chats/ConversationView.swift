@@ -382,6 +382,11 @@ private struct ConversationBody: View {
             messageScroll
             if let archivedAt = liveConversation.archivedAt {
                 archivedBar(archivedAt)
+            } else if let pending = model.pendingCompressionSummary {
+                // A pending summary limits the conversation (the server
+                // refuses sends and compacts until it's resolved) — the
+                // composer gives way to the review verdict.
+                CompressionReviewBar(message: pending, model: model)
             } else {
                 Composer(model: model)
             }
@@ -417,7 +422,7 @@ private struct ConversationBody: View {
                 } label: {
                     Image(systemName: "wand.and.stars")
                 }
-                .disabled(model.isStreaming || model.isCompacting)
+                .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
                 .accessibilityLabel("Compact")
             }
         }

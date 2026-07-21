@@ -145,6 +145,12 @@ struct ConversationBody: View {
                     // conversation — the transcript is view-only, so the
                     // composer gives way to the restore affordance.
                     ArchivedBarMac(conversationID: liveConversation.id, archivedAt: archivedAt)
+                } else if let pending = model.pendingCompressionSummary {
+                    // A pending summary limits the conversation (the
+                    // server refuses sends and compacts until it's
+                    // resolved) — the composer gives way to the review
+                    // verdict.
+                    CompressionReviewBar(message: pending, model: model)
                 } else {
                     composer
                 }
@@ -1616,7 +1622,7 @@ private struct MessageRow: View {
             // Role picker — server only allows user ↔ assistant flips
             // (system/context/summary are locked). For those roles we hide
             // the picker entirely.
-            if isEditableRole {
+            if showsRolePicker {
                 Picker("Role", selection: $editRoleDraft) {
                     Text("User").tag(PsmithMessageRole.user)
                     Text("Assistant").tag(PsmithMessageRole.assistant)
@@ -1644,16 +1650,20 @@ private struct MessageRow: View {
                 }
                 .buttonStyle(.glass)
                 .disabled(editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Save and Resend") {
-                    saveEdit(thenResend: true)
+                if showsRolePicker {
+                    // Resend forks a new turn — meaningless for framing
+                    // roles (system/context), which save content only.
+                    Button("Save and Resend") {
+                        saveEdit(thenResend: true)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(
+                        editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || model.isStreaming
+                    )
+                    .keyboardShortcut(.defaultAction)
+                    .help("Save the edit and immediately fork — re-send the edited message as a sibling of the original.")
                 }
-                .buttonStyle(.glassProminent)
-                .disabled(
-                    editDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || model.isStreaming
-                )
-                .keyboardShortcut(.defaultAction)
-                .help("Save the edit and immediately fork — re-send the edited message as a sibling of the original.")
             }
         }
         .onAppear {
@@ -1682,12 +1692,15 @@ private struct MessageRow: View {
     private func saveEdit(thenResend: Bool) {
         let trimmed = editDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let role = editRoleDraft
+        // Role rides along only for user/assistant — the server rejects
+        // role writes on system/context rows even when the value is
+        // unchanged, so framing-role edits must send content only.
+        let role: PsmithMessageRole? = showsRolePicker ? editRoleDraft : nil
         let messageID = message.id
         let parentForFork = message.parentID
         model.editingMessage = nil
 
-        if thenResend && role == .assistant {
+        if thenResend, role == .assistant {
             // Save the edit on the existing assistant row, then chain a
             // new assistant under it. The edit stays; the new generation
             // continues from there. Two assistants in a row is intended.
@@ -1695,10 +1708,12 @@ private struct MessageRow: View {
                 await model.editMessage(id: messageID, content: trimmed, role: .assistant)
                 await model.regenerateAssistant(parentMessageID: messageID)
             }
-        } else if thenResend {
-            // role == .user: fork-at-user via SendMessage.
+        } else if thenResend, role == .user {
+            // Fork-at-user via SendMessage.
             Task { await model.sendForking(content: trimmed, parentMessageID: parentForFork) }
         } else {
+            // Plain save — also the resend path for framing roles, where
+            // "resend" has no meaning.
             Task { await model.editMessage(id: messageID, content: trimmed, role: role) }
         }
     }
@@ -1884,15 +1899,24 @@ private struct MessageRow: View {
             .disabled(!isEditableRole)
     }
 
-    /// True for user/assistant turns. system/context/compression-summary
-    /// rows are framing devices users shouldn't be editing or deleting via
-    /// these affordances — admins can still mutate them through other
-    /// surfaces.
+    /// User / assistant turns are editable + reloadable. System and
+    /// context rows are also editable (so the user can fix a typo in
+    /// their system message without re-editing the profile) — same
+    /// matrix as iOS; the clients agreeing on this is the point.
+    /// Compression summaries never reach MessageRow (they render as
+    /// CompressionSummaryCard, which carries its own standard menu).
     private var isEditableRole: Bool {
         switch message.role {
-        case .user, .assistant: return true
+        case .user, .assistant, .system, .context: return true
         default: return false
         }
+    }
+
+    /// Role flipping is only meaningful between user and assistant;
+    /// system / context roles aren't interchangeable and the server
+    /// rejects the attempt.
+    private var showsRolePicker: Bool {
+        message.role == .user || message.role == .assistant
     }
 
     /// Reload makes sense for any turn we can fork from — same set as

@@ -260,6 +260,48 @@ struct IntegrationFlowTests {
         #expect(oldMsgs.contains(where: { $0.role == .compressionSummary }))
     }
 
+    @Test("Pending summary gates the conversation until promoted")
+    func pendingCompressionGates() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "if-gate")
+        let seeded = try await Fixtures.seedReadyToChat(
+            client: client,
+            replyText: "ack",
+            withCompression: true,
+            compressionMode: .replace
+        )
+        let conv = try await client.conversations.create(profileID: seeded.profile.id)
+        let vm = ConversationViewModel(conversation: conv, client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { }, localTitler: nil)
+        await vm.load()
+        await sendAndAwait(vm, text: "turn-1")
+        await vm.load()
+
+        await vm.compact()
+        await waitFor(deadlineSeconds: 30.0) { vm.streamRunID == nil && !vm.isCompacting }
+        await vm.load()
+
+        // The clean summary is surfaced as THE pending decision — the
+        // clients swap the composer for the review bar off this.
+        let pending = try #require(vm.pendingCompressionSummary)
+        #expect(vm.hasPendingCompression)
+        #expect(pending.role == .compressionSummary)
+        #expect(pending.errorText == nil)
+
+        // Send and compact are client-side no-ops while pending (the
+        // server would refuse them anyway).
+        let countBefore = vm.messages.count
+        vm.draft = "should not send"
+        await vm.send()
+        #expect(vm.messages.count == countBefore)
+        await vm.compact()
+        #expect(!vm.isCompacting)
+
+        // Promote resolves the gate.
+        await vm.promoteCompaction(messageID: pending.id)
+        await vm.load()
+        #expect(vm.pendingCompressionSummary == nil)
+        #expect(!vm.hasPendingCompression)
+    }
+
     // MARK: - 5. Compact append
 
     @Test("Compact append: both contexts coexist after compact")

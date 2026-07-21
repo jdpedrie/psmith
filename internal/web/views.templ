@@ -969,7 +969,7 @@ templ modelChip(convID string, m pickerModelVM) {
 	</button>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string) {
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string) {
 	@layout(conv.Title + " — Psmith") {
 		<div class="app">
 			@sidebar(convos)
@@ -990,12 +990,41 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pic
 						@assistantStream(conv.ID, runID)
 					}
 				</div>
-				@composer(conv.ID, current)
+				if pendingSummaryID != "" {
+					@compressionReviewBar(conv.ID, pendingSummaryID)
+				} else {
+					@composer(conv.ID, current)
+				}
 			</main>
 		</div>
 		<div id="modal"></div>
 		<script src="/web-assets/chat.js"></script>
 	}
+}
+
+// compressionReviewBar replaces the composer while a clean compression
+// summary awaits review — the server refuses sends and further
+// compactions until the summary is promoted or deleted, so the bottom
+// bar carries the verdict. The summary content renders in the
+// transcript like any other message.
+templ compressionReviewBar(convID string, messageID string) {
+	<div class="review-bar">
+		<div class="review-bar-text">
+			<strong>Compression awaiting review</strong>
+			<span class="muted">Confirm to continue in a fresh context, or delete to resume here.</span>
+		</div>
+		<form
+			method="post"
+			action={ templ.SafeURL("/c/" + convID + "/message/" + messageID + "/delete") }
+			onsubmit="return confirm('Delete the compression summary? The conversation resumes as if compaction never happened.')"
+		>
+			<button class="review-delete" type="submit">Delete</button>
+		</form>
+		<form method="post" action={ templ.SafeURL("/c/" + convID + "/promote") }>
+			<input type="hidden" name="message_id" value={ messageID }/>
+			<button class="review-confirm" type="submit">Confirm</button>
+		</form>
+	</div>
 }
 
 // capBadges renders the compact capability glyphs used on chips and rows.

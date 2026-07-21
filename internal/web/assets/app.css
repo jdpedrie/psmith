@@ -752,3 +752,40 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 	.prow { flex-direction: column; }
 	.prow-actions { justify-content: flex-start; }
 }
+
+/* Compression review bar — replaces the composer while a clean summary
+   awaits promote-or-delete. Orange accent ties it to the compaction
+   flow's summary card in the transcript. */
+.review-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 20px;
+	border-top: 2px solid color-mix(in srgb, orange 55%, transparent);
+	background: color-mix(in srgb, orange 6%, var(--bg));
+}
+.review-bar-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+.review-bar form { margin: 0; }
+.review-delete {
+	color: color-mix(in srgb, var(--danger) 88%, var(--text));
+	background: color-mix(in srgb, var(--danger) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+	border-radius: 8px;
+	padding: 6px 14px;
+	cursor: pointer;
+}
+.review-confirm {
+	color: #fff;
+	background: color-mix(in srgb, orange 80%, var(--text) 8%);
+	border: 1px solid color-mix(in srgb, orange 60%, transparent);
+	border-radius: 8px;
+	padding: 6px 14px;
+	font-weight: 600;
+	cursor: pointer;
+}

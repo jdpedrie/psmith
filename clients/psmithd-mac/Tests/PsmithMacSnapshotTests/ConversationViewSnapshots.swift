@@ -67,6 +67,21 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func pendingCompressionReview() {
+        // A clean compression summary awaiting the user's verdict: the
+        // composer is REPLACED by the CompressionReviewBar (Delete /
+        // Confirm) and the summary card itself carries no inline
+        // action row — content in the transcript, decision in the bar.
+        // If this snapshot ever shows the send field, the pending gate
+        // regressed.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.sampleMessages()
+                + [SnapshotFixtures.compressionSummaryMessage()]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
     func wideBlocksContained() {
         // Pins the horizontal containment of the two content-driven
         // wide block classes: fenced code and markdown tables. Both

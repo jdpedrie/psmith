@@ -306,11 +306,20 @@ public final class ConversationViewModel {
     }
 
     public var hasPendingCompression: Bool {
-        // Errored compression_summary messages are first-class history
-        // entries, NOT pending work — the user retries by deleting the
-        // failed summary or kicking off a fresh compaction. Only clean
-        // (non-errored) summaries gate the conversation.
-        messages.contains { $0.role == .compressionSummary && $0.errorText == nil }
+        pendingCompressionSummary != nil
+    }
+
+    /// The clean (non-errored) compression summary awaiting the user's
+    /// promote-or-delete decision, if any. Errored compression_summary
+    /// messages are first-class history entries, NOT pending work — the
+    /// user retries by deleting the failed summary or kicking off a
+    /// fresh compaction. Only clean summaries gate the conversation;
+    /// the clients swap the composer for the review bar while this is
+    /// non-nil (the server rejects sends and compacts in that state
+    /// anyway — this is the UI reflecting the contract, not enforcing
+    /// it).
+    public var pendingCompressionSummary: PsmithMessage? {
+        messages.last(where: { $0.role == .compressionSummary && $0.errorText == nil })
     }
 
     public var isStreaming: Bool {

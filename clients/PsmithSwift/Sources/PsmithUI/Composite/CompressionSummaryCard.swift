@@ -1,15 +1,24 @@
 import SwiftUI
 import PsmithKit
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Inline card rendered in the message stream for a compression
 /// summary message (`role == .compression`). Two variants:
 ///
-///   - **Success**: shows the streamed summary, plus Edit / Delete /
-///     Confirm. Confirm promotes the summary into a fresh context;
-///     Edit reopens the user's compaction prompt for revision.
+///   - **Success**: shows the streamed summary. The review ACTIONS
+///     (Delete / Confirm) live in `CompressionReviewBar`, which
+///     replaces the composer while the summary is pending — the card
+///     is content, the bar is the decision. Editing goes through the
+///     standard context menu, same as every other message row.
 ///   - **Failure**: shows the error text in red plus an optional
 ///     disclosure for any partial summary that streamed before the
-///     failure, plus a single Dismiss action.
+///     failure, plus inline Dismiss / Retry (an errored summary does
+///     NOT gate the conversation, so there's no review bar to host
+///     its actions).
 ///
 /// Orange accent throughout — distinct from regular assistant
 /// messages so the user immediately recognises this as a compaction
@@ -18,7 +27,6 @@ public struct CompressionSummaryCard: View {
     let message: PsmithMessage
     let model: ConversationViewModel
     @State private var showDeleteConfirm = false
-    @State private var isPromoting = false
     @State private var showPartialContent = false
 
     public init(message: PsmithMessage, model: ConversationViewModel) {
@@ -43,7 +51,7 @@ public struct CompressionSummaryCard: View {
                     .foregroundStyle(.orange)
                 Spacer()
                 if !isErrored {
-                    Text("Review and promote or delete")
+                    Text("Awaiting review — actions below")
                         .scaledFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else if let label = compressionModelLabel {
@@ -68,8 +76,8 @@ public struct CompressionSummaryCard: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                if isErrored {
+            if isErrored {
+                HStack(spacing: 8) {
                     Spacer()
                     Button("Dismiss") {
                         Task { await model.deleteMessage(id: message.id) }
@@ -86,47 +94,6 @@ public struct CompressionSummaryCard: View {
                     .buttonStyle(.glassProminent)
                     .disabled(model.isCompacting || model.sending || model.isStreaming)
                     .help("Re-fire compaction with the current profile defaults. The failed summary stays in history until dismissed.")
-                } else {
-                    Button("Edit…") {
-                        model.editingMessage = message
-                    }
-                    .buttonStyle(.borderless)
-
-                    Spacer()
-
-                    Button("Delete") {
-                        showDeleteConfirm = true
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.red)
-                    .confirmationDialog(
-                        "Delete compression summary?",
-                        isPresented: $showDeleteConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Delete summary", role: .destructive) {
-                            Task { await model.deleteMessage(id: message.id) }
-                        }
-                    } message: {
-                        Text("The conversation will resume in the current context as if compaction never happened.")
-                    }
-
-                    Button {
-                        isPromoting = true
-                        Task {
-                            await model.promoteCompaction(messageID: message.id)
-                            isPromoting = false
-                        }
-                    } label: {
-                        if isPromoting {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("Confirm")
-                        }
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(isPromoting)
-                    .help("Confirm the summary, open a fresh context, and continue from there")
                 }
             }
         }
@@ -141,6 +108,50 @@ public struct CompressionSummaryCard: View {
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        // The STANDARD message affordances — same long-press/right-click
+        // controls every other row gets, replacing the old inline
+        // "Edit…" special case. Delete here shares the confirmation
+        // with the review bar's Delete; both are the same operation.
+        .contextMenu {
+            if !isErrored {
+                Button {
+                    model.editingMessage = message
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+            }
+            Button {
+                copyContent()
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            Divider()
+            Button(role: .destructive) {
+                showDeleteConfirm = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .confirmationDialog(
+            "Delete compression summary?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete summary", role: .destructive) {
+                Task { await model.deleteMessage(id: message.id) }
+            }
+        } message: {
+            Text("The conversation will resume in the current context as if compaction never happened.")
+        }
+    }
+
+    private func copyContent() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = message.content
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(message.content, forType: .string)
+        #endif
     }
 
     /// Body for an errored compression card: error text in red + an optional
