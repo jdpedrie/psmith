@@ -138,7 +138,7 @@ public struct ModelPickerList: View {
     private func logoSlug(for providerID: String) -> String? {
         switch providerTypes[providerID] {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             return providerPresetIDs[providerID]
         default:

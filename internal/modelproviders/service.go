@@ -149,7 +149,7 @@ func (s *Service) ListProviderTemplates(ctx context.Context, _ *connect.Request[
 			Name:              "Google Gemini",
 			DriverType:        "google",
 			ApiBase:           strPtr("https://generativelanguage.googleapis.com/v1beta"),
-			LogoSlug:          strPtr("google-color"),
+			LogoSlug:          strPtr("google"),
 		},
 	)
 

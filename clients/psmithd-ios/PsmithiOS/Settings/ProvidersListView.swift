@@ -178,7 +178,7 @@ struct ProvidersListView: View {
     private func logoSlug(for provider: PsmithUserModelProvider) -> String? {
         switch provider.type {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             return app.providers.templates
                 .first(where: { $0.catalogProviderID == catalogKey(for: provider) })?
@@ -715,7 +715,7 @@ private struct EditProviderSheet: View {
     private var logoSlug: String? {
         switch provider.type {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             // Match against the configured providers' templates by
             // preset id (the catalog identifier for openai-compatible).

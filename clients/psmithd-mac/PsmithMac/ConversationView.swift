@@ -1020,7 +1020,7 @@ struct ConversationBody: View {
     fileprivate func providerLogoSlug(providerID: String, type: String?, presetID: String?) -> String? {
         switch type {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             return presetID
         default:

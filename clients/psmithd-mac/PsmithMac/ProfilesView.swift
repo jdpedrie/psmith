@@ -890,7 +890,7 @@ private struct ProfileForm: View {
         guard let providerID else { return nil }
         switch model.providerTypes[providerID] {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             return model.providerPresetIDs[providerID]
         default:

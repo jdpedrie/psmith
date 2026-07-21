@@ -487,7 +487,7 @@ struct Composer: View {
         guard let pid = model.selectedProviderID else { return nil }
         switch model.providerTypes[pid] {
         case "anthropic": return "anthropic"
-        case "google": return "google-color"
+        case "google": return "google"
         case "openai-compatible": return model.providerPresetIDs[pid]
         default: return nil
         }

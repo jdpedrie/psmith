@@ -229,7 +229,7 @@ private struct ProviderRow: View {
     private var logoSlug: String? {
         switch provider.type {
         case "anthropic": return "anthropic"
-        case "google":    return "google-color"
+        case "google":    return "google"
         case "openai-compatible":
             return provider.presetID
         default:
