@@ -463,6 +463,26 @@ struct ConversationViewModelTests {
 
     // MARK: - editMessage / deleteMessage
 
+    @Test("stream terminal appends the settled turn in place — no full-chain re-fetch")
+    func terminalAppendsInPlace() async throws {
+        let r = try await makeReadyVM(usernamePrefix: "vm-term-inplace")
+        await r.vm.load()
+        await sendAndAwait(r.vm, text: "warmup")
+        // Snapshot the settled chain, then send again: the terminal
+        // handler must extend the array (prior elements untouched, in
+        // order) rather than replace it wholesale — the replacement
+        // forced a full transcript re-diff + re-estimate every turn.
+        let before = r.vm.messages.map(\.id)
+        await sendAndAwait(r.vm, text: "second turn")
+        let after = r.vm.messages.map(\.id)
+        #expect(Array(after.prefix(before.count)) == before)
+        // The new turn is present and settled: user row + assistant row.
+        let tail = r.vm.messages.suffix(after.count - before.count)
+        #expect(tail.contains(where: { $0.role == .user && $0.content == "second turn" }))
+        #expect(tail.contains(where: { $0.role == .assistant }))
+        #expect(r.vm.streamRunID == nil)
+    }
+
     @Test("editMessage updates content locally and on the server")
     func editMessage() async throws {
         let r = try await makeReadyVM(usernamePrefix: "vm-edit")

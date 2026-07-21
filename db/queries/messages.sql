@@ -296,3 +296,23 @@ SELECT id, context_id, parent_id, role, created_at
 FROM messages
 WHERE context_id = $1
 ORDER BY created_at ASC, id ASC;
+
+-- name: ListMessageChainForHistory :many
+-- The ancestor chain of a leaf as FULL message rows (message_headers /
+-- message_trailers included — the wire envelope needs them), returned
+-- root-first. History assembly runs on every send and every token
+-- count; this is O(chain) where ListMessagesByContext is O(context),
+-- and forked contexts carry dead branches the chain never touches.
+WITH RECURSIVE chain AS (
+    SELECT m.id, m.parent_id, 0 AS depth
+    FROM messages m
+    WHERE m.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_id, chain.depth + 1
+    FROM messages p
+    JOIN chain ON chain.parent_id = p.id
+)
+SELECT sqlc.embed(messages)
+FROM messages
+JOIN chain ON chain.id = messages.id
+ORDER BY chain.depth DESC;

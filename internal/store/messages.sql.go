@@ -727,6 +727,88 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 	return items, nil
 }
 
+const listMessageChainForHistory = `-- name: ListMessageChainForHistory :many
+WITH RECURSIVE chain AS (
+    SELECT m.id, m.parent_id, 0 AS depth
+    FROM messages m
+    WHERE m.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_id, chain.depth + 1
+    FROM messages p
+    JOIN chain ON chain.parent_id = p.id
+)
+SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, messages.finish_reason, messages.tool_cost_usd, messages.is_welcome, messages.embedding, messages.embedding_model, messages.embedding_at, messages.message_headers, messages.message_trailers
+FROM messages
+JOIN chain ON chain.id = messages.id
+ORDER BY chain.depth DESC
+`
+
+type ListMessageChainForHistoryRow struct {
+	Message Message
+}
+
+// The ancestor chain of a leaf as FULL message rows (message_headers /
+// message_trailers included — the wire envelope needs them), returned
+// root-first. History assembly runs on every send and every token
+// count; this is O(chain) where ListMessagesByContext is O(context),
+// and forked contexts carry dead branches the chain never touches.
+func (q *Queries) ListMessageChainForHistory(ctx context.Context, id uuid.UUID) ([]ListMessageChainForHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listMessageChainForHistory, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessageChainForHistoryRow
+	for rows.Next() {
+		var i ListMessageChainForHistoryRow
+		if err := rows.Scan(
+			&i.Message.ID,
+			&i.Message.ContextID,
+			&i.Message.ParentID,
+			&i.Message.Role,
+			&i.Message.Content,
+			&i.Message.RawContent,
+			&i.Message.Thinking,
+			&i.Message.ThinkingProviderType,
+			&i.Message.ThinkingRenderedText,
+			&i.Message.ProviderID,
+			&i.Message.ModelID,
+			&i.Message.CreatedAt,
+			&i.Message.InputTokens,
+			&i.Message.OutputTokens,
+			&i.Message.CacheReadTokens,
+			&i.Message.CacheWriteTokens,
+			&i.Message.ReasoningTokens,
+			&i.Message.ProviderUsageRaw,
+			&i.Message.InputCostUsd,
+			&i.Message.OutputCostUsd,
+			&i.Message.CacheReadCostUsd,
+			&i.Message.CacheWriteCostUsd,
+			&i.Message.TotalCostUsd,
+			&i.Message.EditedAt,
+			&i.Message.ErrorPayload,
+			&i.Message.ThinkingDurationMs,
+			&i.Message.ExplicitCacheAttached,
+			&i.Message.ToolCalls,
+			&i.Message.FinishReason,
+			&i.Message.ToolCostUsd,
+			&i.Message.IsWelcome,
+			&i.Message.Embedding,
+			&i.Message.EmbeddingModel,
+			&i.Message.EmbeddingAt,
+			&i.Message.MessageHeaders,
+			&i.Message.MessageTrailers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMessageTreeStructure = `-- name: ListMessageTreeStructure :many
 SELECT id, context_id, parent_id, role, created_at
 FROM messages

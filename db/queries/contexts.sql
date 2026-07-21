@@ -38,23 +38,36 @@ LIMIT 1;
 --   cumulative_cost_usd: SUM of messages.total_cost_usd across every row in
 --     the context (NULLs treated as zero). Includes compression_summary
 --     rows since they carry real cost.
+--
+-- Lateral aggregation, not LEFT JOIN + GROUP BY: the join materialized
+-- every message ROW (all columns, embeddings included) per context just
+-- to count and sum two fields, then grouped by every contexts column.
+-- The laterals aggregate in place off the messages(context_id, ...)
+-- indexes and only two scalars leave each subquery. The client
+-- refreshes this list after every terminal and delete, so it runs
+-- constantly on hot conversations.
 SELECT
     c.*,
-    COUNT(m.id)::BIGINT AS message_count,
-    COALESCE((
-        SELECT (COALESCE(la.input_tokens, 0) + COALESCE(la.output_tokens, 0))::BIGINT
-        FROM messages la
-        WHERE la.context_id = c.id
-          AND la.role = 'assistant'
-          AND (la.input_tokens IS NOT NULL OR la.output_tokens IS NOT NULL)
-        ORDER BY la.created_at DESC, la.id DESC
-        LIMIT 1
-    ), 0)::BIGINT AS last_message_total_tokens,
-    COALESCE(SUM(m.total_cost_usd), 0)::DOUBLE PRECISION AS cumulative_cost_usd
+    agg.message_count,
+    COALESCE(last_turn.total_tokens, 0)::BIGINT AS last_message_total_tokens,
+    agg.cumulative_cost_usd
 FROM contexts c
-LEFT JOIN messages m ON m.context_id = c.id
+LEFT JOIN LATERAL (
+    SELECT COUNT(*)::BIGINT AS message_count,
+           COALESCE(SUM(m.total_cost_usd), 0)::DOUBLE PRECISION AS cumulative_cost_usd
+    FROM messages m
+    WHERE m.context_id = c.id
+) agg ON TRUE
+LEFT JOIN LATERAL (
+    SELECT (COALESCE(la.input_tokens, 0) + COALESCE(la.output_tokens, 0))::BIGINT AS total_tokens
+    FROM messages la
+    WHERE la.context_id = c.id
+      AND la.role = 'assistant'
+      AND (la.input_tokens IS NOT NULL OR la.output_tokens IS NOT NULL)
+    ORDER BY la.created_at DESC, la.id DESC
+    LIMIT 1
+) last_turn ON TRUE
 WHERE c.conversation_id = $1
-GROUP BY c.id
 ORDER BY c.context_activation_time DESC;
 
 -- name: UpdateContextActivationTime :one

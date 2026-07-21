@@ -153,6 +153,26 @@ func (s *stubQueries) GetActiveContextByConversation(_ context.Context, _ uuid.U
 func (s *stubQueries) ListMessagesByContext(_ context.Context, _ uuid.UUID) ([]store.Message, error) {
 	return s.messages, nil
 }
+func (s *stubQueries) ListMessageChainForHistory(_ context.Context, id uuid.UUID) ([]store.ListMessageChainForHistoryRow, error) {
+	byID := make(map[uuid.UUID]store.Message, len(s.messages))
+	for _, m := range s.messages {
+		byID[m.ID] = m
+	}
+	var leafFirst []store.Message
+	cur, ok := byID[id]
+	for ok {
+		leafFirst = append(leafFirst, cur)
+		if cur.ParentID == nil {
+			break
+		}
+		cur, ok = byID[*cur.ParentID]
+	}
+	out := make([]store.ListMessageChainForHistoryRow, 0, len(leafFirst))
+	for i := len(leafFirst) - 1; i >= 0; i-- {
+		out = append(out, store.ListMessageChainForHistoryRow{Message: leafFirst[i]})
+	}
+	return out, nil
+}
 func (s *stubQueries) ListAttachmentsForMessages(_ context.Context, _ []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error) {
 	return s.attachments, nil
 }

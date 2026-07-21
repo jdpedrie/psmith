@@ -1440,27 +1440,58 @@ public final class ConversationViewModel {
         // ---- Atomic streamed-to-settled swap ----
         //
         // The user-visible goal at terminal is: the StreamingRow vanishes
-        // in the same render frame the new settled MessageRow appears. If
-        // we wait for the full `load()` (which does GetConversation,
-        // CountContextTokens, and the tree fetch in addition to
-        // ListMessages), the new MessageRow lands during the first await
-        // and StreamingRow doesn't hide until everything else finishes —
-        // the duplicate-bubble the user sees during long terminal
-        // handlers.
+        // in the same render frame the new settled MessageRow appears —
+        // the mutation and hub.clear must land between the same two
+        // awaits so SwiftUI batches them into one render.
         //
-        // So: fetch JUST the chain here, assign it, and immediately call
-        // hub.clear. Both mutations land between the same two awaits and
-        // SwiftUI batches them into one render. After that we fall back
-        // to the full `load()` for the slower bookkeeping (token count,
-        // tree, settings refresh) — visually a no-op since messages
-        // already reflect the new turn.
-        if let ctx = activeContext,
-           let chain = try? await client.conversations.listMessages(contextID: ctx.id) {
-            self.messages = chain
+        // Fast path (virtually every send): fetch JUST the materialized
+        // turn and append it in place. The old flow fetched the ENTIRE
+        // chain here and then load() fetched it AGAIN — two full-history
+        // transfers per turn (~3MB each on heavy conversations) and two
+        // wholesale array replacements at exactly the moment the
+        // transcript is most sensitive (replacement re-diffs the ForEach
+        // and re-estimates every row). The append is only trusted when
+        // the new turn is the direct child of the current tail — plain
+        // continuation; forks, regenerates, compression, and anything
+        // surprising fall back to the full reload.
+        var swappedInPlace = false
+        if purpose == .assistantResponse,
+           let resultID = run.resultMessageID, !resultID.isEmpty,
+           let settled = try? await client.conversations.getMessage(id: resultID),
+           let parentID = settled.parentID,
+           messages.last?.id == parentID,
+           !messages.contains(where: { $0.id == settled.id }) {
+            messages.append(settled)
+            hub.clear(conversationID: conversation.id)
+            swappedInPlace = true
         }
-        hub.clear(conversationID: conversation.id)
 
-        await load()
+        if swappedInPlace {
+            if let ctx = activeContext {
+                TokenCountCache.shared.invalidate(contextID: ctx.id)
+            }
+            // Conversation snapshot (title overwrites, settings the
+            // pipeline resolved) + the same advisory refreshes load()
+            // runs — everything EXCEPT the redundant chain re-fetch.
+            if let (conv, ctx) = try? await client.conversations.get(id: conversation.id) {
+                self.conversation = conv
+                self.activeContext = ctx
+            }
+            async let tokens: Void = refreshTokenCount()
+            async let tree: Void = loadTree()
+            async let ctxs: Void = loadContexts()
+            _ = await (tokens, tree, ctxs)
+        } else {
+            // Slow path: assign the chain and clear the hub between the
+            // same two awaits (same one-frame swap contract), then full
+            // load() for the bookkeeping.
+            if let ctx = activeContext,
+               let chain = try? await client.conversations.listMessages(contextID: ctx.id) {
+                self.messages = chain
+            }
+            hub.clear(conversationID: conversation.id)
+            await load()
+        }
         await onTerminal()
         if purpose == .assistantResponse {
             fireAssistantTurnComplete()

@@ -220,6 +220,14 @@ type Querier interface {
 	//   cumulative_cost_usd: SUM of messages.total_cost_usd across every row in
 	//     the context (NULLs treated as zero). Includes compression_summary
 	//     rows since they carry real cost.
+	//
+	// Lateral aggregation, not LEFT JOIN + GROUP BY: the join materialized
+	// every message ROW (all columns, embeddings included) per context just
+	// to count and sum two fields, then grouped by every contexts column.
+	// The laterals aggregate in place off the messages(context_id, ...)
+	// indexes and only two scalars leave each subquery. The client
+	// refreshes this list after every terminal and delete, so it runs
+	// constantly on hot conversations.
 	ListContextsByConversation(ctx context.Context, conversationID uuid.UUID) ([]ListContextsByConversationRow, error)
 	// Plugin pipeline overrides scoped to one conversation. Merged on
 	// top of the profile-chain plugins at resolve time — see
@@ -261,6 +269,12 @@ type Querier interface {
 	// branches forking off the same parent. The UI uses it to render fork
 	// indicators alongside the linear chain.
 	ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([]ListMessageAncestorChainRow, error)
+	// The ancestor chain of a leaf as FULL message rows (message_headers /
+	// message_trailers included — the wire envelope needs them), returned
+	// root-first. History assembly runs on every send and every token
+	// count; this is O(chain) where ListMessagesByContext is O(context),
+	// and forked contexts carry dead branches the chain never touches.
+	ListMessageChainForHistory(ctx context.Context, id uuid.UUID) ([]ListMessageChainForHistoryRow, error)
 	// Skeleton rows for the branch switcher: the tree SHAPE without
 	// content. Selecting only these columns keeps TOASTed message bodies
 	// entirely unread.

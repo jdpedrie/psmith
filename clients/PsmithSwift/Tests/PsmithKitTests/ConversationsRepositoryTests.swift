@@ -157,6 +157,31 @@ struct ConversationsRepositoryTests {
         #expect(ctx.conversationID == created.id)
     }
 
+    @Test("getMessage round-trips a single row, NotFound across users")
+    func getMessageSingleRow() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-getmsg")
+        let (fake, _, _, profile) = try await Fixtures.seedReadyToChat(client: client)
+        _ = fake
+        let created = try await client.conversations.create(profileID: profile.id, title: "M")
+        let (userMsg, _) = try await client.conversations.sendMessage(
+            conversationID: created.id, content: "fetch me"
+        )
+        let target = userMsg
+        let fetched = try await client.conversations.getMessage(id: target.id)
+        #expect(fetched.id == target.id)
+        #expect(fetched.content == target.content)
+        #expect(fetched.role == target.role)
+
+        // Cross-user fetch masks existence.
+        let (clientB, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-getmsg-B")
+        do {
+            _ = try await clientB.conversations.getMessage(id: target.id)
+            Issue.record("expected NotFound")
+        } catch let PsmithError.rpc(code, _) {
+            #expect(code == .notFound)
+        }
+    }
+
     @Test("get with unknown id returns NotFound")
     func getUnknownIDNotFound() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "conv-get-unknown")

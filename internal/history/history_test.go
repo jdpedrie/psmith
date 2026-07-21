@@ -512,21 +512,30 @@ func TestBuild_ListMessagesError(t *testing.T) {
 
 func TestBuild_BrokenParentChainErrors(t *testing.T) {
 	t.Parallel()
-	// Construct a context whose only message references a parent_id not
-	// present in the context. walkParentChain should reject this — the DB
-	// schema usually prevents it, but defensive coverage matters.
+	// A leaf in the active context whose parent chain crosses INTO a
+	// different context. The recursive chain fetch follows parent_id
+	// without regard for context boundaries, so Build must reject any
+	// ancestor living outside the active context — the wire prefix
+	// would otherwise smuggle in rows the user can't see.
 	convID := mustUUID(t)
 	ctxID := mustUUID(t)
+	foreignCtxID := mustUUID(t)
+	parent := store.Message{
+		ID:        mustUUID(t),
+		ContextID: foreignCtxID,
+		Role:      roleSystem,
+		Content:   "elsewhere",
+	}
 	leaf := store.Message{
 		ID:        mustUUID(t),
 		ContextID: ctxID,
-		ParentID:  ptr(mustUUID(t)),
+		ParentID:  &parent.ID,
 		Role:      roleUser,
 		Content:   "orphan",
 	}
 	fake := &fakeQueries{
 		active:   store.Context{ID: ctxID, ConversationID: convID},
-		messages: []store.Message{leaf},
+		messages: []store.Message{parent, leaf},
 	}
 	_, err := Build(context.Background(), fake, Params{
 		Conversation:     store.Conversation{ID: convID},
@@ -559,6 +568,35 @@ func (f *fakeQueries) ListMessagesByContext(_ context.Context, _ uuid.UUID) ([]s
 		return nil, f.listErr
 	}
 	return f.messages, nil
+}
+
+// ListMessageChainForHistory mirrors the real recursive CTE: walk
+// parent_id from the leaf across ALL stored messages (context
+// boundaries included — Build owns that validation), return root-first,
+// stop when a parent id doesn't resolve (impossible against the real
+// DB thanks to the FK, but fakes can be sparse).
+func (f *fakeQueries) ListMessageChainForHistory(_ context.Context, id uuid.UUID) ([]store.ListMessageChainForHistoryRow, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	byID := make(map[uuid.UUID]store.Message, len(f.messages))
+	for _, m := range f.messages {
+		byID[m.ID] = m
+	}
+	var leafFirst []store.Message
+	cur, ok := byID[id]
+	for ok {
+		leafFirst = append(leafFirst, cur)
+		if cur.ParentID == nil {
+			break
+		}
+		cur, ok = byID[*cur.ParentID]
+	}
+	out := make([]store.ListMessageChainForHistoryRow, 0, len(leafFirst))
+	for i := len(leafFirst) - 1; i >= 0; i-- {
+		out = append(out, store.ListMessageChainForHistoryRow{Message: leafFirst[i]})
+	}
+	return out, nil
 }
 
 func (f *fakeQueries) ListAttachmentsForMessages(_ context.Context, _ []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error) {

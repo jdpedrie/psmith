@@ -350,6 +350,17 @@ public final class ConversationsRepository: Sendable {
         return (PsmithContext(from: msg.context), userMsg)
     }
 
+    /// Fetch ONE message by id, display-transformed like ListMessages
+    /// rows. The stream-terminal swap uses this to append the just-
+    /// materialized assistant turn without re-fetching the whole chain.
+    public func getMessage(id: String) async throws -> PsmithMessage {
+        var req = Psmith_V1_GetMessageRequest()
+        req.id = id
+        let resp = await client.getMessage(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("get message") }
+        return PsmithMessage(from: msg.message)
+    }
+
     public func editMessage(
         id: String,
         content: String,

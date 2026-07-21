@@ -76,6 +76,7 @@ var (
 type queries interface {
 	GetActiveContextByConversation(ctx context.Context, conversationID uuid.UUID) (store.Context, error)
 	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]store.Message, error)
+	ListMessageChainForHistory(ctx context.Context, id uuid.UUID) ([]store.ListMessageChainForHistoryRow, error)
 	ListAttachmentsForMessages(ctx context.Context, messageIDs []uuid.UUID) ([]store.ListAttachmentsForMessagesRow, error)
 }
 
@@ -161,30 +162,60 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		return nil, fmt.Errorf("%w: %w", ErrNoActiveContext, err)
 	}
 
-	msgs, err := q.ListMessagesByContext(ctx, active.ID)
-	if err != nil {
-		return nil, fmt.Errorf("history: list messages in active context: %w", err)
-	}
-	if len(msgs) == 0 {
-		// Empty context — valid (e.g. before any system/context rows are
-		// seeded for a fresh Context). Return an empty slice rather than
-		// nil so callers can iterate without a nil check.
-		return []providers.WireMessage{}, nil
-	}
+	var chain []store.Message
+	if params.LeafMessageID != nil {
+		// Explicit leaf: fetch ONLY the ancestor chain — O(chain), not
+		// O(context). This is the hot path (SendMessage and
+		// CountContextTokens both resolve a leaf first), and forked
+		// contexts carry dead branches the chain never touches.
+		rows, err := q.ListMessageChainForHistory(ctx, *params.LeafMessageID)
+		if err != nil {
+			return nil, fmt.Errorf("history: list message chain: %w", err)
+		}
+		if len(rows) == 0 {
+			// Leaf id doesn't exist at all — same contract as a leaf
+			// outside the active context.
+			return nil, ErrLeafNotInActiveContext
+		}
+		// The recursive walk follows parent_id without regard for
+		// context boundaries; enforce the original invariants here.
+		// Rows are root-first, so the LEAF is the last row.
+		if rows[len(rows)-1].Message.ContextID != active.ID {
+			return nil, ErrLeafNotInActiveContext
+		}
+		chain = make([]store.Message, 0, len(rows))
+		for _, r := range rows {
+			if r.Message.ContextID != active.ID {
+				return nil, ErrBrokenParentChain
+			}
+			chain = append(chain, r.Message)
+		}
+	} else {
+		msgs, err := q.ListMessagesByContext(ctx, active.ID)
+		if err != nil {
+			return nil, fmt.Errorf("history: list messages in active context: %w", err)
+		}
+		if len(msgs) == 0 {
+			// Empty context — valid (e.g. before any system/context rows
+			// are seeded for a fresh Context). Return an empty slice
+			// rather than nil so callers can iterate without a nil check.
+			return []providers.WireMessage{}, nil
+		}
 
-	byID := make(map[uuid.UUID]store.Message, len(msgs))
-	for _, m := range msgs {
-		byID[m.ID] = m
-	}
+		byID := make(map[uuid.UUID]store.Message, len(msgs))
+		for _, m := range msgs {
+			byID[m.ID] = m
+		}
 
-	leafID, err := selectLeaf(msgs, byID, params.LeafMessageID)
-	if err != nil {
-		return nil, err
-	}
+		leafID, err := selectLeaf(msgs, byID, nil)
+		if err != nil {
+			return nil, err
+		}
 
-	chain, err := walkParentChain(byID, leafID)
-	if err != nil {
-		return nil, err
+		chain, err = walkParentChain(byID, leafID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Load attachments for every message in the chain in one round
