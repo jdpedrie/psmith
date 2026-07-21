@@ -155,6 +155,10 @@ private struct ConversationBody: View {
     ///
     /// Scroll handle for the explicit seeks (entry, send pin, pill).
     @State private var scrollPosition = ScrollPosition()
+    /// Programmatic push into the contexts list — the Contexts entry
+    /// lives in the toolbar menu now, and Menus don't host
+    /// NavigationLinks reliably.
+    @State private var showingContexts = false
     /// True while the pill's jump-to-bottom is converging: seeks from
     /// far above solve against estimated coordinates and can land
     /// short, so the geometry handler keeps re-seeking until the
@@ -416,14 +420,11 @@ private struct ConversationBody: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    model.showingCompactView = true
-                } label: {
-                    Image(systemName: "wand.and.stars")
-                }
-                .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
-                .accessibilityLabel("Compact")
+                ConversationMenu(model: model, showingContexts: $showingContexts)
             }
+        }
+        .navigationDestination(isPresented: $showingContexts) {
+            ContextListView(model: model)
         }
         .sheet(isPresented: $model.showingCompactView) {
             CompactView(model: model)
@@ -448,61 +449,6 @@ private struct ConversationBody: View {
         // race.
     }
 
-    // MARK: - Floating status chips
-
-    /// Cost + context as floating glass capsules over the transcript's
-    /// top-left corner — the transcript scrolls beneath them. Replaces
-    /// the full-width status BAND (thinMaterial + divider) that sat
-    /// between the nav bar and the messages: two rows of edge-to-edge
-    /// chrome before any content, exactly the dated look Liquid Glass
-    /// retires. An overlay rather than a safeAreaInset ON PURPOSE —
-    /// insets shift the scroll geometry (offsets, container size) that
-    /// the v11 scroll machinery is tuned against; an overlay is
-    /// geometry-invisible, same as the scroll-to-bottom pill.
-    @ViewBuilder
-    fileprivate var floatingStatusChips: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                CostChip(model: model)
-                if let context = activeContextLabel {
-                    NavigationLink {
-                        ContextListView(model: model)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "tray.full")
-                                .font(.caption2)
-                            Text(context)
-                                .font(.caption)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Open contexts")
-                }
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.top, 8)
-    }
-
-    /// Header pill label for the active context. Numbering matches the
-    /// Contexts list (chronological by createdAt) so "Context 2" in
-    /// the header points at the same row the user sees in the list.
-    /// Hidden when there's only one context in the conversation —
-    /// the pill carries no signal in that case.
-    private var activeContextLabel: String? {
-        guard let ctx = model.activeContext, model.contexts.count > 1 else { return nil }
-        let chronological = model.contexts.sorted { $0.createdAt < $1.createdAt }
-        let idx = (chronological.firstIndex(where: { $0.id == ctx.id }) ?? 0) + 1
-        return "Context \(idx)"
-    }
 
     private func loadErrorBanner(_ err: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -1128,12 +1074,6 @@ private struct ConversationBody: View {
                 .accessibilityLabel("Scroll to bottom of conversation")
                 .accessibilityHidden(!isFarFromBottom)
             }
-            // Floating status chips (cost + context) over the top-left,
-            // paired with the pill's overlay: geometry-invisible chrome
-            // the transcript scrolls beneath.
-            .overlay(alignment: .topLeading) {
-                floatingStatusChips
-            }
             // Initial position comes from `defaultScrollAnchor(.bottom)`
             // above — no onAppear scrollTo needed. The anchor applies
             // during the first layout pass, so there's no
@@ -1364,53 +1304,75 @@ private struct ScrollMetrics: Equatable, Sendable {
     var offsetX: CGFloat
 }
 
-/// Cost chip with a best-effort total + a (!) tap target when any
-/// assistant message in the active context has usage data but no
-/// per-token price (subscription / flat-fee models like Z.AI Coding
-/// Plan don't populate per-million pricing in `user_models`, so the
-/// cost rolls up as $0). Tapping the warning lists which models
-/// contributed cost-less turns so the user can decide whether to wire
-/// prices in.
+/// The conversation's toolbar menu. Its label is the running cost,
+/// truncated to cents — the always-visible signal the old status chip
+/// carried, now living in the nav bar where it costs no vertical
+/// space. Inside: Compress (infrequent, so demoted from a top-level
+/// button), Contexts, and a non-interactive precise-cost entry. When
+/// any assistant turn ran on a model without per-token pricing, an
+/// "Unpriced models" entry appears and opens the explainer listing
+/// them (subscription / flat-fee models like Z.AI Coding Plan don't
+/// populate per-million pricing in `user_models`, so those turns roll
+/// up as $0 and the total is approximate).
 ///
 /// A standalone view (not a ConversationBody computed) so its O(N)
 /// message scans re-run only when the observed model data changes —
 /// inside ConversationBody they re-ran on every body evaluation,
 /// which during scroll-command storms meant per-tick.
-private struct CostChip: View {
+private struct ConversationMenu: View {
     @Bindable var model: ConversationViewModel
+    @Binding var showingContexts: Bool
     @State private var showingMissingCostInfo = false
 
     var body: some View {
-        // Show even when the rollup is zero — better than vanishing
-        // silently. The (!) makes the missing-data case legible.
-        let label = String(format: "$%.4f", accruedCost)
-        HStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "dollarsign.circle")
-                    .font(.caption2)
-                Text(label)
-                    .font(.caption)
-                    .lineLimit(1)
+        Menu {
+            Button {
+                model.showingCompactView = true
+            } label: {
+                Label("Compress", systemImage: "wand.and.stars")
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .glassEffect(.regular, in: .capsule)
+            .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
+
+            Button {
+                showingContexts = true
+            } label: {
+                Label("Contexts", systemImage: "tray.full")
+            }
+
+            Divider()
+
+            // Precise cost, deliberately unclickable — information,
+            // not an action. The truncated version lives on the menu
+            // label; this row carries the full four decimals.
+            Button {} label: {
+                Label(String(format: "$%.4f", accruedCost), systemImage: "dollarsign.circle")
+            }
+            .disabled(true)
+
             if !modelsMissingCost.isEmpty {
                 Button {
                     showingMissingCostInfo = true
                 } label: {
+                    Label("Unpriced models…", systemImage: "exclamationmark.triangle")
+                }
+            }
+        } label: {
+            // Truncated to cents; monospaced digits so the label
+            // doesn't wobble as the total ticks up. The warning
+            // triangle rides along when the total is approximate.
+            HStack(spacing: 4) {
+                if !modelsMissingCost.isEmpty {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .glassEffect(.regular.tint(.orange.opacity(0.18)).interactive(), in: .capsule)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Cost data missing")
+                Text(String(format: "$%.2f", accruedCost))
+                    .font(.callout.weight(.medium))
+                    .monospacedDigit()
             }
         }
+        .accessibilityLabel("Conversation menu")
+        .accessibilityValue(String(format: "cost $%.4f", accruedCost))
         .alert(
             "Cost is approximate",
             isPresented: $showingMissingCostInfo
