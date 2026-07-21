@@ -2788,9 +2788,13 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 		},
 		Settings: compressionSettings,
 	}
-	compactSendFunc := func(driverCtx context.Context) (<-chan providers.Chunk, error) {
-		return stateless.Send(driverCtx, compactSendReq)
-	}
+	// continue-on-length loop: if the model stops at the output cap
+	// anyway (reasoning ate the budget, or the summary is genuinely
+	// bigger than the cap), the wrapper transparently re-sends with
+	// the partial summary and a continue instruction until the model
+	// finishes on its own — the supervisor sees one uninterrupted
+	// stream. See compact_continue.go.
+	compactSendFunc := continuationSendFunc(stateless, compactSendReq, s.logger)
 
 	// Pipeline is threaded through to the supervisor so MessageLifecycleHook
 	// plugins fire when the compression_summary row is materialised. The

@@ -1076,3 +1076,56 @@ func TestSend_Responses_ThinkingDisabled(t *testing.T) {
 		})
 	}
 }
+
+// TestSend_Responses_IncompleteCarriesFinishReason — a generation that
+// hits max_output_tokens terminates with response.incomplete (NOT
+// response.completed); the driver must still emit usage with the
+// incomplete reason as FinishReason plus a done chunk. Before this was
+// handled, a capped output produced no usage at all and was
+// indistinguishable from a clean stop — the compression continuation
+// loop keys off this reason.
+func TestSend_Responses_IncompleteCarriesFinishReason(t *testing.T) {
+	srv, _ := captureRequest(t, "/v1/responses",
+		"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":1,\"delta\":\"cut off mid\"}\n\n"+
+			"event: response.incomplete\ndata: {\"type\":\"response.incomplete\",\"sequence_number\":2,\"response\":{\"id\":\"r\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"usage\":{\"input_tokens\":100,\"output_tokens\":42,\"total_tokens\":142}}}\n\n")
+	p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	p = forceResponsesAPI(t, p)
+	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+		ModelID:  "gpt-5",
+		Messages: []providers.WireMessage{{Role: "user", Content: "x"}},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	var sawDone bool
+	var usage *providers.Usage
+	for c := range ch {
+		switch c.Type {
+		case providers.ChunkUsage:
+			var u providers.Usage
+			if err := json.Unmarshal(c.Payload, &u); err != nil {
+				t.Fatalf("unmarshal usage: %v", err)
+			}
+			usage = &u
+		case providers.ChunkDone:
+			sawDone = true
+		case providers.ChunkError:
+			t.Fatalf("unexpected error chunk: %s", c.Payload)
+		}
+	}
+	if !sawDone {
+		t.Error("no done chunk")
+	}
+	if usage == nil {
+		t.Fatal("no usage chunk for incomplete response")
+	}
+	if usage.FinishReason == nil || *usage.FinishReason != "max_output_tokens" {
+		t.Errorf("finish_reason=%v want max_output_tokens", usage.FinishReason)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != 42 {
+		t.Errorf("output_tokens=%v want 42", usage.OutputTokens)
+	}
+}

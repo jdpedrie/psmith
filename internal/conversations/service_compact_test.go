@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -557,3 +558,181 @@ func TestCompact_PersistsFinishReason(t *testing.T) {
 }
 
 func ptrInt32(v int32) *int32 { return &v }
+
+// --- continuation on length-capped legs ---
+
+// scriptedStatelessDriver returns a different chunk slice per Send call
+// (the last entry repeats once the script runs out) and records every
+// SendRequest, so continuation tests can assert both the stitched
+// output and the follow-up request shape.
+type scriptedStatelessDriver struct {
+	typeName string
+	mu       sync.Mutex
+	script   [][]providers.Chunk
+	calls    int
+	requests []providers.SendRequest
+}
+
+func (d *scriptedStatelessDriver) Type() string   { return d.typeName }
+func (d *scriptedStatelessDriver) Stateful() bool { return false }
+func (d *scriptedStatelessDriver) DiscoverModels(_ context.Context) ([]providers.Model, error) {
+	return nil, nil
+}
+func (d *scriptedStatelessDriver) RenderThinkingToText(_ json.RawMessage) string { return "" }
+
+func (d *scriptedStatelessDriver) Send(_ context.Context, req providers.SendRequest) (<-chan providers.Chunk, error) {
+	d.mu.Lock()
+	idx := d.calls
+	if idx >= len(d.script) {
+		idx = len(d.script) - 1
+	}
+	chunks := d.script[idx]
+	d.calls++
+	cp := req
+	d.requests = append(d.requests, cp)
+	d.mu.Unlock()
+	ch := make(chan providers.Chunk, len(chunks)+1)
+	for _, c := range chunks {
+		ch <- c
+	}
+	close(ch)
+	return ch, nil
+}
+
+var scriptedByType sync.Map
+
+func registerScriptedDriver(t *testing.T, prefix string, script [][]providers.Chunk) string {
+	t.Helper()
+	typeName := uniqueDriverName(t, prefix)
+	providers.Register(typeName, func(_ providers.Deps, _ json.RawMessage) (providers.Provider, error) {
+		d := &scriptedStatelessDriver{typeName: typeName, script: script}
+		scriptedByType.Store(typeName, d)
+		return d, nil
+	})
+	return typeName
+}
+
+func usageChunk(t *testing.T, outTokens int, finishReason string) providers.Chunk {
+	t.Helper()
+	u := providers.Usage{OutputTokens: &outTokens}
+	if finishReason != "" {
+		u.FinishReason = &finishReason
+	}
+	payload, err := json.Marshal(u)
+	if err != nil {
+		t.Fatalf("marshal usage: %v", err)
+	}
+	return providers.Chunk{Type: providers.ChunkUsage, Payload: payload}
+}
+
+// runScriptedCompact drives Compact against a scripted driver and
+// returns the terminal run, the driver (for request assertions), and
+// the store handle.
+func runScriptedCompact(t *testing.T, script [][]providers.Chunk) (store.StreamRun, *scriptedStatelessDriver, *store.Queries) {
+	t.Helper()
+	svc, q, sup := newFullSvc(t)
+	driverType := registerScriptedDriver(t, "compact-cont", script)
+	f := seedSendable(t, q, driverType)
+	parent := f.systemMsgID
+	_ = insertMessage(t, q, f.contextID, &parent, "user", "story please")
+
+	guide := "Summarize."
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	resp, err := svc.Compact(ctxAsUser(f.user), connect.NewRequest(&psmithv1.CompactRequest{
+		ConversationId:        f.conv.ID.String(),
+		CompressionGuide:      &guide,
+		CompressionProviderId: &pid,
+		CompressionModelId:    &mid,
+	}))
+	if err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	runID, _ := uuid.Parse(resp.Msg.StreamRun.Id)
+	final := waitForTerminal(t, sup, runID)
+	v, ok := scriptedByType.Load(driverType)
+	if !ok {
+		t.Fatalf("scripted driver %q never built", driverType)
+	}
+	return final, v.(*scriptedStatelessDriver), q
+}
+
+// TestCompact_ContinuesAfterLengthCap — a leg that stops at the output
+// cap triggers a transparent follow-up request carrying the partial
+// summary and a continue instruction; the stitched summary lands as one
+// message with summed usage and the FINAL leg's finish_reason.
+func TestCompact_ContinuesAfterLengthCap(t *testing.T) {
+	t.Parallel()
+	final, drv, q := runScriptedCompact(t, [][]providers.Chunk{
+		{textChunk("Part one,"), usageChunk(t, 100, "max_tokens"), doneChunk()},
+		{textChunk(" part two."), usageChunk(t, 50, "end_turn"), doneChunk()},
+	})
+	if final.Status != "completed" {
+		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
+	}
+	summary, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if summary.Content != "Part one, part two." {
+		t.Errorf("stitched content %q", summary.Content)
+	}
+	if summary.FinishReason == nil || *summary.FinishReason != "end_turn" {
+		t.Errorf("finish_reason=%v want end_turn", summary.FinishReason)
+	}
+	if summary.OutputTokens == nil || *summary.OutputTokens != 150 {
+		t.Errorf("output_tokens=%v want 150 (summed across legs)", summary.OutputTokens)
+	}
+
+	drv.mu.Lock()
+	defer drv.mu.Unlock()
+	if len(drv.requests) != 2 {
+		t.Fatalf("requests=%d want 2", len(drv.requests))
+	}
+	second := drv.requests[1]
+	// base [system, user] + [assistant partial, user continue]
+	if len(second.Messages) != 4 {
+		t.Fatalf("continuation messages=%d want 4", len(second.Messages))
+	}
+	if second.Messages[2].Role != "assistant" || second.Messages[2].Content != "Part one," {
+		t.Errorf("continuation assistant turn: %+v", second.Messages[2])
+	}
+	if second.Messages[3].Role != "user" || !strings.Contains(second.Messages[3].Content, "Continue the summary") {
+		t.Errorf("continuation user turn: %+v", second.Messages[3])
+	}
+	if second.Settings.MaxOutputTokens == nil || *second.Settings.MaxOutputTokens != *drv.requests[0].Settings.MaxOutputTokens {
+		t.Errorf("continuation settings drifted: %+v vs %+v", second.Settings, drv.requests[0].Settings)
+	}
+}
+
+// TestCompact_ContinuationCapStops — a model that reports a length stop
+// on every leg gets exactly maxCompressionLegs requests, then the run
+// completes with the truncation visible in finish_reason.
+func TestCompact_ContinuationCapStops(t *testing.T) {
+	t.Parallel()
+	final, drv, q := runScriptedCompact(t, [][]providers.Chunk{
+		{textChunk("chunk "), usageChunk(t, 10, "max_tokens"), doneChunk()},
+	})
+	if final.Status != "completed" {
+		t.Fatalf("status %q want completed; err=%s", final.Status, string(final.ErrorPayload))
+	}
+	drv.mu.Lock()
+	calls := len(drv.requests)
+	drv.mu.Unlock()
+	if calls != maxCompressionLegs {
+		t.Errorf("requests=%d want %d", calls, maxCompressionLegs)
+	}
+	summary, err := q.GetMessageByID(context.Background(), *final.ResultMessageID)
+	if err != nil {
+		t.Fatalf("GetMessageByID: %v", err)
+	}
+	if want := strings.Repeat("chunk ", maxCompressionLegs); summary.Content != want {
+		t.Errorf("content %q want %q", summary.Content, want)
+	}
+	if summary.FinishReason == nil || *summary.FinishReason != "max_tokens" {
+		t.Errorf("finish_reason=%v want max_tokens (truncation stays visible)", summary.FinishReason)
+	}
+	if summary.OutputTokens == nil || *summary.OutputTokens != 10*maxCompressionLegs {
+		t.Errorf("output_tokens=%v want %d", summary.OutputTokens, 10*maxCompressionLegs)
+	}
+}

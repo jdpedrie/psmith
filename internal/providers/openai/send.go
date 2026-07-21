@@ -662,11 +662,15 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 			}
 			emit(out, providers.ChunkError, map[string]string{"message": msg})
 
-		case "response.completed":
-			// Pass IncompleteDetails.Reason when present (e.g.
-			// "max_output_tokens", "content_filter") so the UI can flag
-			// unexpected terminations. A clean completion has an empty
-			// reason — emitResponsesUsage just leaves FinishReason nil.
+		case "response.completed", "response.incomplete":
+			// A generation that hits max_output_tokens terminates with
+			// response.incomplete, NOT response.completed — without this
+			// case the stream fell through to the synthetic done below
+			// with no usage chunk and no finish reason, so a capped
+			// output was indistinguishable from a clean stop.
+			// IncompleteDetails.Reason (e.g. "max_output_tokens",
+			// "content_filter") becomes FinishReason; a clean completion
+			// has an empty reason and leaves FinishReason nil.
 			emitResponsesUsage(out, evt.Response.Usage, evt.Response.IncompleteDetails.Reason)
 			emit(out, providers.ChunkDone, map[string]any{})
 			return
