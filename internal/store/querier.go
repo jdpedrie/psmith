@@ -116,6 +116,10 @@ type Querier interface {
 	// multiple dangling branches (shouldn't happen in normal use), returns the
 	// one with the greatest id (most recently created per UUIDv7 monotonicity).
 	// Returns no rows when the context is truly empty.
+	// NOT EXISTS rather than NOT IN: the planner runs this as an anti-join
+	// probing the messages_parent index per candidate row, where NOT IN
+	// materialized the full distinct-parent set on every call (and carries
+	// NULL-semantics traps besides).
 	GetContextLeafMessage(ctx context.Context, contextID uuid.UUID) (Message, error)
 	// Returns the (single) role=context message in a Context. Each Context has at
 	// most one such message; APPEND-mode compression reads it to chain forward.

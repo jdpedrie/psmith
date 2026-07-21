@@ -131,11 +131,15 @@ LIMIT 1;
 -- multiple dangling branches (shouldn't happen in normal use), returns the
 -- one with the greatest id (most recently created per UUIDv7 monotonicity).
 -- Returns no rows when the context is truly empty.
+-- NOT EXISTS rather than NOT IN: the planner runs this as an anti-join
+-- probing the messages_parent index per candidate row, where NOT IN
+-- materialized the full distinct-parent set on every call (and carries
+-- NULL-semantics traps besides).
 SELECT * FROM messages m
 WHERE m.context_id = $1
-  AND m.id NOT IN (
-    SELECT DISTINCT c.parent_id FROM messages c
-    WHERE c.context_id = $1 AND c.parent_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM messages c
+    WHERE c.parent_id = m.id
   )
 ORDER BY m.id DESC
 LIMIT 1;

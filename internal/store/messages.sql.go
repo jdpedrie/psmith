@@ -418,9 +418,9 @@ func (q *Queries) GetCompressionSummaryInContext(ctx context.Context, contextID 
 const getContextLeafMessage = `-- name: GetContextLeafMessage :one
 SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages m
 WHERE m.context_id = $1
-  AND m.id NOT IN (
-    SELECT DISTINCT c.parent_id FROM messages c
-    WHERE c.context_id = $1 AND c.parent_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM messages c
+    WHERE c.parent_id = m.id
   )
 ORDER BY m.id DESC
 LIMIT 1
@@ -431,6 +431,10 @@ LIMIT 1
 // multiple dangling branches (shouldn't happen in normal use), returns the
 // one with the greatest id (most recently created per UUIDv7 monotonicity).
 // Returns no rows when the context is truly empty.
+// NOT EXISTS rather than NOT IN: the planner runs this as an anti-join
+// probing the messages_parent index per candidate row, where NOT IN
+// materialized the full distinct-parent set on every call (and carries
+// NULL-semantics traps besides).
 func (q *Queries) GetContextLeafMessage(ctx context.Context, contextID uuid.UUID) (Message, error) {
 	row := q.db.QueryRow(ctx, getContextLeafMessage, contextID)
 	var i Message
