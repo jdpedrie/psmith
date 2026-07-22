@@ -44,7 +44,13 @@ templ loginPage(errMsg string) {
 }
 
 templ sidebar(convos []convoVM) {
-	<aside class="sidebar">
+	<aside
+		class="sidebar"
+		id="sidebar"
+		hx-get={ "/partials/sidebar?active=" + sidebarActiveID(convos) }
+		hx-trigger="sse:conversation-changed"
+		hx-swap="outerHTML"
+	>
 		<header class="sidebar-head">
 			<a class="brand" href="/chats">Psmith</a>
 		</header>
@@ -85,7 +91,7 @@ templ sidebar(convos []convoVM) {
 
 templ chatsPage(convos []convoVM) {
 	@layout("Chats — Psmith") {
-		<div class="app">
+		<div class="app" hx-ext="sse" sse-connect="/events">
 			@sidebar(convos)
 			<main class="main empty">
 				<p class="muted">Select a conversation, or <a href="/new">start a new one</a>.</p>
@@ -96,7 +102,7 @@ templ chatsPage(convos []convoVM) {
 
 templ newConversationPage(convos []convoVM, profiles []profileVM) {
 	@layout("New chat — Psmith") {
-		<div class="app">
+		<div class="app" hx-ext="sse" sse-connect="/events">
 			@sidebar(convos)
 			<main class="main">
 				<header class="conv-head">New chat</header>
@@ -998,9 +1004,9 @@ templ modelChip(convID string, m pickerModelVM) {
 	</button>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string) {
+templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string, pendingSummaryTruncated bool) {
 	@layout(conv.Title + " — Psmith") {
-		<div class="app">
+		<div class="app" hx-ext="sse" sse-connect="/events">
 			@sidebar(convos)
 			<main class="main">
 				<header class="conv-head">
@@ -1011,16 +1017,9 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pic
 						<a class="conv-link" href={ templ.SafeURL("/c/" + conv.ID + "/contexts") }>Contexts</a>
 					</span>
 				</header>
-				<div id="messages" class="messages">
-					for _, m := range msgs {
-						@messageBubble(m, true)
-					}
-					if runID != "" {
-						@assistantStream(conv.ID, runID)
-					}
-				</div>
+				@messagesRegion(conv.ID, msgs, runID)
 				if pendingSummaryID != "" {
-					@compressionReviewBar(conv.ID, pendingSummaryID)
+					@compressionReviewBar(conv.ID, pendingSummaryID, pendingSummaryTruncated)
 				} else {
 					@composer(conv.ID, current)
 				}
@@ -1031,16 +1030,45 @@ templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pic
 	}
 }
 
+// messagesRegion is the transcript body, shared by the full page and
+// the /partials/messages refresh. It re-fetches itself when an
+// account event names THIS conversation (send, terminal, edit,
+// delete, compaction — from any client). The partial recomputes the
+// active run server-side, so an observer's refresh drops straight
+// into another client's live stream, and the sender's own refresh
+// re-attaches to its run via SSE replay.
+templ messagesRegion(convID string, msgs []msgVM, runID string) {
+	<div
+		id="messages"
+		class="messages"
+		hx-get={ "/c/" + convID + "/partials/messages" }
+		hx-trigger={ "sse:conversation-changed-" + convID }
+		hx-swap="outerHTML"
+	>
+		for _, m := range msgs {
+			@messageBubble(m, true)
+		}
+		if runID != "" {
+			@assistantStream(convID, runID)
+		}
+	</div>
+}
+
 // compressionReviewBar replaces the composer while a clean compression
 // summary awaits review — the server refuses sends and further
 // compactions until the summary is promoted or deleted, so the bottom
 // bar carries the verdict. The summary content renders in the
 // transcript like any other message.
-templ compressionReviewBar(convID string, messageID string) {
+templ compressionReviewBar(convID string, messageID string, truncated bool) {
 	<div class="review-bar">
 		<div class="review-bar-text">
-			<strong>Compression awaiting review</strong>
-			<span class="muted">Confirm to continue in a fresh context, or delete to resume here.</span>
+			if truncated {
+				<strong>Truncated summary awaiting review</strong>
+				<span class="truncated-note">The summary hit the model's output limit and is incomplete. Delete and re-run compaction; confirming keeps the cut text.</span>
+			} else {
+				<strong>Compression awaiting review</strong>
+				<span class="muted">Confirm to continue in a fresh context, or delete to resume here.</span>
+			}
 		</div>
 		<form
 			method="post"

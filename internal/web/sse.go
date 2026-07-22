@@ -43,6 +43,13 @@ func (s *sseStream) event(name, data string) {
 	s.f.Flush()
 }
 
+// comment writes an SSE comment line — invisible to consumers, but
+// keeps idle connections alive through proxies and browser reapers.
+func (s *sseStream) comment(text string) {
+	fmt.Fprintf(s.w, ": %s\n\n", text)
+	s.f.Flush()
+}
+
 // renderComp renders a templ component to a string (for embedding in SSE data).
 func renderComp(ctx context.Context, c templ.Component) string {
 	var b strings.Builder

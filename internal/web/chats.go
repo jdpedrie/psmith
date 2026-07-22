@@ -15,6 +15,7 @@ import (
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/internal/store"
 )
 
 func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
@@ -26,27 +27,36 @@ func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, chatsPage(convos))
 }
 
-func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+// convTranscript is everything the conversation page (or its messages
+// partial) needs from one load pass.
+type convTranscript struct {
+	conv             *psmithv1.Conversation
+	msgs             []msgVM
+	pendingSummaryID string
+	pendingTruncated bool
+}
+
+// loadTranscript assembles the transcript view-model for a conversation:
+// messages of the active context, plus the pending-compression gate
+// state. Shared by the full page render and the SSE-triggered partial.
+func (h *Handler) loadTranscript(r *http.Request, id string) (convTranscript, error) {
+	var out convTranscript
 	getResp, err := h.convos.GetConversation(r.Context(), connect.NewRequest(&psmithv1.GetConversationRequest{
 		Id: id,
 	}))
 	if err != nil {
-		http.Error(w, "conversation not found", http.StatusNotFound)
-		return
+		return out, err
 	}
-	conv := getResp.Msg.GetConversation()
+	out.conv = getResp.Msg.GetConversation()
 	ctxID := getResp.Msg.GetActiveContext().GetId()
 
 	msgsResp, err := h.convos.ListMessages(r.Context(), connect.NewRequest(&psmithv1.ListMessagesRequest{
 		ContextId: ctxID,
 	}))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return out, err
 	}
 
-	var msgs []msgVM
 	for _, m := range msgsResp.Msg.GetMessages() {
 		role := roleClass(m.GetRole())
 		if role == "system" {
@@ -64,22 +74,84 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		msgs = append(msgs, msgVM{ID: m.GetId(), ConvID: id, ParentID: m.GetParentId(), Role: role, HTML: renderMarkdown(content), Images: images})
+		out.msgs = append(out.msgs, msgVM{ID: m.GetId(), ConvID: id, ParentID: m.GetParentId(), Role: role, HTML: renderMarkdown(content), Images: images})
 	}
 
 	// A clean (non-errored) compression summary gates the conversation:
 	// the server refuses sends and compacts until it's promoted or
-	// deleted, so the composer gives way to the review bar.
-	var pendingSummaryID string
+	// deleted, so the composer gives way to the review bar. Truncated
+	// (output-limit-capped) summaries warn instead of inviting Confirm.
 	for _, m := range msgsResp.Msg.GetMessages() {
 		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY && m.GetErrorText() == "" {
-			pendingSummaryID = m.GetId()
+			out.pendingSummaryID = m.GetId()
+			out.pendingTruncated = isTruncatedFinish(m.GetFinishReason())
 		}
 	}
+	return out, nil
+}
 
+// activeRunID returns a running stream_run for the conversation, or ""
+// — the messages partial uses it so a refresh triggered by another
+// client's send drops the observer straight into the live stream.
+func (h *Handler) activeRunID(r *http.Request, convID string) string {
+	u, ok := auth.FromContext(r.Context())
+	if !ok || h.queries == nil {
+		return ""
+	}
+	cid, err := uuid.Parse(convID)
+	if err != nil {
+		return ""
+	}
+	runs, err := h.queries.ListActiveStreamRunsByConversation(r.Context(), store.ListActiveStreamRunsByConversationParams{
+		UserID:         u.ID,
+		ConversationID: cid,
+	})
+	if err != nil || len(runs) == 0 {
+		return ""
+	}
+	return runs[0].ID.String()
+}
+
+func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	t, err := h.loadTranscript(r, id)
+	if err != nil {
+		http.Error(w, "conversation not found", http.StatusNotFound)
+		return
+	}
 	convos, _ := h.listConvos(r.Context(), id)
-	pick := h.modelPicker(r.Context(), id, currentSettingsModel(conv), capsVM{})
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, msgs, pick.Current, r.URL.Query().Get("run"), pendingSummaryID))
+	pick := h.modelPicker(r.Context(), id, currentSettingsModel(t.conv), capsVM{})
+	runID := r.URL.Query().Get("run")
+	if runID == "" {
+		// Entering (or reloading) a conversation with an in-flight run
+		// — from this client or any other — renders the live stream
+		// instead of a transcript that ends at the question.
+		runID = h.activeRunID(r, id)
+	}
+	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated))
+}
+
+// handleMessagesPartial re-renders the #messages region. Triggered by
+// the SSE bridge when an account event names this conversation.
+func (h *Handler) handleMessagesPartial(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	t, err := h.loadTranscript(r, id)
+	if err != nil {
+		http.Error(w, "conversation not found", http.StatusNotFound)
+		return
+	}
+	h.render(w, r, http.StatusOK, messagesRegion(id, t.msgs, h.activeRunID(r, id)))
+}
+
+// handleSidebarPartial re-renders the conversations sidebar. Triggered
+// by the SSE bridge on any conversation change.
+func (h *Handler) handleSidebarPartial(w http.ResponseWriter, r *http.Request) {
+	convos, err := h.listConvos(r.Context(), r.URL.Query().Get("active"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, http.StatusOK, sidebar(convos))
 }
 
 // handleSend sends a user turn. For htmx requests it returns an HTML fragment

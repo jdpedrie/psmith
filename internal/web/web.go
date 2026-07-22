@@ -22,6 +22,7 @@ import (
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/conversations"
 	"github.com/jdpedrie/psmith/internal/embeddersvc"
+	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/files"
 	"github.com/jdpedrie/psmith/internal/langfusesvc"
 	"github.com/jdpedrie/psmith/internal/modelproviders"
@@ -46,7 +47,10 @@ type Deps struct {
 	Langfuse      *langfusesvc.Service
 	Files         *files.Service
 	Supervisor    *stream.Supervisor
-	Logger        *slog.Logger
+	// Bus may be nil — the /events SSE bridge then reports 404 and
+	// pages simply never receive push triggers (htmx SSE fails quietly).
+	Bus    *events.Bus
+	Logger *slog.Logger
 }
 
 // Handler serves the web UI.
@@ -60,6 +64,7 @@ type Handler struct {
 	langfuse   *langfusesvc.Service
 	files      *files.Service
 	supervisor *stream.Supervisor
+	bus        *events.Bus
 	logger     *slog.Logger
 }
 
@@ -78,6 +83,7 @@ func New(d Deps) *Handler {
 		langfuse:   d.Langfuse,
 		files:      d.Files,
 		supervisor: d.Supervisor,
+		bus:        d.Bus,
 		logger:     d.Logger,
 	}
 }
@@ -108,6 +114,9 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /new", h.requireUser(h.handleNewForm))
 	mux.HandleFunc("POST /new", h.requireUser(h.handleNewCreate))
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
+	mux.HandleFunc("GET /events", h.requireUser(h.handleEvents))
+	mux.HandleFunc("GET /partials/sidebar", h.requireUser(h.handleSidebarPartial))
+	mux.HandleFunc("GET /c/{id}/partials/messages", h.requireUser(h.handleMessagesPartial))
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
 	mux.HandleFunc("POST /c/{id}/elicit/{eid}", h.requireUser(h.handleElicitRespond))
@@ -246,6 +255,18 @@ func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, e
 
 // relTime renders a compact "time since" label for the sidebar: minutes/hours
 // within a day, "d" within a week, then an absolute month/day.
+// sidebarActiveID extracts the highlighted conversation id from the
+// sidebar rows — the sidebar's self-refresh URL carries it so a
+// re-render keeps the same row highlighted.
+func sidebarActiveID(convos []convoVM) string {
+	for _, c := range convos {
+		if c.Active {
+			return c.ID
+		}
+	}
+	return ""
+}
+
 // serverBuildVersion feeds the settings page's version footer.
 // Package-level (not a Handler method) so the templ template can call
 // it without threading the handler through.
