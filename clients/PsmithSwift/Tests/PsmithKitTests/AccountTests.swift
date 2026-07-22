@@ -76,3 +76,28 @@ struct AccountTests {
         #expect(abs(a.createdAt.timeIntervalSinceNow) < 2)
     }
 }
+
+/// The legacy-import bundle gate. The import reads a USER-level token
+/// path on macOS, so it must run only inside the shipping apps — a
+/// scratch instance or test runner adopting the user's real session
+/// is the failure this guards (docs/todo.md, "AccountManager legacy
+/// import"). These tests pin the decision function; the file-touching
+/// path is deliberately untested because exercising it would write to
+/// the developer's real legacy token location.
+@Suite("AccountManager legacy-import gate")
+struct LegacyImportGateTests {
+
+    @Test("shipping bundle ids may import")
+    func shippingIDsPass() {
+        #expect(AccountManager.shouldAttemptLegacyImport(bundleID: "dev.jdpedrie.PsmithMac"))
+        #expect(AccountManager.shouldAttemptLegacyImport(bundleID: "dev.jdpedrie.PsmithiOS"))
+    }
+
+    @Test("scratch, test-runner, and nil bundle ids are refused")
+    func othersRefused() {
+        #expect(!AccountManager.shouldAttemptLegacyImport(bundleID: "dev.jdpedrie.PsmithMac.scratch"))
+        #expect(!AccountManager.shouldAttemptLegacyImport(bundleID: "com.apple.dt.xctest.tool"))
+        #expect(!AccountManager.shouldAttemptLegacyImport(bundleID: ""))
+        #expect(!AccountManager.shouldAttemptLegacyImport(bundleID: nil))
+    }
+}

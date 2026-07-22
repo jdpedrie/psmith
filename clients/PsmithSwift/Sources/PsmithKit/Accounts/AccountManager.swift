@@ -198,11 +198,34 @@ public final class AccountManager {
         model.authState.clear()
     }
 
+    /// Bundle ids allowed to run the legacy import. The legacy token
+    /// file lives at a USER-level path on macOS
+    /// (~/Library/Application Support/PsmithMac/session.token), so
+    /// without this gate ANY empty-account process running as the
+    /// user — a rebadged scratch instance, a test runner — silently
+    /// adopts the user's real session (observed twice; the incident
+    /// log lives in docs/todo.md under "AccountManager legacy
+    /// import"). Only the shipping apps may import.
+    nonisolated static let legacyImportBundleWhitelist: Set<String> = [
+        "dev.jdpedrie.PsmithMac",
+        "dev.jdpedrie.PsmithiOS",
+    ]
+
+    /// Pure gate decision, separated so the whitelist logic is unit-
+    /// testable without touching the real legacy file path.
+    nonisolated static func shouldAttemptLegacyImport(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return legacyImportBundleWhitelist.contains(bundleID)
+    }
+
     /// Try to import the existing single-account state (legacy
     /// FileTokenStore + ServerURLStore) as the first account.
     /// Best-effort: failures leave the legacy state untouched and
     /// the manager starts empty.
     private func tryImportLegacyAccount() {
+        guard Self.shouldAttemptLegacyImport(bundleID: Bundle.main.bundleIdentifier) else {
+            return
+        }
         let host = ServerURLStore.shared.current
         guard let legacyStore = try? FileTokenStore() else { return }
         guard let token = try? legacyStore.load(), !(token.isEmpty) else { return }
