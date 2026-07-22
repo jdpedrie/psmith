@@ -202,6 +202,7 @@ func listContextRowToProto(r store.ListContextsByConversationRow) *psmithv1.Cont
 		MessageCount:           int32(r.MessageCount),
 		LastMessageTotalTokens: r.LastMessageTotalTokens,
 		CumulativeCostUsd:      r.CumulativeCostUsd,
+		CacheSavingsUsd:        r.CacheSavingsUsd,
 	}
 	if r.ParentContextID != nil {
 		s := r.ParentContextID.String()

@@ -74,3 +74,55 @@ func testNumeric(t *testing.T, v float64) pgtype.Numeric {
 	}
 	return n
 }
+
+// cache_savings_usd prices the cache delta from the CURRENT
+// user_models row: cache_read_tokens x input price x provider discount
+// (0.9 on anthropic). Rows without provider/model attribution
+// contribute zero instead of poisoning the aggregate.
+func TestListContexts_CacheSavingsAggregate(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://unused.invalid")
+	ctx := context.Background()
+
+	// 1M cache-read tokens at input price 3.0/M on anthropic:
+	// savings = 1_000_000 * 3.0 / 1e6 * 0.9 = 2.7.
+	cacheRead := int32(1_000_000)
+	modelID := f.modelID
+	if _, err := q.CreateAssistantMessageWithUsage(ctx, store.CreateAssistantMessageWithUsageParams{
+		ID: uuid.New(), ContextID: f.contextID,
+		Role: "assistant", Content: "cached turn",
+		ProviderID:      &f.provider.ID,
+		ModelID:         &modelID,
+		CacheReadTokens: &cacheRead,
+		TotalCostUsd:    testNumeric(t, 0.30),
+	}); err != nil {
+		t.Fatalf("CreateAssistantMessageWithUsage: %v", err)
+	}
+	// Unattributed row (no provider/model): must contribute zero.
+	if _, err := q.CreateMessage(ctx, store.CreateMessageParams{
+		ID: uuid.New(), ContextID: f.contextID, Role: "user", Content: "hi",
+	}); err != nil {
+		t.Fatalf("CreateMessage: %v", err)
+	}
+
+	resp, err := svc.ListContexts(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ListContextsRequest{
+		ConversationId: f.conv.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("ListContexts: %v", err)
+	}
+	var row *psmithv1.Context
+	for _, c := range resp.Msg.Contexts {
+		if c.Id == f.contextID.String() {
+			row = c
+		}
+	}
+	if row == nil {
+		t.Fatal("seeded context missing from ListContexts")
+	}
+	if math.Abs(row.CacheSavingsUsd-2.7) > 1e-9 {
+		t.Errorf("cache_savings_usd = %v, want 2.7", row.CacheSavingsUsd)
+	}
+}

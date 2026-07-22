@@ -2983,8 +2983,14 @@ type Context struct {
 	// Populated by ListContexts; zero when retrieved via single-context RPCs
 	// that don't aggregate.
 	CumulativeCostUsd float64 `protobuf:"fixed64,10,opt,name=cumulative_cost_usd,json=cumulativeCostUsd,proto3" json:"cumulative_cost_usd,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// What prompt caching saved vs full-price input across this context:
+	// sum of cache_read_tokens x current input price x provider discount
+	// (90% on Anthropic, 50% elsewhere). Advisory observability figure —
+	// priced from the CURRENT user_models rows, so it drifts if prices
+	// are edited after the fact. Populated by ListContexts only.
+	CacheSavingsUsd float64 `protobuf:"fixed64,11,opt,name=cache_savings_usd,json=cacheSavingsUsd,proto3" json:"cache_savings_usd,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Context) Reset() {
@@ -3083,6 +3089,13 @@ func (x *Context) GetLastMessageTotalTokens() int64 {
 func (x *Context) GetCumulativeCostUsd() float64 {
 	if x != nil {
 		return x.CumulativeCostUsd
+	}
+	return 0
+}
+
+func (x *Context) GetCacheSavingsUsd() float64 {
+	if x != nil {
+		return x.CacheSavingsUsd
 	}
 	return 0
 }
@@ -4408,7 +4421,7 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"_pinned_at\"G\n" +
 	"\x15StreamingComponentTag\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1c\n" +
-	"\tcomponent\x18\x02 \x01(\tR\tcomponent\"\x96\x04\n" +
+	"\tcomponent\x18\x02 \x01(\tR\tcomponent\"\xc2\x04\n" +
 	"\aContext\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12/\n" +
@@ -4421,7 +4434,8 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\rmessage_count\x18\b \x01(\x05R\fmessageCount\x129\n" +
 	"\x19last_message_total_tokens\x18\t \x01(\x03R\x16lastMessageTotalTokens\x12.\n" +
 	"\x13cumulative_cost_usd\x18\n" +
-	" \x01(\x01R\x11cumulativeCostUsdB\x14\n" +
+	" \x01(\x01R\x11cumulativeCostUsd\x12*\n" +
+	"\x11cache_savings_usd\x18\v \x01(\x01R\x0fcacheSavingsUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
 	"\x06_title\"\xae\t\n" +

@@ -57,7 +57,10 @@ struct ContextListViewSnapshots {
             activationTime: SnapshotFixtures.referenceDate.addingTimeInterval(-5400),
             messageCount: 8,
             lastMessageTotalTokens: 1_840,
-            cumulativeCostUsd: 0.0512
+            cumulativeCostUsd: 0.0512,
+            // Non-zero savings → the chip renders the billed·saved
+            // split; the other rows keep the single-figure form.
+            cacheSavingsUsd: 0.2210
         )
         let mid = SnapshotFixtures.context(
             id: "context-2",

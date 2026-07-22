@@ -2262,6 +2262,13 @@ public nonisolated struct Psmith_V1_Context: Sendable {
   /// that don't aggregate.
   public var cumulativeCostUsd: Double = 0
 
+  /// What prompt caching saved vs full-price input across this context:
+  /// sum of cache_read_tokens x current input price x provider discount
+  /// (90% on Anthropic, 50% elsewhere). Advisory observability figure —
+  /// priced from the CURRENT user_models rows, so it drifts if prices
+  /// are edited after the fact. Populated by ListContexts only.
+  public var cacheSavingsUsd: Double = 0
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -4792,7 +4799,7 @@ nonisolated extension Psmith_V1_StreamingComponentTag: SwiftProtobuf.Message, Sw
 
 nonisolated extension Psmith_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Context"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}parent_context_id\0\u{3}activation_time\0\u{3}created_at\0\u{3}current_leaf_message_id\0\u{1}title\0\u{3}message_count\0\u{3}last_message_total_tokens\0\u{3}cumulative_cost_usd\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}conversation_id\0\u{3}parent_context_id\0\u{3}activation_time\0\u{3}created_at\0\u{3}current_leaf_message_id\0\u{1}title\0\u{3}message_count\0\u{3}last_message_total_tokens\0\u{3}cumulative_cost_usd\0\u{3}cache_savings_usd\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4810,6 +4817,7 @@ nonisolated extension Psmith_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._M
       case 8: try { try decoder.decodeSingularInt32Field(value: &self.messageCount) }()
       case 9: try { try decoder.decodeSingularInt64Field(value: &self.lastMessageTotalTokens) }()
       case 10: try { try decoder.decodeSingularDoubleField(value: &self.cumulativeCostUsd) }()
+      case 11: try { try decoder.decodeSingularDoubleField(value: &self.cacheSavingsUsd) }()
       default: break
       }
     }
@@ -4850,6 +4858,9 @@ nonisolated extension Psmith_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._M
     if self.cumulativeCostUsd.bitPattern != 0 {
       try visitor.visitSingularDoubleField(value: self.cumulativeCostUsd, fieldNumber: 10)
     }
+    if self.cacheSavingsUsd.bitPattern != 0 {
+      try visitor.visitSingularDoubleField(value: self.cacheSavingsUsd, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4864,6 +4875,7 @@ nonisolated extension Psmith_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.messageCount != rhs.messageCount {return false}
     if lhs.lastMessageTotalTokens != rhs.lastMessageTotalTokens {return false}
     if lhs.cumulativeCostUsd != rhs.cumulativeCostUsd {return false}
+    if lhs.cacheSavingsUsd != rhs.cacheSavingsUsd {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

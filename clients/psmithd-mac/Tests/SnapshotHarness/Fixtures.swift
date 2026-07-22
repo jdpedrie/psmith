@@ -178,7 +178,8 @@ public enum SnapshotFixtures {
         activationTime: Date? = nil,
         messageCount: Int = 0,
         lastMessageTotalTokens: Int64 = 0,
-        cumulativeCostUsd: Double = 0
+        cumulativeCostUsd: Double = 0,
+        cacheSavingsUsd: Double = 0
     ) -> PsmithContext {
         PsmithContext(
             id: id,
@@ -190,7 +191,8 @@ public enum SnapshotFixtures {
             title: title,
             messageCount: messageCount,
             lastMessageTotalTokens: lastMessageTotalTokens,
-            cumulativeCostUsd: cumulativeCostUsd
+            cumulativeCostUsd: cumulativeCostUsd,
+            cacheSavingsUsd: cacheSavingsUsd
         )
     }
 

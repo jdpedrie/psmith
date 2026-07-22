@@ -50,12 +50,33 @@ SELECT
     c.*,
     agg.message_count,
     COALESCE(last_turn.total_tokens, 0)::BIGINT AS last_message_total_tokens,
-    agg.cumulative_cost_usd
+    agg.cumulative_cost_usd,
+    agg.cache_savings_usd
 FROM contexts c
 LEFT JOIN LATERAL (
+    -- cache_savings_usd: what prompt caching saved vs full-price input,
+    -- cache_read_tokens x input_price x provider discount (90% off on
+    -- Anthropic, 50% on OpenAI/Google-shaped providers). Prices come
+    -- from the CURRENT user_models row: close enough for an
+    -- observability chip, and it avoids persisting a price snapshot
+    -- per message. Rows whose model/pricing is gone contribute zero.
     SELECT COUNT(*)::BIGINT AS message_count,
-           COALESCE(SUM(m.total_cost_usd), 0)::DOUBLE PRECISION AS cumulative_cost_usd
+           COALESCE(SUM(m.total_cost_usd), 0)::DOUBLE PRECISION AS cumulative_cost_usd,
+           COALESCE(SUM(
+               CASE
+                   WHEN m.cache_read_tokens IS NOT NULL
+                        AND um.input_price_per_million IS NOT NULL
+                   THEN m.cache_read_tokens * um.input_price_per_million / 1000000.0
+                        * CASE WHEN ump.type = 'anthropic' THEN 0.9 ELSE 0.5 END
+                   ELSE 0
+               END
+           ), 0)::DOUBLE PRECISION AS cache_savings_usd
     FROM messages m
+    LEFT JOIN user_models um
+           ON um.user_model_provider_id = m.provider_id
+          AND um.model_id = m.model_id
+    LEFT JOIN user_model_providers ump
+           ON ump.id = m.provider_id
     WHERE m.context_id = c.id
 ) agg ON TRUE
 LEFT JOIN LATERAL (

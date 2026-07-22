@@ -516,6 +516,12 @@ message Context {
   // Populated by ListContexts; zero when retrieved via single-context RPCs
   // that don't aggregate.
   double cumulative_cost_usd = 10;
+  // What prompt caching saved vs full-price input across this context:
+  // sum of cache_read_tokens x current input price x provider discount
+  // (90% on Anthropic, 50% elsewhere). Advisory observability figure —
+  // priced from the CURRENT user_models rows, so it drifts if prices
+  // are edited after the fact. Populated by ListContexts only.
+  double cache_savings_usd = 11;
 }
 
 enum MessageRole {

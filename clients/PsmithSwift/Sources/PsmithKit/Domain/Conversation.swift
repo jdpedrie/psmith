@@ -179,6 +179,10 @@ public struct PsmithContext: Sendable, Hashable, Identifiable, Codable {
     /// Cumulative cost in USD across every message in this context. Populated
     /// by ListContexts; zero on single-context RPCs that don't aggregate.
     public let cumulativeCostUsd: Double
+    /// What prompt caching saved vs full-price input across the context
+    /// (server aggregate, priced from current user_models rows; 90%
+    /// discount on Anthropic, 50% elsewhere). Zero outside ListContexts.
+    public let cacheSavingsUsd: Double
 
     // MARK: - Test support
     /// Public memberwise init so snapshot/unit tests can build deterministic
@@ -194,7 +198,8 @@ public struct PsmithContext: Sendable, Hashable, Identifiable, Codable {
         title: String? = nil,
         messageCount: Int = 0,
         lastMessageTotalTokens: Int64 = 0,
-        cumulativeCostUsd: Double = 0
+        cumulativeCostUsd: Double = 0,
+        cacheSavingsUsd: Double = 0
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -206,6 +211,7 @@ public struct PsmithContext: Sendable, Hashable, Identifiable, Codable {
         self.messageCount = messageCount
         self.lastMessageTotalTokens = lastMessageTotalTokens
         self.cumulativeCostUsd = cumulativeCostUsd
+        self.cacheSavingsUsd = cacheSavingsUsd
     }
 }
 
@@ -221,7 +227,8 @@ extension PsmithContext {
             title: p.hasTitle ? p.title : nil,
             messageCount: Int(p.messageCount),
             lastMessageTotalTokens: p.lastMessageTotalTokens,
-            cumulativeCostUsd: p.cumulativeCostUsd
+            cumulativeCostUsd: p.cumulativeCostUsd,
+            cacheSavingsUsd: p.cacheSavingsUsd
         )
     }
 }

@@ -224,21 +224,24 @@ private struct ContextRow_Legacy: View {
                 )
             }
             if context.cumulativeCostUsd > 0 {
+                // The server aggregate prices the cache delta (see
+                // Context.cache_savings_usd): billed is what actually
+                // hit the ledger, saved is what full-price input would
+                // have added on top.
                 metadataChip(
                     systemImage: "dollarsign.circle",
-                    text: context.cumulativeCostUsd.formatted(.currency(code: "USD").precision(.fractionLength(4)))
+                    text: context.cacheSavingsUsd >= 0.0001
+                        ? "billed \(costText(context.cumulativeCostUsd)) · saved \(costText(context.cacheSavingsUsd))"
+                        : costText(context.cumulativeCostUsd)
                 )
-                // TODO(cache observability): when the server-side per-context
-                // aggregate is extended to expose cache_read_tokens summed
-                // over the context (and the input price for the involved
-                // model is known here), split this chip into "billed" vs
-                // "saved" to surface the cache delta. Today's
-                // `cumulativeCostUsd` already reflects the cached pricing,
-                // so without the savings figure there's nothing to split.
             }
             Spacer(minLength: 0)
         }
         .padding(.leading, 30) // align under the title (past the leading icon)
+    }
+
+    private func costText(_ v: Double) -> String {
+        v.formatted(.currency(code: "USD").precision(.fractionLength(4)))
     }
 
     private func metadataChip(systemImage: String, text: String) -> some View {
