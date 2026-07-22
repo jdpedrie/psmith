@@ -193,6 +193,15 @@ public final class ConversationViewModel {
     // Edit state
     public var editingMessage: PsmithMessage?
 
+    /// Message whose long-press action menu is showing (iOS). Hoisted
+    /// here like `editingMessage` so the row that triggers it and the
+    /// overlay that renders it don't need a binding path through the
+    /// transcript stack. The overlay is custom (not `.contextMenu`):
+    /// the system menu's lift portal re-hosts the row outside the
+    /// inverted transcript's flip and renders it upside down for the
+    /// duration of the lift. Pure presentation signal; not persisted.
+    public var actionMenuMessage: PsmithMessage?
+
     // Context switcher
     public var contexts: [PsmithContext] = []
     /// When true, the conversation pane swaps the message scroll for a

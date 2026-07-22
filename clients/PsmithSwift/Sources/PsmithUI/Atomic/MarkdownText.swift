@@ -20,6 +20,7 @@ public struct MarkdownText: View {
     }
     private let source: Source
     @Environment(\.fontScale) private var fontScale
+    @Environment(\.markdownTextSelectable) private var selectable
 
     public init(_ content: String) {
         self.source = .raw(content)
@@ -36,6 +37,14 @@ public struct MarkdownText: View {
     }
 
     public var body: some View {
+        if selectable {
+            core.textSelection(.enabled)
+        } else {
+            core
+        }
+    }
+
+    private var core: some View {
         Markdown(parsedContent)
             .markdownTheme(.clarkChat)
             // MarkdownUI's base size is a library constant (13pt on
@@ -57,7 +66,6 @@ public struct MarkdownText: View {
                 // cost is the scale snapping to the nearest point.
                 FontSize((FontProperties.defaultSize * fontScale).rounded())
             }
-            .textSelection(.enabled)
     }
 
     private var parsedContent: MarkdownContent {
@@ -113,6 +121,24 @@ public struct MarkdownText: View {
             }
         }
         return out
+    }
+}
+
+/// Whether `MarkdownText` enables platform text selection. Defaults to
+/// true (selection everywhere: readers, settings, Mac transcript). The
+/// iOS transcript rows set this false: the selection interaction's
+/// UIKit long-press recognizer outcompetes the row's action-menu
+/// gesture, so a selectable body makes the menu unreachable on the
+/// message text. The menu's "Select text" action reopens the content
+/// in `MarkdownDocumentView`, where selection stays on.
+private struct MarkdownTextSelectableKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+public extension EnvironmentValues {
+    var markdownTextSelectable: Bool {
+        get { self[MarkdownTextSelectableKey.self] }
+        set { self[MarkdownTextSelectableKey.self] = newValue }
     }
 }
 

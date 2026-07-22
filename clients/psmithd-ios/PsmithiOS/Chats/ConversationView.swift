@@ -230,6 +230,9 @@ private struct ConversationBody: View {
     /// lives in the toolbar menu now, and Menus don't host
     /// NavigationLinks reliably.
     @State private var showingContexts = false
+    /// Message opened in the full-document reader via the action
+    /// menu's "Select text".
+    @State private var selectTextMessage: PsmithMessage?
 
     /// Latest scroll metrics, readable OUTSIDE the geometry handler.
     /// A reference-type box deliberately: writing it per tick must not
@@ -383,6 +386,30 @@ private struct ConversationBody: View {
         // binding loop the inline `.sheet(isPresented:)` was hitting.
         .sheet(item: $model.editingMessage) { msg in
             EditMessageSheet(message: msg, model: model)
+        }
+        // Long-press action menu, hoisted OUTSIDE the flipped scroll
+        // view (the whole reason it exists — see MessageActionMenu).
+        // Fade-only transition here; the cards spring in on their own
+        // so the backdrop doesn't visibly scale.
+        .overlay {
+            if let msg = model.actionMenuMessage {
+                MessageActionMenu(message: msg, model: model) {
+                    selectTextMessage = msg
+                }
+                .transition(.opacity)
+            }
+        }
+        // Full-document reader behind the menu's "Select text" — the
+        // transcript itself renders with selection off (see MessageRow),
+        // so this is where a text grab actually happens. Same cache key
+        // as the row, so the parse is warm.
+        .sheet(item: $selectTextMessage) { msg in
+            let body = msg.displayContent ?? msg.content
+            MarkdownDocumentView(
+                body,
+                cacheKey: MessageRow.markdownKey(id: msg.id, body: body),
+                title: "Message text"
+            )
         }
         .toast(
             message: Binding(

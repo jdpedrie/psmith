@@ -4,8 +4,11 @@ import PsmithUI
 
 /// iOS message bubble. Phase 5f wires per-message actions:
 ///
-///  - **Long-press** → context menu: Edit, Reload (assistant only),
-///    Copy, Delete. Mirrors the Mac hover-pill set.
+///  - **Long-press** → MessageActionMenu: Edit, Reload (assistant
+///    only), Copy, Read aloud, Delete. Mirrors the Mac hover-pill
+///    set. A custom overlay, NOT `.contextMenu` — the system menu's
+///    lift portal renders the row upside down inside the inverted
+///    transcript (see MessageActionMenu for the mechanism).
 ///  - **Edit-in-place**: Edit replaces the bubble's body with a
 ///    TextField + Save / Cancel buttons. Save updates the message via
 ///    `model.reloadFromMessage` (forks a new branch from the edit).
@@ -20,10 +23,7 @@ struct MessageRow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
-    @Environment(\.clipboard) private var clipboard
 
-    @State private var showDeleteConfirm: Bool = false
-    @State private var showCascadeDeleteConfirm: Bool = false
     @State private var showUsageSheet: Bool = false
     /// Pending choice text waiting on a fork confirmation. Set when
     /// the user taps a `send:` choice on a non-tip message; cleared
@@ -88,36 +88,22 @@ struct MessageRow: View {
                 bubble
             }
         }
+        // In-bubble text selection is OFF: the selection interaction's
+        // UIKit long-press wins over the action-menu gesture, making
+        // the menu unreachable anywhere on the message text (under the
+        // old `.contextMenu` the menu interaction preempted selection,
+        // so in-bubble long-press selection never worked here either).
+        // The menu's "Select text" action opens the full-document
+        // reader, which keeps selection enabled.
+        .environment(\.markdownTextSelectable, false)
         // Edit sheet is hoisted to ConversationView via
         // `.sheet(item: $model.editingMessage)` so a single sheet
         // owns the lifecycle. Per-row `.sheet(isPresented:)` with a
         // computed binding raced with @Observable updates and
         // produced an open/close loop on dismiss.
-        .alert(
-            "Delete message?",
-            isPresented: $showDeleteConfirm
-        ) {
-            Button("Delete", role: .destructive) {
-                Haptics.notify(.warning)
-                Task { await model.deleteMessage(id: message.id) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This message will be removed. Children stitch to its parent.")
-        }
-        .alert(
-            "Delete from here?",
-            isPresented: $showCascadeDeleteConfirm
-        ) {
-            Button("Delete from here", role: .destructive) {
-                Haptics.notify(.warning)
-                Task { await model.deleteMessage(id: message.id, cascade: true) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            let count = descendantCount
-            Text("This deletes the message and \(count) repl\(count == 1 ? "y" : "ies") underneath it.")
-        }
+        // Delete confirmations live inside MessageActionMenu (in-card
+        // morph) — the menu overlay dismisses on action, so an alert
+        // anchored here would present from a view mid-removal.
         .alert(
             "Submit choice on an earlier message?",
             isPresented: Binding(
@@ -236,37 +222,44 @@ struct MessageRow: View {
     /// One-row strip rendered in place of the full bubble for system
     /// and context messages. Shows the role label, the first line of
     /// the content as a preview, plus a chevron. Tap to expand into
-    /// the regular bubble. Long-press still surfaces the full
-    /// context menu (edit/delete/copy) so the user can act on the
-    /// message without expanding it.
+    /// the regular bubble. Long-press still surfaces the action menu
+    /// (edit/delete/copy) so the user can act on the message without
+    /// expanding it.
     @ViewBuilder
     private var collapsedHeaderBubble: some View {
-        Button(action: toggleHeaderExpansion) {
-            HStack(spacing: 10) {
-                Image(systemName: message.role == .system ? "gear" : "tray.full")
-                    .font(.caption)
+        // Tap/long-press via explicit gestures, NOT a Button: a
+        // Button claims the whole touch and fires its action on
+        // release even after a long hold (sim-verified — the strip
+        // expanded instead of opening the action menu), whereas
+        // side-by-side tap + long-press gestures disambiguate on
+        // hold duration.
+        HStack(spacing: 10) {
+            Image(systemName: message.role == .system ? "gear" : "tray.full")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(roleLabel)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(roleLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(previewLine)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
+                Text(previewLine)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.down")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { toggleHeaderExpansion() }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(roleLabel), \(previewLine)")
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.primary.opacity(0.04))
@@ -276,38 +269,23 @@ struct MessageRow: View {
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .contextMenu { contextMenuItems } preview: { contextMenuPreview }
+        .onLongPressGesture { presentActionMenu() }
+        .accessibilityAction(named: "Message actions") { presentActionMenu() }
         // Swipe-tray temporarily disabled — its DragGesture
         // intercepted vertical scroll on long messages, making
-        // the chat unusable. Long-press contextMenu (above) still
-        // exposes the same actions. See MessageActionTray.swift
+        // the chat unusable. The long-press action menu (above)
+        // still exposes the same actions. See MessageActionTray.swift
         // for the implementation; re-enable once the gesture
         // disambiguation is fixed.
     }
 
-    /// Upright preview for the long-press context menu. The row
-    /// renders inside the inverted transcript's flip, and the
-    /// system's automatic preview snapshot degenerates on transformed
-    /// rows (a collapsed sliver — sim-verified); an explicit preview
-    /// renders outside the transform. Reuses the row's markdown cache
-    /// key, so the parse is a cache hit.
-    private var contextMenuPreview: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(roleLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            // A short excerpt, not the full body: the system sizes
-            // the preview card to fit, and a long document compresses
-            // every paragraph into an ellipsized line. Raw
-            // MarkdownText with a head cut, NOT BoundedMarkdownText —
-            // its "Show full text" affordance would render as a dead
-            // button inside the preview snapshot.
-            let body = message.displayContent ?? message.content
-            MarkdownText(MarkdownBudget.head(body, limit: 600) ?? body)
+    /// Presents the hoisted MessageActionMenu overlay for this row.
+    /// The haptic stands in for the system menu's lift bump.
+    private func presentActionMenu() {
+        Haptics.impact(.medium)
+        withAnimation(.snappy(duration: 0.22)) {
+            model.actionMenuMessage = message
         }
-        .padding(12)
-        .frame(maxWidth: 340, alignment: .leading)
-        .background(Color(.systemBackground))
     }
 
     /// First non-empty line of the message body, used as the
@@ -455,10 +433,11 @@ struct MessageRow: View {
                     )
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .contextMenu { contextMenuItems } preview: { contextMenuPreview }
+            .onLongPressGesture { presentActionMenu() }
+            .accessibilityAction(named: "Message actions") { presentActionMenu() }
             // Swipe-tray temporarily disabled — see other call site
-            // for rationale; long-press contextMenu still exposes
-            // the same actions.
+            // for rationale; the long-press action menu still
+            // exposes the same actions.
     }
 
     /// Image-kind attachments only — rendered as inline thumbnails.
@@ -514,10 +493,11 @@ struct MessageRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .contextMenu { contextMenuItems } preview: { contextMenuPreview }
+            .onLongPressGesture { presentActionMenu() }
+            .accessibilityAction(named: "Message actions") { presentActionMenu() }
             // Swipe-tray temporarily disabled — see other call site
-            // for rationale; long-press contextMenu still exposes
-            // the same actions.
+            // for rationale; the long-press action menu still
+            // exposes the same actions.
     }
 
     @ViewBuilder
@@ -713,85 +693,6 @@ struct MessageRow: View {
         }
     }
 
-    // MARK: - Context menu items
-
-    @ViewBuilder
-    private var contextMenuItems: some View {
-        Button {
-            startEdit()
-        } label: {
-            Label("Edit", systemImage: "pencil")
-        }
-        .disabled(!isEditableRole)
-
-        if message.role != .user {
-            Button {
-                Task { await model.reloadFromMessage(id: message.id) }
-            } label: {
-                Label("Reload", systemImage: "arrow.clockwise")
-            }
-            .disabled(!isReloadable)
-        }
-
-        Button {
-            copyToClipboard()
-        } label: {
-            Label("Copy", systemImage: "doc.on.doc")
-        }
-
-        if message.role == .assistant && !isErrored {
-            Button {
-                toggleSpeech()
-            } label: {
-                if app.speech.isPlaying(messageID: message.id) || app.speech.isLoading(messageID: message.id) {
-                    Label("Stop speaking", systemImage: "speaker.slash")
-                } else {
-                    Label("Read aloud", systemImage: "speaker.wave.2")
-                }
-            }
-            .disabled(model.isStreaming)
-        }
-
-        Divider()
-
-        Button(role: .destructive) {
-            showDeleteConfirm = true
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-
-        // "Delete all replies…" only surfaces when the message has at
-        // least one descendant — for a leaf, cascade delete behaves
-        // identically to plain Delete and the extra item would just be
-        // noise. Use the cheap `hasDescendants` check here (single pass
-        // / first-match exit) rather than the full `descendantCount`
-        // walk; the count is only needed inside the alert message and
-        // gets computed lazily there.
-        if hasDescendants {
-            Button(role: .destructive) {
-                showCascadeDeleteConfirm = true
-            } label: {
-                Label("Delete from here…", systemImage: "trash.slash")
-            }
-        }
-    }
-
-    /// O(1) probe used by the context menu to decide whether the cascade
-    /// affordance is worth surfacing. Backed by the view model's
-    /// pre-computed `descendantCountCache`. The precise number comes
-    /// from `descendantCount` only when the user opens the cascade alert.
-    private var hasDescendants: Bool {
-        model.hasDescendants(message.id)
-    }
-
-    /// O(1) descendant count for the cascade-delete confirmation alert.
-    private var descendantCount: Int {
-        model.descendantCount(of: message.id)
-    }
-
-    private func startEdit() {
-        model.editingMessage = message
-    }
 
     /// Routes a `FragmentAction` from a renderer into the right
     /// per-conversation handler. `.compose` drops into the
@@ -821,11 +722,6 @@ struct MessageRow: View {
         case .external(let url):
             UIApplication.shared.open(url)
         }
-    }
-
-    private func copyToClipboard() {
-        let text = message.displayContent ?? message.content
-        clipboard.write(text)
     }
 
     // MARK: - Helpers
