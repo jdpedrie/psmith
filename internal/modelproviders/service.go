@@ -23,6 +23,7 @@ import (
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/modelmeta"
 	"github.com/jdpedrie/psmith/internal/profiles"
 	"github.com/jdpedrie/psmith/internal/providers"
@@ -41,6 +42,36 @@ type Service struct {
 	// union (see liveUnionTypes). A field rather than a global so tests
 	// can whitelist their fake driver types per-service.
 	liveUnion map[string]bool
+	// bus may be nil — when set, provider/model mutations publish
+	// ProviderChanged events for subscribed clients (cross-client
+	// live sync). Same optional-wiring pattern as profiles.WithBus.
+	bus *events.Bus
+}
+
+// WithBus returns the service with the event bus wired in. Optional —
+// existing callers (tests, fixtures) keep working with no bus.
+func (s *Service) WithBus(bus *events.Bus) *Service {
+	s.bus = bus
+	return s
+}
+
+// publishProviderEvent is the single point that fires provider events
+// onto the bus. Model-level mutations (enable/disable, metadata,
+// settings, favorites) report the OWNING provider with kind=UPDATED —
+// clients reload provider+model state wholesale, so finer granularity
+// would buy nothing.
+func (s *Service) publishProviderEvent(userID, providerID uuid.UUID, kind events.ProviderChangeKind) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(events.Event{
+		Type:   events.ProviderChanged,
+		UserID: userID,
+		Provider: events.ProviderPayload{
+			ProviderID: providerID,
+			Kind:       kind,
+		},
+	})
 }
 
 // NewService constructs a Service. logger may be nil — slog.Default() is used
@@ -223,6 +254,7 @@ func (s *Service) CreateUserModelProvider(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(u.ID, row.ID, events.ProviderChangeCreated)
 	return connect.NewResponse(&psmithv1.CreateUserModelProviderResponse{Provider: s.storeProviderToProto(row)}), nil
 }
 
@@ -319,6 +351,7 @@ func (s *Service) UpdateUserModelProvider(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(updated.UserID, updated.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateUserModelProviderResponse{Provider: s.storeProviderToProto(updated)}), nil
 }
 
@@ -330,6 +363,7 @@ func (s *Service) DeleteUserModelProvider(ctx context.Context, req *connect.Requ
 	if err := s.queries.DeleteUserModelProvider(ctx, row.ID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeDeleted)
 	return connect.NewResponse(&psmithv1.DeleteUserModelProviderResponse{}), nil
 }
 
@@ -535,6 +569,7 @@ func (s *Service) EnableModels(ctx context.Context, req *connect.Request[psmithv
 		enabled = append(enabled, storeUserModelToProto(written, row.Type))
 	}
 
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.EnableModelsResponse{Enabled: enabled}), nil
 }
 
@@ -554,6 +589,7 @@ func (s *Service) DisableModels(ctx context.Context, req *connect.Request[psmith
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.DisableModelsResponse{}), nil
 }
 
@@ -643,6 +679,7 @@ func (s *Service) ToggleUserModelFavorite(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.ToggleUserModelFavoriteResponse{
 		Model: storeUserModelToProto(updated, row.Type),
 	}), nil
@@ -765,6 +802,7 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[psmi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateUserModelResponse{
 		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil
@@ -847,6 +885,7 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[psmit
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
 	return connect.NewResponse(&psmithv1.AddManualModelResponse{
 		UserModel: storeUserModelToProto(written, row.Type),
 	}), nil

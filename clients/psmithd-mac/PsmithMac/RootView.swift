@@ -106,8 +106,12 @@ struct RootView: View {
 
     /// Refresh the sidebar list (debounced) and run the open
     /// conversation's staleness check — the same cheap-get-then-
-    /// compare path the server-push events use.
+    /// compare path the server-push events use. Also reconnects the
+    /// events stream: after a sleep/wake it may be sitting in up to
+    /// 30s of reconnect backoff, and the pull only covers this
+    /// moment — the kick restores the push channel for what follows.
     private func reconcileWithServer() {
+        app.kickEventStream()
         guard let convos else { return }
         convos.refreshSoon()
         if let sel = convos.selectedID {

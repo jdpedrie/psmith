@@ -177,6 +177,13 @@ public final class AppModel {
             guard let self else { return }
             Task { await self.profiles.load() }
         }
+        // Provider/model mutations from other clients (or this one —
+        // no origin identity) reload the provider list wholesale;
+        // load() is idempotent and the list is small.
+        client.events.onProviderChanged = { [weak self] _ in
+            guard let self else { return }
+            Task { await self.providers.load() }
+        }
         // Conversation mutations fan out two ways: the list-level
         // callback (debounced refresh, wired by the platform root)
         // and the per-conversation observer registry on the hub
@@ -188,6 +195,13 @@ public final class AppModel {
             Task { @MainActor in
                 self.onConversationListChanged?()
                 self.streamHub.notifyConversationChanged(conversationID: conversationID)
+                // Time-critical adopt path: if the changed conversation
+                // is on screen and the hub holds no stream for it, the
+                // change may be another client's just-started run — one
+                // scoped ListActiveRuns attaches this client to the
+                // live stream in the same beat, instead of waiting for
+                // the debounced list refresh's full adopt sweep.
+                await self.adoptActiveRunIfViewing(conversationID: conversationID)
             }
         }
         client.events.start()
@@ -243,5 +257,33 @@ public final class AppModel {
         } catch {
             // Don't surface — caller continues with a cold hub.
         }
+    }
+
+    /// Scoped adopt for the event fast path: when a ConversationChanged
+    /// lands for a conversation the user is LOOKING AT and the hub has
+    /// no active stream for it, ask the server whether a run is going
+    /// and attach. Bounded to the viewed conversation so event bursts
+    /// don't turn into an RPC per event; everything else is covered by
+    /// the list refresh's adopt sweep a debounce-beat later.
+    public func adoptActiveRunIfViewing(conversationID: String) async {
+        guard streamHub.viewingConversationIDs.contains(conversationID),
+              streamHub.streams[conversationID] == nil
+        else { return }
+        guard let runs = try? await client.streams.listActiveRuns(conversationID: conversationID) else {
+            return
+        }
+        for run in runs {
+            streamHub.adopt(run)
+        }
+    }
+
+    /// Reconnect the account-events stream immediately. Platform roots
+    /// call this on foregrounding (alongside their pull refresh): a
+    /// stream that died during a background suspend may be deep in
+    /// reconnect backoff, and the pull refresh only covers the moment
+    /// of activation — the kick restores the PUSH channel for
+    /// everything after it.
+    public func kickEventStream() {
+        client.events.kick()
     }
 }

@@ -33,6 +33,9 @@ type Event struct {
 	// Conversation carries data for ConversationChanged events.
 	// Zero-valued for other types.
 	Conversation ConversationPayload
+	// Provider carries data for ProviderChanged events. Zero-valued
+	// for other types.
+	Provider ProviderPayload
 }
 
 // EventType discriminates the union. New types append.
@@ -49,6 +52,12 @@ const (
 	// deletion. Deliberately coarse — receivers run a cheap
 	// staleness check rather than interpreting fine-grained shapes.
 	ConversationChanged
+	// ProviderChanged fires when a model provider owned by UserID was
+	// mutated: creation, config update, deletion, or any change to
+	// its models (enable/disable, metadata, default settings,
+	// favorites). Model-level mutations report the owning provider —
+	// clients reload provider+model state wholesale.
+	ProviderChanged
 )
 
 // ProfileChangeKind mirrors the proto enum so callers don't need to
@@ -81,6 +90,22 @@ const (
 type ConversationPayload struct {
 	ConversationID uuid.UUID
 	Kind           ConversationChangeKind
+}
+
+// ProviderChangeKind mirrors the proto enum so callers don't need to
+// import the gen package just to publish.
+type ProviderChangeKind int
+
+const (
+	ProviderChangeUnspecified ProviderChangeKind = iota
+	ProviderChangeCreated
+	ProviderChangeUpdated
+	ProviderChangeDeleted
+)
+
+type ProviderPayload struct {
+	ProviderID uuid.UUID
+	Kind       ProviderChangeKind
 }
 
 // Logger is the minimal interface the bus needs for overflow warnings.

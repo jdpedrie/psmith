@@ -207,13 +207,13 @@ func run() error {
 	urlSigningKey := files.DeriveSigningKey(masterKey)
 	baseURL := os.Getenv("PSMITH_PUBLIC_BASE_URL") // empty → clients prepend
 
-	// Per-process pub/sub bus for account-scoped events (profile
-	// mutations today; conversation + provider events likely follow).
-	// In-memory only — restart loses any in-flight events, and clients
-	// re-fetch on every entry path so a missed push is recoverable.
+	// Per-process pub/sub bus for account-scoped events (profile,
+	// conversation, and provider mutations). In-memory only — restart
+	// loses any in-flight events, and clients re-fetch on every entry
+	// path so a missed push is recoverable.
 	eventBus := events.New(slog.Default())
 
-	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default())
+	modelProvidersSvc := modelproviders.NewService(queries, catalog, cipher, slog.Default()).WithBus(eventBus)
 	profilesSvc := profiles.NewService(queries, pool, cipher).WithBus(eventBus)
 	eventsSvc := events.NewService(eventBus)
 

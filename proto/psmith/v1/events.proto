@@ -40,7 +40,26 @@ message AccountEvent {
     // (staleness check before any heavy re-fetch) rather than rely
     // on echo suppression.
     ConversationChanged conversation_changed = 2;
+    // A model provider owned by the calling user was mutated —
+    // creation, config update, deletion, or any change to its models
+    // (enable/disable, metadata edits, default settings, favorites).
+    // Model-level changes report the OWNING provider: clients reload
+    // provider+model state wholesale, so finer granularity would buy
+    // nothing.
+    ProviderChanged provider_changed = 3;
   }
+}
+
+message ProviderChanged {
+  string provider_id = 1;
+  ProviderChangeKind kind = 2;
+}
+
+enum ProviderChangeKind {
+  PROVIDER_CHANGE_KIND_UNSPECIFIED = 0;
+  PROVIDER_CHANGE_KIND_CREATED = 1;
+  PROVIDER_CHANGE_KIND_UPDATED = 2;
+  PROVIDER_CHANGE_KIND_DELETED = 3;
 }
 
 message ConversationChanged {

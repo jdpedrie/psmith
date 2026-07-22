@@ -121,8 +121,13 @@ private struct AppShell: View {
         // is lost (the bus has no replay) — re-entering the
         // foreground reconciles by refresh. The open conversation's
         // own staleness check runs from its scene-phase handler.
+        // The kick restores the PUSH channel itself: the events
+        // stream died during the suspend and may be sitting in up to
+        // 30s of reconnect backoff, during which every other-client
+        // change would go unseen.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                app.kickEventStream()
                 convos?.refreshSoon()
             }
         }

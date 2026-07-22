@@ -135,6 +135,10 @@ public final class AccountManager {
             // Bootstrap is once-per-AppModel (guarded), so re-calling
             // is a no-op when this model was bootstrapped earlier.
             await existingModel.bootstrap()
+            // The events stream may be deep in reconnect backoff from
+            // pre-login 401s (up to 30s) — reconnect it NOW with the
+            // fresh token so pushed changes flow immediately.
+            existingModel.kickEventStream()
             switchAccount(to: existing.id)
             return existing
         }

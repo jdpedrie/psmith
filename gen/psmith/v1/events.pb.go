@@ -21,6 +21,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ProviderChangeKind int32
+
+const (
+	ProviderChangeKind_PROVIDER_CHANGE_KIND_UNSPECIFIED ProviderChangeKind = 0
+	ProviderChangeKind_PROVIDER_CHANGE_KIND_CREATED     ProviderChangeKind = 1
+	ProviderChangeKind_PROVIDER_CHANGE_KIND_UPDATED     ProviderChangeKind = 2
+	ProviderChangeKind_PROVIDER_CHANGE_KIND_DELETED     ProviderChangeKind = 3
+)
+
+// Enum value maps for ProviderChangeKind.
+var (
+	ProviderChangeKind_name = map[int32]string{
+		0: "PROVIDER_CHANGE_KIND_UNSPECIFIED",
+		1: "PROVIDER_CHANGE_KIND_CREATED",
+		2: "PROVIDER_CHANGE_KIND_UPDATED",
+		3: "PROVIDER_CHANGE_KIND_DELETED",
+	}
+	ProviderChangeKind_value = map[string]int32{
+		"PROVIDER_CHANGE_KIND_UNSPECIFIED": 0,
+		"PROVIDER_CHANGE_KIND_CREATED":     1,
+		"PROVIDER_CHANGE_KIND_UPDATED":     2,
+		"PROVIDER_CHANGE_KIND_DELETED":     3,
+	}
+)
+
+func (x ProviderChangeKind) Enum() *ProviderChangeKind {
+	p := new(ProviderChangeKind)
+	*p = x
+	return p
+}
+
+func (x ProviderChangeKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderChangeKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_psmith_v1_events_proto_enumTypes[0].Descriptor()
+}
+
+func (ProviderChangeKind) Type() protoreflect.EnumType {
+	return &file_psmith_v1_events_proto_enumTypes[0]
+}
+
+func (x ProviderChangeKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderChangeKind.Descriptor instead.
+func (ProviderChangeKind) EnumDescriptor() ([]byte, []int) {
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{0}
+}
+
 type ConversationChangeKind int32
 
 const (
@@ -60,11 +112,11 @@ func (x ConversationChangeKind) String() string {
 }
 
 func (ConversationChangeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_events_proto_enumTypes[0].Descriptor()
+	return file_psmith_v1_events_proto_enumTypes[1].Descriptor()
 }
 
 func (ConversationChangeKind) Type() protoreflect.EnumType {
-	return &file_psmith_v1_events_proto_enumTypes[0]
+	return &file_psmith_v1_events_proto_enumTypes[1]
 }
 
 func (x ConversationChangeKind) Number() protoreflect.EnumNumber {
@@ -73,7 +125,7 @@ func (x ConversationChangeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConversationChangeKind.Descriptor instead.
 func (ConversationChangeKind) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{0}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{1}
 }
 
 type ProfileChangeKind int32
@@ -112,11 +164,11 @@ func (x ProfileChangeKind) String() string {
 }
 
 func (ProfileChangeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_events_proto_enumTypes[1].Descriptor()
+	return file_psmith_v1_events_proto_enumTypes[2].Descriptor()
 }
 
 func (ProfileChangeKind) Type() protoreflect.EnumType {
-	return &file_psmith_v1_events_proto_enumTypes[1]
+	return &file_psmith_v1_events_proto_enumTypes[2]
 }
 
 func (x ProfileChangeKind) Number() protoreflect.EnumNumber {
@@ -125,7 +177,7 @@ func (x ProfileChangeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProfileChangeKind.Descriptor instead.
 func (ProfileChangeKind) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{1}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
 }
 
 type SubscribeAccountEventsRequest struct {
@@ -174,6 +226,7 @@ type AccountEvent struct {
 	//
 	//	*AccountEvent_ProfileChanged
 	//	*AccountEvent_ConversationChanged
+	//	*AccountEvent_ProviderChanged
 	Kind          isAccountEvent_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -234,6 +287,15 @@ func (x *AccountEvent) GetConversationChanged() *ConversationChanged {
 	return nil
 }
 
+func (x *AccountEvent) GetProviderChanged() *ProviderChanged {
+	if x != nil {
+		if x, ok := x.Kind.(*AccountEvent_ProviderChanged); ok {
+			return x.ProviderChanged
+		}
+	}
+	return nil
+}
+
 type isAccountEvent_Kind interface {
 	isAccountEvent_Kind()
 }
@@ -257,9 +319,73 @@ type AccountEvent_ConversationChanged struct {
 	ConversationChanged *ConversationChanged `protobuf:"bytes,2,opt,name=conversation_changed,json=conversationChanged,proto3,oneof"`
 }
 
+type AccountEvent_ProviderChanged struct {
+	// A model provider owned by the calling user was mutated —
+	// creation, config update, deletion, or any change to its models
+	// (enable/disable, metadata edits, default settings, favorites).
+	// Model-level changes report the OWNING provider: clients reload
+	// provider+model state wholesale, so finer granularity would buy
+	// nothing.
+	ProviderChanged *ProviderChanged `protobuf:"bytes,3,opt,name=provider_changed,json=providerChanged,proto3,oneof"`
+}
+
 func (*AccountEvent_ProfileChanged) isAccountEvent_Kind() {}
 
 func (*AccountEvent_ConversationChanged) isAccountEvent_Kind() {}
+
+func (*AccountEvent_ProviderChanged) isAccountEvent_Kind() {}
+
+type ProviderChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	Kind          ProviderChangeKind     `protobuf:"varint,2,opt,name=kind,proto3,enum=psmith.v1.ProviderChangeKind" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProviderChanged) Reset() {
+	*x = ProviderChanged{}
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderChanged) ProtoMessage() {}
+
+func (x *ProviderChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderChanged.ProtoReflect.Descriptor instead.
+func (*ProviderChanged) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProviderChanged) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ProviderChanged) GetKind() ProviderChangeKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ProviderChangeKind_PROVIDER_CHANGE_KIND_UNSPECIFIED
+}
 
 type ConversationChanged struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -271,7 +397,7 @@ type ConversationChanged struct {
 
 func (x *ConversationChanged) Reset() {
 	*x = ConversationChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -283,7 +409,7 @@ func (x *ConversationChanged) String() string {
 func (*ConversationChanged) ProtoMessage() {}
 
 func (x *ConversationChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -296,7 +422,7 @@ func (x *ConversationChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationChanged.ProtoReflect.Descriptor instead.
 func (*ConversationChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ConversationChanged) GetConversationId() string {
@@ -323,7 +449,7 @@ type ProfileChanged struct {
 
 func (x *ProfileChanged) Reset() {
 	*x = ProfileChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[3]
+	mi := &file_psmith_v1_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +461,7 @@ func (x *ProfileChanged) String() string {
 func (*ProfileChanged) ProtoMessage() {}
 
 func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[3]
+	mi := &file_psmith_v1_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +474,7 @@ func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileChanged.ProtoReflect.Descriptor instead.
 func (*ProfileChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{3}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProfileChanged) GetProfileId() string {
@@ -370,18 +496,28 @@ var File_psmith_v1_events_proto protoreflect.FileDescriptor
 const file_psmith_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x16psmith/v1/events.proto\x12\tpsmith.v1\"\x1f\n" +
-	"\x1dSubscribeAccountEventsRequest\"\xb1\x01\n" +
+	"\x1dSubscribeAccountEventsRequest\"\xfa\x01\n" +
 	"\fAccountEvent\x12D\n" +
 	"\x0fprofile_changed\x18\x01 \x01(\v2\x19.psmith.v1.ProfileChangedH\x00R\x0eprofileChanged\x12S\n" +
-	"\x14conversation_changed\x18\x02 \x01(\v2\x1e.psmith.v1.ConversationChangedH\x00R\x13conversationChangedB\x06\n" +
-	"\x04kind\"u\n" +
+	"\x14conversation_changed\x18\x02 \x01(\v2\x1e.psmith.v1.ConversationChangedH\x00R\x13conversationChanged\x12G\n" +
+	"\x10provider_changed\x18\x03 \x01(\v2\x1a.psmith.v1.ProviderChangedH\x00R\x0fproviderChangedB\x06\n" +
+	"\x04kind\"e\n" +
+	"\x0fProviderChanged\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x121\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1d.psmith.v1.ProviderChangeKindR\x04kind\"u\n" +
 	"\x13ConversationChanged\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x125\n" +
 	"\x04kind\x18\x02 \x01(\x0e2!.psmith.v1.ConversationChangeKindR\x04kind\"a\n" +
 	"\x0eProfileChanged\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x120\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x1c.psmith.v1.ProfileChangeKindR\x04kind*\xb4\x01\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1c.psmith.v1.ProfileChangeKindR\x04kind*\xa0\x01\n" +
+	"\x12ProviderChangeKind\x12$\n" +
+	" PROVIDER_CHANGE_KIND_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cPROVIDER_CHANGE_KIND_CREATED\x10\x01\x12 \n" +
+	"\x1cPROVIDER_CHANGE_KIND_UPDATED\x10\x02\x12 \n" +
+	"\x1cPROVIDER_CHANGE_KIND_DELETED\x10\x03*\xb4\x01\n" +
 	"\x16ConversationChangeKind\x12(\n" +
 	"$CONVERSATION_CHANGE_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" CONVERSATION_CHANGE_KIND_CREATED\x10\x01\x12$\n" +
@@ -407,28 +543,32 @@ func file_psmith_v1_events_proto_rawDescGZIP() []byte {
 	return file_psmith_v1_events_proto_rawDescData
 }
 
-var file_psmith_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_psmith_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_psmith_v1_events_proto_goTypes = []any{
-	(ConversationChangeKind)(0),           // 0: psmith.v1.ConversationChangeKind
-	(ProfileChangeKind)(0),                // 1: psmith.v1.ProfileChangeKind
-	(*SubscribeAccountEventsRequest)(nil), // 2: psmith.v1.SubscribeAccountEventsRequest
-	(*AccountEvent)(nil),                  // 3: psmith.v1.AccountEvent
-	(*ConversationChanged)(nil),           // 4: psmith.v1.ConversationChanged
-	(*ProfileChanged)(nil),                // 5: psmith.v1.ProfileChanged
+	(ProviderChangeKind)(0),               // 0: psmith.v1.ProviderChangeKind
+	(ConversationChangeKind)(0),           // 1: psmith.v1.ConversationChangeKind
+	(ProfileChangeKind)(0),                // 2: psmith.v1.ProfileChangeKind
+	(*SubscribeAccountEventsRequest)(nil), // 3: psmith.v1.SubscribeAccountEventsRequest
+	(*AccountEvent)(nil),                  // 4: psmith.v1.AccountEvent
+	(*ProviderChanged)(nil),               // 5: psmith.v1.ProviderChanged
+	(*ConversationChanged)(nil),           // 6: psmith.v1.ConversationChanged
+	(*ProfileChanged)(nil),                // 7: psmith.v1.ProfileChanged
 }
 var file_psmith_v1_events_proto_depIdxs = []int32{
-	5, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
-	4, // 1: psmith.v1.AccountEvent.conversation_changed:type_name -> psmith.v1.ConversationChanged
-	0, // 2: psmith.v1.ConversationChanged.kind:type_name -> psmith.v1.ConversationChangeKind
-	1, // 3: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
-	2, // 4: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
-	3, // 5: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
-	5, // [5:6] is the sub-list for method output_type
-	4, // [4:5] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
+	6, // 1: psmith.v1.AccountEvent.conversation_changed:type_name -> psmith.v1.ConversationChanged
+	5, // 2: psmith.v1.AccountEvent.provider_changed:type_name -> psmith.v1.ProviderChanged
+	0, // 3: psmith.v1.ProviderChanged.kind:type_name -> psmith.v1.ProviderChangeKind
+	1, // 4: psmith.v1.ConversationChanged.kind:type_name -> psmith.v1.ConversationChangeKind
+	2, // 5: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
+	3, // 6: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
+	4, // 7: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
+	7, // [7:8] is the sub-list for method output_type
+	6, // [6:7] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_events_proto_init() }
@@ -439,14 +579,15 @@ func file_psmith_v1_events_proto_init() {
 	file_psmith_v1_events_proto_msgTypes[1].OneofWrappers = []any{
 		(*AccountEvent_ProfileChanged)(nil),
 		(*AccountEvent_ConversationChanged)(nil),
+		(*AccountEvent_ProviderChanged)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_events_proto_rawDesc), len(file_psmith_v1_events_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   4,
+			NumEnums:      3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

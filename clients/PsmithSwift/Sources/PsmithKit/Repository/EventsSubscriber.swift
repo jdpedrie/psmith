@@ -1,5 +1,8 @@
 import Foundation
 import Connect
+import os.log
+
+private let syncLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "Sync")
 
 /// Long-lived subscription to the server's account-scoped event
 /// stream. Each received event is dispatched to a typed callback so
@@ -31,6 +34,11 @@ public final class EventsSubscriber: @unchecked Sendable {
     /// Consumers keep their reaction cheap: debounced list refresh
     /// plus a staleness check on the open conversation.
     public var onConversationChanged: (@Sendable (String) -> Void)?
+    /// Fired when the server pushes a ProviderChanged event — a model
+    /// provider (or any of its models: enable/disable, metadata,
+    /// settings, favorites) was mutated. Argument is the provider id;
+    /// the current consumer reloads the whole provider list.
+    public var onProviderChanged: (@Sendable (String) -> Void)?
 
     private var task: Task<Void, Never>?
 
@@ -54,6 +62,21 @@ public final class EventsSubscriber: @unchecked Sendable {
         task = nil
     }
 
+    /// Drop the current connection attempt (and whatever backoff
+    /// sleep it's in) and reconnect NOW. Call on auth transitions and
+    /// app foregrounding: a subscriber that failed pre-auth or died
+    /// during a background suspend may be deep in the 30s backoff,
+    /// and every second it waits is a second another client's
+    /// changes stay invisible.
+    public func kick() {
+        guard task != nil else {
+            start()
+            return
+        }
+        stop()
+        start()
+    }
+
     /// The reconnect loop. Opens the server-streaming RPC, reads
     /// events until the stream ends or the Task is cancelled, then
     /// backs off and tries again. Cap at 30s so a long server outage
@@ -61,6 +84,7 @@ public final class EventsSubscriber: @unchecked Sendable {
     private func runLoop() async {
         var backoffSeconds: Double = 0.5
         while !Task.isCancelled {
+            let connectedAt = ContinuousClock.now
             do {
                 try await subscribe()
                 // Clean stream end (server closed) — reset backoff
@@ -69,7 +93,14 @@ public final class EventsSubscriber: @unchecked Sendable {
             } catch {
                 // Any error → back off. Network unreachable, auth
                 // failure (recoverable on reconnect after re-auth),
-                // server crash.
+                // server crash. A connection that held for a while
+                // before failing was HEALTHY — reset the ladder so a
+                // session's accumulated blips don't climb toward the
+                // 30s cap and stretch every future recovery.
+                if ContinuousClock.now - connectedAt > .seconds(10) {
+                    backoffSeconds = 0.5
+                }
+                syncLog.notice("events stream ended: \(String(describing: error), privacy: .public); retry in \(backoffSeconds, privacy: .public)s")
             }
             if Task.isCancelled { return }
             try? await Task.sleep(for: .seconds(backoffSeconds))
@@ -83,6 +114,7 @@ public final class EventsSubscriber: @unchecked Sendable {
         let stream = client.subscribeAccountEvents(headers: [:])
         defer { stream.cancel() }
         try stream.send(Psmith_V1_SubscribeAccountEventsRequest())
+        syncLog.notice("events stream connected")
         for await result in stream.results() {
             switch result {
             case .headers, .complete:
@@ -105,6 +137,8 @@ public final class EventsSubscriber: @unchecked Sendable {
             onProfileChanged?(payload.profileID)
         case .conversationChanged(let payload):
             onConversationChanged?(payload.conversationID)
+        case .providerChanged(let payload):
+            onProviderChanged?(payload.providerID)
         }
     }
 }

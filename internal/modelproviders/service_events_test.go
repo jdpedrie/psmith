@@ -1,0 +1,136 @@
+package modelproviders
+
+import (
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/events"
+)
+
+// Provider and model mutations must publish ProviderChanged onto the
+// account bus — that push is what makes a provider added on one client
+// appear on the others without a screen re-entry.
+
+func recvProviderEvent(t *testing.T, ch <-chan events.Event) events.Event {
+	t.Helper()
+	select {
+	case ev := <-ch:
+		return ev
+	case <-time.After(2 * time.Second):
+		t.Fatalf("expected an event, got none within 2s")
+		return events.Event{}
+	}
+}
+
+func assertProviderEvent(t *testing.T, ev events.Event, userID, providerID uuid.UUID, kind events.ProviderChangeKind) {
+	t.Helper()
+	if ev.Type != events.ProviderChanged {
+		t.Fatalf("event type = %v, want ProviderChanged", ev.Type)
+	}
+	if ev.UserID != userID {
+		t.Errorf("event user = %s, want %s", ev.UserID, userID)
+	}
+	if ev.Provider.ProviderID != providerID {
+		t.Errorf("event provider = %s, want %s", ev.Provider.ProviderID, providerID)
+	}
+	if ev.Provider.Kind != kind {
+		t.Errorf("event kind = %v, want %v", ev.Provider.Kind, kind)
+	}
+}
+
+func TestProviderEvents_LifecycleEmits(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	bus := events.New(nil)
+	svc = svc.WithBus(bus)
+	user := mustUser(t, q, "alice", false)
+	ch, cancel := bus.Subscribe(user.ID)
+	defer cancel()
+	typeName := registerFakeDriver(t, "events-lifecycle", nil, nil)
+
+	// Create → CREATED.
+	created, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
+		Type:   typeName,
+		Label:  "main",
+		Config: []byte(`{"api_key":"sk-x"}`),
+	}))
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+	providerID := uuid.MustParse(created.Msg.Provider.Id)
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeCreated)
+
+	// Config update → UPDATED.
+	if _, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
+		Id:    created.Msg.Provider.Id,
+		Label: ptr("renamed"),
+	})); err != nil {
+		t.Fatalf("UpdateUserModelProvider: %v", err)
+	}
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeUpdated)
+
+	// Model-level mutation → UPDATED reporting the OWNING provider.
+	// AddManualModel is the lightest model write that doesn't need
+	// driver discovery.
+	added, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "manual-model-1",
+		DisplayName:         "Manual Model 1",
+	}))
+	if err != nil {
+		t.Fatalf("AddManualModel: %v", err)
+	}
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeUpdated)
+
+	// Favorite toggle → UPDATED.
+	if _, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             added.Msg.UserModel.ModelId,
+	})); err != nil {
+		t.Fatalf("ToggleUserModelFavorite: %v", err)
+	}
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeUpdated)
+
+	// Disable → UPDATED.
+	if _, err := svc.DisableModels(ctxAs(user), connect.NewRequest(&psmithv1.DisableModelsRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelIds:            []string{added.Msg.UserModel.ModelId},
+	})); err != nil {
+		t.Fatalf("DisableModels: %v", err)
+	}
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeUpdated)
+
+	// Delete → DELETED.
+	if _, err := svc.DeleteUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.DeleteUserModelProviderRequest{
+		Id: created.Msg.Provider.Id,
+	})); err != nil {
+		t.Fatalf("DeleteUserModelProvider: %v", err)
+	}
+	assertProviderEvent(t, recvProviderEvent(t, ch), user.ID, providerID, events.ProviderChangeDeleted)
+}
+
+// A service without a bus must not panic on any publish path — the
+// optional-wiring contract every fixture and older test relies on.
+func TestProviderEvents_NilBusIsSilent(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "events-nilbus", nil, nil)
+
+	created, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
+		Type:  typeName,
+		Label: "main",
+	}))
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+	if _, err := svc.DeleteUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.DeleteUserModelProviderRequest{
+		Id: created.Msg.Provider.Id,
+	})); err != nil {
+		t.Fatalf("DeleteUserModelProvider: %v", err)
+	}
+}

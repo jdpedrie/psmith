@@ -95,8 +95,30 @@ func eventToProto(ev Event) *psmithv1.AccountEvent {
 				},
 			},
 		}
+	case ProviderChanged:
+		return &psmithv1.AccountEvent{
+			Kind: &psmithv1.AccountEvent_ProviderChanged{
+				ProviderChanged: &psmithv1.ProviderChanged{
+					ProviderId: ev.Provider.ProviderID.String(),
+					Kind:       providerChangeKindToProto(ev.Provider.Kind),
+				},
+			},
+		}
 	default:
 		return nil
+	}
+}
+
+func providerChangeKindToProto(k ProviderChangeKind) psmithv1.ProviderChangeKind {
+	switch k {
+	case ProviderChangeCreated:
+		return psmithv1.ProviderChangeKind_PROVIDER_CHANGE_KIND_CREATED
+	case ProviderChangeUpdated:
+		return psmithv1.ProviderChangeKind_PROVIDER_CHANGE_KIND_UPDATED
+	case ProviderChangeDeleted:
+		return psmithv1.ProviderChangeKind_PROVIDER_CHANGE_KIND_DELETED
+	default:
+		return psmithv1.ProviderChangeKind_PROVIDER_CHANGE_KIND_UNSPECIFIED
 	}
 }
 
