@@ -1,6 +1,6 @@
 # Database schema
 
-The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00043. This document reflects the state after all of them.
+The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00044. This document reflects the state after all of them.
 
 Conventions across the schema: UUIDs for IDs (UUIDv7 where the application mints them, for sortability). Enumerations are `TEXT` with a `CHECK` constraint, never native Postgres `ENUM`, to keep schema evolution painless. `updated_at` is maintained by application code, not a trigger; there are no triggers anywhere.
 
@@ -54,8 +54,14 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00034 | message_embeddings | `messages.embedding` `vector(768)`, `embedding_model`, `embedding_at`; the triple-NULL CHECK; an HNSW partial index and an unembedded partial index. Requires pgvector. |
 | 00035 | user_embedder_config | `user_embedder_config` (per-user singleton, encrypted api key). |
 | 00036 | device_tool_calls | `device_tool_calls` audit log plus two indexes. |
-| 00037–00042 | (undocumented) | Rows not yet backfilled into this table — see docs/todo.md. |
+| 00037 | profile_default | `profiles.is_default` plus a partial unique index (one default per user). |
+| 00038 | conversation_archive | `conversations.archived_at` (NULL = active; timestamps the archive action). |
+| 00039 | conversation_pin | `conversations.pinned_at` (NULL = unpinned; ordering key for pinned rows). |
+| 00040 | user_tts_config | `user_tts_config` (per-user speech settings: synthesizer choice, voice, credential reuse). |
+| 00041 | message_headers_trailers | `messages.message_headers` / `message_trailers` — plugin envelope contributions beside the user's own content. |
+| 00042 | messages_context_created_index | `messages (context_id, created_at DESC, id DESC)` index for chain walks and tail probes. |
 | 00043 | user_mcp_servers | `user_mcp_servers` (user-level MCP server registry, encrypted specs) plus a user index and per-user name uniqueness. |
+| 00044 | messages_parent_index | `messages (parent_id)` index for the stitch-delete reparent (2026-07-21 perf round). |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020).
 

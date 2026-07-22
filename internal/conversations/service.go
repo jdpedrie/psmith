@@ -2264,7 +2264,6 @@ func purposeToProto(p string) psmithv1.StreamRunPurpose {
 }
 
 // silence "imported and not used" for the time package if helpers above don't reference it directly.
-var _ = time.Now
 
 // ---------------------------------------------------------------------------
 // Plugin pipeline resolution

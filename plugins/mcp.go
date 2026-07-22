@@ -152,7 +152,11 @@ func init() {
 }
 
 func (p *mcpPlugin) Name() string        { return MCPName }
-func (p *mcpPlugin) DisplayName() string { return "MCP Server" }
+// DisplayName demotes the raw transport-level entry in pickers: with
+// the MCP registry live, users attach REGISTERED servers (which
+// surface as their own pseudo-plugin entries named after the server);
+// this generic entry is the hand-configured escape hatch.
+func (p *mcpPlugin) DisplayName() string { return "Custom MCP server (advanced)" }
 
 func (p *mcpPlugin) Description() string {
 	return "Bridges any Model Context Protocol (MCP) server's tools into Psmith's tool surface. " +

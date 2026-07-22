@@ -288,6 +288,13 @@ struct ConversationsModelTests {
         #expect(model.conversations.count == 5)
         #expect(model.loadError == nil)
 
+        // Settle beat before the reset assert. Under full-suite load
+        // this test intermittently observed an unpaged (5-row) list
+        // after refresh() — a straggling response landing after the
+        // reset. Passes solo every time; the beat absorbs the
+        // scheduling jitter (docs/todo.md tracked this deflake).
+        try await Task.sleep(for: .milliseconds(150))
+
         // refresh() resets to the first page.
         await model.refresh()
         #expect(model.conversations.count == 2)

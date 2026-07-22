@@ -582,15 +582,15 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 	defer close(out)
 	defer stream.Close()
 
-	// Track the active function call (one at a time is the common case;
-	// extending to a map keyed by output_index would be straightforward
-	// when parallel tool calls become a concern).
+	// Track in-flight function calls keyed by item id. Models emit one
+	// at a time today, but the Responses API allows parallel
+	// function_call items interleaving their argument deltas — a
+	// single slot would cross-wire them.
 	type activeCall struct {
-		itemID string
 		callID string
 		name   string
 	}
-	var active *activeCall
+	active := make(map[string]*activeCall)
 
 	for stream.Next() {
 		evt := stream.Current()
@@ -620,8 +620,7 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 		case "response.output_item.added":
 			// We only care about function calls for the tool-use path.
 			if evt.Item.Type == "function_call" {
-				active = &activeCall{
-					itemID: evt.Item.ID,
+				active[evt.Item.ID] = &activeCall{
 					callID: evt.Item.CallID,
 					name:   evt.Item.Name,
 				}
@@ -632,21 +631,23 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 			}
 
 		case "response.function_call_arguments.delta":
-			if active != nil && active.itemID == evt.ItemID {
+			if call, ok := active[evt.ItemID]; ok {
 				emit(out, providers.ChunkToolUseDelta, map[string]string{
-					"id":             active.callID,
+					"id":             call.callID,
 					"arguments_json": evt.Delta.OfString,
 				})
 			}
 
 		case "response.output_item.done":
-			if evt.Item.Type == "function_call" && active != nil && active.itemID == evt.Item.ID {
-				emit(out, providers.ChunkToolUseEnd, map[string]string{
-					"id":             active.callID,
-					"name":           active.name,
-					"arguments_json": evt.Item.Arguments,
-				})
-				active = nil
+			if evt.Item.Type == "function_call" {
+				if call, ok := active[evt.Item.ID]; ok {
+					emit(out, providers.ChunkToolUseEnd, map[string]string{
+						"id":             call.callID,
+						"name":           call.name,
+						"arguments_json": evt.Item.Arguments,
+					})
+					delete(active, evt.Item.ID)
+				}
 			}
 
 		case "error":
