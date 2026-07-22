@@ -317,10 +317,6 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 
 - **Profile lookups beyond the loaded pages** (`PsmithKit` ConversationsModel/ProfilesViewModel) — clients page profiles at 100/page, and chain-name/grouping lookups only see loaded pages. Under 100 profiles (everyone today) behavior is identical to pre-paging; above that, conversation rows for profiles on unloaded pages fall back to their placeholder until the profiles list is scrolled. Revisit with a by-id profile hydration if it ever bites.
 
-- **Default-profile affordances on Mac + web** — the server RPC, PsmithKit VM, and iOS UI (badge, swipe action, + skips the chooser) landed; the Mac new-conversation flow and the web /new page still always show the chooser. Wire both to `Profile.is_default` for parity.
-
-- **Pin affordances on Mac + web** — same story as archive below: server + PsmithKit + iOS landed (leading swipe, context menu, row glyph); Mac/web need the affordance.
-- **Archive affordances on Mac + web** — server RPCs, PsmithKit, and iOS (swipe Archive, Archived screen, read-only conversation bar) landed; the Mac sidebar and web client have no archive UI yet (archived conversations correctly vanish from their lists via the default filter). Wire swipe/context actions + an archived view when Mac parity work resumes.
 
 ### Considered, deferred until a real use case lands
 

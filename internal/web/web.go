@@ -114,6 +114,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /new", h.requireUser(h.handleNewForm))
 	mux.HandleFunc("POST /new", h.requireUser(h.handleNewCreate))
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
+	mux.HandleFunc("POST /c/{id}/pin", h.requireUser(h.handlePinToggle))
+	mux.HandleFunc("POST /c/{id}/archive", h.requireUser(h.handleArchive))
+	mux.HandleFunc("POST /c/{id}/unarchive", h.requireUser(h.handleUnarchive))
+	mux.HandleFunc("GET /archived", h.requireUser(h.handleArchivedList))
+	mux.HandleFunc("POST /c/{id}/delete", h.requireUser(h.handleConversationDelete))
 	mux.HandleFunc("GET /events", h.requireUser(h.handleEvents))
 	mux.HandleFunc("GET /partials/sidebar", h.requireUser(h.handleSidebarPartial))
 	mux.HandleFunc("GET /partials/sidebar/rows", h.requireUser(h.handleSidebarRowsPartial))
@@ -196,6 +201,7 @@ type convoVM struct {
 	Active  bool
 	RelTime string // short relative time, e.g. "3h", "Apr 2"
 	Group   string // date bucket header for the sidebar, e.g. "Today"
+	Pinned bool
 }
 
 type msgVM struct {
@@ -217,6 +223,7 @@ type profileVM struct {
 	ID          string
 	Name        string
 	Description string
+	IsDefault   bool
 }
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, c templ.Component) {
@@ -251,7 +258,7 @@ func (h *Handler) listConvosPage(ctx context.Context, activeID, pageToken string
 	out := make([]convoVM, 0, len(resp.Msg.GetConversations()))
 	var lastGroup string
 	for _, c := range resp.Msg.GetConversations() {
-		vm := convoVM{ID: c.GetId(), Title: convoTitle(c), Active: c.GetId() == activeID}
+		vm := convoVM{ID: c.GetId(), Title: convoTitle(c), Active: c.GetId() == activeID, Pinned: c.GetPinnedAt() != nil}
 		if ts := c.GetUpdatedAt(); ts != nil {
 			t := ts.AsTime()
 			vm.RelTime = relTime(now, t)
@@ -277,6 +284,14 @@ func sidebarActiveID(convos []convoVM) string {
 		}
 	}
 	return ""
+}
+
+// pinTitle labels the sidebar pin toggle for its current state.
+func pinTitle(pinned bool) string {
+	if pinned {
+		return "Unpin"
+	}
+	return "Pin"
 }
 
 // serverBuildVersion feeds the settings page's version footer.
@@ -399,7 +414,7 @@ func (h *Handler) listProfiles(ctx context.Context) []profileVM {
 		if p.GetParentOnly() {
 			continue
 		}
-		out = append(out, profileVM{ID: p.GetId(), Name: p.GetName(), Description: p.GetDescription()})
+		out = append(out, profileVM{ID: p.GetId(), Name: p.GetName(), Description: p.GetDescription(), IsDefault: p.GetIsDefault()})
 	}
 	return out
 }

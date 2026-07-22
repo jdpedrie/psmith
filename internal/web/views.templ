@@ -65,6 +65,10 @@ templ sidebar(convos []convoVM, nextToken string) {
 			}
 		</nav>
 		<footer class="sidebar-foot">
+			<a class="sidebar-foot-link" href="/archived">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1"></rect><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"></path></svg>
+				Archived
+			</a>
 			<a class="sidebar-foot-link" href="/settings">
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 				Settings
@@ -89,12 +93,29 @@ templ sidebarRows(convos []convoVM, nextToken string) {
 		if c.Group != "" {
 			<div class="convo-group">{ c.Group }</div>
 		}
-		<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
-			<span class="convo-title-text">{ c.Title }</span>
-			if c.RelTime != "" {
-				<span class="convo-time">{ c.RelTime }</span>
-			}
-		</a>
+		<div class={ "convo-row", templ.KV("active", c.Active) }>
+			<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
+				if c.Pinned {
+					<svg class="convo-pin" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3a1 1 0 0 1 .93 1.36l-.06.13L14 9.6V13l3.3 3.3a1 1 0 0 1-.58 1.7l-.13.01H13v4.5a1 1 0 0 1-2 0V18H7.4a1 1 0 0 1-.77-1.64l.07-.07L10 13V9.6L7.13 4.5A1 1 0 0 1 7.9 3H16z"></path></svg>
+				}
+				<span class="convo-title-text">{ c.Title }</span>
+				if c.RelTime != "" {
+					<span class="convo-time">{ c.RelTime }</span>
+				}
+			</a>
+			<span class="convo-actions">
+				<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/pin") }>
+					<button type="submit" class="convo-act" title={ pinTitle(c.Pinned) }>
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 3l5 5-6 2-4 4-1 6-5-5 6-1 4-4 1-7z" transform="scale(0.9)"></path></svg>
+					</button>
+				</form>
+				<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/archive") }>
+					<button type="submit" class="convo-act" title="Archive">
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1"></rect><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"></path></svg>
+					</button>
+				</form>
+			</span>
+		</div>
 	}
 	if nextToken != "" {
 		<button
@@ -133,7 +154,12 @@ templ newConversationPage(convos []convoVM, sidebarToken string, profiles []prof
 						<form method="post" action="/new">
 							<input type="hidden" name="profile_id" value={ p.ID }/>
 							<button type="submit" class="profile-pick">
-								<span class="profile-name">{ p.Name }</span>
+								<span class="profile-name">
+									{ p.Name }
+									if p.IsDefault {
+										<span class="default-badge">Default</span>
+									}
+								</span>
 								if p.Description != "" {
 									<span class="profile-desc">{ p.Description }</span>
 								}
@@ -1023,7 +1049,7 @@ templ modelChip(convID string, m pickerModelVM) {
 	</button>
 }
 
-templ conversationPage(convos []convoVM, sidebarToken string, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string, pendingSummaryTruncated bool) {
+templ conversationPage(convos []convoVM, sidebarToken string, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string, pendingSummaryTruncated bool, archived bool) {
 	@layout(conv.Title + " — Psmith") {
 		<div class="app" hx-ext="sse" sse-connect="/events">
 			@sidebar(convos, sidebarToken)
@@ -1037,7 +1063,9 @@ templ conversationPage(convos []convoVM, sidebarToken string, conv convoVM, msgs
 					</span>
 				</header>
 				@messagesRegion(conv.ID, msgs, runID)
-				if pendingSummaryID != "" {
+				if archived {
+					@archivedBar(conv.ID)
+				} else if pendingSummaryID != "" {
 					@compressionReviewBar(conv.ID, pendingSummaryID, pendingSummaryTruncated)
 				} else {
 					@composer(conv.ID, current)
@@ -1047,6 +1075,53 @@ templ conversationPage(convos []convoVM, sidebarToken string, conv convoVM, msgs
 		<div id="modal"></div>
 		<script src="/web-assets/chat.js"></script>
 	}
+}
+
+// archivedPage is the archive browser: read-only rows with Unarchive
+// and Delete. Reached from the sidebar foot.
+templ archivedPage(convos []convoVM, sidebarToken string, rows []convoVM) {
+	@layout("Archived — Psmith") {
+		<div class="app" hx-ext="sse" sse-connect="/events">
+			@sidebar(convos, sidebarToken)
+			<main class="main">
+				<header class="conv-head"><span class="conv-title">Archived</span></header>
+				<div class="archived-list">
+					if len(rows) == 0 {
+						<p class="muted pad">Nothing archived.</p>
+					}
+					for _, c := range rows {
+						<div class="archived-row">
+							<a class="archived-title" href={ templ.SafeURL("/c/" + c.ID) }>{ c.Title }</a>
+							<form method="post" action={ templ.SafeURL("/c/" + c.ID + "/unarchive") }>
+								<button type="submit" class="btn-secondary">Unarchive</button>
+							</form>
+							<form
+								method="post"
+								action={ templ.SafeURL("/c/" + c.ID + "/delete") }
+								onsubmit="return confirm('Permanently delete this conversation and all of its messages?')"
+							>
+								<button type="submit" class="btn-danger">Delete</button>
+							</form>
+						</div>
+					}
+				</div>
+			</main>
+		</div>
+	}
+}
+
+// archivedBar replaces the composer on an archived conversation — the
+// server refuses mutations until it's unarchived.
+templ archivedBar(convID string) {
+	<div class="review-bar">
+		<div class="review-bar-text">
+			<strong>Archived</strong>
+			<span class="muted">This conversation is read-only. Unarchive to continue it.</span>
+		</div>
+		<form method="post" action={ templ.SafeURL("/c/" + convID + "/unarchive") }>
+			<button type="submit" class="review-confirm">Unarchive</button>
+		</form>
+	</div>
 }
 
 // messagesRegion is the transcript body, shared by the full page and

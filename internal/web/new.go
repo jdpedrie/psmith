@@ -10,8 +10,28 @@ import (
 
 // handleNewForm renders the new-conversation page: pick a profile to start a chat.
 func (h *Handler) handleNewForm(w http.ResponseWriter, r *http.Request) {
+	profiles := h.listProfiles(r.Context())
+	// Default-profile fast path (iOS parity): "New chat" skips the
+	// chooser when a default exists. ?choose=1 forces the chooser —
+	// the created conversation's Settings page covers per-chat
+	// profile switching, and the chooser badges the default row.
+	if r.URL.Query().Get("choose") == "" {
+		for _, p := range profiles {
+			if p.IsDefault {
+				resp, err := h.convos.CreateConversation(r.Context(), connect.NewRequest(&psmithv1.CreateConversationRequest{
+					ProfileId: p.ID,
+				}))
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				http.Redirect(w, r, "/c/"+resp.Msg.GetConversation().GetId(), http.StatusSeeOther)
+				return
+			}
+		}
+	}
 	convos, sidebarToken, _ := h.listConvosPage(r.Context(), "", "")
-	h.render(w, r, http.StatusOK, newConversationPage(convos, sidebarToken, h.listProfiles(r.Context())))
+	h.render(w, r, http.StatusOK, newConversationPage(convos, sidebarToken, profiles))
 }
 
 // handleNewCreate creates a conversation under the chosen profile and redirects

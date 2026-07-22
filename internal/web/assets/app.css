@@ -602,6 +602,40 @@ a.settings-item:hover { border-color: var(--accent); background: var(--bg-elev-2
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .page-head .page-sub { margin-bottom: 22px; }
 
+/* sidebar row + hover-revealed pin/archive actions */
+.convo-row { position: relative; display: flex; align-items: stretch; }
+.convo-row .convo { flex: 1; min-width: 0; }
+.convo-pin { color: var(--accent); flex: 0 0 auto; margin-right: 2px; }
+.convo-actions {
+	position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+	display: none; gap: 2px; align-items: center;
+	background: var(--bg-elev-2); border-radius: 7px; padding: 1px;
+}
+.convo-row:hover .convo-actions { display: flex; }
+.convo-act {
+	background: none; border: none; box-shadow: none; cursor: pointer;
+	color: var(--muted); padding: 4px 5px; border-radius: 6px; line-height: 0;
+}
+.convo-act:hover { color: var(--text); background: var(--bg-sink); }
+
+/* archived browser */
+.archived-list { padding: 18px 24px; display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.archived-row {
+	display: flex; align-items: center; gap: 10px;
+	padding: 10px 14px; background: var(--bg-elev);
+	border: 1px solid var(--border); border-radius: var(--radius);
+}
+.archived-title { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archived-row form { margin: 0; }
+.archived-row button { padding: 6px 12px; font-size: 13px; }
+
+/* /new default badge */
+.default-badge {
+	display: inline-block; margin-left: 8px; padding: 1px 7px;
+	font-size: 11px; font-weight: 600; color: var(--accent);
+	background: var(--accent-soft); border-radius: 999px; vertical-align: middle;
+}
+
 /* sidebar incremental "Show more" */
 .convo-more {
 	display: block; width: 100%; margin: 6px 0 2px; padding: 7px 10px;

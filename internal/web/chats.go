@@ -128,7 +128,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		// instead of a transcript that ends at the question.
 		runID = h.activeRunID(r, id)
 	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated))
+	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated, t.conv.GetArchivedAt() != nil))
 }
 
 // handleMessagesPartial re-renders the #messages region. Triggered by
