@@ -808,6 +808,67 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[psmi
 	}), nil
 }
 
+// RefreshUserModelMetadata re-snapshots one enabled model from the
+// current catalog, discarding hand edits to the snapshotted columns.
+// The user's own layers survive: per-model default settings, favorite
+// state, and enablement are untouched (favorite/enabled aren't in the
+// upsert's update set; default_settings is carried over explicitly).
+// When the catalog has no entry — manual rows, delisted models — the
+// row is left as-is and refreshed=false reports why.
+func (s *Service) RefreshUserModelMetadata(ctx context.Context, req *connect.Request[psmithv1.RefreshUserModelMetadataRequest]) (*connect.Response[psmithv1.RefreshUserModelMetadataResponse], error) {
+	row, err := s.loadOwnedProvider(ctx, req.Msg.UserModelProviderId)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.ModelId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
+	}
+	existing, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: row.ID,
+		ModelID:             req.Msg.ModelId,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("model not enabled on this provider"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	cfg, err := s.resolveProviderConfig(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	catalogProviderID := configCatalogProviderID(row.Type, cfg)
+	if catalogProviderID == "" {
+		return connect.NewResponse(&psmithv1.RefreshUserModelMetadataResponse{
+			UserModel: storeUserModelToProto(existing, row.Type),
+			Refreshed: false,
+		}), nil
+	}
+	cm, err := s.catalog.LookupModel(ctx, catalogProviderID, req.Msg.ModelId)
+	if err != nil {
+		if errors.Is(err, modelmeta.ErrNotFound) {
+			return connect.NewResponse(&psmithv1.RefreshUserModelMetadataResponse{
+				UserModel: storeUserModelToProto(existing, row.Type),
+				Refreshed: false,
+			}), nil
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	params := catalogModelToSnapshot(row.ID, cm, time.Now().UTC())
+	params.DefaultSettings = existing.DefaultSettings
+	written, err := s.queries.UpsertUserModel(ctx, params)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.publishProviderEvent(row.UserID, row.ID, events.ProviderChangeUpdated)
+	return connect.NewResponse(&psmithv1.RefreshUserModelMetadataResponse{
+		UserModel: storeUserModelToProto(written, row.Type),
+		Refreshed: true,
+	}), nil
+}
+
 // --- AddManualModel ---
 
 // AddManualModel registers a user-described model on a provider for which

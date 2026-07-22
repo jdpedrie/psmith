@@ -75,6 +75,9 @@ const (
 	// ModelProvidersServiceUpdateUserModelProcedure is the fully-qualified name of the
 	// ModelProvidersService's UpdateUserModel RPC.
 	ModelProvidersServiceUpdateUserModelProcedure = "/psmith.v1.ModelProvidersService/UpdateUserModel"
+	// ModelProvidersServiceRefreshUserModelMetadataProcedure is the fully-qualified name of the
+	// ModelProvidersService's RefreshUserModelMetadata RPC.
+	ModelProvidersServiceRefreshUserModelMetadataProcedure = "/psmith.v1.ModelProvidersService/RefreshUserModelMetadata"
 	// ModelProvidersServiceAddManualModelProcedure is the fully-qualified name of the
 	// ModelProvidersService's AddManualModel RPC.
 	ModelProvidersServiceAddManualModelProcedure = "/psmith.v1.ModelProvidersService/AddManualModel"
@@ -123,10 +126,19 @@ type ModelProvidersServiceClient interface {
 	// Toggle the favorite flag on a single user model. Identity metadata —
 	// surfaces the model in the FAVORITES section of the model picker.
 	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
-	// Mutate fields on an enabled user model. Currently only `default_settings`
-	// is writable (per-model default CallSettings layer). The model row must
-	// already exist (callers can't update a model they haven't enabled).
+	// Mutate fields on an enabled user model: the snapshotted metadata
+	// (display name, limits, pricing, modalities, capabilities, cutoff)
+	// and the per-model default CallSettings layer. Sparse: unset fields
+	// leave columns alone; clear flags revert nullable columns to NULL.
+	// The model row must already exist (callers can't update a model
+	// they haven't enabled).
 	UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error)
+	// Re-snapshot an enabled model's metadata from the current catalog,
+	// discarding any hand edits to the snapshotted columns. Per-model
+	// default settings, favorite state, and enablement are preserved.
+	// No-op (refreshed=false) when the catalog has no entry — manual
+	// rows and delisted models keep their stored metadata.
+	RefreshUserModelMetadata(context.Context, *connect.Request[v1.RefreshUserModelMetadataRequest]) (*connect.Response[v1.RefreshUserModelMetadataResponse], error)
 	// Add a manually-described model to a user provider. For models not in
 	// the catalog and not surfaced by driver discovery — e.g. private
 	// fine-tunes, renamed-but-real models, or anything served by an
@@ -249,6 +261,12 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(modelProvidersServiceMethods.ByName("UpdateUserModel")),
 			connect.WithClientOptions(opts...),
 		),
+		refreshUserModelMetadata: connect.NewClient[v1.RefreshUserModelMetadataRequest, v1.RefreshUserModelMetadataResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceRefreshUserModelMetadataProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("RefreshUserModelMetadata")),
+			connect.WithClientOptions(opts...),
+		),
 		addManualModel: connect.NewClient[v1.AddManualModelRequest, v1.AddManualModelResponse](
 			httpClient,
 			baseURL+ModelProvidersServiceAddManualModelProcedure,
@@ -290,26 +308,27 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 
 // modelProvidersServiceClient implements ModelProvidersServiceClient.
 type modelProvidersServiceClient struct {
-	listProviderTypes       *connect.Client[v1.ListProviderTypesRequest, v1.ListProviderTypesResponse]
-	listProviderTemplates   *connect.Client[v1.ListProviderTemplatesRequest, v1.ListProviderTemplatesResponse]
-	createUserModelProvider *connect.Client[v1.CreateUserModelProviderRequest, v1.CreateUserModelProviderResponse]
-	listUserModelProviders  *connect.Client[v1.ListUserModelProvidersRequest, v1.ListUserModelProvidersResponse]
-	getUserModelProvider    *connect.Client[v1.GetUserModelProviderRequest, v1.GetUserModelProviderResponse]
-	updateUserModelProvider *connect.Client[v1.UpdateUserModelProviderRequest, v1.UpdateUserModelProviderResponse]
-	deleteUserModelProvider *connect.Client[v1.DeleteUserModelProviderRequest, v1.DeleteUserModelProviderResponse]
-	discoverModels          *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
-	enableModels            *connect.Client[v1.EnableModelsRequest, v1.EnableModelsResponse]
-	disableModels           *connect.Client[v1.DisableModelsRequest, v1.DisableModelsResponse]
-	listUserModels          *connect.Client[v1.ListUserModelsRequest, v1.ListUserModelsResponse]
-	listAllUserModels       *connect.Client[v1.ListAllUserModelsRequest, v1.ListAllUserModelsResponse]
-	toggleUserModelFavorite *connect.Client[v1.ToggleUserModelFavoriteRequest, v1.ToggleUserModelFavoriteResponse]
-	updateUserModel         *connect.Client[v1.UpdateUserModelRequest, v1.UpdateUserModelResponse]
-	addManualModel          *connect.Client[v1.AddManualModelRequest, v1.AddManualModelResponse]
-	testUserModelProvider   *connect.Client[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse]
-	testUserModel           *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
-	refreshModelCatalog     *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
-	getCatalogStatus        *connect.Client[v1.GetCatalogStatusRequest, v1.GetCatalogStatusResponse]
-	listProviderCosts       *connect.Client[v1.ListProviderCostsRequest, v1.ListProviderCostsResponse]
+	listProviderTypes        *connect.Client[v1.ListProviderTypesRequest, v1.ListProviderTypesResponse]
+	listProviderTemplates    *connect.Client[v1.ListProviderTemplatesRequest, v1.ListProviderTemplatesResponse]
+	createUserModelProvider  *connect.Client[v1.CreateUserModelProviderRequest, v1.CreateUserModelProviderResponse]
+	listUserModelProviders   *connect.Client[v1.ListUserModelProvidersRequest, v1.ListUserModelProvidersResponse]
+	getUserModelProvider     *connect.Client[v1.GetUserModelProviderRequest, v1.GetUserModelProviderResponse]
+	updateUserModelProvider  *connect.Client[v1.UpdateUserModelProviderRequest, v1.UpdateUserModelProviderResponse]
+	deleteUserModelProvider  *connect.Client[v1.DeleteUserModelProviderRequest, v1.DeleteUserModelProviderResponse]
+	discoverModels           *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
+	enableModels             *connect.Client[v1.EnableModelsRequest, v1.EnableModelsResponse]
+	disableModels            *connect.Client[v1.DisableModelsRequest, v1.DisableModelsResponse]
+	listUserModels           *connect.Client[v1.ListUserModelsRequest, v1.ListUserModelsResponse]
+	listAllUserModels        *connect.Client[v1.ListAllUserModelsRequest, v1.ListAllUserModelsResponse]
+	toggleUserModelFavorite  *connect.Client[v1.ToggleUserModelFavoriteRequest, v1.ToggleUserModelFavoriteResponse]
+	updateUserModel          *connect.Client[v1.UpdateUserModelRequest, v1.UpdateUserModelResponse]
+	refreshUserModelMetadata *connect.Client[v1.RefreshUserModelMetadataRequest, v1.RefreshUserModelMetadataResponse]
+	addManualModel           *connect.Client[v1.AddManualModelRequest, v1.AddManualModelResponse]
+	testUserModelProvider    *connect.Client[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse]
+	testUserModel            *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
+	refreshModelCatalog      *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
+	getCatalogStatus         *connect.Client[v1.GetCatalogStatusRequest, v1.GetCatalogStatusResponse]
+	listProviderCosts        *connect.Client[v1.ListProviderCostsRequest, v1.ListProviderCostsResponse]
 }
 
 // ListProviderTypes calls psmith.v1.ModelProvidersService.ListProviderTypes.
@@ -382,6 +401,11 @@ func (c *modelProvidersServiceClient) UpdateUserModel(ctx context.Context, req *
 	return c.updateUserModel.CallUnary(ctx, req)
 }
 
+// RefreshUserModelMetadata calls psmith.v1.ModelProvidersService.RefreshUserModelMetadata.
+func (c *modelProvidersServiceClient) RefreshUserModelMetadata(ctx context.Context, req *connect.Request[v1.RefreshUserModelMetadataRequest]) (*connect.Response[v1.RefreshUserModelMetadataResponse], error) {
+	return c.refreshUserModelMetadata.CallUnary(ctx, req)
+}
+
 // AddManualModel calls psmith.v1.ModelProvidersService.AddManualModel.
 func (c *modelProvidersServiceClient) AddManualModel(ctx context.Context, req *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error) {
 	return c.addManualModel.CallUnary(ctx, req)
@@ -440,10 +464,19 @@ type ModelProvidersServiceHandler interface {
 	// Toggle the favorite flag on a single user model. Identity metadata —
 	// surfaces the model in the FAVORITES section of the model picker.
 	ToggleUserModelFavorite(context.Context, *connect.Request[v1.ToggleUserModelFavoriteRequest]) (*connect.Response[v1.ToggleUserModelFavoriteResponse], error)
-	// Mutate fields on an enabled user model. Currently only `default_settings`
-	// is writable (per-model default CallSettings layer). The model row must
-	// already exist (callers can't update a model they haven't enabled).
+	// Mutate fields on an enabled user model: the snapshotted metadata
+	// (display name, limits, pricing, modalities, capabilities, cutoff)
+	// and the per-model default CallSettings layer. Sparse: unset fields
+	// leave columns alone; clear flags revert nullable columns to NULL.
+	// The model row must already exist (callers can't update a model
+	// they haven't enabled).
 	UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error)
+	// Re-snapshot an enabled model's metadata from the current catalog,
+	// discarding any hand edits to the snapshotted columns. Per-model
+	// default settings, favorite state, and enablement are preserved.
+	// No-op (refreshed=false) when the catalog has no entry — manual
+	// rows and delisted models keep their stored metadata.
+	RefreshUserModelMetadata(context.Context, *connect.Request[v1.RefreshUserModelMetadataRequest]) (*connect.Response[v1.RefreshUserModelMetadataResponse], error)
 	// Add a manually-described model to a user provider. For models not in
 	// the catalog and not surfaced by driver discovery — e.g. private
 	// fine-tunes, renamed-but-real models, or anything served by an
@@ -562,6 +595,12 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 		connect.WithSchema(modelProvidersServiceMethods.ByName("UpdateUserModel")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelProvidersServiceRefreshUserModelMetadataHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceRefreshUserModelMetadataProcedure,
+		svc.RefreshUserModelMetadata,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("RefreshUserModelMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelProvidersServiceAddManualModelHandler := connect.NewUnaryHandler(
 		ModelProvidersServiceAddManualModelProcedure,
 		svc.AddManualModel,
@@ -628,6 +667,8 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 			modelProvidersServiceToggleUserModelFavoriteHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceUpdateUserModelProcedure:
 			modelProvidersServiceUpdateUserModelHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceRefreshUserModelMetadataProcedure:
+			modelProvidersServiceRefreshUserModelMetadataHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceAddManualModelProcedure:
 			modelProvidersServiceAddManualModelHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceTestUserModelProviderProcedure:
@@ -703,6 +744,10 @@ func (UnimplementedModelProvidersServiceHandler) ToggleUserModelFavorite(context
 
 func (UnimplementedModelProvidersServiceHandler) UpdateUserModel(context.Context, *connect.Request[v1.UpdateUserModelRequest]) (*connect.Response[v1.UpdateUserModelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ModelProvidersService.UpdateUserModel is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) RefreshUserModelMetadata(context.Context, *connect.Request[v1.RefreshUserModelMetadataRequest]) (*connect.Response[v1.RefreshUserModelMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ModelProvidersService.RefreshUserModelMetadata is not implemented"))
 }
 
 func (UnimplementedModelProvidersServiceHandler) AddManualModel(context.Context, *connect.Request[v1.AddManualModelRequest]) (*connect.Response[v1.AddManualModelResponse], error) {

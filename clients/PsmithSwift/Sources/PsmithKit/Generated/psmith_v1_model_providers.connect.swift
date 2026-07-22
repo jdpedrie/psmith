@@ -64,11 +64,22 @@ public protocol Psmith_V1_ModelProvidersServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `toggleUserModelFavorite`(request: Psmith_V1_ToggleUserModelFavoriteRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ToggleUserModelFavoriteResponse>
 
-    /// Mutate fields on an enabled user model. Currently only `default_settings`
-    /// is writable (per-model default CallSettings layer). The model row must
-    /// already exist (callers can't update a model they haven't enabled).
+    /// Mutate fields on an enabled user model: the snapshotted metadata
+    /// (display name, limits, pricing, modalities, capabilities, cutoff)
+    /// and the per-model default CallSettings layer. Sparse: unset fields
+    /// leave columns alone; clear flags revert nullable columns to NULL.
+    /// The model row must already exist (callers can't update a model
+    /// they haven't enabled).
     @available(iOS 13, *)
     func `updateUserModel`(request: Psmith_V1_UpdateUserModelRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_UpdateUserModelResponse>
+
+    /// Re-snapshot an enabled model's metadata from the current catalog,
+    /// discarding any hand edits to the snapshotted columns. Per-model
+    /// default settings, favorite state, and enablement are preserved.
+    /// No-op (refreshed=false) when the catalog has no entry — manual
+    /// rows and delisted models keep their stored metadata.
+    @available(iOS 13, *)
+    func `refreshUserModelMetadata`(request: Psmith_V1_RefreshUserModelMetadataRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_RefreshUserModelMetadataResponse>
 
     /// Add a manually-described model to a user provider. For models not in
     /// the catalog and not surfaced by driver discovery — e.g. private
@@ -187,6 +198,11 @@ public final class Psmith_V1_ModelProvidersServiceClient: Psmith_V1_ModelProvide
     }
 
     @available(iOS 13, *)
+    public func `refreshUserModelMetadata`(request: Psmith_V1_RefreshUserModelMetadataRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_RefreshUserModelMetadataResponse> {
+        return await self.client.unary(path: "/psmith.v1.ModelProvidersService/RefreshUserModelMetadata", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `addManualModel`(request: Psmith_V1_AddManualModelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_AddManualModelResponse> {
         return await self.client.unary(path: "/psmith.v1.ModelProvidersService/AddManualModel", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -232,6 +248,7 @@ public final class Psmith_V1_ModelProvidersServiceClient: Psmith_V1_ModelProvide
             public static let listAllUserModels = Connect.MethodSpec(name: "ListAllUserModels", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let toggleUserModelFavorite = Connect.MethodSpec(name: "ToggleUserModelFavorite", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let updateUserModel = Connect.MethodSpec(name: "UpdateUserModel", service: "psmith.v1.ModelProvidersService", type: .unary)
+            public static let refreshUserModelMetadata = Connect.MethodSpec(name: "RefreshUserModelMetadata", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let addManualModel = Connect.MethodSpec(name: "AddManualModel", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let testUserModelProvider = Connect.MethodSpec(name: "TestUserModelProvider", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let testUserModel = Connect.MethodSpec(name: "TestUserModel", service: "psmith.v1.ModelProvidersService", type: .unary)

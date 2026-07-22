@@ -1581,6 +1581,113 @@ func (x *UpdateUserModelResponse) GetUserModel() *UserModel {
 // AddManualModelRequest carries every snapshot field. model_id and
 // display_name are required; metadata is optional and stored verbatim
 // (server doesn't try to look up catalog defaults for manual models).
+type RefreshUserModelMetadataRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
+	ModelId             string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RefreshUserModelMetadataRequest) Reset() {
+	*x = RefreshUserModelMetadataRequest{}
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshUserModelMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshUserModelMetadataRequest) ProtoMessage() {}
+
+func (x *RefreshUserModelMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshUserModelMetadataRequest.ProtoReflect.Descriptor instead.
+func (*RefreshUserModelMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RefreshUserModelMetadataRequest) GetUserModelProviderId() string {
+	if x != nil {
+		return x.UserModelProviderId
+	}
+	return ""
+}
+
+func (x *RefreshUserModelMetadataRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+type RefreshUserModelMetadataResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The row after the refresh (unchanged when refreshed=false).
+	UserModel *UserModel `protobuf:"bytes,1,opt,name=user_model,json=userModel,proto3" json:"user_model,omitempty"`
+	// False when the catalog has no entry for this model (manual rows,
+	// delisted models) — the row is left untouched rather than blanked.
+	Refreshed     bool `protobuf:"varint,2,opt,name=refreshed,proto3" json:"refreshed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshUserModelMetadataResponse) Reset() {
+	*x = RefreshUserModelMetadataResponse{}
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshUserModelMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshUserModelMetadataResponse) ProtoMessage() {}
+
+func (x *RefreshUserModelMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshUserModelMetadataResponse.ProtoReflect.Descriptor instead.
+func (*RefreshUserModelMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *RefreshUserModelMetadataResponse) GetUserModel() *UserModel {
+	if x != nil {
+		return x.UserModel
+	}
+	return nil
+}
+
+func (x *RefreshUserModelMetadataResponse) GetRefreshed() bool {
+	if x != nil {
+		return x.Refreshed
+	}
+	return false
+}
+
 type AddManualModelRequest struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	UserModelProviderId string                 `protobuf:"bytes,1,opt,name=user_model_provider_id,json=userModelProviderId,proto3" json:"user_model_provider_id,omitempty"`
@@ -1599,7 +1706,7 @@ type AddManualModelRequest struct {
 
 func (x *AddManualModelRequest) Reset() {
 	*x = AddManualModelRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[30]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1611,7 +1718,7 @@ func (x *AddManualModelRequest) String() string {
 func (*AddManualModelRequest) ProtoMessage() {}
 
 func (x *AddManualModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[30]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1624,7 +1731,7 @@ func (x *AddManualModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddManualModelRequest.ProtoReflect.Descriptor instead.
 func (*AddManualModelRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{30}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AddManualModelRequest) GetUserModelProviderId() string {
@@ -1706,7 +1813,7 @@ type AddManualModelResponse struct {
 
 func (x *AddManualModelResponse) Reset() {
 	*x = AddManualModelResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[31]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +1825,7 @@ func (x *AddManualModelResponse) String() string {
 func (*AddManualModelResponse) ProtoMessage() {}
 
 func (x *AddManualModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[31]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +1838,7 @@ func (x *AddManualModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddManualModelResponse.ProtoReflect.Descriptor instead.
 func (*AddManualModelResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{31}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *AddManualModelResponse) GetUserModel() *UserModel {
@@ -1750,7 +1857,7 @@ type TestUserModelProviderRequest struct {
 
 func (x *TestUserModelProviderRequest) Reset() {
 	*x = TestUserModelProviderRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[32]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1762,7 +1869,7 @@ func (x *TestUserModelProviderRequest) String() string {
 func (*TestUserModelProviderRequest) ProtoMessage() {}
 
 func (x *TestUserModelProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[32]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1775,7 +1882,7 @@ func (x *TestUserModelProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestUserModelProviderRequest.ProtoReflect.Descriptor instead.
 func (*TestUserModelProviderRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{32}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TestUserModelProviderRequest) GetUserModelProviderId() string {
@@ -1797,7 +1904,7 @@ type TestUserModelProviderResponse struct {
 
 func (x *TestUserModelProviderResponse) Reset() {
 	*x = TestUserModelProviderResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[33]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1809,7 +1916,7 @@ func (x *TestUserModelProviderResponse) String() string {
 func (*TestUserModelProviderResponse) ProtoMessage() {}
 
 func (x *TestUserModelProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[33]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1822,7 +1929,7 @@ func (x *TestUserModelProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestUserModelProviderResponse.ProtoReflect.Descriptor instead.
 func (*TestUserModelProviderResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{33}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *TestUserModelProviderResponse) GetOk() bool {
@@ -1870,7 +1977,7 @@ type TestUserModelRequest struct {
 
 func (x *TestUserModelRequest) Reset() {
 	*x = TestUserModelRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[34]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1882,7 +1989,7 @@ func (x *TestUserModelRequest) String() string {
 func (*TestUserModelRequest) ProtoMessage() {}
 
 func (x *TestUserModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[34]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1895,7 +2002,7 @@ func (x *TestUserModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestUserModelRequest.ProtoReflect.Descriptor instead.
 func (*TestUserModelRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{34}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *TestUserModelRequest) GetUserModelProviderId() string {
@@ -1933,7 +2040,7 @@ type TestUserModelResponse struct {
 
 func (x *TestUserModelResponse) Reset() {
 	*x = TestUserModelResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[35]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1945,7 +2052,7 @@ func (x *TestUserModelResponse) String() string {
 func (*TestUserModelResponse) ProtoMessage() {}
 
 func (x *TestUserModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[35]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1958,7 +2065,7 @@ func (x *TestUserModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestUserModelResponse.ProtoReflect.Descriptor instead.
 func (*TestUserModelResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{35}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *TestUserModelResponse) GetOk() bool {
@@ -2011,7 +2118,7 @@ type RefreshModelCatalogRequest struct {
 
 func (x *RefreshModelCatalogRequest) Reset() {
 	*x = RefreshModelCatalogRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[36]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2023,7 +2130,7 @@ func (x *RefreshModelCatalogRequest) String() string {
 func (*RefreshModelCatalogRequest) ProtoMessage() {}
 
 func (x *RefreshModelCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[36]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2036,7 +2143,7 @@ func (x *RefreshModelCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshModelCatalogRequest.ProtoReflect.Descriptor instead.
 func (*RefreshModelCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{36}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{38}
 }
 
 type RefreshModelCatalogResponse struct {
@@ -2050,7 +2157,7 @@ type RefreshModelCatalogResponse struct {
 
 func (x *RefreshModelCatalogResponse) Reset() {
 	*x = RefreshModelCatalogResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[37]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2062,7 +2169,7 @@ func (x *RefreshModelCatalogResponse) String() string {
 func (*RefreshModelCatalogResponse) ProtoMessage() {}
 
 func (x *RefreshModelCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[37]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2075,7 +2182,7 @@ func (x *RefreshModelCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshModelCatalogResponse.ProtoReflect.Descriptor instead.
 func (*RefreshModelCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{37}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RefreshModelCatalogResponse) GetProvidersCount() int32 {
@@ -2107,7 +2214,7 @@ type GetCatalogStatusRequest struct {
 
 func (x *GetCatalogStatusRequest) Reset() {
 	*x = GetCatalogStatusRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[38]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2119,7 +2226,7 @@ func (x *GetCatalogStatusRequest) String() string {
 func (*GetCatalogStatusRequest) ProtoMessage() {}
 
 func (x *GetCatalogStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[38]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2132,7 +2239,7 @@ func (x *GetCatalogStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogStatusRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{38}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{40}
 }
 
 type GetCatalogStatusResponse struct {
@@ -2146,7 +2253,7 @@ type GetCatalogStatusResponse struct {
 
 func (x *GetCatalogStatusResponse) Reset() {
 	*x = GetCatalogStatusResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[39]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2158,7 +2265,7 @@ func (x *GetCatalogStatusResponse) String() string {
 func (*GetCatalogStatusResponse) ProtoMessage() {}
 
 func (x *GetCatalogStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[39]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2171,7 +2278,7 @@ func (x *GetCatalogStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetCatalogStatusResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{39}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetCatalogStatusResponse) GetProvidersCount() int32 {
@@ -2209,7 +2316,7 @@ type ListProviderCostsRequest struct {
 
 func (x *ListProviderCostsRequest) Reset() {
 	*x = ListProviderCostsRequest{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[40]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2221,7 +2328,7 @@ func (x *ListProviderCostsRequest) String() string {
 func (*ListProviderCostsRequest) ProtoMessage() {}
 
 func (x *ListProviderCostsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[40]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2234,7 +2341,7 @@ func (x *ListProviderCostsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderCostsRequest.ProtoReflect.Descriptor instead.
 func (*ListProviderCostsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{40}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListProviderCostsRequest) GetSince() *timestamppb.Timestamp {
@@ -2264,7 +2371,7 @@ type ListProviderCostsResponse struct {
 
 func (x *ListProviderCostsResponse) Reset() {
 	*x = ListProviderCostsResponse{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[41]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2276,7 +2383,7 @@ func (x *ListProviderCostsResponse) String() string {
 func (*ListProviderCostsResponse) ProtoMessage() {}
 
 func (x *ListProviderCostsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[41]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2289,7 +2396,7 @@ func (x *ListProviderCostsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderCostsResponse.ProtoReflect.Descriptor instead.
 func (*ListProviderCostsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{41}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListProviderCostsResponse) GetProviders() []*ProviderCost {
@@ -2321,7 +2428,7 @@ type ProviderCost struct {
 
 func (x *ProviderCost) Reset() {
 	*x = ProviderCost{}
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[42]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2333,7 +2440,7 @@ func (x *ProviderCost) String() string {
 func (*ProviderCost) ProtoMessage() {}
 
 func (x *ProviderCost) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_model_providers_proto_msgTypes[42]
+	mi := &file_psmith_v1_model_providers_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2346,7 +2453,7 @@ func (x *ProviderCost) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderCost.ProtoReflect.Descriptor instead.
 func (*ProviderCost) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{42}
+	return file_psmith_v1_model_providers_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ProviderCost) GetProviderId() string {
@@ -2499,7 +2606,14 @@ const file_psmith_v1_model_providers_proto_rawDesc = "" +
 	"\x11_knowledge_cutoff\"N\n" +
 	"\x17UpdateUserModelResponse\x123\n" +
 	"\n" +
-	"user_model\x18\x01 \x01(\v2\x14.psmith.v1.UserModelR\tuserModel\"\xef\x04\n" +
+	"user_model\x18\x01 \x01(\v2\x14.psmith.v1.UserModelR\tuserModel\"q\n" +
+	"\x1fRefreshUserModelMetadataRequest\x123\n" +
+	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\"u\n" +
+	" RefreshUserModelMetadataResponse\x123\n" +
+	"\n" +
+	"user_model\x18\x01 \x01(\v2\x14.psmith.v1.UserModelR\tuserModel\x12\x1c\n" +
+	"\trefreshed\x18\x02 \x01(\bR\trefreshed\"\xef\x04\n" +
 	"\x15AddManualModelRequest\x123\n" +
 	"\x16user_model_provider_id\x18\x01 \x01(\tR\x13userModelProviderId\x12\x19\n" +
 	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12!\n" +
@@ -2574,7 +2688,7 @@ const file_psmith_v1_model_providers_proto_rawDesc = "" +
 	"\rprovider_type\x18\x03 \x01(\tR\fproviderType\x12$\n" +
 	"\x0etotal_cost_usd\x18\x04 \x01(\x01R\ftotalCostUsd\x12\x1f\n" +
 	"\vevent_count\x18\x05 \x01(\x03R\n" +
-	"eventCount2\xca\x0f\n" +
+	"eventCount2\xbf\x10\n" +
 	"\x15ModelProvidersService\x12^\n" +
 	"\x11ListProviderTypes\x12#.psmith.v1.ListProviderTypesRequest\x1a$.psmith.v1.ListProviderTypesResponse\x12j\n" +
 	"\x15ListProviderTemplates\x12'.psmith.v1.ListProviderTemplatesRequest\x1a(.psmith.v1.ListProviderTemplatesResponse\x12p\n" +
@@ -2589,7 +2703,8 @@ const file_psmith_v1_model_providers_proto_rawDesc = "" +
 	"\x0eListUserModels\x12 .psmith.v1.ListUserModelsRequest\x1a!.psmith.v1.ListUserModelsResponse\x12^\n" +
 	"\x11ListAllUserModels\x12#.psmith.v1.ListAllUserModelsRequest\x1a$.psmith.v1.ListAllUserModelsResponse\x12p\n" +
 	"\x17ToggleUserModelFavorite\x12).psmith.v1.ToggleUserModelFavoriteRequest\x1a*.psmith.v1.ToggleUserModelFavoriteResponse\x12X\n" +
-	"\x0fUpdateUserModel\x12!.psmith.v1.UpdateUserModelRequest\x1a\".psmith.v1.UpdateUserModelResponse\x12U\n" +
+	"\x0fUpdateUserModel\x12!.psmith.v1.UpdateUserModelRequest\x1a\".psmith.v1.UpdateUserModelResponse\x12s\n" +
+	"\x18RefreshUserModelMetadata\x12*.psmith.v1.RefreshUserModelMetadataRequest\x1a+.psmith.v1.RefreshUserModelMetadataResponse\x12U\n" +
 	"\x0eAddManualModel\x12 .psmith.v1.AddManualModelRequest\x1a!.psmith.v1.AddManualModelResponse\x12j\n" +
 	"\x15TestUserModelProvider\x12'.psmith.v1.TestUserModelProviderRequest\x1a(.psmith.v1.TestUserModelProviderResponse\x12R\n" +
 	"\rTestUserModel\x12\x1f.psmith.v1.TestUserModelRequest\x1a .psmith.v1.TestUserModelResponse\x12d\n" +
@@ -2609,139 +2724,144 @@ func file_psmith_v1_model_providers_proto_rawDescGZIP() []byte {
 	return file_psmith_v1_model_providers_proto_rawDescData
 }
 
-var file_psmith_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_psmith_v1_model_providers_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_psmith_v1_model_providers_proto_goTypes = []any{
-	(*ListProviderTypesRequest)(nil),        // 0: psmith.v1.ListProviderTypesRequest
-	(*ListProviderTypesResponse)(nil),       // 1: psmith.v1.ListProviderTypesResponse
-	(*ListProviderTemplatesRequest)(nil),    // 2: psmith.v1.ListProviderTemplatesRequest
-	(*ListProviderTemplatesResponse)(nil),   // 3: psmith.v1.ListProviderTemplatesResponse
-	(*CreateUserModelProviderRequest)(nil),  // 4: psmith.v1.CreateUserModelProviderRequest
-	(*CreateUserModelProviderResponse)(nil), // 5: psmith.v1.CreateUserModelProviderResponse
-	(*ListUserModelProvidersRequest)(nil),   // 6: psmith.v1.ListUserModelProvidersRequest
-	(*ListUserModelProvidersResponse)(nil),  // 7: psmith.v1.ListUserModelProvidersResponse
-	(*GetUserModelProviderRequest)(nil),     // 8: psmith.v1.GetUserModelProviderRequest
-	(*GetUserModelProviderResponse)(nil),    // 9: psmith.v1.GetUserModelProviderResponse
-	(*UpdateUserModelProviderRequest)(nil),  // 10: psmith.v1.UpdateUserModelProviderRequest
-	(*UpdateUserModelProviderResponse)(nil), // 11: psmith.v1.UpdateUserModelProviderResponse
-	(*DeleteUserModelProviderRequest)(nil),  // 12: psmith.v1.DeleteUserModelProviderRequest
-	(*DeleteUserModelProviderResponse)(nil), // 13: psmith.v1.DeleteUserModelProviderResponse
-	(*DiscoverModelsRequest)(nil),           // 14: psmith.v1.DiscoverModelsRequest
-	(*DiscoverModelsResponse)(nil),          // 15: psmith.v1.DiscoverModelsResponse
-	(*DiscoveredModel)(nil),                 // 16: psmith.v1.DiscoveredModel
-	(*EnableModelsRequest)(nil),             // 17: psmith.v1.EnableModelsRequest
-	(*EnableModelsResponse)(nil),            // 18: psmith.v1.EnableModelsResponse
-	(*DisableModelsRequest)(nil),            // 19: psmith.v1.DisableModelsRequest
-	(*DisableModelsResponse)(nil),           // 20: psmith.v1.DisableModelsResponse
-	(*ListUserModelsRequest)(nil),           // 21: psmith.v1.ListUserModelsRequest
-	(*ListUserModelsResponse)(nil),          // 22: psmith.v1.ListUserModelsResponse
-	(*ListAllUserModelsRequest)(nil),        // 23: psmith.v1.ListAllUserModelsRequest
-	(*UserModelEntry)(nil),                  // 24: psmith.v1.UserModelEntry
-	(*ListAllUserModelsResponse)(nil),       // 25: psmith.v1.ListAllUserModelsResponse
-	(*ToggleUserModelFavoriteRequest)(nil),  // 26: psmith.v1.ToggleUserModelFavoriteRequest
-	(*ToggleUserModelFavoriteResponse)(nil), // 27: psmith.v1.ToggleUserModelFavoriteResponse
-	(*UpdateUserModelRequest)(nil),          // 28: psmith.v1.UpdateUserModelRequest
-	(*UpdateUserModelResponse)(nil),         // 29: psmith.v1.UpdateUserModelResponse
-	(*AddManualModelRequest)(nil),           // 30: psmith.v1.AddManualModelRequest
-	(*AddManualModelResponse)(nil),          // 31: psmith.v1.AddManualModelResponse
-	(*TestUserModelProviderRequest)(nil),    // 32: psmith.v1.TestUserModelProviderRequest
-	(*TestUserModelProviderResponse)(nil),   // 33: psmith.v1.TestUserModelProviderResponse
-	(*TestUserModelRequest)(nil),            // 34: psmith.v1.TestUserModelRequest
-	(*TestUserModelResponse)(nil),           // 35: psmith.v1.TestUserModelResponse
-	(*RefreshModelCatalogRequest)(nil),      // 36: psmith.v1.RefreshModelCatalogRequest
-	(*RefreshModelCatalogResponse)(nil),     // 37: psmith.v1.RefreshModelCatalogResponse
-	(*GetCatalogStatusRequest)(nil),         // 38: psmith.v1.GetCatalogStatusRequest
-	(*GetCatalogStatusResponse)(nil),        // 39: psmith.v1.GetCatalogStatusResponse
-	(*ListProviderCostsRequest)(nil),        // 40: psmith.v1.ListProviderCostsRequest
-	(*ListProviderCostsResponse)(nil),       // 41: psmith.v1.ListProviderCostsResponse
-	(*ProviderCost)(nil),                    // 42: psmith.v1.ProviderCost
-	(*ProviderType)(nil),                    // 43: psmith.v1.ProviderType
-	(*ProviderTemplate)(nil),                // 44: psmith.v1.ProviderTemplate
-	(*UserModelProvider)(nil),               // 45: psmith.v1.UserModelProvider
-	(*UserModel)(nil),                       // 46: psmith.v1.UserModel
-	(*CallSettings)(nil),                    // 47: psmith.v1.CallSettings
-	(*ModelPricing)(nil),                    // 48: psmith.v1.ModelPricing
-	(*ModelCapabilities)(nil),               // 49: psmith.v1.ModelCapabilities
-	(MetadataSource)(0),                     // 50: psmith.v1.MetadataSource
-	(*timestamppb.Timestamp)(nil),           // 51: google.protobuf.Timestamp
+	(*ListProviderTypesRequest)(nil),         // 0: psmith.v1.ListProviderTypesRequest
+	(*ListProviderTypesResponse)(nil),        // 1: psmith.v1.ListProviderTypesResponse
+	(*ListProviderTemplatesRequest)(nil),     // 2: psmith.v1.ListProviderTemplatesRequest
+	(*ListProviderTemplatesResponse)(nil),    // 3: psmith.v1.ListProviderTemplatesResponse
+	(*CreateUserModelProviderRequest)(nil),   // 4: psmith.v1.CreateUserModelProviderRequest
+	(*CreateUserModelProviderResponse)(nil),  // 5: psmith.v1.CreateUserModelProviderResponse
+	(*ListUserModelProvidersRequest)(nil),    // 6: psmith.v1.ListUserModelProvidersRequest
+	(*ListUserModelProvidersResponse)(nil),   // 7: psmith.v1.ListUserModelProvidersResponse
+	(*GetUserModelProviderRequest)(nil),      // 8: psmith.v1.GetUserModelProviderRequest
+	(*GetUserModelProviderResponse)(nil),     // 9: psmith.v1.GetUserModelProviderResponse
+	(*UpdateUserModelProviderRequest)(nil),   // 10: psmith.v1.UpdateUserModelProviderRequest
+	(*UpdateUserModelProviderResponse)(nil),  // 11: psmith.v1.UpdateUserModelProviderResponse
+	(*DeleteUserModelProviderRequest)(nil),   // 12: psmith.v1.DeleteUserModelProviderRequest
+	(*DeleteUserModelProviderResponse)(nil),  // 13: psmith.v1.DeleteUserModelProviderResponse
+	(*DiscoverModelsRequest)(nil),            // 14: psmith.v1.DiscoverModelsRequest
+	(*DiscoverModelsResponse)(nil),           // 15: psmith.v1.DiscoverModelsResponse
+	(*DiscoveredModel)(nil),                  // 16: psmith.v1.DiscoveredModel
+	(*EnableModelsRequest)(nil),              // 17: psmith.v1.EnableModelsRequest
+	(*EnableModelsResponse)(nil),             // 18: psmith.v1.EnableModelsResponse
+	(*DisableModelsRequest)(nil),             // 19: psmith.v1.DisableModelsRequest
+	(*DisableModelsResponse)(nil),            // 20: psmith.v1.DisableModelsResponse
+	(*ListUserModelsRequest)(nil),            // 21: psmith.v1.ListUserModelsRequest
+	(*ListUserModelsResponse)(nil),           // 22: psmith.v1.ListUserModelsResponse
+	(*ListAllUserModelsRequest)(nil),         // 23: psmith.v1.ListAllUserModelsRequest
+	(*UserModelEntry)(nil),                   // 24: psmith.v1.UserModelEntry
+	(*ListAllUserModelsResponse)(nil),        // 25: psmith.v1.ListAllUserModelsResponse
+	(*ToggleUserModelFavoriteRequest)(nil),   // 26: psmith.v1.ToggleUserModelFavoriteRequest
+	(*ToggleUserModelFavoriteResponse)(nil),  // 27: psmith.v1.ToggleUserModelFavoriteResponse
+	(*UpdateUserModelRequest)(nil),           // 28: psmith.v1.UpdateUserModelRequest
+	(*UpdateUserModelResponse)(nil),          // 29: psmith.v1.UpdateUserModelResponse
+	(*RefreshUserModelMetadataRequest)(nil),  // 30: psmith.v1.RefreshUserModelMetadataRequest
+	(*RefreshUserModelMetadataResponse)(nil), // 31: psmith.v1.RefreshUserModelMetadataResponse
+	(*AddManualModelRequest)(nil),            // 32: psmith.v1.AddManualModelRequest
+	(*AddManualModelResponse)(nil),           // 33: psmith.v1.AddManualModelResponse
+	(*TestUserModelProviderRequest)(nil),     // 34: psmith.v1.TestUserModelProviderRequest
+	(*TestUserModelProviderResponse)(nil),    // 35: psmith.v1.TestUserModelProviderResponse
+	(*TestUserModelRequest)(nil),             // 36: psmith.v1.TestUserModelRequest
+	(*TestUserModelResponse)(nil),            // 37: psmith.v1.TestUserModelResponse
+	(*RefreshModelCatalogRequest)(nil),       // 38: psmith.v1.RefreshModelCatalogRequest
+	(*RefreshModelCatalogResponse)(nil),      // 39: psmith.v1.RefreshModelCatalogResponse
+	(*GetCatalogStatusRequest)(nil),          // 40: psmith.v1.GetCatalogStatusRequest
+	(*GetCatalogStatusResponse)(nil),         // 41: psmith.v1.GetCatalogStatusResponse
+	(*ListProviderCostsRequest)(nil),         // 42: psmith.v1.ListProviderCostsRequest
+	(*ListProviderCostsResponse)(nil),        // 43: psmith.v1.ListProviderCostsResponse
+	(*ProviderCost)(nil),                     // 44: psmith.v1.ProviderCost
+	(*ProviderType)(nil),                     // 45: psmith.v1.ProviderType
+	(*ProviderTemplate)(nil),                 // 46: psmith.v1.ProviderTemplate
+	(*UserModelProvider)(nil),                // 47: psmith.v1.UserModelProvider
+	(*UserModel)(nil),                        // 48: psmith.v1.UserModel
+	(*CallSettings)(nil),                     // 49: psmith.v1.CallSettings
+	(*ModelPricing)(nil),                     // 50: psmith.v1.ModelPricing
+	(*ModelCapabilities)(nil),                // 51: psmith.v1.ModelCapabilities
+	(MetadataSource)(0),                      // 52: psmith.v1.MetadataSource
+	(*timestamppb.Timestamp)(nil),            // 53: google.protobuf.Timestamp
 }
 var file_psmith_v1_model_providers_proto_depIdxs = []int32{
-	43, // 0: psmith.v1.ListProviderTypesResponse.types:type_name -> psmith.v1.ProviderType
-	44, // 1: psmith.v1.ListProviderTemplatesResponse.templates:type_name -> psmith.v1.ProviderTemplate
-	45, // 2: psmith.v1.CreateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
-	45, // 3: psmith.v1.ListUserModelProvidersResponse.providers:type_name -> psmith.v1.UserModelProvider
-	45, // 4: psmith.v1.GetUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
-	46, // 5: psmith.v1.GetUserModelProviderResponse.enabled_models:type_name -> psmith.v1.UserModel
-	47, // 6: psmith.v1.UpdateUserModelProviderRequest.default_settings:type_name -> psmith.v1.CallSettings
-	45, // 7: psmith.v1.UpdateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
+	45, // 0: psmith.v1.ListProviderTypesResponse.types:type_name -> psmith.v1.ProviderType
+	46, // 1: psmith.v1.ListProviderTemplatesResponse.templates:type_name -> psmith.v1.ProviderTemplate
+	47, // 2: psmith.v1.CreateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
+	47, // 3: psmith.v1.ListUserModelProvidersResponse.providers:type_name -> psmith.v1.UserModelProvider
+	47, // 4: psmith.v1.GetUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
+	48, // 5: psmith.v1.GetUserModelProviderResponse.enabled_models:type_name -> psmith.v1.UserModel
+	49, // 6: psmith.v1.UpdateUserModelProviderRequest.default_settings:type_name -> psmith.v1.CallSettings
+	47, // 7: psmith.v1.UpdateUserModelProviderResponse.provider:type_name -> psmith.v1.UserModelProvider
 	16, // 8: psmith.v1.DiscoverModelsResponse.models:type_name -> psmith.v1.DiscoveredModel
-	48, // 9: psmith.v1.DiscoveredModel.pricing:type_name -> psmith.v1.ModelPricing
-	49, // 10: psmith.v1.DiscoveredModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	50, // 11: psmith.v1.DiscoveredModel.metadata_source:type_name -> psmith.v1.MetadataSource
-	46, // 12: psmith.v1.EnableModelsResponse.enabled:type_name -> psmith.v1.UserModel
-	46, // 13: psmith.v1.ListUserModelsResponse.models:type_name -> psmith.v1.UserModel
-	45, // 14: psmith.v1.UserModelEntry.provider:type_name -> psmith.v1.UserModelProvider
-	46, // 15: psmith.v1.UserModelEntry.model:type_name -> psmith.v1.UserModel
+	50, // 9: psmith.v1.DiscoveredModel.pricing:type_name -> psmith.v1.ModelPricing
+	51, // 10: psmith.v1.DiscoveredModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	52, // 11: psmith.v1.DiscoveredModel.metadata_source:type_name -> psmith.v1.MetadataSource
+	48, // 12: psmith.v1.EnableModelsResponse.enabled:type_name -> psmith.v1.UserModel
+	48, // 13: psmith.v1.ListUserModelsResponse.models:type_name -> psmith.v1.UserModel
+	47, // 14: psmith.v1.UserModelEntry.provider:type_name -> psmith.v1.UserModelProvider
+	48, // 15: psmith.v1.UserModelEntry.model:type_name -> psmith.v1.UserModel
 	24, // 16: psmith.v1.ListAllUserModelsResponse.entries:type_name -> psmith.v1.UserModelEntry
-	46, // 17: psmith.v1.ToggleUserModelFavoriteResponse.model:type_name -> psmith.v1.UserModel
-	47, // 18: psmith.v1.UpdateUserModelRequest.default_settings:type_name -> psmith.v1.CallSettings
-	48, // 19: psmith.v1.UpdateUserModelRequest.pricing:type_name -> psmith.v1.ModelPricing
-	49, // 20: psmith.v1.UpdateUserModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
-	46, // 21: psmith.v1.UpdateUserModelResponse.user_model:type_name -> psmith.v1.UserModel
-	48, // 22: psmith.v1.AddManualModelRequest.pricing:type_name -> psmith.v1.ModelPricing
-	49, // 23: psmith.v1.AddManualModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
-	47, // 24: psmith.v1.AddManualModelRequest.default_settings:type_name -> psmith.v1.CallSettings
-	46, // 25: psmith.v1.AddManualModelResponse.user_model:type_name -> psmith.v1.UserModel
-	47, // 26: psmith.v1.TestUserModelRequest.call_settings:type_name -> psmith.v1.CallSettings
-	51, // 27: psmith.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
-	51, // 28: psmith.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
-	51, // 29: psmith.v1.ListProviderCostsRequest.since:type_name -> google.protobuf.Timestamp
-	51, // 30: psmith.v1.ListProviderCostsRequest.until:type_name -> google.protobuf.Timestamp
-	42, // 31: psmith.v1.ListProviderCostsResponse.providers:type_name -> psmith.v1.ProviderCost
-	0,  // 32: psmith.v1.ModelProvidersService.ListProviderTypes:input_type -> psmith.v1.ListProviderTypesRequest
-	2,  // 33: psmith.v1.ModelProvidersService.ListProviderTemplates:input_type -> psmith.v1.ListProviderTemplatesRequest
-	4,  // 34: psmith.v1.ModelProvidersService.CreateUserModelProvider:input_type -> psmith.v1.CreateUserModelProviderRequest
-	6,  // 35: psmith.v1.ModelProvidersService.ListUserModelProviders:input_type -> psmith.v1.ListUserModelProvidersRequest
-	8,  // 36: psmith.v1.ModelProvidersService.GetUserModelProvider:input_type -> psmith.v1.GetUserModelProviderRequest
-	10, // 37: psmith.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> psmith.v1.UpdateUserModelProviderRequest
-	12, // 38: psmith.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> psmith.v1.DeleteUserModelProviderRequest
-	14, // 39: psmith.v1.ModelProvidersService.DiscoverModels:input_type -> psmith.v1.DiscoverModelsRequest
-	17, // 40: psmith.v1.ModelProvidersService.EnableModels:input_type -> psmith.v1.EnableModelsRequest
-	19, // 41: psmith.v1.ModelProvidersService.DisableModels:input_type -> psmith.v1.DisableModelsRequest
-	21, // 42: psmith.v1.ModelProvidersService.ListUserModels:input_type -> psmith.v1.ListUserModelsRequest
-	23, // 43: psmith.v1.ModelProvidersService.ListAllUserModels:input_type -> psmith.v1.ListAllUserModelsRequest
-	26, // 44: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> psmith.v1.ToggleUserModelFavoriteRequest
-	28, // 45: psmith.v1.ModelProvidersService.UpdateUserModel:input_type -> psmith.v1.UpdateUserModelRequest
-	30, // 46: psmith.v1.ModelProvidersService.AddManualModel:input_type -> psmith.v1.AddManualModelRequest
-	32, // 47: psmith.v1.ModelProvidersService.TestUserModelProvider:input_type -> psmith.v1.TestUserModelProviderRequest
-	34, // 48: psmith.v1.ModelProvidersService.TestUserModel:input_type -> psmith.v1.TestUserModelRequest
-	36, // 49: psmith.v1.ModelProvidersService.RefreshModelCatalog:input_type -> psmith.v1.RefreshModelCatalogRequest
-	38, // 50: psmith.v1.ModelProvidersService.GetCatalogStatus:input_type -> psmith.v1.GetCatalogStatusRequest
-	40, // 51: psmith.v1.ModelProvidersService.ListProviderCosts:input_type -> psmith.v1.ListProviderCostsRequest
-	1,  // 52: psmith.v1.ModelProvidersService.ListProviderTypes:output_type -> psmith.v1.ListProviderTypesResponse
-	3,  // 53: psmith.v1.ModelProvidersService.ListProviderTemplates:output_type -> psmith.v1.ListProviderTemplatesResponse
-	5,  // 54: psmith.v1.ModelProvidersService.CreateUserModelProvider:output_type -> psmith.v1.CreateUserModelProviderResponse
-	7,  // 55: psmith.v1.ModelProvidersService.ListUserModelProviders:output_type -> psmith.v1.ListUserModelProvidersResponse
-	9,  // 56: psmith.v1.ModelProvidersService.GetUserModelProvider:output_type -> psmith.v1.GetUserModelProviderResponse
-	11, // 57: psmith.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> psmith.v1.UpdateUserModelProviderResponse
-	13, // 58: psmith.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> psmith.v1.DeleteUserModelProviderResponse
-	15, // 59: psmith.v1.ModelProvidersService.DiscoverModels:output_type -> psmith.v1.DiscoverModelsResponse
-	18, // 60: psmith.v1.ModelProvidersService.EnableModels:output_type -> psmith.v1.EnableModelsResponse
-	20, // 61: psmith.v1.ModelProvidersService.DisableModels:output_type -> psmith.v1.DisableModelsResponse
-	22, // 62: psmith.v1.ModelProvidersService.ListUserModels:output_type -> psmith.v1.ListUserModelsResponse
-	25, // 63: psmith.v1.ModelProvidersService.ListAllUserModels:output_type -> psmith.v1.ListAllUserModelsResponse
-	27, // 64: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> psmith.v1.ToggleUserModelFavoriteResponse
-	29, // 65: psmith.v1.ModelProvidersService.UpdateUserModel:output_type -> psmith.v1.UpdateUserModelResponse
-	31, // 66: psmith.v1.ModelProvidersService.AddManualModel:output_type -> psmith.v1.AddManualModelResponse
-	33, // 67: psmith.v1.ModelProvidersService.TestUserModelProvider:output_type -> psmith.v1.TestUserModelProviderResponse
-	35, // 68: psmith.v1.ModelProvidersService.TestUserModel:output_type -> psmith.v1.TestUserModelResponse
-	37, // 69: psmith.v1.ModelProvidersService.RefreshModelCatalog:output_type -> psmith.v1.RefreshModelCatalogResponse
-	39, // 70: psmith.v1.ModelProvidersService.GetCatalogStatus:output_type -> psmith.v1.GetCatalogStatusResponse
-	41, // 71: psmith.v1.ModelProvidersService.ListProviderCosts:output_type -> psmith.v1.ListProviderCostsResponse
-	52, // [52:72] is the sub-list for method output_type
-	32, // [32:52] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	48, // 17: psmith.v1.ToggleUserModelFavoriteResponse.model:type_name -> psmith.v1.UserModel
+	49, // 18: psmith.v1.UpdateUserModelRequest.default_settings:type_name -> psmith.v1.CallSettings
+	50, // 19: psmith.v1.UpdateUserModelRequest.pricing:type_name -> psmith.v1.ModelPricing
+	51, // 20: psmith.v1.UpdateUserModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
+	48, // 21: psmith.v1.UpdateUserModelResponse.user_model:type_name -> psmith.v1.UserModel
+	48, // 22: psmith.v1.RefreshUserModelMetadataResponse.user_model:type_name -> psmith.v1.UserModel
+	50, // 23: psmith.v1.AddManualModelRequest.pricing:type_name -> psmith.v1.ModelPricing
+	51, // 24: psmith.v1.AddManualModelRequest.capabilities:type_name -> psmith.v1.ModelCapabilities
+	49, // 25: psmith.v1.AddManualModelRequest.default_settings:type_name -> psmith.v1.CallSettings
+	48, // 26: psmith.v1.AddManualModelResponse.user_model:type_name -> psmith.v1.UserModel
+	49, // 27: psmith.v1.TestUserModelRequest.call_settings:type_name -> psmith.v1.CallSettings
+	53, // 28: psmith.v1.RefreshModelCatalogResponse.fetched_at:type_name -> google.protobuf.Timestamp
+	53, // 29: psmith.v1.GetCatalogStatusResponse.last_refresh_at:type_name -> google.protobuf.Timestamp
+	53, // 30: psmith.v1.ListProviderCostsRequest.since:type_name -> google.protobuf.Timestamp
+	53, // 31: psmith.v1.ListProviderCostsRequest.until:type_name -> google.protobuf.Timestamp
+	44, // 32: psmith.v1.ListProviderCostsResponse.providers:type_name -> psmith.v1.ProviderCost
+	0,  // 33: psmith.v1.ModelProvidersService.ListProviderTypes:input_type -> psmith.v1.ListProviderTypesRequest
+	2,  // 34: psmith.v1.ModelProvidersService.ListProviderTemplates:input_type -> psmith.v1.ListProviderTemplatesRequest
+	4,  // 35: psmith.v1.ModelProvidersService.CreateUserModelProvider:input_type -> psmith.v1.CreateUserModelProviderRequest
+	6,  // 36: psmith.v1.ModelProvidersService.ListUserModelProviders:input_type -> psmith.v1.ListUserModelProvidersRequest
+	8,  // 37: psmith.v1.ModelProvidersService.GetUserModelProvider:input_type -> psmith.v1.GetUserModelProviderRequest
+	10, // 38: psmith.v1.ModelProvidersService.UpdateUserModelProvider:input_type -> psmith.v1.UpdateUserModelProviderRequest
+	12, // 39: psmith.v1.ModelProvidersService.DeleteUserModelProvider:input_type -> psmith.v1.DeleteUserModelProviderRequest
+	14, // 40: psmith.v1.ModelProvidersService.DiscoverModels:input_type -> psmith.v1.DiscoverModelsRequest
+	17, // 41: psmith.v1.ModelProvidersService.EnableModels:input_type -> psmith.v1.EnableModelsRequest
+	19, // 42: psmith.v1.ModelProvidersService.DisableModels:input_type -> psmith.v1.DisableModelsRequest
+	21, // 43: psmith.v1.ModelProvidersService.ListUserModels:input_type -> psmith.v1.ListUserModelsRequest
+	23, // 44: psmith.v1.ModelProvidersService.ListAllUserModels:input_type -> psmith.v1.ListAllUserModelsRequest
+	26, // 45: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:input_type -> psmith.v1.ToggleUserModelFavoriteRequest
+	28, // 46: psmith.v1.ModelProvidersService.UpdateUserModel:input_type -> psmith.v1.UpdateUserModelRequest
+	30, // 47: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:input_type -> psmith.v1.RefreshUserModelMetadataRequest
+	32, // 48: psmith.v1.ModelProvidersService.AddManualModel:input_type -> psmith.v1.AddManualModelRequest
+	34, // 49: psmith.v1.ModelProvidersService.TestUserModelProvider:input_type -> psmith.v1.TestUserModelProviderRequest
+	36, // 50: psmith.v1.ModelProvidersService.TestUserModel:input_type -> psmith.v1.TestUserModelRequest
+	38, // 51: psmith.v1.ModelProvidersService.RefreshModelCatalog:input_type -> psmith.v1.RefreshModelCatalogRequest
+	40, // 52: psmith.v1.ModelProvidersService.GetCatalogStatus:input_type -> psmith.v1.GetCatalogStatusRequest
+	42, // 53: psmith.v1.ModelProvidersService.ListProviderCosts:input_type -> psmith.v1.ListProviderCostsRequest
+	1,  // 54: psmith.v1.ModelProvidersService.ListProviderTypes:output_type -> psmith.v1.ListProviderTypesResponse
+	3,  // 55: psmith.v1.ModelProvidersService.ListProviderTemplates:output_type -> psmith.v1.ListProviderTemplatesResponse
+	5,  // 56: psmith.v1.ModelProvidersService.CreateUserModelProvider:output_type -> psmith.v1.CreateUserModelProviderResponse
+	7,  // 57: psmith.v1.ModelProvidersService.ListUserModelProviders:output_type -> psmith.v1.ListUserModelProvidersResponse
+	9,  // 58: psmith.v1.ModelProvidersService.GetUserModelProvider:output_type -> psmith.v1.GetUserModelProviderResponse
+	11, // 59: psmith.v1.ModelProvidersService.UpdateUserModelProvider:output_type -> psmith.v1.UpdateUserModelProviderResponse
+	13, // 60: psmith.v1.ModelProvidersService.DeleteUserModelProvider:output_type -> psmith.v1.DeleteUserModelProviderResponse
+	15, // 61: psmith.v1.ModelProvidersService.DiscoverModels:output_type -> psmith.v1.DiscoverModelsResponse
+	18, // 62: psmith.v1.ModelProvidersService.EnableModels:output_type -> psmith.v1.EnableModelsResponse
+	20, // 63: psmith.v1.ModelProvidersService.DisableModels:output_type -> psmith.v1.DisableModelsResponse
+	22, // 64: psmith.v1.ModelProvidersService.ListUserModels:output_type -> psmith.v1.ListUserModelsResponse
+	25, // 65: psmith.v1.ModelProvidersService.ListAllUserModels:output_type -> psmith.v1.ListAllUserModelsResponse
+	27, // 66: psmith.v1.ModelProvidersService.ToggleUserModelFavorite:output_type -> psmith.v1.ToggleUserModelFavoriteResponse
+	29, // 67: psmith.v1.ModelProvidersService.UpdateUserModel:output_type -> psmith.v1.UpdateUserModelResponse
+	31, // 68: psmith.v1.ModelProvidersService.RefreshUserModelMetadata:output_type -> psmith.v1.RefreshUserModelMetadataResponse
+	33, // 69: psmith.v1.ModelProvidersService.AddManualModel:output_type -> psmith.v1.AddManualModelResponse
+	35, // 70: psmith.v1.ModelProvidersService.TestUserModelProvider:output_type -> psmith.v1.TestUserModelProviderResponse
+	37, // 71: psmith.v1.ModelProvidersService.TestUserModel:output_type -> psmith.v1.TestUserModelResponse
+	39, // 72: psmith.v1.ModelProvidersService.RefreshModelCatalog:output_type -> psmith.v1.RefreshModelCatalogResponse
+	41, // 73: psmith.v1.ModelProvidersService.GetCatalogStatus:output_type -> psmith.v1.GetCatalogStatusResponse
+	43, // 74: psmith.v1.ModelProvidersService.ListProviderCosts:output_type -> psmith.v1.ListProviderCostsResponse
+	54, // [54:75] is the sub-list for method output_type
+	33, // [33:54] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_model_providers_proto_init() }
@@ -2753,17 +2873,17 @@ func file_psmith_v1_model_providers_proto_init() {
 	file_psmith_v1_model_providers_proto_msgTypes[10].OneofWrappers = []any{}
 	file_psmith_v1_model_providers_proto_msgTypes[16].OneofWrappers = []any{}
 	file_psmith_v1_model_providers_proto_msgTypes[28].OneofWrappers = []any{}
-	file_psmith_v1_model_providers_proto_msgTypes[30].OneofWrappers = []any{}
-	file_psmith_v1_model_providers_proto_msgTypes[34].OneofWrappers = []any{}
-	file_psmith_v1_model_providers_proto_msgTypes[39].OneofWrappers = []any{}
-	file_psmith_v1_model_providers_proto_msgTypes[40].OneofWrappers = []any{}
+	file_psmith_v1_model_providers_proto_msgTypes[32].OneofWrappers = []any{}
+	file_psmith_v1_model_providers_proto_msgTypes[36].OneofWrappers = []any{}
+	file_psmith_v1_model_providers_proto_msgTypes[41].OneofWrappers = []any{}
+	file_psmith_v1_model_providers_proto_msgTypes[42].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_model_providers_proto_rawDesc), len(file_psmith_v1_model_providers_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   43,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

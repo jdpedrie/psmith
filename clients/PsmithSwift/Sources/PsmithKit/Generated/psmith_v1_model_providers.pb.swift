@@ -674,6 +674,46 @@ public nonisolated struct Psmith_V1_UpdateUserModelResponse: Sendable {
 /// AddManualModelRequest carries every snapshot field. model_id and
 /// display_name are required; metadata is optional and stored verbatim
 /// (server doesn't try to look up catalog defaults for manual models).
+public nonisolated struct Psmith_V1_RefreshUserModelMetadataRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModelProviderID: String = String()
+
+  public var modelID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_RefreshUserModelMetadataResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The row after the refresh (unchanged when refreshed=false).
+  public var userModel: Psmith_V1_UserModel {
+    get {_userModel ?? Psmith_V1_UserModel()}
+    set {_userModel = newValue}
+  }
+  /// Returns true if `userModel` has been explicitly set.
+  public var hasUserModel: Bool {self._userModel != nil}
+  /// Clears the value of `userModel`. Subsequent reads from it will return its default value.
+  public mutating func clearUserModel() {self._userModel = nil}
+
+  /// False when the catalog has no entry for this model (manual rows,
+  /// delisted models) — the row is left untouched rather than blanked.
+  public var refreshed: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _userModel: Psmith_V1_UserModel? = nil
+}
+
 public nonisolated struct Psmith_V1_AddManualModelRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -2161,6 +2201,80 @@ nonisolated extension Psmith_V1_UpdateUserModelResponse: SwiftProtobuf.Message, 
 
   public static func ==(lhs: Psmith_V1_UpdateUserModelResponse, rhs: Psmith_V1_UpdateUserModelResponse) -> Bool {
     if lhs._userModel != rhs._userModel {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_RefreshUserModelMetadataRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RefreshUserModelMetadataRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.userModelProviderID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.userModelProviderID.isEmpty {
+      try visitor.visitSingularStringField(value: self.userModelProviderID, fieldNumber: 1)
+    }
+    if !self.modelID.isEmpty {
+      try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_RefreshUserModelMetadataRequest, rhs: Psmith_V1_RefreshUserModelMetadataRequest) -> Bool {
+    if lhs.userModelProviderID != rhs.userModelProviderID {return false}
+    if lhs.modelID != rhs.modelID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_RefreshUserModelMetadataResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RefreshUserModelMetadataResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model\0\u{1}refreshed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._userModel) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.refreshed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._userModel {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.refreshed != false {
+      try visitor.visitSingularBoolField(value: self.refreshed, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_RefreshUserModelMetadataResponse, rhs: Psmith_V1_RefreshUserModelMetadataResponse) -> Bool {
+    if lhs._userModel != rhs._userModel {return false}
+    if lhs.refreshed != rhs.refreshed {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -16,7 +16,6 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### Nice-to-have
 
-- `RefreshUserModelMetadata` RPC — explicit re-snapshot of a UserModel from current catalog. (`UpdateUserModel` partially shipped — handles `default_settings`; metadata-edit fields beyond that are still TODO.)
 - `ListConversations` real pagination (`page_size` capped at 100, `page_token` ignored — returns all in one page).
 - **Search conversations and messages.** `ListConversations.title_query` ships a server-side `ILIKE '%q%'` against `conversations.title`. Extend to: full-text search across message content (probably `tsvector` + GIN on `messages.content`), with hits surfacing the matching message snippet alongside the conversation in the sidebar's Search mode. Today the Search pill only matches titles; users with thousands of conversations will need content search too.
 - Multi-device per user (per-device key-pair pairing).
@@ -26,14 +25,6 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 ## iOS streaming — Phase 4
 
 **Real iOS backgrounding past the ~30s suspend** is still deferred. `beginBackgroundTask` would buy the grace window; APNs silent push is the only path past that and is a non-starter without a hosted APNs story. Current behaviour: backgrounding for >30s during generation triggers a brief resubscribe-and-replay on return.
-
----
-
-## Deferred RPCs (proto contract exists, no implementation yet)
-
-- **`ModelProvidersService.UpdateUserModel`** — partially shipped. The RPC exists and currently writes only `default_settings` (per-model layer of the CallSettings resolution chain). Letting users hand-edit other snapshotted metadata (context window, display name, etc.) is still TODO — extend `UpdateUserModelRequest` with the additional optional fields and route them through new sqlc queries.
-
-- **`ModelProvidersService.RefreshUserModelMetadata`** — explicit re-snapshot of a UserModel from current catalog. Proto stub: not yet defined.
 
 ---
 

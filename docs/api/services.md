@@ -157,6 +157,7 @@ Models:
 | `ListUserModels` / `ListAllUserModels` | Enabled models on one provider / flat across all providers (drives the picker). |
 | `ToggleUserModelFavorite` | Favorite flag for the picker's favorites section. |
 | `UpdateUserModel` | Default settings + metadata, with explicit clear flags for nullable fields. |
+| `RefreshUserModelMetadata` | Re-snapshot one model from the current catalog; preserves default settings, favorite, enablement. `refreshed=false` when the catalog has no entry (manual/delisted rows stay untouched). |
 | `AddManualModel` | Describe a model by hand (not from catalog or discovery). |
 
 Testing and cost:

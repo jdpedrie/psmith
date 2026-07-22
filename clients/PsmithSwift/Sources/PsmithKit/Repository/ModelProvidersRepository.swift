@@ -160,6 +160,20 @@ public final class ModelProvidersRepository: Sendable {
         return PsmithUserModel(from: msg.userModel)
     }
 
+    /// Re-snapshot a model's metadata from the current catalog,
+    /// discarding hand edits to the snapshotted columns. Per-model
+    /// default settings, favorite, and enablement survive. `refreshed`
+    /// is false when the catalog has no entry (manual rows, delisted
+    /// models) — the row is left untouched.
+    public func refreshModelMetadata(providerID: String, modelID: String) async throws -> (model: PsmithUserModel, refreshed: Bool) {
+        var req = Psmith_V1_RefreshUserModelMetadataRequest()
+        req.userModelProviderID = providerID
+        req.modelID = modelID
+        let resp = await client.refreshUserModelMetadata(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("refresh model metadata") }
+        return (PsmithUserModel(from: msg.userModel), msg.refreshed)
+    }
+
     /// Full edit: every field present overrides, every nil leaves the column
     /// alone. `modelID` is the row key and is never updatable. `modalities`
     /// honors the proto's `update_modalities` flag — pass non-nil to replace

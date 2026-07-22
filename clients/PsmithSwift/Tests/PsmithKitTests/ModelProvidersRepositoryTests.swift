@@ -325,6 +325,36 @@ struct ModelProvidersRepositoryTests {
         #expect(updated.defaultSettings?.temperature == 0.5)
     }
 
+    @Test("refreshModelMetadata on a no-catalog model is a reported no-op")
+    func refreshModelMetadataNoCatalog() async throws {
+        // The fake test provider has no catalog identity, so the refresh
+        // must report refreshed=false and leave the row byte-identical —
+        // including a hand edit made just before. The catalog-hit path
+        // (snapshot restored, default settings + favorite preserved) is
+        // covered server-side where the catalog can be seeded.
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "mp-um-refresh")
+        let (fake, provider, model, _) = try await Fixtures.seedReadyToChat(client: client)
+        _ = fake
+        let edited = try await client.modelProviders.updateModelFull(
+            providerID: provider.id,
+            modelID: model.modelID,
+            displayName: "Hand Edited",
+            contextWindow: nil,
+            maxOutputTokens: nil,
+            pricing: nil,
+            modalities: nil,
+            capabilities: nil,
+            knowledgeCutoff: nil,
+            defaultSettings: nil
+        )
+        #expect(edited.displayName == "Hand Edited")
+        let (after, refreshed) = try await client.modelProviders.refreshModelMetadata(
+            providerID: provider.id, modelID: model.modelID
+        )
+        #expect(refreshed == false)
+        #expect(after.displayName == "Hand Edited")
+    }
+
     @Test("updateModelFull display_name change persists")
     func updateModelFullDisplayName() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "mp-um-name")

@@ -49,10 +49,20 @@ service ModelProvidersService {
   // surfaces the model in the FAVORITES section of the model picker.
   rpc ToggleUserModelFavorite(ToggleUserModelFavoriteRequest) returns (ToggleUserModelFavoriteResponse);
 
-  // Mutate fields on an enabled user model. Currently only `default_settings`
-  // is writable (per-model default CallSettings layer). The model row must
-  // already exist (callers can't update a model they haven't enabled).
+  // Mutate fields on an enabled user model: the snapshotted metadata
+  // (display name, limits, pricing, modalities, capabilities, cutoff)
+  // and the per-model default CallSettings layer. Sparse: unset fields
+  // leave columns alone; clear flags revert nullable columns to NULL.
+  // The model row must already exist (callers can't update a model
+  // they haven't enabled).
   rpc UpdateUserModel(UpdateUserModelRequest) returns (UpdateUserModelResponse);
+
+  // Re-snapshot an enabled model's metadata from the current catalog,
+  // discarding any hand edits to the snapshotted columns. Per-model
+  // default settings, favorite state, and enablement are preserved.
+  // No-op (refreshed=false) when the catalog has no entry — manual
+  // rows and delisted models keep their stored metadata.
+  rpc RefreshUserModelMetadata(RefreshUserModelMetadataRequest) returns (RefreshUserModelMetadataResponse);
 
   // Add a manually-described model to a user provider. For models not in
   // the catalog and not surfaced by driver discovery — e.g. private
@@ -246,6 +256,18 @@ message UpdateUserModelResponse {
 // AddManualModelRequest carries every snapshot field. model_id and
 // display_name are required; metadata is optional and stored verbatim
 // (server doesn't try to look up catalog defaults for manual models).
+message RefreshUserModelMetadataRequest {
+  string user_model_provider_id = 1;
+  string model_id = 2;
+}
+message RefreshUserModelMetadataResponse {
+  // The row after the refresh (unchanged when refreshed=false).
+  UserModel user_model = 1;
+  // False when the catalog has no entry for this model (manual rows,
+  // delisted models) — the row is left untouched rather than blanked.
+  bool refreshed = 2;
+}
+
 message AddManualModelRequest {
   string user_model_provider_id           = 1;
   string model_id                         = 2;  // required

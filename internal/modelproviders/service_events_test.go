@@ -134,3 +134,105 @@ func TestProviderEvents_NilBusIsSilent(t *testing.T) {
 		t.Fatalf("DeleteUserModelProvider: %v", err)
 	}
 }
+
+// --- RefreshUserModelMetadata ---
+
+func TestRefreshUserModelMetadata_RestoresCatalogSnapshot(t *testing.T) {
+	t.Parallel()
+	svc, q, cat, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	src := seedCatalogRich(t, cat, "anthropic", "rich-claude")
+	prov := makeProvider(t, q, user.ID, "openai-compatible", "main",
+		[]byte(`{"catalog_provider_id":"anthropic"}`))
+
+	if _, err := svc.EnableModels(ctxAs(user), connect.NewRequest(&psmithv1.EnableModelsRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelIds:            []string{"rich-claude"},
+	})); err != nil {
+		t.Fatalf("EnableModels: %v", err)
+	}
+	// Hand-edit the snapshot AND set a per-model default-settings layer;
+	// the refresh must revert the former and preserve the latter.
+	temp := 0.3
+	if _, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "rich-claude",
+		DisplayName:         ptr("Hand Edited"),
+		ContextWindow:       ptr(int32(1234)),
+		DefaultSettings:     &psmithv1.CallSettings{Temperature: &temp},
+	})); err != nil {
+		t.Fatalf("UpdateUserModel: %v", err)
+	}
+	if _, err := svc.ToggleUserModelFavorite(ctxAs(user), connect.NewRequest(&psmithv1.ToggleUserModelFavoriteRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "rich-claude",
+		Favorite:            true,
+	})); err != nil {
+		t.Fatalf("ToggleUserModelFavorite: %v", err)
+	}
+
+	resp, err := svc.RefreshUserModelMetadata(ctxAs(user), connect.NewRequest(&psmithv1.RefreshUserModelMetadataRequest{
+		UserModelProviderId: prov.ID.String(),
+		ModelId:             "rich-claude",
+	}))
+	if err != nil {
+		t.Fatalf("RefreshUserModelMetadata: %v", err)
+	}
+	if !resp.Msg.Refreshed {
+		t.Fatalf("refreshed = false, want true")
+	}
+	got := resp.Msg.UserModel
+	if got.DisplayName != src.DisplayName {
+		t.Errorf("display_name = %q, want catalog %q", got.DisplayName, src.DisplayName)
+	}
+	if got.GetContextWindow() != int32(src.ContextWindow) {
+		t.Errorf("context_window = %d, want catalog %d", got.GetContextWindow(), src.ContextWindow)
+	}
+	if got.DefaultSettings == nil || got.DefaultSettings.Temperature == nil || *got.DefaultSettings.Temperature != temp {
+		t.Errorf("default_settings not preserved through refresh: %+v", got.DefaultSettings)
+	}
+	if !got.Favorite {
+		t.Errorf("favorite not preserved through refresh")
+	}
+	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_CATALOG {
+		t.Errorf("metadata_source = %v, want catalog", got.MetadataSource)
+	}
+}
+
+func TestRefreshUserModelMetadata_NoCatalogEntry_LeavesRowUntouched(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "refresh-nocat", nil, nil)
+	created, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
+		Type:  typeName,
+		Label: "main",
+	}))
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+	if _, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "my-finetune",
+		DisplayName:         "My Finetune",
+	})); err != nil {
+		t.Fatalf("AddManualModel: %v", err)
+	}
+
+	resp, err := svc.RefreshUserModelMetadata(ctxAs(user), connect.NewRequest(&psmithv1.RefreshUserModelMetadataRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "my-finetune",
+	}))
+	if err != nil {
+		t.Fatalf("RefreshUserModelMetadata: %v", err)
+	}
+	if resp.Msg.Refreshed {
+		t.Fatalf("refreshed = true for a manual model with no catalog entry")
+	}
+	if resp.Msg.UserModel.DisplayName != "My Finetune" {
+		t.Errorf("row mutated on a no-op refresh: %+v", resp.Msg.UserModel)
+	}
+	if resp.Msg.UserModel.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_MANUAL {
+		t.Errorf("metadata_source = %v, want manual", resp.Msg.UserModel.MetadataSource)
+	}
+}
