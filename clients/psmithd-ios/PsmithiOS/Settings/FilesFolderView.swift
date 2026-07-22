@@ -2,18 +2,18 @@ import SwiftUI
 import UniformTypeIdentifiers
 import PsmithKit
 
-/// Settings → Obsidian. Surfaces the saved vault bookmark (if any),
-/// lets the user (re-)pick a vault folder via UIDocumentPicker, and
+/// Settings → Files. Surfaces the saved folder bookmark (if any),
+/// lets the user (re-)pick a notes folder via UIDocumentPicker, and
 /// forgets it on demand. After save, re-runs the
 /// RegisterCapabilities call so the server starts surfacing
-/// obsidian_* tools on the next model turn.
-struct ObsidianVaultView: View {
+/// files_* tools on the next model turn.
+struct FilesFolderView: View {
     @Environment(AppModel.self) private var app
 
     /// Tracks the on-disk bookmark state. Refreshed whenever the
     /// picker dismisses (success or cancel) so the row reflects
     /// reality without polling.
-    @State private var isBookmarked: Bool = ObsidianVaultBookmark.isSet
+    @State private var isBookmarked: Bool = FilesFolderBookmark.isSet
     @State private var bookmarkedDisplayPath: String? = displayPath()
     @State private var pickingFolder: Bool = false
     @State private var pickerError: String?
@@ -52,21 +52,21 @@ struct ObsidianVaultView: View {
             } header: {
                 Text("Folder")
             } footer: {
-                Text("Pick the folder you want Psmith to access — your entire Obsidian vault, or a subfolder of it (e.g. \"Vault/Psmith/\"). Psmith stores a security-scoped bookmark so it can read and write notes inside that folder without re-prompting. No Obsidian plugin or local-REST setup required.")
+                Text("Pick the folder of notes you want Psmith to access. An Obsidian vault (or a subfolder like \"Vault/Psmith/\") works great — content stays plain markdown and frontmatter is preserved — but any notes folder does. Psmith stores a security-scoped bookmark so it can read and write inside that folder without re-prompting.")
             }
 
             if isBookmarked {
                 Section {
                     Button(role: .destructive) {
-                        ObsidianVaultBookmark.clear()
-                        ObsidianTools.syncRegistration()
+                        FilesFolderBookmark.clear()
+                        FilesTools.syncRegistration()
                         refresh()
                         Task { await app.deviceTools.registerWithServer() }
                     } label: {
                         Label("Forget folder", systemImage: "trash")
                     }
                 } footer: {
-                    Text("Removes the bookmark from this device. The model will report \"vault not configured\" until you pick a folder again.")
+                    Text("Removes the bookmark from this device. The model will report \"folder not configured\" until you pick a folder again.")
                 }
             }
 
@@ -79,7 +79,7 @@ struct ObsidianVaultView: View {
                 }
             }
         }
-        .navigationTitle("Obsidian")
+        .navigationTitle("Files")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $pickingFolder) {
             DocumentFolderPicker(
@@ -102,10 +102,10 @@ struct ObsidianVaultView: View {
         defer { if started { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            try ObsidianVaultBookmark.save(folderURL: url)
-            ObsidianTools.syncRegistration()
+            try FilesFolderBookmark.save(folderURL: url)
+            FilesTools.syncRegistration()
             refresh()
-            // Re-register so the server knows obsidian_* tools are
+            // Re-register so the server knows files_* tools are
             // now fulfillable. Best-effort: a registration failure
             // doesn't unset the bookmark; the next bootstrap will
             // pick it up.
@@ -116,16 +116,16 @@ struct ObsidianVaultView: View {
     }
 
     private func refresh() {
-        isBookmarked = ObsidianVaultBookmark.isSet
+        isBookmarked = FilesFolderBookmark.isSet
         bookmarkedDisplayPath = Self.displayPath()
     }
 
-    /// Show the user a recognisable label for their vault folder.
+    /// Show the user a recognisable label for their notes folder.
     /// UIDocumentPicker URLs are full filesystem paths inside an
     /// iCloud container or similar — the last path component
     /// ("My Vault") is what they see in Files.
     static func displayPath() -> String? {
-        guard let url = ObsidianVaultBookmark.resolve() else { return nil }
+        guard let url = FilesFolderBookmark.resolve() else { return nil }
         return url.lastPathComponent
     }
 }

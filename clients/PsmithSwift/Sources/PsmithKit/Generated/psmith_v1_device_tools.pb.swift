@@ -233,7 +233,7 @@ public nonisolated struct Psmith_V1_SupportedTool: Sendable {
 
   /// Permissions the tool needs at runtime. Free-form strings
   /// ("calendar", "reminders", "contacts", "health.steps",
-  /// "files.bookmark:obsidian_vault"). Clients use these to
+  /// "files.bookmark:notes_folder"). Clients use these to
   /// pre-prompt for OS access and to render "Calendar access
   /// required" badges on the settings UI.
   public var requiredPermissions: [String] = []

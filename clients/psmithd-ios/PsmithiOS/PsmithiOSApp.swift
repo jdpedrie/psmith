@@ -31,7 +31,7 @@ struct PsmithiOSApp: App {
         // by ObsidianVaultView after pick/clear so the server
         // sees the new capability set on the next
         // RegisterCapabilities pass.
-        ObsidianTools.syncRegistration()
+        FilesTools.syncRegistration()
     }
 
     @State private var accountManager = AccountManager()

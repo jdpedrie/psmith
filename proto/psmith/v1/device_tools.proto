@@ -131,7 +131,7 @@ message SupportedTool {
   string category = 5;
   // Permissions the tool needs at runtime. Free-form strings
   // ("calendar", "reminders", "contacts", "health.steps",
-  // "files.bookmark:obsidian_vault"). Clients use these to
+  // "files.bookmark:notes_folder"). Clients use these to
   // pre-prompt for OS access and to render "Calendar access
   // required" badges on the settings UI.
   repeated string required_permissions = 6;

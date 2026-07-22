@@ -458,7 +458,7 @@ type SupportedTool struct {
 	Category string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
 	// Permissions the tool needs at runtime. Free-form strings
 	// ("calendar", "reminders", "contacts", "health.steps",
-	// "files.bookmark:obsidian_vault"). Clients use these to
+	// "files.bookmark:notes_folder"). Clients use these to
 	// pre-prompt for OS access and to render "Calendar access
 	// required" badges on the settings UI.
 	RequiredPermissions []string `protobuf:"bytes,6,rep,name=required_permissions,json=requiredPermissions,proto3" json:"required_permissions,omitempty"`

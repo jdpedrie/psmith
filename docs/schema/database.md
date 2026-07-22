@@ -1,6 +1,6 @@
 # Database schema
 
-The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00045. This document reflects the state after all of them.
+The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00046. This document reflects the state after all of them.
 
 Conventions across the schema: UUIDs for IDs (UUIDv7 where the application mints them, for sortability). Enumerations are `TEXT` with a `CHECK` constraint, never native Postgres `ENUM`, to keep schema evolution painless. `updated_at` is maintained by application code, not a trigger; there are no triggers anywhere.
 
@@ -63,6 +63,7 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00043 | user_mcp_servers | `user_mcp_servers` (user-level MCP server registry, encrypted specs) plus a user index and per-user name uniqueness. |
 | 00044 | messages_parent_index | `messages (parent_id)` index for the stitch-delete reparent (2026-07-21 perf round). |
 | 00045 | user_models_pricing_tiers | `user_models.pricing_tiers` JSONB — context-size pricing steps; highest threshold under the prompt-token count wins, whole request prices at that tier. |
+| 00046 | rename_obsidian_plugin_to_files | Data migration: `plugin_name` 'obsidian' → 'files' across profile/conversation/user plugin tables (the plugin's identity generalized; encrypted config keys normalize in code). |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020).
 

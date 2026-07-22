@@ -81,9 +81,9 @@ struct SettingsRoot: View {
                     categoryRow("Speech", systemImage: "speaker.wave.2")
                 }
                 NavigationLink {
-                    ObsidianVaultView()
+                    FilesFolderView()
                 } label: {
-                    categoryRow("Obsidian", systemImage: "doc.text.below.ecg")
+                    categoryRow("Files", systemImage: "folder")
                 }
                 NavigationLink {
                     DeviceToolActivityView()

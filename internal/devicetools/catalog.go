@@ -32,7 +32,7 @@ type Tool struct {
 	InputSchema string
 	// RequiredPermissions is the list of OS / app permissions the
 	// client needs at runtime. Free-form strings consumed by the
-	// settings UI ("calendar", "reminders", "files.bookmark:obsidian").
+	// settings UI ("calendar", "reminders", "files.bookmark:notes_folder").
 	RequiredPermissions []string
 	// DefaultEnabled is whether the tool starts toggled-on in a
 	// fresh app_tools plugin config. Conservative defaults — read-

@@ -1,8 +1,8 @@
 import Foundation
 
-/// Persistent storage + resolution for the Obsidian vault's
+/// Persistent storage + resolution for the notes folder's
 /// security-scoped bookmark. The user picks their vault folder via
-/// `UIDocumentPicker` (see ObsidianVaultView); the picked URL is
+/// `UIDocumentPicker` (see FilesFolderView); the picked URL is
 /// converted to a bookmark with `.minimalBookmark` + security-scoped
 /// resolution, persisted to UserDefaults, and resolved on every
 /// subsequent tool call.
@@ -13,14 +13,17 @@ import Foundation
 /// `url.startAccessingSecurityScopedResource()` /
 /// `stopAccessingSecurityScopedResource()` — the helper here
 /// centralises that dance so handlers don't forget.
-public enum ObsidianVaultBookmark {
+public enum FilesFolderBookmark {
+    // Historical key from the plugin's "obsidian" era — kept so
+    // existing folder grants survive the rename to Files (changing it
+    // would orphan every bookmarked vault).
     private static let key = "psmith.obsidian.vaultBookmark.v1"
 
     /// True when a vault bookmark is currently saved. Drives the
     /// settings UI's "vault selected" indicator + the iOS client's
-    /// RegisterCapabilities pass: when false, the obsidian_* tool
-    /// names are NOT advertised, so the server's obsidian plugin
-    /// returns a friendly "open Settings → Obsidian" error to the
+    /// RegisterCapabilities pass: when false, the files_* tool
+    /// names are NOT advertised, so the server's files plugin
+    /// returns a friendly "open Settings → Files" error to the
     /// model instead of letting the call land on an unbookmarked
     /// device.
     public static var isSet: Bool {

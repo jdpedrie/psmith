@@ -478,7 +478,7 @@ const (
 	// — purely an in-flight UI cue.
 	ChunkType_CHUNK_TYPE_ELICIT ChunkType = 11
 	// Synthetic — emitted by the conversations-side tool loop when the
-	// model calls a device tool (calendar_list_events, obsidian_read_note,
+	// model calls a device tool (calendar_list_events, files_read_note,
 	// …). Payload is JSON
 	// `{"call_id":"<uuid>","tool_name":"...","input":{...}}`.
 	// The connected client executes the tool via its native APIs

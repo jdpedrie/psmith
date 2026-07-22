@@ -59,7 +59,7 @@ public final class AppModel {
     /// bootstrap, and routes incoming ChunkDeviceToolUse events to
     /// the matching handler. Always present (cheap to hold); the
     /// platform-specific bootstrap code is what actually
-    /// registers handlers for Calendar / Obsidian / etc. into
+    /// registers handlers for Calendar / Files / etc. into
     /// `DeviceToolRegistry.shared`.
     public let deviceTools: DeviceToolDispatcher
 

@@ -2,7 +2,7 @@ import Foundation
 
 /// Handlers for the Obsidian-vault device tools. Each handler
 /// resolves the security-scoped bookmark via
-/// `ObsidianVaultBookmark.withVault`, does its filesystem work, and
+/// `FilesFolderBookmark.withVault`, does its filesystem work, and
 /// returns a structured JSON response.
 ///
 /// Vault-relative paths are normalised before use — leading slashes
@@ -10,26 +10,26 @@ import Foundation
 /// model writing outside the bookmarked folder), and paths must
 /// end in `.md` for read/write operations to keep the surface
 /// scoped to the actual notes.
-public enum ObsidianTools {
+public enum FilesTools {
 
     private static let toolNames = [
-        "obsidian_list_notes",
-        "obsidian_read_note",
-        "obsidian_append_note",
-        "obsidian_create_note",
-        "obsidian_search_text",
+        "files_list_notes",
+        "files_read_note",
+        "files_append_note",
+        "files_create_note",
+        "files_search_text",
     ]
 
     public static func register() {
         let r = DeviceToolRegistry.shared
-        r.register(name: "obsidian_list_notes", handler: listNotes)
-        r.register(name: "obsidian_read_note", handler: readNote)
-        r.register(name: "obsidian_append_note", handler: appendNote)
-        r.register(name: "obsidian_create_note", handler: createNote)
-        r.register(name: "obsidian_search_text", handler: searchText)
+        r.register(name: "files_list_notes", handler: listNotes)
+        r.register(name: "files_read_note", handler: readNote)
+        r.register(name: "files_append_note", handler: appendNote)
+        r.register(name: "files_create_note", handler: createNote)
+        r.register(name: "files_search_text", handler: searchText)
     }
 
-    /// Mirror of register() — drops the obsidian_* handlers from
+    /// Mirror of register() — drops the files_* handlers from
     /// the shared registry. Called when the user forgets their
     /// vault so the iOS RegisterCapabilities pass stops advertising
     /// these tools to the server.
@@ -52,7 +52,7 @@ public enum ObsidianTools {
         }
     }
 
-    /// Whether to advertise obsidian_* tools at RegisterCapabilities
+    /// Whether to advertise files_* tools at RegisterCapabilities
     /// time. The dispatcher's registerWithServer call sources the
     /// supported set from DeviceToolRegistry.shared.registeredNames,
     /// which is everything we've registered — but obsidian tools
@@ -61,7 +61,7 @@ public enum ObsidianTools {
     /// server's obsidian plugin then refuses calls if the iOS
     /// client didn't advertise.
     static var isAvailable: Bool {
-        ObsidianVaultBookmark.isSet
+        FilesFolderBookmark.isSet
     }
 
     // MARK: - Handlers
@@ -69,7 +69,7 @@ public enum ObsidianTools {
     private static let listNotes: DeviceToolHandler = { inputJSON in
         let input = try decode(ListInput.self, from: inputJSON)
         let recursive = input.recursive ?? true
-        let output = try ObsidianVaultBookmark.withVault { root -> ListOutput in
+        let output = try FilesFolderBookmark.withVault { root -> ListOutput in
             let start = try resolveSubfolder(root: root, folder: input.folder)
             let notes = try walkMarkdownNotes(root: start, vaultRoot: root, recursive: recursive)
             return ListOutput(notes: notes.sorted())
@@ -79,7 +79,7 @@ public enum ObsidianTools {
 
     private static let readNote: DeviceToolHandler = { inputJSON in
         let input = try decode(ReadInput.self, from: inputJSON)
-        let payload = try ObsidianVaultBookmark.withVault { root -> ReadOutput in
+        let payload = try FilesFolderBookmark.withVault { root -> ReadOutput in
             let url = try resolveNotePath(root: root, path: input.path, mustExist: true)
             let content = try String(contentsOf: url, encoding: .utf8)
             return ReadOutput(path: input.path, content: content)
@@ -89,7 +89,7 @@ public enum ObsidianTools {
 
     private static let appendNote: DeviceToolHandler = { inputJSON in
         let input = try decode(WriteInput.self, from: inputJSON)
-        let payload = try ObsidianVaultBookmark.withVault { root -> WriteOutput in
+        let payload = try FilesFolderBookmark.withVault { root -> WriteOutput in
             let url = try resolveNotePath(root: root, path: input.path, mustExist: true)
             var existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             // Append with a blank-line separator so daily-log style
@@ -111,7 +111,7 @@ public enum ObsidianTools {
     private static let createNote: DeviceToolHandler = { inputJSON in
         let input = try decode(CreateInput.self, from: inputJSON)
         let overwrite = input.overwrite ?? false
-        let payload = try ObsidianVaultBookmark.withVault { root -> WriteOutput in
+        let payload = try FilesFolderBookmark.withVault { root -> WriteOutput in
             let url = try resolveNotePath(root: root, path: input.path, mustExist: false)
             if !overwrite && FileManager.default.fileExists(atPath: url.path) {
                 throw ObsidianVaultError.noteAlreadyExists(input.path)
@@ -133,7 +133,7 @@ public enum ObsidianTools {
         if query.isEmpty {
             throw DeviceToolError.message("query is required")
         }
-        let output = try ObsidianVaultBookmark.withVault { root -> SearchOutput in
+        let output = try FilesFolderBookmark.withVault { root -> SearchOutput in
             var hits: [SearchHit] = []
             let notes = try walkMarkdownNotes(root: root, vaultRoot: root, recursive: true)
             for rel in notes {

@@ -67,7 +67,7 @@ The registered plugins:
 - **memory** (`memory`) — ToolProvider. One server tool, `search_history`, semantic-searching the user's own history. Needs an embedder. See [embeddings-and-search.md](embeddings-and-search.md).
 - **imagegen** (`imagegen`) — ToolProvider. One server tool, `generate_image`. The only plugin that reports a cost.
 - **app_tools** (`app_tools`) — ToolProvider over the device-tools catalog (Calendar, Reminders, Health), routed through the device-tool broker. See [tools.md](tools.md).
-- **obsidian** (`obsidian`) — ToolProvider over a bookmarked Obsidian vault on the device, its own five-tool catalog, sharing the device-tool broker.
+- **files** (`files`) — ToolProvider over a bookmarked notes folder on the device (an Obsidian vault is the flagship use; frontmatter preserved, content stays markdown), its own five-tool catalog, sharing the device-tool broker. Shipped as `obsidian` originally; migration 00046 renamed persisted references and the config parser normalizes old `obsidian_*` enabled-keys.
 - **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Psmith tools. The in-process transport is the elicitation path. Usually attached via the MCP server registry's `mcp:<id>` pseudo-plugins (see above) rather than configured inline. See [tools.md](tools.md) and the MCP section of the API docs.
 
 Alongside these, a few non-plugin support files in the same package are wiring shims rather than registered plugins: `caller_info` and `provider_resolver` and `searcher` thread caller, provider-resolution, and search dependencies onto the dispatch context for tools to pull, and `device_tool_broker` is the broker handle. They are not attachable to a profile.
