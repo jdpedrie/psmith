@@ -389,6 +389,16 @@ public final class ConversationViewModel {
     /// content (see `hydrateFromCache`).
     public private(set) var hasLoadedFromServer = false
 
+    /// Push the current in-memory transcript into the offline cache.
+    /// Called after every in-place `messages` mutation so the next
+    /// entry's hydrateFromCache serves THIS state, not the last full
+    /// load's (stale-hydrate was user-visible: re-entry showed an old
+    /// transcript until the network load caught up).
+    private func persistTranscriptToCache() async {
+        guard let ctx = activeContext else { return }
+        await client.conversations.cacheTranscript(contextID: ctx.id, messages: messages)
+    }
+
     /// Instant entry hydration: populate the transcript from the
     /// offline cache synchronously-ish (one SwiftData read, no
     /// network) so re-entering a conversation renders immediately;
@@ -802,6 +812,7 @@ public final class ConversationViewModel {
             )
             pendingUserText = nil
             messages.append(userMsg)
+            await persistTranscriptToCache()
             // Hand the run to the hub — it owns the subscriber task
             // and accumulates streaming state. Terminal arrives via
             // the callback registered in init(), regardless of
@@ -1355,6 +1366,7 @@ public final class ConversationViewModel {
             if let idx = messages.firstIndex(where: { $0.id == id }) {
                 messages[idx] = updated
             }
+            await persistTranscriptToCache()
         } catch {
             loadError = PsmithError.display(error)
         }
@@ -1468,6 +1480,7 @@ public final class ConversationViewModel {
             // race).
             if !messages.contains(where: { $0.id == userMsg.id }) {
                 messages.append(userMsg)
+                await persistTranscriptToCache()
             }
             hub.register(
                 runID: run.id,
@@ -1504,6 +1517,7 @@ public final class ConversationViewModel {
             // is what armed the scroll machinery's clamp storm (the
             // "deleting a compression message locks the app" report).
             messages.removeAll { $0.id == id }
+            await persistTranscriptToCache()
             // Advisory refreshes, same set load() runs: token count +
             // cost aggregates + branch tree all shifted with the row.
             async let tokens: Void = refreshTokenCount()
@@ -1572,6 +1586,7 @@ public final class ConversationViewModel {
            messages.last?.id == parentID,
            !messages.contains(where: { $0.id == settled.id }) {
             messages.append(settled)
+            await persistTranscriptToCache()
             hub.clear(conversationID: conversation.id)
             swappedInPlace = true
         }

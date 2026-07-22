@@ -88,6 +88,19 @@ public final class ConversationsRepository: Sendable {
         return await cache.get([PsmithMessage].self, kind: CacheKind.messagesByContext, id: contextID)
     }
 
+    /// Write-through for the in-memory transcript. The view model calls
+    /// this after every mutation that changes `messages` WITHOUT a full
+    /// network fetch (send append, terminal settle, edit, delete) — the
+    /// fetch paths cache their own responses, but these in-place
+    /// mutations used to leave the cache at the last load(), so
+    /// re-entering a conversation hydrated an OLD transcript and the
+    /// fresh turn only popped in when the network load landed
+    /// (user-reported).
+    public func cacheTranscript(contextID: String, messages: [PsmithMessage]) async {
+        guard let cache else { return }
+        try? await cache.set(messages, kind: CacheKind.messagesByContext, id: contextID, capBytes: CachePreferences.capBytes)
+    }
+
     public func get(id: String) async throws -> (PsmithConversation, PsmithContext) {
         var req = Psmith_V1_GetConversationRequest()
         req.id = id

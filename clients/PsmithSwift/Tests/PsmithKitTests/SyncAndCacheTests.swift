@@ -102,6 +102,60 @@ struct SyncAndCacheTests {
         #expect(vm2.hasLoadedFromServer == false)
     }
 
+    @Test("in-place transcript mutations write through to the cache")
+    func mutationsWriteThroughToCache() async throws {
+        // The user-reported stale-hydrate: send a turn, leave, re-enter —
+        // the cache used to hold the LAST load()'s chain, so hydration
+        // showed an old transcript until the network caught up. Every
+        // in-place mutation now writes the cache, so a fresh hydrate
+        // must equal the live transcript with no network load.
+        let (client, _) = try await TestSession.freshUser(
+            server: server, usernamePrefix: "cache-wt", withCache: true
+        )
+        let seeded = try await Fixtures.seedReadyToChat(client: client)
+        defer { seeded.fake.stop() }
+        let profile = try await seededProfile(client: client, base: seeded)
+        let conv = try await client.conversations.create(profileID: profile.id)
+
+        let vm = ConversationViewModel(
+            conversation: conv, client: client,
+            hub: StreamHub(subscriber: client.streams),
+            onTerminal: { }, localTitler: nil
+        )
+        await vm.load()
+        let baseline = vm.messages.count
+
+        vm.draft = "write-through probe"
+        await vm.send()
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            if vm.streamRunID == nil && !vm.sending && vm.messages.count >= baseline + 2 { break }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        #expect(vm.messages.count >= baseline + 2)
+        guard let ctxID = vm.activeContext?.id else {
+            Issue.record("no active context"); return
+        }
+
+        // The cache must already hold the full post-turn transcript —
+        // no further load() allowed before this read.
+        let cached = await client.conversations.cachedMessages(contextID: ctxID)
+        #expect(cached?.count == vm.messages.count)
+        #expect(cached?.last?.id == vm.messages.last?.id)
+        #expect(cached?.last?.role == .assistant)
+
+        // And a fresh entry hydrates the CURRENT state.
+        let vm2 = ConversationViewModel(
+            conversation: conv, client: client,
+            hub: StreamHub(subscriber: client.streams),
+            onTerminal: { }, localTitler: nil
+        )
+        await vm2.hydrateFromCache()
+        #expect(vm2.messages.count == vm.messages.count)
+        #expect(vm2.messages.last?.id == vm.messages.last?.id)
+    }
+
     @Test("hydrateFromCache never overwrites a completed network load")
     func hydrateDoesNotClobberNetworkLoad() async throws {
         let (client, _) = try await TestSession.freshUser(
