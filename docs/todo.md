@@ -16,7 +16,6 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### Nice-to-have
 
-- `ListConversations` real pagination (`page_size` capped at 100, `page_token` ignored — returns all in one page).
 - **Search conversations and messages.** `ListConversations.title_query` ships a server-side `ILIKE '%q%'` against `conversations.title`. Extend to: full-text search across message content (probably `tsvector` + GIN on `messages.content`), with hits surfacing the matching message snippet alongside the conversation in the sidebar's Search mode. Today the Search pill only matches titles; users with thousands of conversations will need content search too.
 - Multi-device per user (per-device key-pair pairing).
 
@@ -317,7 +316,6 @@ Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, 
 `ContentRenderer` is the bigger piece (proto change, Swift component scaffolding, action-dispatch wiring) — worth deferring until at least one plugin's needs (`lettered_choices`'s choice cards is the clearest candidate) drives the schema. `PreSendContextInjector` once a concrete RAG/memory plugin pulls on it.
 
 
-- **Web sidebar infinite scroll** (`internal/web/web.go` listConvos) — the web client still fetches one 100-row page for the sidebar. The RPC pages properly now; the web UI needs an htmx load-more affordance. Revisit when a dogfooding account crosses 100 conversations on web.
 - **Profile lookups beyond the loaded pages** (`PsmithKit` ConversationsModel/ProfilesViewModel) — clients page profiles at 100/page, and chain-name/grouping lookups only see loaded pages. Under 100 profiles (everyone today) behavior is identical to pre-paging; above that, conversation rows for profiles on unloaded pages fall back to their placeholder until the profiles list is scrolled. Revisit with a by-id profile hydration if it ever bites.
 
 - **Default-profile affordances on Mac + web** — the server RPC, PsmithKit VM, and iOS UI (badge, swipe action, + skips the chooser) landed; the Mac new-conversation flow and the web /new page still always show the chooser. Wire both to `Profile.is_default` for parity.

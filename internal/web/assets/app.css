@@ -602,6 +602,15 @@ a.settings-item:hover { border-color: var(--accent); background: var(--bg-elev-2
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .page-head .page-sub { margin-bottom: 22px; }
 
+/* sidebar incremental "Show more" */
+.convo-more {
+	display: block; width: 100%; margin: 6px 0 2px; padding: 7px 10px;
+	font-size: 13px; color: var(--muted); background: none;
+	border: 1px dashed var(--border); border-radius: var(--radius-lg);
+	cursor: pointer;
+}
+.convo-more:hover { color: var(--fg); border-color: var(--muted); }
+
 /* truncated-compaction badge + warning on the compact review page */
 .truncated-badge {
 	display: inline-block; margin-left: 8px; padding: 2px 8px;

@@ -43,7 +43,7 @@ templ loginPage(errMsg string) {
 	}
 }
 
-templ sidebar(convos []convoVM) {
+templ sidebar(convos []convoVM, nextToken string) {
 	<aside
 		class="sidebar"
 		id="sidebar"
@@ -59,17 +59,7 @@ templ sidebar(convos []convoVM) {
 			New chat
 		</a>
 		<nav class="convo-list">
-			for _, c := range convos {
-				if c.Group != "" {
-					<div class="convo-group">{ c.Group }</div>
-				}
-				<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
-					<span class="convo-title-text">{ c.Title }</span>
-					if c.RelTime != "" {
-						<span class="convo-time">{ c.RelTime }</span>
-					}
-				</a>
-			}
+			@sidebarRows(convos, nextToken)
 			if len(convos) == 0 {
 				<p class="convo-empty">No conversations yet.</p>
 			}
@@ -89,10 +79,39 @@ templ sidebar(convos []convoVM) {
 	</aside>
 }
 
-templ chatsPage(convos []convoVM) {
+
+// sidebarRows renders one page of sidebar conversation rows plus, when
+// more pages exist, a Show-more button that replaces itself with the
+// next batch. The SSE-triggered sidebar refresh resets to page one —
+// acceptable: a mutation reorders the list anyway.
+templ sidebarRows(convos []convoVM, nextToken string) {
+	for _, c := range convos {
+		if c.Group != "" {
+			<div class="convo-group">{ c.Group }</div>
+		}
+		<a class={ "convo", templ.KV("active", c.Active) } href={ templ.SafeURL("/c/" + c.ID) }>
+			<span class="convo-title-text">{ c.Title }</span>
+			if c.RelTime != "" {
+				<span class="convo-time">{ c.RelTime }</span>
+			}
+		</a>
+	}
+	if nextToken != "" {
+		<button
+			class="convo-more"
+			hx-get={ "/partials/sidebar/rows?token=" + nextToken + "&active=" + sidebarActiveID(convos) }
+			hx-target="this"
+			hx-swap="outerHTML"
+		>
+			Show more
+		</button>
+	}
+}
+
+templ chatsPage(convos []convoVM, sidebarToken string) {
 	@layout("Chats — Psmith") {
 		<div class="app" hx-ext="sse" sse-connect="/events">
-			@sidebar(convos)
+			@sidebar(convos, sidebarToken)
 			<main class="main empty">
 				<p class="muted">Select a conversation, or <a href="/new">start a new one</a>.</p>
 			</main>
@@ -100,10 +119,10 @@ templ chatsPage(convos []convoVM) {
 	}
 }
 
-templ newConversationPage(convos []convoVM, profiles []profileVM) {
+templ newConversationPage(convos []convoVM, sidebarToken string, profiles []profileVM) {
 	@layout("New chat — Psmith") {
 		<div class="app" hx-ext="sse" sse-connect="/events">
-			@sidebar(convos)
+			@sidebar(convos, sidebarToken)
 			<main class="main">
 				<header class="conv-head">New chat</header>
 				<div class="new-list">
@@ -1004,10 +1023,10 @@ templ modelChip(convID string, m pickerModelVM) {
 	</button>
 }
 
-templ conversationPage(convos []convoVM, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string, pendingSummaryTruncated bool) {
+templ conversationPage(convos []convoVM, sidebarToken string, conv convoVM, msgs []msgVM, current pickerModelVM, runID string, pendingSummaryID string, pendingSummaryTruncated bool) {
 	@layout(conv.Title + " — Psmith") {
 		<div class="app" hx-ext="sse" sse-connect="/events">
-			@sidebar(convos)
+			@sidebar(convos, sidebarToken)
 			<main class="main">
 				<header class="conv-head">
 					<span class="conv-title">{ conv.Title }</span>

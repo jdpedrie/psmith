@@ -19,12 +19,12 @@ import (
 )
 
 func (h *Handler) handleChats(w http.ResponseWriter, r *http.Request) {
-	convos, err := h.listConvos(r.Context(), "")
+	convos, token, err := h.listConvosPage(r.Context(), "", "")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.render(w, r, http.StatusOK, chatsPage(convos))
+	h.render(w, r, http.StatusOK, chatsPage(convos, token))
 }
 
 // convTranscript is everything the conversation page (or its messages
@@ -119,7 +119,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
-	convos, _ := h.listConvos(r.Context(), id)
+	convos, sidebarToken, _ := h.listConvosPage(r.Context(), id, "")
 	pick := h.modelPicker(r.Context(), id, currentSettingsModel(t.conv), capsVM{})
 	runID := r.URL.Query().Get("run")
 	if runID == "" {
@@ -128,7 +128,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		// instead of a transcript that ends at the question.
 		runID = h.activeRunID(r, id)
 	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated))
+	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated))
 }
 
 // handleMessagesPartial re-renders the #messages region. Triggered by
@@ -146,12 +146,23 @@ func (h *Handler) handleMessagesPartial(w http.ResponseWriter, r *http.Request) 
 // handleSidebarPartial re-renders the conversations sidebar. Triggered
 // by the SSE bridge on any conversation change.
 func (h *Handler) handleSidebarPartial(w http.ResponseWriter, r *http.Request) {
-	convos, err := h.listConvos(r.Context(), r.URL.Query().Get("active"))
+	convos, token, err := h.listConvosPage(r.Context(), r.URL.Query().Get("active"), "")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.render(w, r, http.StatusOK, sidebar(convos))
+	h.render(w, r, http.StatusOK, sidebar(convos, token))
+}
+
+// handleSidebarRowsPartial serves the Show-more continuation: the next
+// page of rows plus, when more remain, another Show-more button.
+func (h *Handler) handleSidebarRowsPartial(w http.ResponseWriter, r *http.Request) {
+	convos, token, err := h.listConvosPage(r.Context(), r.URL.Query().Get("active"), r.URL.Query().Get("token"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, http.StatusOK, sidebarRows(convos, token))
 }
 
 // handleSend sends a user turn. For htmx requests it returns an HTML fragment

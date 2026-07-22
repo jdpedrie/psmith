@@ -10,8 +10,8 @@ import (
 
 // handleNewForm renders the new-conversation page: pick a profile to start a chat.
 func (h *Handler) handleNewForm(w http.ResponseWriter, r *http.Request) {
-	convos, _ := h.listConvos(r.Context(), "")
-	h.render(w, r, http.StatusOK, newConversationPage(convos, h.listProfiles(r.Context())))
+	convos, sidebarToken, _ := h.listConvosPage(r.Context(), "", "")
+	h.render(w, r, http.StatusOK, newConversationPage(convos, sidebarToken, h.listProfiles(r.Context())))
 }
 
 // handleNewCreate creates a conversation under the chosen profile and redirects

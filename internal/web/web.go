@@ -116,6 +116,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /c/{id}", h.requireUser(h.handleConversation))
 	mux.HandleFunc("GET /events", h.requireUser(h.handleEvents))
 	mux.HandleFunc("GET /partials/sidebar", h.requireUser(h.handleSidebarPartial))
+	mux.HandleFunc("GET /partials/sidebar/rows", h.requireUser(h.handleSidebarRowsPartial))
 	mux.HandleFunc("GET /c/{id}/partials/messages", h.requireUser(h.handleMessagesPartial))
 	mux.HandleFunc("POST /c/{id}/send", h.requireUser(h.handleSend))
 	mux.HandleFunc("GET /c/{id}/stream", h.requireUser(h.handleStream))
@@ -229,11 +230,22 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, c t
 // listConvos loads the caller's conversations for the sidebar, marking
 // activeID as current.
 func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, error) {
+	out, _, err := h.listConvosPage(ctx, activeID, "")
+	return out, err
+}
+
+// listConvosPage is the paged form: pass the previous response's token
+// to continue, "" for page one (which also carries the pinned block).
+// The returned token is empty on the last page. The sidebar's
+// "Show more" fragment is the consumer; full-page renders take page
+// one and let the fragment extend it in place.
+func (h *Handler) listConvosPage(ctx context.Context, activeID, pageToken string) ([]convoVM, string, error) {
 	resp, err := h.convos.ListConversations(ctx, connect.NewRequest(&psmithv1.ListConversationsRequest{
-		PageSize: 100,
+		PageSize:  100,
+		PageToken: pageToken,
 	}))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	now := time.Now()
 	out := make([]convoVM, 0, len(resp.Msg.GetConversations()))
@@ -250,7 +262,7 @@ func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, e
 		}
 		out = append(out, vm)
 	}
-	return out, nil
+	return out, resp.Msg.GetNextPageToken(), nil
 }
 
 // relTime renders a compact "time since" label for the sidebar: minutes/hours
