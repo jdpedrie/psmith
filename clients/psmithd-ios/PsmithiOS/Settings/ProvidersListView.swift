@@ -210,6 +210,7 @@ private struct ProviderDetailView: View {
     }
     @State private var editing: Bool = false
     @State private var modelSettingsTarget: PsmithUserModel?
+    @State private var modelEditTarget: PsmithUserModel?
     @State private var testResultMessage: String?
     @State private var disableCandidate: PsmithUserModel?
 
@@ -239,7 +240,7 @@ private struct ProviderDetailView: View {
                     }
                 }
                 NavigationLink {
-                    AddCustomModelScreen(provider: provider)
+                    ModelFormScreen(provider: provider)
                 } label: {
                     Label("Add Custom Model", systemImage: "plus")
                         .foregroundStyle(.tint)
@@ -267,7 +268,7 @@ private struct ProviderDetailView: View {
                         Label("Discover models", systemImage: "magnifyingglass")
                     }
                     NavigationLink {
-                        AddCustomModelScreen(provider: provider)
+                        ModelFormScreen(provider: provider)
                     } label: {
                         Label("Add custom model", systemImage: "plus")
                     }
@@ -287,6 +288,11 @@ private struct ProviderDetailView: View {
         }
         .sheet(item: $modelSettingsTarget) { model in
             ModelDefaultSettingsSheet(provider: provider, model: model)
+        }
+        // Push, not a sheet: metadata editing is a full form (the
+        // no-popup convention for routine flows).
+        .navigationDestination(item: $modelEditTarget) { model in
+            ModelFormScreen(provider: provider, mode: .edit(model))
         }
         .alert(
             "Test result",
@@ -352,6 +358,12 @@ private struct ProviderDetailView: View {
             } label: {
                 Label("Disable", systemImage: "minus.circle")
             }
+            Button {
+                modelEditTarget = m
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.orange)
             Button {
                 modelSettingsTarget = m
             } label: {

@@ -363,6 +363,18 @@ public final class ProvidersViewModel {
         return updated
     }
 
+    /// Re-snapshot one model from the current catalog (see
+    /// ModelProvidersRepository.refreshModelMetadata). Updates the
+    /// in-memory row on a real refresh so the list reflects it on pop.
+    public func refreshModelMetadata(providerID: String, modelID: String) async throws -> (model: PsmithUserModel, refreshed: Bool) {
+        let result = try await client.modelProviders.refreshModelMetadata(providerID: providerID, modelID: modelID)
+        if result.refreshed, let idx = enabledModels.firstIndex(where: { $0.modelID == modelID }) {
+            enabledModels[idx] = result.model
+            enabledModels.sort { $0.displayName < $1.displayName }
+        }
+        return result
+    }
+
     public func discoverModels(providerID: String) async throws -> [PsmithDiscoveredModel] {
         try await client.modelProviders.discoverModels(providerID: providerID)
     }

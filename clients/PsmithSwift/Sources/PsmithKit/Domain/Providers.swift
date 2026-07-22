@@ -253,6 +253,11 @@ public struct PsmithUserModel: Sendable, Identifiable, Hashable, Codable {
     /// offers the full range and reactively renders any upstream
     /// rejection inline.
     public let constraints: PsmithModelConstraints?
+    /// Where the snapshotted metadata came from: "catalog" rows can be
+    /// re-synced via RefreshUserModelMetadata; "manual" and
+    /// "driver" rows have nothing to refresh against. Mirrors the
+    /// proto MetadataSource enum as its lowercase name.
+    public let metadataSource: String
 
     public init(
         providerID: String,
@@ -266,7 +271,8 @@ public struct PsmithUserModel: Sendable, Identifiable, Hashable, Codable {
         capabilities: PsmithModelCapabilities?,
         favorite: Bool,
         defaultSettings: PsmithCallSettings? = nil,
-        constraints: PsmithModelConstraints? = nil
+        constraints: PsmithModelConstraints? = nil,
+        metadataSource: String = "manual"
     ) {
         self.providerID = providerID
         self.modelID = modelID
@@ -280,6 +286,7 @@ public struct PsmithUserModel: Sendable, Identifiable, Hashable, Codable {
         self.favorite = favorite
         self.defaultSettings = defaultSettings
         self.constraints = constraints
+        self.metadataSource = metadataSource
     }
 }
 
@@ -297,6 +304,12 @@ extension PsmithUserModel {
         favorite       = p.favorite
         defaultSettings = p.hasDefaultSettings ? PsmithCallSettings(from: p.defaultSettings) : nil
         constraints   = p.hasConstraints    ? PsmithModelConstraints(from: p.constraints)  : nil
+        switch p.metadataSource {
+        case .catalog:   metadataSource = "catalog"
+        case .driver:    metadataSource = "driver"
+        case .manual:    metadataSource = "manual"
+        default:         metadataSource = "manual"
+        }
     }
 }
 

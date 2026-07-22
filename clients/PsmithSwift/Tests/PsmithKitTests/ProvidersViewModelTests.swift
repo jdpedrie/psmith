@@ -336,6 +336,38 @@ struct ProvidersViewModelTests {
         #expect(vm.enabledModels.contains(where: { $0.modelID == "manual-model-x" }))
     }
 
+    @Test("refreshModelMetadata reports no-op for non-catalog rows and leaves state intact")
+    func refreshModelMetadataNoCatalog() async throws {
+        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvw-rmm")
+        let (provider, fake) = try await Fixtures.seedFakeProvider(client: client)
+        _ = fake
+
+        let vm = ProvidersViewModel(client: client)
+        await vm.load()
+        await vm.selectProvider(provider.id)
+        _ = try await vm.addManualModel(
+            providerID: provider.id,
+            modelID: "manual-refresh",
+            displayName: "Manual Refresh",
+            contextWindow: nil,
+            maxOutputTokens: nil,
+            pricing: nil,
+            modalities: ["text"],
+            capabilities: nil,
+            knowledgeCutoff: nil,
+            defaultSettings: nil
+        )
+
+        let (model, refreshed) = try await vm.refreshModelMetadata(
+            providerID: provider.id, modelID: "manual-refresh"
+        )
+        #expect(refreshed == false)
+        #expect(model.displayName == "Manual Refresh")
+        #expect(model.metadataSource == "manual")
+        let row = vm.enabledModels.first(where: { $0.modelID == "manual-refresh" })
+        #expect(row?.displayName == "Manual Refresh")
+    }
+
     // MARK: - testProvider (case 15)
 
     @Test("testProvider sets providerTestStatus to .testing then .success against the fake")
