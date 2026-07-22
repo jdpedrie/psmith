@@ -356,10 +356,13 @@ public enum SnapshotFixtures {
     }
 
     /// Compression summary message — the cards rendered between contexts.
+    /// finishReason "max_tokens"/"length" renders the truncated-review
+    /// state (badge on the card, warning in the review bar).
     public static func compressionSummaryMessage(
         id: String = "msg-compression",
         contextID: String = "context-conv-1-1",
-        content: String = "**Conversation summary:** The user asked about SwiftUI snapshot testing; the assistant explained the snapshot-on-disk + diff workflow and pointed at the swift-snapshot-testing package."
+        content: String = "**Conversation summary:** The user asked about SwiftUI snapshot testing; the assistant explained the snapshot-on-disk + diff workflow and pointed at the swift-snapshot-testing package.",
+        finishReason: String? = nil
     ) -> PsmithMessage {
         PsmithMessage(
             id: id,
@@ -368,7 +371,8 @@ public enum SnapshotFixtures {
             role: .compressionSummary,
             content: content,
             providerID: "provider-anthropic",
-            modelID: "claude-opus-4-7"
+            modelID: "claude-opus-4-7",
+            finishReason: finishReason
         )
     }
 

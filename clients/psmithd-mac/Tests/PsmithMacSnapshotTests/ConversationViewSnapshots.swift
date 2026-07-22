@@ -82,6 +82,21 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func truncatedCompressionReview() {
+        // A summary whose finish_reason says it was cut at the model's
+        // output limit (even after the server's continuation legs).
+        // The card badges "Truncated" + a red guidance line, and the
+        // review bar swaps its explainer for the delete-and-re-run
+        // recommendation. If this snapshot ever matches the clean
+        // pendingCompressionReview chrome, the badge wiring regressed.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.sampleMessages()
+                + [SnapshotFixtures.compressionSummaryMessage(finishReason: "max_tokens")]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
     func longCompressionSummaryPreview() {
         // A summary past the card's inline budget renders as a head
         // preview + "Show full text (…)" button instead of the whole

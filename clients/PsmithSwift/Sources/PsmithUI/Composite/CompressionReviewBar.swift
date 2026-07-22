@@ -73,12 +73,20 @@ public struct CompressionReviewBar: View {
 
     private var textBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Compression awaiting review")
+            Text(message.isTruncatedOutput
+                 ? "Truncated summary awaiting review"
+                 : "Compression awaiting review")
                 .scaledFont(.subheadline)
                 .fontWeight(.semibold)
-            Text("Confirm to continue in a fresh context, or delete to resume here.")
+            // A truncated summary (cut at the model's output limit
+            // even after continuation legs) shouldn't be confirmed —
+            // promoting it bakes the missing tail into the fresh
+            // context. Steer toward delete + re-run.
+            Text(message.isTruncatedOutput
+                 ? "The summary hit the model's output limit and is incomplete. Delete and re-run compaction; confirming keeps the cut text."
+                 : "Confirm to continue in a fresh context, or delete to resume here.")
                 .scaledFont(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(message.isTruncatedOutput ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                 // Wrap, never truncate — the verdict explainer is the
                 // one line of guidance this state offers.
                 .fixedSize(horizontal: false, vertical: true)

@@ -59,6 +59,18 @@ public struct CompressionSummaryCard: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                 Spacer()
+                // Output-limit badge: the summary text is incomplete
+                // even after the server's continuation legs (up to 4).
+                // Confirming a truncated summary bakes the cut into
+                // the fresh context, so make the state loud here and
+                // let the review bar carry the recommendation.
+                if !isErrored && message.isTruncatedOutput {
+                    Label("Truncated", systemImage: "scissors")
+                        .scaledFont(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
                 // Which model produced this summary — same trailing
                 // slot the assistant rows use for their model label.
                 // (This used to read "Awaiting review — actions
@@ -87,6 +99,12 @@ public struct CompressionSummaryCard: View {
                     limit: Self.summaryPreviewLimit
                 )
                 .scaledFont(.callout)
+                if message.isTruncatedOutput {
+                    Text("Cut off at the model's output limit — the tail of the summary is missing. Delete and re-run compaction rather than confirming.")
+                        .scaledFont(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let summary = usageSummaryLine {
                     Text(summary)
                         .scaledFont(.caption2)

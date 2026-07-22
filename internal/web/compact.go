@@ -35,7 +35,11 @@ func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
 	var pending *summaryVM
 	for _, m := range msgsResp.Msg.GetMessages() {
 		if m.GetRole() == psmithv1.MessageRole_MESSAGE_ROLE_COMPRESSION_SUMMARY {
-			pending = &summaryVM{MessageID: m.GetId(), HTML: renderMarkdown(m.GetContent())}
+			pending = &summaryVM{
+				MessageID: m.GetId(),
+				HTML:      renderMarkdown(m.GetContent()),
+				Truncated: isTruncatedFinish(m.GetFinishReason()),
+			}
 		}
 	}
 	h.render(w, r, http.StatusOK, compactPage(convoVM{ID: conv.GetId(), Title: convoTitle(conv)}, pending))
@@ -44,6 +48,23 @@ func (h *Handler) handleCompactPage(w http.ResponseWriter, r *http.Request) {
 type summaryVM struct {
 	MessageID string
 	HTML      string
+	// The summary hit the model's output limit even after the server's
+	// continuation legs — the review UI warns instead of presenting it
+	// as reviewable-complete.
+	Truncated bool
+}
+
+// isTruncatedFinish reports whether a message finish_reason means the
+// output was cut at the model's token limit (Anthropic max_tokens,
+// OpenAI length, Google MAX_TOKENS). Mirrors PsmithMessage
+// .isTruncatedOutput on the Swift side.
+func isTruncatedFinish(reason string) bool {
+	switch strings.ToLower(reason) {
+	case "max_tokens", "length":
+		return true
+	default:
+		return false
+	}
 }
 
 // handleCompactRun starts a compaction run and returns the streaming container
@@ -96,7 +117,16 @@ func (h *Handler) handleCompactStream(w http.ResponseWriter, r *http.Request) {
 				sse.event("done", "")
 				return
 			}
-			sse.event("promote", renderComp(r.Context(), promoteForm(convID, ev.Terminal.ResultMessageID.String(), renderMarkdown(buf.String()))))
+			// finish_reason lives on the settled message row, not the
+			// run — one fetch tells us whether the summary was cut at
+			// the output limit so the promote form can warn.
+			truncated := false
+			if msgResp, merr := h.convos.GetMessage(r.Context(), connect.NewRequest(&psmithv1.GetMessageRequest{
+				Id: ev.Terminal.ResultMessageID.String(),
+			})); merr == nil {
+				truncated = isTruncatedFinish(msgResp.Msg.GetMessage().GetFinishReason())
+			}
+			sse.event("promote", renderComp(r.Context(), promoteForm(convID, ev.Terminal.ResultMessageID.String(), renderMarkdown(buf.String()), truncated)))
 			sse.event("done", "")
 			return
 		}

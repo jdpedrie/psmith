@@ -422,9 +422,24 @@ templ contextViewPage(conv convoVM, msgs []msgVM) {
 
 // promoteForm shows a reviewed compaction summary and a button to roll it into
 // a new active context. Used on reload when a summary is already pending.
-templ promoteForm(convID, messageID, summaryHTML string) {
+// truncated = the summary hit the model's output limit even after the
+// server's continuation legs; promoting it would bake the missing tail
+// into the fresh context, so the form warns and recommends re-running.
+templ promoteForm(convID, messageID, summaryHTML string, truncated bool) {
 	<div class="compact-out">
-		<h2>Summary</h2>
+		<h2>
+			Summary
+			if truncated {
+				<span class="truncated-badge">Truncated</span>
+			}
+		</h2>
+		if truncated {
+			<p class="truncated-note">
+				This summary was cut off at the model's output limit — the tail is
+				missing. Delete it from the conversation and re-run compaction
+				rather than starting a fresh context from incomplete text.
+			</p>
+		}
 		<div class="md compact-summary">
 			@templ.Raw(summaryHTML)
 		</div>
@@ -469,7 +484,7 @@ templ compactPage(conv convoVM, pending *summaryVM) {
 						The original messages are kept and remain viewable under Contexts.
 					</p>
 					if pending != nil {
-						@promoteForm(conv.ID, pending.MessageID, pending.HTML)
+						@promoteForm(conv.ID, pending.MessageID, pending.HTML, pending.Truncated)
 					} else {
 						<form
 							method="post"

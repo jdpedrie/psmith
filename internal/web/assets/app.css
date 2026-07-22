@@ -602,6 +602,16 @@ a.settings-item:hover { border-color: var(--accent); background: var(--bg-elev-2
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .page-head .page-sub { margin-bottom: 22px; }
 
+/* truncated-compaction badge + warning on the compact review page */
+.truncated-badge {
+	display: inline-block; margin-left: 8px; padding: 2px 8px;
+	font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+	text-transform: uppercase; color: #b3261e;
+	background: rgba(179, 38, 30, 0.12); border-radius: 999px;
+	vertical-align: middle;
+}
+.truncated-note { color: #b3261e; font-size: 13px; margin: 6px 0 10px; }
+
 /* build-version line at the foot of the settings page */
 .version-foot {
 	color: var(--muted); font-size: 12px; text-align: center;

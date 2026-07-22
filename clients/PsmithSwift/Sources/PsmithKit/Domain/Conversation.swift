@@ -481,6 +481,18 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
     /// finishReason. The UI surfaces it only when unexpected — i.e.
     /// anything other than `stop` / `end_turn` / `STOP` / nil.
     public let finishReason: String?
+
+    /// True when the provider cut this message at its output-token
+    /// limit (Anthropic `max_tokens`, OpenAI `length`, Google
+    /// `MAX_TOKENS`). For compression summaries this means the text is
+    /// incomplete even after the server's continuation legs — the
+    /// review UIs badge it and steer toward re-running.
+    public var isTruncatedOutput: Bool {
+        switch finishReason?.lowercased() {
+        case "max_tokens", "length": return true
+        default: return false
+        }
+    }
     /// Wall-clock the server materialised this row. Used by clients
     /// for the in-bubble timestamp line; required for ordering only at
     /// the server (clients trust list order). May be `Date(0)` for
