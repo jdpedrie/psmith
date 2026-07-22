@@ -864,18 +864,30 @@ private struct ConversationBody: View {
                         try? await Task.sleep(for: .milliseconds(150))
                         guard !scrollPosition.isPositionedByUser,
                               let replyID = model.messages.last?.id else { return }
-                        scrollLog.notice("terminal: reply-top solve")
+                        scrollLog.notice("terminal: reply-top solve (held)")
                         positionHeld = true
                         var t = Transaction()
                         t.disablesAnimations = true
                         withTransaction(t) {
                             scrollPosition.scrollTo(id: replyID, anchor: UnitPoint(x: 0, y: 1))
                         }
-                        try? await Task.sleep(for: .milliseconds(300))
-                        if positionHeld, !scrollPosition.isPositionedByUser {
-                            positionHeld = false
-                            scrollPosition = ScrollPosition()
-                        }
+                        // NO timer release — the reply-top frame HOLDS
+                        // past the terminal until the user takes over
+                        // (explicit UX spec: "stick the message at the
+                        // top and hold it there past the stream end").
+                        // The geometry handler's user-grab release is
+                        // the only exit. Holding is safe here where it
+                        // wasn't mid-stream: the transcript is static
+                        // and the eager stack is fully laid out, so
+                        // the held solve re-applies identical values
+                        // (no estimate churn to shimmy against), and
+                        // it rides keyboard-driven viewport changes
+                        // keeping the reply top pinned. A timed
+                        // release also risked the documented
+                        // one-viewport rewind on the binding swap —
+                        // the likely mechanism behind the on-device
+                        // "when the stream ends it resets to the
+                        // bottom" report.
                     }
                 }
             }
