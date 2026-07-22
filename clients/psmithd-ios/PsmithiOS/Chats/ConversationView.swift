@@ -10,6 +10,15 @@ import os.log
 /// stream and have burned multiple debugging rounds.
 private let scrollLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "ChatScroll")
 
+extension Notification.Name {
+    /// "Jump to the start of the context" — posted by the toolbar
+    /// title button (object: conversation id); ConversationBody
+    /// observes and runs its scroll-to-oldest. A notification rather
+    /// than a binding because the toolbar item lives on the OUTER
+    /// view while the scroll machinery is ConversationBody's.
+    static let psmithScrollToContextStart = Notification.Name("psmith.scrollToContextStart")
+}
+
 /// iOS conversation surface. Constructs `ConversationViewModel` against
 /// the live `psmithd`, then renders the status strip + message scroll.
 /// Per `docs/clients/ios-reference.md`: composer arrives in Phase 5d, the
@@ -136,6 +145,31 @@ struct ConversationView: View {
         }
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
+        // Tap the TITLE to jump to the start of the context. This is
+        // the reliable device path for "tap the top to go to the
+        // beginning": the navigation bar owns touches in its band, so
+        // any tap target we float UNDER the bar never hears them on
+        // hardware (the sim's synthetic taps slipped through, which
+        // is why the fade-band tap looked verified). A principal
+        // toolbar item lives INSIDE the bar and wins those touches.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button(action: scrollToOldestFromToolbar) {
+                    Text(navTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(navTitle) — tap to scroll to the start of the conversation")
+            }
+        }
+    }
+
+    /// The toolbar lives outside ConversationBody, so the title button
+    /// posts the same notification the (device-only) status-bar bridge
+    /// uses; the body observes it and runs its scroll-to-oldest.
+    private func scrollToOldestFromToolbar() {
+        NotificationCenter.default.post(name: .psmithScrollToContextStart, object: conversation.id)
     }
 
     /// Always read the latest snapshot from the list so an auto-generated
@@ -440,10 +474,16 @@ private struct ConversationBody: View {
                 // toolbarBackground, so without this the title text
                 // sat directly on passing transcript content.
                 //
-                // The band doubles as the "tap the top to jump to
-                // the start of the context" target — the status-bar
-                // tap affordance, made deterministic. The pill
-                // overlays this band and wins its own taps.
+                // PURELY VISUAL — hit-testing off, unconditionally.
+                // This band used to carry the tap-to-top gesture, and
+                // any hit-testable view floated over the transcript
+                // steals EVERY gesture in its frame (scroll pans and
+                // long-presses live in the scroll view's UIKit branch;
+                // there's no simultaneity across branches). On device
+                // that read as "a transparent overlay blocks the top
+                // of the screen" (user-reported). The tap-to-top
+                // affordance is the toolbar TITLE button now — inside
+                // the bar, which owns those touches anyway.
                 .overlay(alignment: .top) {
                     LinearGradient(
                         stops: [
@@ -456,8 +496,7 @@ private struct ConversationBody: View {
                     )
                     .frame(height: navClearance + 28)
                     .ignoresSafeArea(edges: .top)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: scrollToOldest)
+                    .allowsHitTesting(false)
                 }
         }
     }
@@ -841,20 +880,33 @@ private struct ConversationBody: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            // The toolbar title button (and the device-only status-bar
+            // bridge) live outside this body; both funnel through this
+            // notification. Filtered by conversation id so a stale
+            // observer from a previous conversation can't fire.
+            .onReceive(NotificationCenter.default.publisher(for: .psmithScrollToContextStart)) { note in
+                guard (note.object as? String) == model.conversation.id else { return }
+                scrollToOldest()
+            }
     }
 
-    /// Jump to the start of the context — the oldest message, the
-    /// content END inverted. The far coordinate is estimated, so the
-    /// edge solve lands approximately and refines as rows realize;
-    /// fine for a jump affordance, and the one-shot release keeps
-    /// nothing solving afterwards.
+    /// Jump to the start of the context — the oldest message's first
+    /// lines at the visual top. An exact id-solve, same anchor math as
+    /// the terminal solve: anchor y:1 aligns the row's content-space
+    /// bottom (its VISUAL top, through the flips) with the viewport's
+    /// content-space bottom (the visual top). Exact because the eager
+    /// stack has every row laid out. The previous `scrollTo(edge:
+    /// .bottom)` resolved to the WRONG END on device ("scroll to top
+    /// scrolls to bottom", user-reported) — edge semantics through the
+    /// flip aren't trustworthy; row ids are.
     private func scrollToOldest() {
-        scrollLog.notice("scroll to oldest (top tap)")
+        guard let oldestID = model.messages.first?.id else { return }
+        scrollLog.notice("scroll to oldest (top tap) id=\(oldestID, privacy: .public)")
         positionHeld = true
         var t = Transaction()
         t.disablesAnimations = true
         withTransaction(t) {
-            scrollPosition.scrollTo(edge: .bottom)
+            scrollPosition.scrollTo(id: oldestID, anchor: UnitPoint(x: 0, y: 1))
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(400))
