@@ -61,16 +61,26 @@ func (s *Service) Probe(_ context.Context, _ *connect.Request[psmithv1.ProbeRequ
 	}), nil
 }
 
-// serverVersion returns the build's identity string. Empty for dev
-// builds (`go run`) where no -ldflags-stamped value is available; the
-// client treats empty as "unknown — proceed without warning."
+// serverVersion returns the build's identity string. Empty when no
+// -ldflags-stamped value is available (bare `go build`/`go test`, the
+// L1 harness's lazily-built binary); the client treats empty as
+// "unknown — proceed without warning."
 func serverVersion() string {
-	// TODO: stamp at build time via -ldflags='-X github.com/jdpedrie/psmith/internal/auth.buildVersion=...'
 	return buildVersion
 }
 
-// buildVersion is overridden at build time via -ldflags. Empty means
-// "no version stamped" (dev builds).
+// BuildVersion exposes the stamp to non-RPC surfaces (the web UI's
+// settings footer). Same contract as the Probe field: empty means the
+// build wasn't stamped.
+func BuildVersion() string {
+	return buildVersion
+}
+
+// buildVersion is stamped by `make build` / `make run` via
+// -ldflags "-X github.com/jdpedrie/psmith/internal/auth.buildVersion=<v>"
+// where <v> is the short commit hash, suffixed +YYYYMMDDHHMM when the
+// tree was dirty (see PSMITH_VERSION in the Makefile). Empty means
+// "no version stamped."
 var buildVersion = ""
 
 func (s *Service) Login(ctx context.Context, req *connect.Request[psmithv1.LoginRequest]) (*connect.Response[psmithv1.LoginResponse], error) {

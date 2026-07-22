@@ -162,7 +162,21 @@ templ settingsPage() {
 				@settingsRow("/settings/cost", "cost", "Cost", "Recorded model spend per provider.")
 			</div>
 		</section>
+		@versionFooter()
 	}
+}
+
+// versionFooter shows the server's stamped build identity below the
+// settings groups — the web UI is served by psmithd, so one stamp
+// covers both "app" and "server." Empty stamp = unstamped dev build.
+templ versionFooter() {
+	<p class="version-foot">
+		if serverBuildVersion() == "" {
+			psmithd dev (unstamped build)
+		} else {
+			psmithd { serverBuildVersion() }
+		}
+	</p>
 }
 
 templ settingsRow(href, icon, title, desc string) {

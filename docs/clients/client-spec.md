@@ -12,7 +12,7 @@ The protobuf schema is the source of truth for every message shape. Generate you
 
 ## Authentication
 
-1. **Probe** (`AuthService.Probe`, unauthenticated) confirms a URL is a reachable Psmith server and reports its version. Use it before login to validate a server address.
+1. **Probe** (`AuthService.Probe`, unauthenticated) confirms a URL is a reachable Psmith server and reports its version — the short commit hash the server was built at, `+YYYYMMDDHHMM`-suffixed for dirty builds, or empty for unstamped dev builds. Use it before login to validate a server address, and from a settings surface to show the server's build identity next to the client's own (the iOS and Mac apps render both in a settings footer via the shared `VersionFooter`; a client reads its own stamp from its bundle — `BuildInfo.commit` in PsmithKit).
 2. **Login** (`AuthService.Login`, unauthenticated) takes a username and password and returns a session token and its expiry. The token is shown once; store it.
 3. Attach the token as `Authorization: Bearer <token>` on every subsequent request, RPC and HTTP. An interceptor is the right place for this.
 4. On a `401` / `Unauthenticated`, the session is gone (expired or revoked). Drop the stored token and route the user back to login. Do not retry with the dead token.

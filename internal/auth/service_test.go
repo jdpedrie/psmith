@@ -76,6 +76,29 @@ func assertCode(t *testing.T, err error, want connect.Code) {
 	}
 }
 
+// --- Probe ---
+
+func TestService_Probe_EchoesStampedVersion(t *testing.T) {
+	svc, _ := newTestSvc(t)
+	orig := buildVersion
+	t.Cleanup(func() { buildVersion = orig })
+	buildVersion = "abc1234+202607212215"
+
+	resp, err := svc.Probe(context.Background(), connect.NewRequest(&psmithv1.ProbeRequest{}))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if resp.Msg.Server != "psmithd" {
+		t.Errorf("server = %q, want psmithd", resp.Msg.Server)
+	}
+	if resp.Msg.Version != "abc1234+202607212215" {
+		t.Errorf("version = %q, want the stamped value", resp.Msg.Version)
+	}
+	if got := BuildVersion(); got != "abc1234+202607212215" {
+		t.Errorf("BuildVersion() = %q, want the stamped value", got)
+	}
+}
+
 // --- Login ---
 
 func TestService_Login_Success(t *testing.T) {

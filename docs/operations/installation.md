@@ -37,7 +37,12 @@ Common operations:
 ```bash
 docker compose -p psmith logs -f psmithd        # follow server logs
 docker compose -p psmith exec psmithd psmith install -status   # migration status
-docker compose -p psmith pull && docker compose -p psmith up -d --build   # upgrade
+# Upgrade. PSMITH_VERSION stamps the image with the commit hash so
+# clients' settings footers can tell whether the server is current
+# (unset, the image stamps its build datetime instead).
+docker compose -p psmith pull
+PSMITH_VERSION=$(git rev-parse --short HEAD) \
+  docker compose -p psmith up -d --build
 ```
 
 ## 2. Docker (single container)

@@ -35,7 +35,14 @@ services:
     restart: unless-stopped
 
   psmithd:
-    build: .
+    build:
+      context: .
+      args:
+        # Version stamp for AuthService.Probe / the clients' settings
+        # footers. Export before building to stamp the commit hash:
+        #   PSMITH_VERSION=$(git rev-parse --short HEAD) docker compose -p psmith up -d --build
+        # Unset, the image stamps its build datetime instead.
+        PSMITH_VERSION: ${PSMITH_VERSION:-}
     image: psmith:latest
     depends_on:
       db:

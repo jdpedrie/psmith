@@ -602,6 +602,12 @@ a.settings-item:hover { border-color: var(--accent); background: var(--bg-elev-2
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .page-head .page-sub { margin-bottom: 22px; }
 
+/* build-version line at the foot of the settings page */
+.version-foot {
+	color: var(--muted); font-size: 12px; text-align: center;
+	margin: 30px 0 8px; font-variant-numeric: tabular-nums;
+}
+
 /* a labelled group: gray header outside, rounded card holding rows */
 .sgroup { margin: 0 0 26px; }
 .sgroup-head {

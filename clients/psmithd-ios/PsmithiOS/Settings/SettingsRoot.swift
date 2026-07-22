@@ -12,6 +12,8 @@ import PsmithUI
 /// identity at the top of every chats session, which makes a
 /// dedicated Settings section redundant.
 struct SettingsRoot: View {
+    @Environment(AppModel.self) private var app
+
     var body: some View {
         List {
             Section("Data") {
@@ -88,6 +90,15 @@ struct SettingsRoot: View {
                 } label: {
                     categoryRow("Device tool activity", systemImage: "clock.arrow.circlepath")
                 }
+            }
+
+            // Build identity, below the menu items: app stamp from the
+            // bundle, server stamp from one Probe. The quick answer to
+            // "am I running the latest build?"
+            Section {
+            } footer: {
+                VersionFooter(auth: app.client.auth)
+                    .padding(.top, 4)
             }
         }
         .navigationTitle("Settings")

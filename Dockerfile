@@ -18,6 +18,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # into the psmith binary at compile time (cmd/psmith/install.go).
 COPY . .
 
+# Version stamp surfaced by AuthService.Probe and the clients'
+# settings footers. The build context excludes .git (see
+# .dockerignore), so the hash can't be derived here — pass it:
+#   docker build --build-arg PSMITH_VERSION=$(git rev-parse --short HEAD) …
+# (docker-compose.yml forwards $PSMITH_VERSION the same way). When
+# absent, the image stamps its build datetime instead, so every
+# deploy still gets a fresh, comparable identifier.
+ARG PSMITH_VERSION=
+
 # Build both binaries. CGO disabled for a fully static link so the
 # final image needs nothing beyond ca-certs at runtime. -trimpath
 # strips host-specific paths from the binary so debug strings don't
@@ -25,7 +34,8 @@ COPY . .
 ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags='-s -w' -o /out/psmithd ./cmd/psmithd \
+    STAMP="${PSMITH_VERSION:-$(date +%Y%m%d%H%M)}" \
+ && go build -trimpath -ldflags="-s -w -X github.com/jdpedrie/psmith/internal/auth.buildVersion=$STAMP" -o /out/psmithd ./cmd/psmithd \
  && go build -trimpath -ldflags='-s -w' -o /out/psmith  ./cmd/psmith
 
 # ---- Runtime stage -------------------------------------------------------

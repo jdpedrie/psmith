@@ -74,6 +74,26 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
+        # The version-stamp build phase below writes into the built
+        # product's Info.plist and shells out to git; the default
+        # script sandbox blocks both.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Stamp the build's version identifier (short commit hash, with a
+    # +YYYYMMDDHHMM suffix when the tree is dirty — same scheme as the
+    # Makefile's PSMITH_VERSION) into the BUILT product's Info.plist.
+    # Recomputed here rather than passed in so direct-from-Xcode builds
+    # get an honest stamp too. Settings reads PsmithBuildCommit.
+    postBuildScripts:
+      - name: Stamp build commit
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          cd "$SRCROOT/../.."
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)
+          git diff --quiet HEAD 2>/dev/null || COMMIT="$COMMIT+$(date +%Y%m%d%H%M)"
+          PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Delete :PsmithBuildCommit" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :PsmithBuildCommit string $COMMIT" "$PLIST"
     dependencies:
       - package: PsmithSwift
         product: PsmithKit

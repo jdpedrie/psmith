@@ -246,6 +246,13 @@ func (h *Handler) listConvos(ctx context.Context, activeID string) ([]convoVM, e
 
 // relTime renders a compact "time since" label for the sidebar: minutes/hours
 // within a day, "d" within a week, then an absolute month/day.
+// serverBuildVersion feeds the settings page's version footer.
+// Package-level (not a Handler method) so the templ template can call
+// it without threading the handler through.
+func serverBuildVersion() string {
+	return auth.BuildVersion()
+}
+
 func relTime(now, t time.Time) string {
 	d := now.Sub(t)
 	switch {

@@ -203,8 +203,14 @@ struct AuthRepositoryTests {
     func probeSuccess() async throws {
         let result = await probePsmithServer(url: server.baseURL)
         switch result {
-        case .ok(let serverName, _):
+        case .ok(let serverName, let version):
             #expect(serverName == "psmithd")
+            // The harness binary is built without the Makefile's
+            // -ldflags stamp, so the version field round-trips as
+            // empty here — deterministic for this harness. The
+            // stamped echo is asserted server-side (internal/auth
+            // TestService_Probe_EchoesStampedVersion).
+            #expect(version.isEmpty)
         case .wrongServer(let detail):
             Issue.record("expected ok; got wrongServer: \(detail)")
         case .unreachable(let detail):

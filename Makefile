@@ -2,6 +2,16 @@
 
 TEMPL_VERSION ?= v0.3.1020
 
+# Version identifier stamped into every artifact: the short commit
+# hash, plus a +YYYYMMDDHHMM suffix when the working tree differs
+# from HEAD — a dirty build must not masquerade as its base commit.
+# Surfaces: psmithd (AuthService.Probe + web footer), the Mac app
+# bundle plist, and the iOS app plist (stamped by an Xcode build
+# phase, see clients/psmithd-ios/project.yml, which recomputes this
+# same value so direct-from-Xcode builds stay honest).
+PSMITH_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)$(shell git diff --quiet HEAD 2>/dev/null || echo +$(shell date +%Y%m%d%H%M))
+GO_VERSION_FLAGS := -ldflags "-X github.com/jdpedrie/psmith/internal/auth.buildVersion=$(PSMITH_VERSION)"
+
 GOOSE_DRIVER ?= postgres
 GOOSE_DBSTRING ?= postgres://clark:clark@localhost:5433/clark?sslmode=disable
 GOOSE_MIGRATION_DIR ?= db/migrations
@@ -14,10 +24,10 @@ lint:
 	go vet ./...
 
 build:
-	go build -o bin/psmithd ./cmd/psmithd
+	go build $(GO_VERSION_FLAGS) -o bin/psmithd ./cmd/psmithd
 
 run:
-	go run ./cmd/psmithd
+	go run $(GO_VERSION_FLAGS) ./cmd/psmithd
 
 tidy:
 	go mod tidy
@@ -104,6 +114,10 @@ mac-app: mac-build clients/psmithd-mac/AppBundle/AppIcon.icns
 	mkdir -p clients/psmithd-mac/.build/PsmithMac.app/Contents/MacOS
 	mkdir -p clients/psmithd-mac/.build/PsmithMac.app/Contents/Resources
 	cp clients/psmithd-mac/AppBundle/Info.plist clients/psmithd-mac/.build/PsmithMac.app/Contents/Info.plist
+	# Stamp the build's version identifier into the bundle plist —
+	# the Settings sidebar footer reads PsmithBuildCommit at runtime.
+	/usr/libexec/PlistBuddy -c "Add :PsmithBuildCommit string $(PSMITH_VERSION)" \
+		clients/psmithd-mac/.build/PsmithMac.app/Contents/Info.plist
 	cp clients/psmithd-mac/AppBundle/AppIcon.icns clients/psmithd-mac/.build/PsmithMac.app/Contents/Resources/AppIcon.icns
 	cp clients/psmithd-mac/.build/debug/PsmithMac clients/psmithd-mac/.build/PsmithMac.app/Contents/MacOS/PsmithMac
 	# SwiftPM resource bundles. The provider-logo SVGs moved to
@@ -164,6 +178,20 @@ ios-build: ios-project logos-png
 		-destination 'platform=iOS Simulator,name=$(IOS_SIMULATOR),OS=latest' \
 		-derivedDataPath clients/psmithd-ios/.build \
 		build
+	# Authoritative version stamp. The in-project "Stamp build commit"
+	# phase covers incremental Xcode builds, but on a clean build the
+	# build graph can order plist processing after it, losing the
+	# stamp — so make-driven builds re-stamp the product here and
+	# re-sign (preserving entitlements; a bare re-sign would strip
+	# the HealthKit entitlement).
+	/usr/libexec/PlistBuddy -c "Delete :PsmithBuildCommit" $(IOS_DERIVED_APP)/Info.plist 2>/dev/null || true
+	/usr/libexec/PlistBuddy -c "Add :PsmithBuildCommit string $(PSMITH_VERSION)" $(IOS_DERIVED_APP)/Info.plist
+	xcrun codesign -d --entitlements - --xml $(IOS_DERIVED_APP) > /tmp/psmith-ios-entitlements.plist 2>/dev/null || true
+	if [ -s /tmp/psmith-ios-entitlements.plist ]; then \
+		codesign --force --sign - --entitlements /tmp/psmith-ios-entitlements.plist $(IOS_DERIVED_APP); \
+	else \
+		codesign --force --sign - $(IOS_DERIVED_APP); \
+	fi
 
 # Build, boot the simulator, install the freshly-built bundle, and
 # launch. The simulator stays open across runs so subsequent installs

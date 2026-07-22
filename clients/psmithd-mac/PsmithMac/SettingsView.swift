@@ -126,6 +126,10 @@ struct SettingsView: View {
                 categoryRow(c, indented: true)
             }
             Spacer(minLength: 0)
+            // Build identity at the sidebar's foot: app stamp from the
+            // bundle plist (mac-app target), server stamp via Probe.
+            VersionFooter(auth: app.client.auth)
+                .padding(.bottom, 10)
         }
         .padding(.horizontal, 8)
         .padding(.top, 12)

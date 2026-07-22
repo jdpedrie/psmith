@@ -11,6 +11,19 @@ make run      # go run ./cmd/psmithd
 
 The operator CLI builds with `go build ./cmd/psmith`. The Docker image builds both binaries with `CGO_ENABLED=0`, `-trimpath`, and stripped symbols. See [installation.md](installation.md) for the Docker flow.
 
+### Version stamping
+
+Every build carries an identity: the short commit hash, suffixed `+YYYYMMDDHHMM` when the working tree differs from HEAD, so a dirty build can't masquerade as its base commit. The point is answering "am I on the latest build?" at a glance — the iOS and Mac settings surfaces show both the app's own stamp and the server's (fetched via `AuthService.Probe`), and the web settings page shows the server's.
+
+How each artifact gets stamped:
+
+- **psmithd** (`make build` / `make run`): `-ldflags -X` into `internal/auth.buildVersion` (the `PSMITH_VERSION` variable at the top of the Makefile). Bare `go build`/`go test` and the L1 harness's lazily-built `bin/psmithd-test` are deliberately unstamped — Probe returns empty and clients render "dev".
+- **Docker**: pass `--build-arg PSMITH_VERSION=$(git rev-parse --short HEAD)` (docker-compose forwards `$PSMITH_VERSION` from the environment). Unset, the image stamps its build datetime — every deploy still gets a fresh, comparable identifier.
+- **iOS**: `make ios-build` stamps `PsmithBuildCommit` into the built product's Info.plist and re-signs (preserving entitlements). An in-project "Stamp build commit" phase covers incremental direct-from-Xcode builds too, but on a clean Xcode build the build graph can order plist processing after the phase — the Makefile stamp is the authoritative one, so prefer `make ios-build` when the version matters.
+- **Mac**: the `mac-app` target stamps the assembled bundle's Info.plist before re-signing. `swift run PsmithMac` has no bundle and reads "dev".
+
+Clients read their own stamp via `BuildInfo.commit` (PsmithKit) and render it with the shared `VersionFooter` (PsmithUI). If the identifier scheme ever moves off the commit hash (pure datetime stamps), updating the stamp becomes part of finishing every task.
+
 ## Code generation
 
 Two generators produce code that is checked in. Regenerate after changing a `.proto` or a `.sql` query.
