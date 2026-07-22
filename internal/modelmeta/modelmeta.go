@@ -55,6 +55,37 @@ type Pricing struct {
 	CacheWritePerMillion float64
 }
 
+// PricingTier is one context-size pricing step (grok-4.5-style: a
+// different rate card once the prompt exceeds a threshold). Stored on
+// user_models.pricing_tiers as a JSON array; the catalog source
+// (models.dev) doesn't carry tiers, so these are user-maintained via
+// the model edit surface. Nil subfields inherit the base (flat-column)
+// price for that component.
+type PricingTier struct {
+	ThresholdTokens      int      `json:"threshold_tokens"`
+	InputPerMillion      *float64 `json:"input_per_million,omitempty"`
+	OutputPerMillion     *float64 `json:"output_per_million,omitempty"`
+	CacheReadPerMillion  *float64 `json:"cache_read_per_million,omitempty"`
+	CacheWritePerMillion *float64 `json:"cache_write_per_million,omitempty"`
+}
+
+// EffectiveTier returns the tier with the highest threshold strictly
+// below promptTokens, or nil when no tier applies (base pricing).
+// Provider semantics: the WHOLE request prices at the winning tier,
+// not marginally.
+func EffectiveTier(tiers []PricingTier, promptTokens int) *PricingTier {
+	var best *PricingTier
+	for i := range tiers {
+		t := &tiers[i]
+		if promptTokens > t.ThresholdTokens {
+			if best == nil || t.ThresholdTokens > best.ThresholdTokens {
+				best = t
+			}
+		}
+	}
+	return best
+}
+
 type Capabilities struct {
 	Streaming bool
 	Thinking  bool

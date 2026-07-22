@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/jdpedrie/psmith/internal/modelmeta"
 	"github.com/jdpedrie/psmith/internal/providers"
 	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/jdpedrie/psmith/plugins"
@@ -670,10 +671,45 @@ func buildUsageParams(ctx context.Context, q *store.Queries, providerID uuid.UUI
 		return out
 	}
 
-	out.InputCostUsd = costFromTokens(usage.InputTokens, row.InputPricePerMillion)
-	out.OutputCostUsd = costFromTokens(usage.OutputTokens, row.OutputPricePerMillion)
-	out.CacheReadCostUsd = costFromTokens(usage.CacheReadTokens, row.CacheReadPerMillion)
-	out.CacheWriteCostUsd = costFromTokens(usage.CacheWriteTokens, row.CacheWritePerMillion)
+	// Context-size-tiered pricing: when the model row carries tiers
+	// and the request's prompt (input + cache read + cache write)
+	// exceeds a tier threshold, the WHOLE request prices at that tier
+	// (provider semantics — grok-4.5-style). Nil tier subfields fall
+	// back to the base columns.
+	inPrice := row.InputPricePerMillion
+	outPrice := row.OutputPricePerMillion
+	crPrice := row.CacheReadPerMillion
+	cwPrice := row.CacheWritePerMillion
+	if len(row.PricingTiers) > 0 {
+		var tiers []modelmeta.PricingTier
+		if err := json.Unmarshal(row.PricingTiers, &tiers); err == nil {
+			prompt := 0
+			for _, t := range []*int{usage.InputTokens, usage.CacheReadTokens, usage.CacheWriteTokens} {
+				if t != nil {
+					prompt += *t
+				}
+			}
+			if tier := modelmeta.EffectiveTier(tiers, prompt); tier != nil {
+				if tier.InputPerMillion != nil {
+					inPrice = tier.InputPerMillion
+				}
+				if tier.OutputPerMillion != nil {
+					outPrice = tier.OutputPerMillion
+				}
+				if tier.CacheReadPerMillion != nil {
+					crPrice = tier.CacheReadPerMillion
+				}
+				if tier.CacheWritePerMillion != nil {
+					cwPrice = tier.CacheWritePerMillion
+				}
+			}
+		}
+	}
+
+	out.InputCostUsd = costFromTokens(usage.InputTokens, inPrice)
+	out.OutputCostUsd = costFromTokens(usage.OutputTokens, outPrice)
+	out.CacheReadCostUsd = costFromTokens(usage.CacheReadTokens, crPrice)
+	out.CacheWriteCostUsd = costFromTokens(usage.CacheWriteTokens, cwPrice)
 	out.TotalCostUsd = sumNumerics(out.InputCostUsd, out.OutputCostUsd, out.CacheReadCostUsd, out.CacheWriteCostUsd, out.ToolCostUsd)
 	return out
 }

@@ -72,3 +72,26 @@ func TestConstraintsFor_AnthropicTemperatureLock(t *testing.T) {
 		t.Errorf("haiku-4-5: want [0,1] range, got %+v", c.Temperature)
 	}
 }
+
+func TestEffectiveTier(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	tiers := []PricingTier{
+		{ThresholdTokens: 128_000, InputPerMillion: f(6.0)},
+		{ThresholdTokens: 256_000, InputPerMillion: f(12.0)},
+	}
+	if got := EffectiveTier(tiers, 100_000); got != nil {
+		t.Errorf("100k: got tier %+v, want base (nil)", got)
+	}
+	if got := EffectiveTier(tiers, 128_000); got != nil {
+		t.Errorf("exactly at threshold: got tier %+v, want base (nil, strict >)", got)
+	}
+	if got := EffectiveTier(tiers, 130_000); got == nil || *got.InputPerMillion != 6.0 {
+		t.Errorf("130k: got %+v, want 128k tier", got)
+	}
+	if got := EffectiveTier(tiers, 300_000); got == nil || *got.InputPerMillion != 12.0 {
+		t.Errorf("300k: got %+v, want 256k tier", got)
+	}
+	if got := EffectiveTier(nil, 300_000); got != nil {
+		t.Errorf("no tiers: got %+v, want nil", got)
+	}
+}

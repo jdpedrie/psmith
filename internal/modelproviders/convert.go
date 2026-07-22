@@ -89,7 +89,10 @@ func storeUserModelToProto(m store.UserModel, providerType string) *psmithv1.Use
 		Favorite:            m.Favorite,
 	}
 	if pricing := pricingFromCols(m.InputPricePerMillion, m.OutputPricePerMillion, m.CacheReadPerMillion, m.CacheWritePerMillion); pricing != nil {
+		pricing.Tiers = pricingTiersFromJSON(m.PricingTiers)
 		out.Pricing = pricing
+	} else if tiers := pricingTiersFromJSON(m.PricingTiers); len(tiers) > 0 {
+		out.Pricing = &psmithv1.ModelPricing{Tiers: tiers}
 	}
 	if m.KnowledgeCutoff.Valid {
 		s := m.KnowledgeCutoff.Time.Format("2006-01-02")
@@ -146,6 +149,52 @@ func pricingFromCols(in, out, cr, cw *float64) *psmithv1.ModelPricing {
 		CacheReadPerMillionTokens:  cr,
 		CacheWritePerMillionTokens: cw,
 	}
+}
+
+// pricingTiersFromJSON parses the user_models.pricing_tiers column
+// into proto tiers. Unparseable or empty blobs read as no tiers.
+func pricingTiersFromJSON(b []byte) []*psmithv1.PricingTier {
+	if len(b) == 0 {
+		return nil
+	}
+	var tiers []modelmeta.PricingTier
+	if err := json.Unmarshal(b, &tiers); err != nil {
+		return nil
+	}
+	out := make([]*psmithv1.PricingTier, 0, len(tiers))
+	for _, t := range tiers {
+		out = append(out, &psmithv1.PricingTier{
+			ThresholdTokens:            int32(t.ThresholdTokens),
+			InputPerMillionTokens:      t.InputPerMillion,
+			OutputPerMillionTokens:     t.OutputPerMillion,
+			CacheReadPerMillionTokens:  t.CacheReadPerMillion,
+			CacheWritePerMillionTokens: t.CacheWritePerMillion,
+		})
+	}
+	return out
+}
+
+// pricingTiersToJSON serializes proto tiers for the JSONB column.
+// Empty input returns nil (column NULL = flat pricing).
+func pricingTiersToJSON(tiers []*psmithv1.PricingTier) []byte {
+	if len(tiers) == 0 {
+		return nil
+	}
+	out := make([]modelmeta.PricingTier, 0, len(tiers))
+	for _, t := range tiers {
+		out = append(out, modelmeta.PricingTier{
+			ThresholdTokens:      int(t.ThresholdTokens),
+			InputPerMillion:      t.InputPerMillionTokens,
+			OutputPerMillion:     t.OutputPerMillionTokens,
+			CacheReadPerMillion:  t.CacheReadPerMillionTokens,
+			CacheWritePerMillion: t.CacheWritePerMillionTokens,
+		})
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 func capabilitiesFromJSON(b []byte) *psmithv1.ModelCapabilities {

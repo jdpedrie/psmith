@@ -236,3 +236,69 @@ func TestRefreshUserModelMetadata_NoCatalogEntry_LeavesRowUntouched(t *testing.T
 		t.Errorf("metadata_source = %v, want manual", resp.Msg.UserModel.MetadataSource)
 	}
 }
+
+// Tiered pricing round-trips through the manual-add + update surface:
+// tiers persist as JSONB and come back on the proto pricing block;
+// an update whose pricing is UNSET preserves them.
+func TestPricingTiers_RoundTripAndPreserve(t *testing.T) {
+	t.Parallel()
+	svc, q, _, _ := newTestService(t)
+	user := mustUser(t, q, "alice", false)
+	typeName := registerFakeDriver(t, "tiers-rt", nil, nil)
+	created, err := svc.CreateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.CreateUserModelProviderRequest{
+		Type: typeName, Label: "main",
+	}))
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+
+	in := 3.0
+	tierIn := 6.0
+	added, err := svc.AddManualModel(ctxAs(user), connect.NewRequest(&psmithv1.AddManualModelRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "tiered",
+		DisplayName:         "Tiered",
+		Pricing: &psmithv1.ModelPricing{
+			InputPerMillionTokens: &in,
+			Tiers: []*psmithv1.PricingTier{
+				{ThresholdTokens: 128_000, InputPerMillionTokens: &tierIn},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("AddManualModel: %v", err)
+	}
+	got := added.Msg.UserModel.GetPricing()
+	if got == nil || len(got.Tiers) != 1 {
+		t.Fatalf("tiers didn't round-trip: %+v", got)
+	}
+	if got.Tiers[0].ThresholdTokens != 128_000 || got.Tiers[0].GetInputPerMillionTokens() != 6.0 {
+		t.Errorf("tier content drift: %+v", got.Tiers[0])
+	}
+
+	// Metadata-only update (pricing unset) must PRESERVE the tiers.
+	updated, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "tiered",
+		DisplayName:         ptr("Tiered v2"),
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel: %v", err)
+	}
+	if p := updated.Msg.UserModel.GetPricing(); p == nil || len(p.Tiers) != 1 {
+		t.Errorf("tiers lost on metadata-only update: %+v", p)
+	}
+
+	// Pricing replace-block WITHOUT tiers clears them.
+	cleared, err := svc.UpdateUserModel(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelRequest{
+		UserModelProviderId: created.Msg.Provider.Id,
+		ModelId:             "tiered",
+		Pricing:             &psmithv1.ModelPricing{InputPerMillionTokens: &in},
+	}))
+	if err != nil {
+		t.Fatalf("UpdateUserModel(clear tiers): %v", err)
+	}
+	if p := cleared.Msg.UserModel.GetPricing(); p != nil && len(p.Tiers) != 0 {
+		t.Errorf("tiers survived a tier-less pricing replace: %+v", p)
+	}
+}

@@ -1100,8 +1100,16 @@ type ModelPricing struct {
 	OutputPerMillionTokens     *float64               `protobuf:"fixed64,2,opt,name=output_per_million_tokens,json=outputPerMillionTokens,proto3,oneof" json:"output_per_million_tokens,omitempty"`
 	CacheReadPerMillionTokens  *float64               `protobuf:"fixed64,3,opt,name=cache_read_per_million_tokens,json=cacheReadPerMillionTokens,proto3,oneof" json:"cache_read_per_million_tokens,omitempty"`
 	CacheWritePerMillionTokens *float64               `protobuf:"fixed64,4,opt,name=cache_write_per_million_tokens,json=cacheWritePerMillionTokens,proto3,oneof" json:"cache_write_per_million_tokens,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Context-size pricing steps (grok-4.5-style). A tier applies when
+	// the request's prompt tokens (input + cache read + cache write)
+	// EXCEED threshold_tokens; the highest matching threshold wins and
+	// the WHOLE request prices at that tier. Unset subfields inherit
+	// the flat fields above. The catalog carries no tiers — these are
+	// user-maintained metadata, replaced wholesale with the pricing
+	// block on update.
+	Tiers         []*PricingTier `protobuf:"bytes,5,rep,name=tiers,proto3" json:"tiers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ModelPricing) Reset() {
@@ -1162,6 +1170,89 @@ func (x *ModelPricing) GetCacheWritePerMillionTokens() float64 {
 	return 0
 }
 
+func (x *ModelPricing) GetTiers() []*PricingTier {
+	if x != nil {
+		return x.Tiers
+	}
+	return nil
+}
+
+type PricingTier struct {
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	ThresholdTokens            int32                  `protobuf:"varint,1,opt,name=threshold_tokens,json=thresholdTokens,proto3" json:"threshold_tokens,omitempty"`
+	InputPerMillionTokens      *float64               `protobuf:"fixed64,2,opt,name=input_per_million_tokens,json=inputPerMillionTokens,proto3,oneof" json:"input_per_million_tokens,omitempty"`
+	OutputPerMillionTokens     *float64               `protobuf:"fixed64,3,opt,name=output_per_million_tokens,json=outputPerMillionTokens,proto3,oneof" json:"output_per_million_tokens,omitempty"`
+	CacheReadPerMillionTokens  *float64               `protobuf:"fixed64,4,opt,name=cache_read_per_million_tokens,json=cacheReadPerMillionTokens,proto3,oneof" json:"cache_read_per_million_tokens,omitempty"`
+	CacheWritePerMillionTokens *float64               `protobuf:"fixed64,5,opt,name=cache_write_per_million_tokens,json=cacheWritePerMillionTokens,proto3,oneof" json:"cache_write_per_million_tokens,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+func (x *PricingTier) Reset() {
+	*x = PricingTier{}
+	mi := &file_psmith_v1_types_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PricingTier) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PricingTier) ProtoMessage() {}
+
+func (x *PricingTier) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_types_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PricingTier.ProtoReflect.Descriptor instead.
+func (*PricingTier) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PricingTier) GetThresholdTokens() int32 {
+	if x != nil {
+		return x.ThresholdTokens
+	}
+	return 0
+}
+
+func (x *PricingTier) GetInputPerMillionTokens() float64 {
+	if x != nil && x.InputPerMillionTokens != nil {
+		return *x.InputPerMillionTokens
+	}
+	return 0
+}
+
+func (x *PricingTier) GetOutputPerMillionTokens() float64 {
+	if x != nil && x.OutputPerMillionTokens != nil {
+		return *x.OutputPerMillionTokens
+	}
+	return 0
+}
+
+func (x *PricingTier) GetCacheReadPerMillionTokens() float64 {
+	if x != nil && x.CacheReadPerMillionTokens != nil {
+		return *x.CacheReadPerMillionTokens
+	}
+	return 0
+}
+
+func (x *PricingTier) GetCacheWritePerMillionTokens() float64 {
+	if x != nil && x.CacheWritePerMillionTokens != nil {
+		return *x.CacheWritePerMillionTokens
+	}
+	return 0
+}
+
 // Read-only catalog provider entry (refreshed periodically from models.dev).
 type CatalogModelProvider struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1178,7 +1269,7 @@ type CatalogModelProvider struct {
 
 func (x *CatalogModelProvider) Reset() {
 	*x = CatalogModelProvider{}
-	mi := &file_psmith_v1_types_proto_msgTypes[6]
+	mi := &file_psmith_v1_types_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1281,7 @@ func (x *CatalogModelProvider) String() string {
 func (*CatalogModelProvider) ProtoMessage() {}
 
 func (x *CatalogModelProvider) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[6]
+	mi := &file_psmith_v1_types_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1294,7 @@ func (x *CatalogModelProvider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogModelProvider.ProtoReflect.Descriptor instead.
 func (*CatalogModelProvider) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{6}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CatalogModelProvider) GetId() string {
@@ -1274,7 +1365,7 @@ type CatalogModel struct {
 
 func (x *CatalogModel) Reset() {
 	*x = CatalogModel{}
-	mi := &file_psmith_v1_types_proto_msgTypes[7]
+	mi := &file_psmith_v1_types_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1377,7 @@ func (x *CatalogModel) String() string {
 func (*CatalogModel) ProtoMessage() {}
 
 func (x *CatalogModel) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[7]
+	mi := &file_psmith_v1_types_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1390,7 @@ func (x *CatalogModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogModel.ProtoReflect.Descriptor instead.
 func (*CatalogModel) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{7}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CatalogModel) GetProviderId() string {
@@ -1407,7 +1498,7 @@ type UserModel struct {
 
 func (x *UserModel) Reset() {
 	*x = UserModel{}
-	mi := &file_psmith_v1_types_proto_msgTypes[8]
+	mi := &file_psmith_v1_types_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1419,7 +1510,7 @@ func (x *UserModel) String() string {
 func (*UserModel) ProtoMessage() {}
 
 func (x *UserModel) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[8]
+	mi := &file_psmith_v1_types_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1432,7 +1523,7 @@ func (x *UserModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserModel.ProtoReflect.Descriptor instead.
 func (*UserModel) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UserModel) GetUserModelProviderId() string {
@@ -1560,7 +1651,7 @@ type ModelConstraints struct {
 
 func (x *ModelConstraints) Reset() {
 	*x = ModelConstraints{}
-	mi := &file_psmith_v1_types_proto_msgTypes[9]
+	mi := &file_psmith_v1_types_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1572,7 +1663,7 @@ func (x *ModelConstraints) String() string {
 func (*ModelConstraints) ProtoMessage() {}
 
 func (x *ModelConstraints) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[9]
+	mi := &file_psmith_v1_types_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1585,7 +1676,7 @@ func (x *ModelConstraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelConstraints.ProtoReflect.Descriptor instead.
 func (*ModelConstraints) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ModelConstraints) GetTemperature() *Range {
@@ -1617,7 +1708,7 @@ type Range struct {
 
 func (x *Range) Reset() {
 	*x = Range{}
-	mi := &file_psmith_v1_types_proto_msgTypes[10]
+	mi := &file_psmith_v1_types_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1629,7 +1720,7 @@ func (x *Range) String() string {
 func (*Range) ProtoMessage() {}
 
 func (x *Range) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[10]
+	mi := &file_psmith_v1_types_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1642,7 +1733,7 @@ func (x *Range) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Range.ProtoReflect.Descriptor instead.
 func (*Range) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Range) GetMin() float64 {
@@ -1706,7 +1797,7 @@ type CallSettings struct {
 
 func (x *CallSettings) Reset() {
 	*x = CallSettings{}
-	mi := &file_psmith_v1_types_proto_msgTypes[11]
+	mi := &file_psmith_v1_types_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1718,7 +1809,7 @@ func (x *CallSettings) String() string {
 func (*CallSettings) ProtoMessage() {}
 
 func (x *CallSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[11]
+	mi := &file_psmith_v1_types_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1731,7 +1822,7 @@ func (x *CallSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallSettings.ProtoReflect.Descriptor instead.
 func (*CallSettings) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{11}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CallSettings) GetTemperature() float64 {
@@ -1821,7 +1912,7 @@ type ThinkingSettings struct {
 
 func (x *ThinkingSettings) Reset() {
 	*x = ThinkingSettings{}
-	mi := &file_psmith_v1_types_proto_msgTypes[12]
+	mi := &file_psmith_v1_types_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1833,7 +1924,7 @@ func (x *ThinkingSettings) String() string {
 func (*ThinkingSettings) ProtoMessage() {}
 
 func (x *ThinkingSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[12]
+	mi := &file_psmith_v1_types_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1846,7 +1937,7 @@ func (x *ThinkingSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThinkingSettings.ProtoReflect.Descriptor instead.
 func (*ThinkingSettings) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ThinkingSettings) GetEnabled() bool {
@@ -1882,7 +1973,7 @@ type AnthropicExtras struct {
 
 func (x *AnthropicExtras) Reset() {
 	*x = AnthropicExtras{}
-	mi := &file_psmith_v1_types_proto_msgTypes[13]
+	mi := &file_psmith_v1_types_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1894,7 +1985,7 @@ func (x *AnthropicExtras) String() string {
 func (*AnthropicExtras) ProtoMessage() {}
 
 func (x *AnthropicExtras) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[13]
+	mi := &file_psmith_v1_types_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1907,7 +1998,7 @@ func (x *AnthropicExtras) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnthropicExtras.ProtoReflect.Descriptor instead.
 func (*AnthropicExtras) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AnthropicExtras) GetCacheEnabled() bool {
@@ -1944,7 +2035,7 @@ type OpenAIExtras struct {
 
 func (x *OpenAIExtras) Reset() {
 	*x = OpenAIExtras{}
-	mi := &file_psmith_v1_types_proto_msgTypes[14]
+	mi := &file_psmith_v1_types_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1956,7 +2047,7 @@ func (x *OpenAIExtras) String() string {
 func (*OpenAIExtras) ProtoMessage() {}
 
 func (x *OpenAIExtras) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[14]
+	mi := &file_psmith_v1_types_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1969,7 +2060,7 @@ func (x *OpenAIExtras) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenAIExtras.ProtoReflect.Descriptor instead.
 func (*OpenAIExtras) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{14}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *OpenAIExtras) GetSeed() int32 {
@@ -2047,7 +2138,7 @@ type ResponseFormat struct {
 
 func (x *ResponseFormat) Reset() {
 	*x = ResponseFormat{}
-	mi := &file_psmith_v1_types_proto_msgTypes[15]
+	mi := &file_psmith_v1_types_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2059,7 +2150,7 @@ func (x *ResponseFormat) String() string {
 func (*ResponseFormat) ProtoMessage() {}
 
 func (x *ResponseFormat) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[15]
+	mi := &file_psmith_v1_types_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2072,7 +2163,7 @@ func (x *ResponseFormat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResponseFormat.ProtoReflect.Descriptor instead.
 func (*ResponseFormat) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{15}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ResponseFormat) GetKind() isResponseFormat_Kind {
@@ -2143,7 +2234,7 @@ type JsonSchema struct {
 
 func (x *JsonSchema) Reset() {
 	*x = JsonSchema{}
-	mi := &file_psmith_v1_types_proto_msgTypes[16]
+	mi := &file_psmith_v1_types_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2155,7 +2246,7 @@ func (x *JsonSchema) String() string {
 func (*JsonSchema) ProtoMessage() {}
 
 func (x *JsonSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[16]
+	mi := &file_psmith_v1_types_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2168,7 +2259,7 @@ func (x *JsonSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JsonSchema.ProtoReflect.Descriptor instead.
 func (*JsonSchema) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{16}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *JsonSchema) GetName() string {
@@ -2212,7 +2303,7 @@ type GoogleExtras struct {
 
 func (x *GoogleExtras) Reset() {
 	*x = GoogleExtras{}
-	mi := &file_psmith_v1_types_proto_msgTypes[17]
+	mi := &file_psmith_v1_types_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2224,7 +2315,7 @@ func (x *GoogleExtras) String() string {
 func (*GoogleExtras) ProtoMessage() {}
 
 func (x *GoogleExtras) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[17]
+	mi := &file_psmith_v1_types_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2237,7 +2328,7 @@ func (x *GoogleExtras) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GoogleExtras.ProtoReflect.Descriptor instead.
 func (*GoogleExtras) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{17}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GoogleExtras) GetSafetySettings() *SafetySettings {
@@ -2280,7 +2371,7 @@ type SafetySettings struct {
 
 func (x *SafetySettings) Reset() {
 	*x = SafetySettings{}
-	mi := &file_psmith_v1_types_proto_msgTypes[18]
+	mi := &file_psmith_v1_types_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2383,7 @@ func (x *SafetySettings) String() string {
 func (*SafetySettings) ProtoMessage() {}
 
 func (x *SafetySettings) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[18]
+	mi := &file_psmith_v1_types_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2396,7 @@ func (x *SafetySettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SafetySettings.ProtoReflect.Descriptor instead.
 func (*SafetySettings) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{18}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SafetySettings) GetHarassment() HarmThreshold {
@@ -2352,7 +2443,7 @@ type ProfileDefaults struct {
 
 func (x *ProfileDefaults) Reset() {
 	*x = ProfileDefaults{}
-	mi := &file_psmith_v1_types_proto_msgTypes[19]
+	mi := &file_psmith_v1_types_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2364,7 +2455,7 @@ func (x *ProfileDefaults) String() string {
 func (*ProfileDefaults) ProtoMessage() {}
 
 func (x *ProfileDefaults) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[19]
+	mi := &file_psmith_v1_types_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2377,7 +2468,7 @@ func (x *ProfileDefaults) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileDefaults.ProtoReflect.Descriptor instead.
 func (*ProfileDefaults) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{19}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ProfileDefaults) GetDefaultProviderId() string {
@@ -2483,7 +2574,7 @@ type Profile struct {
 
 func (x *Profile) Reset() {
 	*x = Profile{}
-	mi := &file_psmith_v1_types_proto_msgTypes[20]
+	mi := &file_psmith_v1_types_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2495,7 +2586,7 @@ func (x *Profile) String() string {
 func (*Profile) ProtoMessage() {}
 
 func (x *Profile) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[20]
+	mi := &file_psmith_v1_types_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2508,7 +2599,7 @@ func (x *Profile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Profile.ProtoReflect.Descriptor instead.
 func (*Profile) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{20}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Profile) GetId() string {
@@ -2687,7 +2778,7 @@ type ConversationSettings struct {
 
 func (x *ConversationSettings) Reset() {
 	*x = ConversationSettings{}
-	mi := &file_psmith_v1_types_proto_msgTypes[21]
+	mi := &file_psmith_v1_types_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2699,7 +2790,7 @@ func (x *ConversationSettings) String() string {
 func (*ConversationSettings) ProtoMessage() {}
 
 func (x *ConversationSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[21]
+	mi := &file_psmith_v1_types_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2712,7 +2803,7 @@ func (x *ConversationSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSettings.ProtoReflect.Descriptor instead.
 func (*ConversationSettings) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{21}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ConversationSettings) GetDefaultProviderId() string {
@@ -2783,7 +2874,7 @@ type Conversation struct {
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_psmith_v1_types_proto_msgTypes[22]
+	mi := &file_psmith_v1_types_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2795,7 +2886,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[22]
+	mi := &file_psmith_v1_types_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2808,7 +2899,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{22}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Conversation) GetId() string {
@@ -2912,7 +3003,7 @@ type StreamingComponentTag struct {
 
 func (x *StreamingComponentTag) Reset() {
 	*x = StreamingComponentTag{}
-	mi := &file_psmith_v1_types_proto_msgTypes[23]
+	mi := &file_psmith_v1_types_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2924,7 +3015,7 @@ func (x *StreamingComponentTag) String() string {
 func (*StreamingComponentTag) ProtoMessage() {}
 
 func (x *StreamingComponentTag) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[23]
+	mi := &file_psmith_v1_types_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2937,7 +3028,7 @@ func (x *StreamingComponentTag) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamingComponentTag.ProtoReflect.Descriptor instead.
 func (*StreamingComponentTag) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{23}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *StreamingComponentTag) GetTag() string {
@@ -2995,7 +3086,7 @@ type Context struct {
 
 func (x *Context) Reset() {
 	*x = Context{}
-	mi := &file_psmith_v1_types_proto_msgTypes[24]
+	mi := &file_psmith_v1_types_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3007,7 +3098,7 @@ func (x *Context) String() string {
 func (*Context) ProtoMessage() {}
 
 func (x *Context) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[24]
+	mi := &file_psmith_v1_types_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3020,7 +3111,7 @@ func (x *Context) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Context.ProtoReflect.Descriptor instead.
 func (*Context) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{24}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Context) GetId() string {
@@ -3180,7 +3271,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_psmith_v1_types_proto_msgTypes[25]
+	mi := &file_psmith_v1_types_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3192,7 +3283,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[25]
+	mi := &file_psmith_v1_types_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3205,7 +3296,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{25}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Message) GetId() string {
@@ -3400,7 +3491,7 @@ type UIFragment struct {
 
 func (x *UIFragment) Reset() {
 	*x = UIFragment{}
-	mi := &file_psmith_v1_types_proto_msgTypes[26]
+	mi := &file_psmith_v1_types_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3412,7 +3503,7 @@ func (x *UIFragment) String() string {
 func (*UIFragment) ProtoMessage() {}
 
 func (x *UIFragment) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[26]
+	mi := &file_psmith_v1_types_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3425,7 +3516,7 @@ func (x *UIFragment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UIFragment.ProtoReflect.Descriptor instead.
 func (*UIFragment) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{26}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UIFragment) GetComponent() string {
@@ -3483,7 +3574,7 @@ type MessageAttachment struct {
 
 func (x *MessageAttachment) Reset() {
 	*x = MessageAttachment{}
-	mi := &file_psmith_v1_types_proto_msgTypes[27]
+	mi := &file_psmith_v1_types_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3495,7 +3586,7 @@ func (x *MessageAttachment) String() string {
 func (*MessageAttachment) ProtoMessage() {}
 
 func (x *MessageAttachment) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[27]
+	mi := &file_psmith_v1_types_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3508,7 +3599,7 @@ func (x *MessageAttachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageAttachment.ProtoReflect.Descriptor instead.
 func (*MessageAttachment) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{27}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MessageAttachment) GetFileId() string {
@@ -3579,7 +3670,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_psmith_v1_types_proto_msgTypes[28]
+	mi := &file_psmith_v1_types_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3591,7 +3682,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[28]
+	mi := &file_psmith_v1_types_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3604,7 +3695,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{28}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ToolCall) GetId() string {
@@ -3696,7 +3787,7 @@ type MessageUsage struct {
 
 func (x *MessageUsage) Reset() {
 	*x = MessageUsage{}
-	mi := &file_psmith_v1_types_proto_msgTypes[29]
+	mi := &file_psmith_v1_types_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3708,7 +3799,7 @@ func (x *MessageUsage) String() string {
 func (*MessageUsage) ProtoMessage() {}
 
 func (x *MessageUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[29]
+	mi := &file_psmith_v1_types_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3721,7 +3812,7 @@ func (x *MessageUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageUsage.ProtoReflect.Descriptor instead.
 func (*MessageUsage) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{29}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *MessageUsage) GetInputTokens() int32 {
@@ -3844,7 +3935,7 @@ type StreamRun struct {
 
 func (x *StreamRun) Reset() {
 	*x = StreamRun{}
-	mi := &file_psmith_v1_types_proto_msgTypes[30]
+	mi := &file_psmith_v1_types_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3856,7 +3947,7 @@ func (x *StreamRun) String() string {
 func (*StreamRun) ProtoMessage() {}
 
 func (x *StreamRun) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[30]
+	mi := &file_psmith_v1_types_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3869,7 +3960,7 @@ func (x *StreamRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamRun.ProtoReflect.Descriptor instead.
 func (*StreamRun) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{30}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *StreamRun) GetId() string {
@@ -3995,7 +4086,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_psmith_v1_types_proto_msgTypes[31]
+	mi := &file_psmith_v1_types_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4007,7 +4098,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[31]
+	mi := &file_psmith_v1_types_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4020,7 +4111,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{31}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *Chunk) GetSequence() int64 {
@@ -4057,7 +4148,7 @@ type DeviceFact struct {
 
 func (x *DeviceFact) Reset() {
 	*x = DeviceFact{}
-	mi := &file_psmith_v1_types_proto_msgTypes[32]
+	mi := &file_psmith_v1_types_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4069,7 +4160,7 @@ func (x *DeviceFact) String() string {
 func (*DeviceFact) ProtoMessage() {}
 
 func (x *DeviceFact) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_types_proto_msgTypes[32]
+	mi := &file_psmith_v1_types_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4082,7 +4173,7 @@ func (x *DeviceFact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceFact.ProtoReflect.Descriptor instead.
 func (*DeviceFact) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{32}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeviceFact) GetKey() DeviceFactKey {
@@ -4156,12 +4247,23 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\btool_use\x18\x03 \x01(\bR\atoolUse\x12\x16\n" +
 	"\x06vision\x18\x04 \x01(\bR\x06vision\x12%\n" +
 	"\x0eprompt_caching\x18\x05 \x01(\bR\rpromptCaching\x12)\n" +
-	"\x10generates_images\x18\x06 \x01(\bR\x0fgeneratesImages\"\x9c\x03\n" +
+	"\x10generates_images\x18\x06 \x01(\bR\x0fgeneratesImages\"\xca\x03\n" +
 	"\fModelPricing\x12<\n" +
 	"\x18input_per_million_tokens\x18\x01 \x01(\x01H\x00R\x15inputPerMillionTokens\x88\x01\x01\x12>\n" +
 	"\x19output_per_million_tokens\x18\x02 \x01(\x01H\x01R\x16outputPerMillionTokens\x88\x01\x01\x12E\n" +
 	"\x1dcache_read_per_million_tokens\x18\x03 \x01(\x01H\x02R\x19cacheReadPerMillionTokens\x88\x01\x01\x12G\n" +
-	"\x1ecache_write_per_million_tokens\x18\x04 \x01(\x01H\x03R\x1acacheWritePerMillionTokens\x88\x01\x01B\x1b\n" +
+	"\x1ecache_write_per_million_tokens\x18\x04 \x01(\x01H\x03R\x1acacheWritePerMillionTokens\x88\x01\x01\x12,\n" +
+	"\x05tiers\x18\x05 \x03(\v2\x16.psmith.v1.PricingTierR\x05tiersB\x1b\n" +
+	"\x19_input_per_million_tokensB\x1c\n" +
+	"\x1a_output_per_million_tokensB \n" +
+	"\x1e_cache_read_per_million_tokensB!\n" +
+	"\x1f_cache_write_per_million_tokens\"\xc6\x03\n" +
+	"\vPricingTier\x12)\n" +
+	"\x10threshold_tokens\x18\x01 \x01(\x05R\x0fthresholdTokens\x12<\n" +
+	"\x18input_per_million_tokens\x18\x02 \x01(\x01H\x00R\x15inputPerMillionTokens\x88\x01\x01\x12>\n" +
+	"\x19output_per_million_tokens\x18\x03 \x01(\x01H\x01R\x16outputPerMillionTokens\x88\x01\x01\x12E\n" +
+	"\x1dcache_read_per_million_tokens\x18\x04 \x01(\x01H\x02R\x19cacheReadPerMillionTokens\x88\x01\x01\x12G\n" +
+	"\x1ecache_write_per_million_tokens\x18\x05 \x01(\x01H\x03R\x1acacheWritePerMillionTokens\x88\x01\x01B\x1b\n" +
 	"\x19_input_per_million_tokensB\x1c\n" +
 	"\x1a_output_per_million_tokensB \n" +
 	"\x1e_cache_read_per_million_tokensB!\n" +
@@ -4653,7 +4755,7 @@ func file_psmith_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_psmith_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_psmith_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_psmith_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: psmith.v1.MetadataSource
 	(CacheTTL)(0),                 // 1: psmith.v1.CacheTTL
@@ -4671,102 +4773,104 @@ var file_psmith_v1_types_proto_goTypes = []any{
 	(*ProviderTemplate)(nil),      // 13: psmith.v1.ProviderTemplate
 	(*ModelCapabilities)(nil),     // 14: psmith.v1.ModelCapabilities
 	(*ModelPricing)(nil),          // 15: psmith.v1.ModelPricing
-	(*CatalogModelProvider)(nil),  // 16: psmith.v1.CatalogModelProvider
-	(*CatalogModel)(nil),          // 17: psmith.v1.CatalogModel
-	(*UserModel)(nil),             // 18: psmith.v1.UserModel
-	(*ModelConstraints)(nil),      // 19: psmith.v1.ModelConstraints
-	(*Range)(nil),                 // 20: psmith.v1.Range
-	(*CallSettings)(nil),          // 21: psmith.v1.CallSettings
-	(*ThinkingSettings)(nil),      // 22: psmith.v1.ThinkingSettings
-	(*AnthropicExtras)(nil),       // 23: psmith.v1.AnthropicExtras
-	(*OpenAIExtras)(nil),          // 24: psmith.v1.OpenAIExtras
-	(*ResponseFormat)(nil),        // 25: psmith.v1.ResponseFormat
-	(*JsonSchema)(nil),            // 26: psmith.v1.JsonSchema
-	(*GoogleExtras)(nil),          // 27: psmith.v1.GoogleExtras
-	(*SafetySettings)(nil),        // 28: psmith.v1.SafetySettings
-	(*ProfileDefaults)(nil),       // 29: psmith.v1.ProfileDefaults
-	(*Profile)(nil),               // 30: psmith.v1.Profile
-	(*ConversationSettings)(nil),  // 31: psmith.v1.ConversationSettings
-	(*Conversation)(nil),          // 32: psmith.v1.Conversation
-	(*StreamingComponentTag)(nil), // 33: psmith.v1.StreamingComponentTag
-	(*Context)(nil),               // 34: psmith.v1.Context
-	(*Message)(nil),               // 35: psmith.v1.Message
-	(*UIFragment)(nil),            // 36: psmith.v1.UIFragment
-	(*MessageAttachment)(nil),     // 37: psmith.v1.MessageAttachment
-	(*ToolCall)(nil),              // 38: psmith.v1.ToolCall
-	(*MessageUsage)(nil),          // 39: psmith.v1.MessageUsage
-	(*StreamRun)(nil),             // 40: psmith.v1.StreamRun
-	(*Chunk)(nil),                 // 41: psmith.v1.Chunk
-	(*DeviceFact)(nil),            // 42: psmith.v1.DeviceFact
-	nil,                           // 43: psmith.v1.OpenAIExtras.LogitBiasEntry
-	(*timestamppb.Timestamp)(nil), // 44: google.protobuf.Timestamp
+	(*PricingTier)(nil),           // 16: psmith.v1.PricingTier
+	(*CatalogModelProvider)(nil),  // 17: psmith.v1.CatalogModelProvider
+	(*CatalogModel)(nil),          // 18: psmith.v1.CatalogModel
+	(*UserModel)(nil),             // 19: psmith.v1.UserModel
+	(*ModelConstraints)(nil),      // 20: psmith.v1.ModelConstraints
+	(*Range)(nil),                 // 21: psmith.v1.Range
+	(*CallSettings)(nil),          // 22: psmith.v1.CallSettings
+	(*ThinkingSettings)(nil),      // 23: psmith.v1.ThinkingSettings
+	(*AnthropicExtras)(nil),       // 24: psmith.v1.AnthropicExtras
+	(*OpenAIExtras)(nil),          // 25: psmith.v1.OpenAIExtras
+	(*ResponseFormat)(nil),        // 26: psmith.v1.ResponseFormat
+	(*JsonSchema)(nil),            // 27: psmith.v1.JsonSchema
+	(*GoogleExtras)(nil),          // 28: psmith.v1.GoogleExtras
+	(*SafetySettings)(nil),        // 29: psmith.v1.SafetySettings
+	(*ProfileDefaults)(nil),       // 30: psmith.v1.ProfileDefaults
+	(*Profile)(nil),               // 31: psmith.v1.Profile
+	(*ConversationSettings)(nil),  // 32: psmith.v1.ConversationSettings
+	(*Conversation)(nil),          // 33: psmith.v1.Conversation
+	(*StreamingComponentTag)(nil), // 34: psmith.v1.StreamingComponentTag
+	(*Context)(nil),               // 35: psmith.v1.Context
+	(*Message)(nil),               // 36: psmith.v1.Message
+	(*UIFragment)(nil),            // 37: psmith.v1.UIFragment
+	(*MessageAttachment)(nil),     // 38: psmith.v1.MessageAttachment
+	(*ToolCall)(nil),              // 39: psmith.v1.ToolCall
+	(*MessageUsage)(nil),          // 40: psmith.v1.MessageUsage
+	(*StreamRun)(nil),             // 41: psmith.v1.StreamRun
+	(*Chunk)(nil),                 // 42: psmith.v1.Chunk
+	(*DeviceFact)(nil),            // 43: psmith.v1.DeviceFact
+	nil,                           // 44: psmith.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 45: google.protobuf.Timestamp
 }
 var file_psmith_v1_types_proto_depIdxs = []int32{
-	44, // 0: psmith.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	44, // 1: psmith.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	44, // 2: psmith.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	44, // 3: psmith.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
-	21, // 4: psmith.v1.UserModelProvider.default_settings:type_name -> psmith.v1.CallSettings
-	44, // 5: psmith.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
-	15, // 6: psmith.v1.CatalogModel.pricing:type_name -> psmith.v1.ModelPricing
-	14, // 7: psmith.v1.CatalogModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	44, // 8: psmith.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
-	15, // 9: psmith.v1.UserModel.pricing:type_name -> psmith.v1.ModelPricing
-	14, // 10: psmith.v1.UserModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	21, // 11: psmith.v1.UserModel.default_settings:type_name -> psmith.v1.CallSettings
-	0,  // 12: psmith.v1.UserModel.metadata_source:type_name -> psmith.v1.MetadataSource
-	44, // 13: psmith.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	44, // 14: psmith.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
-	19, // 15: psmith.v1.UserModel.constraints:type_name -> psmith.v1.ModelConstraints
-	20, // 16: psmith.v1.ModelConstraints.temperature:type_name -> psmith.v1.Range
-	22, // 17: psmith.v1.CallSettings.thinking:type_name -> psmith.v1.ThinkingSettings
-	23, // 18: psmith.v1.CallSettings.anthropic:type_name -> psmith.v1.AnthropicExtras
-	24, // 19: psmith.v1.CallSettings.openai:type_name -> psmith.v1.OpenAIExtras
-	27, // 20: psmith.v1.CallSettings.google:type_name -> psmith.v1.GoogleExtras
-	1,  // 21: psmith.v1.AnthropicExtras.cache_ttl:type_name -> psmith.v1.CacheTTL
-	2,  // 22: psmith.v1.OpenAIExtras.service_tier:type_name -> psmith.v1.ServiceTier
-	25, // 23: psmith.v1.OpenAIExtras.response_format:type_name -> psmith.v1.ResponseFormat
-	43, // 24: psmith.v1.OpenAIExtras.logit_bias:type_name -> psmith.v1.OpenAIExtras.LogitBiasEntry
-	26, // 25: psmith.v1.ResponseFormat.json_schema:type_name -> psmith.v1.JsonSchema
-	28, // 26: psmith.v1.GoogleExtras.safety_settings:type_name -> psmith.v1.SafetySettings
-	3,  // 27: psmith.v1.SafetySettings.harassment:type_name -> psmith.v1.HarmThreshold
-	3,  // 28: psmith.v1.SafetySettings.hate_speech:type_name -> psmith.v1.HarmThreshold
-	3,  // 29: psmith.v1.SafetySettings.sexually_explicit:type_name -> psmith.v1.HarmThreshold
-	3,  // 30: psmith.v1.SafetySettings.dangerous_content:type_name -> psmith.v1.HarmThreshold
-	21, // 31: psmith.v1.ProfileDefaults.call_settings:type_name -> psmith.v1.CallSettings
-	4,  // 32: psmith.v1.Profile.compression_mode:type_name -> psmith.v1.CompressionMode
-	29, // 33: psmith.v1.Profile.default_settings:type_name -> psmith.v1.ProfileDefaults
-	44, // 34: psmith.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	44, // 35: psmith.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	14, // 36: psmith.v1.Profile.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
-	21, // 37: psmith.v1.ConversationSettings.call_settings:type_name -> psmith.v1.CallSettings
-	31, // 38: psmith.v1.Conversation.settings:type_name -> psmith.v1.ConversationSettings
-	44, // 39: psmith.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	44, // 40: psmith.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	44, // 41: psmith.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	33, // 42: psmith.v1.Conversation.streaming_components:type_name -> psmith.v1.StreamingComponentTag
-	44, // 43: psmith.v1.Conversation.archived_at:type_name -> google.protobuf.Timestamp
-	44, // 44: psmith.v1.Conversation.pinned_at:type_name -> google.protobuf.Timestamp
-	44, // 45: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	44, // 46: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 47: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
-	44, // 48: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	39, // 49: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
-	44, // 50: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	38, // 51: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
-	37, // 52: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
-	36, // 53: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
-	6,  // 54: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
-	7,  // 55: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
-	44, // 56: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	44, // 57: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 58: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
-	9,  // 59: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
-	60, // [60:60] is the sub-list for method output_type
-	60, // [60:60] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	45, // 0: psmith.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	45, // 1: psmith.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 2: psmith.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	45, // 3: psmith.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 4: psmith.v1.UserModelProvider.default_settings:type_name -> psmith.v1.CallSettings
+	16, // 5: psmith.v1.ModelPricing.tiers:type_name -> psmith.v1.PricingTier
+	45, // 6: psmith.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	15, // 7: psmith.v1.CatalogModel.pricing:type_name -> psmith.v1.ModelPricing
+	14, // 8: psmith.v1.CatalogModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	45, // 9: psmith.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	15, // 10: psmith.v1.UserModel.pricing:type_name -> psmith.v1.ModelPricing
+	14, // 11: psmith.v1.UserModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	22, // 12: psmith.v1.UserModel.default_settings:type_name -> psmith.v1.CallSettings
+	0,  // 13: psmith.v1.UserModel.metadata_source:type_name -> psmith.v1.MetadataSource
+	45, // 14: psmith.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	45, // 15: psmith.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	20, // 16: psmith.v1.UserModel.constraints:type_name -> psmith.v1.ModelConstraints
+	21, // 17: psmith.v1.ModelConstraints.temperature:type_name -> psmith.v1.Range
+	23, // 18: psmith.v1.CallSettings.thinking:type_name -> psmith.v1.ThinkingSettings
+	24, // 19: psmith.v1.CallSettings.anthropic:type_name -> psmith.v1.AnthropicExtras
+	25, // 20: psmith.v1.CallSettings.openai:type_name -> psmith.v1.OpenAIExtras
+	28, // 21: psmith.v1.CallSettings.google:type_name -> psmith.v1.GoogleExtras
+	1,  // 22: psmith.v1.AnthropicExtras.cache_ttl:type_name -> psmith.v1.CacheTTL
+	2,  // 23: psmith.v1.OpenAIExtras.service_tier:type_name -> psmith.v1.ServiceTier
+	26, // 24: psmith.v1.OpenAIExtras.response_format:type_name -> psmith.v1.ResponseFormat
+	44, // 25: psmith.v1.OpenAIExtras.logit_bias:type_name -> psmith.v1.OpenAIExtras.LogitBiasEntry
+	27, // 26: psmith.v1.ResponseFormat.json_schema:type_name -> psmith.v1.JsonSchema
+	29, // 27: psmith.v1.GoogleExtras.safety_settings:type_name -> psmith.v1.SafetySettings
+	3,  // 28: psmith.v1.SafetySettings.harassment:type_name -> psmith.v1.HarmThreshold
+	3,  // 29: psmith.v1.SafetySettings.hate_speech:type_name -> psmith.v1.HarmThreshold
+	3,  // 30: psmith.v1.SafetySettings.sexually_explicit:type_name -> psmith.v1.HarmThreshold
+	3,  // 31: psmith.v1.SafetySettings.dangerous_content:type_name -> psmith.v1.HarmThreshold
+	22, // 32: psmith.v1.ProfileDefaults.call_settings:type_name -> psmith.v1.CallSettings
+	4,  // 33: psmith.v1.Profile.compression_mode:type_name -> psmith.v1.CompressionMode
+	30, // 34: psmith.v1.Profile.default_settings:type_name -> psmith.v1.ProfileDefaults
+	45, // 35: psmith.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	45, // 36: psmith.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	14, // 37: psmith.v1.Profile.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
+	22, // 38: psmith.v1.ConversationSettings.call_settings:type_name -> psmith.v1.CallSettings
+	32, // 39: psmith.v1.Conversation.settings:type_name -> psmith.v1.ConversationSettings
+	45, // 40: psmith.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	45, // 41: psmith.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 42: psmith.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	34, // 43: psmith.v1.Conversation.streaming_components:type_name -> psmith.v1.StreamingComponentTag
+	45, // 44: psmith.v1.Conversation.archived_at:type_name -> google.protobuf.Timestamp
+	45, // 45: psmith.v1.Conversation.pinned_at:type_name -> google.protobuf.Timestamp
+	45, // 46: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	45, // 47: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 48: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
+	45, // 49: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	40, // 50: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
+	45, // 51: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	39, // 52: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
+	38, // 53: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
+	37, // 54: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
+	6,  // 55: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
+	7,  // 56: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
+	45, // 57: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	45, // 58: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	8,  // 59: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
+	9,  // 60: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
+	61, // [61:61] is the sub-list for method output_type
+	61, // [61:61] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_types_proto_init() }
@@ -4787,31 +4891,32 @@ func file_psmith_v1_types_proto_init() {
 	file_psmith_v1_types_proto_msgTypes[12].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[13].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[14].OneofWrappers = []any{}
-	file_psmith_v1_types_proto_msgTypes[15].OneofWrappers = []any{
+	file_psmith_v1_types_proto_msgTypes[15].OneofWrappers = []any{}
+	file_psmith_v1_types_proto_msgTypes[16].OneofWrappers = []any{
 		(*ResponseFormat_Text)(nil),
 		(*ResponseFormat_JsonObject)(nil),
 		(*ResponseFormat_JsonSchema)(nil),
 	}
-	file_psmith_v1_types_proto_msgTypes[16].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[17].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[18].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[19].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[20].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[21].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[22].OneofWrappers = []any{}
-	file_psmith_v1_types_proto_msgTypes[24].OneofWrappers = []any{}
+	file_psmith_v1_types_proto_msgTypes[23].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[25].OneofWrappers = []any{}
-	file_psmith_v1_types_proto_msgTypes[27].OneofWrappers = []any{}
+	file_psmith_v1_types_proto_msgTypes[26].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[28].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[29].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[30].OneofWrappers = []any{}
+	file_psmith_v1_types_proto_msgTypes[31].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_types_proto_rawDesc), len(file_psmith_v1_types_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

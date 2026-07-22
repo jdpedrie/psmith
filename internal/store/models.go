@@ -278,6 +278,7 @@ type UserModel struct {
 	MetadataSnapshotAt    time.Time
 	EnabledAt             time.Time
 	Favorite              bool
+	PricingTiers          []byte
 }
 
 type UserModelProvider struct {

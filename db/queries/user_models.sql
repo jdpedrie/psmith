@@ -5,8 +5,8 @@ INSERT INTO user_models (
     input_price_per_million, output_price_per_million,
     cache_read_per_million, cache_write_per_million,
     knowledge_cutoff, modalities, capabilities, default_settings,
-    metadata_source, metadata_snapshot_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    metadata_source, metadata_snapshot_at, pricing_tiers
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 ON CONFLICT (user_model_provider_id, model_id) DO UPDATE SET
     display_name              = EXCLUDED.display_name,
     context_window            = EXCLUDED.context_window,
@@ -20,7 +20,8 @@ ON CONFLICT (user_model_provider_id, model_id) DO UPDATE SET
     capabilities              = EXCLUDED.capabilities,
     default_settings          = EXCLUDED.default_settings,
     metadata_source           = EXCLUDED.metadata_source,
-    metadata_snapshot_at      = EXCLUDED.metadata_snapshot_at
+    metadata_snapshot_at      = EXCLUDED.metadata_snapshot_at,
+    pricing_tiers             = EXCLUDED.pricing_tiers
 RETURNING *;
 
 -- name: GetUserModel :one

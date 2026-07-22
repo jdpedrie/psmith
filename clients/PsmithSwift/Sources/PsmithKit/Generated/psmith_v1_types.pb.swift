@@ -846,6 +846,68 @@ public nonisolated struct Psmith_V1_ModelPricing: Sendable {
   /// Clears the value of `cacheWritePerMillionTokens`. Subsequent reads from it will return its default value.
   public mutating func clearCacheWritePerMillionTokens() {self._cacheWritePerMillionTokens = nil}
 
+  /// Context-size pricing steps (grok-4.5-style). A tier applies when
+  /// the request's prompt tokens (input + cache read + cache write)
+  /// EXCEED threshold_tokens; the highest matching threshold wins and
+  /// the WHOLE request prices at that tier. Unset subfields inherit
+  /// the flat fields above. The catalog carries no tiers — these are
+  /// user-maintained metadata, replaced wholesale with the pricing
+  /// block on update.
+  public var tiers: [Psmith_V1_PricingTier] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _inputPerMillionTokens: Double? = nil
+  fileprivate var _outputPerMillionTokens: Double? = nil
+  fileprivate var _cacheReadPerMillionTokens: Double? = nil
+  fileprivate var _cacheWritePerMillionTokens: Double? = nil
+}
+
+public nonisolated struct Psmith_V1_PricingTier: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var thresholdTokens: Int32 = 0
+
+  public var inputPerMillionTokens: Double {
+    get {_inputPerMillionTokens ?? 0}
+    set {_inputPerMillionTokens = newValue}
+  }
+  /// Returns true if `inputPerMillionTokens` has been explicitly set.
+  public var hasInputPerMillionTokens: Bool {self._inputPerMillionTokens != nil}
+  /// Clears the value of `inputPerMillionTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearInputPerMillionTokens() {self._inputPerMillionTokens = nil}
+
+  public var outputPerMillionTokens: Double {
+    get {_outputPerMillionTokens ?? 0}
+    set {_outputPerMillionTokens = newValue}
+  }
+  /// Returns true if `outputPerMillionTokens` has been explicitly set.
+  public var hasOutputPerMillionTokens: Bool {self._outputPerMillionTokens != nil}
+  /// Clears the value of `outputPerMillionTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearOutputPerMillionTokens() {self._outputPerMillionTokens = nil}
+
+  public var cacheReadPerMillionTokens: Double {
+    get {_cacheReadPerMillionTokens ?? 0}
+    set {_cacheReadPerMillionTokens = newValue}
+  }
+  /// Returns true if `cacheReadPerMillionTokens` has been explicitly set.
+  public var hasCacheReadPerMillionTokens: Bool {self._cacheReadPerMillionTokens != nil}
+  /// Clears the value of `cacheReadPerMillionTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearCacheReadPerMillionTokens() {self._cacheReadPerMillionTokens = nil}
+
+  public var cacheWritePerMillionTokens: Double {
+    get {_cacheWritePerMillionTokens ?? 0}
+    set {_cacheWritePerMillionTokens = newValue}
+  }
+  /// Returns true if `cacheWritePerMillionTokens` has been explicitly set.
+  public var hasCacheWritePerMillionTokens: Bool {self._cacheWritePerMillionTokens != nil}
+  /// Clears the value of `cacheWritePerMillionTokens`. Subsequent reads from it will return its default value.
+  public mutating func clearCacheWritePerMillionTokens() {self._cacheWritePerMillionTokens = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3297,7 +3359,7 @@ nonisolated extension Psmith_V1_ModelCapabilities: SwiftProtobuf.Message, SwiftP
 
 nonisolated extension Psmith_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ModelPricing"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_per_million_tokens\0\u{3}output_per_million_tokens\0\u{3}cache_read_per_million_tokens\0\u{3}cache_write_per_million_tokens\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}input_per_million_tokens\0\u{3}output_per_million_tokens\0\u{3}cache_read_per_million_tokens\0\u{3}cache_write_per_million_tokens\0\u{1}tiers\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3309,6 +3371,7 @@ nonisolated extension Psmith_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtob
       case 2: try { try decoder.decodeSingularDoubleField(value: &self._outputPerMillionTokens) }()
       case 3: try { try decoder.decodeSingularDoubleField(value: &self._cacheReadPerMillionTokens) }()
       case 4: try { try decoder.decodeSingularDoubleField(value: &self._cacheWritePerMillionTokens) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.tiers) }()
       default: break
       }
     }
@@ -3331,10 +3394,68 @@ nonisolated extension Psmith_V1_ModelPricing: SwiftProtobuf.Message, SwiftProtob
     try { if let v = self._cacheWritePerMillionTokens {
       try visitor.visitSingularDoubleField(value: v, fieldNumber: 4)
     } }()
+    if !self.tiers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.tiers, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ModelPricing, rhs: Psmith_V1_ModelPricing) -> Bool {
+    if lhs._inputPerMillionTokens != rhs._inputPerMillionTokens {return false}
+    if lhs._outputPerMillionTokens != rhs._outputPerMillionTokens {return false}
+    if lhs._cacheReadPerMillionTokens != rhs._cacheReadPerMillionTokens {return false}
+    if lhs._cacheWritePerMillionTokens != rhs._cacheWritePerMillionTokens {return false}
+    if lhs.tiers != rhs.tiers {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_PricingTier: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PricingTier"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}threshold_tokens\0\u{3}input_per_million_tokens\0\u{3}output_per_million_tokens\0\u{3}cache_read_per_million_tokens\0\u{3}cache_write_per_million_tokens\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.thresholdTokens) }()
+      case 2: try { try decoder.decodeSingularDoubleField(value: &self._inputPerMillionTokens) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self._outputPerMillionTokens) }()
+      case 4: try { try decoder.decodeSingularDoubleField(value: &self._cacheReadPerMillionTokens) }()
+      case 5: try { try decoder.decodeSingularDoubleField(value: &self._cacheWritePerMillionTokens) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.thresholdTokens != 0 {
+      try visitor.visitSingularInt32Field(value: self.thresholdTokens, fieldNumber: 1)
+    }
+    try { if let v = self._inputPerMillionTokens {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._outputPerMillionTokens {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._cacheReadPerMillionTokens {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 4)
+    } }()
+    try { if let v = self._cacheWritePerMillionTokens {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 5)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_PricingTier, rhs: Psmith_V1_PricingTier) -> Bool {
+    if lhs.thresholdTokens != rhs.thresholdTokens {return false}
     if lhs._inputPerMillionTokens != rhs._inputPerMillionTokens {return false}
     if lhs._outputPerMillionTokens != rhs._outputPerMillionTokens {return false}
     if lhs._cacheReadPerMillionTokens != rhs._cacheReadPerMillionTokens {return false}

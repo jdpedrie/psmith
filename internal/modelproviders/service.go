@@ -730,6 +730,7 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[psmi
 		OutputPricePerMillion: existing.OutputPricePerMillion,
 		CacheReadPerMillion:   existing.CacheReadPerMillion,
 		CacheWritePerMillion:  existing.CacheWritePerMillion,
+		PricingTiers:          existing.PricingTiers,
 		KnowledgeCutoff:       existing.KnowledgeCutoff,
 		Modalities:            existing.Modalities,
 		Capabilities:          existing.Capabilities,
@@ -762,10 +763,13 @@ func (s *Service) UpdateUserModel(ctx context.Context, req *connect.Request[psmi
 		// Pricing is replace-block: any subfield not set on the incoming
 		// ModelPricing means "clear that subfield" (matches AddManualModel
 		// semantics where a Pricing object always carries its full intent).
+		// Tiers ride the same contract: the incoming list replaces the
+		// column wholesale (empty = clear).
 		params.InputPricePerMillion = p.InputPerMillionTokens
 		params.OutputPricePerMillion = p.OutputPerMillionTokens
 		params.CacheReadPerMillion = p.CacheReadPerMillionTokens
 		params.CacheWritePerMillion = p.CacheWritePerMillionTokens
+		params.PricingTiers = pricingTiersToJSON(p.Tiers)
 	}
 	if c := req.Msg.Capabilities; c != nil {
 		capJSON, err := json.Marshal(modelmeta.Capabilities{
@@ -919,6 +923,7 @@ func (s *Service) AddManualModel(ctx context.Context, req *connect.Request[psmit
 		params.OutputPricePerMillion = p.OutputPerMillionTokens
 		params.CacheReadPerMillion = p.CacheReadPerMillionTokens
 		params.CacheWritePerMillion = p.CacheWritePerMillionTokens
+		params.PricingTiers = pricingTiersToJSON(p.Tiers)
 	}
 	if c := req.Msg.Capabilities; c != nil {
 		capJSON, err := json.Marshal(modelmeta.Capabilities{

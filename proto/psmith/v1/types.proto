@@ -103,6 +103,22 @@ message ModelPricing {
   optional double output_per_million_tokens = 2;
   optional double cache_read_per_million_tokens = 3;
   optional double cache_write_per_million_tokens = 4;
+  // Context-size pricing steps (grok-4.5-style). A tier applies when
+  // the request's prompt tokens (input + cache read + cache write)
+  // EXCEED threshold_tokens; the highest matching threshold wins and
+  // the WHOLE request prices at that tier. Unset subfields inherit
+  // the flat fields above. The catalog carries no tiers — these are
+  // user-maintained metadata, replaced wholesale with the pricing
+  // block on update.
+  repeated PricingTier tiers = 5;
+}
+
+message PricingTier {
+  int32 threshold_tokens = 1;
+  optional double input_per_million_tokens = 2;
+  optional double output_per_million_tokens = 3;
+  optional double cache_read_per_million_tokens = 4;
+  optional double cache_write_per_million_tokens = 5;
 }
 
 // Read-only catalog provider entry (refreshed periodically from models.dev).
