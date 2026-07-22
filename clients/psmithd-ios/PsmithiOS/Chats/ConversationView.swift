@@ -166,9 +166,8 @@ private struct ConversationBody: View {
     // clamps chasing a flapping content estimate at 100% CPU — came
     // from solving positions against the estimated FAR end of a
     // LazyVStack. Inverted, the interesting edge is the exact end;
-    // estimate error still exists but lives entirely in the
-    // old-history direction, where nothing ever solves against it
-    // and a wrong guess only miscalibrates the scrollbar.
+    // and since the stack went eager (see paneScrollBody) there is
+    // no estimate error anywhere — every offset is a laid-out fact.
     //
     // What this deletes: the cold-entry tail window + staged
     // backfill + entry curtain + settle failsafes, the pill
@@ -470,12 +469,39 @@ private struct ConversationBody: View {
                 // Children are listed newest-first and each row applies
                 // its own y-flip (`chatRowFlip`), so through the scroll
                 // view's outer flip the transcript reads chronological.
-                // LazyVStack laziness now works WITH the design: initial
-                // render realizes rows outward from offset 0 (the
-                // newest), and older rows realize on scroll — no mount
-                // window, no staged backfill, no entry curtain.
-                LazyVStack(alignment: .leading, spacing: 12) {
+                //
+                // EAGER VStack, deliberately not LazyVStack. On iOS 26
+                // each row's un-flip is committed as a CALayer transform
+                // on a per-row UIKit portal container (the containers
+                // exist because of the rows' context menus — hierarchy-
+                // dump verified). When LazyVStack realizes a row
+                // MID-FLING, the row's drawing appears frames before
+                // that transform lands, and the whole message renders
+                // upside-down until scroll settle (device-video
+                // verified, sustained 400ms+). An eager stack realizes
+                // every row in the entry transaction, where content and
+                // transform commit together — the race is unreachable,
+                // and every offset estimate LazyVStack would have
+                // guessed at becomes exact. Entry cost is bounded by
+                // MarkdownBudget: the 200×800w fixture plus a 180KB
+                // summary card paints inside the push animation
+                // (sim-measured); watch entry feel and memory on
+                // device before scaling fixtures further.
+                VStack(alignment: .leading, spacing: 12) {
                     StreamingArea(model: model)
+                        // fixedSize BEFORE the cap: frame(maxHeight:)
+                        // clamps the height PROPOSAL, and MarkdownUI
+                        // under a too-short proposal degrades every
+                        // paragraph to one truncated line (the same
+                        // proposal-starvation class as the Mac
+                        // blockquote bug; user-reported here as
+                        // "paragraphs truncate while streaming, snap
+                        // into place at stream end"). fixedSize lets
+                        // the content lay out at its ideal height
+                        // regardless, so the frame below only caps
+                        // the LAYOUT size and the clip only hides
+                        // overflow.
+                        .fixedSize(horizontal: false, vertical: true)
                         // The park: cap the streaming row's rendered
                         // height at ~one viewport. While the reply is
                         // shorter, the cap is inert and the rest edge
@@ -502,9 +528,11 @@ private struct ConversationBody: View {
                     // only `model.messages`. Without this split, every
                     // streaming chunk (which mutates streamingText on the
                     // shared @Observable model) would re-eval the entire
-                    // LazyVStack content closure — running ForEach over
+                    // stack content closure — running ForEach over
                     // N messages and constructing N MessageRow values
-                    // per chunk, even though none of them changed.
+                    // per chunk, even though none of them changed. The
+                    // eager stack raises the stakes: a spurious re-eval
+                    // re-renders ALL rows, not just realized ones.
                     ChatHistoryArea(model: model)
                         .equatable()
                 }
@@ -1009,11 +1037,10 @@ private struct ConversationMenu: View {
 /// Renders the settled message + compression-summary timeline,
 /// NEWEST-FIRST for the flipped stack (each row un-flips itself via
 /// `chatRowFlip`). Observes only `model.messages`; immune to
-/// streaming-text churn. No mount window: LazyVStack realizes rows
-/// outward from the newest edge and older rows realize on scroll —
-/// laziness and the inverted origin point the same direction now.
-/// Message ids are stable, so a new message is a pure head-insert in
-/// ForEach's diff.
+/// streaming-text churn. Rows render eagerly (see paneScrollBody for
+/// why laziness is banned here), so every row's un-flip commits in
+/// the same transaction as its content. Message ids are stable, so a
+/// new message is a pure head-insert in ForEach's diff.
 private struct ChatHistoryArea: View, @MainActor Equatable {
     @Bindable var model: ConversationViewModel
     @Environment(\.chatPaneWidth) private var paneWidth
