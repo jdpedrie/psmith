@@ -1,4 +1,9 @@
 import Foundation
+import os.log
+
+/// Breadcrumbs for the on-device/cloud title decision — the skip
+/// paths are silent by design and were once undiagnosable.
+private let titleLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "Titles")
 import Observation
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
@@ -554,22 +559,43 @@ public final class ConversationViewModel {
         if !profilesByID.isEmpty {
             localTitleProfilesByID = profilesByID
         }
-        guard let titler = localTitler else { return }
         guard !localTitleAttempted else { return }
-        guard titler.isAvailable else { return }
         // Read the live conversation title — if another path already set one
         // (manual rename, server, parallel client) skip silently.
         if !(conversation.title ?? "").isEmpty { return }
         let resolveMap = profilesByID.isEmpty ? localTitleProfilesByID : profilesByID
+        if resolveMap.isEmpty {
+            // Profile cache empty (list not loaded yet) — the kind can't
+            // resolve, so this open silently does nothing. Logged because
+            // that silence once cost a debugging round.
+            titleLog.notice("local title: profile cache empty; skipping resolve for conversation \(self.conversation.id, privacy: .public)")
+            return
+        }
         // Determine the resolved profile kind. The cheap path: walk the
         // local profile cache up the parent chain (mirrors server-side
-        // `Resolve` first-non-null logic). The Mac client always loads the
-        // full profile list at startup, so the cache should be populated.
+        // `Resolve` first-non-null logic).
         guard resolvedTitleProviderKind(profilesByID: resolveMap) == PsmithTitleProviderKind.appleFoundation else { return }
         let realMessages = messages.filter { $0.role == .user || $0.role == .assistant }
         guard realMessages.count >= 2 else { return }
 
         localTitleAttempted = true
+
+        // The profile delegates titling to the client. When the
+        // on-device model can't run here (no FoundationModels, Apple
+        // Intelligence off, old OS), fall back to the server's cloud
+        // title path instead of leaving the derived fallback forever —
+        // the kind sentinel used to be all-or-nothing.
+        guard let titler = localTitler, titler.isAvailable else {
+            titleLog.notice("local title: on-device model unavailable; falling back to server cloud titling")
+            do {
+                _ = try await client.conversations.generateTitle(id: conversation.id)
+                await onTerminal()
+            } catch {
+                titleLog.warning("local title: cloud fallback failed: \(String(describing: error), privacy: .public)")
+            }
+            return
+        }
+
         let transcript = renderLocalTitleTranscript(realMessages)
         guard !transcript.isEmpty else { return }
         let guide = resolvedTitleGuide(profilesByID: resolveMap)
@@ -582,7 +608,13 @@ public final class ConversationViewModel {
             // Bubble the new title into the sidebar without a re-mount.
             await onTerminal()
         } catch {
-            // Non-fatal — leave the title blank; the user can rename.
+            // On-device generation failed — same cloud fallback as the
+            // unavailable case, so a flaky local model doesn't strand
+            // the conversation untitled.
+            titleLog.warning("local title: on-device generation failed (\(String(describing: error), privacy: .public)); trying cloud fallback")
+            if let title = try? await client.conversations.generateTitle(id: conversation.id), !title.isEmpty {
+                await onTerminal()
+            }
         }
     }
 

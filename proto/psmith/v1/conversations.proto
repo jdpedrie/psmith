@@ -24,6 +24,15 @@ service ConversationsService {
   // first). Pinning an archived conversation is refused; archiving a
   // pinned conversation clears the pin.
   rpc PinConversation(PinConversationRequest) returns (PinConversationResponse);
+
+  // Client-invoked cloud titling. Exists for profiles whose
+  // title_provider_kind delegates titling to the CLIENT (e.g.
+  // apple_foundation): when the on-device model isn't available, the
+  // client asks the server to run its normal cloud title path instead
+  // of leaving the conversation on the derived fallback. Ignores the
+  // kind sentinel; respects everything else (configured title model,
+  // sanitization, derived fallback, context title co-write).
+  rpc GenerateConversationTitle(GenerateConversationTitleRequest) returns (GenerateConversationTitleResponse);
   rpc UnpinConversation(UnpinConversationRequest) returns (UnpinConversationResponse);
 
   // Contexts.
@@ -189,6 +198,16 @@ message UnarchiveConversationRequest {
   string id = 1;
 }
 message UnarchiveConversationResponse {}
+
+message GenerateConversationTitleRequest {
+  string id = 1;
+}
+message GenerateConversationTitleResponse {
+  // The persisted conversation title after the call — model-generated
+  // when a title model is configured and succeeds, the derived
+  // "Profile (date)" fallback otherwise.
+  string title = 1;
+}
 
 message PinConversationRequest {
   string id = 1;

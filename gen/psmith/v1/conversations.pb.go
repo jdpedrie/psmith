@@ -832,6 +832,97 @@ func (*UnarchiveConversationResponse) Descriptor() ([]byte, []int) {
 	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{13}
 }
 
+type GenerateConversationTitleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateConversationTitleRequest) Reset() {
+	*x = GenerateConversationTitleRequest{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateConversationTitleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateConversationTitleRequest) ProtoMessage() {}
+
+func (x *GenerateConversationTitleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateConversationTitleRequest.ProtoReflect.Descriptor instead.
+func (*GenerateConversationTitleRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GenerateConversationTitleRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GenerateConversationTitleResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The persisted conversation title after the call — model-generated
+	// when a title model is configured and succeeds, the derived
+	// "Profile (date)" fallback otherwise.
+	Title         string `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateConversationTitleResponse) Reset() {
+	*x = GenerateConversationTitleResponse{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateConversationTitleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateConversationTitleResponse) ProtoMessage() {}
+
+func (x *GenerateConversationTitleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateConversationTitleResponse.ProtoReflect.Descriptor instead.
+func (*GenerateConversationTitleResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GenerateConversationTitleResponse) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
 type PinConversationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -841,7 +932,7 @@ type PinConversationRequest struct {
 
 func (x *PinConversationRequest) Reset() {
 	*x = PinConversationRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[14]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -853,7 +944,7 @@ func (x *PinConversationRequest) String() string {
 func (*PinConversationRequest) ProtoMessage() {}
 
 func (x *PinConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[14]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -866,7 +957,7 @@ func (x *PinConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinConversationRequest.ProtoReflect.Descriptor instead.
 func (*PinConversationRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{14}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PinConversationRequest) GetId() string {
@@ -884,7 +975,7 @@ type PinConversationResponse struct {
 
 func (x *PinConversationResponse) Reset() {
 	*x = PinConversationResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[15]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -896,7 +987,7 @@ func (x *PinConversationResponse) String() string {
 func (*PinConversationResponse) ProtoMessage() {}
 
 func (x *PinConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[15]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -909,7 +1000,7 @@ func (x *PinConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinConversationResponse.ProtoReflect.Descriptor instead.
 func (*PinConversationResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{15}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{17}
 }
 
 type UnpinConversationRequest struct {
@@ -921,7 +1012,7 @@ type UnpinConversationRequest struct {
 
 func (x *UnpinConversationRequest) Reset() {
 	*x = UnpinConversationRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[16]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -933,7 +1024,7 @@ func (x *UnpinConversationRequest) String() string {
 func (*UnpinConversationRequest) ProtoMessage() {}
 
 func (x *UnpinConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[16]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -946,7 +1037,7 @@ func (x *UnpinConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinConversationRequest.ProtoReflect.Descriptor instead.
 func (*UnpinConversationRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{16}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UnpinConversationRequest) GetId() string {
@@ -964,7 +1055,7 @@ type UnpinConversationResponse struct {
 
 func (x *UnpinConversationResponse) Reset() {
 	*x = UnpinConversationResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[17]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -976,7 +1067,7 @@ func (x *UnpinConversationResponse) String() string {
 func (*UnpinConversationResponse) ProtoMessage() {}
 
 func (x *UnpinConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[17]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -989,7 +1080,7 @@ func (x *UnpinConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinConversationResponse.ProtoReflect.Descriptor instead.
 func (*UnpinConversationResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{17}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{19}
 }
 
 type ListContextsRequest struct {
@@ -1001,7 +1092,7 @@ type ListContextsRequest struct {
 
 func (x *ListContextsRequest) Reset() {
 	*x = ListContextsRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[18]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1013,7 +1104,7 @@ func (x *ListContextsRequest) String() string {
 func (*ListContextsRequest) ProtoMessage() {}
 
 func (x *ListContextsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[18]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1026,7 +1117,7 @@ func (x *ListContextsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContextsRequest.ProtoReflect.Descriptor instead.
 func (*ListContextsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{18}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListContextsRequest) GetConversationId() string {
@@ -1045,7 +1136,7 @@ type ListContextsResponse struct {
 
 func (x *ListContextsResponse) Reset() {
 	*x = ListContextsResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[19]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1057,7 +1148,7 @@ func (x *ListContextsResponse) String() string {
 func (*ListContextsResponse) ProtoMessage() {}
 
 func (x *ListContextsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[19]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1070,7 +1161,7 @@ func (x *ListContextsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContextsResponse.ProtoReflect.Descriptor instead.
 func (*ListContextsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{19}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListContextsResponse) GetContexts() []*Context {
@@ -1089,7 +1180,7 @@ type ActivateContextRequest struct {
 
 func (x *ActivateContextRequest) Reset() {
 	*x = ActivateContextRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[20]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1101,7 +1192,7 @@ func (x *ActivateContextRequest) String() string {
 func (*ActivateContextRequest) ProtoMessage() {}
 
 func (x *ActivateContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[20]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1205,7 @@ func (x *ActivateContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateContextRequest.ProtoReflect.Descriptor instead.
 func (*ActivateContextRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{20}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ActivateContextRequest) GetContextId() string {
@@ -1133,7 +1224,7 @@ type ActivateContextResponse struct {
 
 func (x *ActivateContextResponse) Reset() {
 	*x = ActivateContextResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[21]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1145,7 +1236,7 @@ func (x *ActivateContextResponse) String() string {
 func (*ActivateContextResponse) ProtoMessage() {}
 
 func (x *ActivateContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[21]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1158,7 +1249,7 @@ func (x *ActivateContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateContextResponse.ProtoReflect.Descriptor instead.
 func (*ActivateContextResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{21}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ActivateContextResponse) GetContext() *Context {
@@ -1179,7 +1270,7 @@ type SetCurrentLeafRequest struct {
 
 func (x *SetCurrentLeafRequest) Reset() {
 	*x = SetCurrentLeafRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[22]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1191,7 +1282,7 @@ func (x *SetCurrentLeafRequest) String() string {
 func (*SetCurrentLeafRequest) ProtoMessage() {}
 
 func (x *SetCurrentLeafRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[22]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1204,7 +1295,7 @@ func (x *SetCurrentLeafRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentLeafRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentLeafRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{22}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetCurrentLeafRequest) GetContextId() string {
@@ -1230,7 +1321,7 @@ type SetCurrentLeafResponse struct {
 
 func (x *SetCurrentLeafResponse) Reset() {
 	*x = SetCurrentLeafResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[23]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1242,7 +1333,7 @@ func (x *SetCurrentLeafResponse) String() string {
 func (*SetCurrentLeafResponse) ProtoMessage() {}
 
 func (x *SetCurrentLeafResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[23]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1255,7 +1346,7 @@ func (x *SetCurrentLeafResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentLeafResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentLeafResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{23}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetCurrentLeafResponse) GetContext() *Context {
@@ -1277,7 +1368,7 @@ type UpdateContextRequest struct {
 
 func (x *UpdateContextRequest) Reset() {
 	*x = UpdateContextRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[24]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1289,7 +1380,7 @@ func (x *UpdateContextRequest) String() string {
 func (*UpdateContextRequest) ProtoMessage() {}
 
 func (x *UpdateContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[24]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1302,7 +1393,7 @@ func (x *UpdateContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateContextRequest.ProtoReflect.Descriptor instead.
 func (*UpdateContextRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{24}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *UpdateContextRequest) GetContextId() string {
@@ -1328,7 +1419,7 @@ type UpdateContextResponse struct {
 
 func (x *UpdateContextResponse) Reset() {
 	*x = UpdateContextResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[25]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1340,7 +1431,7 @@ func (x *UpdateContextResponse) String() string {
 func (*UpdateContextResponse) ProtoMessage() {}
 
 func (x *UpdateContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[25]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1353,7 +1444,7 @@ func (x *UpdateContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateContextResponse.ProtoReflect.Descriptor instead.
 func (*UpdateContextResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{25}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateContextResponse) GetContext() *Context {
@@ -1372,7 +1463,7 @@ type DeleteContextRequest struct {
 
 func (x *DeleteContextRequest) Reset() {
 	*x = DeleteContextRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[26]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1475,7 @@ func (x *DeleteContextRequest) String() string {
 func (*DeleteContextRequest) ProtoMessage() {}
 
 func (x *DeleteContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[26]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1488,7 @@ func (x *DeleteContextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteContextRequest.ProtoReflect.Descriptor instead.
 func (*DeleteContextRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{26}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeleteContextRequest) GetContextId() string {
@@ -1415,7 +1506,7 @@ type DeleteContextResponse struct {
 
 func (x *DeleteContextResponse) Reset() {
 	*x = DeleteContextResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[27]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1427,7 +1518,7 @@ func (x *DeleteContextResponse) String() string {
 func (*DeleteContextResponse) ProtoMessage() {}
 
 func (x *DeleteContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[27]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1440,7 +1531,7 @@ func (x *DeleteContextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteContextResponse.ProtoReflect.Descriptor instead.
 func (*DeleteContextResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{27}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{29}
 }
 
 type ListMessagesRequest struct {
@@ -1469,7 +1560,7 @@ type ListMessagesRequest struct {
 
 func (x *ListMessagesRequest) Reset() {
 	*x = ListMessagesRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[28]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1572,7 @@ func (x *ListMessagesRequest) String() string {
 func (*ListMessagesRequest) ProtoMessage() {}
 
 func (x *ListMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[28]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1585,7 @@ func (x *ListMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMessagesRequest.ProtoReflect.Descriptor instead.
 func (*ListMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{28}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListMessagesRequest) GetContextId() string {
@@ -1534,7 +1625,7 @@ type ListMessagesResponse struct {
 
 func (x *ListMessagesResponse) Reset() {
 	*x = ListMessagesResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[29]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1546,7 +1637,7 @@ func (x *ListMessagesResponse) String() string {
 func (*ListMessagesResponse) ProtoMessage() {}
 
 func (x *ListMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[29]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1559,7 +1650,7 @@ func (x *ListMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMessagesResponse.ProtoReflect.Descriptor instead.
 func (*ListMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{29}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListMessagesResponse) GetMessages() []*Message {
@@ -1578,7 +1669,7 @@ type GetMessageRequest struct {
 
 func (x *GetMessageRequest) Reset() {
 	*x = GetMessageRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[30]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1590,7 +1681,7 @@ func (x *GetMessageRequest) String() string {
 func (*GetMessageRequest) ProtoMessage() {}
 
 func (x *GetMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[30]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,7 +1694,7 @@ func (x *GetMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessageRequest.ProtoReflect.Descriptor instead.
 func (*GetMessageRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{30}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetMessageRequest) GetId() string {
@@ -1622,7 +1713,7 @@ type GetMessageResponse struct {
 
 func (x *GetMessageResponse) Reset() {
 	*x = GetMessageResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[31]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1634,7 +1725,7 @@ func (x *GetMessageResponse) String() string {
 func (*GetMessageResponse) ProtoMessage() {}
 
 func (x *GetMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[31]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1647,7 +1738,7 @@ func (x *GetMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessageResponse.ProtoReflect.Descriptor instead.
 func (*GetMessageResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{31}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetMessageResponse) GetMessage() *Message {
@@ -1671,7 +1762,7 @@ type EditMessageRequest struct {
 
 func (x *EditMessageRequest) Reset() {
 	*x = EditMessageRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[32]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1683,7 +1774,7 @@ func (x *EditMessageRequest) String() string {
 func (*EditMessageRequest) ProtoMessage() {}
 
 func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[32]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1696,7 +1787,7 @@ func (x *EditMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageRequest.ProtoReflect.Descriptor instead.
 func (*EditMessageRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{32}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *EditMessageRequest) GetId() string {
@@ -1729,7 +1820,7 @@ type EditMessageResponse struct {
 
 func (x *EditMessageResponse) Reset() {
 	*x = EditMessageResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[33]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1741,7 +1832,7 @@ func (x *EditMessageResponse) String() string {
 func (*EditMessageResponse) ProtoMessage() {}
 
 func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[33]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1754,7 +1845,7 @@ func (x *EditMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EditMessageResponse.ProtoReflect.Descriptor instead.
 func (*EditMessageResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{33}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *EditMessageResponse) GetMessage() *Message {
@@ -1776,7 +1867,7 @@ type DeleteMessageRequest struct {
 
 func (x *DeleteMessageRequest) Reset() {
 	*x = DeleteMessageRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[34]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1788,7 +1879,7 @@ func (x *DeleteMessageRequest) String() string {
 func (*DeleteMessageRequest) ProtoMessage() {}
 
 func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[34]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1801,7 +1892,7 @@ func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMessageRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{34}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DeleteMessageRequest) GetId() string {
@@ -1826,7 +1917,7 @@ type DeleteMessageResponse struct {
 
 func (x *DeleteMessageResponse) Reset() {
 	*x = DeleteMessageResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[35]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1838,7 +1929,7 @@ func (x *DeleteMessageResponse) String() string {
 func (*DeleteMessageResponse) ProtoMessage() {}
 
 func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[35]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1851,7 +1942,7 @@ func (x *DeleteMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMessageResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMessageResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{35}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{37}
 }
 
 // One plugin row scoped to a single conversation. Shape mirrors
@@ -1869,7 +1960,7 @@ type ConversationPlugin struct {
 
 func (x *ConversationPlugin) Reset() {
 	*x = ConversationPlugin{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[36]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1881,7 +1972,7 @@ func (x *ConversationPlugin) String() string {
 func (*ConversationPlugin) ProtoMessage() {}
 
 func (x *ConversationPlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[36]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1894,7 +1985,7 @@ func (x *ConversationPlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationPlugin.ProtoReflect.Descriptor instead.
 func (*ConversationPlugin) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{36}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ConversationPlugin) GetPluginName() string {
@@ -1934,7 +2025,7 @@ type GetConversationPluginsRequest struct {
 
 func (x *GetConversationPluginsRequest) Reset() {
 	*x = GetConversationPluginsRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[37]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1946,7 +2037,7 @@ func (x *GetConversationPluginsRequest) String() string {
 func (*GetConversationPluginsRequest) ProtoMessage() {}
 
 func (x *GetConversationPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[37]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1959,7 +2050,7 @@ func (x *GetConversationPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationPluginsRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{37}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetConversationPluginsRequest) GetConversationId() string {
@@ -1978,7 +2069,7 @@ type GetConversationPluginsResponse struct {
 
 func (x *GetConversationPluginsResponse) Reset() {
 	*x = GetConversationPluginsResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[38]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1990,7 +2081,7 @@ func (x *GetConversationPluginsResponse) String() string {
 func (*GetConversationPluginsResponse) ProtoMessage() {}
 
 func (x *GetConversationPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[38]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2003,7 +2094,7 @@ func (x *GetConversationPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationPluginsResponse.ProtoReflect.Descriptor instead.
 func (*GetConversationPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{38}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetConversationPluginsResponse) GetPlugins() []*ConversationPlugin {
@@ -2026,7 +2117,7 @@ type SetConversationPluginsRequest struct {
 
 func (x *SetConversationPluginsRequest) Reset() {
 	*x = SetConversationPluginsRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[39]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2038,7 +2129,7 @@ func (x *SetConversationPluginsRequest) String() string {
 func (*SetConversationPluginsRequest) ProtoMessage() {}
 
 func (x *SetConversationPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[39]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2051,7 +2142,7 @@ func (x *SetConversationPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConversationPluginsRequest.ProtoReflect.Descriptor instead.
 func (*SetConversationPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{39}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SetConversationPluginsRequest) GetConversationId() string {
@@ -2077,7 +2168,7 @@ type SetConversationPluginsResponse struct {
 
 func (x *SetConversationPluginsResponse) Reset() {
 	*x = SetConversationPluginsResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[40]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2089,7 +2180,7 @@ func (x *SetConversationPluginsResponse) String() string {
 func (*SetConversationPluginsResponse) ProtoMessage() {}
 
 func (x *SetConversationPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[40]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2102,7 +2193,7 @@ func (x *SetConversationPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConversationPluginsResponse.ProtoReflect.Descriptor instead.
 func (*SetConversationPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{40}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SetConversationPluginsResponse) GetPlugins() []*ConversationPlugin {
@@ -2121,7 +2212,7 @@ type ResolveConversationPipelineRequest struct {
 
 func (x *ResolveConversationPipelineRequest) Reset() {
 	*x = ResolveConversationPipelineRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[41]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2133,7 +2224,7 @@ func (x *ResolveConversationPipelineRequest) String() string {
 func (*ResolveConversationPipelineRequest) ProtoMessage() {}
 
 func (x *ResolveConversationPipelineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[41]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2146,7 +2237,7 @@ func (x *ResolveConversationPipelineRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ResolveConversationPipelineRequest.ProtoReflect.Descriptor instead.
 func (*ResolveConversationPipelineRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{41}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ResolveConversationPipelineRequest) GetConversationId() string {
@@ -2168,7 +2259,7 @@ type ResolveConversationPipelineResponse struct {
 
 func (x *ResolveConversationPipelineResponse) Reset() {
 	*x = ResolveConversationPipelineResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[42]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2180,7 +2271,7 @@ func (x *ResolveConversationPipelineResponse) String() string {
 func (*ResolveConversationPipelineResponse) ProtoMessage() {}
 
 func (x *ResolveConversationPipelineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[42]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2193,7 +2284,7 @@ func (x *ResolveConversationPipelineResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ResolveConversationPipelineResponse.ProtoReflect.Descriptor instead.
 func (*ResolveConversationPipelineResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{42}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ResolveConversationPipelineResponse) GetEntries() []*ResolvedPipelineEntry {
@@ -2217,7 +2308,7 @@ type ResolvedPipelineEntry struct {
 
 func (x *ResolvedPipelineEntry) Reset() {
 	*x = ResolvedPipelineEntry{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[43]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2229,7 +2320,7 @@ func (x *ResolvedPipelineEntry) String() string {
 func (*ResolvedPipelineEntry) ProtoMessage() {}
 
 func (x *ResolvedPipelineEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[43]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2242,7 +2333,7 @@ func (x *ResolvedPipelineEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvedPipelineEntry.ProtoReflect.Descriptor instead.
 func (*ResolvedPipelineEntry) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{43}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ResolvedPipelineEntry) GetPluginName() string {
@@ -2286,7 +2377,7 @@ type PromoteCompactionToNewContextRequest struct {
 
 func (x *PromoteCompactionToNewContextRequest) Reset() {
 	*x = PromoteCompactionToNewContextRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[44]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2298,7 +2389,7 @@ func (x *PromoteCompactionToNewContextRequest) String() string {
 func (*PromoteCompactionToNewContextRequest) ProtoMessage() {}
 
 func (x *PromoteCompactionToNewContextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[44]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2311,7 +2402,7 @@ func (x *PromoteCompactionToNewContextRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PromoteCompactionToNewContextRequest.ProtoReflect.Descriptor instead.
 func (*PromoteCompactionToNewContextRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{44}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PromoteCompactionToNewContextRequest) GetMessageId() string {
@@ -2330,7 +2421,7 @@ type PromoteCompactionToNewContextResponse struct {
 
 func (x *PromoteCompactionToNewContextResponse) Reset() {
 	*x = PromoteCompactionToNewContextResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[45]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2342,7 +2433,7 @@ func (x *PromoteCompactionToNewContextResponse) String() string {
 func (*PromoteCompactionToNewContextResponse) ProtoMessage() {}
 
 func (x *PromoteCompactionToNewContextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[45]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2446,7 @@ func (x *PromoteCompactionToNewContextResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use PromoteCompactionToNewContextResponse.ProtoReflect.Descriptor instead.
 func (*PromoteCompactionToNewContextResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{45}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PromoteCompactionToNewContextResponse) GetContext() *Context {
@@ -2381,7 +2472,7 @@ type CreateContextManualRequest struct {
 
 func (x *CreateContextManualRequest) Reset() {
 	*x = CreateContextManualRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[46]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2393,7 +2484,7 @@ func (x *CreateContextManualRequest) String() string {
 func (*CreateContextManualRequest) ProtoMessage() {}
 
 func (x *CreateContextManualRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[46]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2406,7 +2497,7 @@ func (x *CreateContextManualRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateContextManualRequest.ProtoReflect.Descriptor instead.
 func (*CreateContextManualRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{46}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CreateContextManualRequest) GetConversationId() string {
@@ -2441,7 +2532,7 @@ type CreateContextManualResponse struct {
 
 func (x *CreateContextManualResponse) Reset() {
 	*x = CreateContextManualResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[47]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2453,7 +2544,7 @@ func (x *CreateContextManualResponse) String() string {
 func (*CreateContextManualResponse) ProtoMessage() {}
 
 func (x *CreateContextManualResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[47]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2466,7 +2557,7 @@ func (x *CreateContextManualResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateContextManualResponse.ProtoReflect.Descriptor instead.
 func (*CreateContextManualResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{47}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CreateContextManualResponse) GetContext() *Context {
@@ -2522,7 +2613,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[48]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2534,7 +2625,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[48]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2547,7 +2638,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{48}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SendMessageRequest) GetConversationId() string {
@@ -2626,7 +2717,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[49]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2638,7 +2729,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[49]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2651,7 +2742,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{49}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SendMessageResponse) GetUserMessage() *Message {
@@ -2684,7 +2775,7 @@ type CompactRequest struct {
 
 func (x *CompactRequest) Reset() {
 	*x = CompactRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[50]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2696,7 +2787,7 @@ func (x *CompactRequest) String() string {
 func (*CompactRequest) ProtoMessage() {}
 
 func (x *CompactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[50]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2709,7 +2800,7 @@ func (x *CompactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactRequest.ProtoReflect.Descriptor instead.
 func (*CompactRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{50}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *CompactRequest) GetConversationId() string {
@@ -2749,7 +2840,7 @@ type CompactResponse struct {
 
 func (x *CompactResponse) Reset() {
 	*x = CompactResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[51]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2761,7 +2852,7 @@ func (x *CompactResponse) String() string {
 func (*CompactResponse) ProtoMessage() {}
 
 func (x *CompactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[51]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2774,7 +2865,7 @@ func (x *CompactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactResponse.ProtoReflect.Descriptor instead.
 func (*CompactResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{51}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *CompactResponse) GetStreamRun() *StreamRun {
@@ -2796,7 +2887,7 @@ type CountContextTokensRequest struct {
 
 func (x *CountContextTokensRequest) Reset() {
 	*x = CountContextTokensRequest{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[52]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2808,7 +2899,7 @@ func (x *CountContextTokensRequest) String() string {
 func (*CountContextTokensRequest) ProtoMessage() {}
 
 func (x *CountContextTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[52]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2821,7 +2912,7 @@ func (x *CountContextTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountContextTokensRequest.ProtoReflect.Descriptor instead.
 func (*CountContextTokensRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{52}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CountContextTokensRequest) GetContextId() string {
@@ -2855,7 +2946,7 @@ type CountContextTokensResponse struct {
 
 func (x *CountContextTokensResponse) Reset() {
 	*x = CountContextTokensResponse{}
-	mi := &file_psmith_v1_conversations_proto_msgTypes[53]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2867,7 +2958,7 @@ func (x *CountContextTokensResponse) String() string {
 func (*CountContextTokensResponse) ProtoMessage() {}
 
 func (x *CountContextTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_conversations_proto_msgTypes[53]
+	mi := &file_psmith_v1_conversations_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2880,7 +2971,7 @@ func (x *CountContextTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountContextTokensResponse.ProtoReflect.Descriptor instead.
 func (*CountContextTokensResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{53}
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CountContextTokensResponse) GetTokenCount() int32 {
@@ -2950,7 +3041,11 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x1bArchiveConversationResponse\".\n" +
 	"\x1cUnarchiveConversationRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x1f\n" +
-	"\x1dUnarchiveConversationResponse\"(\n" +
+	"\x1dUnarchiveConversationResponse\"2\n" +
+	" GenerateConversationTitleRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"9\n" +
+	"!GenerateConversationTitleResponse\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\"(\n" +
 	"\x16PinConversationRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x19\n" +
 	"\x17PinConversationResponse\"*\n" +
@@ -3095,7 +3190,7 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x16ResolvedPipelineSource\x12(\n" +
 	"$RESOLVED_PIPELINE_SOURCE_UNSPECIFIED\x10\x00\x12$\n" +
 	" RESOLVED_PIPELINE_SOURCE_PROFILE\x10\x01\x12)\n" +
-	"%RESOLVED_PIPELINE_SOURCE_CONVERSATION\x10\x022\xa7\x13\n" +
+	"%RESOLVED_PIPELINE_SOURCE_CONVERSATION\x10\x022\x9f\x14\n" +
 	"\x14ConversationsService\x12a\n" +
 	"\x12CreateConversation\x12$.psmith.v1.CreateConversationRequest\x1a%.psmith.v1.CreateConversationResponse\x12^\n" +
 	"\x11ListConversations\x12#.psmith.v1.ListConversationsRequest\x1a$.psmith.v1.ListConversationsResponse\x12X\n" +
@@ -3104,7 +3199,8 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x12DeleteConversation\x12$.psmith.v1.DeleteConversationRequest\x1a%.psmith.v1.DeleteConversationResponse\x12d\n" +
 	"\x13ArchiveConversation\x12%.psmith.v1.ArchiveConversationRequest\x1a&.psmith.v1.ArchiveConversationResponse\x12j\n" +
 	"\x15UnarchiveConversation\x12'.psmith.v1.UnarchiveConversationRequest\x1a(.psmith.v1.UnarchiveConversationResponse\x12X\n" +
-	"\x0fPinConversation\x12!.psmith.v1.PinConversationRequest\x1a\".psmith.v1.PinConversationResponse\x12^\n" +
+	"\x0fPinConversation\x12!.psmith.v1.PinConversationRequest\x1a\".psmith.v1.PinConversationResponse\x12v\n" +
+	"\x19GenerateConversationTitle\x12+.psmith.v1.GenerateConversationTitleRequest\x1a,.psmith.v1.GenerateConversationTitleResponse\x12^\n" +
 	"\x11UnpinConversation\x12#.psmith.v1.UnpinConversationRequest\x1a$.psmith.v1.UnpinConversationResponse\x12O\n" +
 	"\fListContexts\x12\x1e.psmith.v1.ListContextsRequest\x1a\x1f.psmith.v1.ListContextsResponse\x12X\n" +
 	"\x0fActivateContext\x12!.psmith.v1.ActivateContextRequest\x1a\".psmith.v1.ActivateContextResponse\x12U\n" +
@@ -3138,7 +3234,7 @@ func file_psmith_v1_conversations_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_conversations_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_psmith_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_psmith_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_psmith_v1_conversations_proto_goTypes = []any{
 	(ConversationOrder)(0),                        // 0: psmith.v1.ConversationOrder
 	(ResolvedPipelineSource)(0),                   // 1: psmith.v1.ResolvedPipelineSource
@@ -3156,89 +3252,91 @@ var file_psmith_v1_conversations_proto_goTypes = []any{
 	(*ArchiveConversationResponse)(nil),           // 13: psmith.v1.ArchiveConversationResponse
 	(*UnarchiveConversationRequest)(nil),          // 14: psmith.v1.UnarchiveConversationRequest
 	(*UnarchiveConversationResponse)(nil),         // 15: psmith.v1.UnarchiveConversationResponse
-	(*PinConversationRequest)(nil),                // 16: psmith.v1.PinConversationRequest
-	(*PinConversationResponse)(nil),               // 17: psmith.v1.PinConversationResponse
-	(*UnpinConversationRequest)(nil),              // 18: psmith.v1.UnpinConversationRequest
-	(*UnpinConversationResponse)(nil),             // 19: psmith.v1.UnpinConversationResponse
-	(*ListContextsRequest)(nil),                   // 20: psmith.v1.ListContextsRequest
-	(*ListContextsResponse)(nil),                  // 21: psmith.v1.ListContextsResponse
-	(*ActivateContextRequest)(nil),                // 22: psmith.v1.ActivateContextRequest
-	(*ActivateContextResponse)(nil),               // 23: psmith.v1.ActivateContextResponse
-	(*SetCurrentLeafRequest)(nil),                 // 24: psmith.v1.SetCurrentLeafRequest
-	(*SetCurrentLeafResponse)(nil),                // 25: psmith.v1.SetCurrentLeafResponse
-	(*UpdateContextRequest)(nil),                  // 26: psmith.v1.UpdateContextRequest
-	(*UpdateContextResponse)(nil),                 // 27: psmith.v1.UpdateContextResponse
-	(*DeleteContextRequest)(nil),                  // 28: psmith.v1.DeleteContextRequest
-	(*DeleteContextResponse)(nil),                 // 29: psmith.v1.DeleteContextResponse
-	(*ListMessagesRequest)(nil),                   // 30: psmith.v1.ListMessagesRequest
-	(*ListMessagesResponse)(nil),                  // 31: psmith.v1.ListMessagesResponse
-	(*GetMessageRequest)(nil),                     // 32: psmith.v1.GetMessageRequest
-	(*GetMessageResponse)(nil),                    // 33: psmith.v1.GetMessageResponse
-	(*EditMessageRequest)(nil),                    // 34: psmith.v1.EditMessageRequest
-	(*EditMessageResponse)(nil),                   // 35: psmith.v1.EditMessageResponse
-	(*DeleteMessageRequest)(nil),                  // 36: psmith.v1.DeleteMessageRequest
-	(*DeleteMessageResponse)(nil),                 // 37: psmith.v1.DeleteMessageResponse
-	(*ConversationPlugin)(nil),                    // 38: psmith.v1.ConversationPlugin
-	(*GetConversationPluginsRequest)(nil),         // 39: psmith.v1.GetConversationPluginsRequest
-	(*GetConversationPluginsResponse)(nil),        // 40: psmith.v1.GetConversationPluginsResponse
-	(*SetConversationPluginsRequest)(nil),         // 41: psmith.v1.SetConversationPluginsRequest
-	(*SetConversationPluginsResponse)(nil),        // 42: psmith.v1.SetConversationPluginsResponse
-	(*ResolveConversationPipelineRequest)(nil),    // 43: psmith.v1.ResolveConversationPipelineRequest
-	(*ResolveConversationPipelineResponse)(nil),   // 44: psmith.v1.ResolveConversationPipelineResponse
-	(*ResolvedPipelineEntry)(nil),                 // 45: psmith.v1.ResolvedPipelineEntry
-	(*PromoteCompactionToNewContextRequest)(nil),  // 46: psmith.v1.PromoteCompactionToNewContextRequest
-	(*PromoteCompactionToNewContextResponse)(nil), // 47: psmith.v1.PromoteCompactionToNewContextResponse
-	(*CreateContextManualRequest)(nil),            // 48: psmith.v1.CreateContextManualRequest
-	(*CreateContextManualResponse)(nil),           // 49: psmith.v1.CreateContextManualResponse
-	(*SendMessageRequest)(nil),                    // 50: psmith.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),                   // 51: psmith.v1.SendMessageResponse
-	(*CompactRequest)(nil),                        // 52: psmith.v1.CompactRequest
-	(*CompactResponse)(nil),                       // 53: psmith.v1.CompactResponse
-	(*CountContextTokensRequest)(nil),             // 54: psmith.v1.CountContextTokensRequest
-	(*CountContextTokensResponse)(nil),            // 55: psmith.v1.CountContextTokensResponse
-	(*ConversationSettings)(nil),                  // 56: psmith.v1.ConversationSettings
-	(*Conversation)(nil),                          // 57: psmith.v1.Conversation
-	(*Context)(nil),                               // 58: psmith.v1.Context
-	(*Message)(nil),                               // 59: psmith.v1.Message
-	(MessageRole)(0),                              // 60: psmith.v1.MessageRole
-	(CompressionMode)(0),                          // 61: psmith.v1.CompressionMode
-	(*CallSettings)(nil),                          // 62: psmith.v1.CallSettings
-	(*DeviceFact)(nil),                            // 63: psmith.v1.DeviceFact
-	(*StreamRun)(nil),                             // 64: psmith.v1.StreamRun
+	(*GenerateConversationTitleRequest)(nil),      // 16: psmith.v1.GenerateConversationTitleRequest
+	(*GenerateConversationTitleResponse)(nil),     // 17: psmith.v1.GenerateConversationTitleResponse
+	(*PinConversationRequest)(nil),                // 18: psmith.v1.PinConversationRequest
+	(*PinConversationResponse)(nil),               // 19: psmith.v1.PinConversationResponse
+	(*UnpinConversationRequest)(nil),              // 20: psmith.v1.UnpinConversationRequest
+	(*UnpinConversationResponse)(nil),             // 21: psmith.v1.UnpinConversationResponse
+	(*ListContextsRequest)(nil),                   // 22: psmith.v1.ListContextsRequest
+	(*ListContextsResponse)(nil),                  // 23: psmith.v1.ListContextsResponse
+	(*ActivateContextRequest)(nil),                // 24: psmith.v1.ActivateContextRequest
+	(*ActivateContextResponse)(nil),               // 25: psmith.v1.ActivateContextResponse
+	(*SetCurrentLeafRequest)(nil),                 // 26: psmith.v1.SetCurrentLeafRequest
+	(*SetCurrentLeafResponse)(nil),                // 27: psmith.v1.SetCurrentLeafResponse
+	(*UpdateContextRequest)(nil),                  // 28: psmith.v1.UpdateContextRequest
+	(*UpdateContextResponse)(nil),                 // 29: psmith.v1.UpdateContextResponse
+	(*DeleteContextRequest)(nil),                  // 30: psmith.v1.DeleteContextRequest
+	(*DeleteContextResponse)(nil),                 // 31: psmith.v1.DeleteContextResponse
+	(*ListMessagesRequest)(nil),                   // 32: psmith.v1.ListMessagesRequest
+	(*ListMessagesResponse)(nil),                  // 33: psmith.v1.ListMessagesResponse
+	(*GetMessageRequest)(nil),                     // 34: psmith.v1.GetMessageRequest
+	(*GetMessageResponse)(nil),                    // 35: psmith.v1.GetMessageResponse
+	(*EditMessageRequest)(nil),                    // 36: psmith.v1.EditMessageRequest
+	(*EditMessageResponse)(nil),                   // 37: psmith.v1.EditMessageResponse
+	(*DeleteMessageRequest)(nil),                  // 38: psmith.v1.DeleteMessageRequest
+	(*DeleteMessageResponse)(nil),                 // 39: psmith.v1.DeleteMessageResponse
+	(*ConversationPlugin)(nil),                    // 40: psmith.v1.ConversationPlugin
+	(*GetConversationPluginsRequest)(nil),         // 41: psmith.v1.GetConversationPluginsRequest
+	(*GetConversationPluginsResponse)(nil),        // 42: psmith.v1.GetConversationPluginsResponse
+	(*SetConversationPluginsRequest)(nil),         // 43: psmith.v1.SetConversationPluginsRequest
+	(*SetConversationPluginsResponse)(nil),        // 44: psmith.v1.SetConversationPluginsResponse
+	(*ResolveConversationPipelineRequest)(nil),    // 45: psmith.v1.ResolveConversationPipelineRequest
+	(*ResolveConversationPipelineResponse)(nil),   // 46: psmith.v1.ResolveConversationPipelineResponse
+	(*ResolvedPipelineEntry)(nil),                 // 47: psmith.v1.ResolvedPipelineEntry
+	(*PromoteCompactionToNewContextRequest)(nil),  // 48: psmith.v1.PromoteCompactionToNewContextRequest
+	(*PromoteCompactionToNewContextResponse)(nil), // 49: psmith.v1.PromoteCompactionToNewContextResponse
+	(*CreateContextManualRequest)(nil),            // 50: psmith.v1.CreateContextManualRequest
+	(*CreateContextManualResponse)(nil),           // 51: psmith.v1.CreateContextManualResponse
+	(*SendMessageRequest)(nil),                    // 52: psmith.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),                   // 53: psmith.v1.SendMessageResponse
+	(*CompactRequest)(nil),                        // 54: psmith.v1.CompactRequest
+	(*CompactResponse)(nil),                       // 55: psmith.v1.CompactResponse
+	(*CountContextTokensRequest)(nil),             // 56: psmith.v1.CountContextTokensRequest
+	(*CountContextTokensResponse)(nil),            // 57: psmith.v1.CountContextTokensResponse
+	(*ConversationSettings)(nil),                  // 58: psmith.v1.ConversationSettings
+	(*Conversation)(nil),                          // 59: psmith.v1.Conversation
+	(*Context)(nil),                               // 60: psmith.v1.Context
+	(*Message)(nil),                               // 61: psmith.v1.Message
+	(MessageRole)(0),                              // 62: psmith.v1.MessageRole
+	(CompressionMode)(0),                          // 63: psmith.v1.CompressionMode
+	(*CallSettings)(nil),                          // 64: psmith.v1.CallSettings
+	(*DeviceFact)(nil),                            // 65: psmith.v1.DeviceFact
+	(*StreamRun)(nil),                             // 66: psmith.v1.StreamRun
 }
 var file_psmith_v1_conversations_proto_depIdxs = []int32{
-	56, // 0: psmith.v1.CreateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
-	57, // 1: psmith.v1.CreateConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	58, // 2: psmith.v1.CreateConversationResponse.initial_context:type_name -> psmith.v1.Context
-	59, // 3: psmith.v1.CreateConversationResponse.seed_messages:type_name -> psmith.v1.Message
+	58, // 0: psmith.v1.CreateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
+	59, // 1: psmith.v1.CreateConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	60, // 2: psmith.v1.CreateConversationResponse.initial_context:type_name -> psmith.v1.Context
+	61, // 3: psmith.v1.CreateConversationResponse.seed_messages:type_name -> psmith.v1.Message
 	0,  // 4: psmith.v1.ListConversationsRequest.order:type_name -> psmith.v1.ConversationOrder
-	57, // 5: psmith.v1.ListConversationsResponse.conversations:type_name -> psmith.v1.Conversation
-	57, // 6: psmith.v1.GetConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	58, // 7: psmith.v1.GetConversationResponse.active_context:type_name -> psmith.v1.Context
-	56, // 8: psmith.v1.UpdateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
-	57, // 9: psmith.v1.UpdateConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	58, // 10: psmith.v1.ListContextsResponse.contexts:type_name -> psmith.v1.Context
-	58, // 11: psmith.v1.ActivateContextResponse.context:type_name -> psmith.v1.Context
-	58, // 12: psmith.v1.SetCurrentLeafResponse.context:type_name -> psmith.v1.Context
-	58, // 13: psmith.v1.UpdateContextResponse.context:type_name -> psmith.v1.Context
-	59, // 14: psmith.v1.ListMessagesResponse.messages:type_name -> psmith.v1.Message
-	59, // 15: psmith.v1.GetMessageResponse.message:type_name -> psmith.v1.Message
-	60, // 16: psmith.v1.EditMessageRequest.role:type_name -> psmith.v1.MessageRole
-	59, // 17: psmith.v1.EditMessageResponse.message:type_name -> psmith.v1.Message
-	38, // 18: psmith.v1.GetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
-	38, // 19: psmith.v1.SetConversationPluginsRequest.plugins:type_name -> psmith.v1.ConversationPlugin
-	38, // 20: psmith.v1.SetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
-	45, // 21: psmith.v1.ResolveConversationPipelineResponse.entries:type_name -> psmith.v1.ResolvedPipelineEntry
+	59, // 5: psmith.v1.ListConversationsResponse.conversations:type_name -> psmith.v1.Conversation
+	59, // 6: psmith.v1.GetConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	60, // 7: psmith.v1.GetConversationResponse.active_context:type_name -> psmith.v1.Context
+	58, // 8: psmith.v1.UpdateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
+	59, // 9: psmith.v1.UpdateConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	60, // 10: psmith.v1.ListContextsResponse.contexts:type_name -> psmith.v1.Context
+	60, // 11: psmith.v1.ActivateContextResponse.context:type_name -> psmith.v1.Context
+	60, // 12: psmith.v1.SetCurrentLeafResponse.context:type_name -> psmith.v1.Context
+	60, // 13: psmith.v1.UpdateContextResponse.context:type_name -> psmith.v1.Context
+	61, // 14: psmith.v1.ListMessagesResponse.messages:type_name -> psmith.v1.Message
+	61, // 15: psmith.v1.GetMessageResponse.message:type_name -> psmith.v1.Message
+	62, // 16: psmith.v1.EditMessageRequest.role:type_name -> psmith.v1.MessageRole
+	61, // 17: psmith.v1.EditMessageResponse.message:type_name -> psmith.v1.Message
+	40, // 18: psmith.v1.GetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
+	40, // 19: psmith.v1.SetConversationPluginsRequest.plugins:type_name -> psmith.v1.ConversationPlugin
+	40, // 20: psmith.v1.SetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
+	47, // 21: psmith.v1.ResolveConversationPipelineResponse.entries:type_name -> psmith.v1.ResolvedPipelineEntry
 	1,  // 22: psmith.v1.ResolvedPipelineEntry.source:type_name -> psmith.v1.ResolvedPipelineSource
-	58, // 23: psmith.v1.PromoteCompactionToNewContextResponse.context:type_name -> psmith.v1.Context
-	61, // 24: psmith.v1.CreateContextManualRequest.mode:type_name -> psmith.v1.CompressionMode
-	58, // 25: psmith.v1.CreateContextManualResponse.context:type_name -> psmith.v1.Context
-	59, // 26: psmith.v1.CreateContextManualResponse.user_message:type_name -> psmith.v1.Message
-	62, // 27: psmith.v1.SendMessageRequest.call_settings:type_name -> psmith.v1.CallSettings
-	63, // 28: psmith.v1.SendMessageRequest.device_facts:type_name -> psmith.v1.DeviceFact
-	59, // 29: psmith.v1.SendMessageResponse.user_message:type_name -> psmith.v1.Message
-	64, // 30: psmith.v1.SendMessageResponse.stream_run:type_name -> psmith.v1.StreamRun
-	64, // 31: psmith.v1.CompactResponse.stream_run:type_name -> psmith.v1.StreamRun
+	60, // 23: psmith.v1.PromoteCompactionToNewContextResponse.context:type_name -> psmith.v1.Context
+	63, // 24: psmith.v1.CreateContextManualRequest.mode:type_name -> psmith.v1.CompressionMode
+	60, // 25: psmith.v1.CreateContextManualResponse.context:type_name -> psmith.v1.Context
+	61, // 26: psmith.v1.CreateContextManualResponse.user_message:type_name -> psmith.v1.Message
+	64, // 27: psmith.v1.SendMessageRequest.call_settings:type_name -> psmith.v1.CallSettings
+	65, // 28: psmith.v1.SendMessageRequest.device_facts:type_name -> psmith.v1.DeviceFact
+	61, // 29: psmith.v1.SendMessageResponse.user_message:type_name -> psmith.v1.Message
+	66, // 30: psmith.v1.SendMessageResponse.stream_run:type_name -> psmith.v1.StreamRun
+	66, // 31: psmith.v1.CompactResponse.stream_run:type_name -> psmith.v1.StreamRun
 	2,  // 32: psmith.v1.ConversationsService.CreateConversation:input_type -> psmith.v1.CreateConversationRequest
 	4,  // 33: psmith.v1.ConversationsService.ListConversations:input_type -> psmith.v1.ListConversationsRequest
 	6,  // 34: psmith.v1.ConversationsService.GetConversation:input_type -> psmith.v1.GetConversationRequest
@@ -3246,53 +3344,55 @@ var file_psmith_v1_conversations_proto_depIdxs = []int32{
 	10, // 36: psmith.v1.ConversationsService.DeleteConversation:input_type -> psmith.v1.DeleteConversationRequest
 	12, // 37: psmith.v1.ConversationsService.ArchiveConversation:input_type -> psmith.v1.ArchiveConversationRequest
 	14, // 38: psmith.v1.ConversationsService.UnarchiveConversation:input_type -> psmith.v1.UnarchiveConversationRequest
-	16, // 39: psmith.v1.ConversationsService.PinConversation:input_type -> psmith.v1.PinConversationRequest
-	18, // 40: psmith.v1.ConversationsService.UnpinConversation:input_type -> psmith.v1.UnpinConversationRequest
-	20, // 41: psmith.v1.ConversationsService.ListContexts:input_type -> psmith.v1.ListContextsRequest
-	22, // 42: psmith.v1.ConversationsService.ActivateContext:input_type -> psmith.v1.ActivateContextRequest
-	24, // 43: psmith.v1.ConversationsService.SetCurrentLeaf:input_type -> psmith.v1.SetCurrentLeafRequest
-	26, // 44: psmith.v1.ConversationsService.UpdateContext:input_type -> psmith.v1.UpdateContextRequest
-	28, // 45: psmith.v1.ConversationsService.DeleteContext:input_type -> psmith.v1.DeleteContextRequest
-	39, // 46: psmith.v1.ConversationsService.GetConversationPlugins:input_type -> psmith.v1.GetConversationPluginsRequest
-	41, // 47: psmith.v1.ConversationsService.SetConversationPlugins:input_type -> psmith.v1.SetConversationPluginsRequest
-	43, // 48: psmith.v1.ConversationsService.ResolveConversationPipeline:input_type -> psmith.v1.ResolveConversationPipelineRequest
-	30, // 49: psmith.v1.ConversationsService.ListMessages:input_type -> psmith.v1.ListMessagesRequest
-	32, // 50: psmith.v1.ConversationsService.GetMessage:input_type -> psmith.v1.GetMessageRequest
-	34, // 51: psmith.v1.ConversationsService.EditMessage:input_type -> psmith.v1.EditMessageRequest
-	36, // 52: psmith.v1.ConversationsService.DeleteMessage:input_type -> psmith.v1.DeleteMessageRequest
-	46, // 53: psmith.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> psmith.v1.PromoteCompactionToNewContextRequest
-	48, // 54: psmith.v1.ConversationsService.CreateContextManual:input_type -> psmith.v1.CreateContextManualRequest
-	50, // 55: psmith.v1.ConversationsService.SendMessage:input_type -> psmith.v1.SendMessageRequest
-	52, // 56: psmith.v1.ConversationsService.Compact:input_type -> psmith.v1.CompactRequest
-	54, // 57: psmith.v1.ConversationsService.CountContextTokens:input_type -> psmith.v1.CountContextTokensRequest
-	3,  // 58: psmith.v1.ConversationsService.CreateConversation:output_type -> psmith.v1.CreateConversationResponse
-	5,  // 59: psmith.v1.ConversationsService.ListConversations:output_type -> psmith.v1.ListConversationsResponse
-	7,  // 60: psmith.v1.ConversationsService.GetConversation:output_type -> psmith.v1.GetConversationResponse
-	9,  // 61: psmith.v1.ConversationsService.UpdateConversation:output_type -> psmith.v1.UpdateConversationResponse
-	11, // 62: psmith.v1.ConversationsService.DeleteConversation:output_type -> psmith.v1.DeleteConversationResponse
-	13, // 63: psmith.v1.ConversationsService.ArchiveConversation:output_type -> psmith.v1.ArchiveConversationResponse
-	15, // 64: psmith.v1.ConversationsService.UnarchiveConversation:output_type -> psmith.v1.UnarchiveConversationResponse
-	17, // 65: psmith.v1.ConversationsService.PinConversation:output_type -> psmith.v1.PinConversationResponse
-	19, // 66: psmith.v1.ConversationsService.UnpinConversation:output_type -> psmith.v1.UnpinConversationResponse
-	21, // 67: psmith.v1.ConversationsService.ListContexts:output_type -> psmith.v1.ListContextsResponse
-	23, // 68: psmith.v1.ConversationsService.ActivateContext:output_type -> psmith.v1.ActivateContextResponse
-	25, // 69: psmith.v1.ConversationsService.SetCurrentLeaf:output_type -> psmith.v1.SetCurrentLeafResponse
-	27, // 70: psmith.v1.ConversationsService.UpdateContext:output_type -> psmith.v1.UpdateContextResponse
-	29, // 71: psmith.v1.ConversationsService.DeleteContext:output_type -> psmith.v1.DeleteContextResponse
-	40, // 72: psmith.v1.ConversationsService.GetConversationPlugins:output_type -> psmith.v1.GetConversationPluginsResponse
-	42, // 73: psmith.v1.ConversationsService.SetConversationPlugins:output_type -> psmith.v1.SetConversationPluginsResponse
-	44, // 74: psmith.v1.ConversationsService.ResolveConversationPipeline:output_type -> psmith.v1.ResolveConversationPipelineResponse
-	31, // 75: psmith.v1.ConversationsService.ListMessages:output_type -> psmith.v1.ListMessagesResponse
-	33, // 76: psmith.v1.ConversationsService.GetMessage:output_type -> psmith.v1.GetMessageResponse
-	35, // 77: psmith.v1.ConversationsService.EditMessage:output_type -> psmith.v1.EditMessageResponse
-	37, // 78: psmith.v1.ConversationsService.DeleteMessage:output_type -> psmith.v1.DeleteMessageResponse
-	47, // 79: psmith.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> psmith.v1.PromoteCompactionToNewContextResponse
-	49, // 80: psmith.v1.ConversationsService.CreateContextManual:output_type -> psmith.v1.CreateContextManualResponse
-	51, // 81: psmith.v1.ConversationsService.SendMessage:output_type -> psmith.v1.SendMessageResponse
-	53, // 82: psmith.v1.ConversationsService.Compact:output_type -> psmith.v1.CompactResponse
-	55, // 83: psmith.v1.ConversationsService.CountContextTokens:output_type -> psmith.v1.CountContextTokensResponse
-	58, // [58:84] is the sub-list for method output_type
-	32, // [32:58] is the sub-list for method input_type
+	18, // 39: psmith.v1.ConversationsService.PinConversation:input_type -> psmith.v1.PinConversationRequest
+	16, // 40: psmith.v1.ConversationsService.GenerateConversationTitle:input_type -> psmith.v1.GenerateConversationTitleRequest
+	20, // 41: psmith.v1.ConversationsService.UnpinConversation:input_type -> psmith.v1.UnpinConversationRequest
+	22, // 42: psmith.v1.ConversationsService.ListContexts:input_type -> psmith.v1.ListContextsRequest
+	24, // 43: psmith.v1.ConversationsService.ActivateContext:input_type -> psmith.v1.ActivateContextRequest
+	26, // 44: psmith.v1.ConversationsService.SetCurrentLeaf:input_type -> psmith.v1.SetCurrentLeafRequest
+	28, // 45: psmith.v1.ConversationsService.UpdateContext:input_type -> psmith.v1.UpdateContextRequest
+	30, // 46: psmith.v1.ConversationsService.DeleteContext:input_type -> psmith.v1.DeleteContextRequest
+	41, // 47: psmith.v1.ConversationsService.GetConversationPlugins:input_type -> psmith.v1.GetConversationPluginsRequest
+	43, // 48: psmith.v1.ConversationsService.SetConversationPlugins:input_type -> psmith.v1.SetConversationPluginsRequest
+	45, // 49: psmith.v1.ConversationsService.ResolveConversationPipeline:input_type -> psmith.v1.ResolveConversationPipelineRequest
+	32, // 50: psmith.v1.ConversationsService.ListMessages:input_type -> psmith.v1.ListMessagesRequest
+	34, // 51: psmith.v1.ConversationsService.GetMessage:input_type -> psmith.v1.GetMessageRequest
+	36, // 52: psmith.v1.ConversationsService.EditMessage:input_type -> psmith.v1.EditMessageRequest
+	38, // 53: psmith.v1.ConversationsService.DeleteMessage:input_type -> psmith.v1.DeleteMessageRequest
+	48, // 54: psmith.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> psmith.v1.PromoteCompactionToNewContextRequest
+	50, // 55: psmith.v1.ConversationsService.CreateContextManual:input_type -> psmith.v1.CreateContextManualRequest
+	52, // 56: psmith.v1.ConversationsService.SendMessage:input_type -> psmith.v1.SendMessageRequest
+	54, // 57: psmith.v1.ConversationsService.Compact:input_type -> psmith.v1.CompactRequest
+	56, // 58: psmith.v1.ConversationsService.CountContextTokens:input_type -> psmith.v1.CountContextTokensRequest
+	3,  // 59: psmith.v1.ConversationsService.CreateConversation:output_type -> psmith.v1.CreateConversationResponse
+	5,  // 60: psmith.v1.ConversationsService.ListConversations:output_type -> psmith.v1.ListConversationsResponse
+	7,  // 61: psmith.v1.ConversationsService.GetConversation:output_type -> psmith.v1.GetConversationResponse
+	9,  // 62: psmith.v1.ConversationsService.UpdateConversation:output_type -> psmith.v1.UpdateConversationResponse
+	11, // 63: psmith.v1.ConversationsService.DeleteConversation:output_type -> psmith.v1.DeleteConversationResponse
+	13, // 64: psmith.v1.ConversationsService.ArchiveConversation:output_type -> psmith.v1.ArchiveConversationResponse
+	15, // 65: psmith.v1.ConversationsService.UnarchiveConversation:output_type -> psmith.v1.UnarchiveConversationResponse
+	19, // 66: psmith.v1.ConversationsService.PinConversation:output_type -> psmith.v1.PinConversationResponse
+	17, // 67: psmith.v1.ConversationsService.GenerateConversationTitle:output_type -> psmith.v1.GenerateConversationTitleResponse
+	21, // 68: psmith.v1.ConversationsService.UnpinConversation:output_type -> psmith.v1.UnpinConversationResponse
+	23, // 69: psmith.v1.ConversationsService.ListContexts:output_type -> psmith.v1.ListContextsResponse
+	25, // 70: psmith.v1.ConversationsService.ActivateContext:output_type -> psmith.v1.ActivateContextResponse
+	27, // 71: psmith.v1.ConversationsService.SetCurrentLeaf:output_type -> psmith.v1.SetCurrentLeafResponse
+	29, // 72: psmith.v1.ConversationsService.UpdateContext:output_type -> psmith.v1.UpdateContextResponse
+	31, // 73: psmith.v1.ConversationsService.DeleteContext:output_type -> psmith.v1.DeleteContextResponse
+	42, // 74: psmith.v1.ConversationsService.GetConversationPlugins:output_type -> psmith.v1.GetConversationPluginsResponse
+	44, // 75: psmith.v1.ConversationsService.SetConversationPlugins:output_type -> psmith.v1.SetConversationPluginsResponse
+	46, // 76: psmith.v1.ConversationsService.ResolveConversationPipeline:output_type -> psmith.v1.ResolveConversationPipelineResponse
+	33, // 77: psmith.v1.ConversationsService.ListMessages:output_type -> psmith.v1.ListMessagesResponse
+	35, // 78: psmith.v1.ConversationsService.GetMessage:output_type -> psmith.v1.GetMessageResponse
+	37, // 79: psmith.v1.ConversationsService.EditMessage:output_type -> psmith.v1.EditMessageResponse
+	39, // 80: psmith.v1.ConversationsService.DeleteMessage:output_type -> psmith.v1.DeleteMessageResponse
+	49, // 81: psmith.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> psmith.v1.PromoteCompactionToNewContextResponse
+	51, // 82: psmith.v1.ConversationsService.CreateContextManual:output_type -> psmith.v1.CreateContextManualResponse
+	53, // 83: psmith.v1.ConversationsService.SendMessage:output_type -> psmith.v1.SendMessageResponse
+	55, // 84: psmith.v1.ConversationsService.Compact:output_type -> psmith.v1.CompactResponse
+	57, // 85: psmith.v1.ConversationsService.CountContextTokens:output_type -> psmith.v1.CountContextTokensResponse
+	59, // [59:86] is the sub-list for method output_type
+	32, // [32:59] is the sub-list for method input_type
 	32, // [32:32] is the sub-list for extension type_name
 	32, // [32:32] is the sub-list for extension extendee
 	0,  // [0:32] is the sub-list for field type_name
@@ -3307,19 +3407,19 @@ func file_psmith_v1_conversations_proto_init() {
 	file_psmith_v1_conversations_proto_msgTypes[0].OneofWrappers = []any{}
 	file_psmith_v1_conversations_proto_msgTypes[2].OneofWrappers = []any{}
 	file_psmith_v1_conversations_proto_msgTypes[6].OneofWrappers = []any{}
-	file_psmith_v1_conversations_proto_msgTypes[24].OneofWrappers = []any{}
-	file_psmith_v1_conversations_proto_msgTypes[28].OneofWrappers = []any{}
-	file_psmith_v1_conversations_proto_msgTypes[32].OneofWrappers = []any{}
-	file_psmith_v1_conversations_proto_msgTypes[47].OneofWrappers = []any{}
-	file_psmith_v1_conversations_proto_msgTypes[48].OneofWrappers = []any{}
+	file_psmith_v1_conversations_proto_msgTypes[26].OneofWrappers = []any{}
+	file_psmith_v1_conversations_proto_msgTypes[30].OneofWrappers = []any{}
+	file_psmith_v1_conversations_proto_msgTypes[34].OneofWrappers = []any{}
+	file_psmith_v1_conversations_proto_msgTypes[49].OneofWrappers = []any{}
 	file_psmith_v1_conversations_proto_msgTypes[50].OneofWrappers = []any{}
+	file_psmith_v1_conversations_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_conversations_proto_rawDesc), len(file_psmith_v1_conversations_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   54,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

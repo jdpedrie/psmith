@@ -133,6 +133,9 @@ type Querier interface {
 	GetExplicitCache(ctx context.Context, arg GetExplicitCacheParams) (ExplicitCach, error)
 	GetFile(ctx context.Context, id uuid.UUID) (File, error)
 	GetFileByUserAndSHA(ctx context.Context, arg GetFileByUserAndSHAParams) (File, error)
+	// Newest assistant turn in a context — the transcript seed for
+	// client-invoked title generation (GenerateConversationTitle).
+	GetLatestAssistantMessage(ctx context.Context, contextID uuid.UUID) (Message, error)
 	// The chronological tip of a context — resolveParent's fallback when
 	// no cursor is tracked. Only the id is needed; the previous
 	// implementation listed the ENTIRE context (embeddings included) to

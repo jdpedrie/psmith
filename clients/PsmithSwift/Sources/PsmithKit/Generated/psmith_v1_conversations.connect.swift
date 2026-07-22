@@ -42,6 +42,16 @@ public protocol Psmith_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `pinConversation`(request: Psmith_V1_PinConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_PinConversationResponse>
 
+    /// Client-invoked cloud titling. Exists for profiles whose
+    /// title_provider_kind delegates titling to the CLIENT (e.g.
+    /// apple_foundation): when the on-device model isn't available, the
+    /// client asks the server to run its normal cloud title path instead
+    /// of leaving the conversation on the derived fallback. Ignores the
+    /// kind sentinel; respects everything else (configured title model,
+    /// sanitization, derived fallback, context title co-write).
+    @available(iOS 13, *)
+    func `generateConversationTitle`(request: Psmith_V1_GenerateConversationTitleRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_GenerateConversationTitleResponse>
+
     @available(iOS 13, *)
     func `unpinConversation`(request: Psmith_V1_UnpinConversationRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_UnpinConversationResponse>
 
@@ -204,6 +214,11 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
     }
 
     @available(iOS 13, *)
+    public func `generateConversationTitle`(request: Psmith_V1_GenerateConversationTitleRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_GenerateConversationTitleResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/GenerateConversationTitle", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `unpinConversation`(request: Psmith_V1_UnpinConversationRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_UnpinConversationResponse> {
         return await self.client.unary(path: "/psmith.v1.ConversationsService/UnpinConversation", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -303,6 +318,7 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
             public static let archiveConversation = Connect.MethodSpec(name: "ArchiveConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let unarchiveConversation = Connect.MethodSpec(name: "UnarchiveConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let pinConversation = Connect.MethodSpec(name: "PinConversation", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let generateConversationTitle = Connect.MethodSpec(name: "GenerateConversationTitle", service: "psmith.v1.ConversationsService", type: .unary)
             public static let unpinConversation = Connect.MethodSpec(name: "UnpinConversation", service: "psmith.v1.ConversationsService", type: .unary)
             public static let listContexts = Connect.MethodSpec(name: "ListContexts", service: "psmith.v1.ConversationsService", type: .unary)
             public static let activateContext = Connect.MethodSpec(name: "ActivateContext", service: "psmith.v1.ConversationsService", type: .unary)

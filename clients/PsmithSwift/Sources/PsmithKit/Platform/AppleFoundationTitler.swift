@@ -1,19 +1,19 @@
 import Foundation
-import PsmithKit
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
 /// `LocalTitler` backed by Apple's on-device `FoundationModels` framework
-/// (macOS 26+ Tahoe, requires Apple Intelligence to be enabled). Free, fast
-/// (typically sub-second for a 4-word title), private — the transcript
-/// never leaves the device.
+/// (macOS 26+ / iOS 26+, requires Apple Intelligence to be enabled). Free,
+/// fast (typically sub-second for a 4-word title), private — the transcript
+/// never leaves the device. Lives in PsmithKit so the Mac and iOS shells
+/// inject the SAME implementation.
 ///
 /// The whole type is gated on `canImport(FoundationModels)` so the package
 /// still compiles on older SDKs / non-Apple-Intelligence-capable machines.
 /// On those builds `isAvailable` returns false and `generateTitle` throws,
 /// which the trigger logic in `ConversationViewModel` treats as a no-op.
-struct AppleFoundationTitler: LocalTitler {
+public struct AppleFoundationTitler: LocalTitler {
     /// Errors specific to the local titler. The trigger path logs and drops
     /// these silently — we never surface a popup or banner.
     enum LocalTitlerError: Error, CustomStringConvertible {
@@ -36,7 +36,9 @@ struct AppleFoundationTitler: LocalTitler {
     /// Delegates to the shared `AppleFoundation.isAvailable` check in
     /// PsmithKit so the Mac titler, the iOS titler, and the settings
     /// pickers in both shells answer this question identically.
-    var isAvailable: Bool {
+    public init() {}
+
+    public var isAvailable: Bool {
         AppleFoundation.isAvailable
     }
 
@@ -44,9 +46,9 @@ struct AppleFoundationTitler: LocalTitler {
     /// title. The prompt mirrors the server-side title path so the local
     /// model produces consistent style. Cap output via the session's
     /// generation options to avoid the model wandering into a paragraph.
-    func generateTitle(transcript: String, guide: String?) async throws -> String {
+    public func generateTitle(transcript: String, guide: String?) async throws -> String {
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, iOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
             case .available:
                 break
@@ -68,7 +70,7 @@ struct AppleFoundationTitler: LocalTitler {
             guard !trimmed.isEmpty else { throw LocalTitlerError.emptyResult }
             return trimmed
         } else {
-            throw LocalTitlerError.unavailable(reason: "macOS < 26")
+            throw LocalTitlerError.unavailable(reason: "OS < 26")
         }
         #else
         throw LocalTitlerError.unavailable(reason: "FoundationModels framework not available")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -125,4 +126,68 @@ func TestListContexts_CacheSavingsAggregate(t *testing.T) {
 	if math.Abs(row.CacheSavingsUsd-2.7) > 1e-9 {
 		t.Errorf("cache_savings_usd = %v, want 2.7", row.CacheSavingsUsd)
 	}
+}
+
+// GenerateConversationTitle is the client-invoked cloud path for
+// profiles whose kind sentinel delegates titling to the client. With
+// no title model configured it persists (and returns) the derived
+// "Profile (date)" fallback — enough to verify the RPC contract
+// without a live provider.
+func TestGenerateConversationTitle_DerivedFallback(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _, pool := newFullSvcWithPool(t)
+	f := seedAnthropicSendable(t, q, "http://unused.invalid")
+	ctx := context.Background()
+
+	// Give the profile a client-side kind so the sentinel would have
+	// blocked the AUTO path — this RPC must ignore it.
+	if _, err := pool.Exec(ctx,
+		"UPDATE profiles SET title_provider_kind = 'apple_foundation' WHERE id = $1",
+		f.profile.ID,
+	); err != nil {
+		t.Fatalf("set title_provider_kind: %v", err)
+	}
+
+	resp, err := svc.GenerateConversationTitle(ctxAsUser(f.user), connect.NewRequest(&psmithv1.GenerateConversationTitleRequest{
+		Id: f.conv.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("GenerateConversationTitle: %v", err)
+	}
+	if resp.Msg.Title == "" {
+		t.Fatal("empty title")
+	}
+	// Derived fallback shape: "<profile name> (YYYY-MM-DD)".
+	if !strings.HasPrefix(resp.Msg.Title, "test (") {
+		t.Errorf("title = %q, want derived 'test (date)' fallback", resp.Msg.Title)
+	}
+	// Persisted on the row too.
+	conv, err := q.GetConversationByID(ctx, f.conv.ID)
+	if err != nil {
+		t.Fatalf("GetConversationByID: %v", err)
+	}
+	if conv.Title == nil || *conv.Title != resp.Msg.Title {
+		t.Errorf("persisted title = %v, want %q", conv.Title, resp.Msg.Title)
+	}
+}
+
+// Ownership: another user's conversation reads as NotFound.
+func TestGenerateConversationTitle_OwnershipEnforced(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://unused.invalid")
+	oid, _ := uuid.NewV7()
+	other, err := q.CreateUser(context.Background(), store.CreateUserParams{
+		ID: oid, Username: t.Name() + "-mallory", PasswordHash: "x",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	_, gerr := svc.GenerateConversationTitle(ctxAsUser(other), connect.NewRequest(&psmithv1.GenerateConversationTitleRequest{
+		Id: f.conv.ID.String(),
+	}))
+	assertCode(t, gerr, connect.CodeNotFound)
 }

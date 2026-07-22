@@ -265,16 +265,20 @@ struct ProfilesViewModelTests {
 
     // MARK: - loadPluginTypes (case 12)
 
-    @Test("loadPluginTypes populates list (sorted by name)")
+    @Test("loadPluginTypes populates list (sorted by display name)")
     func loadPluginTypesSorted() async throws {
         let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "pvm-lpt")
         let vm = ProfilesViewModel(client: client)
         await vm.loadPluginTypes()
         #expect(!vm.pluginTypes.isEmpty)
         #expect(vm.pluginTypes.contains(where: { $0.name == "lettered_choices" }))
-        // Sorted by name (case-insensitive) — verify by re-running the sort.
-        let names = vm.pluginTypes.map(\.name)
-        #expect(names == names.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }))
+        // The picker sorts by what the user SEES — display names, not
+        // wire names (asserting name order only held while every
+        // display name happened to share its wire name's prefix; the
+        // mcp entry's "Custom MCP server (advanced)" demotion broke
+        // that coincidence).
+        let displayNames = vm.pluginTypes.map(\.displayName)
+        #expect(displayNames == displayNames.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }))
     }
 
     // MARK: - loadPlugins (case 13)

@@ -301,6 +301,18 @@ struct ConversationsModelTests {
         #expect(model.hasMore)
     }
 
+    @Test("generateTitle returns and persists the derived fallback when no title model is configured")
+    func generateTitleDerivedFallback() async throws {
+        let (client, profile) = try await freshUserWithProfile(prefix: "convm-title")
+        let conv = try await client.conversations.create(profileID: profile.id, title: nil)
+        let title = try await client.conversations.generateTitle(id: conv.id)
+        #expect(!title.isEmpty)
+        // Derived shape is "<profile name> (YYYY-MM-DD)".
+        #expect(title.hasPrefix(profile.name))
+        let (after, _) = try await client.conversations.get(id: conv.id)
+        #expect(after.title == title)
+    }
+
     @Test("archive removes from the active list; archived list serves it read-only; unarchive restores")
     func archiveFlow() async throws {
         let (client, profile) = try await freshUserWithProfile(prefix: "convm-arch")

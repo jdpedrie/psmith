@@ -8,9 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/profiles"
 	"github.com/jdpedrie/psmith/internal/providers"
@@ -206,6 +209,119 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 	if needConvTitle || needCtxTitle {
 		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	}
+}
+
+// GenerateConversationTitle is the client-invoked cloud title path.
+// It exists for profiles whose title_provider_kind delegates titling
+// to the CLIENT (apple_foundation): when the on-device model isn't
+// available on a given device, the client calls this instead of
+// leaving the conversation on the derived fallback. The kind sentinel
+// is deliberately IGNORED here — the caller has already decided the
+// client-side generator can't run. Everything else mirrors the auto
+// path: configured title model when present, sanitization, derived
+// "Profile (date)" fallback, and a context-title co-write when the
+// active context is untitled.
+func (s *Service) GenerateConversationTitle(ctx context.Context, req *connect.Request[psmithv1.GenerateConversationTitleRequest]) (*connect.Response[psmithv1.GenerateConversationTitleResponse], error) {
+	caller := auth.MustFromContext(ctx)
+	convID, err := uuid.Parse(req.Msg.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid id: %w", err))
+	}
+	conv, err := s.fetchOwnedConversation(ctx, convID, caller.ID)
+	if err != nil {
+		return nil, err
+	}
+	cx, err := s.queries.GetActiveContextByConversation(ctx, conv.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	prof, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	resolved, err := profiles.Resolve(ctx, s.queries, prof)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	needCtxTitle := cx.Title == nil || *cx.Title == ""
+	derivedConvTitle := derivedTitle(prof.Name, conv.CreatedAt)
+
+	persist := func(title string) error {
+		if err := s.queries.UpdateConversationTitle(ctx, store.UpdateConversationTitleParams{
+			ID: conv.ID, Title: &title,
+		}); err != nil {
+			return connect.NewError(connect.CodeInternal, err)
+		}
+		if needCtxTitle {
+			if err := s.queries.UpdateContextTitle(ctx, store.UpdateContextTitleParams{
+				ID: cx.ID, Title: &title,
+			}); err != nil {
+				s.logger.Warn("title(rpc): persist context title failed", "err", err)
+			}
+		}
+		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+		return nil
+	}
+
+	// No title model configured → derived fallback, same as the auto
+	// path's opt-out branch.
+	if resolved.TitleProviderID == nil || resolved.TitleModelID == nil || *resolved.TitleModelID == "" {
+		if err := persist(derivedConvTitle); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&psmithv1.GenerateConversationTitleResponse{Title: derivedConvTitle}), nil
+	}
+
+	guide := defaultTitleGuide
+	if resolved.TitleGuide != nil && *resolved.TitleGuide != "" {
+		guide = *resolved.TitleGuide
+	}
+
+	asst, err := s.queries.GetLatestAssistantMessage(ctx, cx.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Nothing to title from yet; derived fallback keeps the
+			// sidebar readable and the client can retry after a turn.
+			if perr := persist(derivedConvTitle); perr != nil {
+				return nil, perr
+			}
+			return connect.NewResponse(&psmithv1.GenerateConversationTitleResponse{Title: derivedConvTitle}), nil
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	var userMsg store.Message
+	if asst.ParentID != nil {
+		userMsg, _ = s.queries.GetMessageByID(ctx, *asst.ParentID)
+	}
+	transcript := s.renderTitleTranscript(userMsg, asst)
+	if transcript == "" {
+		if perr := persist(derivedConvTitle); perr != nil {
+			return nil, perr
+		}
+		return connect.NewResponse(&psmithv1.GenerateConversationTitleResponse{Title: derivedConvTitle}), nil
+	}
+
+	startedAt := time.Now()
+	title, err := s.callTitleModel(ctx, *resolved.TitleProviderID, *resolved.TitleModelID, guide, transcript)
+	endedAt := time.Now()
+	if err == nil {
+		title = sanitizeTitle(title)
+	}
+	if err != nil || title == "" {
+		if err != nil {
+			s.logger.Warn("title(rpc): generation failed", "err", err)
+		}
+		if perr := persist(derivedConvTitle); perr != nil {
+			return nil, perr
+		}
+		return connect.NewResponse(&psmithv1.GenerateConversationTitleResponse{Title: derivedConvTitle}), nil
+	}
+	s.emitLangfuseTitleCall(conv.UserID, conv.ID, asst.ID, *resolved.TitleProviderID, *resolved.TitleModelID, transcript, title, startedAt, endedAt)
+	if err := persist(title); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&psmithv1.GenerateConversationTitleResponse{Title: title}), nil
 }
 
 // isFirstAssistantInContext reports whether assistantMsgID is the only

@@ -118,7 +118,8 @@ struct ConversationView: View {
                         messageID: msgID,
                         preview: preview
                     )
-                }
+                },
+                localTitler: AppleFoundationTitler()
             )
             m.speechPlayer = app.speech
             // Cache-first entry: cached transcript renders this frame;
@@ -127,6 +128,12 @@ struct ConversationView: View {
             await m.hydrateFromCache()
             self.model = m
             await m.load()
+            // Decide whether to fire the on-device titler (or its cloud
+            // fallback) now that the messages are in hand — same trigger
+            // the Mac shell runs. The profile map lets the VM resolve
+            // title_provider_kind through the parent chain locally.
+            let profileMap = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
+            await m.maybeGenerateLocalTitle(profilesByID: profileMap)
             // Loaded alongside the message list so the model chip
             // can show the display name (not just the model id) and
             // contexts toolbar item knows the count up-front.

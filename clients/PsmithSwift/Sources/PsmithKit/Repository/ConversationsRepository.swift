@@ -180,6 +180,19 @@ public final class ConversationsRepository: Sendable {
         return PsmithConversation(from: msg.conversation)
     }
 
+    /// Ask the server to run its cloud title path now. The client-side
+    /// generator's fallback: profiles whose title_provider_kind is
+    /// apple_foundation own titling client-side, but a device without
+    /// the on-device model calls this instead of leaving the derived
+    /// fallback in place. Returns the persisted title.
+    public func generateTitle(id: String) async throws -> String {
+        var req = Psmith_V1_GenerateConversationTitleRequest()
+        req.id = id
+        let resp = await client.generateConversationTitle(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("generate title") }
+        return msg.title
+    }
+
     /// Updates the conversation's per-conversation settings — bound to
     /// `conversations.settings` JSONB. Pass `nil` for `title` to leave it
     /// unchanged. The server replaces (not merges) the settings blob, so

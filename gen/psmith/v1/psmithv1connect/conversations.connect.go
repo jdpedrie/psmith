@@ -57,6 +57,9 @@ const (
 	// ConversationsServicePinConversationProcedure is the fully-qualified name of the
 	// ConversationsService's PinConversation RPC.
 	ConversationsServicePinConversationProcedure = "/psmith.v1.ConversationsService/PinConversation"
+	// ConversationsServiceGenerateConversationTitleProcedure is the fully-qualified name of the
+	// ConversationsService's GenerateConversationTitle RPC.
+	ConversationsServiceGenerateConversationTitleProcedure = "/psmith.v1.ConversationsService/GenerateConversationTitle"
 	// ConversationsServiceUnpinConversationProcedure is the fully-qualified name of the
 	// ConversationsService's UnpinConversation RPC.
 	ConversationsServiceUnpinConversationProcedure = "/psmith.v1.ConversationsService/UnpinConversation"
@@ -130,6 +133,14 @@ type ConversationsServiceClient interface {
 	// first). Pinning an archived conversation is refused; archiving a
 	// pinned conversation clears the pin.
 	PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error)
+	// Client-invoked cloud titling. Exists for profiles whose
+	// title_provider_kind delegates titling to the CLIENT (e.g.
+	// apple_foundation): when the on-device model isn't available, the
+	// client asks the server to run its normal cloud title path instead
+	// of leaving the conversation on the derived fallback. Ignores the
+	// kind sentinel; respects everything else (configured title model,
+	// sanitization, derived fallback, context title co-write).
+	GenerateConversationTitle(context.Context, *connect.Request[v1.GenerateConversationTitleRequest]) (*connect.Response[v1.GenerateConversationTitleResponse], error)
 	UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
@@ -269,6 +280,12 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("PinConversation")),
 			connect.WithClientOptions(opts...),
 		),
+		generateConversationTitle: connect.NewClient[v1.GenerateConversationTitleRequest, v1.GenerateConversationTitleResponse](
+			httpClient,
+			baseURL+ConversationsServiceGenerateConversationTitleProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("GenerateConversationTitle")),
+			connect.WithClientOptions(opts...),
+		),
 		unpinConversation: connect.NewClient[v1.UnpinConversationRequest, v1.UnpinConversationResponse](
 			httpClient,
 			baseURL+ConversationsServiceUnpinConversationProcedure,
@@ -390,6 +407,7 @@ type conversationsServiceClient struct {
 	archiveConversation           *connect.Client[v1.ArchiveConversationRequest, v1.ArchiveConversationResponse]
 	unarchiveConversation         *connect.Client[v1.UnarchiveConversationRequest, v1.UnarchiveConversationResponse]
 	pinConversation               *connect.Client[v1.PinConversationRequest, v1.PinConversationResponse]
+	generateConversationTitle     *connect.Client[v1.GenerateConversationTitleRequest, v1.GenerateConversationTitleResponse]
 	unpinConversation             *connect.Client[v1.UnpinConversationRequest, v1.UnpinConversationResponse]
 	listContexts                  *connect.Client[v1.ListContextsRequest, v1.ListContextsResponse]
 	activateContext               *connect.Client[v1.ActivateContextRequest, v1.ActivateContextResponse]
@@ -448,6 +466,11 @@ func (c *conversationsServiceClient) UnarchiveConversation(ctx context.Context, 
 // PinConversation calls psmith.v1.ConversationsService.PinConversation.
 func (c *conversationsServiceClient) PinConversation(ctx context.Context, req *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error) {
 	return c.pinConversation.CallUnary(ctx, req)
+}
+
+// GenerateConversationTitle calls psmith.v1.ConversationsService.GenerateConversationTitle.
+func (c *conversationsServiceClient) GenerateConversationTitle(ctx context.Context, req *connect.Request[v1.GenerateConversationTitleRequest]) (*connect.Response[v1.GenerateConversationTitleResponse], error) {
+	return c.generateConversationTitle.CallUnary(ctx, req)
 }
 
 // UnpinConversation calls psmith.v1.ConversationsService.UnpinConversation.
@@ -557,6 +580,14 @@ type ConversationsServiceHandler interface {
 	// first). Pinning an archived conversation is refused; archiving a
 	// pinned conversation clears the pin.
 	PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error)
+	// Client-invoked cloud titling. Exists for profiles whose
+	// title_provider_kind delegates titling to the CLIENT (e.g.
+	// apple_foundation): when the on-device model isn't available, the
+	// client asks the server to run its normal cloud title path instead
+	// of leaving the conversation on the derived fallback. Ignores the
+	// kind sentinel; respects everything else (configured title model,
+	// sanitization, derived fallback, context title co-write).
+	GenerateConversationTitle(context.Context, *connect.Request[v1.GenerateConversationTitleRequest]) (*connect.Response[v1.GenerateConversationTitleResponse], error)
 	UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error)
 	// Contexts.
 	ListContexts(context.Context, *connect.Request[v1.ListContextsRequest]) (*connect.Response[v1.ListContextsResponse], error)
@@ -692,6 +723,12 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("PinConversation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServiceGenerateConversationTitleHandler := connect.NewUnaryHandler(
+		ConversationsServiceGenerateConversationTitleProcedure,
+		svc.GenerateConversationTitle,
+		connect.WithSchema(conversationsServiceMethods.ByName("GenerateConversationTitle")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceUnpinConversationHandler := connect.NewUnaryHandler(
 		ConversationsServiceUnpinConversationProcedure,
 		svc.UnpinConversation,
@@ -818,6 +855,8 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceUnarchiveConversationHandler.ServeHTTP(w, r)
 		case ConversationsServicePinConversationProcedure:
 			conversationsServicePinConversationHandler.ServeHTTP(w, r)
+		case ConversationsServiceGenerateConversationTitleProcedure:
+			conversationsServiceGenerateConversationTitleHandler.ServeHTTP(w, r)
 		case ConversationsServiceUnpinConversationProcedure:
 			conversationsServiceUnpinConversationHandler.ServeHTTP(w, r)
 		case ConversationsServiceListContextsProcedure:
@@ -893,6 +932,10 @@ func (UnimplementedConversationsServiceHandler) UnarchiveConversation(context.Co
 
 func (UnimplementedConversationsServiceHandler) PinConversation(context.Context, *connect.Request[v1.PinConversationRequest]) (*connect.Response[v1.PinConversationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.PinConversation is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) GenerateConversationTitle(context.Context, *connect.Request[v1.GenerateConversationTitleRequest]) (*connect.Response[v1.GenerateConversationTitleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.GenerateConversationTitle is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) UnpinConversation(context.Context, *connect.Request[v1.UnpinConversationRequest]) (*connect.Response[v1.UnpinConversationResponse], error) {

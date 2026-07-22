@@ -551,6 +551,59 @@ func (q *Queries) GetContextRoleMessageInContext(ctx context.Context, contextID 
 	return i, err
 }
 
+const getLatestAssistantMessage = `-- name: GetLatestAssistantMessage :one
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
+WHERE context_id = $1 AND role = 'assistant'
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// Newest assistant turn in a context — the transcript seed for
+// client-invoked title generation (GenerateConversationTitle).
+func (q *Queries) GetLatestAssistantMessage(ctx context.Context, contextID uuid.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getLatestAssistantMessage, contextID)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ContextID,
+		&i.ParentID,
+		&i.Role,
+		&i.Content,
+		&i.RawContent,
+		&i.Thinking,
+		&i.ThinkingProviderType,
+		&i.ThinkingRenderedText,
+		&i.ProviderID,
+		&i.ModelID,
+		&i.CreatedAt,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.ReasoningTokens,
+		&i.ProviderUsageRaw,
+		&i.InputCostUsd,
+		&i.OutputCostUsd,
+		&i.CacheReadCostUsd,
+		&i.CacheWriteCostUsd,
+		&i.TotalCostUsd,
+		&i.EditedAt,
+		&i.ErrorPayload,
+		&i.ThinkingDurationMs,
+		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
+		&i.FinishReason,
+		&i.ToolCostUsd,
+		&i.IsWelcome,
+		&i.Embedding,
+		&i.EmbeddingModel,
+		&i.EmbeddingAt,
+		&i.MessageHeaders,
+		&i.MessageTrailers,
+	)
+	return i, err
+}
+
 const getLatestMessageID = `-- name: GetLatestMessageID :one
 SELECT id FROM messages
 WHERE context_id = $1

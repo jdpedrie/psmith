@@ -347,3 +347,11 @@ WHERE m.context_id = $1
   AND NOT EXISTS (SELECT 1 FROM messages c WHERE c.parent_id = m.id)
 ORDER BY m.id DESC
 LIMIT 2;
+
+-- name: GetLatestAssistantMessage :one
+-- Newest assistant turn in a context — the transcript seed for
+-- client-invoked title generation (GenerateConversationTitle).
+SELECT * FROM messages
+WHERE context_id = $1 AND role = 'assistant'
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
