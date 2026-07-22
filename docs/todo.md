@@ -229,7 +229,6 @@ Deferred:
   - **WS drivers** (Grok WS, ElevenLabs stream-input, Cartesia) behind the same `Synthesizer` interface.
   - **Voice resolution chain** (conversation > profile > user) + multi-voice conversations.
   - **Standalone-key cost attribution** — `cost_events.provider_id` is a FK to `user_model_providers`, so synthesis with a standalone key (no `provider_ref`) skips the ledger. Fine while credential-reuse is the recommended path; revisit if ElevenLabs (never a chat provider) lands.
-  - **iOS visual QA pass pending** — built against the generic simulator destination (CoreSimulator broken on the dev Mac); the speaker affordance + Speech settings screen compile and the models are L1-tested, but nobody has eyeballed the running UI yet.
 
 - ~~Mac profile editor lacks welcome-message editing~~ — added in the 2026-07-10 parity sweep (Prompt section row + clear handling).
 
