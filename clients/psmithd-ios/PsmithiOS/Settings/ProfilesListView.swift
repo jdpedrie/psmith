@@ -1,6 +1,7 @@
 import SwiftUI
 import PsmithKit
 import PsmithUI
+import UniformTypeIdentifiers
 
 /// iOS Profiles list. Push from SettingsRoot. Per
 /// `docs/clients/ios-reference.md`: list with parent-chain captions, tap
@@ -14,6 +15,7 @@ struct ProfilesListView: View {
     @Environment(AppModel.self) private var app
     @State private var deleteCandidate: PsmithProfile?
     @State private var creating = false
+    @State private var importing = false
 
     var body: some View {
         @Bindable var profiles = app.profiles
@@ -68,12 +70,43 @@ struct ProfilesListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    importing = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .accessibilityLabel("Import profile")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
                     creating = true
                 } label: {
                     Image(systemName: "plus")
                 }
                 .accessibilityLabel("New profile")
             }
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { result in
+            switch result {
+            case .success(let url):
+                // A file picked outside the app sandbox needs an explicit
+                // scoped-resource claim before it can be read.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let data = try Data(contentsOf: url)
+                    Task { await profiles.previewImport(payload: data) }
+                } catch {
+                    profiles.error = "Could not read that file: \(error.localizedDescription)"
+                }
+            case .failure(let error):
+                profiles.error = error.localizedDescription
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { profiles.pendingImport != nil },
+            set: { if !$0 { profiles.cancelImport() } }
+        )) {
+            ProfileImportSheet(profiles: profiles)
         }
         // Always re-fetch on appear (and on pull-to-refresh) so an
         // edit made elsewhere — another client, the Psmith Manager via
@@ -271,6 +304,23 @@ private struct ProfileViewerScreen: View {
                         Button("Edit") {
                             editing = true
                         }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            Task { await app.profiles.exportProfile(id: p.id) }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Export profile")
+                        .disabled(app.profiles.isSharing)
+                    }
+                }
+                .sheet(isPresented: Binding(
+                    get: { app.profiles.pendingExport != nil },
+                    set: { if !$0 { app.profiles.pendingExport = nil } }
+                )) {
+                    if let export = app.profiles.pendingExport {
+                        ProfileExportSheet(export: export, profileName: p.name)
                     }
                 }
                 .task {
@@ -1550,5 +1600,101 @@ private struct LongTextEditorScreen: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+// MARK: - Sharing
+
+/// Hands the bundle to the system share sheet.
+///
+/// A share sheet is the right modal here: the whole action is "send this
+/// somewhere else", which is exactly what it is for. The notices sit above it
+/// so the sender sees what the recipient will still have to configure before
+/// they pick a destination.
+private struct ProfileExportSheet: View {
+    let export: PsmithProfileExport
+    let profileName: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Anyone with this file can recreate \(profileName).")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ProfileExportNotices(notices: export.notices)
+
+                    if let url = writeToTemporaryFile() {
+                        ShareLink(item: url) {
+                            Label("Share \(export.suggestedFilename)", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Export profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    /// ShareLink needs a file URL to offer a filename; the bytes alone would
+    /// share as an unnamed blob.
+    private func writeToTemporaryFile() -> URL? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(export.suggestedFilename)
+        do {
+            try export.payload.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+}
+
+/// Review before committing an import.
+private struct ProfileImportSheet: View {
+    @Bindable var profiles: ProfilesViewModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Nothing is created until you confirm.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ProfileImportReview(
+                        warnings: profiles.pendingImport?.warnings ?? [],
+                        renamed: profiles.pendingImport?.renamed ?? [],
+                        profileNames: profiles.pendingImport?.renamed ?? []
+                    )
+                }
+                .padding()
+            }
+            .navigationTitle("Import profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { profiles.cancelImport() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Import") {
+                        Task { await profiles.confirmImport() }
+                    }
+                    .disabled(profiles.isSharing)
+                }
+            }
+        }
     }
 }

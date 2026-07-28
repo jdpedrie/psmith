@@ -28,6 +28,21 @@ struct ProfilesMiddleColumn: View {
                 createDisabled: model.detailMode == .adding
             )
 
+            HStack {
+                Button {
+                    importProfile(into: model)
+                } label: {
+                    Label("Import profile", systemImage: "square.and.arrow.down")
+                        .scaledFont(.caption)
+                }
+                .buttonStyle(.glass)
+                .disabled(model.isSharing)
+                .help("Open a .psmithprofile file someone shared with you")
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+
             if model.isLoading {
                 ProgressView().padding()
                 Spacer()
@@ -93,6 +108,8 @@ struct ProfilesDetail: View {
     var body: some View {
         Group {
             switch model.detailMode {
+            case .importing:
+                ProfileImportPane(model: model)
             case .adding:
                 ProfileForm(model: model, editing: nil)
             case .viewing, .editing:
@@ -180,6 +197,12 @@ private struct ProfileViewer: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                GlassCircleButton(
+                    systemImage: "square.and.arrow.up",
+                    action: { exportProfile(profile, model: model.profilesModel) },
+                    help: "Export profile to a file you can share",
+                    disabled: model.profilesModel.isSharing
+                )
                 GlassCircleButton(
                     systemImage: "pencil",
                     action: { model.profilesModel.detailMode = .editing },
@@ -1615,5 +1638,103 @@ private func anyEqual(_ a: Any, _ b: Any) -> Bool {
         return configsEqual(a, b)
     default:
         return false
+    }
+}
+
+
+// MARK: - Sharing
+
+/// Reviewing a bundle before it is written.
+///
+/// Lives in the detail pane rather than a sheet: deciding whether to accept
+/// an import is a settings decision like any other, and the warnings need
+/// room to be read rather than a cramped modal.
+private struct ProfileImportPane: View {
+    @Bindable var model: ProfilesViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Import profile").scaledFont(.headline)
+                    Text("Nothing is created until you confirm.")
+                        .scaledFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: paneHeaderHeight)
+
+            Divider()
+
+            ScrollView {
+                ProfileImportReview(
+                    warnings: model.pendingImport?.warnings ?? [],
+                    renamed: model.pendingImport?.renamed ?? [],
+                    profileNames: model.pendingImport?.renamed ?? []
+                )
+                .padding(16)
+            }
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Cancel") { model.cancelImport() }
+                    .buttonStyle(.glass)
+                Button("Import") {
+                    Task { await model.confirmImport() }
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(model.isSharing)
+            }
+            .padding(12)
+            .background(.thinMaterial)
+        }
+    }
+}
+
+/// Writes the bundle to a file the user picks.
+///
+/// NSSavePanel rather than an in-app affordance because the destination is
+/// the filesystem; this is the system's job, not ours.
+@MainActor
+private func exportProfile(_ profile: PsmithProfile, model: ProfilesViewModel) {
+    Task {
+        await model.exportProfile(id: profile.id)
+        guard let export = model.pendingExport else { return }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = export.suggestedFilename
+        panel.canCreateDirectories = true
+        panel.message = export.notices.isEmpty
+            ? "Anyone with this file can recreate the profile."
+            : export.notices.joined(separator: "\n\n")
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try export.payload.write(to: url)
+            } catch {
+                model.error = "Could not save the profile: \(error.localizedDescription)"
+            }
+        }
+        model.pendingExport = nil
+    }
+}
+
+@MainActor
+private func importProfile(into model: ProfilesViewModel) {
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.message = "Choose a .psmithprofile file"
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+        let data = try Data(contentsOf: url)
+        Task { await model.previewImport(payload: data) }
+    } catch {
+        model.error = "Could not read that file: \(error.localizedDescription)"
     }
 }

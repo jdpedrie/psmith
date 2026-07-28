@@ -12,6 +12,7 @@ How the system works, one subsystem per document.
 
 - [design/overview.md](design/overview.md) — what Psmith is, goals, topology, stack, the shape of a turn.
 - [design/data-model.md](design/data-model.md) — conversation, context, the message tree, roles, profiles, inheritance, editing, branching.
+- [design/profile-sharing.md](design/profile-sharing.md) — exporting a profile as a portable bundle and importing it into another account: what never travels, how per-user references are rewritten as portable handles, flatten versus preserve.
 - [design/providers.md](design/providers.md) — drivers, provider instances, enabled models, the live catalog, stateless vs stateful, per-driver behavior.
 - [design/history-builder.md](design/history-builder.md) — building the wire prefix: walking the tree, role mapping, thinking, tool history, attachments, plugin contributions.
 - [design/streaming.md](design/streaming.md) — the stream supervisor, durable chunks, the broker, retry, subscribe and replay, the chunk vocabulary.

@@ -5,6 +5,10 @@ public enum ProfilesDetailMode: Equatable, Sendable {
     case viewing
     case adding
     case editing
+    /// Reviewing a bundle before committing it. The detail pane shows what
+    /// will be created and what did not resolve, so the decision happens in
+    /// place rather than in a modal over the list.
+    case importing
 }
 
 /// Drives the Profiles settings category. Reusable across macOS / iOS.
@@ -356,6 +360,79 @@ public final class ProfilesViewModel {
     public func savePlugins(forProfileID id: String, plugins: [PsmithProfilePlugin]) async throws {
         let updated = try await client.profiles.setProfilePlugins(profileID: id, plugins: plugins)
         profilePlugins[id] = updated
+    }
+
+    // MARK: - Sharing
+
+    /// Set while an export or import RPC is in flight.
+    public var isSharing = false
+    /// Result of the most recent export, held so the UI can offer a save or a
+    /// copy and show what was withheld.
+    public var pendingExport: PsmithProfileExport?
+    /// Dry-run result, shown for confirmation before anything is written.
+    public var pendingImport: PsmithImportResult?
+    /// The bundle behind `pendingImport`, kept so confirming does not require
+    /// the user to pick the file again.
+    public var pendingImportPayload: Data?
+    /// Warnings from a completed import, surfaced until dismissed. An import
+    /// succeeds even when things did not resolve, so these are the only place
+    /// the user learns what still needs configuring.
+    public var importWarnings: [PsmithImportWarning] = []
+
+    public func exportProfile(id: String, preserveChain: Bool = false) async {
+        isSharing = true
+        defer { isSharing = false }
+        do {
+            pendingExport = try await client.profiles.exportProfile(id: id, preserveChain: preserveChain)
+            error = nil
+        } catch {
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    /// Step one of import: resolve against this account and report, without
+    /// writing. Lets the user see "missing MCP server" before committing
+    /// rather than discovering it afterwards.
+    public func previewImport(payload: Data) async {
+        isSharing = true
+        defer { isSharing = false }
+        do {
+            pendingImport = try await client.profiles.importProfile(payload: payload, dryRun: true)
+            pendingImportPayload = payload
+            detailMode = .importing
+            error = nil
+        } catch {
+            pendingImport = nil
+            pendingImportPayload = nil
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    /// Step two: actually create the profiles previewed above.
+    public func confirmImport() async {
+        guard let payload = pendingImportPayload else { return }
+        isSharing = true
+        defer { isSharing = false }
+        do {
+            let result = try await client.profiles.importProfile(payload: payload)
+            importWarnings = result.warnings
+            pendingImport = nil
+            pendingImportPayload = nil
+            detailMode = .viewing
+            error = nil
+            await load()
+            if let first = result.profiles.first {
+                selectedID = first.id
+            }
+        } catch {
+            self.error = PsmithError.display(error)
+        }
+    }
+
+    public func cancelImport() {
+        pendingImport = nil
+        pendingImportPayload = nil
+        detailMode = .viewing
     }
 
     public func deleteSelected() async {
