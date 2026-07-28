@@ -86,6 +86,21 @@ type ConfigField struct {
 	// per-key basis. UIs render global fields on a separate "Plugin
 	// settings" surface, NOT in the per-profile plugin form.
 	Global bool
+	// Secret marks the field as credential-bearing: it must never leave
+	// the deployment. Profile export strips it.
+	//
+	// Distinct from Global, which is about scope, not sensitivity. They
+	// often coincide (brave_search's api_key is both) but not always:
+	// mcp's `env` and `headers` are per-instance profile config, so not
+	// Global, while holding exactly the API keys and bearer tokens the
+	// user would be horrified to share. Without a separate flag, export
+	// would have to hardcode knowledge of individual plugins' config
+	// shapes, which is the coupling this package exists to prevent.
+	//
+	// Global implies non-exportable too (a user-scoped value is not the
+	// profile's to give away), so export skips a key when either is set.
+	Secret bool
+
 	// Merge picks how this field combines across the resolver's
 	// root-to-leaf layered view. Unset = MergeReplace (leaf wins).
 	// Set to MergeAppendString on string/textarea fields where each

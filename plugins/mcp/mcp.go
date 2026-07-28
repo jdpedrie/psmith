@@ -202,6 +202,7 @@ func (p *mcpPlugin) ConfigFields() []pluginapi.ConfigField {
 			Display:     "Environment variables (stdio)",
 			Description: "KEY=VALUE per line for stdio transport. The subprocess inherits NOTHING from psmithd's environment — declare what the server needs (PATH, HOME, API keys, etc.) explicitly here.",
 			Type:        pluginapi.ConfigFieldTextarea,
+			Secret:      true,
 		},
 		{
 			Name:        "url",
@@ -214,6 +215,7 @@ func (p *mcpPlugin) ConfigFields() []pluginapi.ConfigField {
 			Display:     "HTTP headers (http)",
 			Description: "KEY: VALUE per line, attached to every HTTP request. Most often Authorization: Bearer YOUR_TOKEN. Ignored for stdio transport.",
 			Type:        pluginapi.ConfigFieldTextarea,
+			Secret:      true,
 		},
 		{
 			Name:        "tool_prefix",

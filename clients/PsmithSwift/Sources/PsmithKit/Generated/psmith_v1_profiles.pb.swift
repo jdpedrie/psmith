@@ -25,6 +25,60 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+public nonisolated enum Psmith_V1_ImportWarningKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// A (provider_type, model_id) pair matched no configured provider.
+  case providerMissing // = 1
+
+  /// A named MCP server is not in the importer's registry.
+  case mcpServerMissing // = 2
+
+  /// The bundle names a plugin this server does not have registered.
+  case pluginUnknown // = 3
+
+  /// A profile name collided and was suffixed.
+  case renamed // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .providerMissing
+    case 2: self = .mcpServerMissing
+    case 3: self = .pluginUnknown
+    case 4: self = .renamed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .providerMissing: return 1
+    case .mcpServerMissing: return 2
+    case .pluginUnknown: return 3
+    case .renamed: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Psmith_V1_ImportWarningKind] = [
+    .unspecified,
+    .providerMissing,
+    .mcpServerMissing,
+    .pluginUnknown,
+    .renamed,
+  ]
+
+}
+
 public nonisolated struct Psmith_V1_CreateProfileRequest: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -658,43 +712,64 @@ public nonisolated struct Psmith_V1_PluginType: @unchecked Sendable {
 /// ConfigField is one entry in a plugin's per-instance config descriptor.
 /// The list is flat — there's no nesting — so a UI can render a form by
 /// walking the array once.
-public nonisolated struct Psmith_V1_ConfigField: Sendable {
+public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var name: String = String()
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
 
-  public var display: String = String()
+  public var display: String {
+    get {_storage._display}
+    set {_uniqueStorage()._display = newValue}
+  }
 
-  public var description_p: String = String()
+  public var description_p: String {
+    get {_storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
 
-  public var type: Psmith_V1_ConfigField.TypeEnum = .unspecified
+  public var type: Psmith_V1_ConfigField.TypeEnum {
+    get {_storage._type}
+    set {_uniqueStorage()._type = newValue}
+  }
 
   /// JSON-encoded default value (e.g. `1`, `"<choices>"`, `true`). Empty = no default.
-  public var defaultJson: String = String()
+  public var defaultJson: String {
+    get {_storage._defaultJson}
+    set {_uniqueStorage()._defaultJson = newValue}
+  }
 
   /// Populated only when type == SELECT.
-  public var options: [Psmith_V1_ConfigOption] = []
+  public var options: [Psmith_V1_ConfigOption] {
+    get {_storage._options}
+    set {_uniqueStorage()._options = newValue}
+  }
 
   /// Populated only when type == MODEL_PICKER. Hints to the UI
   /// which models to surface in the picker. Multiple flags AND
   /// (a model must satisfy every flag set to true). Empty / all-
   /// false = no filter, surface every user_model.
   public var modelPickerFilter: Psmith_V1_ModelPickerFilter {
-    get {_modelPickerFilter ?? Psmith_V1_ModelPickerFilter()}
-    set {_modelPickerFilter = newValue}
+    get {_storage._modelPickerFilter ?? Psmith_V1_ModelPickerFilter()}
+    set {_uniqueStorage()._modelPickerFilter = newValue}
   }
   /// Returns true if `modelPickerFilter` has been explicitly set.
-  public var hasModelPickerFilter: Bool {self._modelPickerFilter != nil}
+  public var hasModelPickerFilter: Bool {_storage._modelPickerFilter != nil}
   /// Clears the value of `modelPickerFilter`. Subsequent reads from it will return its default value.
-  public mutating func clearModelPickerFilter() {self._modelPickerFilter = nil}
+  public mutating func clearModelPickerFilter() {_uniqueStorage()._modelPickerFilter = nil}
 
   /// True when the form must collect a value before the plugin can be
   /// saved. UIs disable the parent Save button and show inline validation
   /// when a required field is empty. The plugin's constructor remains
   /// the authoritative validator at runtime.
-  public var required: Bool = false
+  public var required: Bool {
+    get {_storage._required}
+    set {_uniqueStorage()._required = newValue}
+  }
 
   /// True when this field lives at user scope rather than profile scope
   /// (e.g. credentials the user only wants to enter once across every
@@ -703,7 +778,18 @@ public nonisolated struct Psmith_V1_ConfigField: Sendable {
   /// omits them. The server merges the user's stored global value into
   /// the per-profile config blob handed to the plugin constructor at
   /// pipeline-build time.
-  public var global: Bool = false
+  public var global: Bool {
+    get {_storage._global}
+    set {_uniqueStorage()._global = newValue}
+  }
+
+  /// True when the field holds a credential. Profile export strips it, and
+  /// UIs may mask it on input. Distinct from `global`, which is about
+  /// scope: mcp's env/headers are profile-scoped but secret.
+  public var secret: Bool {
+    get {_storage._secret}
+    set {_uniqueStorage()._secret = newValue}
+  }
 
   /// How this field's value combines across the resolver's layered view
   /// (root profile → leaf profile → conversation override). Default is
@@ -711,14 +797,20 @@ public nonisolated struct Psmith_V1_ConfigField: Sendable {
   /// contribution root-to-leaf, blank-line separated. UIs use this to
   /// hint the user that their entry will be added on top of whatever
   /// the chain already contributes, not replace it.
-  public var merge: Psmith_V1_ConfigField.Merge = .unspecified
+  public var merge: Psmith_V1_ConfigField.Merge {
+    get {_storage._merge}
+    set {_uniqueStorage()._merge = newValue}
+  }
 
   /// Optional grouping header the UI renders above the field.
   /// Empty = ungrouped (rendered alongside top-level fields).
   /// Plugins with many fields of the same kind (app_tools'
   /// per-tool toggles bundled by capability — Calendar /
   /// Reminders / etc.) populate this to keep the form scannable.
-  public var category: String = String()
+  public var category: String {
+    get {_storage._category}
+    set {_uniqueStorage()._category = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -826,7 +918,7 @@ public nonisolated struct Psmith_V1_ConfigField: Sendable {
 
   public init() {}
 
-  fileprivate var _modelPickerFilter: Psmith_V1_ModelPickerFilter? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// ConfigOption is one entry in a SELECT field's options list.
@@ -1266,9 +1358,360 @@ public nonisolated struct Psmith_V1_TestMCPServerResponse: Sendable {
   public init() {}
 }
 
+/// ProfileBundle is the payload bytes ExportProfile emits and ImportProfile
+/// consumes. Serialized proto behind a magic prefix so a truncated file or a
+/// paste of the wrong thing fails loudly instead of importing garbage.
+public nonisolated struct Psmith_V1_ProfileBundle: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Format version. Bumped when the bundle shape changes incompatibly;
+  /// an importer that does not recognize the version refuses the file
+  /// rather than guessing.
+  public var version: Int32 = 0
+
+  /// Profiles in root-to-leaf order, so an importer can create them in
+  /// sequence and rewire each parent reference as it goes. A flattened
+  /// bundle holds exactly one.
+  public var profiles: [Psmith_V1_BundledProfile] = []
+
+  /// Free-text provenance for the human, never interpreted on import.
+  public var exportedBy: String = String()
+
+  public var exportedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_exportedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_exportedAt = newValue}
+  }
+  /// Returns true if `exportedAt` has been explicitly set.
+  public var hasExportedAt: Bool {self._exportedAt != nil}
+  /// Clears the value of `exportedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearExportedAt() {self._exportedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _exportedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// BundledProfile is one profile with its per-user references rewritten as
+/// portable handles.
+public nonisolated struct Psmith_V1_BundledProfile: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Bundle-local identity. NOT the source database id — importing must not
+  /// be able to collide with or overwrite an existing row. `parent_ref`
+  /// names another entry's `ref` in the same bundle; empty means root.
+  public var ref: String {
+    get {_storage._ref}
+    set {_uniqueStorage()._ref = newValue}
+  }
+
+  public var parentRef: String {
+    get {_storage._parentRef}
+    set {_uniqueStorage()._parentRef = newValue}
+  }
+
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
+
+  public var systemMessage: String {
+    get {_storage._systemMessage ?? String()}
+    set {_uniqueStorage()._systemMessage = newValue}
+  }
+  /// Returns true if `systemMessage` has been explicitly set.
+  public var hasSystemMessage: Bool {_storage._systemMessage != nil}
+  /// Clears the value of `systemMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearSystemMessage() {_uniqueStorage()._systemMessage = nil}
+
+  public var defaultUserMessage: String {
+    get {_storage._defaultUserMessage ?? String()}
+    set {_uniqueStorage()._defaultUserMessage = newValue}
+  }
+  /// Returns true if `defaultUserMessage` has been explicitly set.
+  public var hasDefaultUserMessage: Bool {_storage._defaultUserMessage != nil}
+  /// Clears the value of `defaultUserMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultUserMessage() {_uniqueStorage()._defaultUserMessage = nil}
+
+  public var compressionGuide: String {
+    get {_storage._compressionGuide ?? String()}
+    set {_uniqueStorage()._compressionGuide = newValue}
+  }
+  /// Returns true if `compressionGuide` has been explicitly set.
+  public var hasCompressionGuide: Bool {_storage._compressionGuide != nil}
+  /// Clears the value of `compressionGuide`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionGuide() {_uniqueStorage()._compressionGuide = nil}
+
+  public var compressionMode: Psmith_V1_CompressionMode {
+    get {_storage._compressionMode ?? .unspecified}
+    set {_uniqueStorage()._compressionMode = newValue}
+  }
+  /// Returns true if `compressionMode` has been explicitly set.
+  public var hasCompressionMode: Bool {_storage._compressionMode != nil}
+  /// Clears the value of `compressionMode`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionMode() {_uniqueStorage()._compressionMode = nil}
+
+  public var titleGuide: String {
+    get {_storage._titleGuide ?? String()}
+    set {_uniqueStorage()._titleGuide = newValue}
+  }
+  /// Returns true if `titleGuide` has been explicitly set.
+  public var hasTitleGuide: Bool {_storage._titleGuide != nil}
+  /// Clears the value of `titleGuide`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleGuide() {_uniqueStorage()._titleGuide = nil}
+
+  public var titleProviderKind: String {
+    get {_storage._titleProviderKind ?? String()}
+    set {_uniqueStorage()._titleProviderKind = newValue}
+  }
+  /// Returns true if `titleProviderKind` has been explicitly set.
+  public var hasTitleProviderKind: Bool {_storage._titleProviderKind != nil}
+  /// Clears the value of `titleProviderKind`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleProviderKind() {_uniqueStorage()._titleProviderKind = nil}
+
+  public var description_p: String {
+    get {_storage._description_p}
+    set {_uniqueStorage()._description_p = newValue}
+  }
+
+  public var parentOnly: Bool {
+    get {_storage._parentOnly}
+    set {_uniqueStorage()._parentOnly = newValue}
+  }
+
+  public var welcomeMessage: String {
+    get {_storage._welcomeMessage ?? String()}
+    set {_uniqueStorage()._welcomeMessage = newValue}
+  }
+  /// Returns true if `welcomeMessage` has been explicitly set.
+  public var hasWelcomeMessage: Bool {_storage._welcomeMessage != nil}
+  /// Clears the value of `welcomeMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearWelcomeMessage() {_uniqueStorage()._welcomeMessage = nil}
+
+  public var includeThinkingInHistory: Bool {
+    get {_storage._includeThinkingInHistory ?? false}
+    set {_uniqueStorage()._includeThinkingInHistory = newValue}
+  }
+  /// Returns true if `includeThinkingInHistory` has been explicitly set.
+  public var hasIncludeThinkingInHistory: Bool {_storage._includeThinkingInHistory != nil}
+  /// Clears the value of `includeThinkingInHistory`. Subsequent reads from it will return its default value.
+  public mutating func clearIncludeThinkingInHistory() {_uniqueStorage()._includeThinkingInHistory = nil}
+
+  public var callSettings: Psmith_V1_CallSettings {
+    get {_storage._callSettings ?? Psmith_V1_CallSettings()}
+    set {_uniqueStorage()._callSettings = newValue}
+  }
+  /// Returns true if `callSettings` has been explicitly set.
+  public var hasCallSettings: Bool {_storage._callSettings != nil}
+  /// Clears the value of `callSettings`. Subsequent reads from it will return its default value.
+  public mutating func clearCallSettings() {_uniqueStorage()._callSettings = nil}
+
+  /// Provider references travel as (driver type, model id) rather than the
+  /// source user_model_providers UUID, which would mean nothing in another
+  /// account. On import each resolves against the importer's own providers
+  /// of that type; no match leaves the field null and emits a warning.
+  public var defaultModel: Psmith_V1_ModelRef {
+    get {_storage._defaultModel ?? Psmith_V1_ModelRef()}
+    set {_uniqueStorage()._defaultModel = newValue}
+  }
+  /// Returns true if `defaultModel` has been explicitly set.
+  public var hasDefaultModel: Bool {_storage._defaultModel != nil}
+  /// Clears the value of `defaultModel`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaultModel() {_uniqueStorage()._defaultModel = nil}
+
+  public var compressionModel: Psmith_V1_ModelRef {
+    get {_storage._compressionModel ?? Psmith_V1_ModelRef()}
+    set {_uniqueStorage()._compressionModel = newValue}
+  }
+  /// Returns true if `compressionModel` has been explicitly set.
+  public var hasCompressionModel: Bool {_storage._compressionModel != nil}
+  /// Clears the value of `compressionModel`. Subsequent reads from it will return its default value.
+  public mutating func clearCompressionModel() {_uniqueStorage()._compressionModel = nil}
+
+  public var titleModel: Psmith_V1_ModelRef {
+    get {_storage._titleModel ?? Psmith_V1_ModelRef()}
+    set {_uniqueStorage()._titleModel = newValue}
+  }
+  /// Returns true if `titleModel` has been explicitly set.
+  public var hasTitleModel: Bool {_storage._titleModel != nil}
+  /// Clears the value of `titleModel`. Subsequent reads from it will return its default value.
+  public mutating func clearTitleModel() {_uniqueStorage()._titleModel = nil}
+
+  public var plugins: [Psmith_V1_BundledPlugin] {
+    get {_storage._plugins}
+    set {_uniqueStorage()._plugins = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// ModelRef is a portable pointer to a model: the driver type (e.g.
+/// "anthropic") plus the provider-scoped model id (e.g.
+/// "claude-sonnet-4-5"). Model ids are stable strings; provider instance
+/// ids are not portable.
+public nonisolated struct Psmith_V1_ModelRef: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerType: String = String()
+
+  public var modelID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_BundledPlugin: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var pluginName: String = String()
+
+  public var ordinal: Int32 = 0
+
+  /// Config with every Global-declared key removed. Non-global keys only.
+  public var config: Data = Data()
+
+  public var disabled: Bool = false
+
+  /// Set when plugin_name was an "mcp:<id>" registry reference. Carries the
+  /// registered server's NAME, never its spec. On import the name is matched
+  /// against the importer's own registry; no match drops the attachment with
+  /// a warning rather than creating a half-configured server.
+  public var mcpServerName: String {
+    get {_mcpServerName ?? String()}
+    set {_mcpServerName = newValue}
+  }
+  /// Returns true if `mcpServerName` has been explicitly set.
+  public var hasMcpServerName: Bool {self._mcpServerName != nil}
+  /// Clears the value of `mcpServerName`. Subsequent reads from it will return its default value.
+  public mutating func clearMcpServerName() {self._mcpServerName = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _mcpServerName: String? = nil
+}
+
+public nonisolated struct Psmith_V1_ExportProfileRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var profileID: String = String()
+
+  /// False (default) flattens the parent chain into one self-contained
+  /// profile holding the fully inherited values: the recipient gets one
+  /// profile that behaves identically with no scaffolding in their list.
+  /// True preserves the chain as separate profiles, which keeps the
+  /// structure reusable and is the right choice for backup.
+  public var preserveChain: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ExportProfileResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The bundle, magic-prefixed and ready to write to a file. Clients may
+  /// also base64 this for paste-sharing; it is the same bytes.
+  public var payload: Data = Data()
+
+  /// Filename hint, e.g. "coding-assistant.psmithprofile".
+  public var suggestedFilename: String = String()
+
+  /// What the export left out, phrased for the person doing the sharing —
+  /// "the Brave Search API key is not included" — so they know what the
+  /// recipient will still have to configure.
+  public var notices: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ImportProfileRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var payload: Data = Data()
+
+  /// When true, validate and report without writing anything. Lets a client
+  /// show the warnings and the profile names before the user commits.
+  public var dryRun: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ImportProfileResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Created profiles in root-to-leaf order. Empty when dry_run.
+  public var profiles: [Psmith_V1_Profile] = []
+
+  /// Human-readable, one per thing that did not resolve cleanly. Examples:
+  /// "model provider 'anthropic' is not configured, the default model was
+  /// left unset", "missing MCP server 'Linear', that plugin was not
+  /// attached", "unknown plugin 'foo', skipped".
+  public var warnings: [Psmith_V1_ImportWarning] = []
+
+  /// Name the import assigned, when the bundle's name collided with an
+  /// existing profile and was suffixed.
+  public var renamed: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ImportWarning: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var kind: Psmith_V1_ImportWarningKind = .unspecified
+
+  /// Ready to display. Server-composed so every client words it the same.
+  public var message: String = String()
+
+  /// The bundle-side identifier the warning is about (a provider type, an
+  /// MCP server name, a plugin name). Lets a client offer a fix-it action.
+  public var subject: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "psmith.v1"
+
+nonisolated extension Psmith_V1_ImportWarningKind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0IMPORT_WARNING_KIND_UNSPECIFIED\0\u{1}IMPORT_WARNING_KIND_PROVIDER_MISSING\0\u{1}IMPORT_WARNING_KIND_MCP_SERVER_MISSING\0\u{1}IMPORT_WARNING_KIND_PLUGIN_UNKNOWN\0\u{1}IMPORT_WARNING_KIND_RENAMED\0")
+}
 
 nonisolated extension Psmith_V1_CreateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateProfileRequest"
@@ -2152,83 +2595,146 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0\u{1}category\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0\u{1}category\0\u{1}secret\0")
+
+  fileprivate class _StorageClass {
+    var _name: String = String()
+    var _display: String = String()
+    var _description_p: String = String()
+    var _type: Psmith_V1_ConfigField.TypeEnum = .unspecified
+    var _defaultJson: String = String()
+    var _options: [Psmith_V1_ConfigOption] = []
+    var _modelPickerFilter: Psmith_V1_ModelPickerFilter? = nil
+    var _required: Bool = false
+    var _global: Bool = false
+    var _secret: Bool = false
+    var _merge: Psmith_V1_ConfigField.Merge = .unspecified
+    var _category: String = String()
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _name = source._name
+      _display = source._display
+      _description_p = source._description_p
+      _type = source._type
+      _defaultJson = source._defaultJson
+      _options = source._options
+      _modelPickerFilter = source._modelPickerFilter
+      _required = source._required
+      _global = source._global
+      _secret = source._secret
+      _merge = source._merge
+      _category = source._category
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.display) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
-      case 4: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.defaultJson) }()
-      case 6: try { try decoder.decodeRepeatedMessageField(value: &self.options) }()
-      case 7: try { try decoder.decodeSingularBoolField(value: &self.required) }()
-      case 8: try { try decoder.decodeSingularBoolField(value: &self.global) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._modelPickerFilter) }()
-      case 10: try { try decoder.decodeSingularEnumField(value: &self.merge) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self.category) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._display) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 4: try { try decoder.decodeSingularEnumField(value: &_storage._type) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._defaultJson) }()
+        case 6: try { try decoder.decodeRepeatedMessageField(value: &_storage._options) }()
+        case 7: try { try decoder.decodeSingularBoolField(value: &_storage._required) }()
+        case 8: try { try decoder.decodeSingularBoolField(value: &_storage._global) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._modelPickerFilter) }()
+        case 10: try { try decoder.decodeSingularEnumField(value: &_storage._merge) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._category) }()
+        case 12: try { try decoder.decodeSingularBoolField(value: &_storage._secret) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
-    }
-    if !self.display.isEmpty {
-      try visitor.visitSingularStringField(value: self.display, fieldNumber: 2)
-    }
-    if !self.description_p.isEmpty {
-      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
-    }
-    if self.type != .unspecified {
-      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 4)
-    }
-    if !self.defaultJson.isEmpty {
-      try visitor.visitSingularStringField(value: self.defaultJson, fieldNumber: 5)
-    }
-    if !self.options.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.options, fieldNumber: 6)
-    }
-    if self.required != false {
-      try visitor.visitSingularBoolField(value: self.required, fieldNumber: 7)
-    }
-    if self.global != false {
-      try visitor.visitSingularBoolField(value: self.global, fieldNumber: 8)
-    }
-    try { if let v = self._modelPickerFilter {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    if self.merge != .unspecified {
-      try visitor.visitSingularEnumField(value: self.merge, fieldNumber: 10)
-    }
-    if !self.category.isEmpty {
-      try visitor.visitSingularStringField(value: self.category, fieldNumber: 11)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 1)
+      }
+      if !_storage._display.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._display, fieldNumber: 2)
+      }
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 3)
+      }
+      if _storage._type != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._type, fieldNumber: 4)
+      }
+      if !_storage._defaultJson.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._defaultJson, fieldNumber: 5)
+      }
+      if !_storage._options.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._options, fieldNumber: 6)
+      }
+      if _storage._required != false {
+        try visitor.visitSingularBoolField(value: _storage._required, fieldNumber: 7)
+      }
+      if _storage._global != false {
+        try visitor.visitSingularBoolField(value: _storage._global, fieldNumber: 8)
+      }
+      try { if let v = _storage._modelPickerFilter {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      if _storage._merge != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._merge, fieldNumber: 10)
+      }
+      if !_storage._category.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._category, fieldNumber: 11)
+      }
+      if _storage._secret != false {
+        try visitor.visitSingularBoolField(value: _storage._secret, fieldNumber: 12)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ConfigField, rhs: Psmith_V1_ConfigField) -> Bool {
-    if lhs.name != rhs.name {return false}
-    if lhs.display != rhs.display {return false}
-    if lhs.description_p != rhs.description_p {return false}
-    if lhs.type != rhs.type {return false}
-    if lhs.defaultJson != rhs.defaultJson {return false}
-    if lhs.options != rhs.options {return false}
-    if lhs._modelPickerFilter != rhs._modelPickerFilter {return false}
-    if lhs.required != rhs.required {return false}
-    if lhs.global != rhs.global {return false}
-    if lhs.merge != rhs.merge {return false}
-    if lhs.category != rhs.category {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._display != rhs_storage._display {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._type != rhs_storage._type {return false}
+        if _storage._defaultJson != rhs_storage._defaultJson {return false}
+        if _storage._options != rhs_storage._options {return false}
+        if _storage._modelPickerFilter != rhs_storage._modelPickerFilter {return false}
+        if _storage._required != rhs_storage._required {return false}
+        if _storage._global != rhs_storage._global {return false}
+        if _storage._secret != rhs_storage._secret {return false}
+        if _storage._merge != rhs_storage._merge {return false}
+        if _storage._category != rhs_storage._category {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3109,6 +3615,523 @@ nonisolated extension Psmith_V1_TestMCPServerResponse: SwiftProtobuf.Message, Sw
     if lhs.ok != rhs.ok {return false}
     if lhs.errorMessage != rhs.errorMessage {return false}
     if lhs.toolNames != rhs.toolNames {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ProfileBundle: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProfileBundle"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}profiles\0\u{3}exported_by\0\u{3}exported_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.version) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.profiles) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.exportedBy) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._exportedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.version != 0 {
+      try visitor.visitSingularInt32Field(value: self.version, fieldNumber: 1)
+    }
+    if !self.profiles.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.profiles, fieldNumber: 2)
+    }
+    if !self.exportedBy.isEmpty {
+      try visitor.visitSingularStringField(value: self.exportedBy, fieldNumber: 3)
+    }
+    try { if let v = self._exportedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ProfileBundle, rhs: Psmith_V1_ProfileBundle) -> Bool {
+    if lhs.version != rhs.version {return false}
+    if lhs.profiles != rhs.profiles {return false}
+    if lhs.exportedBy != rhs.exportedBy {return false}
+    if lhs._exportedAt != rhs._exportedAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_BundledProfile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BundledProfile"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ref\0\u{3}parent_ref\0\u{1}name\0\u{3}system_message\0\u{3}default_user_message\0\u{3}compression_guide\0\u{3}compression_mode\0\u{3}title_guide\0\u{3}title_provider_kind\0\u{1}description\0\u{3}parent_only\0\u{3}welcome_message\0\u{3}include_thinking_in_history\0\u{3}call_settings\0\u{3}default_model\0\u{3}compression_model\0\u{3}title_model\0\u{1}plugins\0")
+
+  fileprivate class _StorageClass {
+    var _ref: String = String()
+    var _parentRef: String = String()
+    var _name: String = String()
+    var _systemMessage: String? = nil
+    var _defaultUserMessage: String? = nil
+    var _compressionGuide: String? = nil
+    var _compressionMode: Psmith_V1_CompressionMode? = nil
+    var _titleGuide: String? = nil
+    var _titleProviderKind: String? = nil
+    var _description_p: String = String()
+    var _parentOnly: Bool = false
+    var _welcomeMessage: String? = nil
+    var _includeThinkingInHistory: Bool? = nil
+    var _callSettings: Psmith_V1_CallSettings? = nil
+    var _defaultModel: Psmith_V1_ModelRef? = nil
+    var _compressionModel: Psmith_V1_ModelRef? = nil
+    var _titleModel: Psmith_V1_ModelRef? = nil
+    var _plugins: [Psmith_V1_BundledPlugin] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _ref = source._ref
+      _parentRef = source._parentRef
+      _name = source._name
+      _systemMessage = source._systemMessage
+      _defaultUserMessage = source._defaultUserMessage
+      _compressionGuide = source._compressionGuide
+      _compressionMode = source._compressionMode
+      _titleGuide = source._titleGuide
+      _titleProviderKind = source._titleProviderKind
+      _description_p = source._description_p
+      _parentOnly = source._parentOnly
+      _welcomeMessage = source._welcomeMessage
+      _includeThinkingInHistory = source._includeThinkingInHistory
+      _callSettings = source._callSettings
+      _defaultModel = source._defaultModel
+      _compressionModel = source._compressionModel
+      _titleModel = source._titleModel
+      _plugins = source._plugins
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._ref) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._parentRef) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._systemMessage) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._defaultUserMessage) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._compressionGuide) }()
+        case 7: try { try decoder.decodeSingularEnumField(value: &_storage._compressionMode) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._titleGuide) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._titleProviderKind) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._description_p) }()
+        case 11: try { try decoder.decodeSingularBoolField(value: &_storage._parentOnly) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._welcomeMessage) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._includeThinkingInHistory) }()
+        case 14: try { try decoder.decodeSingularMessageField(value: &_storage._callSettings) }()
+        case 15: try { try decoder.decodeSingularMessageField(value: &_storage._defaultModel) }()
+        case 16: try { try decoder.decodeSingularMessageField(value: &_storage._compressionModel) }()
+        case 17: try { try decoder.decodeSingularMessageField(value: &_storage._titleModel) }()
+        case 18: try { try decoder.decodeRepeatedMessageField(value: &_storage._plugins) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._ref.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ref, fieldNumber: 1)
+      }
+      if !_storage._parentRef.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._parentRef, fieldNumber: 2)
+      }
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 3)
+      }
+      try { if let v = _storage._systemMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      try { if let v = _storage._defaultUserMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
+      try { if let v = _storage._compressionGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 6)
+      } }()
+      try { if let v = _storage._compressionMode {
+        try visitor.visitSingularEnumField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._titleGuide {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._titleProviderKind {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+      } }()
+      if !_storage._description_p.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._description_p, fieldNumber: 10)
+      }
+      if _storage._parentOnly != false {
+        try visitor.visitSingularBoolField(value: _storage._parentOnly, fieldNumber: 11)
+      }
+      try { if let v = _storage._welcomeMessage {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+      } }()
+      try { if let v = _storage._includeThinkingInHistory {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 13)
+      } }()
+      try { if let v = _storage._callSettings {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+      } }()
+      try { if let v = _storage._defaultModel {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+      } }()
+      try { if let v = _storage._compressionModel {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
+      } }()
+      try { if let v = _storage._titleModel {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
+      } }()
+      if !_storage._plugins.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._plugins, fieldNumber: 18)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_BundledProfile, rhs: Psmith_V1_BundledProfile) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._ref != rhs_storage._ref {return false}
+        if _storage._parentRef != rhs_storage._parentRef {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._systemMessage != rhs_storage._systemMessage {return false}
+        if _storage._defaultUserMessage != rhs_storage._defaultUserMessage {return false}
+        if _storage._compressionGuide != rhs_storage._compressionGuide {return false}
+        if _storage._compressionMode != rhs_storage._compressionMode {return false}
+        if _storage._titleGuide != rhs_storage._titleGuide {return false}
+        if _storage._titleProviderKind != rhs_storage._titleProviderKind {return false}
+        if _storage._description_p != rhs_storage._description_p {return false}
+        if _storage._parentOnly != rhs_storage._parentOnly {return false}
+        if _storage._welcomeMessage != rhs_storage._welcomeMessage {return false}
+        if _storage._includeThinkingInHistory != rhs_storage._includeThinkingInHistory {return false}
+        if _storage._callSettings != rhs_storage._callSettings {return false}
+        if _storage._defaultModel != rhs_storage._defaultModel {return false}
+        if _storage._compressionModel != rhs_storage._compressionModel {return false}
+        if _storage._titleModel != rhs_storage._titleModel {return false}
+        if _storage._plugins != rhs_storage._plugins {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ModelRef: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ModelRef"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_type\0\u{3}model_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerType) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerType.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerType, fieldNumber: 1)
+    }
+    if !self.modelID.isEmpty {
+      try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ModelRef, rhs: Psmith_V1_ModelRef) -> Bool {
+    if lhs.providerType != rhs.providerType {return false}
+    if lhs.modelID != rhs.modelID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_BundledPlugin: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BundledPlugin"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}plugin_name\0\u{1}ordinal\0\u{1}config\0\u{1}disabled\0\u{3}mcp_server_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.pluginName) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.ordinal) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.config) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.disabled) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._mcpServerName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.pluginName.isEmpty {
+      try visitor.visitSingularStringField(value: self.pluginName, fieldNumber: 1)
+    }
+    if self.ordinal != 0 {
+      try visitor.visitSingularInt32Field(value: self.ordinal, fieldNumber: 2)
+    }
+    if !self.config.isEmpty {
+      try visitor.visitSingularBytesField(value: self.config, fieldNumber: 3)
+    }
+    if self.disabled != false {
+      try visitor.visitSingularBoolField(value: self.disabled, fieldNumber: 4)
+    }
+    try { if let v = self._mcpServerName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_BundledPlugin, rhs: Psmith_V1_BundledPlugin) -> Bool {
+    if lhs.pluginName != rhs.pluginName {return false}
+    if lhs.ordinal != rhs.ordinal {return false}
+    if lhs.config != rhs.config {return false}
+    if lhs.disabled != rhs.disabled {return false}
+    if lhs._mcpServerName != rhs._mcpServerName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ExportProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ExportProfileRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_id\0\u{3}preserve_chain\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.profileID) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.preserveChain) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.profileID.isEmpty {
+      try visitor.visitSingularStringField(value: self.profileID, fieldNumber: 1)
+    }
+    if self.preserveChain != false {
+      try visitor.visitSingularBoolField(value: self.preserveChain, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ExportProfileRequest, rhs: Psmith_V1_ExportProfileRequest) -> Bool {
+    if lhs.profileID != rhs.profileID {return false}
+    if lhs.preserveChain != rhs.preserveChain {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ExportProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ExportProfileResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}payload\0\u{3}suggested_filename\0\u{1}notices\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.payload) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.suggestedFilename) }()
+      case 3: try { try decoder.decodeRepeatedStringField(value: &self.notices) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.payload.isEmpty {
+      try visitor.visitSingularBytesField(value: self.payload, fieldNumber: 1)
+    }
+    if !self.suggestedFilename.isEmpty {
+      try visitor.visitSingularStringField(value: self.suggestedFilename, fieldNumber: 2)
+    }
+    if !self.notices.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.notices, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ExportProfileResponse, rhs: Psmith_V1_ExportProfileResponse) -> Bool {
+    if lhs.payload != rhs.payload {return false}
+    if lhs.suggestedFilename != rhs.suggestedFilename {return false}
+    if lhs.notices != rhs.notices {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ImportProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ImportProfileRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}payload\0\u{3}dry_run\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.payload) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.dryRun) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.payload.isEmpty {
+      try visitor.visitSingularBytesField(value: self.payload, fieldNumber: 1)
+    }
+    if self.dryRun != false {
+      try visitor.visitSingularBoolField(value: self.dryRun, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ImportProfileRequest, rhs: Psmith_V1_ImportProfileRequest) -> Bool {
+    if lhs.payload != rhs.payload {return false}
+    if lhs.dryRun != rhs.dryRun {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ImportProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ImportProfileResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}profiles\0\u{1}warnings\0\u{1}renamed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.profiles) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.warnings) }()
+      case 3: try { try decoder.decodeRepeatedStringField(value: &self.renamed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.profiles.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.profiles, fieldNumber: 1)
+    }
+    if !self.warnings.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.warnings, fieldNumber: 2)
+    }
+    if !self.renamed.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.renamed, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ImportProfileResponse, rhs: Psmith_V1_ImportProfileResponse) -> Bool {
+    if lhs.profiles != rhs.profiles {return false}
+    if lhs.warnings != rhs.warnings {return false}
+    if lhs.renamed != rhs.renamed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ImportWarning: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ImportWarning"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}message\0\u{1}subject\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.message) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.subject) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 1)
+    }
+    if !self.message.isEmpty {
+      try visitor.visitSingularStringField(value: self.message, fieldNumber: 2)
+    }
+    if !self.subject.isEmpty {
+      try visitor.visitSingularStringField(value: self.subject, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ImportWarning, rhs: Psmith_V1_ImportWarning) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.message != rhs.message {return false}
+    if lhs.subject != rhs.subject {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

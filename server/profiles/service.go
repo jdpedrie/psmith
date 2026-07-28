@@ -1026,6 +1026,7 @@ func configFieldToProto(f pluginapi.ConfigField) *psmithv1.ConfigField {
 		Type:        configFieldTypeToProto(f.Type),
 		Required:    f.Required,
 		Global:      f.Global,
+		Secret:      f.Secret,
 		Merge:       configFieldMergeToProto(f.Merge),
 		Category:    f.Category,
 	}

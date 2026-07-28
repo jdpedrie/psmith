@@ -81,6 +81,12 @@ const (
 	// ProfilesServiceTestMCPServerProcedure is the fully-qualified name of the ProfilesService's
 	// TestMCPServer RPC.
 	ProfilesServiceTestMCPServerProcedure = "/psmith.v1.ProfilesService/TestMCPServer"
+	// ProfilesServiceExportProfileProcedure is the fully-qualified name of the ProfilesService's
+	// ExportProfile RPC.
+	ProfilesServiceExportProfileProcedure = "/psmith.v1.ProfilesService/ExportProfile"
+	// ProfilesServiceImportProfileProcedure is the fully-qualified name of the ProfilesService's
+	// ImportProfile RPC.
+	ProfilesServiceImportProfileProcedure = "/psmith.v1.ProfilesService/ImportProfile"
 )
 
 // ProfilesServiceClient is a client for the psmith.v1.ProfilesService service.
@@ -141,6 +147,21 @@ type ProfilesServiceClient interface {
 	// dead server degrades to "no tools" mid-conversation). Failure is
 	// reported in the response (ok=false), not as an RPC error.
 	TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error)
+	// --- Sharing -----------------------------------------------------------
+	// Serialize a profile into a portable bundle another user can import.
+	//
+	// The bundle NEVER carries credentials. Two things are deliberately left
+	// behind: any plugin config key whose ConfigField declares Global=true
+	// (those belong to user_plugin_settings, not the profile), and the
+	// contents of any registered MCP server (env vars and auth headers are
+	// encrypted at rest precisely because they are secret). MCP attachments
+	// export as the server's NAME so the importer can match one of their own.
+	ExportProfile(context.Context, *connect.Request[v1.ExportProfileRequest]) (*connect.Response[v1.ExportProfileResponse], error)
+	// Create profiles from a bundle. Never overwrites: every profile in the
+	// bundle becomes a new row owned by the caller. Anything the bundle
+	// referenced that the importer does not have resolves to null (which the
+	// schema already reads as "inherit") and is reported in `warnings`.
+	ImportProfile(context.Context, *connect.Request[v1.ImportProfileRequest]) (*connect.Response[v1.ImportProfileResponse], error)
 }
 
 // NewProfilesServiceClient constructs a client for the psmith.v1.ProfilesService service. By
@@ -250,6 +271,18 @@ func NewProfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(profilesServiceMethods.ByName("TestMCPServer")),
 			connect.WithClientOptions(opts...),
 		),
+		exportProfile: connect.NewClient[v1.ExportProfileRequest, v1.ExportProfileResponse](
+			httpClient,
+			baseURL+ProfilesServiceExportProfileProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("ExportProfile")),
+			connect.WithClientOptions(opts...),
+		),
+		importProfile: connect.NewClient[v1.ImportProfileRequest, v1.ImportProfileResponse](
+			httpClient,
+			baseURL+ProfilesServiceImportProfileProcedure,
+			connect.WithSchema(profilesServiceMethods.ByName("ImportProfile")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -271,6 +304,8 @@ type profilesServiceClient struct {
 	upsertMCPServer          *connect.Client[v1.UpsertMCPServerRequest, v1.UpsertMCPServerResponse]
 	deleteMCPServer          *connect.Client[v1.DeleteMCPServerRequest, v1.DeleteMCPServerResponse]
 	testMCPServer            *connect.Client[v1.TestMCPServerRequest, v1.TestMCPServerResponse]
+	exportProfile            *connect.Client[v1.ExportProfileRequest, v1.ExportProfileResponse]
+	importProfile            *connect.Client[v1.ImportProfileRequest, v1.ImportProfileResponse]
 }
 
 // CreateProfile calls psmith.v1.ProfilesService.CreateProfile.
@@ -353,6 +388,16 @@ func (c *profilesServiceClient) TestMCPServer(ctx context.Context, req *connect.
 	return c.testMCPServer.CallUnary(ctx, req)
 }
 
+// ExportProfile calls psmith.v1.ProfilesService.ExportProfile.
+func (c *profilesServiceClient) ExportProfile(ctx context.Context, req *connect.Request[v1.ExportProfileRequest]) (*connect.Response[v1.ExportProfileResponse], error) {
+	return c.exportProfile.CallUnary(ctx, req)
+}
+
+// ImportProfile calls psmith.v1.ProfilesService.ImportProfile.
+func (c *profilesServiceClient) ImportProfile(ctx context.Context, req *connect.Request[v1.ImportProfileRequest]) (*connect.Response[v1.ImportProfileResponse], error) {
+	return c.importProfile.CallUnary(ctx, req)
+}
+
 // ProfilesServiceHandler is an implementation of the psmith.v1.ProfilesService service.
 type ProfilesServiceHandler interface {
 	CreateProfile(context.Context, *connect.Request[v1.CreateProfileRequest]) (*connect.Response[v1.CreateProfileResponse], error)
@@ -411,6 +456,21 @@ type ProfilesServiceHandler interface {
 	// dead server degrades to "no tools" mid-conversation). Failure is
 	// reported in the response (ok=false), not as an RPC error.
 	TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error)
+	// --- Sharing -----------------------------------------------------------
+	// Serialize a profile into a portable bundle another user can import.
+	//
+	// The bundle NEVER carries credentials. Two things are deliberately left
+	// behind: any plugin config key whose ConfigField declares Global=true
+	// (those belong to user_plugin_settings, not the profile), and the
+	// contents of any registered MCP server (env vars and auth headers are
+	// encrypted at rest precisely because they are secret). MCP attachments
+	// export as the server's NAME so the importer can match one of their own.
+	ExportProfile(context.Context, *connect.Request[v1.ExportProfileRequest]) (*connect.Response[v1.ExportProfileResponse], error)
+	// Create profiles from a bundle. Never overwrites: every profile in the
+	// bundle becomes a new row owned by the caller. Anything the bundle
+	// referenced that the importer does not have resolves to null (which the
+	// schema already reads as "inherit") and is reported in `warnings`.
+	ImportProfile(context.Context, *connect.Request[v1.ImportProfileRequest]) (*connect.Response[v1.ImportProfileResponse], error)
 }
 
 // NewProfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -516,6 +576,18 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(profilesServiceMethods.ByName("TestMCPServer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profilesServiceExportProfileHandler := connect.NewUnaryHandler(
+		ProfilesServiceExportProfileProcedure,
+		svc.ExportProfile,
+		connect.WithSchema(profilesServiceMethods.ByName("ExportProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profilesServiceImportProfileHandler := connect.NewUnaryHandler(
+		ProfilesServiceImportProfileProcedure,
+		svc.ImportProfile,
+		connect.WithSchema(profilesServiceMethods.ByName("ImportProfile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/psmith.v1.ProfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProfilesServiceCreateProfileProcedure:
@@ -550,6 +622,10 @@ func NewProfilesServiceHandler(svc ProfilesServiceHandler, opts ...connect.Handl
 			profilesServiceDeleteMCPServerHandler.ServeHTTP(w, r)
 		case ProfilesServiceTestMCPServerProcedure:
 			profilesServiceTestMCPServerHandler.ServeHTTP(w, r)
+		case ProfilesServiceExportProfileProcedure:
+			profilesServiceExportProfileHandler.ServeHTTP(w, r)
+		case ProfilesServiceImportProfileProcedure:
+			profilesServiceImportProfileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -621,4 +697,12 @@ func (UnimplementedProfilesServiceHandler) DeleteMCPServer(context.Context, *con
 
 func (UnimplementedProfilesServiceHandler) TestMCPServer(context.Context, *connect.Request[v1.TestMCPServerRequest]) (*connect.Response[v1.TestMCPServerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.TestMCPServer is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) ExportProfile(context.Context, *connect.Request[v1.ExportProfileRequest]) (*connect.Response[v1.ExportProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.ExportProfile is not implemented"))
+}
+
+func (UnimplementedProfilesServiceHandler) ImportProfile(context.Context, *connect.Request[v1.ImportProfileRequest]) (*connect.Response[v1.ImportProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ProfilesService.ImportProfile is not implemented"))
 }

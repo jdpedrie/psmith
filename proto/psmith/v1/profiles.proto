@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package psmith.v1;
 
+import "google/protobuf/timestamp.proto";
 import "psmith/v1/types.proto";
 
 option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
@@ -69,6 +70,22 @@ service ProfilesService {
   // dead server degrades to "no tools" mid-conversation). Failure is
   // reported in the response (ok=false), not as an RPC error.
   rpc TestMCPServer(TestMCPServerRequest) returns (TestMCPServerResponse);
+
+  // --- Sharing -----------------------------------------------------------
+  // Serialize a profile into a portable bundle another user can import.
+  //
+  // The bundle NEVER carries credentials. Two things are deliberately left
+  // behind: any plugin config key whose ConfigField declares Global=true
+  // (those belong to user_plugin_settings, not the profile), and the
+  // contents of any registered MCP server (env vars and auth headers are
+  // encrypted at rest precisely because they are secret). MCP attachments
+  // export as the server's NAME so the importer can match one of their own.
+  rpc ExportProfile(ExportProfileRequest) returns (ExportProfileResponse);
+  // Create profiles from a bundle. Never overwrites: every profile in the
+  // bundle becomes a new row owned by the caller. Anything the bundle
+  // referenced that the importer does not have resolves to null (which the
+  // schema already reads as "inherit") and is reported in `warnings`.
+  rpc ImportProfile(ImportProfileRequest) returns (ImportProfileResponse);
 }
 
 message CreateProfileRequest {
@@ -278,6 +295,10 @@ message ConfigField {
   // the per-profile config blob handed to the plugin constructor at
   // pipeline-build time.
   bool global = 8;
+  // True when the field holds a credential. Profile export strips it, and
+  // UIs may mask it on input. Distinct from `global`, which is about
+  // scope: mcp's env/headers are profile-scoped but secret.
+  bool secret = 12;
   // How this field's value combines across the resolver's layered view
   // (root profile → leaf profile → conversation override). Default is
   // REPLACE (leaf wins). APPEND_STRING fields concatenate every non-empty
@@ -453,4 +474,139 @@ message TestMCPServerResponse {
   string error_message = 2;
   // The server's advertised tools (before any tool_prefix), when ok.
   repeated string tool_names = 3;
+}
+
+// --- Profile sharing -------------------------------------------------------
+
+// ProfileBundle is the payload bytes ExportProfile emits and ImportProfile
+// consumes. Serialized proto behind a magic prefix so a truncated file or a
+// paste of the wrong thing fails loudly instead of importing garbage.
+message ProfileBundle {
+  // Format version. Bumped when the bundle shape changes incompatibly;
+  // an importer that does not recognize the version refuses the file
+  // rather than guessing.
+  int32 version = 1;
+  // Profiles in root-to-leaf order, so an importer can create them in
+  // sequence and rewire each parent reference as it goes. A flattened
+  // bundle holds exactly one.
+  repeated BundledProfile profiles = 2;
+  // Free-text provenance for the human, never interpreted on import.
+  string exported_by = 3;
+  google.protobuf.Timestamp exported_at = 4;
+}
+
+// BundledProfile is one profile with its per-user references rewritten as
+// portable handles.
+message BundledProfile {
+  // Bundle-local identity. NOT the source database id — importing must not
+  // be able to collide with or overwrite an existing row. `parent_ref`
+  // names another entry's `ref` in the same bundle; empty means root.
+  string ref = 1;
+  string parent_ref = 2;
+
+  string name = 3;
+  optional string system_message = 4;
+  optional string default_user_message = 5;
+  optional string compression_guide = 6;
+  optional CompressionMode compression_mode = 7;
+  optional string title_guide = 8;
+  optional string title_provider_kind = 9;
+  string description = 10;
+  bool parent_only = 11;
+  optional string welcome_message = 12;
+  optional bool include_thinking_in_history = 13;
+  optional CallSettings call_settings = 14;
+
+  // Provider references travel as (driver type, model id) rather than the
+  // source user_model_providers UUID, which would mean nothing in another
+  // account. On import each resolves against the importer's own providers
+  // of that type; no match leaves the field null and emits a warning.
+  optional ModelRef default_model = 15;
+  optional ModelRef compression_model = 16;
+  optional ModelRef title_model = 17;
+
+  repeated BundledPlugin plugins = 18;
+}
+
+// ModelRef is a portable pointer to a model: the driver type (e.g.
+// "anthropic") plus the provider-scoped model id (e.g.
+// "claude-sonnet-4-5"). Model ids are stable strings; provider instance
+// ids are not portable.
+message ModelRef {
+  string provider_type = 1;
+  string model_id = 2;
+}
+
+message BundledPlugin {
+  string plugin_name = 1;
+  int32 ordinal = 2;
+  // Config with every Global-declared key removed. Non-global keys only.
+  bytes config = 3;
+  bool disabled = 4;
+  // Set when plugin_name was an "mcp:<id>" registry reference. Carries the
+  // registered server's NAME, never its spec. On import the name is matched
+  // against the importer's own registry; no match drops the attachment with
+  // a warning rather than creating a half-configured server.
+  optional string mcp_server_name = 5;
+}
+
+message ExportProfileRequest {
+  string profile_id = 1;
+  // False (default) flattens the parent chain into one self-contained
+  // profile holding the fully inherited values: the recipient gets one
+  // profile that behaves identically with no scaffolding in their list.
+  // True preserves the chain as separate profiles, which keeps the
+  // structure reusable and is the right choice for backup.
+  bool preserve_chain = 2;
+}
+message ExportProfileResponse {
+  // The bundle, magic-prefixed and ready to write to a file. Clients may
+  // also base64 this for paste-sharing; it is the same bytes.
+  bytes payload = 1;
+  // Filename hint, e.g. "coding-assistant.psmithprofile".
+  string suggested_filename = 2;
+  // What the export left out, phrased for the person doing the sharing —
+  // "the Brave Search API key is not included" — so they know what the
+  // recipient will still have to configure.
+  repeated string notices = 3;
+}
+
+message ImportProfileRequest {
+  bytes payload = 1;
+  // When true, validate and report without writing anything. Lets a client
+  // show the warnings and the profile names before the user commits.
+  bool dry_run = 2;
+}
+message ImportProfileResponse {
+  // Created profiles in root-to-leaf order. Empty when dry_run.
+  repeated Profile profiles = 1;
+  // Human-readable, one per thing that did not resolve cleanly. Examples:
+  // "model provider 'anthropic' is not configured, the default model was
+  // left unset", "missing MCP server 'Linear', that plugin was not
+  // attached", "unknown plugin 'foo', skipped".
+  repeated ImportWarning warnings = 2;
+  // Name the import assigned, when the bundle's name collided with an
+  // existing profile and was suffixed.
+  repeated string renamed = 3;
+}
+
+message ImportWarning {
+  ImportWarningKind kind = 1;
+  // Ready to display. Server-composed so every client words it the same.
+  string message = 2;
+  // The bundle-side identifier the warning is about (a provider type, an
+  // MCP server name, a plugin name). Lets a client offer a fix-it action.
+  string subject = 3;
+}
+
+enum ImportWarningKind {
+  IMPORT_WARNING_KIND_UNSPECIFIED = 0;
+  // A (provider_type, model_id) pair matched no configured provider.
+  IMPORT_WARNING_KIND_PROVIDER_MISSING = 1;
+  // A named MCP server is not in the importer's registry.
+  IMPORT_WARNING_KIND_MCP_SERVER_MISSING = 2;
+  // The bundle names a plugin this server does not have registered.
+  IMPORT_WARNING_KIND_PLUGIN_UNKNOWN = 3;
+  // A profile name collided and was suffixed.
+  IMPORT_WARNING_KIND_RENAMED = 4;
 }

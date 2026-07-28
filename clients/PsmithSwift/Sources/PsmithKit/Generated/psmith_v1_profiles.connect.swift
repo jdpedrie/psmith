@@ -98,6 +98,25 @@ public protocol Psmith_V1_ProfilesServiceClientInterface: Sendable {
     /// reported in the response (ok=false), not as an RPC error.
     @available(iOS 13, *)
     func `testMcpserver`(request: Psmith_V1_TestMCPServerRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_TestMCPServerResponse>
+
+    /// --- Sharing -----------------------------------------------------------
+    /// Serialize a profile into a portable bundle another user can import.
+    ///
+    /// The bundle NEVER carries credentials. Two things are deliberately left
+    /// behind: any plugin config key whose ConfigField declares Global=true
+    /// (those belong to user_plugin_settings, not the profile), and the
+    /// contents of any registered MCP server (env vars and auth headers are
+    /// encrypted at rest precisely because they are secret). MCP attachments
+    /// export as the server's NAME so the importer can match one of their own.
+    @available(iOS 13, *)
+    func `exportProfile`(request: Psmith_V1_ExportProfileRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ExportProfileResponse>
+
+    /// Create profiles from a bundle. Never overwrites: every profile in the
+    /// bundle becomes a new row owned by the caller. Anything the bundle
+    /// referenced that the importer does not have resolves to null (which the
+    /// schema already reads as "inherit") and is reported in `warnings`.
+    @available(iOS 13, *)
+    func `importProfile`(request: Psmith_V1_ImportProfileRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ImportProfileResponse>
 }
 
 /// Concrete implementation of `Psmith_V1_ProfilesServiceClientInterface`.
@@ -188,6 +207,16 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
         return await self.client.unary(path: "/psmith.v1.ProfilesService/TestMCPServer", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `exportProfile`(request: Psmith_V1_ExportProfileRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ExportProfileResponse> {
+        return await self.client.unary(path: "/psmith.v1.ProfilesService/ExportProfile", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `importProfile`(request: Psmith_V1_ImportProfileRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ImportProfileResponse> {
+        return await self.client.unary(path: "/psmith.v1.ProfilesService/ImportProfile", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let createProfile = Connect.MethodSpec(name: "CreateProfile", service: "psmith.v1.ProfilesService", type: .unary)
@@ -206,6 +235,8 @@ public final class Psmith_V1_ProfilesServiceClient: Psmith_V1_ProfilesServiceCli
             public static let upsertMcpserver = Connect.MethodSpec(name: "UpsertMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
             public static let deleteMcpserver = Connect.MethodSpec(name: "DeleteMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
             public static let testMcpserver = Connect.MethodSpec(name: "TestMCPServer", service: "psmith.v1.ProfilesService", type: .unary)
+            public static let exportProfile = Connect.MethodSpec(name: "ExportProfile", service: "psmith.v1.ProfilesService", type: .unary)
+            public static let importProfile = Connect.MethodSpec(name: "ImportProfile", service: "psmith.v1.ProfilesService", type: .unary)
         }
     }
 }
