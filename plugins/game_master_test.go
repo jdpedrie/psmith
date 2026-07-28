@@ -681,3 +681,40 @@ func TestGameMaster_ClocksSurfaceInTheStatusPanel(t *testing.T) {
 		t.Errorf("the clock's remaining turns should be visible; got %s", panel)
 	}
 }
+
+// TestGameMaster_RefusesToSeedWithoutCallerInfo pins the loud-failure
+// contract. The seed previously fell back to a constant when CallerInfo
+// was missing, which would hand every campaign on the server identical
+// dice — and because rolls are deterministic per decision, nobody would
+// notice until two unrelated campaigns played out move for move the same.
+func TestGameMaster_RefusesToSeedWithoutCallerInfo(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	// Store wired, CallerInfo deliberately absent.
+	ctx := WithPluginStateStore(context.Background(), &stubStateStore{})
+
+	_, err := g.ExecuteTool(ctx, "game_commit_turn", json.RawMessage(initInput))
+	if err == nil || !strings.Contains(err.Error(), "CallerInfo") {
+		t.Errorf("an unseeded campaign must fail loudly; got %v", err)
+	}
+}
+
+// TestGameMaster_SeedVariesByConversation guards the other half: two
+// campaigns must not share dice. Folding only a UUIDv7's timestamp prefix
+// would make conversations opened moments apart start from neighbouring
+// seeds.
+func TestGameMaster_SeedVariesByConversation(t *testing.T) {
+	t.Parallel()
+	seeds := map[uint64]bool{}
+	for i := 0; i < 64; i++ {
+		ctx := WithCallerInfo(context.Background(), CallerInfo{ConversationID: uuid.New()})
+		s, err := seedFor(ctx)
+		if err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		seeds[s] = true
+	}
+	if len(seeds) != 64 {
+		t.Errorf("expected 64 distinct campaign seeds; got %d", len(seeds))
+	}
+}

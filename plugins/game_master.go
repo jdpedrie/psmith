@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
+
 	"github.com/jdpedrie/psmith/plugins/gamemaster"
 )
 
@@ -291,7 +293,11 @@ func (p *gameMaster) commitTurn(ctx context.Context, store PluginStateStore, raw
 		if in.Scenario == nil {
 			return ToolResult{}, fmt.Errorf("game_master: initialize requires a scenario")
 		}
-		next, err := gamemaster.Initialize(*in.Scenario, seedFor(ctx))
+		seed, err := seedFor(ctx)
+		if err != nil {
+			return ToolResult{}, fmt.Errorf("game_master: %w", err)
+		}
+		next, err := gamemaster.Initialize(*in.Scenario, seed)
 		if err != nil {
 			return ToolResult{}, fmt.Errorf("game_master: %w", err)
 		}
@@ -850,17 +856,26 @@ func (p *gameMaster) RenderContent(parts []ContentPart, role string) []ContentPa
 // seedFor derives a campaign seed. Taken from the caller identity rather
 // than a clock so a test can pin it, and so two campaigns started by the
 // same user in the same conversation cannot collide.
-func seedFor(ctx context.Context) uint64 {
+func seedFor(ctx context.Context) (uint64, error) {
 	info := CallerInfoFrom(ctx)
+	if info.ConversationID == uuid.Nil {
+		// Fail loudly rather than fall back to a constant. A silent
+		// default would hand every campaign on the server the same dice,
+		// and because rolls are deterministic per decision nobody would
+		// notice until two unrelated campaigns played out identically.
+		// The state store already hard-errors when unwired; this is the
+		// same contract.
+		return 0, fmt.Errorf("no CallerInfo in context — cannot seed a campaign")
+	}
+	// Fold all sixteen bytes. Using only the first eight would lean on
+	// a UUIDv7's timestamp prefix, so campaigns opened moments apart
+	// would start from neighbouring seeds.
 	b := info.ConversationID
 	var seed uint64
-	for i := 0; i < 8; i++ {
-		seed = seed<<8 | uint64(b[i])
+	for i := 0; i < 16; i++ {
+		seed = seed*1099511628211 ^ uint64(b[i])
 	}
-	if seed == 0 {
-		seed = 0x5DEECE66D
-	}
-	return seed
+	return seed, nil
 }
 
 func jsonResult(v any) (ToolResult, error) {
