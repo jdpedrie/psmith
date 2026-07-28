@@ -85,6 +85,9 @@ type Querier interface {
 	// The cascade=true path. With ON DELETE CASCADE on parent_id (migration 00006),
 	// this single DELETE removes the descendant subtree too.
 	DeleteMessageByID(ctx context.Context, id uuid.UUID) error
+	// Explicit teardown. Conversation deletion already cascades; this exists
+	// for a plugin that wants to abandon a campaign without deleting the chat.
+	DeletePluginStateForConversation(ctx context.Context, arg DeletePluginStateForConversationParams) error
 	DeleteProfile(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	// Rows whose run happened in this context; stream_chunks cascade.
@@ -146,6 +149,21 @@ type Querier interface {
 	// Used by the next SendMessage to compute cache-stable prefix length.
 	GetLatestStreamRunWithPrefixForContext(ctx context.Context, contextID uuid.UUID) (StreamRun, error)
 	GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error)
+	// THE read path. Walks the message parent chain upward from $2 and returns
+	// the first ancestor (inclusive of $2 itself) carrying a snapshot for this
+	// plugin.
+	//
+	// A plain "parent's row" lookup is not good enough: stitch deletes reparent
+	// children onto a grandparent, non-game messages can be interleaved, and a
+	// turn that failed to bind leaves a gap. Walking until a row is found
+	// absorbs all three.
+	//
+	// The walk deliberately does NOT cross a context boundary, because the
+	// parent chain does not either — compaction seeds the new context with a
+	// fresh root. Carrying a campaign through compaction is an explicit copy.
+	GetNearestPluginState(ctx context.Context, arg GetNearestPluginStateParams) (PluginState, error)
+	// Exact lookup for one message's snapshot.
+	GetPluginState(ctx context.Context, arg GetPluginStateParams) (PluginState, error)
 	GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error)
 	GetSessionWithUser(ctx context.Context, tokenHash string) (GetSessionWithUserRow, error)
 	GetStreamRunByID(ctx context.Context, id uuid.UUID) (StreamRun, error)
@@ -307,6 +325,8 @@ type Querier interface {
 	// matching MaxListPageSize). Every pinned row is active by invariant,
 	// but the archived filter keeps the archived listing honest anyway.
 	ListPinnedConversationsByUser(ctx context.Context, arg ListPinnedConversationsByUserParams) ([]ListPinnedConversationsByUserRow, error)
+	// Context sweep, used by the compaction copy and by cleanup. Newest first.
+	ListPluginStateInContext(ctx context.Context, arg ListPluginStateInContextParams) ([]PluginState, error)
 	// Returns the ordered plugin pipeline for one profile (no inheritance walk;
 	// callers do the walk in code so they can short-circuit on a profile that
 	// defines its own pipeline).
@@ -497,6 +517,11 @@ type Querier interface {
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
+	// Write the snapshot a completed turn produced. Upsert rather than insert
+	// because the assistant message is materialized before the binding hook
+	// runs, and a retried bind must be idempotent rather than a duplicate-key
+	// failure.
+	UpsertPluginState(ctx context.Context, arg UpsertPluginStateParams) (PluginState, error)
 	// Single-row upsert keyed by user_id. Conflict resolves by replacing
 	// every field (no merge semantics) — the UI sends the whole row each
 	// time and "clear my api_key" must work via an empty bytea.

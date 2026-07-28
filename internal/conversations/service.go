@@ -1834,7 +1834,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
-		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher, s.deviceToolBroker, s.deviceToolRegistry)
+		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher, s.deviceToolBroker, s.deviceToolRegistry,
+			func(pluginName string) plugins.GameStore {
+				return s.newGameStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID)
+			})
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)

@@ -1,6 +1,6 @@
 # Database schema
 
-The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00046. This document reflects the state after all of them.
+The full current Postgres schema, the migration history that produced it, and the special features that matter. The source of truth is `db/migrations/`, a sequence of goose migrations numbered 00001 through 00047. This document reflects the state after all of them.
 
 Conventions across the schema: UUIDs for IDs (UUIDv7 where the application mints them, for sortability). Enumerations are `TEXT` with a `CHECK` constraint, never native Postgres `ENUM`, to keep schema evolution painless. `updated_at` is maintained by application code, not a trigger; there are no triggers anywhere.
 
@@ -64,6 +64,7 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00044 | messages_parent_index | `messages (parent_id)` index for the stitch-delete reparent (2026-07-21 perf round). |
 | 00045 | user_models_pricing_tiers | `user_models.pricing_tiers` JSONB — context-size pricing steps; highest threshold under the prompt-token count wins, whole request prices at that tier. |
 | 00046 | rename_obsidian_plugin_to_files | Data migration: `plugin_name` 'obsidian' → 'files' across profile/conversation/user plugin tables (the plugin's identity generalized; encrypted config keys normalize in code). |
+| 00047 | plugin_state | Branch-scoped plugin state keyed to the assistant message that produced it (`PRIMARY KEY (plugin_name, message_id)`), so forks and regenerations each own an independent lineage. Read path walks the message parent chain to the nearest ancestor with a row; the walk does not cross a context boundary, so compaction carries state forward by explicit copy. |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020).
 
@@ -109,6 +110,8 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 
 **user_plugin_settings** — composite PK `(user_id, plugin_name)`; FK to users ON DELETE CASCADE; `config` JSONB nullable; `config_encrypted` BYTEA nullable; timestamps. Index on `user_id`. Per-user plugin globals, for example a shared API key a plugin needs.
 
+**plugin_state** — composite PK `(plugin_name, message_id)`; FKs to messages, conversations, and contexts all ON DELETE CASCADE; `state_version` BIGINT; `schema_version` INT; `state_json` JSONB; `created_at`. Index on `(plugin_name, context_id)`. Branch-scoped state for stateful plugins, keyed to the assistant message that produced it rather than to the conversation, so a regenerated or forked turn owns an independent lineage instead of overwriting its sibling. Reads walk the message parent chain to the nearest ancestor carrying a row, which absorbs stitch deletes and turns that wrote no state. The walk stops at a context boundary because the parent chain does too, so carrying state through compaction is an explicit copy rather than a chain walk.
+
 ### Caching, cost, files, integrations
 
 **explicit_caches** — composite PK `(context_id, provider_type, model_id)`; FK to contexts ON DELETE CASCADE; `cache_ref` (the provider's cache handle); `prefix_message_count`; `prefix_hash`; `created_at`, `expires_at`. Index on `expires_at`. Tracks server-managed explicit caches (Google `cachedContents`, Anthropic 1-hour TTL).
@@ -131,7 +134,7 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 
 Two patterns, applied deliberately.
 
-Ownership edges cascade. Deleting a user removes their sessions, providers, profiles, conversations, plugin settings, and cost events. Deleting a conversation removes its contexts, runs, plugin overrides, and device-tool calls. Deleting a context removes its messages. Deleting a message removes its attachments and its child messages. Deleting a provider removes its enabled models and cost events.
+Ownership edges cascade. Deleting a user removes their sessions, providers, profiles, conversations, plugin settings, and cost events. Deleting a conversation removes its contexts, runs, plugin overrides, and device-tool calls. Deleting a context removes its messages. Deleting a message removes its attachments, its plugin state, and its child messages. Deleting a provider removes its enabled models and cost events.
 
 Audit and display edges set null, so the referencing row survives the delete with a dangling link cleared. This covers `messages.provider_id`, `stream_runs.{provider_id, parent_message_id, result_message_id}`, `harness_sessions.provider_id`, `profiles.{compression_provider_id, title_provider_id}`, `contexts.current_leaf_message_id`, `cost_events.message_id`, and `device_tool_calls.message_id`. A historical stream run keeps its row even after the message it produced is deleted.
 

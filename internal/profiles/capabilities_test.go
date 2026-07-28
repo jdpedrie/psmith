@@ -113,9 +113,13 @@ func TestResolveRequiredModelCapabilities_ParentInheritance(t *testing.T) {
 	}
 }
 
-// TestResolveRequiredModelCapabilities_ChildOverridesParent verifies a child
-// with its own plugin list ignores the parent (all-or-nothing rule).
-func TestResolveRequiredModelCapabilities_ChildOverridesParent(t *testing.T) {
+// TestResolveRequiredModelCapabilities_ChildAddsToParent verifies a child
+// with its own plugin list still inherits the parent's requirements. This
+// asserted the opposite until the resolver was fixed: the old all-or-nothing
+// walk let a child that attached any plugin hide every requirement the
+// parent declared, which is exactly the base-profile/child-profile pattern.
+// The pipeline builder layers, so the capability gate has to layer too.
+func TestResolveRequiredModelCapabilities_ChildAddsToParent(t *testing.T) {
 	t.Parallel()
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "alice")
@@ -138,7 +142,8 @@ func TestResolveRequiredModelCapabilities_ChildOverridesParent(t *testing.T) {
 		ParentProfileId: &pParent,
 	}))
 	childID := uuid.MustParse(child.Msg.Profile.Id)
-	// Override parent: child has its own (cap-free) plugin list.
+	// Child attaches its own cap-free plugin. The parent's tool plugin is
+	// still in the resolved pipeline, so its requirement must survive.
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: childID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
@@ -153,8 +158,54 @@ func TestResolveRequiredModelCapabilities_ChildOverridesParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve child: %v", err)
 	}
+	if !caps.ToolUse {
+		t.Errorf("child with its own plugins must still inherit ToolUse from parent; got %+v", caps)
+	}
+}
+
+// TestResolveRequiredModelCapabilities_ChildDisableSubtracts verifies the one
+// way a child CAN shed an inherited requirement: an explicit disabled row,
+// which is what the pipeline builder honours.
+func TestResolveRequiredModelCapabilities_ChildDisableSubtracts(t *testing.T) {
+	t.Parallel()
+	svc, q := newTestSvc(t)
+	user := mustCreateUser(t, q, "alice")
+
+	parent, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&psmithv1.CreateProfileRequest{Name: "parent"}))
+	parentID := uuid.MustParse(parent.Msg.Profile.Id)
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
+		ProfileId: parentID.String(),
+		Plugins: []*psmithv1.ProfilePlugin{{
+			PluginName: plugins.MCPName,
+			Config:     []byte(`{"transport":"stdio","command":"true"}`),
+		}},
+	})); err != nil {
+		t.Fatalf("set parent: %v", err)
+	}
+
+	pParent := parentID.String()
+	child, _ := svc.CreateProfile(ctxAs(user), connect.NewRequest(&psmithv1.CreateProfileRequest{
+		Name:            "child",
+		ParentProfileId: &pParent,
+	}))
+	childID := uuid.MustParse(child.Msg.Profile.Id)
+	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
+		ProfileId: childID.String(),
+		Plugins: []*psmithv1.ProfilePlugin{{
+			PluginName: plugins.MCPName,
+			Config:     []byte(`{"transport":"stdio","command":"true"}`),
+			Disabled:   true,
+		}},
+	})); err != nil {
+		t.Fatalf("set child: %v", err)
+	}
+
+	caps, err := ResolveRequiredModelCapabilities(context.Background(), q, childID)
+	if err != nil {
+		t.Fatalf("resolve child: %v", err)
+	}
 	if caps.ToolUse {
-		t.Errorf("child override should NOT inherit ToolUse from parent; got %+v", caps)
+		t.Errorf("a disabled row must subtract the inherited requirement; got %+v", caps)
 	}
 }
 

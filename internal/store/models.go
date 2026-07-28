@@ -146,6 +146,17 @@ type MessageAttachment struct {
 	RoleHint  string
 }
 
+type PluginState struct {
+	PluginName     string
+	MessageID      uuid.UUID
+	ConversationID uuid.UUID
+	ContextID      uuid.UUID
+	StateVersion   int64
+	SchemaVersion  int32
+	StateJson      []byte
+	CreatedAt      time.Time
+}
+
 type Profile struct {
 	ID                    uuid.UUID
 	UserID                uuid.UUID
