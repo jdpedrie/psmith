@@ -107,13 +107,14 @@ func (s *Service) WithBus(bus *events.Bus) *Service {
 // publishProfileEvent is the single point that fires profile events
 // onto the bus. Centralised so the call sites stay one-liners and so
 // adding new mutation paths doesn't risk forgetting to publish.
-func (s *Service) publishProfileEvent(userID, profileID uuid.UUID, kind events.ProfileChangeKind) {
+func (s *Service) publishProfileEvent(ctx context.Context, userID, profileID uuid.UUID, kind events.ProfileChangeKind) {
 	if s.bus == nil {
 		return
 	}
 	s.bus.Publish(events.Event{
-		Type:   events.ProfileChanged,
-		UserID: userID,
+		Type:           events.ProfileChanged,
+		OriginClientID: auth.ClientIDFrom(ctx),
+		UserID:         userID,
 		Profile: events.ProfilePayload{
 			ProfileID: profileID,
 			Kind:      kind,
@@ -232,7 +233,7 @@ func (s *Service) CreateProfile(ctx context.Context, req *connect.Request[psmith
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachRequiredCaps(ctx, proto)
-	s.publishProfileEvent(caller.ID, id, events.ProfileChangeCreated)
+	s.publishProfileEvent(ctx, caller.ID, id, events.ProfileChangeCreated)
 	return connect.NewResponse(&psmithv1.CreateProfileResponse{Profile: proto}), nil
 }
 
@@ -602,7 +603,7 @@ func (s *Service) UpdateProfile(ctx context.Context, req *connect.Request[psmith
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachRequiredCaps(ctx, proto)
-	s.publishProfileEvent(caller.ID, id, events.ProfileChangeUpdated)
+	s.publishProfileEvent(ctx, caller.ID, id, events.ProfileChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateProfileResponse{Profile: proto}), nil
 }
 
@@ -629,7 +630,7 @@ func (s *Service) DeleteProfile(ctx context.Context, req *connect.Request[psmith
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishProfileEvent(caller.ID, id, events.ProfileChangeDeleted)
+	s.publishProfileEvent(ctx, caller.ID, id, events.ProfileChangeDeleted)
 	return connect.NewResponse(&psmithv1.DeleteProfileResponse{}), nil
 }
 

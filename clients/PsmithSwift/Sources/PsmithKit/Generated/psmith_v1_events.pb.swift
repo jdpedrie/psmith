@@ -231,6 +231,19 @@ public nonisolated struct Psmith_V1_AccountEvent: Sendable {
     set {kind = .heartbeat(newValue)}
   }
 
+  /// The client whose request caused this event, when one did.
+  ///
+  /// Every mutation fans out to every subscriber for the user, including the
+  /// client that performed it. That echo is not free: on receipt a client
+  /// refreshes its conversation list and runs staleness checks, so a send or an
+  /// edit pays for a round trip it already knew the answer to, landing on the
+  /// main actor exactly while the user is still interacting.
+  ///
+  /// Empty for anything with no originating request (a background worker, a
+  /// server-side timer). Clients skip events matching their own id and treat an
+  /// empty value as "not mine".
+  public var originClientID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Kind: Equatable, Sendable {
@@ -375,7 +388,7 @@ nonisolated extension Psmith_V1_SubscribeAccountEventsRequest: SwiftProtobuf.Mes
 
 nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AccountEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0\u{3}conversation_changed\0\u{3}provider_changed\0\u{1}heartbeat\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0\u{3}conversation_changed\0\u{3}provider_changed\0\u{1}heartbeat\0\u{3}origin_client_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -435,6 +448,7 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
           self.kind = .heartbeat(v)
         }
       }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.originClientID) }()
       default: break
       }
     }
@@ -464,11 +478,15 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
     }()
     case nil: break
     }
+    if !self.originClientID.isEmpty {
+      try visitor.visitSingularStringField(value: self.originClientID, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_AccountEvent, rhs: Psmith_V1_AccountEvent) -> Bool {
     if lhs.kind != rhs.kind {return false}
+    if lhs.originClientID != rhs.originClientID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

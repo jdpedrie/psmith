@@ -104,13 +104,17 @@ func (s *Service) WithBus(bus *events.Bus) *Service {
 // for the ORIGINATING client too — events carry no origin identity, so
 // receivers keep their reaction cheap (staleness check) instead of
 // relying on echo suppression.
-func (s *Service) publishConversationEvent(userID, conversationID uuid.UUID, kind events.ConversationChangeKind) {
+func (s *Service) publishConversationEvent(ctx context.Context, userID, conversationID uuid.UUID, kind events.ConversationChangeKind) {
 	if s.bus == nil {
 		return
 	}
 	s.bus.Publish(events.Event{
-		Type:   events.ConversationChanged,
-		UserID: userID,
+		Type: events.ConversationChanged,
+		// Attribute the mutation so the client that made it can skip its own
+		// echo. Empty when nothing originated the change (a supervisor hook, a
+		// background worker), which correctly reaches every client.
+		OriginClientID: auth.ClientIDFrom(ctx),
+		UserID:         userID,
 		Conversation: events.ConversationPayload{
 			ConversationID: conversationID,
 			Kind:           kind,
@@ -123,7 +127,12 @@ func (s *Service) publishConversationEvent(userID, conversationID uuid.UUID, kin
 // compression summary, errored row) is a conversation mutation the
 // other clients should hear about.
 func (s *Service) OnRunMaterialized(params stream.StartParams) {
-	s.publishConversationEvent(params.UserID, params.ConversationID, events.ConversationChangeUpdated)
+	// A supervisor callback, not a request: there is no caller context to
+	// inherit, so this is a legitimate place to start one. The empty origin is
+	// also correct rather than incidental. A materialized run must reach every
+	// client including whoever started it, because finishing is news even to
+	// the sender.
+	s.publishConversationEvent(context.Background(), params.UserID, params.ConversationID, events.ConversationChangeUpdated)
 }
 
 // NewService builds a Service. catalog/supervisor/logger/pool may be nil for
@@ -399,7 +408,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, convoRow, convoProto)
-	s.publishConversationEvent(caller.ID, convoRow.ID, events.ConversationChangeCreated)
+	s.publishConversationEvent(ctx, caller.ID, convoRow.ID, events.ConversationChangeCreated)
 	return connect.NewResponse(&psmithv1.CreateConversationResponse{
 		Conversation:   convoProto,
 		InitialContext: contextToProto(contextRow),
@@ -653,7 +662,7 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, updated, proto)
-	s.publishConversationEvent(updated.UserID, updated.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, updated.UserID, updated.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateConversationResponse{Conversation: proto}), nil
 }
 
@@ -675,7 +684,7 @@ func (s *Service) DeleteConversation(ctx context.Context, req *connect.Request[p
 	if err := s.queries.DeleteConversation(ctx, id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, id, events.ConversationChangeDeleted)
+	s.publishConversationEvent(ctx, caller.ID, id, events.ConversationChangeDeleted)
 	return connect.NewResponse(&psmithv1.DeleteConversationResponse{}), nil
 }
 
@@ -804,7 +813,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
-	s.publishConversationEvent(caller.ID, convID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, convID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SetConversationPluginsResponse{Plugins: out}), nil
 }
 
@@ -909,7 +918,7 @@ func (s *Service) ActivateContext(ctx context.Context, req *connect.Request[psmi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.ActivateContextResponse{Context: contextToProto(updated)}), nil
 }
 
@@ -969,7 +978,7 @@ func (s *Service) SetCurrentLeaf(ctx context.Context, req *connect.Request[psmit
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, updated.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SetCurrentLeafResponse{Context: contextToProto(updated)}), nil
 }
 
@@ -1010,7 +1019,7 @@ func (s *Service) UpdateContext(ctx context.Context, req *connect.Request[psmith
 		cxRow.Title = title
 	}
 
-	s.publishConversationEvent(caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateContextResponse{Context: contextToProto(cxRow)}), nil
 }
 
@@ -1070,7 +1079,7 @@ func (s *Service) DeleteContext(ctx context.Context, req *connect.Request[psmith
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, cxRow.ConversationID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.DeleteContextResponse{}), nil
 }
 
@@ -1293,7 +1302,7 @@ func (s *Service) ArchiveConversation(ctx context.Context, req *connect.Request[
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, id, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, id, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.ArchiveConversationResponse{}), nil
 }
 
@@ -1313,7 +1322,7 @@ func (s *Service) UnarchiveConversation(ctx context.Context, req *connect.Reques
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(caller.ID, id, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, id, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UnarchiveConversationResponse{}), nil
 }
 
@@ -1353,7 +1362,7 @@ func (s *Service) setPinned(ctx context.Context, rawID string, pinned bool) erro
 	}); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	s.publishConversationEvent(conv.UserID, id, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, conv.UserID, id, events.ConversationChangeUpdated)
 	return nil
 }
 
@@ -1969,7 +1978,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// The user row + started run are already visible to other
 	// clients; the assistant terminal will publish separately via
 	// the supervisor's materialization hook.
-	s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.SendMessageResponse{
 		UserMessage: userProto,
 		StreamRun:   streamRunToProto(runRow),
@@ -2931,7 +2940,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	// Other clients gate their composer on the pending compaction —
 	// tell them it started; the summary terminal publishes separately
 	// via the supervisor's materialization hook.
-	s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.CompactResponse{StreamRun: streamRunToProto(runRow)}), nil
 }
 

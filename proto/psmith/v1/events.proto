@@ -62,6 +62,19 @@ message AccountEvent {
     // too late to be useful.
     Heartbeat heartbeat = 4;
   }
+
+  // The client whose request caused this event, when one did.
+  //
+  // Every mutation fans out to every subscriber for the user, including the
+  // client that performed it. That echo is not free: on receipt a client
+  // refreshes its conversation list and runs staleness checks, so a send or an
+  // edit pays for a round trip it already knew the answer to, landing on the
+  // main actor exactly while the user is still interacting.
+  //
+  // Empty for anything with no originating request (a background worker, a
+  // server-side timer). Clients skip events matching their own id and treat an
+  // empty value as "not mine".
+  string origin_client_id = 5;
 }
 
 message Heartbeat {

@@ -23,7 +23,11 @@ struct EventsSubscriberLifecycleTests {
 
     @Test("repeated kicks do not multiply event delivery")
     func kicksDoNotAccumulateSubscribers() async throws {
-        let (client, _) = try await TestSession.freshUser(server: server, usernamePrefix: "evt-kick")
+        let (client, user) = try await TestSession.freshUser(server: server, usernamePrefix: "evt-kick")
+        // The mutation has to come from somewhere else. A client no longer
+        // hears the echo of its own, so using this one as the probe would
+        // measure suppression rather than subscriber count.
+        let other = try await TestSession.secondClient(server: server, for: user)
 
         let deliveries = Counter()
         client.events.onProfileChanged = { _ in deliveries.bump() }
@@ -45,7 +49,7 @@ struct EventsSubscriberLifecycleTests {
         // One mutation. One callback, however many kicks preceded it.
         var patch = Fixtures.minimalProfilePatch(name: "Kick Probe")
         patch.systemMessage = "probe"
-        _ = try await client.profiles.create(patch)
+        _ = try await other.profiles.create(patch)
 
         try await Task.sleep(for: .seconds(2))
         client.events.stop()

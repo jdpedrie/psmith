@@ -207,7 +207,7 @@ func (s *Service) MaybeGenerateTitle(ctx context.Context, params stream.StartPar
 		}
 	}
 	if needConvTitle || needCtxTitle {
-		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+		s.publishConversationEvent(ctx, conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	}
 }
 
@@ -260,7 +260,7 @@ func (s *Service) GenerateConversationTitle(ctx context.Context, req *connect.Re
 				s.logger.Warn("title(rpc): persist context title failed", "err", err)
 			}
 		}
-		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+		s.publishConversationEvent(ctx, conv.UserID, conv.ID, events.ConversationChangeUpdated)
 		return nil
 	}
 
@@ -485,7 +485,7 @@ func (s *Service) persistFallbacks(
 		}
 	}
 	if needConv || needCtx {
-		s.publishConversationEvent(conv.UserID, conv.ID, events.ConversationChangeUpdated)
+		s.publishConversationEvent(ctx, conv.UserID, conv.ID, events.ConversationChangeUpdated)
 	}
 }
 

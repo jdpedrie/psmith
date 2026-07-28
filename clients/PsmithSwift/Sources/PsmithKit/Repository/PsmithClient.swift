@@ -22,8 +22,23 @@ public final class PsmithClient: Sendable {
     /// conversation data when psmithd is unreachable.
     public let cache: PsmithCache?
 
+    /// Identifies this client instance to the server for the life of the
+    /// process. Exposed for diagnostics; the events stream uses it to skip
+    /// the echoes of this client's own mutations.
+    public let clientID: String
+
     public init(host: URL, tokenStore: TokenStore, authState: AuthState, cache: PsmithCache? = nil) {
-        let interceptor = AuthInterceptor(tokenStore: tokenStore, authState: authState)
+        // Identifies this client instance for the life of the process, so the
+        // events stream can skip the echoes of mutations this client made.
+        // Per-process on purpose: a restarted client has none of the state
+        // that made suppressing the echo safe, so it should hear everything.
+        let clientID = UUID().uuidString
+        self.clientID = clientID
+        let interceptor = AuthInterceptor(
+            tokenStore: tokenStore,
+            authState: authState,
+            clientID: clientID
+        )
         let config = ProtocolClientConfig(
             host: host.absoluteString,
             networkProtocol: .connect,
@@ -110,6 +125,7 @@ public final class PsmithClient: Sendable {
             tokenStore: tokenStore
         )
         self.events = EventsSubscriber(
+            ownClientID: clientID,
             client: Psmith_V1_EventsServiceClient(client: streamingClient)
         )
         self.speech = SpeechRepository(

@@ -131,7 +131,7 @@ func runSubscription(ctx context.Context, bus *Bus, userID uuid.UUID, out eventS
 // Returns nil for event types the proto doesn't model — caller skips
 // those, so a forward-compatible server can publish new types without
 // breaking old clients.
-func eventToProto(ev Event) *psmithv1.AccountEvent {
+func eventToProtoUnattributed(ev Event) *psmithv1.AccountEvent {
 	switch ev.Type {
 	case ProfileChanged:
 		return &psmithv1.AccountEvent{
@@ -202,4 +202,15 @@ func profileChangeKindToProto(k ProfileChangeKind) psmithv1.ProfileChangeKind {
 	default:
 		return psmithv1.ProfileChangeKind_PROFILE_CHANGE_KIND_UNSPECIFIED
 	}
+}
+
+// eventToProto renders an internal Event, carrying the originating client
+// through so a subscriber can skip the echo of its own mutation.
+func eventToProto(e Event) *psmithv1.AccountEvent {
+	p := eventToProtoUnattributed(e)
+	if p == nil {
+		return nil
+	}
+	p.OriginClientId = e.OriginClientID
+	return p
 }

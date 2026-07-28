@@ -70,6 +70,10 @@ func (i *Interceptor) authenticate(ctx context.Context, header http.Header) (con
 		}
 		return ctx, connect.NewError(connect.CodeInternal, err)
 	}
+	// Carry the caller's client id alongside the user. Both wrappers funnel
+	// through here, so a mutation reached over any transport can attribute the
+	// events it publishes and let the originator skip its own echo.
+	ctx = ContextWithClientID(ctx, ClientID(header.Get(ClientIDHeader)))
 	return contextWithUser(ctx, user), nil
 }
 

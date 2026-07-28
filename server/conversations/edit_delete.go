@@ -95,7 +95,7 @@ func (s *Service) EditMessage(ctx context.Context, req *connect.Request[psmithv1
 	if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
 		s.logger.Warn("touch conversation after edit failed", "err", err)
 	}
-	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.EditMessageResponse{Message: proto}), nil
 }
 
@@ -143,7 +143,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[psmith
 		if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
 			s.logger.Warn("touch conversation after delete failed", "err", err)
 		}
-		s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
+		s.publishConversationEvent(ctx, caller.ID, conv.ID, events.ConversationChangeUpdated)
 		return connect.NewResponse(&psmithv1.DeleteMessageResponse{}), nil
 	}
 
@@ -177,7 +177,7 @@ func (s *Service) DeleteMessage(ctx context.Context, req *connect.Request[psmith
 	if err := s.queries.TouchConversationUpdatedAt(ctx, conv.ID); err != nil {
 		s.logger.Warn("touch conversation after delete failed", "err", err)
 	}
-	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.DeleteMessageResponse{}), nil
 }
 
@@ -332,7 +332,7 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
 
-	s.publishConversationEvent(caller.ID, conv.ID, events.ConversationChangeUpdated)
+	s.publishConversationEvent(ctx, caller.ID, conv.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.PromoteCompactionToNewContextResponse{
 		Context: contextToProto(newCtx),
 	}), nil

@@ -36,6 +36,10 @@ type Event struct {
 	// Provider carries data for ProviderChanged events. Zero-valued
 	// for other types.
 	Provider ProviderPayload
+	// OriginClientID identifies the client whose request caused this
+	// event, so that client can skip its own echo. Empty when nothing
+	// originated it (a background worker, a server-side timer).
+	OriginClientID string
 }
 
 // EventType discriminates the union. New types append.

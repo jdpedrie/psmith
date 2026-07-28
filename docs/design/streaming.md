@@ -88,3 +88,35 @@ a wifi-to-cellular handoff leaves a dead connection the OS already knows about.
 The two constants are a pair. Clients size the deadline off the server interval,
 so changing one without the other reopens the gap; `TestHeartbeat_IntervalIsTheDocumentedValue`
 and the RPC timeout invariants both pin it.
+
+## Echo suppression
+
+Every mutation fans out to every subscriber for the user, the originator
+included. Receiving that echo is not free: a client refreshes its conversation
+list and runs staleness checks on it, so a send or an edit paid for a round trip
+to learn something it already knew, landing on the main actor while the user was
+still interacting. On iOS that surfaced as the keyboard taking a second to
+appear and sends lagging behind the tap.
+
+The cost was invisible while the events stream kept dying, because most echoes
+were dropped. Fixing the connection made the app do work it had been silently
+skipping, which is why stability and responsiveness appeared to trade off.
+
+Clients generate a `clientID` per process and send it as `psmith-client-id`.
+The auth interceptor reads it into the request context beside the user, so any
+transport carries it, and event publishers stamp it onto what they emit.
+`AccountEvent.origin_client_id` carries it to subscribers, which drop events
+matching their own id.
+
+Two properties keep it honest, both tested end to end against a real server.
+Suppression is scoped to the originator, so a second client on the same account
+still hears everything; dropping the event for everyone would break the
+cross-device sync the stream exists for. And an empty origin means "nobody
+attributable caused this" and is always delivered, which covers supervisor
+hooks, background workers, and older clients that send no header. A
+materialized run deliberately carries no origin: finishing is news even to the
+sender.
+
+The id is per process, not per user or per device. A restarted client has none
+of the optimistic state that made suppressing the echo safe, so it should hear
+everything again.

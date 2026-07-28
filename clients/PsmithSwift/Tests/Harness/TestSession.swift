@@ -52,7 +52,31 @@ public enum TestSession {
             cache: cache
         )
         let user = try await client.auth.login(username: username, password: password)
+        LoginRegistry.shared.remember(userID: user.id, username: username, password: password)
         return (client, user)
+    }
+
+    /// A SECOND authenticated client for a user `freshUser` already created.
+    ///
+    /// Its own token store and its own client id, so it behaves like a
+    /// different device rather than a second reference to the same one. Needed
+    /// by anything asserting cross-client behaviour: echo suppression is only
+    /// correct if the originator is quiet AND everyone else still hears it,
+    /// and one client cannot demonstrate both halves.
+    public static func secondClient(
+        server: TestPsmithdServer,
+        for user: PsmithUser
+    ) async throws -> PsmithClient {
+        guard let creds = LoginRegistry.shared.lookup(userID: user.id) else {
+            throw HarnessError.serverFailedToStart("no remembered credentials for \(user.id); create the user with freshUser first")
+        }
+        let client = PsmithClient(
+            host: server.baseURL,
+            tokenStore: InMemoryTokenStore(),
+            authState: await MainActor.run { AuthState() }
+        )
+        _ = try await client.auth.login(username: creds.username, password: creds.password)
+        return client
     }
 
     /// Returns an admin-authenticated handle, cached per server. Used by
@@ -129,7 +153,11 @@ public enum TestSession {
         var interceptors: [InterceptorFactory] = []
         if let tokenStore {
             let authState = await MainActor.run { AuthState() }
-            let interceptor = AuthInterceptor(tokenStore: tokenStore, authState: authState)
+            let interceptor = AuthInterceptor(
+                tokenStore: tokenStore,
+                authState: authState,
+                clientID: UUID().uuidString
+            )
             interceptors.append(InterceptorFactory { _ in interceptor })
         }
         let config = ProtocolClientConfig(
@@ -169,5 +197,26 @@ final class AdminCache: @unchecked Sendable {
     func set(serverID: ObjectIdentifier, handle: AdminHandle) {
         lock.lock(); defer { lock.unlock() }
         byServer[serverID] = handle
+    }
+}
+
+
+/// Remembers the credentials `freshUser` minted so a second client can log in
+/// as the same user. Test-only: real clients never hold a password.
+private final class LoginRegistry: @unchecked Sendable {
+    static let shared = LoginRegistry()
+    private let lock = NSLock()
+    private var byUser: [String: (username: String, password: String)] = [:]
+
+    func remember(userID: String, username: String, password: String) {
+        lock.lock()
+        byUser[userID] = (username, password)
+        lock.unlock()
+    }
+
+    func lookup(userID: String) -> (username: String, password: String)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return byUser[userID]
     }
 }

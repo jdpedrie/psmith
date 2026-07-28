@@ -8,15 +8,34 @@ import SwiftProtobuf
 public final class AuthInterceptor: UnaryInterceptor, StreamInterceptor, @unchecked Sendable {
     private let tokenStore: TokenStore
     private let authState: AuthState
+    private let clientID: String
 
-    public init(tokenStore: TokenStore, authState: AuthState) {
+    /// Lowercase: connect normalises header keys, and a mismatched case reads
+    /// as absent on the server.
+    static let clientIDHeader = "psmith-client-id"
+
+    public init(tokenStore: TokenStore, authState: AuthState, clientID: String) {
         self.tokenStore = tokenStore
         self.authState = authState
+        self.clientID = clientID
     }
 
     private func attachToken<Message: ProtobufMessage>(_ request: HTTPRequest<Message>) -> HTTPRequest<Message> {
-        guard let token = try? tokenStore.load(), !token.isEmpty else { return request }
         var headers = request.headers
+        // Stamped before the token check. An early return on the
+        // unauthenticated path would drop the id too, and the server reads it
+        // in the same place it reads the token.
+        headers[Self.clientIDHeader] = [clientID]
+        guard let token = try? tokenStore.load(), !token.isEmpty else {
+            return HTTPRequest(
+                url: request.url,
+                headers: headers,
+                message: request.message,
+                method: request.method,
+                trailers: request.trailers,
+                idempotencyLevel: request.idempotencyLevel
+            )
+        }
         headers["authorization"] = ["Bearer \(token)"]
         return HTTPRequest(
             url: request.url,
@@ -29,8 +48,18 @@ public final class AuthInterceptor: UnaryInterceptor, StreamInterceptor, @unchec
     }
 
     private func attachToken(_ request: HTTPRequest<Void>) -> HTTPRequest<Void> {
-        guard let token = try? tokenStore.load(), !token.isEmpty else { return request }
         var headers = request.headers
+        headers[Self.clientIDHeader] = [clientID]
+        guard let token = try? tokenStore.load(), !token.isEmpty else {
+            return HTTPRequest(
+                url: request.url,
+                headers: headers,
+                message: request.message,
+                method: request.method,
+                trailers: request.trailers,
+                idempotencyLevel: request.idempotencyLevel
+            )
+        }
         headers["authorization"] = ["Bearer \(token)"]
         return HTTPRequest(
             url: request.url,

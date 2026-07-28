@@ -229,9 +229,21 @@ type AccountEvent struct {
 	//	*AccountEvent_ConversationChanged
 	//	*AccountEvent_ProviderChanged
 	//	*AccountEvent_Heartbeat
-	Kind          isAccountEvent_Kind `protobuf_oneof:"kind"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Kind isAccountEvent_Kind `protobuf_oneof:"kind"`
+	// The client whose request caused this event, when one did.
+	//
+	// Every mutation fans out to every subscriber for the user, including the
+	// client that performed it. That echo is not free: on receipt a client
+	// refreshes its conversation list and runs staleness checks, so a send or an
+	// edit pays for a round trip it already knew the answer to, landing on the
+	// main actor exactly while the user is still interacting.
+	//
+	// Empty for anything with no originating request (a background worker, a
+	// server-side timer). Clients skip events matching their own id and treat an
+	// empty value as "not mine".
+	OriginClientId string `protobuf:"bytes,5,opt,name=origin_client_id,json=originClientId,proto3" json:"origin_client_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AccountEvent) Reset() {
@@ -305,6 +317,13 @@ func (x *AccountEvent) GetHeartbeat() *Heartbeat {
 		}
 	}
 	return nil
+}
+
+func (x *AccountEvent) GetOriginClientId() string {
+	if x != nil {
+		return x.OriginClientId
+	}
+	return ""
 }
 
 type isAccountEvent_Kind interface {
@@ -571,12 +590,13 @@ var File_psmith_v1_events_proto protoreflect.FileDescriptor
 const file_psmith_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x16psmith/v1/events.proto\x12\tpsmith.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1f\n" +
-	"\x1dSubscribeAccountEventsRequest\"\xb0\x02\n" +
+	"\x1dSubscribeAccountEventsRequest\"\xda\x02\n" +
 	"\fAccountEvent\x12D\n" +
 	"\x0fprofile_changed\x18\x01 \x01(\v2\x19.psmith.v1.ProfileChangedH\x00R\x0eprofileChanged\x12S\n" +
 	"\x14conversation_changed\x18\x02 \x01(\v2\x1e.psmith.v1.ConversationChangedH\x00R\x13conversationChanged\x12G\n" +
 	"\x10provider_changed\x18\x03 \x01(\v2\x1a.psmith.v1.ProviderChangedH\x00R\x0fproviderChanged\x124\n" +
-	"\theartbeat\x18\x04 \x01(\v2\x14.psmith.v1.HeartbeatH\x00R\theartbeatB\x06\n" +
+	"\theartbeat\x18\x04 \x01(\v2\x14.psmith.v1.HeartbeatH\x00R\theartbeat\x12(\n" +
+	"\x10origin_client_id\x18\x05 \x01(\tR\x0eoriginClientIdB\x06\n" +
 	"\x04kind\"@\n" +
 	"\tHeartbeat\x123\n" +
 	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"e\n" +

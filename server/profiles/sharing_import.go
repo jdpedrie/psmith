@@ -193,7 +193,7 @@ func (s *Service) ImportProfile(ctx context.Context, req *connect.Request[psmith
 	}
 	for _, p := range created {
 		if id, err := uuid.Parse(p.Id); err == nil {
-			s.publishProfileEvent(caller.ID, id, events.ProfileChangeCreated)
+			s.publishProfileEvent(ctx, caller.ID, id, events.ProfileChangeCreated)
 		}
 	}
 

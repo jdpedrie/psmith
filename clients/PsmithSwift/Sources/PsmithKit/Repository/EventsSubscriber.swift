@@ -43,7 +43,17 @@ public final class EventsSubscriber: @unchecked Sendable {
 
     private var task: Task<Void, Never>?
 
-    public init(client: Psmith_V1_EventsServiceClientInterface) {
+    /// This client's own id, as stamped on outbound requests.
+    ///
+    /// Every mutation fans out to every subscriber for the user, the
+    /// originator included. Acting on that echo means a round trip to learn
+    /// something this client already knew, landing on the main actor while the
+    /// user is still interacting. Suppressing it is the difference between a
+    /// send costing one request and costing three.
+    private let ownClientID: String
+
+    public init(ownClientID: String = "", client: Psmith_V1_EventsServiceClientInterface) {
+        self.ownClientID = ownClientID
         self.client = client
     }
 
@@ -308,6 +318,12 @@ public final class EventsSubscriber: @unchecked Sendable {
     /// so the server can ship new events without breaking old clients.
     private func dispatch(_ event: Psmith_V1_AccountEvent) {
         guard let kind = event.kind else { return }
+        // Skip the echo of a mutation this client made. An empty origin means
+        // nothing attributable caused it (a supervisor hook, a background
+        // worker, an older server), and those must still be delivered.
+        if !ownClientID.isEmpty, event.originClientID == ownClientID {
+            return
+        }
         switch kind {
         case .profileChanged(let payload):
             onProfileChanged?(payload.profileID)
