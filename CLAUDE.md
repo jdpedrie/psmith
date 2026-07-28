@@ -24,6 +24,18 @@ Defaults baked into `Makefile` (`GOOSE_DBSTRING`) and `server/testutil` (pgtestd
 docker exec clark-postgres psql -U clark -d template1 -c "CREATE EXTENSION IF NOT EXISTS vector"
 ```
 
+## Skills
+
+Project workflows live in `.claude/skills/`, committed so they version with the code they describe. They were previously in `~/.claude/skills/` and drifted badly: they still said `internal/`, `Reeve`, and a flat `plugins/` package long after none of that was true. In-repo means a restructure that invalidates one shows up in the same diff.
+
+- `/psmith-vertical-slice` — a feature through every layer: proto, database, Go service, RPC handler, PsmithKit, Mac, iOS, with the gate at each.
+- `/psmith-add-plugin` — scaffold a plugin under `plugins/<name>/`.
+- `/psmith-add-provider` — scaffold a driver under `server/providers/<name>/`.
+- `/psmith-mirror-screen` — build the counterpart surface on the other platform.
+- `/psmith-screenshot-ios` — capture and drive the iOS simulator.
+
+If you change layout, naming, or a workflow these describe, update the skill in the same commit.
+
 ## Conventions
 
 - **Protos: every RPC has a dedicated request and response message pair.** Never return a domain message (e.g. `Profile`, `Conversation`) directly, and never return `google.protobuf.Empty`. Even no-data responses use `message FooResponse {}`. This preserves wire-compat headroom — fields can be added to any response without breaking the schema.

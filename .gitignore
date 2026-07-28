@@ -25,7 +25,8 @@
 
 # Per-user Claude Code state — user-level settings + scheduled-task locks
 # don't belong in the repo.
-.claude/
+.claude/*
+!.claude/skills/
 
 # Swift build artifacts and the xcodegen-generated project (project.yml is the
 # source of truth). Naming-agnostic so they hold across the client rename.
