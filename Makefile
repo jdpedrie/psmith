@@ -10,7 +10,7 @@ TEMPL_VERSION ?= v0.3.1020
 # phase, see clients/psmithd-ios/project.yml, which recomputes this
 # same value so direct-from-Xcode builds stay honest).
 PSMITH_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)$(shell git diff --quiet HEAD 2>/dev/null || echo +$(shell date +%Y%m%d%H%M))
-GO_VERSION_FLAGS := -ldflags "-X github.com/jdpedrie/psmith/internal/auth.buildVersion=$(PSMITH_VERSION)"
+GO_VERSION_FLAGS := -ldflags "-X github.com/jdpedrie/psmith/server/auth.buildVersion=$(PSMITH_VERSION)"
 
 GOOSE_DRIVER ?= postgres
 GOOSE_DBSTRING ?= postgres://clark:clark@localhost:5433/clark?sslmode=disable
@@ -35,10 +35,10 @@ tidy:
 sqlc:
 	sqlc generate
 
-# Regenerate the web client's templ templates (internal/web/*.templ -> *_templ.go).
+# Regenerate the web client's templ templates (server/web/*.templ -> *_templ.go).
 # Run after editing any .templ file; the generated files are checked in.
 web-generate:
-	go run github.com/a-h/templ/cmd/templ@$(TEMPL_VERSION) generate ./internal/web/
+	go run github.com/a-h/templ/cmd/templ@$(TEMPL_VERSION) generate ./server/web/
 
 migrate-up:
 	GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING="$(GOOSE_DBSTRING)" GOOSE_MIGRATION_DIR=$(GOOSE_MIGRATION_DIR) goose up

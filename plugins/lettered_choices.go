@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 // LetteredChoicesName is the registered name for the lettered-choices plugin.

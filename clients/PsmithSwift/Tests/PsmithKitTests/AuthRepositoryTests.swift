@@ -208,7 +208,7 @@ struct AuthRepositoryTests {
             // The harness binary is built without the Makefile's
             // -ldflags stamp, so the version field round-trips as
             // empty here — deterministic for this harness. The
-            // stamped echo is asserted server-side (internal/auth
+            // stamped echo is asserted server-side (server/auth
             // TestService_Probe_EchoesStampedVersion).
             #expect(version.isEmpty)
         case .wrongServer(let detail):

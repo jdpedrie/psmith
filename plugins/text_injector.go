@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 // TextInjectorName is the registered name for the text-injector plugin.

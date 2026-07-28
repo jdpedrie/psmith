@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jdpedrie/psmith/internal/embeddings"
+	"github.com/jdpedrie/psmith/server/embeddings"
 )
 
 // MemoryName is the registered name for the conversation-memory

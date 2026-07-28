@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 func buildComponentBuilder(t *testing.T, configJSON string) *componentBuilder {

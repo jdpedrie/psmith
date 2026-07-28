@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/jdpedrie/psmith/fakellm"
-	"github.com/jdpedrie/psmith/internal/providers"
-	_ "github.com/jdpedrie/psmith/internal/providers/anthropic" // registers driver
-	"github.com/jdpedrie/psmith/internal/providers/openai"      // registers openai-compatible driver
+	"github.com/jdpedrie/psmith/server/providers"
+	_ "github.com/jdpedrie/psmith/server/providers/anthropic" // registers driver
+	"github.com/jdpedrie/psmith/server/providers/openai"      // registers openai-compatible driver
 )
 
 // TestAnthropicRoundTrip drives the real Anthropic driver against the fake

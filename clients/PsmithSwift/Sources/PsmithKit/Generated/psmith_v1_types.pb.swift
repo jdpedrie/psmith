@@ -1187,7 +1187,7 @@ public nonisolated struct Psmith_V1_UserModel: @unchecked Sendable {
   /// constraints describes per-model limits on the CallSettings the UI
   /// can offer for this model — clamp temperature ranges, hide controls
   /// for unsupported fields, etc. Sourced from a hand-maintained
-  /// server-side table (see internal/modelmeta/constraints.go),
+  /// server-side table (see server/modelmeta/constraints.go),
   /// empirically discovered via cmd/discover-constraints. Sparse: any
   /// field left empty means "no known constraint" — UI offers the full
   /// range and reactively renders any upstream rejection inline.
@@ -1209,7 +1209,7 @@ public nonisolated struct Psmith_V1_UserModel: @unchecked Sendable {
 
 /// ModelConstraints carries per-model UI guardrails for CallSettings.
 /// Sparse — any field left empty means "no known constraint." See
-/// internal/modelmeta/constraints.go for the source-of-truth table.
+/// server/modelmeta/constraints.go for the source-of-truth table.
 public nonisolated struct Psmith_V1_ModelConstraints: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for

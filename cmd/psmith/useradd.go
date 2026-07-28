@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
-	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/server/store"
 )
 
 const defaultDSN = "postgres://clark:clark@localhost:5433/clark?sslmode=disable"

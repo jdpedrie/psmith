@@ -3,7 +3,7 @@
 // enabled model accepts, silently drops, or actively rejects.
 //
 // Output is a JSON results file (default
-// internal/modelmeta/constraint_probes/<timestamp>.json) that
+// server/modelmeta/constraint_probes/<timestamp>.json) that
 // downstream tooling distils into the per-model constraint table the
 // UI uses for guardrails.
 //
@@ -200,7 +200,7 @@ func main() {
 	addr := flag.String("addr", "http://localhost:8080", "psmithd base URL")
 	user := flag.String("u", "john", "username")
 	pass := flag.String("p", "password", "password")
-	out := flag.String("out", "", "output JSON path; empty = stdout, 'auto' = internal/modelmeta/constraint_probes/<timestamp>.json")
+	out := flag.String("out", "", "output JSON path; empty = stdout, 'auto' = server/modelmeta/constraint_probes/<timestamp>.json")
 	only := flag.String("only", "", "comma-separated probe names to run (default: all)")
 	models := flag.String("models", "", "comma-separated provider_id:model_id pairs to limit the run")
 	timeout := flag.Duration("timeout", 30*time.Second, "per-probe RPC timeout")
@@ -317,7 +317,7 @@ func main() {
 		os.Stdout.WriteString("\n")
 	case "auto":
 		ts := report.StartedAt.Format("20060102-150405")
-		path := filepath.Join("internal/modelmeta/constraint_probes", ts+".json")
+		path := filepath.Join("server/modelmeta/constraint_probes", ts+".json")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			fatal("mkdir: %v", err)
 		}

@@ -248,7 +248,7 @@ public struct PsmithUserModel: Sendable, Identifiable, Hashable, Codable {
     public let defaultSettings: PsmithCallSettings?
     /// Server-supplied UI guardrails for this model (clamped temperature
     /// ranges, locked-at values, hidden-control list). Sourced from
-    /// internal/modelmeta/constraints.go and empirically refreshed via
+    /// server/modelmeta/constraints.go and empirically refreshed via
     /// cmd/discover-constraints. nil = no known constraints; the UI
     /// offers the full range and reactively renders any upstream
     /// rejection inline.
@@ -316,7 +316,7 @@ extension PsmithUserModel {
 /// Per-model UI guardrails for CallSettings. Sparse — any field left
 /// nil means "no known constraint." Mirrors the Go `modelmeta.Constraints`
 /// + `proto Psmith_V1_ModelConstraints`. Source-of-truth table lives in
-/// `internal/modelmeta/constraints.go`.
+/// `server/modelmeta/constraints.go`.
 public struct PsmithModelConstraints: Sendable, Hashable, Codable {
     /// Accepted temperature interval. nil = no constraint; UI offers
     /// the full slider range.

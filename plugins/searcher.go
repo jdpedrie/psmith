@@ -3,7 +3,7 @@ package plugins
 import (
 	"context"
 
-	"github.com/jdpedrie/psmith/internal/embeddings"
+	"github.com/jdpedrie/psmith/server/embeddings"
 )
 
 // Searcher is the runtime-injected dependency the `memory` plugin

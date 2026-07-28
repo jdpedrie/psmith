@@ -22,7 +22,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/server/crypto"
 )
 
 // tableSpec describes the SELECT shape for one table — its key columns

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jdpedrie/psmith/internal/crypto"
+	"github.com/jdpedrie/psmith/server/crypto"
 )
 
 // genkeyCmd prints a fresh base64-encoded 32-byte master key suitable

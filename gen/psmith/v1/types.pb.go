@@ -1487,7 +1487,7 @@ type UserModel struct {
 	// constraints describes per-model limits on the CallSettings the UI
 	// can offer for this model — clamp temperature ranges, hide controls
 	// for unsupported fields, etc. Sourced from a hand-maintained
-	// server-side table (see internal/modelmeta/constraints.go),
+	// server-side table (see server/modelmeta/constraints.go),
 	// empirically discovered via cmd/discover-constraints. Sparse: any
 	// field left empty means "no known constraint" — UI offers the full
 	// range and reactively renders any upstream rejection inline.
@@ -1633,7 +1633,7 @@ func (x *UserModel) GetConstraints() *ModelConstraints {
 
 // ModelConstraints carries per-model UI guardrails for CallSettings.
 // Sparse — any field left empty means "no known constraint." See
-// internal/modelmeta/constraints.go for the source-of-truth table.
+// server/modelmeta/constraints.go for the source-of-truth table.
 type ModelConstraints struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// temperature, when set, defines the model's accepted temperature

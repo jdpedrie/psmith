@@ -300,7 +300,7 @@ struct ConversationSettingsView: View {
     }
 
     /// Per-model UI guardrails for the active conversation's pinned
-    /// model. Sourced from `internal/modelmeta/constraints.go` over
+    /// model. Sourced from `server/modelmeta/constraints.go` over
     /// the wire on `PsmithUserModel.constraints`. nil = no known
     /// constraints; the form falls back to driver-type heuristics.
     private var effectiveModelConstraints: PsmithModelConstraints? {

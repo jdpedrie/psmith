@@ -35,7 +35,7 @@ ENV CGO_ENABLED=0 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     STAMP="${PSMITH_VERSION:-$(date +%Y%m%d%H%M)}" \
- && go build -trimpath -ldflags="-s -w -X github.com/jdpedrie/psmith/internal/auth.buildVersion=$STAMP" -o /out/psmithd ./cmd/psmithd \
+ && go build -trimpath -ldflags="-s -w -X github.com/jdpedrie/psmith/server/auth.buildVersion=$STAMP" -o /out/psmithd ./cmd/psmithd \
  && go build -trimpath -ldflags='-s -w' -o /out/psmith  ./cmd/psmith
 
 # ---- Runtime stage -------------------------------------------------------

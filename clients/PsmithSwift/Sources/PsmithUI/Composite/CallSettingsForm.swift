@@ -56,7 +56,7 @@ public struct CallSettingsForm: View {
     /// ranges, locked-at values, hidden field paths). nil = no
     /// known constraints; the form falls back to driver-type
     /// heuristics. Source-of-truth lives in
-    /// `internal/modelmeta/constraints.go`.
+    /// `server/modelmeta/constraints.go`.
     let modelConstraints: PsmithModelConstraints?
     /// When true (default), every provider's extras section is reachable
     /// through the tab control below, pre-selected by `driverType`.

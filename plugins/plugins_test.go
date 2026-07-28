@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jdpedrie/psmith/internal/providers"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 // dummyPlugin is a minimal Plugin used in registry tests.

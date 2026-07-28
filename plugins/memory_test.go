@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jdpedrie/psmith/internal/embeddings"
+	"github.com/jdpedrie/psmith/server/embeddings"
 )
 
 // stubSearcher returns canned results so tests assert behavior

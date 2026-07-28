@@ -13,7 +13,7 @@
 # files embed verbatim provider error messages which have leaked an API
 # key in the past; keep them out of the repo entirely (review locally,
 # never commit).
-/internal/modelmeta/constraint_probes/
+/server/modelmeta/constraint_probes/
 
 # IDE
 .idea/
