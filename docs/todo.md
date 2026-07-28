@@ -283,6 +283,8 @@ Captured after surveying the `pluginapi` capability set. Two entries that lived 
 - **Profile lookups beyond the loaded pages** (`PsmithKit` ConversationsModel/ProfilesViewModel) — clients page profiles at 100/page, and chain-name/grouping lookups only see loaded pages. Under 100 profiles (everyone today) behavior is identical to pre-paging; above that, conversation rows for profiles on unloaded pages fall back to their placeholder until the profiles list is scrolled. Revisit with a by-id profile hydration if it ever bites.
 
 
+- **lettered_choices component mode leaves raw tags in `display_content`** — it refuses to strip delimiters in component mode because the renderer used to be fed the display-transformed text, so stripping destroyed its input. Renderers read the original content now, so that workaround is unnecessary. The fix is not simply to strip: a fragment-blind client would then see no choices at all. Component mode should run the same `rewriteJSONChoiceBodiesAsLettered` pass text mode uses, so the fallback stays readable while fragments render.
+
 ### Considered, deferred until a real use case lands
 
 - **`ToolMiddleware`** (wrap `ExecuteTool` for validation/logging/rate-limiting). No current need; revisit when an audit-style tool plugin is requested.

@@ -524,7 +524,26 @@ func applyDisplay(m *psmithv1.Message, pipeline pluginapi.Pipeline) {
 		return
 	}
 	m.DisplayContent = pipeline.TransformForDisplay(m.Content)
-	if parts := pipeline.RenderContent(m.DisplayContent, roleProtoToString(m.Role)); parts != nil {
+
+	// Renderers get the ORIGINAL content, not the display-transformed text.
+	//
+	// They are two independent views of the same message, not a pipeline:
+	// DisplayContent is the flat fallback for a client that cannot draw
+	// fragments, and UiFragments is the structured rendering. Feeding the
+	// second from the first meant a plugin that both strips a tag block for
+	// the fallback AND renders it as a component destroyed its own renderer's
+	// input — the block vanished from the text and no fragment replaced it,
+	// so the content was simply invisible.
+	//
+	// lettered_choices worked around this by refusing to strip in component
+	// mode, at the cost of leaving raw tags in DisplayContent. game_master
+	// could not: its block is a JSON state blob that has to be stripped from
+	// the fallback and rendered as components. Handing renderers the original
+	// lets a plugin do both, which is what the capability split promises.
+	//
+	// Renderers still chain with each other; RenderContent threads parts
+	// through every renderer in pipeline order.
+	if parts := pipeline.RenderContent(m.Content, roleProtoToString(m.Role)); parts != nil {
 		m.UiFragments = contentPartsToProto(parts)
 	}
 }
