@@ -90,17 +90,50 @@ public final class EventsSubscriber: @unchecked Sendable {
     public func start() {
         startPathMonitor()
         guard task == nil else { return }
+        let generation = currentGeneration.withLock { gen -> UInt64 in
+            gen &+= 1
+            return gen
+        }
         task = Task { [weak self] in
-            await self?.runLoop()
+            await self?.runLoop(generation: generation)
         }
     }
 
     /// Stop the subscription. Closes the underlying stream and
     /// halts the reconnect loop.
     public func stop() {
+        // Cancel the live stream, not just the task.
+        //
+        // Task.cancel() only requests cancellation. The loop is suspended
+        // inside `for await stream.results()`, which does not observe it, so
+        // the old subscriber kept running while `task = nil` let start() spawn
+        // a second one. Every kick could leave another orphan behind, and each
+        // orphan receives every event, multiplying the reloads the callbacks
+        // fire. Cancelling the stream ends `results()`, so subscribe() returns,
+        // its defers run, and runLoop sees the cancellation and exits.
+        //
+        // This was survivable while a dead connection eventually hit the 600s
+        // transport timeout. Heartbeats removed that backstop: an orphan on a
+        // live connection is fed forever and never reaps itself.
+        cancelActiveStream()
         task?.cancel()
         task = nil
     }
+
+    /// Cancels whatever stream `subscribe()` currently holds, if any.
+    ///
+    /// Stored as a closure rather than the stream itself so this file does not
+    /// have to name Connect's generic stream type.
+    private func cancelActiveStream() {
+        let cancel = activeStreamCancel.withLock { held -> (@Sendable () -> Void)? in
+            let c = held
+            held = nil
+            return c
+        }
+        cancel?()
+    }
+
+    private let activeStreamCancel = OSAllocatedUnfairLock<(@Sendable () -> Void)?>(initialState: nil)
 
     /// Drop the current connection attempt (and whatever backoff
     /// sleep it's in) and reconnect NOW. Call on auth transitions and
@@ -121,12 +154,23 @@ public final class EventsSubscriber: @unchecked Sendable {
     /// events until the stream ends or the Task is cancelled, then
     /// backs off and tries again. Cap at 30s so a long server outage
     /// doesn't spin forever at full speed.
-    private func runLoop() async {
+    /// Bumped on every start. A subscriber whose generation is no longer
+    /// current has been superseded and must stop dispatching, even if it is
+    /// still unwinding: `results()` can deliver buffered messages after the
+    /// stream is cancelled, and a superseded subscriber that dispatched them
+    /// would double every reload its callbacks trigger.
+    private let currentGeneration = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+
+    private func isCurrent(_ generation: UInt64) -> Bool {
+        currentGeneration.withLock { $0 == generation }
+    }
+
+    private func runLoop(generation: UInt64) async {
         var backoffSeconds: Double = 0.5
-        while !Task.isCancelled {
+        while !Task.isCancelled && isCurrent(generation) {
             let connectedAt = ContinuousClock.now
             do {
-                try await subscribe()
+                try await subscribe(generation: generation)
                 // Clean stream end (server closed) — reset backoff
                 // for the next cycle.
                 backoffSeconds = 0.5
@@ -150,9 +194,13 @@ public final class EventsSubscriber: @unchecked Sendable {
 
     /// Single subscription pass. Returns normally on clean close,
     /// throws on error (callers retry).
-    private func subscribe() async throws {
+    private func subscribe(generation: UInt64) async throws {
         let stream = client.subscribeAccountEvents(headers: [:])
         defer { stream.cancel() }
+        // Publish a cancel hook so stop() can break the `for await` below.
+        // Without it a cancelled task stays parked here indefinitely.
+        activeStreamCancel.withLock { $0 = { stream.cancel() } }
+        defer { activeStreamCancel.withLock { $0 = nil } }
         try stream.send(Psmith_V1_SubscribeAccountEventsRequest())
         syncLog.notice("events stream connected")
 
@@ -197,6 +245,9 @@ public final class EventsSubscriber: @unchecked Sendable {
                 // the stream cleanly.
                 continue
             case .message(let event):
+                // A superseded subscriber drains quietly rather than firing
+                // callbacks a current one is already handling.
+                guard isCurrent(generation) else { continue }
                 dispatch(event)
             }
         }
