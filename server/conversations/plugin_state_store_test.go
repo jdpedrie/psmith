@@ -12,10 +12,12 @@ import (
 	"github.com/google/uuid"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/pluginapi/host"
+	gamemaster "github.com/jdpedrie/psmith/plugins/game_master"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/testutil"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // stateStoreFixture stands up a user + conversation and returns the
@@ -93,7 +95,7 @@ func jsonEq(t *testing.T, got json.RawMessage, want string) {
 	}
 }
 
-func (f stateStoreFixture) storeAt(leaf uuid.UUID) plugins.PluginStateStore {
+func (f stateStoreFixture) storeAt(leaf uuid.UUID) host.PluginStateStore {
 	return f.svc.newPluginStateStore("game_master", f.user.ID, f.conv.ID, leaf)
 }
 
@@ -104,7 +106,7 @@ func TestPluginStateStore_NoStateIsNotAnError(t *testing.T) {
 	f := newStateStoreFixture(t)
 
 	_, _, _, err := f.storeAt(f.root).LoadNearest(context.Background())
-	if !errors.Is(err, plugins.ErrNoPluginState) {
+	if !errors.Is(err, host.ErrNoPluginState) {
 		t.Fatalf("want ErrNoPluginState on a fresh branch; got %v", err)
 	}
 }
@@ -237,7 +239,7 @@ func TestPluginStateStore_RefusesForeignConversation(t *testing.T) {
 		t.Fatalf("owner save: %v", err)
 	}
 	crossReader := mine.svc.newPluginStateStore("game_master", mine.user.ID, mine.conv.ID, foreign)
-	if _, _, _, err := crossReader.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoPluginState) {
+	if _, _, _, err := crossReader.LoadNearest(ctx); !errors.Is(err, host.ErrNoPluginState) {
 		t.Errorf("cross-conversation read should look absent; got %v", err)
 	}
 }
@@ -256,7 +258,7 @@ func TestPluginStateStore_ScopedPerPlugin(t *testing.T) {
 	}
 
 	other := f.svc.newPluginStateStore("some_other_plugin", f.user.ID, f.conv.ID, a)
-	if _, _, _, err := other.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoPluginState) {
+	if _, _, _, err := other.LoadNearest(ctx); !errors.Is(err, host.ErrNoPluginState) {
 		t.Errorf("a different plugin must not see the game's rows; got %v", err)
 	}
 }
@@ -272,18 +274,18 @@ func TestPluginStateStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 	ctx := context.Background()
 
 	// --- turn 1: a fresh plugin instance starts a campaign ---
-	turn1Plugin, err := plugins.Build(plugins.GameMasterName, nil)
+	turn1Plugin, err := pluginapi.Build(gamemaster.Name, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
-	tp, ok := turn1Plugin.(plugins.ToolProvider)
+	tp, ok := turn1Plugin.(pluginapi.ToolProvider)
 	if !ok {
 		t.Fatal("game_master must provide tools")
 	}
 
 	assistant1 := f.addMessage(t, &f.root, "assistant", "The granary stands empty.")
-	toolCtx := plugins.WithPluginStateStore(ctx, f.storeAt(f.root))
-	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
+	toolCtx := host.WithPluginStateStore(ctx, f.storeAt(f.root))
+	toolCtx = host.WithCallerInfo(toolCtx, host.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
 	if _, err := tp.ExecuteTool(toolCtx, "game_commit_turn", json.RawMessage(openingScenario)); err != nil {
@@ -292,7 +294,7 @@ func TestPluginStateStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 
 	// Materialization binds whatever the turn computed to the assistant
 	// message — the same loop postMaterialize runs.
-	for _, ps := range (plugins.Pipeline{turn1Plugin}).PendingPluginStates() {
+	for _, ps := range (pluginapi.Pipeline{turn1Plugin}).PendingPluginStates() {
 		gs := f.svc.newPluginStateStore(ps.PluginName, f.user.ID, f.conv.ID, assistant1)
 		if err := gs.Save(ctx, assistant1, ps.State, ps.Version); err != nil {
 			t.Fatalf("bind: %v", err)
@@ -301,13 +303,13 @@ func TestPluginStateStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 
 	// --- turn 2: a NEW instance, no memory of turn 1 ---
 	choice := f.addMessage(t, &assistant1, "user", "A")
-	turn2Plugin, err := plugins.Build(plugins.GameMasterName, nil)
+	turn2Plugin, err := pluginapi.Build(gamemaster.Name, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
-	tp2 := turn2Plugin.(plugins.ToolProvider)
-	turn2Ctx := plugins.WithPluginStateStore(ctx, f.storeAt(choice))
-	turn2Ctx = plugins.WithCallerInfo(turn2Ctx, plugins.CallerInfo{
+	tp2 := turn2Plugin.(pluginapi.ToolProvider)
+	turn2Ctx := host.WithPluginStateStore(ctx, f.storeAt(choice))
+	turn2Ctx = host.WithCallerInfo(turn2Ctx, host.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
 
@@ -535,18 +537,18 @@ func TestPluginStateStore_PlaysAFullCampaign(t *testing.T) {
 // assistant message.
 func play(t *testing.T, f stateStoreFixture, ctx context.Context, leaf, assistant uuid.UUID, input string) {
 	t.Helper()
-	pl, err := plugins.Build(plugins.GameMasterName, nil)
+	pl, err := pluginapi.Build(gamemaster.Name, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
-	toolCtx := plugins.WithPluginStateStore(ctx, f.storeAt(leaf))
-	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
+	toolCtx := host.WithPluginStateStore(ctx, f.storeAt(leaf))
+	toolCtx = host.WithCallerInfo(toolCtx, host.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
-	if _, err := pl.(plugins.ToolProvider).ExecuteTool(toolCtx, "game_commit_turn", json.RawMessage(input)); err != nil {
+	if _, err := pl.(pluginapi.ToolProvider).ExecuteTool(toolCtx, "game_commit_turn", json.RawMessage(input)); err != nil {
 		t.Fatalf("commit turn: %v", err)
 	}
-	for _, ps := range (plugins.Pipeline{pl}).PendingPluginStates() {
+	for _, ps := range (pluginapi.Pipeline{pl}).PendingPluginStates() {
 		if err := f.svc.newPluginStateStore(ps.PluginName, f.user.ID, f.conv.ID, assistant).
 			Save(ctx, assistant, ps.State, ps.Version); err != nil {
 			t.Fatalf("bind: %v", err)

@@ -9,10 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	basicgrounding "github.com/jdpedrie/psmith/plugins/basic_grounding"
+	"github.com/jdpedrie/psmith/plugins/mcp"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/testutil"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // TestResolveRequiredModelCapabilities_EmptyForBareProfile verifies a profile
@@ -55,7 +56,7 @@ func TestResolveRequiredModelCapabilities_AutoDerivesToolUse(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: pid.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
 	})); err != nil {
@@ -87,7 +88,7 @@ func TestResolveRequiredModelCapabilities_ParentInheritance(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: parentID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
 	})); err != nil {
@@ -129,7 +130,7 @@ func TestResolveRequiredModelCapabilities_ChildAddsToParent(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: parentID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
 	})); err != nil {
@@ -147,7 +148,7 @@ func TestResolveRequiredModelCapabilities_ChildAddsToParent(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: childID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.BasicGroundingName,
+			PluginName: basicgrounding.Name,
 			Config:     []byte(`{}`),
 		}},
 	})); err != nil {
@@ -176,7 +177,7 @@ func TestResolveRequiredModelCapabilities_ChildDisableSubtracts(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: parentID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
 	})); err != nil {
@@ -192,7 +193,7 @@ func TestResolveRequiredModelCapabilities_ChildDisableSubtracts(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: childID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 			Disabled:   true,
 		}},
@@ -221,7 +222,7 @@ func TestGetProfile_PopulatesRequiredCapabilities(t *testing.T) {
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: pid.String(),
 		Plugins: []*psmithv1.ProfilePlugin{{
-			PluginName: plugins.MCPName,
+			PluginName: mcp.Name,
 			Config:     []byte(`{"transport":"stdio","command":"true"}`),
 		}},
 	})); err != nil {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // persistToolResultAttachments writes each tool-produced attachment
@@ -29,7 +29,7 @@ func (s *Service) persistToolResultAttachments(
 	ctx context.Context,
 	userID uuid.UUID,
 	assistantMsgID uuid.UUID,
-	atts []plugins.ToolAttachment,
+	atts []pluginapi.ToolAttachment,
 ) error {
 	if len(atts) == 0 {
 		return nil

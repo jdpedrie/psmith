@@ -9,8 +9,8 @@ import (
 
 	"github.com/jdpedrie/psmith/fakellm"
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	letteredchoices "github.com/jdpedrie/psmith/plugins/lettered_choices"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // TestCacheObs_FirstTurnRecordsHashesNullsMetrics — the very first send for
@@ -122,7 +122,7 @@ func TestCacheObs_LetteredChoicesShiftsTrailingByOne(t *testing.T) {
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
 		ProfileID:       f.profile.ID,
 		Ordinal:         0,
-		PluginName:      plugins.LetteredChoicesName,
+		PluginName:      letteredchoices.Name,
 		ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)

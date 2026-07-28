@@ -1,0 +1,320 @@
+package basicgrounding
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/jdpedrie/psmith/pluginapi"
+)
+
+// Name is the registered name for the basic-grounding plugin.
+const Name = "basic_grounding"
+
+// Tag pair the plugin wraps grounding facts in. Stable across releases —
+// changing it would orphan stripping on existing message rows. Picked to
+// be unambiguous (an XML-style tag the user is unlikely to type
+// verbatim) so the display strip can't false-positive on user content.
+const (
+	groundingOpenTag  = "<grounding>"
+	groundingCloseTag = "</grounding>"
+)
+
+// basicGrounding adds small "ground facts" the model often gets wrong
+// without help — currently just the current date/time, with room for
+// more (location, user-specified facts, …) later.
+//
+// Implements the existing plugin interfaces:
+//
+//   - MessageEnvelope: contributes a `<grounding>…</grounding>` header
+//     block, rendered at SEND time and persisted in the user row's
+//     message_headers column — never in content, so editing / display /
+//     TTS / embeddings all see the user's own words. Rendering once at
+//     write time is what freezes the wall-clock value: re-rendering at
+//     history-build time would tick "current time" forward each turn
+//     and bust the provider-side prefix cache.
+//   - DisplayTransformer: strips a `<grounding>` block from content.
+//     Only fires on LEGACY rows — before message_headers existed the
+//     plugin rewrote content directly, and those rows still carry the
+//     block inline. New rows have clean content and the anchored regex
+//     never matches.
+//
+// CacheStable: the persisted header is byte-stable after write, so the
+// plugin's contribution doesn't bust the prefix cache as the
+// conversation grows.
+type basicGrounding struct {
+	cfg basicGroundingConfig
+	// now is a seam for tests. Production reads `time.Now()`; tests
+	// inject a fixed clock.
+	now func() time.Time
+}
+
+// basicGroundingConfig is the per-instance config blob. Every field is
+// optional with sensible defaults.
+type basicGroundingConfig struct {
+	// IncludeDateTime toggles the time fact. Default on — the
+	// model losing track of "today" was the original reason this
+	// plugin exists, so it's the most useful single fact.
+	IncludeDateTime bool `json:"include_date_time"`
+
+	// TimeFormat picks the wall-clock format. One of
+	// "datetime_iso", "datetime_human", "date_only". Empty = datetime_iso.
+	TimeFormat string `json:"time_format"`
+
+	// Timezone is the IANA zone the timestamp renders in (e.g.
+	// "America/New_York"). Empty = use the client-supplied
+	// pluginapi.DeviceFactKeyTimezone fact, or UTC if the client didn't
+	// send one. Server-local time is never used: clarkd often
+	// runs in a different zone from the user (a cloud host's
+	// "local" is meaningless to the model).
+	Timezone string `json:"timezone"`
+
+	// IncludeLocale renders "Locale: en-US" from the client-
+	// supplied pluginapi.DeviceFactKeyLocale. Default on — zero permission
+	// cost, lets the model pick units / date formats / language
+	// without asking.
+	IncludeLocale bool `json:"include_locale"`
+
+	// IncludePlatform renders "Platform: iOS 26.5 / iPhone 17 Pro"
+	// from the client-supplied pluginapi.DeviceFactKeyPlatform. Default on —
+	// also zero permission cost; useful for tech-support framing
+	// where the answer is OS/device-specific.
+	IncludePlatform bool `json:"include_platform"`
+
+	// IncludeLocation renders "Location: Brooklyn, NY" (and/or
+	// the raw coords as a fallback) from the client-supplied
+	// pluginapi.DeviceFactKeyLocationCity / pluginapi.DeviceFactKeyLocationCoords.
+	// Default ON: the device-side Privacy toggle
+	// (LocationFactPreference) is the actual gate — when it's
+	// off the client sends no location facts and this section
+	// silently renders nothing. The per-plugin knob is now just
+	// a profile-level override for users who want one profile
+	// to deliberately skip location even when the device is
+	// supplying it.
+	IncludeLocation bool `json:"include_location"`
+}
+
+func newBasicGrounding(configBytes json.RawMessage) (pluginapi.Plugin, error) {
+	cfg := basicGroundingConfig{
+		IncludeDateTime: true,
+		TimeFormat:      "datetime_iso",
+		IncludeLocale:   true,
+		IncludePlatform: true,
+		IncludeLocation: true,
+	}
+	if len(configBytes) > 0 {
+		if err := json.Unmarshal(configBytes, &cfg); err != nil {
+			return nil, fmt.Errorf("basic_grounding: parse config: %w", err)
+		}
+		if cfg.TimeFormat == "" {
+			cfg.TimeFormat = "datetime_iso"
+		}
+		if cfg.Timezone != "" {
+			if _, err := time.LoadLocation(cfg.Timezone); err != nil {
+				return nil, fmt.Errorf("basic_grounding: invalid timezone %q: %w", cfg.Timezone, err)
+			}
+		}
+	}
+	return &basicGrounding{cfg: cfg, now: time.Now}, nil
+}
+
+func init() {
+	pluginapi.Register(Name, newBasicGrounding)
+}
+
+func (p *basicGrounding) Name() string        { return Name }
+func (p *basicGrounding) DisplayName() string { return "Basic Grounding" }
+
+func (p *basicGrounding) Description() string {
+	return "Prepends small grounding facts (currently the wall-clock time) " +
+		"to every outgoing user message and hides them from display. " +
+		"Helps models that would otherwise hallucinate today's date or " +
+		"reason as if it's their training-data cutoff."
+}
+
+// --- pluginapi.Configurable ---
+
+func (p *basicGrounding) ConfigFields() []pluginapi.ConfigField {
+	return []pluginapi.ConfigField{
+		{
+			Name:        "include_date_time",
+			Display:     "Include current date/time",
+			Description: "Prepend the current wall-clock to every outgoing user message.",
+			Type:        pluginapi.ConfigFieldBoolean,
+			Default:     true,
+		},
+		{
+			Name:        "time_format",
+			Display:     "Time format",
+			Description: "How the timestamp is formatted in the prepended block.",
+			Type:        pluginapi.ConfigFieldSelect,
+			Default:     "datetime_iso",
+			Options: []pluginapi.ConfigOption{
+				{Value: "datetime_iso", Label: "ISO 8601 (2026-05-02T14:45:00-04:00)"},
+				{Value: "datetime_human", Label: "Human (Saturday, May 2, 2026 · 2:45 PM EDT)"},
+				{Value: "date_only", Label: "Date only (2026-05-02)"},
+			},
+		},
+		{
+			Name:        "timezone",
+			Display:     "Timezone (IANA)",
+			Description: "Optional IANA zone for the timestamp (e.g. America/New_York). Empty = use the device's timezone (falls back to UTC if the device didn't send one).",
+			Type:        pluginapi.ConfigFieldText,
+		},
+		{
+			Name:        "include_locale",
+			Display:     "Include locale",
+			Description: "Send the user's locale (e.g. en-US) so the model can pick units, date formats, and language without asking. No OS permission required.",
+			Type:        pluginapi.ConfigFieldBoolean,
+			Default:     true,
+		},
+		{
+			Name:        "include_platform",
+			Display:     "Include platform",
+			Description: "Send the OS + device (e.g. \"iOS 26.5 / iPhone 17 Pro\"). Useful for tech-support framing. No OS permission required.",
+			Type:        pluginapi.ConfigFieldBoolean,
+			Default:     true,
+		},
+		{
+			Name:        "include_location",
+			Display:     "Include current location",
+			Description: "Render the location section when the device sends location facts. The device-side Privacy toggle is the real permission gate; turning this off here lets one profile skip the section even when other profiles use it.",
+			Type:        pluginapi.ConfigFieldBoolean,
+			Default:     true,
+		},
+	}
+}
+
+// --- pluginapi.DeviceFactRequester ---
+
+func (p *basicGrounding) RequestedDeviceFacts() []string {
+	var keys []string
+	if p.cfg.IncludeDateTime && p.cfg.Timezone == "" {
+		// Only requested when needed for the timestamp fallback —
+		// when the user pinned an explicit Timezone in config, the
+		// device fact is unused, so don't bother asking for it.
+		keys = append(keys, pluginapi.DeviceFactKeyTimezone)
+	}
+	if p.cfg.IncludeLocale {
+		keys = append(keys, pluginapi.DeviceFactKeyLocale)
+	}
+	if p.cfg.IncludePlatform {
+		keys = append(keys, pluginapi.DeviceFactKeyPlatform)
+	}
+	if p.cfg.IncludeLocation {
+		keys = append(keys, pluginapi.DeviceFactKeyLocationCity, pluginapi.DeviceFactKeyLocationCoords)
+	}
+	return keys
+}
+
+// --- MessageEnvelope ---
+
+func (p *basicGrounding) OutgoingMessageEnvelope(facts map[string]string) (header, trailer string) {
+	lines := p.factLines(facts)
+	if len(lines) == 0 {
+		return "", ""
+	}
+	var b strings.Builder
+	b.WriteString(groundingOpenTag)
+	b.WriteByte('\n')
+	for _, line := range lines {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	b.WriteString(groundingCloseTag)
+	return b.String(), ""
+}
+
+// --- DisplayTransformer ---
+
+// groundingBlockRe matches the plugin's wrapper, including any trailing
+// whitespace, anchored at the start of the message (the only place the
+// outgoing transformer ever writes it). Compiled once at package load —
+// the pattern is closed-class.
+var groundingBlockRe = regexp.MustCompile(
+	`^` + regexp.QuoteMeta(groundingOpenTag) +
+		`[\s\S]*?` + regexp.QuoteMeta(groundingCloseTag) +
+		`[ \t]*\n*`,
+)
+
+func (p *basicGrounding) TransformForDisplay(content string) string {
+	return groundingBlockRe.ReplaceAllString(content, "")
+}
+
+// --- Internal ---
+
+// factLines returns one rendered "Key: value" line per enabled fact, in
+// stable order. `facts` is the device-supplied envelope from the
+// SendMessage request (may be nil); per-fact rendering tolerates
+// missing keys and just skips the corresponding line. Empty slice
+// when every enabled fact has nothing to render — caller skips the
+// wrapping block entirely.
+func (p *basicGrounding) factLines(facts map[string]string) []string {
+	var lines []string
+	if p.cfg.IncludeDateTime {
+		lines = append(lines, "Current time: "+p.formatNow(facts))
+	}
+	if p.cfg.IncludeLocale {
+		if v := facts[pluginapi.DeviceFactKeyLocale]; v != "" {
+			lines = append(lines, "Locale: "+v)
+		}
+	}
+	if p.cfg.IncludePlatform {
+		if v := facts[pluginapi.DeviceFactKeyPlatform]; v != "" {
+			lines = append(lines, "Platform: "+v)
+		}
+	}
+	if p.cfg.IncludeLocation {
+		city := facts[pluginapi.DeviceFactKeyLocationCity]
+		coords := facts[pluginapi.DeviceFactKeyLocationCoords]
+		switch {
+		case city != "" && coords != "":
+			// Pair city + coords on one line — the city anchors
+			// the human-readable answer, the coords give the
+			// model precise enough geography to disambiguate
+			// neighborhoods or do distance math.
+			lines = append(lines, "Location: "+city+" ("+coords+")")
+		case city != "":
+			lines = append(lines, "Location: "+city)
+		case coords != "":
+			lines = append(lines, "Location (coords): "+coords)
+		}
+	}
+	return lines
+}
+
+func (p *basicGrounding) formatNow(facts map[string]string) string {
+	t := p.now().In(p.resolveLocation(facts))
+	switch p.cfg.TimeFormat {
+	case "date_only":
+		return t.Format("2006-01-02")
+	case "datetime_human":
+		// Mac-style human format with weekday + zone abbreviation.
+		return t.Format("Monday, January 2, 2006 · 3:04 PM MST")
+	default: // datetime_iso
+		return t.Format(time.RFC3339)
+	}
+}
+
+// resolveLocation picks the timezone to render the timestamp in, in
+// priority order: explicit config → device-supplied fact → UTC.
+// Server-local is intentionally absent: clarkd typically runs in a
+// different zone from the user, so falling back to it would render a
+// timestamp the user doesn't recognize.
+func (p *basicGrounding) resolveLocation(facts map[string]string) *time.Location {
+	if p.cfg.Timezone != "" {
+		// Pre-validated in the constructor — LoadLocation here is
+		// only re-resolving the IANA name to a *Location.
+		if loc, err := time.LoadLocation(p.cfg.Timezone); err == nil {
+			return loc
+		}
+	}
+	if tz := facts[pluginapi.DeviceFactKeyTimezone]; tz != "" {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			return loc
+		}
+	}
+	return time.UTC
+}

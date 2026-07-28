@@ -6,12 +6,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/devicetools"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // deviceToolBinding adapts the in-memory devicetools.Broker +
-// Registry into the plugins.DeviceToolBroker interface a per-call
+// Registry into the host.DeviceToolBroker interface a per-call
 // ExecuteTool sees via ctx. One instance per run — the `emit`
 // closure binds to the run's chunk channel so the device-tool
 // chunk lands on the same wire as everything else.
@@ -33,7 +33,7 @@ func newDeviceToolBinding(
 	registry *devicetools.Registry,
 	userID, conversationID uuid.UUID,
 	emit func(devicetools.Request),
-) plugins.DeviceToolBroker {
+) host.DeviceToolBroker {
 	if broker == nil || registry == nil {
 		return nil
 	}

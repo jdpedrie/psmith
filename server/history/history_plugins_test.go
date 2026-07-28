@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/providers"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // --- Test plugins ----------------------------------------------------------
@@ -31,7 +31,7 @@ type stripAfterNPlugin struct {
 func (p *stripAfterNPlugin) Name() string        { return "test-strip-after-n" }
 func (p *stripAfterNPlugin) DisplayName() string { return "Test Strip After N" }
 func (p *stripAfterNPlugin) Description() string { return "test" }
-func (p *stripAfterNPlugin) TransformHistoryMessage(msg providers.WireMessage, pos plugins.HistoryPos) providers.WireMessage {
+func (p *stripAfterNPlugin) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) providers.WireMessage {
 	if msg.Role != "assistant" || pos.FromHeadSameRole < p.keepLast {
 		return msg
 	}
@@ -79,7 +79,7 @@ func TestBuild_HistoryTransformer_KeepsRecentStripsOlder(t *testing.T) {
 	u2 := insertMessage(t, f.q, f.ctxRow.ID, &a1.ID, "user", "second")
 	a2 := insertMessage(t, f.q, f.ctxRow.ID, &u2.ID, "assistant", "second reply <c>X) alt</c>")
 
-	pipeline := plugins.Pipeline{&stripAfterNPlugin{keepLast: 1, open: "<c>", close: "</c>"}}
+	pipeline := pluginapi.Pipeline{&stripAfterNPlugin{keepLast: 1, open: "<c>", close: "</c>"}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &a2.ID,
@@ -114,7 +114,7 @@ func TestBuild_HistoryTransformer_SkipsSystemAndContext(t *testing.T) {
 	u1 := insertMessage(t, f.q, f.ctxRow.ID, &cxm.ID, "user", "u1")
 	a1 := insertMessage(t, f.q, f.ctxRow.ID, &u1.ID, "assistant", "a1 <c>VISIBLE</c>")
 
-	pipeline := plugins.Pipeline{&stripAfterNPlugin{keepLast: 0, open: "<c>", close: "</c>"}}
+	pipeline := pluginapi.Pipeline{&stripAfterNPlugin{keepLast: 0, open: "<c>", close: "</c>"}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &a1.ID,
@@ -175,7 +175,7 @@ func TestBuild_SystemPrompter_WrapsExistingSystem(t *testing.T) {
 	sys := insertMessage(t, f.q, f.ctxRow.ID, nil, "system", "STORED")
 	u1 := insertMessage(t, f.q, f.ctxRow.ID, &sys.ID, "user", "u1")
 
-	pipeline := plugins.Pipeline{&prependSysPlugin{pre: "PRE", post: "POST"}}
+	pipeline := pluginapi.Pipeline{&prependSysPlugin{pre: "PRE", post: "POST"}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &u1.ID,
@@ -202,7 +202,7 @@ func TestBuild_SystemPrompter_InsertsWhenNoSystem(t *testing.T) {
 	f := seedConversation(t)
 	u1 := insertMessage(t, f.q, f.ctxRow.ID, nil, "user", "u1")
 
-	pipeline := plugins.Pipeline{&prependSysPlugin{pre: "PRE", post: "POST"}}
+	pipeline := pluginapi.Pipeline{&prependSysPlugin{pre: "PRE", post: "POST"}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &u1.ID,
@@ -228,7 +228,7 @@ func TestBuild_SystemPrompter_OnlyPrependNoExisting(t *testing.T) {
 	f := seedConversation(t)
 	u1 := insertMessage(t, f.q, f.ctxRow.ID, nil, "user", "u1")
 
-	pipeline := plugins.Pipeline{&prependSysPlugin{pre: "ONLY-PRE"}}
+	pipeline := pluginapi.Pipeline{&prependSysPlugin{pre: "ONLY-PRE"}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &u1.ID,
@@ -250,7 +250,7 @@ func TestBuild_SystemPrompter_NoContributionsLeavesSystemAlone(t *testing.T) {
 	u1 := insertMessage(t, f.q, f.ctxRow.ID, &sys.ID, "user", "u1")
 
 	// Plugin returning empty strings — should not wrap.
-	pipeline := plugins.Pipeline{&prependSysPlugin{pre: "", post: ""}}
+	pipeline := pluginapi.Pipeline{&prependSysPlugin{pre: "", post: ""}}
 	wire, err := Build(context.Background(), f.q, Params{
 		Conversation:     f.conv,
 		LeafMessageID:    &u1.ID,

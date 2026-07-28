@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/testutil"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // --- Fixture helpers -------------------------------------------------------
@@ -630,13 +630,13 @@ func (f *fakeQueries) ListAttachmentsForMessages(_ context.Context, _ []uuid.UUI
 // about the turn.
 type stubInjector struct {
 	block   string
-	sawTurn plugins.TurnInfo
+	sawTurn pluginapi.TurnInfo
 }
 
 func (s *stubInjector) Name() string        { return "stub_injector" }
 func (s *stubInjector) DisplayName() string { return "Stub" }
 func (s *stubInjector) Description() string { return "test" }
-func (s *stubInjector) BuildTurnContext(_ context.Context, t plugins.TurnInfo) (string, error) {
+func (s *stubInjector) BuildTurnContext(_ context.Context, t pluginapi.TurnInfo) (string, error) {
 	s.sawTurn = t
 	return s.block, nil
 }
@@ -661,7 +661,7 @@ func TestBuild_TurnContextLandsOnTheHead(t *testing.T) {
 		Conversation:  f.conv,
 		LeafMessageID: &head.ID,
 		UserID:        f.user.ID,
-		Plugins:       plugins.Pipeline{inj},
+		Plugins:       pluginapi.Pipeline{inj},
 	})
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -704,7 +704,7 @@ func TestBuild_TurnContextIsNotPersisted(t *testing.T) {
 		Conversation:  f.conv,
 		LeafMessageID: &u1.ID,
 		UserID:        f.user.ID,
-		Plugins:       plugins.Pipeline{inj},
+		Plugins:       pluginapi.Pipeline{inj},
 	}); err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -726,7 +726,7 @@ func TestBuild_TurnContextIsNotPersisted(t *testing.T) {
 		Conversation:  f.conv,
 		LeafMessageID: &u1.ID,
 		UserID:        f.user.ID,
-		Plugins:       plugins.Pipeline{inj},
+		Plugins:       pluginapi.Pipeline{inj},
 	})
 	if err != nil {
 		t.Fatalf("second build: %v", err)

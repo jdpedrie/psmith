@@ -14,11 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/plugins/mcp"
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/mcpreg"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // User-level MCP server registry handlers. A registered server is a
@@ -106,7 +107,7 @@ func (s *Service) UpsertMCPServer(ctx context.Context, req *connect.Request[psmi
 	}
 	// Same pre-write check as SetProfilePlugins: the mcp constructor is
 	// the authoritative validator for the spec shape.
-	if _, err := plugins.Build(mcpreg.BaseName, cfg); err != nil {
+	if _, err := pluginapi.Build(mcpreg.BaseName, cfg); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	encrypted, err := s.cipher.Encrypt(cfg)
@@ -181,7 +182,7 @@ func (s *Service) TestMCPServer(ctx context.Context, req *connect.Request[psmith
 	}
 	testCtx, cancel := context.WithTimeout(ctx, mcpTestTimeout)
 	defer cancel()
-	names, err := plugins.TestMCPConnection(testCtx, cfg)
+	names, err := mcp.TestMCPConnection(testCtx, cfg)
 	if err != nil {
 		// Connection failure is the test's RESULT, not an RPC error —
 		// mirrors the embedder/Langfuse test contract.

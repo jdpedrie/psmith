@@ -19,10 +19,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/storage"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // Message roles as stored in the messages table.
@@ -115,7 +115,7 @@ type Params struct {
 	// outgoing-user, tools) are not consumed here — they run elsewhere in
 	// the pipeline. See "Where each capability runs" in
 	// docs/design/plugins.md.
-	Plugins plugins.Pipeline
+	Plugins pluginapi.Pipeline
 
 	// UserID owns the conversation. Used to scope attachment reads
 	// (storage is partitioned per-user). Required when the chain
@@ -352,7 +352,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 			if role != roleUser && role != roleAssistant {
 				continue
 			}
-			pos := plugins.HistoryPos{
+			pos := pluginapi.HistoryPos{
 				FromHead:         (n - 1) - i,
 				FromHeadSameRole: samePos[i],
 				DestProviderType: params.DestProviderType,
@@ -396,7 +396,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		if params.LeafMessageID != nil {
 			leaf = *params.LeafMessageID
 		}
-		blocks := params.Plugins.BuildTurnContexts(ctx, plugins.TurnInfo{
+		blocks := params.Plugins.BuildTurnContexts(ctx, pluginapi.TurnInfo{
 			UserID:         params.UserID,
 			ConversationID: params.Conversation.ID,
 			ContextID:      active.ID,

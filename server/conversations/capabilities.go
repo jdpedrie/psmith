@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/profiles"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // validateModelCapabilities checks the conversation's resolved model can
@@ -59,8 +59,8 @@ func (s *Service) validateModelCapabilities(
 
 // capabilityShortfall returns the requirements not met by `actual`. The
 // result is Empty() iff actual satisfies every requirement.
-func capabilityShortfall(req plugins.ModelCapabilityRequirements, actual modelmeta.Capabilities) plugins.ModelCapabilityRequirements {
-	return plugins.ModelCapabilityRequirements{
+func capabilityShortfall(req pluginapi.ModelCapabilityRequirements, actual modelmeta.Capabilities) pluginapi.ModelCapabilityRequirements {
+	return pluginapi.ModelCapabilityRequirements{
 		Streaming:       req.Streaming && !actual.Streaming,
 		Thinking:        req.Thinking && !actual.Thinking,
 		ToolUse:         req.ToolUse && !actual.ToolUse,

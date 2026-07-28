@@ -11,9 +11,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jdpedrie/psmith/pluginapi"
+	basicgrounding "github.com/jdpedrie/psmith/plugins/basic_grounding"
+	letteredchoices "github.com/jdpedrie/psmith/plugins/lettered_choices"
+	"github.com/jdpedrie/psmith/plugins/mcp"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // System profile prose lives in seeds/*.md so reviewers can read it
@@ -76,7 +79,7 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 			// basic_grounding teaches the model "today is X" and similar
 			// per-turn facts. Defaults are sensible — date/time + locale
 			// + platform on, location off (location triggers OS prompt).
-			{Name: plugins.BasicGroundingName, Config: json.RawMessage(`{}`)},
+			{Name: basicgrounding.Name, Config: json.RawMessage(`{}`)},
 		},
 	},
 	{
@@ -90,13 +93,13 @@ var SystemProfileTemplates = []SystemProfileTemplate{
 			// The dispatcher is registered at server startup; without it,
 			// the plugin construction succeeds but tool calls fail with
 			// a clear "not registered" error.
-			{Name: plugins.MCPName, Config: json.RawMessage(`{"transport":"inproc"}`)},
+			{Name: mcp.Name, Config: json.RawMessage(`{"transport":"inproc"}`)},
 			// lettered_choices makes the assistant emit A/B/C choice
 			// blocks at decision points — perfect for a step-by-step
 			// configuration walkthrough. Component mode renders the
 			// choices as tappable buttons; tapping types the chosen
 			// letter into the composer.
-			{Name: plugins.LetteredChoicesName, Config: json.RawMessage(`{"output_mode":"component"}`)},
+			{Name: letteredchoices.Name, Config: json.RawMessage(`{"output_mode":"component"}`)},
 		},
 	},
 }
@@ -342,7 +345,7 @@ func insertSystemProfile(
 		// before persisting. A typo in a template would otherwise only
 		// surface when the user first tries to send a message —
 		// catching it here turns it into a build/test failure.
-		if _, err := plugins.Build(sp.Name, sp.Config); err != nil {
+		if _, err := pluginapi.Build(sp.Name, sp.Config); err != nil {
 			return fmt.Errorf("plugin[%d] %s: %w", i, sp.Name, err)
 		}
 		var encrypted []byte

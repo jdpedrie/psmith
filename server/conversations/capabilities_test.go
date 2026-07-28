@@ -3,12 +3,12 @@ package conversations
 import (
 	"testing"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/modelmeta"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 func TestCapabilityShortfall_AllSatisfied(t *testing.T) {
-	req := plugins.ModelCapabilityRequirements{ToolUse: true, Vision: true}
+	req := pluginapi.ModelCapabilityRequirements{ToolUse: true, Vision: true}
 	actual := modelmeta.Capabilities{ToolUse: true, Vision: true, Streaming: true}
 	got := capabilityShortfall(req, actual)
 	if !got.Empty() {
@@ -17,7 +17,7 @@ func TestCapabilityShortfall_AllSatisfied(t *testing.T) {
 }
 
 func TestCapabilityShortfall_PartiallySatisfied(t *testing.T) {
-	req := plugins.ModelCapabilityRequirements{ToolUse: true, Vision: true, Thinking: true}
+	req := pluginapi.ModelCapabilityRequirements{ToolUse: true, Vision: true, Thinking: true}
 	actual := modelmeta.Capabilities{ToolUse: true} // missing Vision + Thinking
 	got := capabilityShortfall(req, actual)
 	if !got.Vision {
@@ -32,7 +32,7 @@ func TestCapabilityShortfall_PartiallySatisfied(t *testing.T) {
 }
 
 func TestCapabilityShortfall_NoRequirements(t *testing.T) {
-	req := plugins.ModelCapabilityRequirements{}
+	req := pluginapi.ModelCapabilityRequirements{}
 	actual := modelmeta.Capabilities{} // empty model is fine when nothing is required
 	got := capabilityShortfall(req, actual)
 	if !got.Empty() {
@@ -41,7 +41,7 @@ func TestCapabilityShortfall_NoRequirements(t *testing.T) {
 }
 
 func TestCapabilityShortfall_ModelMissingEverything(t *testing.T) {
-	req := plugins.ModelCapabilityRequirements{
+	req := pluginapi.ModelCapabilityRequirements{
 		ToolUse: true, Vision: true, Thinking: true, GeneratesImages: true,
 	}
 	actual := modelmeta.Capabilities{} // model supports nothing

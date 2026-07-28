@@ -8,11 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
-// userScopedResolver implements plugins.ProviderResolver for the
+// userScopedResolver implements host.ProviderResolver for the
 // duration of a single SendMessage. It scopes resolution to one
 // user (the conversation owner) so a misconfigured plugin can't
 // reach across user boundaries by passing somebody else's
@@ -20,34 +20,34 @@ import (
 //
 // Constructed inline in service.SendMessage and attached to the
 // tool dispatch context — plugins read it via
-// plugins.ProviderResolverFrom(ctx).
+// host.ProviderResolverFrom(ctx).
 type userScopedResolver struct {
 	svc    *Service
 	userID uuid.UUID
 }
 
-func (r *userScopedResolver) ResolveModel(ctx context.Context, providerIDStr, modelID string) (plugins.ResolvedModel, error) {
+func (r *userScopedResolver) ResolveModel(ctx context.Context, providerIDStr, modelID string) (host.ResolvedModel, error) {
 	providerID, err := uuid.Parse(providerIDStr)
 	if err != nil {
-		return plugins.ResolvedModel{}, fmt.Errorf("provider_resolver: invalid provider_id: %w", err)
+		return host.ResolvedModel{}, fmt.Errorf("provider_resolver: invalid provider_id: %w", err)
 	}
 	provRow, err := r.svc.queries.GetUserModelProvider(ctx, providerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return plugins.ResolvedModel{}, fmt.Errorf("provider_resolver: provider %s not found", providerID)
+			return host.ResolvedModel{}, fmt.Errorf("provider_resolver: provider %s not found", providerID)
 		}
-		return plugins.ResolvedModel{}, fmt.Errorf("provider_resolver: load provider: %w", err)
+		return host.ResolvedModel{}, fmt.Errorf("provider_resolver: load provider: %w", err)
 	}
 	if provRow.UserID != r.userID {
 		// Treat foreign-owned providers as not-found rather than
 		// returning a permission-error — the plugin can't tell
 		// the difference and we'd rather not leak existence.
-		return plugins.ResolvedModel{}, fmt.Errorf("provider_resolver: provider %s not found", providerID)
+		return host.ResolvedModel{}, fmt.Errorf("provider_resolver: provider %s not found", providerID)
 	}
 
 	cfgBytes, err := r.svc.resolveProviderConfig(provRow)
 	if err != nil {
-		return plugins.ResolvedModel{}, err
+		return host.ResolvedModel{}, err
 	}
 	apiKey, baseURL := extractCredentials(cfgBytes)
 
@@ -56,7 +56,7 @@ func (r *userScopedResolver) ResolveModel(ctx context.Context, providerIDStr, mo
 	// to populate ToolResult.CostUSD). Best-effort: if the row
 	// is missing or pricing is null we hand back zeros and the
 	// plugin treats that as "unknown".
-	var pricing plugins.ResolvedPricing
+	var pricing host.ResolvedPricing
 	if modelRow, err := r.svc.queries.GetUserModel(ctx, store.GetUserModelParams{
 		UserModelProviderID: providerID,
 		ModelID:             modelID,
@@ -75,7 +75,7 @@ func (r *userScopedResolver) ResolveModel(ctx context.Context, providerIDStr, mo
 		}
 	}
 
-	return plugins.ResolvedModel{
+	return host.ResolvedModel{
 		ProviderType: provRow.Type,
 		ProviderID:   providerIDStr,
 		ModelID:      modelID,
@@ -107,11 +107,11 @@ func extractCredentials(cfg []byte) (apiKey, baseURL string) {
 // stash one on the Service struct, this comment + the
 // userID-binding parameter on construction should make them
 // reconsider.
-var _ plugins.ProviderResolver = (*userScopedResolver)(nil)
+var _ host.ProviderResolver = (*userScopedResolver)(nil)
 
 // newProviderResolver builds a per-send resolver bound to the
 // conversation owner.
-func (s *Service) newProviderResolver(userID uuid.UUID) plugins.ProviderResolver {
+func (s *Service) newProviderResolver(userID uuid.UUID) host.ProviderResolver {
 	return &userScopedResolver{svc: s, userID: userID}
 }
 

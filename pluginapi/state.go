@@ -72,14 +72,14 @@ type PersistedMessage struct {
 // Two properties are load-bearing.
 //
 // It is not persisted. MessageEnvelope output is stored beside the user's
-// content and recomposed into every future prefix (internal/history
+// content and recomposed into every future prefix (server/history
 // composeEnvelope), so a per-turn state block written that way would
 // accumulate one copy per turn for the life of the campaign. This block
 // is built fresh each send and never written down.
 //
 // It lands at the HEAD, not in the system slot. Anthropic's cache
 // breakpoint sits at the end of the last assistant turn
-// (internal/providers/anthropic applyAutoCacheControl), so anything
+// (server/providers/anthropic applyAutoCacheControl), so anything
 // before it must stay byte-identical between turns to stay cached.
 // Putting changing state in the system slot would invalidate the entire
 // cached prefix on every single turn — on turn forty of a long

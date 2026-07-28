@@ -24,6 +24,8 @@ import (
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/devicetools"
@@ -39,7 +41,6 @@ import (
 	"github.com/jdpedrie/psmith/server/storage"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/stream"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // MaxListPageSize caps page_size in ListConversations regardless of what the
@@ -77,7 +78,7 @@ type Service struct {
 	// PSMITH_EMBEDDER isn't configured — memory plugin then surfaces
 	// a clean "search not configured" error. Set via SetSearcher
 	// after construction so existing test fixtures stay one-line.
-	searcher plugins.Searcher
+	searcher host.Searcher
 	// deviceTools brokers calls between the server-side `app_tools`
 	// plugin and the connected client that actually runs each tool
 	// (Calendar / Obsidian / etc. via native APIs). Process-wide and
@@ -179,7 +180,7 @@ func (s *Service) ElicitBroker() *elicitBroker {
 // (or skip the call entirely) to leave search disabled — memory
 // plugin then surfaces a clean "search not configured" error to the
 // model instead of crashing. Idempotent; safe to call multiple times.
-func (s *Service) SetSearcher(searcher plugins.Searcher) {
+func (s *Service) SetSearcher(searcher host.Searcher) {
 	s.searcher = searcher
 }
 
@@ -750,7 +751,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 			if _, ok := mcpreg.RefID(p.PluginName); ok {
 				continue
 			}
-			if !plugins.IsRegistered(p.PluginName) {
+			if !pluginapi.IsRegistered(p.PluginName) {
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): unknown plugin name", i, p.PluginName))
 			}
 			continue
@@ -759,7 +760,7 @@ func (s *Service) SetConversationPlugins(ctx context.Context, req *connect.Reque
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
-		if _, err := plugins.Build(name, cfg); err != nil {
+		if _, err := pluginapi.Build(name, cfg); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
 	}
@@ -1672,7 +1673,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// parent assistant turn, not a freshly-persisted user message).
 	// Detached goroutines, no back-pressure on this RPC.
 	if !pipeline.Empty() && !req.Msg.Regenerate {
-		pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+		pipeline.FireMessagePersisted(context.Background(), pluginapi.PersistedMessage{
 			ID:        userMsgRow.ID.String(),
 			ContextID: userMsgRow.ContextID.String(),
 			Role:      userMsgRow.Role,
@@ -1694,7 +1695,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// Stateful plugins need their branch-scoped store to build a
 		// turn-context block, the same way tool dispatch gives them one.
 		PluginContext: func(c context.Context, pluginName string) context.Context {
-			return plugins.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
+			return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
 		},
 	})
 	if err != nil {
@@ -1780,9 +1781,9 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// assistant message id (role_hint=tool_result).
 	var (
 		toolAttachMu      sync.Mutex
-		toolAttachPending []plugins.ToolAttachment
+		toolAttachPending []pluginapi.ToolAttachment
 	)
-	appendToolAttachment := func(a plugins.ToolAttachment) {
+	appendToolAttachment := func(a pluginapi.ToolAttachment) {
 		toolAttachMu.Lock()
 		defer toolAttachMu.Unlock()
 		toolAttachPending = append(toolAttachPending, a)
@@ -1840,7 +1841,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
 		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher, s.deviceToolBroker, s.deviceToolRegistry,
-			func(pluginName string) plugins.PluginStateStore {
+			func(pluginName string) host.PluginStateStore {
 				return s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID)
 			})
 	} else {
@@ -1854,7 +1855,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		//    the run. Best-effort: a failure logs and continues so
 		//    the rest of post-materialize work isn't blocked.
 		toolAttachMu.Lock()
-		atts := append([]plugins.ToolAttachment(nil), toolAttachPending...)
+		atts := append([]pluginapi.ToolAttachment(nil), toolAttachPending...)
 		toolAttachPending = nil
 		toolAttachMu.Unlock()
 		if len(atts) > 0 {
@@ -2332,7 +2333,7 @@ func purposeToProto(p string) psmithv1.StreamRunPurpose {
 //
 // resolvePluginPipelineForConversation extends this with one extra
 // layer on top (conversation_plugins) — see below.
-func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID) (plugins.Pipeline, error) {
+func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID) (pluginapi.Pipeline, error) {
 	rows, owner, err := s.mergedProfileChainRows(ctx, profileID)
 	if err != nil {
 		return nil, err
@@ -2345,7 +2346,7 @@ func (s *Service) resolvePluginPipeline(ctx context.Context, profileID uuid.UUID
 //   - conv-level row by plugin_name wins over the profile chain
 //   - conv-level row with disabled=TRUE removes the plugin
 //   - sort the final set by ordinal (conv-level rows may reorder)
-func (s *Service) resolvePluginPipelineForConversation(ctx context.Context, conv store.Conversation) (plugins.Pipeline, error) {
+func (s *Service) resolvePluginPipelineForConversation(ctx context.Context, conv store.Conversation) (pluginapi.Pipeline, error) {
 	rows, owner, err := s.mergedProfileChainRowsForConversation(ctx, conv)
 	if err != nil {
 		return nil, err
@@ -2356,7 +2357,7 @@ func (s *Service) resolvePluginPipelineForConversation(ctx context.Context, conv
 // mergedRow holds one resolved entry after the chain walk + dedup +
 // per-field merge. `Config` carries the FINAL post-merge plaintext
 // bytes ready for the plugin constructor — every contributing layer
-// has already been decrypted and combined via plugins.MergeLayeredConfigs.
+// has already been decrypted and combined via pluginapi.MergeLayeredConfigs.
 type mergedRow struct {
 	Name    string
 	Ordinal int32
@@ -2376,7 +2377,7 @@ type layeredPlugin struct {
 
 // mergedProfileChainRows walks the profile parent chain and returns
 // one row per active plugin, with every contributing layer's config
-// already field-merged via `plugins.MergeLayeredConfigs`. Disabled
+// already field-merged via `pluginapi.MergeLayeredConfigs`. Disabled
 // rows subtract a plugin from the resolver chain. Plus the owner
 // user_id for the global-merge step.
 func (s *Service) mergedProfileChainRows(ctx context.Context, profileID uuid.UUID) ([]mergedRow, uuid.UUID, error) {
@@ -2454,7 +2455,7 @@ func (s *Service) layeredProfileChain(ctx context.Context, profileID uuid.UUID) 
 // resolved-and-merged profile-chain result. Same semantics as before:
 // disabled removes the plugin entirely; non-disabled conv rows
 // contribute a final layer (their config field-merges into the
-// inherited chain via plugins.MergeLayeredConfigs).
+// inherited chain via pluginapi.MergeLayeredConfigs).
 //
 // `profileRows` carries the already-merged config bytes for each
 // inherited plugin. To layer a conv-level config on top we re-enter
@@ -2489,7 +2490,7 @@ func mergeConversationOverrides(profileRows []mergedRow, convRows []store.Conver
 			}
 			continue
 		}
-		merged, err := plugins.MergeLayeredConfigs(c.PluginName, [][]byte{inherited.Config, convBytes})
+		merged, err := pluginapi.MergeLayeredConfigs(c.PluginName, [][]byte{inherited.Config, convBytes})
 		if err != nil {
 			// Fall back to conv-wins shape; the constructor will
 			// surface any structural problem.
@@ -2511,7 +2512,7 @@ func mergeConversationOverrides(profileRows []mergedRow, convRows []store.Conver
 
 // mergedProfileChainRowsForConversation walks both the profile chain
 // AND the conversation_plugins override layer in one pass, decrypting
-// every layer before handing them to plugins.MergeLayeredConfigs. This
+// every layer before handing them to pluginapi.MergeLayeredConfigs. This
 // is the path SendMessage uses — same merge semantics as the
 // profile-only path but with the conversation row treated as the
 // leaf-most layer.
@@ -2557,7 +2558,7 @@ func (s *Service) mergedProfileChainRowsForConversation(ctx context.Context, con
 func flattenLayered(layered map[string]*layeredPlugin) ([]mergedRow, error) {
 	out := make([]mergedRow, 0, len(layered))
 	for _, e := range layered {
-		merged, err := plugins.MergeLayeredConfigs(e.name, e.layers)
+		merged, err := pluginapi.MergeLayeredConfigs(e.name, e.layers)
 		if err != nil {
 			return nil, fmt.Errorf("merge layered config for %s: %w", e.name, err)
 		}
@@ -2583,13 +2584,13 @@ func sortMergedRows(rows []mergedRow) {
 }
 
 // buildPipeline runs the globals merge per row and hands the specs to
-// plugins.Resolve. Decryption + field-merge already happened upstream
+// pluginapi.Resolve. Decryption + field-merge already happened upstream
 // in `mergedProfileChainRows` / `mergedProfileChainRowsForConversation`.
-func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uuid.UUID) (plugins.Pipeline, error) {
+func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uuid.UUID) (pluginapi.Pipeline, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
-	specs := make([]plugins.Spec, 0, len(rows))
+	specs := make([]pluginapi.Spec, 0, len(rows))
 	for _, r := range rows {
 		merged, err := s.mergeGlobalIntoProfileConfig(ctx, owner, r.Name, r.Config)
 		if err != nil {
@@ -2603,9 +2604,9 @@ func (s *Service) buildPipeline(ctx context.Context, rows []mergedRow, owner uui
 		if err != nil {
 			return nil, fmt.Errorf("resolve mcp reference %q: %w", r.Name, err)
 		}
-		specs = append(specs, plugins.Spec{Name: name, Config: cfg})
+		specs = append(specs, pluginapi.Spec{Name: name, Config: cfg})
 	}
-	return plugins.Resolve(specs)
+	return pluginapi.Resolve(specs)
 }
 
 // mergeGlobalIntoProfileConfig fetches the calling user's global config
@@ -2670,7 +2671,7 @@ func (s *Service) mergeGlobalIntoProfileConfig(ctx context.Context, userID uuid.
 // resolvePipelineForConversation is a convenience wrapper. Delegates
 // to resolvePluginPipelineForConversation which merges any
 // conversation-level overrides over the profile-chain pipeline.
-func (s *Service) resolvePipelineForConversation(ctx context.Context, conv store.Conversation) (plugins.Pipeline, error) {
+func (s *Service) resolvePipelineForConversation(ctx context.Context, conv store.Conversation) (pluginapi.Pipeline, error) {
 	return s.resolvePluginPipelineForConversation(ctx, conv)
 }
 

@@ -11,8 +11,9 @@ import (
 
 	"github.com/jdpedrie/psmith/fakellm"
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	basicgrounding "github.com/jdpedrie/psmith/plugins/basic_grounding"
+	letteredchoices "github.com/jdpedrie/psmith/plugins/lettered_choices"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // attachLetteredChoicesPlugin writes a single profile_plugins row referencing
@@ -22,7 +23,7 @@ func attachLetteredChoicesPlugin(t *testing.T, q *store.Queries, profileID uuid.
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
 		ProfileID:       profileID,
 		Ordinal:         0,
-		PluginName:      plugins.LetteredChoicesName,
+		PluginName:      letteredchoices.Name,
 		ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
@@ -237,8 +238,8 @@ func TestPlugins_PipelineResolverInheritsFromParentProfile(t *testing.T) {
 	if pipeline.Empty() {
 		t.Fatal("expected parent's plugin to be inherited; got empty pipeline")
 	}
-	if pipeline[0].Name() != plugins.LetteredChoicesName {
-		t.Errorf("first plugin = %q want %q", pipeline[0].Name(), plugins.LetteredChoicesName)
+	if pipeline[0].Name() != letteredchoices.Name {
+		t.Errorf("first plugin = %q want %q", pipeline[0].Name(), letteredchoices.Name)
 	}
 }
 
@@ -261,17 +262,17 @@ func TestPlugins_PipelineResolverChildOverridesParent(t *testing.T) {
 	}
 	// Parent has 2 lettered_choices entries; child overrides with 1.
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: parentID, Ordinal: 0, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 5}`),
+		ProfileID: parentID, Ordinal: 0, PluginName: letteredchoices.Name, ConfigEncrypted: []byte(`{"keep_last_n": 5}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin parent[0]: %v", err)
 	}
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: parentID, Ordinal: 1, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 7}`),
+		ProfileID: parentID, Ordinal: 1, PluginName: letteredchoices.Name, ConfigEncrypted: []byte(`{"keep_last_n": 7}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin parent[1]: %v", err)
 	}
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: cid, Ordinal: 0, PluginName: plugins.LetteredChoicesName, ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
+		ProfileID: cid, Ordinal: 0, PluginName: letteredchoices.Name, ConfigEncrypted: []byte(`{"keep_last_n": 1}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin child: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestPlugins_E2E_BasicGroundingRewritesPersistedUser(t *testing.T) {
 	if _, err := q.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
 		ProfileID:       f.profile.ID,
 		Ordinal:         0,
-		PluginName:      plugins.BasicGroundingName,
+		PluginName:      basicgrounding.Name,
 		ConfigEncrypted: []byte(`{"include_date_time": true, "time_format": "datetime_iso"}`),
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)

@@ -32,9 +32,9 @@ import (
 
 	"github.com/jdpedrie/psmith/server/auth"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // StreamPurpose distinguishes assistant-response runs from compression runs.
@@ -165,7 +165,7 @@ type StartParams struct {
 	// fire MessageLifecycleHook (post-insert, in detached goroutines).
 	// Optional: nil pipeline = no plugin transforms / no lifecycle
 	// hooks fired.
-	Pipeline plugins.Pipeline
+	Pipeline pluginapi.Pipeline
 
 	// OnAssistantMaterialized fires after the assistant row is
 	// inserted, with the new message id. Per-run hook (in

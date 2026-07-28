@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/plugins/mcp"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/mcpreg"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 func TestMCPServers_CreateAndListWithheldSecrets(t *testing.T) {
@@ -218,7 +218,7 @@ func TestMCPServers_TestProbe(t *testing.T) {
 	user := mustCreateUser(t, qs, "mcp-probe")
 	ctx := ctxAs(user)
 
-	plugins.RegisterInprocMCPDispatcher(func(_ context.Context, body []byte) ([]byte, error) {
+	mcp.RegisterInprocMCPDispatcher(func(_ context.Context, body []byte) ([]byte, error) {
 		var req struct {
 			ID     int64  `json:"id"`
 			Method string `json:"method"`
@@ -235,7 +235,7 @@ func TestMCPServers_TestProbe(t *testing.T) {
 			return nil, nil
 		}
 	})
-	t.Cleanup(func() { plugins.RegisterInprocMCPDispatcher(nil) })
+	t.Cleanup(func() { mcp.RegisterInprocMCPDispatcher(nil) })
 
 	created, err := svc.UpsertMCPServer(ctx, connect.NewRequest(&psmithv1.UpsertMCPServerRequest{
 		Name: "Inproc", Transport: "inproc",

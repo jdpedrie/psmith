@@ -11,8 +11,9 @@ import (
 	"github.com/google/uuid"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	letteredchoices "github.com/jdpedrie/psmith/plugins/lettered_choices"
+	textinjector "github.com/jdpedrie/psmith/plugins/text_injector"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // makeProfilePlain creates a profile with the minimum required fields. Used
@@ -48,7 +49,7 @@ func TestListPluginTypes_IncludesLetteredChoicesWithCapabilities(t *testing.T) {
 	}
 	var got *psmithv1.PluginType
 	for _, pt := range resp.Msg.PluginTypes {
-		if pt.Name == plugins.LetteredChoicesName {
+		if pt.Name == letteredchoices.Name {
 			got = pt
 			break
 		}
@@ -140,7 +141,7 @@ func TestGetProfilePlugins_ReturnsRowsInOrder(t *testing.T) {
 	svc, qs := newTestSvc(t)
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
-	for i, name := range []string{plugins.LetteredChoicesName, plugins.LetteredChoicesName} {
+	for i, name := range []string{letteredchoices.Name, letteredchoices.Name} {
 		if _, err := qs.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
 			ProfileID: prof.ID, Ordinal: int32(i), PluginName: name,
 		}); err != nil {
@@ -171,7 +172,7 @@ func TestGetProfilePlugins_DoesNotWalkParentChain(t *testing.T) {
 
 	// Plugin attached to PARENT only.
 	if _, err := qs.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: parent.ID, Ordinal: 0, PluginName: plugins.LetteredChoicesName,
+		ProfileID: parent.ID, Ordinal: 0, PluginName: letteredchoices.Name,
 	}); err != nil {
 		t.Fatalf("InsertProfilePlugin: %v", err)
 	}
@@ -221,8 +222,8 @@ func TestSetProfilePlugins_HappyPath(t *testing.T) {
 	resp, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{
-			{PluginName: plugins.LetteredChoicesName, Config: []byte(`{"keep_last_n": 2}`)},
-			{PluginName: plugins.LetteredChoicesName, Config: nil},
+			{PluginName: letteredchoices.Name, Config: []byte(`{"keep_last_n": 2}`)},
+			{PluginName: letteredchoices.Name, Config: nil},
 		},
 	}))
 	if err != nil {
@@ -283,7 +284,7 @@ func TestSetProfilePlugins_ConfigRoundTripsAfterEncryption(t *testing.T) {
 	}
 	if _, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
-		Plugins:   []*psmithv1.ProfilePlugin{{PluginName: plugins.TextInjectorName, Config: encoded}},
+		Plugins:   []*psmithv1.ProfilePlugin{{PluginName: textinjector.Name, Config: encoded}},
 	})); err != nil {
 		t.Fatalf("SetProfilePlugins: %v", err)
 	}
@@ -317,14 +318,14 @@ func TestSetProfilePlugins_AtomicReplace(t *testing.T) {
 	// Pre-populate with 3 rows.
 	for i := 0; i < 3; i++ {
 		_, _ = qs.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-			ProfileID: prof.ID, Ordinal: int32(i), PluginName: plugins.LetteredChoicesName,
+			ProfileID: prof.ID, Ordinal: int32(i), PluginName: letteredchoices.Name,
 		})
 	}
 	// Replace with 1 row.
 	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{
-			{PluginName: plugins.LetteredChoicesName},
+			{PluginName: letteredchoices.Name},
 		},
 	}))
 	if err != nil {
@@ -345,7 +346,7 @@ func TestSetProfilePlugins_EmptyListClearsPipeline(t *testing.T) {
 	user := mustCreateUser(t, qs, "alice")
 	prof := makeProfilePlain(t, qs, user.ID, nil)
 	_, _ = qs.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: prof.ID, Ordinal: 0, PluginName: plugins.LetteredChoicesName,
+		ProfileID: prof.ID, Ordinal: 0, PluginName: letteredchoices.Name,
 	})
 
 	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
@@ -368,7 +369,7 @@ func TestSetProfilePlugins_UnknownPluginRejected(t *testing.T) {
 	prof := makeProfilePlain(t, qs, user.ID, nil)
 	// Pre-populate so we can verify the failed Set didn't touch existing rows.
 	if _, err := qs.InsertProfilePlugin(context.Background(), store.InsertProfilePluginParams{
-		ProfileID: prof.ID, Ordinal: 0, PluginName: plugins.LetteredChoicesName,
+		ProfileID: prof.ID, Ordinal: 0, PluginName: letteredchoices.Name,
 	}); err != nil {
 		t.Fatalf("seed insert: %v", err)
 	}
@@ -397,7 +398,7 @@ func TestSetProfilePlugins_BadConfigRejected(t *testing.T) {
 	_, err := svc.SetProfilePlugins(ctxAs(user), connect.NewRequest(&psmithv1.SetProfilePluginsRequest{
 		ProfileId: prof.ID.String(),
 		Plugins: []*psmithv1.ProfilePlugin{
-			{PluginName: plugins.LetteredChoicesName, Config: []byte(`{not json`)},
+			{PluginName: letteredchoices.Name, Config: []byte(`{not json`)},
 		},
 	}))
 	assertConnectCode(t, err, connect.CodeInvalidArgument)

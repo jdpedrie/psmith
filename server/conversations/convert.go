@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // attachmentRowToProto projects a single message_attachments JOIN
@@ -515,7 +515,7 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *psmithv1.Message {
 // transformers / renderers), display_content equals content and
 // ui_fragments stays empty so clients can always read either field
 // without checking for absence.
-func applyDisplay(m *psmithv1.Message, pipeline plugins.Pipeline) {
+func applyDisplay(m *psmithv1.Message, pipeline pluginapi.Pipeline) {
 	if m == nil {
 		return
 	}
@@ -535,7 +535,7 @@ func applyDisplay(m *psmithv1.Message, pipeline plugins.Pipeline) {
 // client can render the parts list uniformly without having to
 // special-case the absence of a Fragment. Returns nil when the
 // list is empty so the proto field stays unset on the wire.
-func contentPartsToProto(parts []plugins.ContentPart) []*psmithv1.UIFragment {
+func contentPartsToProto(parts []pluginapi.ContentPart) []*psmithv1.UIFragment {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -615,21 +615,21 @@ func deviceFactsFromProto(in []*psmithv1.DeviceFact) map[string]string {
 // deviceFactKeyToString maps the proto enum to the plugin-side
 // string constants in the plugins package. Single source of truth
 // for the wire ↔ runtime correspondence — adding a new
-// DeviceFactKey requires updating the enum, the plugins.DeviceFactKey*
+// DeviceFactKey requires updating the enum, the pluginapi.DeviceFactKey*
 // constant, AND this switch (compiler enforces nothing here, so
 // the test in plugins/device_facts_test.go pins the round-trip).
 func deviceFactKeyToString(k psmithv1.DeviceFactKey) string {
 	switch k {
 	case psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE:
-		return plugins.DeviceFactKeyLocale
+		return pluginapi.DeviceFactKeyLocale
 	case psmithv1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE:
-		return plugins.DeviceFactKeyTimezone
+		return pluginapi.DeviceFactKeyTimezone
 	case psmithv1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM:
-		return plugins.DeviceFactKeyPlatform
+		return pluginapi.DeviceFactKeyPlatform
 	case psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY:
-		return plugins.DeviceFactKeyLocationCity
+		return pluginapi.DeviceFactKeyLocationCity
 	case psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS:
-		return plugins.DeviceFactKeyLocationCoords
+		return pluginapi.DeviceFactKeyLocationCoords
 	default:
 		return ""
 	}
@@ -640,15 +640,15 @@ func deviceFactKeyToString(k psmithv1.DeviceFactKey) string {
 // requested-facts list back into proto enums for the wire.
 func deviceFactKeyFromString(k string) psmithv1.DeviceFactKey {
 	switch k {
-	case plugins.DeviceFactKeyLocale:
+	case pluginapi.DeviceFactKeyLocale:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
-	case plugins.DeviceFactKeyTimezone:
+	case pluginapi.DeviceFactKeyTimezone:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
-	case plugins.DeviceFactKeyPlatform:
+	case pluginapi.DeviceFactKeyPlatform:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
-	case plugins.DeviceFactKeyLocationCity:
+	case pluginapi.DeviceFactKeyLocationCity:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
-	case plugins.DeviceFactKeyLocationCoords:
+	case pluginapi.DeviceFactKeyLocationCoords:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
 	default:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED

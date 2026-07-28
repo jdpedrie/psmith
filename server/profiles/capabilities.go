@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // ResolveRequiredModelCapabilities returns the union of model capability
@@ -42,14 +42,14 @@ func ResolveRequiredModelCapabilities(
 	ctx context.Context,
 	q *store.Queries,
 	profileID uuid.UUID,
-) (plugins.ModelCapabilityRequirements, error) {
+) (pluginapi.ModelCapabilityRequirements, error) {
 	names, err := resolveEffectivePluginNames(ctx, q, profileID)
 	if err != nil {
-		return plugins.ModelCapabilityRequirements{}, err
+		return pluginapi.ModelCapabilityRequirements{}, err
 	}
-	var caps plugins.ModelCapabilityRequirements
+	var caps pluginapi.ModelCapabilityRequirements
 	for _, name := range names {
-		d, err := plugins.Describe(name)
+		d, err := pluginapi.Describe(name)
 		if err != nil {
 			continue
 		}

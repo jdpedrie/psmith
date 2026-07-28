@@ -19,6 +19,8 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	_ "github.com/jdpedrie/psmith/plugins/all"
+	"github.com/jdpedrie/psmith/plugins/mcp"
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/conversations"
 	"github.com/jdpedrie/psmith/server/crypto"
@@ -38,7 +40,6 @@ import (
 	"github.com/jdpedrie/psmith/server/stream"
 	"github.com/jdpedrie/psmith/server/streamsvc"
 	"github.com/jdpedrie/psmith/server/web"
-	"github.com/jdpedrie/psmith/plugins"
 
 	// Driver packages self-register their provider type in init().
 	_ "github.com/jdpedrie/psmith/server/providers/anthropic"
@@ -294,7 +295,7 @@ func run() error {
 	// with `transport: "inproc"` (e.g. the seeded "Psmith Manager" profile)
 	// dispatch directly through HandleRPC — no port, no token, the
 	// authenticated user on ctx flows through unchanged.
-	plugins.RegisterInprocMCPDispatcher(mcpSrv.HandleRPC)
+	mcp.RegisterInprocMCPDispatcher(mcpSrv.HandleRPC)
 	// Elicitation response endpoint — clients POST the user's answer
 	// here for any in-flight elicit chunk the conversation stream
 	// surfaced. Same Bearer-token auth as the rest; ownership-checked

@@ -11,10 +11,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/devicetools"
 	"github.com/jdpedrie/psmith/server/elicit"
 	"github.com/jdpedrie/psmith/server/providers"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // maxToolRounds caps how many tool-use → tool-result → continued-stream
@@ -61,7 +62,7 @@ type ToolSpan struct {
 func makeToolLoopSendFunc(
 	drv providers.StatelessProvider,
 	initial providers.SendRequest,
-	pipeline plugins.Pipeline,
+	pipeline pluginapi.Pipeline,
 	logger *slog.Logger,
 	// onToolAttachment, when non-nil, is called once per
 	// attachment a tool produces (typically a screenshot or
@@ -69,7 +70,7 @@ func makeToolLoopSendFunc(
 	// per-run + persists them on the assistant message in the
 	// post-materialize hook so they show up in the chat surface
 	// alongside the tool's text output.
-	onToolAttachment func(plugins.ToolAttachment),
+	onToolAttachment func(pluginapi.ToolAttachment),
 	// onToolCost, when non-nil, is called once per tool result
 	// that returned a non-nil ToolResult.CostUSD (today: imagegen
 	// after a successful gpt-image-1 / gemini image generation).
@@ -92,7 +93,7 @@ func makeToolLoopSendFunc(
 	// (provider_id, model_id) pair the user picked in their
 	// MODEL_PICKER config and dispatch to the corresponding
 	// upstream API.
-	resolver plugins.ProviderResolver,
+	resolver host.ProviderResolver,
 	// elicitBroker, when non-nil, lets in-process MCP tools call
 	// ctx.Elicit(...) to ask the user for input mid-call. The
 	// closure creates a per-run elicit.Client bound to the broker
@@ -117,7 +118,7 @@ func makeToolLoopSendFunc(
 	// so the memory plugin can answer search_history calls.
 	// PSMITH_EMBEDDER unset → searcher is nil → search_history
 	// surfaces a clean "search not configured" error.
-	searcher plugins.Searcher,
+	searcher host.Searcher,
 	// deviceToolBroker + deviceToolRegistry power the `app_tools`
 	// plugin's per-call routing to the connected client. Both
 	// nil-tolerant: the plugin reports "no DeviceToolBroker in
@@ -131,10 +132,10 @@ func makeToolLoopSendFunc(
 	// two stateful plugins in one pipeline must not see each other's
 	// rows. Nil leaves the capability unwired and the plugin reports a
 	// clean "persistence not available" tool error.
-	stateStoreFor func(pluginName string) plugins.PluginStateStore,
+	stateStoreFor func(pluginName string) host.PluginStateStore,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline, resolver, searcher,
-		plugins.CallerInfo{
+		host.CallerInfo{
 			UserID:          userID,
 			ConversationID:  conversationID,
 			ActiveContextID: activeContextID,
@@ -189,7 +190,7 @@ func makeToolLoopSendFunc(
 			}
 			binding := newDeviceToolBinding(deviceToolBroker, deviceToolRegistry,
 				userID, conversationID, emit)
-			ctx = plugins.WithDeviceToolBroker(ctx, binding)
+			ctx = host.WithDeviceToolBroker(ctx, binding)
 		}
 
 		go func() {
@@ -220,7 +221,7 @@ func makeToolLoopSendFunc(
 						return
 					}
 					started := time.Now()
-					var toolOut plugins.ToolResult
+					var toolOut pluginapi.ToolResult
 					var execErr error
 					if dispatch == nil {
 						execErr = errors.New("no ToolProvider in pipeline")
@@ -347,13 +348,13 @@ func makeToolLoopSendFunc(
 // collectPipelineTools walks the active plugin pipeline and gathers
 // every plugin-declared tool into the providers.ToolDef shape used on
 // SendRequest.
-func collectPipelineTools(pipeline plugins.Pipeline) []providers.ToolDef {
+func collectPipelineTools(pipeline pluginapi.Pipeline) []providers.ToolDef {
 	if len(pipeline) == 0 {
 		return nil
 	}
 	var out []providers.ToolDef
 	for _, pl := range pipeline {
-		tp, ok := pl.(plugins.ToolProvider)
+		tp, ok := pl.(pluginapi.ToolProvider)
 		if !ok {
 			continue
 		}
@@ -375,15 +376,15 @@ func collectPipelineTools(pipeline plugins.Pipeline) []providers.ToolDef {
 // `searcher` + `caller` are attached the same way for the memory
 // plugin (and any future plugin needing per-user scoping).
 func buildToolDispatch(
-	pipeline plugins.Pipeline,
-	resolver plugins.ProviderResolver,
-	searcher plugins.Searcher,
-	caller plugins.CallerInfo,
-	stateStoreFor func(pluginName string) plugins.PluginStateStore,
-) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
-	owners := map[string]plugins.ToolProvider{}
+	pipeline pluginapi.Pipeline,
+	resolver host.ProviderResolver,
+	searcher host.Searcher,
+	caller host.CallerInfo,
+	stateStoreFor func(pluginName string) host.PluginStateStore,
+) func(ctx context.Context, name string, input json.RawMessage) (pluginapi.ToolResult, error) {
+	owners := map[string]pluginapi.ToolProvider{}
 	for _, pl := range pipeline {
-		tp, ok := pl.(plugins.ToolProvider)
+		tp, ok := pl.(pluginapi.ToolProvider)
 		if !ok {
 			continue
 		}
@@ -397,21 +398,21 @@ func buildToolDispatch(
 	if len(owners) == 0 {
 		return nil
 	}
-	return func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
+	return func(ctx context.Context, name string, input json.RawMessage) (pluginapi.ToolResult, error) {
 		owner, ok := owners[name]
 		if !ok {
-			return plugins.ToolResult{}, fmt.Errorf("no plugin owns tool %q", name)
+			return pluginapi.ToolResult{}, fmt.Errorf("no plugin owns tool %q", name)
 		}
-		ctx = plugins.WithProviderResolver(ctx, resolver)
-		ctx = plugins.WithSearcher(ctx, searcher)
-		ctx = plugins.WithCallerInfo(ctx, caller)
+		ctx = host.WithProviderResolver(ctx, resolver)
+		ctx = host.WithSearcher(ctx, searcher)
+		ctx = host.WithCallerInfo(ctx, caller)
 		// Scope the state store to the plugin that owns this tool, so a
 		// pipeline holding two stateful plugins can't cross-read. The
 		// ToolProvider is always also a Plugin; the assertion is
 		// defensive rather than expected to fail.
 		if stateStoreFor != nil {
-			if named, ok := owner.(plugins.Plugin); ok {
-				ctx = plugins.WithPluginStateStore(ctx, stateStoreFor(named.Name()))
+			if named, ok := owner.(pluginapi.Plugin); ok {
+				ctx = host.WithPluginStateStore(ctx, stateStoreFor(named.Name()))
 			}
 		}
 		return owner.ExecuteTool(ctx, name, input)

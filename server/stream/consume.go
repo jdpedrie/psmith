@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // consume is the supervisor goroutine for one run. It:
@@ -602,7 +602,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 	// exists for UI surfacing but downstream processing — embedding,
 	// auto-tag — would be working with garbage content).
 	if !params.Pipeline.Empty() && len(errPayload) == 0 {
-		params.Pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+		params.Pipeline.FireMessagePersisted(context.Background(), pluginapi.PersistedMessage{
 			ID:         msgID.String(),
 			ContextID:  params.ContextID.String(),
 			Role:       "assistant",
@@ -851,7 +851,7 @@ func (s *Supervisor) materializeCompression(params StartParams, summary string, 
 	// Fire MessageLifecycleHook plugins for the compression_summary row.
 	// Skip on errored runs (same rationale as materializeAssistant).
 	if !params.Pipeline.Empty() && len(errPayload) == 0 {
-		params.Pipeline.FireMessagePersisted(context.Background(), plugins.PersistedMessage{
+		params.Pipeline.FireMessagePersisted(context.Background(), pluginapi.PersistedMessage{
 			ID:         summaryID.String(),
 			ContextID:  params.ContextID.String(),
 			Role:       "compression_summary",

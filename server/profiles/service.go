@@ -15,13 +15,13 @@ import (
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/crypto"
 	"github.com/jdpedrie/psmith/server/events"
 	"github.com/jdpedrie/psmith/server/mcpreg"
 	"github.com/jdpedrie/psmith/server/pagetoken"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // Compression mode wire/storage constants. The DB CHECK constraint enforces
@@ -685,9 +685,9 @@ func (s *Service) SetDefaultProfile(ctx context.Context, req *connect.Request[ps
 
 // ListPluginTypes returns metadata for every plugin type compiled into the
 // server. The set is fixed at build time (registered in init()); the proto
-// shape mirrors plugins.TypeDescriptor with a flat capabilities sub-message.
+// shape mirrors pluginapi.TypeDescriptor with a flat capabilities sub-message.
 func (s *Service) ListPluginTypes(ctx context.Context, _ *connect.Request[psmithv1.ListPluginTypesRequest]) (*connect.Response[psmithv1.ListPluginTypesResponse], error) {
-	descs, err := plugins.DescribeAll()
+	descs, err := pluginapi.DescribeAll()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("describe plugins: %w", err))
 	}
@@ -758,7 +758,7 @@ func (s *Service) GetProfilePlugins(ctx context.Context, req *connect.Request[ps
 
 // SetProfilePlugins atomically replaces a profile's plugin pipeline with the
 // supplied list. Each plugin's name + config is validated by attempting to
-// construct it (via plugins.Build) BEFORE any DB write — an unknown plugin
+// construct it (via pluginapi.Build) BEFORE any DB write — an unknown plugin
 // or malformed config aborts the request without touching the existing
 // pipeline. The replace itself runs in a transaction (delete-then-insert)
 // so concurrent reads either see the old or the new full pipeline.
@@ -790,7 +790,7 @@ func (s *Service) SetProfilePlugins(ctx context.Context, req *connect.Request[ps
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
-		if _, err := plugins.Build(name, cfg); err != nil {
+		if _, err := pluginapi.Build(name, cfg); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugins[%d] (%s): %w", i, p.PluginName, err))
 		}
 	}
@@ -913,7 +913,7 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 	if len(cfg) == 0 {
 		cfg = []byte("{}")
 	}
-	if _, err := plugins.Build(name, cfg); err != nil {
+	if _, err := pluginapi.Build(name, cfg); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("plugin %q: %w", name, err))
 	}
 	encrypted, err := s.cipher.Encrypt(cfg)
@@ -936,8 +936,8 @@ func (s *Service) UpsertUserPluginSettings(ctx context.Context, req *connect.Req
 	}), nil
 }
 
-// pluginTypeToProto converts a plugins.TypeDescriptor to its proto shape.
-func pluginTypeToProto(d plugins.TypeDescriptor) *psmithv1.PluginType {
+// pluginTypeToProto converts a pluginapi.TypeDescriptor to its proto shape.
+func pluginTypeToProto(d pluginapi.TypeDescriptor) *psmithv1.PluginType {
 	fields := make([]*psmithv1.ConfigField, 0, len(d.ConfigFields))
 	for _, f := range d.ConfigFields {
 		fields = append(fields, configFieldToProto(f))
@@ -954,8 +954,8 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *psmithv1.PluginType {
 		Description:  d.Description,
 		ConfigFields: fields,
 		Capabilities: &psmithv1.PluginCapabilities{
-			Configurable:                d.Capabilities.Configurable,
-			SystemPrompter:              d.Capabilities.SystemPrompter,
+			Configurable:   d.Capabilities.Configurable,
+			SystemPrompter: d.Capabilities.SystemPrompter,
 			// Proto field name predates the MessageEnvelope rename;
 			// the meaning ("touches the outgoing user message") and
 			// field number are stable.
@@ -977,7 +977,7 @@ func pluginTypeToProto(d plugins.TypeDescriptor) *psmithv1.PluginType {
 // capabilityRequirementsToProto converts the plugins-package shape to its
 // proto twin. Returns nil when the requirement set is empty so the proto
 // field stays unset (mirroring the optional<ModelCapabilities> on the wire).
-func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *psmithv1.ModelCapabilities {
+func capabilityRequirementsToProto(r pluginapi.ModelCapabilityRequirements) *psmithv1.ModelCapabilities {
 	if r.Empty() {
 		return nil
 	}
@@ -994,31 +994,31 @@ func capabilityRequirementsToProto(r plugins.ModelCapabilityRequirements) *psmit
 // deviceFactKeyToProto mirrors the same string ↔ enum mapping
 // the conversations service uses on the inbound side. Defined
 // here to avoid a cross-package dep from internal/profiles into
-// internal/conversations; both pin to the plugins.DeviceFactKey*
+// internal/conversations; both pin to the pluginapi.DeviceFactKey*
 // string constants as the source of truth.
 func deviceFactKeyToProto(k string) psmithv1.DeviceFactKey {
 	switch k {
-	case plugins.DeviceFactKeyLocale:
+	case pluginapi.DeviceFactKeyLocale:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCALE
-	case plugins.DeviceFactKeyTimezone:
+	case pluginapi.DeviceFactKeyTimezone:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_TIMEZONE
-	case plugins.DeviceFactKeyPlatform:
+	case pluginapi.DeviceFactKeyPlatform:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_PLATFORM
-	case plugins.DeviceFactKeyLocationCity:
+	case pluginapi.DeviceFactKeyLocationCity:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_CITY
-	case plugins.DeviceFactKeyLocationCoords:
+	case pluginapi.DeviceFactKeyLocationCoords:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_LOCATION_COORDS
 	default:
 		return psmithv1.DeviceFactKey_DEVICE_FACT_KEY_UNSPECIFIED
 	}
 }
 
-// configFieldToProto converts one plugins.ConfigField to its proto shape.
+// configFieldToProto converts one pluginapi.ConfigField to its proto shape.
 // The Default is JSON-marshaled into default_json; nil becomes the empty
 // string (which the wire treats as "no default"). Unknown field types map
 // to TYPE_UNSPECIFIED so a malformed plugin descriptor surfaces as an
 // explicit zero-value rather than getting silently coerced.
-func configFieldToProto(f plugins.ConfigField) *psmithv1.ConfigField {
+func configFieldToProto(f pluginapi.ConfigField) *psmithv1.ConfigField {
 	out := &psmithv1.ConfigField{
 		Name:        f.Name,
 		Display:     f.Display,
@@ -1045,7 +1045,7 @@ func configFieldToProto(f plugins.ConfigField) *psmithv1.ConfigField {
 		}
 		out.Options = opts
 	}
-	if f.Type == plugins.ConfigFieldModelPicker {
+	if f.Type == pluginapi.ConfigFieldModelPicker {
 		out.ModelPickerFilter = &psmithv1.ModelPickerFilter{
 			RequiresStreaming:       f.ModelPickerFilter.RequiresStreaming,
 			RequiresThinking:        f.ModelPickerFilter.RequiresThinking,
@@ -1058,28 +1058,28 @@ func configFieldToProto(f plugins.ConfigField) *psmithv1.ConfigField {
 	return out
 }
 
-func configFieldMergeToProto(m plugins.ConfigFieldMerge) psmithv1.ConfigField_Merge {
+func configFieldMergeToProto(m pluginapi.ConfigFieldMerge) psmithv1.ConfigField_Merge {
 	switch m {
-	case plugins.MergeAppendString:
+	case pluginapi.MergeAppendString:
 		return psmithv1.ConfigField_MERGE_APPEND_STRING
 	default:
 		return psmithv1.ConfigField_MERGE_REPLACE
 	}
 }
 
-func configFieldTypeToProto(t plugins.ConfigFieldType) psmithv1.ConfigField_Type {
+func configFieldTypeToProto(t pluginapi.ConfigFieldType) psmithv1.ConfigField_Type {
 	switch t {
-	case plugins.ConfigFieldNumber:
+	case pluginapi.ConfigFieldNumber:
 		return psmithv1.ConfigField_NUMBER
-	case plugins.ConfigFieldText:
+	case pluginapi.ConfigFieldText:
 		return psmithv1.ConfigField_TEXT
-	case plugins.ConfigFieldTextarea:
+	case pluginapi.ConfigFieldTextarea:
 		return psmithv1.ConfigField_TEXTAREA
-	case plugins.ConfigFieldBoolean:
+	case pluginapi.ConfigFieldBoolean:
 		return psmithv1.ConfigField_BOOLEAN
-	case plugins.ConfigFieldSelect:
+	case pluginapi.ConfigFieldSelect:
 		return psmithv1.ConfigField_SELECT
-	case plugins.ConfigFieldModelPicker:
+	case pluginapi.ConfigFieldModelPicker:
 		return psmithv1.ConfigField_MODEL_PICKER
 	default:
 		return psmithv1.ConfigField_TYPE_UNSPECIFIED

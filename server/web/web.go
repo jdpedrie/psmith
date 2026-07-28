@@ -201,7 +201,7 @@ type convoVM struct {
 	Active  bool
 	RelTime string // short relative time, e.g. "3h", "Apr 2"
 	Group   string // date bucket header for the sidebar, e.g. "Today"
-	Pinned bool
+	Pinned  bool
 }
 
 type msgVM struct {

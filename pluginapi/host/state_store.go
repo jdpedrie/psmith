@@ -23,7 +23,7 @@ var ErrNoPluginState = errors.New("plugins: no game state on this branch")
 // Deliberately narrow and expressed in domain terms — uuid.UUID and raw
 // JSON, never store or pgx types — so plugin tests can stub it without
 // standing up Postgres, and so the plugins package keeps its convention
-// of not importing internal/store.
+// of not importing server/store.
 //
 // Scoping is the implementation's job, not the caller's: the concrete
 // instance is built per send with the owner's id baked in, and refuses

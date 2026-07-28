@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
+	componentbuilder "github.com/jdpedrie/psmith/plugins/component_builder"
+	letteredchoices "github.com/jdpedrie/psmith/plugins/lettered_choices"
+	textinjector "github.com/jdpedrie/psmith/plugins/text_injector"
 	"github.com/jdpedrie/psmith/server/store"
-	"github.com/jdpedrie/psmith/plugins"
 )
 
 // makeMergeProfile creates a profile via raw query — focused on the merge
@@ -70,19 +72,19 @@ func TestPluginMerge_ChildInheritsParentPlugins(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	parentID := makeMergeProfile(t, q, user.ID, "parent", nil)
-	insertProfilePlugin(t, q, parentID, 0, plugins.LetteredChoicesName, `{}`, false)
+	insertProfilePlugin(t, q, parentID, 0, letteredchoices.Name, `{}`, false)
 
 	childID := makeMergeProfile(t, q, user.ID, "child", &parentID)
-	insertProfilePlugin(t, q, childID, 0, plugins.ComponentBuilderName, `{}`, false)
+	insertProfilePlugin(t, q, childID, 0, componentbuilder.Name, `{}`, false)
 
 	rows, _, err := svc.mergedProfileChainRows(context.Background(), childID)
 	if err != nil {
 		t.Fatalf("mergedProfileChainRows: %v", err)
 	}
-	if !containsName(rows, plugins.LetteredChoicesName) {
+	if !containsName(rows, letteredchoices.Name) {
 		t.Errorf("expected parent's lettered_choices in merged set; got %v", pluginNames(rows))
 	}
-	if !containsName(rows, plugins.ComponentBuilderName) {
+	if !containsName(rows, componentbuilder.Name) {
 		t.Errorf("expected child's component_builder in merged set; got %v", pluginNames(rows))
 	}
 }
@@ -95,16 +97,16 @@ func TestPluginMerge_DisabledRowSubtractsInheritedPlugin(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	parentID := makeMergeProfile(t, q, user.ID, "parent", nil)
-	insertProfilePlugin(t, q, parentID, 0, plugins.LetteredChoicesName, `{}`, false)
+	insertProfilePlugin(t, q, parentID, 0, letteredchoices.Name, `{}`, false)
 
 	childID := makeMergeProfile(t, q, user.ID, "child", &parentID)
-	insertProfilePlugin(t, q, childID, 0, plugins.LetteredChoicesName, "", true)
+	insertProfilePlugin(t, q, childID, 0, letteredchoices.Name, "", true)
 
 	rows, _, err := svc.mergedProfileChainRows(context.Background(), childID)
 	if err != nil {
 		t.Fatalf("mergedProfileChainRows: %v", err)
 	}
-	if containsName(rows, plugins.LetteredChoicesName) {
+	if containsName(rows, letteredchoices.Name) {
 		t.Errorf("expected disabled row to subtract inherited plugin; got %v", pluginNames(rows))
 	}
 }
@@ -117,10 +119,10 @@ func TestPluginMerge_ChildOverridesParentConfig(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	parentID := makeMergeProfile(t, q, user.ID, "parent", nil)
-	insertProfilePlugin(t, q, parentID, 0, plugins.LetteredChoicesName, `{"keep_last_n":3}`, false)
+	insertProfilePlugin(t, q, parentID, 0, letteredchoices.Name, `{"keep_last_n":3}`, false)
 
 	childID := makeMergeProfile(t, q, user.ID, "child", &parentID)
-	insertProfilePlugin(t, q, childID, 0, plugins.LetteredChoicesName, `{"keep_last_n":7}`, false)
+	insertProfilePlugin(t, q, childID, 0, letteredchoices.Name, `{"keep_last_n":7}`, false)
 
 	rows, _, err := svc.mergedProfileChainRows(context.Background(), childID)
 	if err != nil {
@@ -146,7 +148,7 @@ func TestPluginMerge_ConversationDisabledRemovesInheritedPlugin(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	profileID := makeMergeProfile(t, q, user.ID, "p", nil)
-	insertProfilePlugin(t, q, profileID, 0, plugins.LetteredChoicesName, `{}`, false)
+	insertProfilePlugin(t, q, profileID, 0, letteredchoices.Name, `{}`, false)
 
 	convID := uuid.New()
 	contextID := uuid.New()
@@ -161,7 +163,7 @@ func TestPluginMerge_ConversationDisabledRemovesInheritedPlugin(t *testing.T) {
 		t.Fatalf("CreateContext: %v", err)
 	}
 
-	insertConversationPlugin(t, q, convID, 0, plugins.LetteredChoicesName, "", true)
+	insertConversationPlugin(t, q, convID, 0, letteredchoices.Name, "", true)
 
 	convRow, _ := q.GetConversationByID(context.Background(), convID)
 	pipeline, err := svc.resolvePluginPipelineForConversation(context.Background(), convRow)
@@ -184,10 +186,10 @@ func TestPluginMerge_TextInjectorAppendsAcrossChain(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	parentID := makeMergeProfile(t, q, user.ID, "parent", nil)
-	insertProfilePlugin(t, q, parentID, 0, plugins.TextInjectorName, `{"system_prefix":"PARENT-SYS","user_head_reminder":"PARENT-REM"}`, false)
+	insertProfilePlugin(t, q, parentID, 0, textinjector.Name, `{"system_prefix":"PARENT-SYS","user_head_reminder":"PARENT-REM"}`, false)
 
 	childID := makeMergeProfile(t, q, user.ID, "child", &parentID)
-	insertProfilePlugin(t, q, childID, 0, plugins.TextInjectorName, `{"system_prefix":"CHILD-SYS"}`, false)
+	insertProfilePlugin(t, q, childID, 0, textinjector.Name, `{"system_prefix":"CHILD-SYS"}`, false)
 
 	rows, _, err := svc.mergedProfileChainRows(context.Background(), childID)
 	if err != nil {
@@ -221,7 +223,7 @@ func TestPluginMerge_TextInjectorConvLayerAppends(t *testing.T) {
 	user := mustCreateUser(t, q, "alice")
 
 	profileID := makeMergeProfile(t, q, user.ID, "p", nil)
-	insertProfilePlugin(t, q, profileID, 0, plugins.TextInjectorName, `{"system_prefix":"PROFILE"}`, false)
+	insertProfilePlugin(t, q, profileID, 0, textinjector.Name, `{"system_prefix":"PROFILE"}`, false)
 
 	convID := uuid.New()
 	contextID := uuid.New()
@@ -235,7 +237,7 @@ func TestPluginMerge_TextInjectorConvLayerAppends(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateContext: %v", err)
 	}
-	insertConversationPlugin(t, q, convID, 0, plugins.TextInjectorName, `{"system_prefix":"CONV"}`, false)
+	insertConversationPlugin(t, q, convID, 0, textinjector.Name, `{"system_prefix":"CONV"}`, false)
 
 	convRow, _ := q.GetConversationByID(context.Background(), convID)
 	rows, _, err := svc.mergedProfileChainRowsForConversation(context.Background(), convRow)
