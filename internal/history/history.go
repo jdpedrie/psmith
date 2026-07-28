@@ -123,6 +123,12 @@ type Params struct {
 	// caller's storage backend.
 	UserID uuid.UUID
 
+	// PluginContext, when non-nil, decorates the context with per-plugin
+	// runtime dependencies before a TurnContextInjector runs — the same
+	// capability shims the tool dispatch site attaches. Kept as a callback
+	// so this package stays ignorant of what any particular plugin needs.
+	PluginContext func(ctx context.Context, pluginName string) context.Context
+
 	// Attachments inlines blob bytes from the Storage backend onto
 	// each WireMessage that carries an attachment. Nil disables
 	// attachment inlining — the chain still walks but provider
@@ -367,6 +373,38 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		prepend, appendStr := params.Plugins.SystemPrompts()
 		if prepend != "" || appendStr != "" {
 			out = applySystemContributions(out, prepend, appendStr)
+		}
+	}
+
+	// Ephemeral per-turn context from TurnContextInjector plugins,
+	// prepended to the HEAD message's wire content.
+	//
+	// The position is not cosmetic. Anthropic's cache breakpoint sits at
+	// the end of the last assistant turn, so everything before it must
+	// stay byte-identical between turns to remain cached. State that
+	// changes every turn belongs after that line — in the head message —
+	// or it invalidates the whole cached prefix on every send, which on a
+	// long conversation means re-reading the entire transcript at full
+	// price each turn.
+	//
+	// Nothing here is persisted: the block is rebuilt per send. Writing it
+	// through MessageEnvelope instead would store it beside the user's
+	// content and recompose it into every later prefix, accumulating one
+	// stale copy per turn.
+	if !params.Plugins.Empty() && len(out) > 0 {
+		leaf := uuid.Nil
+		if params.LeafMessageID != nil {
+			leaf = *params.LeafMessageID
+		}
+		blocks := params.Plugins.BuildTurnContexts(ctx, plugins.TurnInfo{
+			UserID:         params.UserID,
+			ConversationID: params.Conversation.ID,
+			ContextID:      active.ID,
+			LeafMessageID:  leaf,
+		}, params.PluginContext)
+		if len(blocks) > 0 {
+			head := &out[len(out)-1]
+			head.Content = joinParts(append(blocks, head.Content))
 		}
 	}
 

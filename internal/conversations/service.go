@@ -26,11 +26,11 @@ import (
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
 	"github.com/jdpedrie/psmith/internal/auth"
 	"github.com/jdpedrie/psmith/internal/crypto"
-	"github.com/jdpedrie/psmith/internal/mcpreg"
 	"github.com/jdpedrie/psmith/internal/devicetools"
 	"github.com/jdpedrie/psmith/internal/events"
 	"github.com/jdpedrie/psmith/internal/history"
 	"github.com/jdpedrie/psmith/internal/langfuse"
+	"github.com/jdpedrie/psmith/internal/mcpreg"
 	"github.com/jdpedrie/psmith/internal/modelmeta"
 	"github.com/jdpedrie/psmith/internal/pagetoken"
 	"github.com/jdpedrie/psmith/internal/profiles"
@@ -1691,6 +1691,11 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		UserID:           user.ID,
 		Attachments:      s.storage,
 		Logger:           s.logger,
+		// Stateful plugins need their branch-scoped store to build a
+		// turn-context block, the same way tool dispatch gives them one.
+		PluginContext: func(c context.Context, pluginName string) context.Context {
+			return plugins.WithGameStore(c, s.newGameStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
+		},
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))

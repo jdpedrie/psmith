@@ -90,6 +90,18 @@ const initInput = `{
   }
 }`
 
+// nextTurn models what actually happens between turns: the pipeline is
+// rebuilt per send, so turn N+1 runs on a brand-new plugin instance
+// whose only knowledge of turn N is what was written to the store.
+func nextTurn(t *testing.T, prev *strategyGame) (*strategyGame, *stubGameStore) {
+	t.Helper()
+	state, version, ok := prev.PendingPluginState()
+	if !ok {
+		t.Fatal("previous turn committed no state to carry forward")
+	}
+	return newGameForTest(t, ""), &stubGameStore{state: state, version: version}
+}
+
 func TestStrategyGame_Descriptor(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
@@ -180,11 +192,12 @@ func TestStrategyGame_InitializeStartsCampaign(t *testing.T) {
 func TestStrategyGame_RejectsSecondInitialize(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	store := &stubGameStore{}
-	if _, err := g.ExecuteTool(gameCtx(store), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("first initialize: %v", err)
 	}
-	_, err := g.ExecuteTool(gameCtx(store), "game_commit_turn", json.RawMessage(initInput))
+	// A later send, with the campaign already on the branch.
+	g2, store2 := nextTurn(t, g)
+	_, err := g2.ExecuteTool(gameCtx(store2), "game_commit_turn", json.RawMessage(initInput))
 	if err == nil || !strings.Contains(err.Error(), "already underway") {
 		t.Errorf("second initialize should be refused; got %v", err)
 	}
@@ -226,10 +239,12 @@ func TestStrategyGame_RejectsModelInventedDifficulty(t *testing.T) {
 func TestStrategyGame_ResolveAppliesTurn(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	ctx := gameCtx(&stubGameStore{})
-	if _, err := g.ExecuteTool(ctx, "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
+	g2, store2 := nextTurn(t, g)
+	ctx := gameCtx(store2)
+	g = g2
 
 	resolveInput := `{
 	  "kind":"resolve","choice_id":"A",
@@ -459,5 +474,68 @@ func TestPipeline_CollectsPendingState(t *testing.T) {
 	}
 	if !json.Valid(pending[0].State) {
 		t.Error("pending state must be valid JSON — it goes straight into JSONB")
+	}
+}
+
+// TestStrategyGame_RefusesSecondCommitInOneTurn guards against a model
+// that calls the tool twice — retry logic, a confused tool loop, or
+// fishing for a better roll. Without the guard the campaign advances
+// several turns behind a single narration and only the last state ever
+// gets bound to a message.
+func TestStrategyGame_RefusesSecondCommitInOneTurn(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	ctx := gameCtx(&stubGameStore{})
+	if _, err := g.ExecuteTool(ctx, "game_commit_turn", json.RawMessage(initInput)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	// Same instance, same send — this is the double-commit the guard exists for.
+	_, err := g.ExecuteTool(ctx, "game_commit_turn", json.RawMessage(
+		`{"kind":"resolve","choice_id":"A","next_situation":{"id":"x","title":"X","body":"b","choices":[
+		  {"id":"A","label":"one","rating":"guile","difficulty":"easy","stakes":"minor","advances":"treasury","costs":"treasury"},
+		  {"id":"B","label":"two","rating":"guile","difficulty":"easy","stakes":"minor","advances":"treasury","costs":"treasury"}]}}`))
+	if err == nil || !strings.Contains(err.Error(), "already committed") {
+		t.Errorf("a second commit in one turn should be refused; got %v", err)
+	}
+}
+
+// TestStrategyGame_StateVersionConflict verifies the optimistic
+// concurrency check rejects a call acting on state that has since moved,
+// rather than applying it on top of newer state.
+func TestStrategyGame_StateVersionConflict(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	// A campaign already at version 7 on the branch.
+	stored := `{"meta":{"schema_version":1,"state_version":7,"turn":4,"ruleset":"governance","seed":9},
+	  "public":{"title":"t","role":"r","resources":{"treasury":50},"ratings":{"guile":3},
+	    "limits":{"treasury":{"min":0,"max":100},"guile":{"min":0,"max":10}},
+	    "loss_when":[{"stat":"treasury","op":"<=","value":0,"label":"broke"}],"turn_limit":20,
+	    "situation":{"id":"s","title":"S","body":"b","choices":[
+	      {"id":"A","label":"go","rating":"guile","difficulty":"easy","target":8,"modifier":3,
+	       "odds":{"favorable":90,"disaster":0},"stakes":"minor","advances":"treasury","costs":"treasury"}]}},
+	  "protocol":{"phase":"awaiting_player_action","allowed_commit_kind":"resolve","legal_choice_ids":["A"]}}`
+	store := &stubGameStore{state: json.RawMessage(stored), version: 7}
+
+	_, err := g.ExecuteTool(gameCtx(store), "game_commit_turn", json.RawMessage(
+		`{"kind":"resolve","expected_state_version":3,"choice_id":"A"}`))
+	if err == nil || !strings.Contains(err.Error(), "state conflict") {
+		t.Errorf("a stale expected_state_version should be refused; got %v", err)
+	}
+}
+
+// TestStrategyGame_MatchingVersionProceeds is the other half: the guard
+// must not fire on a correct call.
+func TestStrategyGame_MatchingVersionProceeds(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	ctx := gameCtx(&stubGameStore{})
+	// A fresh campaign has no state, so an expected version cannot
+	// conflict — initialize must go through.
+	if _, err := g.ExecuteTool(ctx, "game_commit_turn",
+		json.RawMessage(strings.Replace(initInput, `"kind": "initialize",`, `"kind": "initialize","expected_state_version":0,`, 1))); err != nil {
+		t.Fatalf("initialize with a version hint should proceed: %v", err)
+	}
+	if _, version, ok := g.PendingPluginState(); !ok || version != 1 {
+		t.Errorf("expected version 1 after initialize; got ok=%v v=%d", ok, version)
 	}
 }

@@ -311,6 +311,23 @@ func (s *Service) PromoteCompactionToNewContext(ctx context.Context, req *connec
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seed role=context: %w", err))
 	}
+
+	// Carry any stateful plugin's campaign forward. Compaction seeds the
+	// new context with a fresh root, so the message parent chain does not
+	// cross the boundary and a plugin's ancestor walk would come up empty
+	// on the other side — narrative preserved, mechanics silently lost.
+	// Copying inside this transaction means the new context never exists
+	// without its state.
+	if err := copyPluginStateAcrossContexts(ctx, qtx, copyStateParams{
+		conversationID: conv.ID,
+		sourceLeafID:   summaryMsg.ParentID,
+		sourceCtxID:    sourceCtx.ID,
+		newCtxID:       newCtx.ID,
+		seedMessageID:  framingID,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
 	}
@@ -461,6 +478,22 @@ func (s *Service) CreateContextManual(ctx context.Context, req *connect.Request[
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seed role=user: %w", err))
 		}
 		userMsgProto = messageToProto(userRow)
+	}
+
+	// Same boundary as compaction: the new context starts a fresh message
+	// root, so a stateful plugin's ancestor walk stops here. A manual
+	// context switch mid-campaign is a continuation, not a new game, so
+	// carry the state across from the branch the user was on.
+	if leafID != nil {
+		if err := copyPluginStateAcrossContexts(ctx, qtx, copyStateParams{
+			conversationID: conv.ID,
+			sourceLeafID:   activeCtx.CurrentLeafMessageID,
+			sourceCtxID:    activeCtx.ID,
+			newCtxID:       newCtx.ID,
+			seedMessageID:  *leafID,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -11,7 +12,9 @@ import (
 	"github.com/google/uuid"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/internal/crypto"
 	"github.com/jdpedrie/psmith/internal/store"
+	"github.com/jdpedrie/psmith/internal/testutil"
 	"github.com/jdpedrie/psmith/plugins"
 )
 
@@ -348,3 +351,103 @@ const resolveTurn = `{
       {"id":"B","label":"Make an example","rating":"guile","difficulty":"moderate","stakes":"major","advances":"guile","costs":"treasury"}
     ]}
 }`
+
+// TestGameStore_SurvivesCompaction is the gap that made a campaign
+// unplayable past its first compaction: the new context is seeded with a
+// fresh root, so the message parent chain does not cross the boundary
+// and the plugin's ancestor walk comes up empty on the other side. The
+// story survived and the numbers vanished.
+func TestGameStore_SurvivesCompaction(t *testing.T) {
+	t.Parallel()
+	pool := testutil.Pool(t)
+	q := store.New(pool)
+	svc := NewService(q, pool, nil, nil, crypto.Nop{}, nil, slog.Default())
+	ctx := context.Background()
+
+	user := mustCreateUser(t, q, "compact_"+uuid.NewString()[:8])
+	prof := makeProfile(t, q, user.ID, nil, nil, nil)
+	resp, err := svc.CreateConversation(ctxAs(user), connect.NewRequest(&psmithv1.CreateConversationRequest{
+		ProfileId: prof.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+	convID := uuid.MustParse(resp.Msg.Conversation.Id)
+	conv, _ := q.GetConversationByID(ctx, convID)
+	srcCtx, _ := q.GetActiveContextByConversation(ctx, convID)
+
+	add := func(parent *uuid.UUID, role, content string) uuid.UUID {
+		t.Helper()
+		id, _ := uuid.NewV7()
+		if _, err := q.CreateMessage(ctx, store.CreateMessageParams{
+			ID: id, ContextID: srcCtx.ID, ParentID: parent, Role: role, Content: content,
+		}); err != nil {
+			t.Fatalf("CreateMessage: %v", err)
+		}
+		return id
+	}
+
+	// A campaign several turns deep on the branch that will be compacted.
+	u1 := add(nil, "user", "start")
+	a1 := add(&u1, "assistant", "turn 1")
+	gs := svc.newGameStore("strategy_game", user.ID, conv.ID, u1)
+	if err := gs.Save(ctx, a1, json.RawMessage(`{"treasury":73,"turn":9}`), 9); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// A sibling branch the player abandoned, carrying different numbers.
+	// The copy must NOT pick this one up just because it is newer.
+	abandoned := add(&u1, "assistant", "abandoned branch")
+	if err := svc.newGameStore("strategy_game", user.ID, conv.ID, u1).
+		Save(ctx, abandoned, json.RawMessage(`{"treasury":5,"turn":99}`), 99); err != nil {
+		t.Fatalf("save abandoned: %v", err)
+	}
+
+	// Compaction writes its summary parented to the played branch's tip.
+	summary := add(&a1, "compression_summary", "The march weathered a hard winter.")
+
+	promoted, err := svc.PromoteCompactionToNewContext(ctxAs(user),
+		connect.NewRequest(&psmithv1.PromoteCompactionToNewContextRequest{MessageId: summary.String()}))
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	newCtxID := uuid.MustParse(promoted.Msg.Context.Id)
+
+	// The new context's seed message must carry the campaign forward.
+	rows, err := q.ListPluginStateInContext(ctx, store.ListPluginStateInContextParams{
+		PluginName: "strategy_game", ContextID: newCtxID,
+	})
+	if err != nil {
+		t.Fatalf("list new context state: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected exactly one carried snapshot; got %d", len(rows))
+	}
+	if rows[0].StateVersion != 9 {
+		t.Errorf("carried the wrong branch: version %d (99 means it took the abandoned sibling)", rows[0].StateVersion)
+	}
+	jsonEq(t, json.RawMessage(rows[0].StateJson), `{"treasury":73,"turn":9}`)
+
+	// And a plugin walking up from a new message in the new context finds it.
+	firstNewMsg := uuid.UUID{}
+	newMsgs, err := q.ListMessagesByContext(ctx, newCtxID)
+	if err != nil {
+		t.Fatalf("list new messages: %v", err)
+	}
+	for _, m := range newMsgs {
+		if m.Role == roleContext {
+			firstNewMsg = m.ID
+		}
+	}
+	if firstNewMsg == (uuid.UUID{}) {
+		t.Fatal("new context has no framing message")
+	}
+	state, version, _, err := svc.newGameStore("strategy_game", user.ID, conv.ID, firstNewMsg).LoadNearest(ctx)
+	if err != nil {
+		t.Fatalf("load after compaction: %v", err)
+	}
+	if version != 9 {
+		t.Errorf("post-compaction version: got %d want 9", version)
+	}
+	jsonEq(t, state, `{"treasury":73,"turn":9}`)
+}

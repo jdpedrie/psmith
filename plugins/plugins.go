@@ -18,7 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+
+	"github.com/google/uuid"
 
 	"github.com/jdpedrie/psmith/internal/providers"
 )
@@ -704,6 +707,69 @@ func (p Pipeline) TransformForDisplay(content string) string {
 // implement the interface are skipped. Called from
 // stream.materializeAssistant before the message row is inserted, so
 // the persisted bytes match the returned string.
+// TurnContextInjector contributes an EPHEMERAL block to the wire prefix
+// for the turn about to be generated. Unlike every other prompt-shaping
+// interface it receives conversation identity, so a plugin can inject
+// state scoped to the specific branch being continued.
+//
+// Two properties are load-bearing.
+//
+// It is not persisted. MessageEnvelope output is stored beside the user's
+// content and recomposed into every future prefix (internal/history
+// composeEnvelope), so a per-turn state block written that way would
+// accumulate one copy per turn for the life of the campaign. This block
+// is built fresh each send and never written down.
+//
+// It lands at the HEAD, not in the system slot. Anthropic's cache
+// breakpoint sits at the end of the last assistant turn
+// (internal/providers/anthropic applyAutoCacheControl), so anything
+// before it must stay byte-identical between turns to stay cached.
+// Putting changing state in the system slot would invalidate the entire
+// cached prefix on every single turn — on turn forty of a long
+// conversation that means re-reading the whole transcript at full price,
+// every turn. Injected after the breakpoint, only the block itself is
+// uncached.
+type TurnContextInjector interface {
+	BuildTurnContext(ctx context.Context, turn TurnInfo) (string, error)
+}
+
+// TurnInfo identifies the branch a turn is continuing.
+type TurnInfo struct {
+	UserID         uuid.UUID
+	ConversationID uuid.UUID
+	ContextID      uuid.UUID
+	// LeafMessageID is the message the new turn hangs off — the branch
+	// head. This is what makes injection fork-aware.
+	LeafMessageID uuid.UUID
+}
+
+// BuildTurnContexts collects every injector's block, in pipeline order.
+// Errors are the caller's to log; a plugin that cannot build its block
+// contributes nothing rather than failing the send, because a missing
+// status panel is a worse outcome than a degraded one.
+// decorate, when non-nil, attaches per-plugin runtime dependencies to the
+// context before the injector runs — the same shims tool dispatch
+// provides. Without it a stateful injector has no way to read anything.
+func (p Pipeline) BuildTurnContexts(ctx context.Context, turn TurnInfo, decorate func(context.Context, string) context.Context) []string {
+	var out []string
+	for _, pl := range p {
+		inj, ok := pl.(TurnContextInjector)
+		if !ok {
+			continue
+		}
+		pctx := ctx
+		if decorate != nil {
+			pctx = decorate(ctx, pl.Name())
+		}
+		block, err := inj.BuildTurnContext(pctx, turn)
+		if err != nil || strings.TrimSpace(block) == "" {
+			continue
+		}
+		out = append(out, block)
+	}
+	return out
+}
+
 // PendingStateProvider is implemented by plugins that compute
 // authoritative state during a turn which must be bound to the assistant
 // message once it exists.

@@ -106,6 +106,35 @@ func (q *Queries) GetPluginState(ctx context.Context, arg GetPluginStateParams) 
 	return i, err
 }
 
+const listPluginNamesInContext = `-- name: ListPluginNamesInContext :many
+SELECT DISTINCT plugin_name FROM plugin_state
+WHERE context_id = $1
+ORDER BY plugin_name
+`
+
+// Which plugins hold state in this context. Used by the compaction copy,
+// which must carry every stateful plugin forward without knowing in
+// advance which ones are attached.
+func (q *Queries) ListPluginNamesInContext(ctx context.Context, contextID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPluginNamesInContext, contextID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var plugin_name string
+		if err := rows.Scan(&plugin_name); err != nil {
+			return nil, err
+		}
+		items = append(items, plugin_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginStateInContext = `-- name: ListPluginStateInContext :many
 SELECT plugin_name, message_id, conversation_id, context_id, state_version, schema_version, state_json, created_at FROM plugin_state
 WHERE plugin_name = $1 AND context_id = $2

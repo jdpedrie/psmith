@@ -325,6 +325,10 @@ type Querier interface {
 	// matching MaxListPageSize). Every pinned row is active by invariant,
 	// but the archived filter keeps the archived listing honest anyway.
 	ListPinnedConversationsByUser(ctx context.Context, arg ListPinnedConversationsByUserParams) ([]ListPinnedConversationsByUserRow, error)
+	// Which plugins hold state in this context. Used by the compaction copy,
+	// which must carry every stateful plugin forward without knowing in
+	// advance which ones are attached.
+	ListPluginNamesInContext(ctx context.Context, contextID uuid.UUID) ([]string, error)
 	// Context sweep, used by the compaction copy and by cleanup. Newest first.
 	ListPluginStateInContext(ctx context.Context, arg ListPluginStateInContextParams) ([]PluginState, error)
 	// Returns the ordered plugin pipeline for one profile (no inheritance walk;

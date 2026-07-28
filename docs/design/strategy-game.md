@@ -99,6 +99,38 @@ assistant row exists to key state to, so the plugin holds its result on
 the per-send instance and the runtime binds it at materialization via
 `PendingStateProvider`.
 
+## Staying honest across turns
+
+Three guards, each for a failure this design invites.
+
+**One commit per send.** A model that calls the commit tool twice — retry
+logic, a confused tool loop, or fishing for a better roll — would
+otherwise advance the campaign several turns behind a single narration,
+and only the last state would ever be bound to a message. The second call
+is refused.
+
+**Optimistic concurrency.** Every result carries a `state_version` the
+model passes back on its next commit. A call acting on a version that has
+since moved is rejected rather than applied on top of newer state, which
+covers replays, retries, and a second client acting on what the model
+last saw.
+
+**Live state in front of the model.** The campaign state is injected into
+the wire prefix every turn, scoped to the branch being continued, so the
+model never narrates from figures it half-remembers. This block is
+ephemeral — rebuilt per send, never stored. Writing it through
+`MessageEnvelope` would persist it beside the user's content and
+recompose it into every later prefix, accumulating one stale copy per
+turn.
+
+Its position is load-bearing. Anthropic's cache breakpoint sits at the
+end of the last assistant turn, so anything before it must stay
+byte-identical between turns to remain cached. The block lands on the
+head message, after the breakpoint. In the system slot it would
+invalidate the entire cached prefix on every single turn, which on turn
+forty of a long campaign means re-reading the whole transcript at full
+price, every turn.
+
 ## How a turn works
 
 Attaching the plugin to a profile and opening a conversation is what
@@ -135,15 +167,15 @@ box.
 
 ## What is not built yet
 
-Phase 1 is the loop. Deliberately missing: multi-stage situations and
-concurrent clocks, delayed and conditional effects, free-text actions
-priced on the fly, policies and projects, factions and characters with
-loyalty tracked separately from power, and turn capacity limits.
+Phase 1 is the loop and Phase 2 is durability. Deliberately still
+missing from the game itself: multi-stage situations and concurrent
+clocks, delayed and conditional effects, free-text actions priced on the
+fly, policies and projects, factions and characters with loyalty tracked
+separately from power, and turn capacity limits.
 
-On the durability side: prepared-then-committed transitions with an
-idempotency key, optimistic concurrency on `state_version`, the
-compaction copy described above, and injecting live state near the
-prompt head so the model always has ground truth without a tool call.
-That last one has to land after the Anthropic cache breakpoint — state
-in the system slot would invalidate the entire cached prefix on every
-single turn, which on turn forty of a long campaign is expensive.
+On the durability side, what remains is prepared-then-committed
+transitions with an idempotency key and a transitions ledger. Today a
+tool that mutates state followed by a failed generation leaves the turn
+bound to no message; the next turn's ancestor walk absorbs that by
+replaying from the previous snapshot, which is safe but quietly costs a
+turn.

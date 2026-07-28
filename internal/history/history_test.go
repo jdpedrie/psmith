@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jdpedrie/psmith/internal/store"
 	"github.com/jdpedrie/psmith/internal/testutil"
+	"github.com/jdpedrie/psmith/plugins"
 )
 
 // --- Fixture helpers -------------------------------------------------------
@@ -622,4 +624,118 @@ func (f *fakeQueries) ListAttachmentsForMessages(_ context.Context, _ []uuid.UUI
 	// tests live in service_send_test.go alongside the rest of the
 	// SendMessage integration coverage.
 	return nil, nil
+}
+
+// stubInjector contributes a fixed block and records what it was told
+// about the turn.
+type stubInjector struct {
+	block   string
+	sawTurn plugins.TurnInfo
+}
+
+func (s *stubInjector) Name() string        { return "stub_injector" }
+func (s *stubInjector) DisplayName() string { return "Stub" }
+func (s *stubInjector) Description() string { return "test" }
+func (s *stubInjector) BuildTurnContext(_ context.Context, t plugins.TurnInfo) (string, error) {
+	s.sawTurn = t
+	return s.block, nil
+}
+
+// TestBuild_TurnContextLandsOnTheHead pins the placement that makes
+// per-turn state affordable. Anthropic's cache breakpoint sits at the end
+// of the last assistant turn, so a block that changes every turn has to
+// land AFTER it — in the head message. In the system slot it would
+// invalidate the entire cached prefix on every send, which on a long
+// conversation means re-reading the whole transcript at full price on
+// every turn.
+func TestBuild_TurnContextLandsOnTheHead(t *testing.T) {
+	t.Parallel()
+	f := seedConversation(t)
+	sys := insertMessage(t, f.q, f.ctxRow.ID, nil, "system", "You are helpful.")
+	u1 := insertMessage(t, f.q, f.ctxRow.ID, &sys.ID, "user", "first question")
+	a1 := insertMessage(t, f.q, f.ctxRow.ID, &u1.ID, "assistant", "first answer")
+	head := insertMessage(t, f.q, f.ctxRow.ID, &a1.ID, "user", "second question")
+
+	inj := &stubInjector{block: "<game_state>treasury 73</game_state>"}
+	out, err := Build(context.Background(), f.q, Params{
+		Conversation:  f.conv,
+		LeafMessageID: &head.ID,
+		UserID:        f.user.ID,
+		Plugins:       plugins.Pipeline{inj},
+	})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("empty prefix")
+	}
+
+	last := out[len(out)-1]
+	if !strings.Contains(last.Content, "treasury 73") {
+		t.Errorf("turn context should be on the head message; head=%q", last.Content)
+	}
+	if !strings.Contains(last.Content, "second question") {
+		t.Error("the user's own text must survive alongside the injected block")
+	}
+	for i, m := range out[:len(out)-1] {
+		if strings.Contains(m.Content, "treasury 73") {
+			t.Errorf("turn context leaked into message %d (role %s) — that is before the cache breakpoint", i, m.Role)
+		}
+	}
+	if inj.sawTurn.LeafMessageID != head.ID {
+		t.Errorf("injector got leaf %s, want %s", inj.sawTurn.LeafMessageID, head.ID)
+	}
+	if inj.sawTurn.ConversationID != f.conv.ID {
+		t.Error("injector did not receive the conversation id")
+	}
+}
+
+// TestBuild_TurnContextIsNotPersisted verifies the block is rebuilt per
+// send rather than stored. Written through MessageEnvelope it would be
+// saved beside the user's content and recomposed into every later prefix,
+// accumulating one stale copy per turn for the life of the conversation.
+func TestBuild_TurnContextIsNotPersisted(t *testing.T) {
+	t.Parallel()
+	f := seedConversation(t)
+	u1 := insertMessage(t, f.q, f.ctxRow.ID, nil, "user", "hello")
+
+	inj := &stubInjector{block: "<game_state>turn 1</game_state>"}
+	if _, err := Build(context.Background(), f.q, Params{
+		Conversation:  f.conv,
+		LeafMessageID: &u1.ID,
+		UserID:        f.user.ID,
+		Plugins:       plugins.Pipeline{inj},
+	}); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	row, err := f.q.GetMessageByID(context.Background(), u1.ID)
+	if err != nil {
+		t.Fatalf("reload message: %v", err)
+	}
+	if strings.Contains(row.Content, "game_state") {
+		t.Error("turn context was written to the stored message; it must be ephemeral")
+	}
+	if row.MessageHeaders != nil && strings.Contains(*row.MessageHeaders, "game_state") {
+		t.Error("turn context leaked into message_headers; it would replay into every future prefix")
+	}
+
+	// A second build with different state must not stack.
+	inj.block = "<game_state>turn 2</game_state>"
+	out, err := Build(context.Background(), f.q, Params{
+		Conversation:  f.conv,
+		LeafMessageID: &u1.ID,
+		UserID:        f.user.ID,
+		Plugins:       plugins.Pipeline{inj},
+	})
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+	head := out[len(out)-1].Content
+	if strings.Contains(head, "turn 1") {
+		t.Error("a stale block from the previous build survived into this one")
+	}
+	if !strings.Contains(head, "turn 2") {
+		t.Error("the current block is missing")
+	}
 }

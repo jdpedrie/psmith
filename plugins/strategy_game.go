@@ -145,6 +145,10 @@ func (p *strategyGame) AppendSystemMessage() string {
 		"high-reward one. The player should be choosing between kinds of damage, not between an",
 		"obvious right answer and an obvious wrong one.",
 		"",
+		"Call game_commit_turn exactly ONCE per turn. Every result carries a state_version;",
+		"pass it back as expected_state_version on your next commit so a replayed or stale call",
+		"is rejected instead of silently double-applied.",
+		"",
 		"Never reveal director-only facts (hidden agendas, scheduled events) unless the fiction",
 		"has legitimately exposed them.",
 	}, "\n")
@@ -198,10 +202,15 @@ func (p *strategyGame) ExecuteTool(ctx context.Context, name string, input json.
 // integer describing the game. Difficulty and stakes are band names the
 // engine prices.
 type commitTurnInput struct {
-	Kind     string                       `json:"kind"`
-	Scenario *strategygame.Scenario       `json:"scenario,omitempty"`
-	ChoiceID string                       `json:"choice_id,omitempty"`
-	Next     *strategygame.SituationDraft `json:"next_situation,omitempty"`
+	Kind string `json:"kind"`
+	// ExpectedStateVersion is the version the model believes it is acting
+	// on. Optional but strongly encouraged: it turns a duplicated,
+	// retried or replayed tool call from a silent double-application into
+	// a clean rejection the model can recover from.
+	ExpectedStateVersion *int64                       `json:"expected_state_version,omitempty"`
+	Scenario             *strategygame.Scenario       `json:"scenario,omitempty"`
+	ChoiceID             string                       `json:"choice_id,omitempty"`
+	Next                 *strategygame.SituationDraft `json:"next_situation,omitempty"`
 }
 
 func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json.RawMessage) (ToolResult, error) {
@@ -212,6 +221,30 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 	current, exists, err := p.loadStateOptional(ctx, store)
 	if err != nil {
 		return ToolResult{}, err
+	}
+
+	// One committed turn per send. A model that calls the tool twice —
+	// retry logic, a confused tool loop, or fishing for a better roll —
+	// would otherwise advance the campaign several turns behind a single
+	// narration, and only the last one would ever be bound to a message.
+	p.mu.Lock()
+	alreadyCommitted := p.pending != nil
+	p.mu.Unlock()
+	if alreadyCommitted {
+		return ToolResult{}, fmt.Errorf(
+			"strategy_game: this turn is already committed — narrate the result you were given rather than committing again")
+	}
+
+	// Optimistic concurrency. Compares against the version actually on
+	// the branch, so a stale call (a replay, or a second client acting on
+	// state the model last saw) is refused rather than silently applied
+	// on top of newer state.
+	if in.ExpectedStateVersion != nil && exists {
+		if got := current.Meta.StateVersion; got != *in.ExpectedStateVersion {
+			return ToolResult{}, fmt.Errorf(
+				"strategy_game: state conflict — you acted on version %d but the campaign is at version %d; call game_inspect and reconsider",
+				*in.ExpectedStateVersion, got)
+		}
 	}
 
 	switch in.Kind {
@@ -231,11 +264,12 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		}
 		p.setPending(&next, nil)
 		return jsonResult(map[string]any{
-			"committed": true,
-			"turn":      next.Meta.Turn,
-			"public":    next.Public,
-			"director":  next.Director,
-			"narrate":   "Introduce the campaign and pose the opening situation. Do not restate any numbers.",
+			"committed":     true,
+			"state_version": next.Meta.StateVersion,
+			"turn":          next.Meta.Turn,
+			"public":        next.Public,
+			"director":      next.Director,
+			"narrate":       "Introduce the campaign and pose the opening situation. Do not restate any numbers.",
 		})
 
 	case "resolve":
@@ -267,13 +301,14 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		}
 		p.setPending(&next, &tr)
 		out := map[string]any{
-			"committed": true,
-			"outcome":   tr.Band,
-			"explain":   tr.Explain,
-			"deltas":    tr.Deltas,
-			"turn":      next.Meta.Turn,
-			"public":    next.Public,
-			"director":  next.Director,
+			"committed":     true,
+			"state_version": next.Meta.StateVersion,
+			"outcome":       tr.Band,
+			"explain":       tr.Explain,
+			"deltas":        tr.Deltas,
+			"turn":          next.Meta.Turn,
+			"public":        next.Public,
+			"director":      next.Director,
 			"narrate": "Narrate this outcome in the fiction. The band is authoritative — if it " +
 				"says disaster, write a disaster. Do not restate any numbers.",
 		}
@@ -346,6 +381,95 @@ func (p *strategyGame) PendingPluginState() (json.RawMessage, int64, bool) {
 		return nil, 0, false
 	}
 	return blob, p.pending.Meta.StateVersion, true
+}
+
+// --- TurnContextInjector ---
+
+// BuildTurnContext puts the live campaign state in front of the model
+// every turn, scoped to the branch being continued.
+//
+// Without it the model only learns state from a tool result, which means
+// it cannot answer "how is the treasury" without spending a round trip,
+// and after a compaction it would be narrating from whatever figures
+// survived into the summary. The block is ephemeral and lands after the
+// cache breakpoint, so it costs a few hundred uncached tokens a turn
+// rather than invalidating the whole prefix.
+//
+// Director facts are included: the model is the game's director and is
+// told to keep them secret. They never reach the renderer, which only
+// ever sees the block appended to assistant content.
+func (p *strategyGame) BuildTurnContext(ctx context.Context, turn TurnInfo) (string, error) {
+	store := GameStoreFrom(ctx)
+	if store == nil {
+		return "", nil
+	}
+	raw, _, _, err := store.LoadNearest(ctx)
+	if err != nil {
+		// No campaign yet is the normal first-turn case, not a failure.
+		return "", nil
+	}
+	var st strategygame.State
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	b.WriteString("<game_state>\n")
+	fmt.Fprintf(&b, "Turn %d", st.Meta.Turn)
+	if st.Meta.DateLabel != "" {
+		fmt.Fprintf(&b, " — %s", st.Meta.DateLabel)
+	}
+	fmt.Fprintf(&b, "\nRole: %s\n", st.Public.Role)
+
+	resources, ratings := st.Public.SortedStats()
+	if len(resources) > 0 {
+		b.WriteString("Resources: ")
+		for i, id := range resources {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%s %d", st.Public.Label(id), st.Public.Resources[id])
+		}
+		b.WriteString("\n")
+	}
+	if len(ratings) > 0 {
+		b.WriteString("Ratings: ")
+		for i, id := range ratings {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%s %d", st.Public.Label(id), st.Public.Ratings[id])
+		}
+		b.WriteString("\n")
+	}
+	if st.Public.Situation != nil {
+		fmt.Fprintf(&b, "Current situation: %s (id %s)\n", st.Public.Situation.Title, st.Public.Situation.ID)
+		b.WriteString("Options on the table: ")
+		for i, c := range st.Public.Situation.Choices {
+			if i > 0 {
+				b.WriteString("; ")
+			}
+			fmt.Fprintf(&b, "%s = %s", c.ID, c.Label)
+		}
+		b.WriteString("\n")
+	}
+	// Only the tail of the ledger: enough for callbacks, not enough to
+	// grow without bound as the campaign runs long.
+	if n := len(st.Public.History); n > 0 {
+		b.WriteString("Recent decisions:\n")
+		for _, e := range st.Public.History[max(0, n-5):] {
+			fmt.Fprintf(&b, "  turn %d: chose %s in %s → %s\n", e.Turn, e.Choice, e.Situation, e.Band)
+		}
+	}
+	if len(st.Director.HiddenFacts) > 0 {
+		b.WriteString("Director-only (never reveal directly):\n")
+		for _, f := range st.Director.HiddenFacts {
+			fmt.Fprintf(&b, "  - %s\n", f)
+		}
+	}
+	fmt.Fprintf(&b, "State version %d — pass this as expected_state_version.\n", st.Meta.StateVersion)
+	b.WriteString("</game_state>")
+	return b.String(), nil
 }
 
 // --- AssistantContentTransformer ---
@@ -569,6 +693,7 @@ const commitTurnSchema = `{
   "type": "object",
   "properties": {
     "kind": {"type": "string", "enum": ["initialize", "resolve"]},
+    "expected_state_version": {"type": "integer", "description": "The state_version from the previous turn's result. Rejects stale or replayed calls."},
     "scenario": {
       "type": "object",
       "description": "Required when kind=initialize. Compiled from the user's opening message.",

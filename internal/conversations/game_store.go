@@ -111,3 +111,64 @@ func (g *userScopedGameStore) Save(ctx context.Context, messageID uuid.UUID, sta
 	}
 	return nil
 }
+
+// copyStateParams describes one context-boundary crossing.
+type copyStateParams struct {
+	conversationID uuid.UUID
+	// sourceLeafID is the message whose lineage the new context
+	// continues. For compaction that is the summary's parent — the tip
+	// of the chain the summary was written from.
+	sourceLeafID  *uuid.UUID
+	sourceCtxID   uuid.UUID
+	newCtxID      uuid.UUID
+	seedMessageID uuid.UUID
+}
+
+// copyPluginStateAcrossContexts carries every stateful plugin's state
+// into a newly seeded context.
+//
+// Which snapshot gets copied matters more than it looks. A context can
+// hold several leaves, and the copy has to take the one belonging to the
+// SAME chain the summary was written from — not simply the newest row in
+// the context. Taking the newest would hand the player mechanical state
+// from a branch they abandoned while the narrative summary describes the
+// branch they actually played, and the mismatch would be silent.
+//
+// Runs inside the caller's transaction so the new context cannot exist
+// without its state.
+func copyPluginStateAcrossContexts(ctx context.Context, q *store.Queries, p copyStateParams) error {
+	if p.sourceLeafID == nil {
+		// An empty source context has no lineage to carry.
+		return nil
+	}
+	names, err := q.ListPluginNamesInContext(ctx, p.sourceCtxID)
+	if err != nil {
+		return fmt.Errorf("copy plugin state: list plugins: %w", err)
+	}
+	for _, name := range names {
+		row, err := q.GetNearestPluginState(ctx, store.GetNearestPluginStateParams{
+			PluginName: name,
+			ID:         *p.sourceLeafID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// The plugin has state somewhere in this context but not
+				// on the branch being compacted. Nothing to carry.
+				continue
+			}
+			return fmt.Errorf("copy plugin state: load %s: %w", name, err)
+		}
+		if _, err := q.UpsertPluginState(ctx, store.UpsertPluginStateParams{
+			PluginName:     name,
+			MessageID:      p.seedMessageID,
+			ConversationID: p.conversationID,
+			ContextID:      p.newCtxID,
+			StateVersion:   row.StateVersion,
+			SchemaVersion:  row.SchemaVersion,
+			StateJson:      row.StateJson,
+		}); err != nil {
+			return fmt.Errorf("copy plugin state: write %s: %w", name, err)
+		}
+	}
+	return nil
+}

@@ -58,3 +58,11 @@ ORDER BY state_version DESC;
 -- for a plugin that wants to abandon a campaign without deleting the chat.
 DELETE FROM plugin_state
 WHERE plugin_name = $1 AND conversation_id = $2;
+
+-- name: ListPluginNamesInContext :many
+-- Which plugins hold state in this context. Used by the compaction copy,
+-- which must carry every stateful plugin forward without knowing in
+-- advance which ones are attached.
+SELECT DISTINCT plugin_name FROM plugin_state
+WHERE context_id = $1
+ORDER BY plugin_name;
