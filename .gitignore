@@ -32,3 +32,7 @@
 clients/**/.build/
 clients/**/.swiftpm/
 clients/**/*.xcodeproj/
+
+# Reference material dropped in the repo root, not a repo artifact.
+# The design it informed lives in docs/design/strategy-game.md.
+/AI Strategy Game Design.pdf
