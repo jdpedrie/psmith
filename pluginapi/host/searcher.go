@@ -1,9 +1,7 @@
-package plugins
+package host
 
 import (
 	"context"
-
-	"github.com/jdpedrie/psmith/server/embeddings"
 )
 
 // Searcher is the runtime-injected dependency the `memory` plugin
@@ -17,7 +15,7 @@ import (
 // embedder. `*embeddings.Searcher` satisfies it for free — same
 // method signature, same options struct.
 type Searcher interface {
-	Search(ctx context.Context, query string, opts embeddings.SearchOptions) ([]embeddings.Hit, error)
+	Search(ctx context.Context, query string, opts SearchOptions) ([]Hit, error)
 }
 
 type searcherKey struct{}

@@ -1,12 +1,35 @@
-package plugins
+package pluginapi
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jdpedrie/psmith/server/providers"
 )
+
+// testFixtureName is registered by this test binary so the registry tests have
+// a real entry to exercise. pluginapi deliberately knows about no concrete
+// plugin — depending on one would be an import cycle, since every plugin
+// imports pluginapi — so the fixture stands in for what package init provides
+// in a running server.
+const testFixtureName = "pluginapi_test_fixture"
+
+func init() {
+	Register(testFixtureName, func(cfg json.RawMessage) (Plugin, error) {
+		// Parses its config so Resolve's error path has something real to
+		// surface. A constructor that accepts anything cannot fail, and the
+		// "bad config propagates" test would pass vacuously.
+		if len(cfg) > 0 {
+			var v map[string]any
+			if err := json.Unmarshal(cfg, &v); err != nil {
+				return nil, fmt.Errorf("%s: parse config: %w", testFixtureName, err)
+			}
+		}
+		return &dummyPlugin{name: testFixtureName}, nil
+	})
+}
 
 // dummyPlugin is a minimal Plugin used in registry tests.
 type dummyPlugin struct{ name string }
@@ -29,9 +52,9 @@ func TestRegistry_RegisterPanicsOnDuplicate(t *testing.T) {
 			t.Error("expected panic on duplicate Register")
 		}
 	}()
-	// lettered_choices is already registered by package init; re-registering should panic.
-	Register(LetteredChoicesName, func(json.RawMessage) (Plugin, error) {
-		return &dummyPlugin{name: LetteredChoicesName}, nil
+	// The fixture is already registered by init; re-registering must panic.
+	Register(testFixtureName, func(json.RawMessage) (Plugin, error) {
+		return &dummyPlugin{name: testFixtureName}, nil
 	})
 }
 
@@ -55,18 +78,18 @@ func TestRegistry_RegisterPanicsOnNilCtor(t *testing.T) {
 	Register("nil-ctor", nil)
 }
 
-func TestRegistry_ListRegisteredIncludesBuiltins(t *testing.T) {
+func TestRegistry_ListRegisteredIncludesRegistered(t *testing.T) {
 	t.Parallel()
 	names := ListRegistered()
 	found := false
 	for _, n := range names {
-		if n == LetteredChoicesName {
+		if n == testFixtureName {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("ListRegistered did not include %q; got %v", LetteredChoicesName, names)
+		t.Errorf("ListRegistered did not include %q; got %v", testFixtureName, names)
 	}
 }
 
@@ -368,8 +391,8 @@ func TestPipeline_RenderContent_RoleGated(t *testing.T) {
 func TestResolve_BuildsByName(t *testing.T) {
 	t.Parallel()
 	specs := []Spec{
-		{Name: LetteredChoicesName, Config: nil},
-		{Name: LetteredChoicesName, Config: []byte(`{"keep_last_n": 3}`)},
+		{Name: testFixtureName, Config: nil},
+		{Name: testFixtureName, Config: []byte(`{"any": "config"}`)},
 	}
 	p, err := Resolve(specs)
 	if err != nil {
@@ -378,8 +401,8 @@ func TestResolve_BuildsByName(t *testing.T) {
 	if len(p) != 2 {
 		t.Fatalf("len = %d want 2", len(p))
 	}
-	if p[0].Name() != LetteredChoicesName {
-		t.Errorf("p[0].Name = %q want %q", p[0].Name(), LetteredChoicesName)
+	if p[0].Name() != testFixtureName {
+		t.Errorf("p[0].Name = %q want %q", p[0].Name(), testFixtureName)
 	}
 }
 
@@ -393,7 +416,7 @@ func TestResolve_UnknownPluginErrors(t *testing.T) {
 
 func TestResolve_BadConfigErrors(t *testing.T) {
 	t.Parallel()
-	_, err := Resolve([]Spec{{Name: LetteredChoicesName, Config: []byte(`{not json`)}})
+	_, err := Resolve([]Spec{{Name: testFixtureName, Config: []byte(`{not json`)}})
 	if err == nil {
 		t.Fatal("expected error for bad config")
 	}

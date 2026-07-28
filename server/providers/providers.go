@@ -85,6 +85,10 @@ type ToolDef struct {
 }
 
 // WireMessage is the shape providers actually see.
+// Re-exported as pluginapi.WireMessage, so this struct is part of the public
+// plugin contract even though it lives in a server package. Changing its shape
+// breaks out-of-tree plugins that implement HistoryTransformer. Same applies to
+// Chunk below.
 type WireMessage struct {
 	Role     string // "system" | "user" | "assistant"
 	Content  string
