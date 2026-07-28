@@ -168,10 +168,17 @@ public final class EventsSubscriber: @unchecked Sendable {
         // reconnect loop do its job.
         let watchdog = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(RPCTimeouts.eventsLivenessDeadline))
+                // Poll at half the deadline. Sleeping a full deadline between
+                // checks meant worst-case detection was two of them.
+                try? await Task.sleep(for: .seconds(RPCTimeouts.eventsLivenessDeadline / 2))
                 if Task.isCancelled { return }
                 guard let self else { return }
-                let quietFor = self.frameClock.quietFor()
+                let (quietFor, deadlineApplies) = self.frameClock.liveness()
+                // A server too old to heartbeat gives us nothing to measure,
+                // so there is no safe deadline to enforce. Leave the stream
+                // alone and fall back to the transport timeout, which is what
+                // this client did before heartbeats existed.
+                guard deadlineApplies else { continue }
                 if quietFor >= .seconds(RPCTimeouts.eventsLivenessDeadline) {
                     syncLog.notice("events stream silent for \(quietFor, privacy: .public); assuming dead, reconnecting")
                     stream.cancel()
@@ -181,7 +188,7 @@ public final class EventsSubscriber: @unchecked Sendable {
         }
         defer { watchdog.cancel() }
 
-        markFrame()
+        frameClock.reset()
         for await result in stream.results() {
             markFrame()
             switch result {
@@ -205,19 +212,43 @@ public final class EventsSubscriber: @unchecked Sendable {
 
     private func markFrame() { frameClock.mark() }
 
-    /// Tiny lock-guarded timestamp. `OSAllocatedUnfairLock` rather than a
-    /// serial queue: the critical section is one store or one load, and a
-    /// queue hop per received frame would be real overhead on a chatty stream.
-    private final class FrameClock: @unchecked Sendable {
-        private let lock = OSAllocatedUnfairLock(initialState: ContinuousClock.Instant.now)
-
-        func mark() {
-            lock.withLock { $0 = .now }
+    /// Lock-guarded liveness state for one connection. `OSAllocatedUnfairLock`
+    /// rather than a serial queue: the critical section is one store or one
+    /// load, and a queue hop per received frame would be real overhead on a
+    /// chatty stream.
+    final class FrameClock: @unchecked Sendable {
+        struct State {
+            var lastFrame: ContinuousClock.Instant = .now
+            var sawHeartbeat = false
         }
 
-        /// How long since the last frame.
-        func quietFor() -> Duration {
-            lock.withLock { ContinuousClock.now - $0 }
+        private let lock = OSAllocatedUnfairLock(initialState: State())
+
+        func mark() {
+            lock.withLock { $0.lastFrame = .now }
+        }
+
+        /// Records that the server is a version that heartbeats.
+        func markHeartbeat() {
+            lock.withLock {
+                $0.lastFrame = .now
+                $0.sawHeartbeat = true
+            }
+        }
+
+        /// Fresh state for a new connection. The heartbeat flag is per
+        /// connection, not per subscriber: reconnecting may land on a
+        /// different server.
+        func reset() {
+            lock.withLock { $0 = State() }
+        }
+
+        /// How long since the last frame, and whether the deadline applies at
+        /// all. It does not until a heartbeat has been seen: a server that
+        /// predates them is not broken, it is just quiet, and tearing its
+        /// stream down every deadline would churn the connection forever.
+        func liveness() -> (quietFor: Duration, deadlineApplies: Bool) {
+            lock.withLock { (ContinuousClock.now - $0.lastFrame, $0.sawHeartbeat) }
         }
     }
 
@@ -234,9 +265,10 @@ public final class EventsSubscriber: @unchecked Sendable {
         case .providerChanged(let payload):
             onProviderChanged?(payload.providerID)
         case .heartbeat:
-            // Liveness only. Arriving at all is the entire contribution;
-            // markFrame already recorded it.
-            break
+            // Liveness only. Arriving at all is the entire contribution, and
+            // it is also what tells us this server is new enough for the
+            // watchdog's deadline to mean anything.
+            frameClock.markHeartbeat()
         }
     }
 }
