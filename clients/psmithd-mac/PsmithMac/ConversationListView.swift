@@ -4,6 +4,7 @@ import PsmithUI
 
 struct ConversationListView: View {
     @Environment(ConversationsModel.self) private var convos
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @State private var conversationToDelete: PsmithConversation?
     @State private var sortPopoverShown = false
@@ -19,6 +20,9 @@ struct ConversationListView: View {
     var body: some View {
         @Bindable var convos = convos
         VStack(spacing: 0) {
+            if app.connectivity.state == .offline {
+                offlineBanner
+            }
             List(selection: $convos.selectedID) {
                 if showingArchived {
                     archivedContent
@@ -94,9 +98,48 @@ struct ConversationListView: View {
                     .padding()
                 } else if convos.isLoading && convos.conversations.isEmpty {
                     ProgressView()
+                } else if convos.conversations.isEmpty, app.connectivity.state == .offline {
+                    // Terminal empty state, not a transient one. The
+                    // cache fallback swallows transport errors (so
+                    // `loadError` stays nil) and the load has finished
+                    // (so there's no spinner) — without this the pane
+                    // renders blank with no explanation.
+                    VStack(spacing: 8) {
+                        Text("Can't reach the server").scaledFont(.headline)
+                        Text("No cached chats to show. Check that psmithd is running and reachable.")
+                            .scaledFont(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") { Task { await convos.refresh() } }
+                    }
+                    .padding()
                 }
             }
         }
+    }
+
+    /// Strip above the sidebar when the connectivity monitor reports
+    /// the server unreachable. Mirrors the iOS ChatsRoot banner: the
+    /// list below still shows whatever the cache last saw, so the user
+    /// keeps context but knows it isn't live. Mac uses a material
+    /// capsule rather than iOS's glass effect to match sidebar chrome.
+    private var offlineBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.exclamationmark")
+                .scaledFont(.caption2)
+            // Don't promise cached chats when there are none — the
+            // empty-cache branch below already says the opposite.
+            Text(convos.conversations.isEmpty
+                 ? "Server unavailable"
+                 : "Server unavailable — showing cached chats")
+                .scaledFont(.caption2)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(.orange.opacity(0.12))
     }
 
     /// Pill at the top of the list — three buttons for All Chats / By

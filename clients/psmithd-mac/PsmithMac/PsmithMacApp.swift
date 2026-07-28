@@ -225,11 +225,11 @@ struct PsmithMacApp: App {
         // Device-tool handlers register once per process, before any
         // AppModel boots. Registration only seeds the registry —
         // EventKit stores + permission prompts stay lazy until the
-        // model actually calls a tool. Obsidian registers only when a
+        // model actually calls a tool. Files registers only when a
         // vault bookmark exists (re-synced by the settings pane).
         CalendarTools.register()
         RemindersTools.register()
-        ObsidianTools.syncRegistration()
+        FilesTools.syncRegistration()
     }
 
     var body: some Scene {

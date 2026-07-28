@@ -11,6 +11,36 @@ import SnapshotHarness
 @MainActor
 struct ConversationListViewSnapshots {
 
+    // MARK: - Offline
+
+    /// Server unreachable, cache still has rows: banner above the list,
+    /// chats still readable. Regression pin for the bug where an
+    /// unroutable host left the sidebar spinning with no explanation.
+    @Test
+    func offlineWithCachedChats() {
+        let env = SnapshotEnvironment.standard(connectivityState: .offline)
+        let view = PsmithMacEnvironment(
+            app: env.app, convos: env.convos,
+            navigator: env.navigator, windowState: env.windowState
+        ) { ConversationListView(showingArchived: .constant(false)) }
+        assertViewSnapshots(view, sizes: columnSizes)
+    }
+
+    /// Server unreachable AND the cache is empty — the state that used
+    /// to render a blank pane, because the cache fallback swallows the
+    /// transport error so `loadError` stays nil and no spinner shows.
+    @Test
+    func offlineWithEmptyCache() {
+        let env = SnapshotEnvironment.standard(
+            conversations: [], connectivityState: .offline
+        )
+        let view = PsmithMacEnvironment(
+            app: env.app, convos: env.convos,
+            navigator: env.navigator, windowState: env.windowState
+        ) { ConversationListView(showingArchived: .constant(false)) }
+        assertViewSnapshots(view, sizes: columnSizes)
+    }
+
     // MARK: - All Chats mode
 
     @Test

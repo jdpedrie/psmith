@@ -37,12 +37,14 @@ public enum SnapshotStubs {
     public static func makeAppModel(
         providers: [PsmithUserModelProvider] = [SnapshotFixtures.userModelProvider()],
         models: [PsmithUserModel] = [SnapshotFixtures.userModel()],
-        profiles: [PsmithProfile] = [SnapshotFixtures.profile()]
+        profiles: [PsmithProfile] = [SnapshotFixtures.profile()],
+        connectivityState: ConnectivityMonitor.State = .unknown
     ) -> AppModel {
         let model = AppModel(
             host: nullHost,
             tokenStore: InMemoryTokenStore(),
-            authState: AuthState()
+            authState: AuthState(),
+            connectivityState: connectivityState
         )
         model.providers.providers = providers
         model.providers.enabledModels = models

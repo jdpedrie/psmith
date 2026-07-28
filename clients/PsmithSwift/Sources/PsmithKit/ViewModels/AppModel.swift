@@ -68,11 +68,16 @@ public final class AppModel {
     /// than per-ConversationViewModel.
     public let speech: SpeechPlaybackModel
 
+    /// `connectivityState` seeds the ConnectivityMonitor before its
+    /// first probe. Production leaves it `.unknown`; it's here so the
+    /// snapshot suite can render the offline banner deterministically
+    /// (the monitor is a `let`, and a real probe can't run under test).
     public init(
         host: URL,
         tokenStore: TokenStore,
         authState: AuthState = .init(),
-        accountID: UUID? = nil
+        accountID: UUID? = nil,
+        connectivityState: ConnectivityMonitor.State = .unknown
     ) {
         self.authState = authState
         self.serverURL = host
@@ -101,7 +106,11 @@ public final class AppModel {
         self.profiles = ProfilesViewModel(client: c)
         self.mcpServers = MCPServersViewModel(client: c)
         self.outboundQueue = OutboundQueue()
-        self.connectivity = ConnectivityMonitor(host: host, queue: self.outboundQueue)
+        self.connectivity = ConnectivityMonitor(
+            host: host,
+            queue: self.outboundQueue,
+            initialState: connectivityState
+        )
         let hub = StreamHub(subscriber: c.streams)
         self.streamHub = hub
         self.elicitations = ElicitationsRepository(host: host, tokenStore: tokenStore)

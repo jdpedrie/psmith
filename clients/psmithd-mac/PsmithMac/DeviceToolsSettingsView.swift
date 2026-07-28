@@ -2,7 +2,7 @@ import SwiftUI
 import PsmithKit
 import UniformTypeIdentifiers
 
-/// Mac settings panel for device tools: the Obsidian vault bookmark
+/// Mac settings panel for device tools: the files folder bookmark
 /// (the one tool that needs configuration) and the recent-first audit
 /// of every device-tool call the server logged for this user.
 /// Calendar and Reminders need no setup — macOS prompts for access on
@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 struct DeviceToolsSettingsView: View {
     @Environment(AppModel.self) private var app
 
-    @State private var isBookmarked: Bool = ObsidianVaultBookmark.isSet
+    @State private var isBookmarked: Bool = FilesFolderBookmark.isSet
     @State private var bookmarkedDisplayPath: String? = DeviceToolsSettingsView.displayPath()
     @State private var pickingFolder = false
     @State private var pickerError: String?
@@ -26,13 +26,13 @@ struct DeviceToolsSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Device tools")
                         .scaledFont(.title2, weight: .semibold)
-                    Text("Tools the model runs on this Mac: Calendar, Reminders, and Obsidian notes. macOS asks for Calendar/Reminders access the first time the model uses them; Obsidian needs a folder picked below.")
+                    Text("Tools the model runs on this Mac: Calendar, Reminders, and a folder of notes. macOS asks for Calendar/Reminders access the first time the model uses them; the files tools need a folder picked below.")
                         .scaledFont(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                obsidianSection
+                filesSection
                 activitySection
             }
             .padding(.horizontal, 28)
@@ -52,10 +52,10 @@ struct DeviceToolsSettingsView: View {
         }
     }
 
-    // MARK: - Obsidian
+    // MARK: - Files
 
-    private var obsidianSection: some View {
-        sectionCard("Obsidian") {
+    private var filesSection: some View {
+        sectionCard("Files") {
             VStack(alignment: .leading, spacing: 12) {
                 if isBookmarked {
                     Label {
@@ -88,8 +88,8 @@ struct DeviceToolsSettingsView: View {
                     .buttonStyle(.glass)
                     if isBookmarked {
                         Button(role: .destructive) {
-                            ObsidianVaultBookmark.clear()
-                            ObsidianTools.syncRegistration()
+                            FilesFolderBookmark.clear()
+                            FilesTools.syncRegistration()
                             refreshBookmark()
                             Task { await app.deviceTools.registerWithServer() }
                         } label: {
@@ -105,7 +105,7 @@ struct DeviceToolsSettingsView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
-                Text("Pick your Obsidian vault (or a subfolder). Psmith stores a bookmark so the model can read and write notes inside it — no Obsidian plugin required.")
+                Text("Pick a folder of notes — an Obsidian vault (or a subfolder) is the flagship use, but any folder works. Psmith stores a bookmark so the model can read and write inside it.")
                     .scaledFont(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -116,10 +116,10 @@ struct DeviceToolsSettingsView: View {
         let started = url.startAccessingSecurityScopedResource()
         defer { if started { url.stopAccessingSecurityScopedResource() } }
         do {
-            try ObsidianVaultBookmark.save(folderURL: url)
-            ObsidianTools.syncRegistration()
+            try FilesFolderBookmark.save(folderURL: url)
+            FilesTools.syncRegistration()
             refreshBookmark()
-            // Re-register so the server knows obsidian_* tools are now
+            // Re-register so the server knows files_* tools are now
             // fulfillable. Best-effort; the next bootstrap re-syncs.
             Task { await app.deviceTools.registerWithServer() }
         } catch {
@@ -128,12 +128,12 @@ struct DeviceToolsSettingsView: View {
     }
 
     private func refreshBookmark() {
-        isBookmarked = ObsidianVaultBookmark.isSet
+        isBookmarked = FilesFolderBookmark.isSet
         bookmarkedDisplayPath = Self.displayPath()
     }
 
     static func displayPath() -> String? {
-        guard let url = ObsidianVaultBookmark.resolve() else { return nil }
+        guard let url = FilesFolderBookmark.resolve() else { return nil }
         return url.lastPathComponent
     }
 

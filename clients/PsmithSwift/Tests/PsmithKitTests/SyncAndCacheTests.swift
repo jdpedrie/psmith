@@ -156,6 +156,35 @@ struct SyncAndCacheTests {
         #expect(vm2.messages.last?.id == vm.messages.last?.id)
     }
 
+    @Test("an unreachable server falls back to cache instead of hanging")
+    func deadServerServesCachePromptly() async throws {
+        let (client, _) = try await TestSession.freshUser(
+            server: server, usernamePrefix: "offline-fb", withCache: true
+        )
+        let seeded = try await Fixtures.seedReadyToChat(client: client)
+        defer { seeded.fake.stop() }
+        let profile = try await seededProfile(client: client, base: seeded)
+        _ = try await client.conversations.create(profileID: profile.id)
+        // Populate the cache from a healthy server first.
+        let live = try await client.conversations.list()
+        #expect(!live.0.isEmpty)
+
+        // Now point an identically-configured client at a port with
+        // nothing on it. The call must return cached rows rather than
+        // propagating a transport error or blocking the caller.
+        let dead = PsmithClient(
+            host: URL(string: "http://127.0.0.1:1")!,
+            tokenStore: InMemoryTokenStore(),
+            authState: AuthState(),
+            cache: client.cache
+        )
+        let start = Date()
+        let (rows, _) = try await dead.conversations.list()
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(rows.count == live.0.count)
+        #expect(elapsed < 10, "cache fallback took \(elapsed)s")
+    }
+
     @Test("hydrateFromCache never overwrites a completed network load")
     func hydrateDoesNotClobberNetworkLoad() async throws {
         let (client, _) = try await TestSession.freshUser(

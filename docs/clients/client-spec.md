@@ -125,6 +125,12 @@ Offline support is a client concern; the server has no offline mode. The referen
 
 Neither is required by the protocol. A simpler client can just show an error when offline. But the cache-and-queue shape is what makes the app usable on a flaky connection, and it is safe precisely because the server owns the truth.
 
+Two traps come with that shape, both of which the reference client hit in production:
+
+**Bound your unary calls separately from your streams.** They want opposite timeouts. A stream's between-bytes window has to exceed the server's stream `IdleTimeout` (60s), or the transport dies during a thinking model's quiet stretch before the server emits `Terminal`, the materialized row never reaches the client, and the assistant turn looks like it vanished. A unary call wants the opposite: if one long window covers both, an unreachable host pins every list and get for the full duration with no error, and the app appears to hang. The reference client builds two transports over one config, at 30s and 600s, and routes services by whether they expose a stream.
+
+**A cache fallback that swallows transport errors must not also swallow the offline signal.** Serving cached data on failure means the caller sees success, so any UI keyed on an error state will never fire, and any UI keyed on "still loading" will never stop. Surface reachability separately (the reference client polls a cheap unauthenticated endpoint) and let views say "showing cached data" rather than silently presenting stale content as live. Make sure the empty cache case is handled too, since that path renders neither an error nor a spinner and will otherwise show a blank pane forever.
+
 ## Multi-account
 
 The protocol has no notion of multiple accounts; each account is just a (server URL, session token) pair. A client that supports several should keep them isolated: a separate token store, cache, and outbound queue per account, switchable without re-login. The reference client keeps one in-memory app model per account and switches between them instantly.

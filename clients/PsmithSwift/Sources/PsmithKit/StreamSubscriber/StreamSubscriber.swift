@@ -391,7 +391,14 @@ public final class StreamSubscriber: Sendable {
         if let conversationID, !conversationID.isEmpty {
             req.conversationID = conversationID
         }
-        let resp = await client.listActiveRuns(request: req, headers: [:])
+        // Unary call riding the STREAMING transport (600s between-bytes
+        // window, sized for SubscribeStream). `bootstrap()` awaits this
+        // during the adopt sweep, so an unreachable host would leave that
+        // task hanging for ten minutes. Bound it here instead.
+        let frozenReq = req
+        let resp = try await withRPCTimeout(seconds: 10) { [client] in
+            await client.listActiveRuns(request: frozenReq, headers: [:])
+        }
         guard let msg = resp.message else {
             throw resp.error.map(PsmithError.from) ?? PsmithError.missingPayload("list active runs")
         }

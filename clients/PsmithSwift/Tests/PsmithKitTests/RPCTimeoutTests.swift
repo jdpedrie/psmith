@@ -41,4 +41,20 @@ struct RPCTimeoutTests {
             Issue.record("unexpected error: \(error)")
         }
     }
+
+    @Test("transport timeouts keep both failure modes out of reach")
+    func transportTimeoutInvariants() {
+        // Streaming must outlast the server's idle timer, or URLSession
+        // tears down a thinking model's quiet stream before Terminal
+        // arrives and the assistant turn vanishes client-side.
+        #expect(RPCTimeouts.streamingRequest > RPCTimeouts.serverStreamIdleTimeout)
+
+        // Unary must NOT inherit that window. It did, which is why an
+        // unreachable host pinned every list/get for ten minutes with
+        // no error surfaced ("spins forever"). Keep it an order of
+        // magnitude tighter, and bound the whole transfer too.
+        #expect(RPCTimeouts.unaryRequest < RPCTimeouts.streamingRequest / 10)
+        #expect(RPCTimeouts.unaryResource <= RPCTimeouts.streamingRequest / 5)
+        #expect(RPCTimeouts.unaryRequest <= RPCTimeouts.unaryResource)
+    }
 }

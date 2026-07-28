@@ -60,9 +60,10 @@ enum SnapshotEnvironment {
         searchQuery: String = "",
         navMode: AppMode = .chats,
         composing: Bool = false,
-        windowMode: WindowState.Mode = .normal
+        windowMode: WindowState.Mode = .normal,
+        connectivityState: ConnectivityMonitor.State = .unknown
     ) -> (app: AppModel, convos: ConversationsModel, navigator: Navigator, windowState: WindowState) {
-        let app = SnapshotStubs.makeAppModel(profiles: profiles)
+        let app = SnapshotStubs.makeAppModel(profiles: profiles, connectivityState: connectivityState)
         let convos = SnapshotStubs.makeConversationsModel(
             client: app.client,
             conversations: conversations,

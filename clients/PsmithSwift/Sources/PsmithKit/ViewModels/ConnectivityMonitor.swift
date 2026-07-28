@@ -55,12 +55,19 @@ public final class ConnectivityMonitor {
     /// stop() and reset on `init`.
     private var queueObserver: NSObjectProtocol?
 
+    /// `initialState` seeds `state` before the first probe lands.
+    /// Production always leaves it `.unknown` (nothing is known until
+    /// a probe completes); it exists so offline UI can be rendered
+    /// deterministically without a network, which is the only way the
+    /// snapshot suite can pin the offline banner.
     public init(
         host: URL,
         queue: OutboundQueue? = nil,
         pollInterval: TimeInterval = 15,
-        probeTimeout: TimeInterval = 3
+        probeTimeout: TimeInterval = 3,
+        initialState: State = .unknown
     ) {
+        self.state = initialState
         self.host = host
         self.queue = queue
         self.steadyInterval = pollInterval

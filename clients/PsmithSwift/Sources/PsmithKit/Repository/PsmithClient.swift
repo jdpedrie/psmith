@@ -30,71 +30,109 @@ public final class PsmithClient: Sendable {
             codec: ProtoCodec(),
             interceptors: [.init { _ in interceptor }]
         )
-        // URLSession defaults to a 60s `timeoutIntervalForRequest` that
-        // governs "max time between bytes" for any request — including
-        // server-streaming SubscribeStream calls. A reasoning model
-        // that goes silent for ~60s while it thinks would otherwise
-        // race against the server-side idle timeout (also 60s):
-        // sometimes URLSession wins, the iOS subscriber gets a
-        // transport error before the server's Terminal event arrives,
-        // and the materialised row appears in the DB without iOS ever
-        // reloading the chain — the assistant turn "disappears."
+        // TWO transports, because unary and streaming want opposite
+        // timeouts and one URLSession can't serve both.
         //
-        // Bump the per-request timeout well above the server's
-        // IdleTimeout so the server's own timer reliably terminates
-        // the stream first and emits a clean Terminal event. The
-        // resource timeout keeps the URLSession default (~7 days), so
-        // a runaway stream can't leak forever.
-        let urlConfig = URLSessionConfiguration.default
-        urlConfig.timeoutIntervalForRequest = 600
-        let protocolClient = ProtocolClient(
-            httpClient: URLSessionHTTPClient(configuration: urlConfig),
+        // Streaming: `timeoutIntervalForRequest` governs "max time
+        // between bytes". A reasoning model that goes silent for ~60s
+        // while it thinks would race the server-side idle timeout
+        // (also 60s): sometimes URLSession wins, the subscriber gets a
+        // transport error before the server's Terminal event arrives,
+        // and the materialised row lands in the DB without the client
+        // ever reloading the chain — the assistant turn "disappears."
+        // So the stream transport sits well above the server's
+        // IdleTimeout, letting the server's own timer terminate first
+        // and emit a clean Terminal.
+        //
+        // Unary: that same 600s applied to every list/get, which meant
+        // an unreachable host pinned the launch path for ten minutes
+        // per call with no error and no way for the UI to give up
+        // (user-reported: "server unreachable just spins forever").
+        // Unary calls are request/response, so a bound in the tens of
+        // seconds is generous — the slowest are server-side model work
+        // (GenerateConversationTitle, speech synthesis), not transfers.
+        // This is the systemic bound; the per-call `withRPCTimeout`
+        // wrappers on the launch-critical path are tighter still.
+        let unaryConfig = URLSessionConfiguration.default
+        unaryConfig.timeoutIntervalForRequest = RPCTimeouts.unaryRequest
+        unaryConfig.timeoutIntervalForResource = RPCTimeouts.unaryResource
+        let unaryClient = ProtocolClient(
+            httpClient: URLSessionHTTPClient(configuration: unaryConfig),
+            config: config
+        )
+
+        let streamConfig = URLSessionConfiguration.default
+        streamConfig.timeoutIntervalForRequest = RPCTimeouts.streamingRequest
+        let streamingClient = ProtocolClient(
+            httpClient: URLSessionHTTPClient(configuration: streamConfig),
             config: config
         )
         self.cache = cache
         self.auth = AuthRepository(
-            client: Psmith_V1_AuthServiceClient(client: protocolClient),
+            client: Psmith_V1_AuthServiceClient(client: unaryClient),
             tokenStore: tokenStore,
             authState: authState,
             cache: cache
         )
         self.conversations = ConversationsRepository(
-            client: Psmith_V1_ConversationsServiceClient(client: protocolClient),
+            client: Psmith_V1_ConversationsServiceClient(client: unaryClient),
             cache: cache
         )
         self.profiles = ProfilesRepository(
-            client: Psmith_V1_ProfilesServiceClient(client: protocolClient),
+            client: Psmith_V1_ProfilesServiceClient(client: unaryClient),
             cache: cache
         )
         self.streams = StreamSubscriber(
-            client: Psmith_V1_StreamsServiceClient(client: protocolClient)
+            client: Psmith_V1_StreamsServiceClient(client: streamingClient)
         )
         self.modelProviders = ModelProvidersRepository(
-            client: Psmith_V1_ModelProvidersServiceClient(client: protocolClient),
+            client: Psmith_V1_ModelProvidersServiceClient(client: unaryClient),
             cache: cache
         )
         self.files = FilesRepository(
-            client: Psmith_V1_FilesServiceClient(client: protocolClient),
+            client: Psmith_V1_FilesServiceClient(client: streamingClient),
             host: host
         )
         self.langfuse = LangfuseRepository(
-            client: Psmith_V1_LangfuseServiceClient(client: protocolClient)
+            client: Psmith_V1_LangfuseServiceClient(client: unaryClient)
         )
         self.embedder = EmbedderRepository(
-            client: Psmith_V1_EmbedderServiceClient(client: protocolClient)
+            client: Psmith_V1_EmbedderServiceClient(client: unaryClient)
         )
         self.deviceTools = DeviceToolsRepository(
-            client: Psmith_V1_DeviceToolsServiceClient(client: protocolClient),
+            client: Psmith_V1_DeviceToolsServiceClient(client: unaryClient),
             host: host,
             tokenStore: tokenStore
         )
         self.events = EventsSubscriber(
-            client: Psmith_V1_EventsServiceClient(client: protocolClient)
+            client: Psmith_V1_EventsServiceClient(client: streamingClient)
         )
         self.speech = SpeechRepository(
-            client: Psmith_V1_SpeechServiceClient(client: protocolClient),
+            client: Psmith_V1_SpeechServiceClient(client: unaryClient),
             host: host,
             tokenStore: tokenStore
         )
     }
+}
+
+/// Transport timeouts, named so the invariants between them are
+/// testable. Both numbers come from a production failure:
+///
+///   - `streamingRequest` must stay ABOVE the server's stream
+///     IdleTimeout (60s). Below it, URLSession kills a thinking
+///     model's quiet stream before the server emits Terminal, the
+///     materialised row never reaches the client, and the assistant
+///     turn appears to vanish.
+///   - `unaryRequest` must stay FAR BELOW it. Sharing the streaming
+///     value meant an unreachable host pinned each list/get for ten
+///     minutes with no error, which read to the user as an app that
+///     spins forever.
+enum RPCTimeouts {
+    static let unaryRequest: TimeInterval = 30
+    static let unaryResource: TimeInterval = 60
+    static let streamingRequest: TimeInterval = 600
+    /// The server-side stream idle timeout these are sized against
+    /// (`internal/stream`). Mirrored here so the test can assert the
+    /// relationship rather than a bare magic number.
+    static let serverStreamIdleTimeout: TimeInterval = 60
 }

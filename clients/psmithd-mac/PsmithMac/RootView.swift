@@ -22,6 +22,16 @@ struct RootView: View {
     /// keeps the same instance across the whole authed session.
     @State private var convos: ConversationsModel?
 
+    /// Deadline for the pre-home splash. The splash exists only to
+    /// stop OnboardingView flashing before the first provider list
+    /// lands, which is a cosmetic concern — so it must never outlive
+    /// a slow or unreachable server. Without this the gate below waits
+    /// on `providers.hasLoadedOnce`, and an unroutable host held the
+    /// entire window on a spinner with no error and no way out
+    /// (user-reported). After this fires the real UI renders and the
+    /// offline banner explains the empty list.
+    @State private var splashExpired = false
+
     var body: some View {
         switch app.authState.phase {
         case .resolving:
@@ -62,11 +72,17 @@ struct RootView: View {
         // without this, OnboardingView flashes briefly on every
         // cold start because `providers.providers` is empty until
         // the first list completes.
-        if !app.providers.hasLoadedOnce || convos == nil {
+        if (!app.providers.hasLoadedOnce || convos == nil) && !splashExpired {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task {
+                    // Independent of the loads below: whatever they do,
+                    // the window stops being a spinner after this.
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        splashExpired = true
+                    }
                     if convos == nil {
                         let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
                         // Server-push conversation events drive the
