@@ -23,10 +23,13 @@ Every plugin implements the base `Plugin` interface (a name and not much else). 
 - **ChunkTransformer** — processes the live chunk stream inside the supervisor. Returns a fresh `InboundProcessor` per stream so per-stream state stays isolated; the processor can buffer and emit zero or more chunks per input and flush residue on close.
 - **DisplayTransformer** — rewrites stored content for display at fetch time. Non-persistent and position-independent: same input, same output.
 - **AssistantContentTransformer** — rewrites the assistant's finalized text before the row is inserted, so the persisted bytes are the post-transform output forever.
+- **TurnContextInjector** — contributes a block of live state for the turn about to be generated. Alone among the prompt-shaping interfaces it receives conversation identity, so a plugin can scope what it injects to the specific branch being continued. Two properties are load-bearing. It is never persisted, because MessageEnvelope output is recomposed into every future prefix and a per-turn state block written that way would accumulate one copy per turn forever. And it lands at the head rather than the system slot: Anthropic's cache breakpoint sits at the end of the last assistant turn, so anything before it must stay byte-identical to stay cached. Changing state in the system slot would invalidate the whole cached prefix every turn, which on turn forty means re-reading the entire transcript at full price. Injected after the breakpoint, only the block itself is uncached.
 - **ContentRenderer** — turns display content into a structured list of content parts the client renders with native UI instead of plain markdown. Runs after DisplayTransformer and chains: each renderer sees the previous one's parts.
 - **StreamingTagProvider** — declares tags the client should treat specially while streaming.
 - **MessageLifecycleHook** — runs at message lifecycle points.
 - **ToolProvider** — declares tools and executes them. Implementing it makes the profile require the `tool_use` model capability. See [tools.md](tools.md).
+- **PendingStateProvider** — hands the runtime state to bind to the assistant message once it exists. Forced by ordering: a tool runs mid-generation, before there is any assistant row to key state to, so the plugin holds its result on the per-send instance and the runtime collects it at materialization.
+- **DeviceFactRequester** — declares which on-device facts (timezone, locale, platform, location) the client should gather before each send. A fact no plugin requests is a permission the user is never prompted for, so the list stays short.
 - **CapabilityRequirer** — declares model capabilities the plugin needs, so a send against an incapable model is rejected before it starts.
 
 The split keeps plugins small. A plugin that only injects a system prompt implements one interface; a plugin that does five things implements five. The framework runs each capability only at the point in the turn where it belongs.
@@ -35,13 +38,14 @@ The split keeps plugins small. A plugin that only injects a system prompt implem
 
 A turn touches the pipeline at several points, and each capability has exactly one of them:
 
-- **Prefix build** (history builder): SystemPrompter contributions and HistoryTransformer rewrites. This is the only place these two run. See [history-builder.md](history-builder.md).
+- **Prefix build** (history builder): SystemPrompter contributions, HistoryTransformer rewrites, and TurnContextInjector blocks. This is the only place these run. See [history-builder.md](history-builder.md).
 - **Outgoing user message**: MessageEnvelope, rendered before persist; composed onto the wire at prefix build.
 - **Live stream** (supervisor): ChunkTransformer processors, transforming chunks as they flow.
 - **Assistant finalize**: AssistantContentTransformer, before the assistant row is written.
 - **Tool dispatch**: ToolProvider execution, inside the tool loop.
 - **Fetch / display**: DisplayTransformer then ContentRenderer, when messages are read back.
 - **Lifecycle points**: MessageLifecycleHook.
+- **Before the send leaves the client**: DeviceFactRequester, which is the client's cue for what to gather.
 - **Assistant materialization**: PendingStateProvider. A tool runs mid-generation, before any assistant row exists to key state to, so a stateful plugin holds its result on the per-send instance and the runtime collects it once the message id is known. Unlike MessageLifecycleHook this runs synchronously, so the state lands before the run closes.
 
 The pipeline is the same ordered list everywhere; each stage just invokes the plugins that implement the relevant interface, in pipeline order.

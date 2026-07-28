@@ -265,64 +265,11 @@ Deferred:
 
 ## Plugin hook ideas
 
-Captured after surveying the existing `plugins.Plugin` surface (`Configurable`, `SystemPrompter`, `MessageEnvelope`, `HistoryTransformer`, `ChunkTransformer`, `DisplayTransformer`, `AssistantContentTransformer`, `ToolProvider`, `MessageLifecycleHook`).
+Captured after surveying the `pluginapi` capability set. Two entries that lived here as designs have since shipped; both are documented in [design/plugins.md](design/plugins.md), and where the shipped shape diverged from the sketch it is worth knowing why.
 
-### Worth designing now
+**`PreSendContextInjector` shipped as `TurnContextInjector`.** The sketch returned `[]providers.WireMessage` spliced in before the user turn. The shipped shape returns one text block and takes a `TurnInfo` carrying conversation, context and leaf-message ids, which is what makes injection fork-aware. Two things the sketch had not worked out: the block must land at the head rather than the system slot, or it invalidates Anthropic's cached prefix every turn, and the injector needs the same host-capability decoration tool dispatch gets, or a stateful injector has no way to read anything.
 
-- **`PreSendContextInjector`** — non-persisted, per-turn injection of synthetic wire messages BEFORE the user turn. Distinct from `SystemPrompter` (static, persisted across turns) and `OutgoingUserTransformer` (mutates the user row that gets persisted). Returns zero or more `providers.WireMessage` values that splice into the wire prefix only for this turn. Unblocks the RAG/memory family: vector-search prior conversations and inject top-K snippets; pull recent calendar/email; inject project-scoped docs; auto-search on trigger keywords. Without this, RAG plugins either pollute the persisted user message (bust the prefix cache every turn — `basic_grounding`'s reason for being) or jam everything into the system slot (useless when relevant docs change per-turn).
-  ```go
-  type PreSendContextInjector interface {
-      // Empty slice = no contribution this turn.
-      InjectPreSend(userContent string) []providers.WireMessage
-  }
-  ```
-
-- **`ContentRenderer` (server-driven UI fragments)** — generalises the display path from text-rewrites into structured rendering. Today the chain is `string → DisplayTransformer chain → string` and the Mac client renders the result as Markdown. New shape: `string → DisplayTransformer chain → string → ContentRenderer chain → []ContentPart`, where each part is either literal text or a typed `UIFragment` the client renders with a native SwiftUI view. The whole point is that this is **NOT tool-specific** — any plugin can opt in. `lettered_choices` is the immediate motivating case: it strips delimiters today, but the choices block could be a tappable card-list of options instead of a markdown bullet list. `brave_search` would render its tool result as cards. A future "mermaid" plugin would substitute fenced ```mermaid blocks with rendered SVG.
-
-  ```go
-  type ContentRenderer interface {
-      // Walks the (possibly already-display-transformed) string and
-      // returns an ordered mix of literal text spans and structured
-      // UI fragments. Plugins downstream in the pipeline operate on
-      // the parts list, free to split/replace any text part. A
-      // returned single-text-part = pass-through.
-      RenderContent(content string, role MessageRole) []ContentPart
-  }
-
-  type ContentPart struct {
-      // Exactly one of Text or Fragment is set.
-      Text     string
-      Fragment *UIFragment
-  }
-
-  type UIFragment struct {
-      Component string          // "card_list" | "choice_list" | "key_value" | ...
-      Props     json.RawMessage // schema per Component, validated client-side
-      // Optional: stable id so the client can preserve view-state
-      // (selection, expand, scroll position) across re-renders.
-      Key string
-  }
-  ```
-
-  Initial component set scoped to what we'd actually use:
-  - **`card_list`** — `[{title, description, url?, image?, badges?}]` — Brave Search and any future search plugin.
-  - **`choice_list`** — `[{label, value}]` plus an `action` template (`compose:{value}` to drop the choice into the composer, or `tool:foo?bar={value}` to fire a tool). `lettered_choices` ships this on day one.
-  - **`key_value`** — `[{key, value}]` definition-list — for "stat-style" plugins (weather, status).
-  - **`image`** / **`image_grid`** — `[{url, alt?, caption?}]` — plugins that return media.
-  - **`error`** — `{message, code?, retry?: action}` — typed error rendering.
-  - **`raw_json`** — explicit fallback the existing JSON pretty-print path migrates to.
-
-  Each component lives as a SwiftUI view in `clients/psmithd-mac/PsmithMac/PluginRenderers/`; plugins are pure-Go authors describing structure, not native code. The same proto fragment ships to a future iOS/web client and they render their own component set. **Behaviour** rides on declarative `action` strings on interactive components: `compose:{text}`, `tool:{name}?{key}={value}`, `external:{https://…}` (with the link-safety prompt), `nav:conversation:{id}`. Anything beyond that is a signal the action set should grow, NOT that we should ship a JS sandbox.
-
-  Wire shape: a new `Message.ui_fragments []UIFragment` proto field (per message, ordered, may be empty); persisted alongside content. Server runs ContentRenderer pipeline at materialisation (assistant turns) AND at fetch (read-time, so old messages benefit when a renderer plugin is added later — the fragments are derived, not stored, so re-deriving on read is correct).
-
-  Open design questions worth chewing on before starting:
-  - Read-time vs write-time rendering. Read-time means the same content adapts as the active pipeline changes; write-time freezes the rendering. Read-time is more flexible but adds work to every fetch.
-  - Span replacement vs whole-content replacement. The `[]ContentPart` model lets one plugin replace just a substring while another renders the surrounding text. Worth it for composability (e.g. a `citations` plugin co-existing with `mermaid`); cost is a trickier API shape than "give me one fragment."
-  - DisplayTransformer migration path. They're a strict subset of ContentRenderer (single text part out). Either keep both interfaces and document overlap, or deprecate DisplayTransformer in favor of ContentRenderer-emitting-text. Lean toward keeping both — DisplayTransformer is simpler when you only need a regex strip, and there's no reason to force every plugin to learn the parts model.
-
-`ContentRenderer` is the bigger piece (proto change, Swift component scaffolding, action-dispatch wiring) — worth deferring until at least one plugin's needs (`lettered_choices`'s choice cards is the clearest candidate) drives the schema. `PreSendContextInjector` once a concrete RAG/memory plugin pulls on it.
-
+**`ContentRenderer` shipped roughly as sketched**, including the `Message.ui_fragments` wire field and the initial component set. Two of the three open questions resolved differently than the sketch guessed. Rendering is read-time only (`server/conversations/convert.go`), not read-time plus materialization, so adding a renderer plugin retroactively improves old messages and nothing is frozen at write. And the components live in `PsmithUI` rather than the Mac target, so iOS and Mac share them. The third resolved as predicted: DisplayTransformer stays alongside ContentRenderer rather than being deprecated, because a regex strip should not have to learn the parts model.
 
 - **Profile lookups beyond the loaded pages** (`PsmithKit` ConversationsModel/ProfilesViewModel) — clients page profiles at 100/page, and chain-name/grouping lookups only see loaded pages. Under 100 profiles (everyone today) behavior is identical to pre-paging; above that, conversation rows for profiles on unloaded pages fall back to their placeholder until the profiles list is scrolled. Revisit with a by-id profile hydration if it ever bites.
 
