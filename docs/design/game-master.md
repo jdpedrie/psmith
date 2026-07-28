@@ -38,12 +38,12 @@ major stakes") and the engine turns those tags into numbers from authored
 tables.
 
 That is also why rebalancing a campaign that plays too soft is an edit to
-one table in `plugins/gamemaster/engine.go` rather than a
+one table in `plugins/game_master/engine/engine.go` rather than a
 prompt-tuning session.
 
 ## Where the numbers come from
 
-`plugins/gamemaster/` is pure Go with no dependencies on the rest of
+`plugins/game_master/engine/` is pure Go with no dependencies on the rest of
 the app, so all of it is unit-testable without a database.
 
 **Stats split in two.** Resources are spent and accumulated and run to

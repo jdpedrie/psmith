@@ -2303,11 +2303,9 @@ func purposeToProto(p string) psmithv1.StreamRunPurpose {
 // Plugin pipeline resolution
 // ---------------------------------------------------------------------------
 
-// resolvePluginPipeline walks the profile parent chain looking for the first
-// profile with non-empty profile_plugins rows; returns that profile's
-// pipeline. If no profile in the chain has any plugins, returns nil. The
-// architecture's "all-or-nothing" inheritance: a child with any plugin rows
-// overrides its parent's pipeline entirely.
+// resolvePluginPipeline merges profile_plugins rows across the profile parent
+// chain into one pipeline, per plugin rather than per profile. Returns nil if
+// no profile in the chain has any plugins. Merge rules are spelled out below.
 //
 // Per-plugin user-scoped global settings (`Global=true` ConfigField rows
 // stored in user_plugin_settings) are merged INTO the profile-level

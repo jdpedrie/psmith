@@ -124,7 +124,7 @@ and waits for the tag/component machinery to drive it.
 
 ## The driver interface
 
-`internal/speech`, mirroring `internal/embeddings`:
+`server/speech`, mirroring `server/embeddings`:
 
 ```go
 type Synthesizer interface {
@@ -148,7 +148,7 @@ of listening), which we accept. Revisit opus only if that ever bites.
 
 ## Segmentation and normalization
 
-One shared segmenter in `internal/speech`: split on sentence
+One shared segmenter in `server/speech`: split on sentence
 terminators and paragraph breaks, minimum ~40 chars per segment,
 force-flush on markdown block boundaries and at end of input.
 
@@ -230,7 +230,7 @@ artifact class buy nothing over re-synthesis at these prices.
 
 ## Phasing
 
-1. **v1 — read-aloud (built):** `internal/speech` package + segmenter
+1. **v1 — read-aloud (built):** `server/speech` package + segmenter
    + normalizer, `grok` + `openai-compatible` drivers,
    `user_tts_config` + SpeechService RPCs, `POST /tts` endpoint, iOS
    speaker action with both paths, `apple_local` default. Tests at

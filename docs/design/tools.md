@@ -6,7 +6,7 @@ This document covers the tool loop, how tools are collected and gated, device to
 
 ## The tool loop
 
-The loop lives in `internal/conversations/tool_loop.go`. It is a decorator around the provider's `Send` function. `SendMessage` builds the wire request, collects the active pipeline's tools into `SendRequest.Tools`, and if that list is non-empty wraps the driver's `Send` in the tool loop before handing it to the stream supervisor. If no plugin contributed a tool, there is no wrapping and the send is a plain pass-through. The supervisor never knows tools exist. From its point of view it consumes one chunk stream and materializes one assistant message.
+The loop lives in `server/conversations/tool_loop.go`. It is a decorator around the provider's `Send` function. `SendMessage` builds the wire request, collects the active pipeline's tools into `SendRequest.Tools`, and if that list is non-empty wraps the driver's `Send` in the tool loop before handing it to the stream supervisor. If no plugin contributed a tool, there is no wrapping and the send is a plain pass-through. The supervisor never knows tools exist. From its point of view it consumes one chunk stream and materializes one assistant message.
 
 A single iteration:
 
@@ -41,7 +41,7 @@ Device tools run on the user's device, not the server. Calendar, Reminders, Heal
 
 ### The broker
 
-`internal/devicetools/broker.go`. One broker for the process lifetime. `Invoke` registers a pending call keyed by a fresh UUID with a one-slot response channel, emits a `device_tool_use` chunk describing the call, and blocks on the response channel or a timeout. The default timeout is 60 seconds, larger than elicitation's because some device work (a vault search) is slow. `Respond` matches the UUID, checks the conversation matches, deletes the entry (so a second response is a no-op), and delivers the result. The broker is in memory, so an in-flight call is lost on a server restart and a late response returns not-found.
+`server/devicetools/broker.go`. One broker for the process lifetime. `Invoke` registers a pending call keyed by a fresh UUID with a one-slot response channel, emits a `device_tool_use` chunk describing the call, and blocks on the response channel or a timeout. The default timeout is 60 seconds, larger than elicitation's because some device work (a vault search) is slow. `Respond` matches the UUID, checks the conversation matches, deletes the entry (so a second response is a no-op), and delivers the result. The broker is in memory, so an in-flight call is lost on a server restart and a late response returns not-found.
 
 ### The capability handshake
 
@@ -57,7 +57,7 @@ Every completed device-tool call writes a row to `device_tool_calls`: the tool n
 
 ### The catalog
 
-`internal/devicetools/catalog.go` is a hand-curated list in Go, so adding a tool is a server release, not a client release. Each entry carries a JSON Schema, a category, the OS permission it needs, and a default-enabled flag. The default rule is that read-only tools default on and mutating tools default off, so a fresh profile never grants the model write access without the user flipping a toggle. The shipped catalog: Calendar (`calendar_list_events` on by default; `calendar_create_event`, `calendar_update_event`, `calendar_delete_event` off), Reminders (`reminders_list` on; `reminders_create`, `reminders_complete` off), and Health (`health_today_summary`, `health_recent_workouts`, `health_sleep_last_night`, `health_vitals_recent`, `health_query`, all read-only and on by default). Obsidian is deliberately not in this catalog; it is its own plugin with its own catalog, sharing only the broker and wire mechanism.
+`server/devicetools/catalog.go` is a hand-curated list in Go, so adding a tool is a server release, not a client release. Each entry carries a JSON Schema, a category, the OS permission it needs, and a default-enabled flag. The default rule is that read-only tools default on and mutating tools default off, so a fresh profile never grants the model write access without the user flipping a toggle. The shipped catalog: Calendar (`calendar_list_events` on by default; `calendar_create_event`, `calendar_update_event`, `calendar_delete_event` off), Reminders (`reminders_list` on; `reminders_create`, `reminders_complete` off), and Health (`health_today_summary`, `health_recent_workouts`, `health_sleep_last_night`, `health_vitals_recent`, `health_query`, all read-only and on by default). Obsidian is deliberately not in this catalog; it is its own plugin with its own catalog, sharing only the broker and wire mechanism.
 
 ## Elicitation
 

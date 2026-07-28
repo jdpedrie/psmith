@@ -12,7 +12,7 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### Architecture-flagship features not yet built
 
-- **Stateful harness drivers (Claude Code, Codex, pi.dev)** — entirely missing. Two parts: (a) per-harness Layer-1 implementations (subprocess management, NDJSON event parsing, session lifecycle), (b) Layer-2 abstraction + the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class; was a stated original motivator (mixing cloud APIs with local agentic CLIs). The `StatefulProvider` interface exists (`internal/providers/providers.go`) but has no implementation and no `SendMessage` code path; see the stateless-vs-stateful section of [design/providers.md](design/providers.md).
+- **Stateful harness drivers (Claude Code, Codex, pi.dev)** — entirely missing. Two parts: (a) per-harness Layer-1 implementations (subprocess management, NDJSON event parsing, session lifecycle), (b) Layer-2 abstraction + the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class; was a stated original motivator (mixing cloud APIs with local agentic CLIs). The `StatefulProvider` interface exists (`server/providers/providers.go`) but has no implementation and no `SendMessage` code path; see the stateless-vs-stateful section of [design/providers.md](design/providers.md).
 
 ### Nice-to-have
 
@@ -31,13 +31,13 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### Drivers
 
-- **`internal/providers/anthropic` `citations_delta`** — silently dropped because no normalized chunk type exists for it yet. Narrow (only fires when Anthropic citations are attached); add a chunk slot when a use case lands.
+- **`server/providers/anthropic` `citations_delta`** — silently dropped because no normalized chunk type exists for it yet. Narrow (only fires when Anthropic citations are attached); add a chunk slot when a use case lands.
 
-- **`internal/providers/openai` cross-shape thinking round-trip** — the persisted thinking shape only round-trips cleanly when it matches the Responses-API `ResponseReasoningItem`. Cross-shape thinking (e.g. assistant turn produced by Anthropic, then sent through OpenAI) is silently omitted on the way back in.
+- **`server/providers/openai` cross-shape thinking round-trip** — the persisted thinking shape only round-trips cleanly when it matches the Responses-API `ResponseReasoningItem`. Cross-shape thinking (e.g. assistant turn produced by Anthropic, then sent through OpenAI) is silently omitted on the way back in.
 
 ### History builder
 
-- **`internal/history`** — cross-provider thinking is **omitted entirely** when destination ≠ producer. The architecture doc's "Thinking handling" section spec'd "render to plain text and inject into content" for this case. Deferred until tool use lands so we don't have to redo it. Code comment in `history.go` references this.
+- **`server/history`** — cross-provider thinking is **omitted entirely** when destination ≠ producer. The architecture doc's "Thinking handling" section spec'd "render to plain text and inject into content" for this case. Deferred until tool use lands so we don't have to redo it. Code comment in `history.go` references this.
 
 ### Conversations / SendMessage
 
@@ -55,11 +55,12 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 Recorded here for grep-ability; the canonical discussion lives in the relevant design docs under [design/](README.md#design):
 
 - **Resource sharing model** — v1 is per-user-only. Add `visibility = {private, shared}` on `user_model_providers` when a second user actually exists.
-- **Encryption Tier B** — per-user keys derived from the password (envelope wrapping). Tier A (column at rest via `internal/crypto`) is shipped on `user_model_providers.config_encrypted` and `user_langfuse_config.secret_key_encrypted`; Tier B is the next step if the threat model grows past "operator with logical DB access shouldn't see plaintext."
+- **Encryption Tier B** — per-user keys derived from the password (envelope wrapping). Tier A (column at rest via `server/crypto`) is shipped on `user_model_providers.config_encrypted` and `user_langfuse_config.secret_key_encrypted`; Tier B is the next step if the threat model grows past "operator with logical DB access shouldn't see plaintext."
+- **Dynamic plugins** — the reason `pluginapi` and `pluginapi/host` were split out of `plugins` and each plugin got its own package. The intended shape is activate-by-config with hot-swap into a running server, plus a core-versus-optional split (mcp and basic_grounding always on, the rest opt-in). `plugins/all` is a blank-import placeholder that preserves compile-time registration until then, and the registry is still a package global; making it an instance is probably right for per-user plugins but is the same conversation. `hashicorp/go-plugin` is the obvious candidate and is not in `go.mod`; adding it pulls grpc-go, which would be this repo's first (everything speaks connectrpc today), so it is worth deciding deliberately. The closest existing precedent is `plugins/mcp`, which already spawns subprocesses and speaks newline-delimited JSON-RPC behind a transport interface, so the process-supervision and transport-abstraction shapes exist.
 
 ---
 
-## MCP server (v1 shipped — `internal/mcpserver`)
+## MCP server (v1 shipped — `server/mcpserver`)
 
 Exposes a curated subset of the Connect RPCs as MCP tools at `/mcp`,
 served over Streamable HTTP, JSON-only responses. Bearer-token auth
@@ -90,18 +91,18 @@ Deferred:
   `update_user_model` (settings clears) etc. all need elicitation
   gating before exposure. Defer until elicitation lands.
 
-## Elicitation (inproc shipped — `internal/elicit` + the broker)
+## Elicitation (inproc shipped — `server/elicit` + the broker)
 
 MCP elicitation lets a server tool request additional input from the
 user mid-call without that input ever entering LLM context. Psmith
 ships the inproc-transport flavour today:
 
-* `internal/elicit` holds the protocol types (`Request`, `Response`,
+* `server/elicit` holds the protocol types (`Request`, `Response`,
   `Client` interface, ctx helpers). Lives in its own package so both
   `mcpserver` (publishes the `ctx.Elicit` hook to tool fns) and
   `server/conversations` (provides the broker implementation) can
   import without creating a cycle.
-* `internal/conversations.elicitBroker` routes responses: tools
+* `server/conversations.elicitBroker` routes responses: tools
   block on a channel; the user-facing endpoint writes into it. 5-minute
   timeout per request.
 * `providers.ChunkElicit` is the new stream chunk type the tool loop
@@ -146,7 +147,7 @@ opens render statically.
 
 Seed file format extended with YAML-style frontmatter so a single
 `.md` template can carry both `welcome_message` and the system
-message body. Tiny custom parser (`internal/profiles/seed_format.go`,
+message body. Tiny custom parser (`server/profiles/seed_format.go`,
 ~30 LOC) handles single-line scalars and `|` block scalars — enough
 for the current use case without pulling in yaml.v3. New seed
 templates inherit through the backfill path that already runs on
@@ -173,7 +174,7 @@ Two seeded profiles materialize on first login (Personal Assistant +
 Psmith Manager). Backed by `users.system_profiles_seeded`; idempotent;
 the user can edit, rename, or delete them like any other profile —
 deleted ones don't resurrect on next login. Templates live in
-`internal/profiles/seeds/*.md`.
+`server/profiles/seeds/*.md`.
 
 Plugin model-capability requirements: `plugins.CapabilityRequirer`
 declares what a plugin needs from the conversation's model
@@ -212,22 +213,22 @@ Deferred:
 - **`PSMITH_CATALOG_REFRESH_INTERVAL` smoke-tested only at "0" (disabled).** Periodic refresh path not exercised in tests.
 - **`ListProviderTypes` `display_name`** — currently humanized via `humanizeName`. Could come from driver metadata if drivers exposed a `DisplayName()` method.
 - **`ListProviderTypes` `config_schema`** — empty bytes for v1; UI hardcodes config forms. JSON Schema generation per-driver is a future ergonomic win.
-- **Unit-tested `internal/store` queries** — no direct tests of the sqlc-generated layer (covered transitively by every service test).
+- **Unit-tested `server/store` queries** — no direct tests of the sqlc-generated layer (covered transitively by every service test).
 - **`messages.raw_content` is dormant** — in the schema since 00001, plumbed through the proto, never written. Superseded by the `message_headers`/`message_trailers` envelope design (00041): content stays the user's words, plugin contributions live beside it. Dropping the column needs a proto-field deprecation pass; not urgent.
 - **Legacy grounding rows** — messages written before 00041 carry the `<grounding>` block inline in `content`; basic_grounding's DisplayTransformer strip stays wired for them (display is clean, but editing such a row still shows the block, and its TTS/embedding text includes it). A one-shot backfill migration (split block out of content into message_headers) would let the strip retire; skipped for now.
-- **Web conversation settings: JSON-oneof call-settings editors not built** (`internal/web/convsettings.go`). The Call settings tab covers the scalar/tri-state knobs (temperature, top_p, max output, top_k, stop sequences, thinking, explicit cache, include-thinking-in-history) plus per-provider scalar extras (Anthropic prompt-cache, OpenAI seed/penalties/parallel-tools, Google candidate count). Skipped: OpenAI `response_format` (text/json-object/json-schema oneof) and `logit_bias`, Anthropic `cache_ttl`, and Google `safety_settings`/`response_schema`. Add these as JSON/structured editors when a user needs them; iOS has them in `CallSettingsForm`.
+- **Web conversation settings: JSON-oneof call-settings editors not built** (`server/web/convsettings.go`). The Call settings tab covers the scalar/tri-state knobs (temperature, top_p, max output, top_k, stop sequences, thinking, explicit cache, include-thinking-in-history) plus per-provider scalar extras (Anthropic prompt-cache, OpenAI seed/penalties/parallel-tools, Google candidate count). Skipped: OpenAI `response_format` (text/json-object/json-schema oneof) and `logit_bias`, Anthropic `cache_ttl`, and Google `safety_settings`/`response_schema`. Add these as JSON/structured editors when a user needs them; iOS has them in `CallSettingsForm`.
 - **`CompressionSummaryCard` still uses `.contextMenu` on iOS** (`PsmithUI/Composite/CompressionSummaryCard.swift`, shared with Mac where it's the right-click menu). Inside the flipped transcript its long-press lift can still render the card upside down for the lift frames — the same portal mechanism `MessageActionMenu` removed for message rows. Rare surface (one card per compaction); migrate to the action menu behind a platform conditional if it bites.
 - **Expanded thinking/tool-call disclosure text keeps `.textSelection(.enabled)`** (`ThinkingDisclosure`/`ToolCallDisclosure`). A long-press that starts inside that text opens the selection menu, not the message action menu — deliberate for now (selection is useful there and the menu is reachable from the message body); revisit if it reads as inconsistent.
 - **Mac sidebar mode pill renders the ACTIVE segment white-on-white in snapshots** (`ConversationListView.modePillRow`). Visible in every committed `ConversationListViewSnapshots` baseline since Jul 21, so it predates the offline work and may be a harness-only artifact rather than a real rendering bug — check against a running app before chasing it.
 - **`ProvidersViewModel.load()` is sequential per provider** — one `get(id:)` per provider, then `loadTemplates()`, all awaited in series. Now bounded (30s unary transport) but a many-provider account on a slow link still serializes; the Mac splash no longer waits on it (3s fallthrough) so it's latency, not a hang. Parallelize with a task group if it ever bites.
 - **95 of 101 repository calls have no per-call timeout.** They're now bounded by the unary transport (30s request / 60s resource, `RPCTimeouts`), which is the systemic fix; the six bespoke `withRPCTimeout` wrappers stay because they're tighter on the launch-critical path. Adding more per-call wrappers is only worth it where 30s is too generous to show a user.
 - **`server/stream` tests flake under concurrent load.** Passes reliably on its own (3/3), but running the full suite — or even just alongside `server/conversations` — fails a *different* test each time (`TestIdleTimeout_FinalizesAsErrored`, `TestCancel_InFlight_MaterializesPartial`, ...), with `closed pool` and `context canceled` errors in the log. These are wall-clock-sensitive stream tests racing pgtestdb pool teardown when many packages share the database concurrently. Pre-existing and unrelated to any one change; it makes `go test ./...` untrustworthy as a green/red signal, which is the real cost. Likely fixes: give the timing tests injectable clocks rather than real sleeps, or serialize the package with `-p 1`.
-- **Game master — remaining durability.** Landed: compaction/manual-context state carry, optimistic concurrency via `expected_state_version`, a one-commit-per-send guard, and ephemeral turn-context injection. Still open: prepared-then-committed transitions with an idempotency key `(plugin_name, conversation_id, tool_call_id)` — needs the tool-call id threaded into dispatch (`internal/conversations/tool_loop.go:221` has `c.ID` but does not pass it) — and a transitions ledger for replay/debugging. Today a tool that mutates state followed by a generation failure leaves the turn bound to no message; the next turn's ancestor walk absorbs it by replaying from the previous snapshot, which is safe but silently loses a turn.
+- **Game master — remaining durability.** Landed: compaction/manual-context state carry, optimistic concurrency via `expected_state_version`, a one-commit-per-send guard, and ephemeral turn-context injection. Still open: prepared-then-committed transitions with an idempotency key `(plugin_name, conversation_id, tool_call_id)` — needs the tool-call id threaded into dispatch (`server/conversations/tool_loop.go:221` has `c.ID` but does not pass it) — and a transitions ledger for replay/debugging. Today a tool that mutates state followed by a generation failure leaves the turn bound to no message; the next turn's ancestor walk absorbs it by replaying from the previous snapshot, which is safe but silently loses a turn.
 - **Game master — remaining depth.** Landed: concurrent clocks and off-menu actions with priced confirmation. Still open: multi-stage situations that branch within themselves, delayed/conditional effects keyed to a state predicate rather than a countdown, policies and projects, factions and characters with loyalty separate from power, turn capacity forcing triage, and soft-failure endings. Presentation still reuses `key_value`/`choice_list`, so odds and clocks ride in label strings; bespoke `game_status`/`game_choices` components would give odds a two-column layout and clocks a progress treatment (one new `*Renderer.swift` plus a case in `FragmentView.bodyFor` — no proto change).
-- **Capability gate ignores conversation-level plugins.** `ResolveRequiredModelCapabilities` takes a profile id, so a plugin attached only via `conversation_plugins` never has its required capabilities enforced. Closing it means threading the conversation through send-time validation (`internal/conversations/service.go:1468`), which is wider than the profile-layering fix that landed with the game work.
+- **Capability gate ignores conversation-level plugins.** `ResolveRequiredModelCapabilities` takes a profile id, so a plugin attached only via `conversation_plugins` never has its required capabilities enforced. Closing it means threading the conversation through send-time validation (`server/conversations/service.go:1468`), which is wider than the profile-layering fix that landed with the game work.
 - **Web model picker has no provider logos.** iOS shows a `ProviderLogo` per group header; the web picker uses the provider label text. Add logo assets if/when we vendor them.
 
-- **Anthropic SDK upgrade for native `ttl` field.** The `AnthropicExtras.cache_ttl` follow-up shipped the 1-hour TTL via the SDK's `metadata.SetExtraFields` escape hatch (anthropic-sdk-go v1.4 doesn't expose `ttl` on the non-beta `CacheControlEphemeralParam` directly — the beta path does). The escape hatch produces the correct wire payload (`"cache_control":{"type":"ephemeral","ttl":"1h"}`), but it's brittle: if the SDK adds a typed `TTL` field in a later release, the marshalling could double-emit or conflict. Drop the `SetExtraFields` call in `internal/providers/anthropic/send.go::applyAutoCacheControl` once the SDK exposes a typed `TTL` field, or alternatively switch the driver to the `betamessage` API (which already has `BetaCacheControlEphemeralTTL`).
+- **Anthropic SDK upgrade for native `ttl` field.** The `AnthropicExtras.cache_ttl` follow-up shipped the 1-hour TTL via the SDK's `metadata.SetExtraFields` escape hatch (anthropic-sdk-go v1.4 doesn't expose `ttl` on the non-beta `CacheControlEphemeralParam` directly — the beta path does). The escape hatch produces the correct wire payload (`"cache_control":{"type":"ephemeral","ttl":"1h"}`), but it's brittle: if the SDK adds a typed `TTL` field in a later release, the marshalling could double-emit or conflict. Drop the `SetExtraFields` call in `server/providers/anthropic/send.go::applyAutoCacheControl` once the SDK exposes a typed `TTL` field, or alternatively switch the driver to the `betamessage` API (which already has `BetaCacheControlEphemeralTTL`).
 
 - **Speech (TTS) — v1 shipped 2026-07-08; deferred pieces** ([design/speech.md](design/speech.md)):
   - **Web read-aloud UI** (Mac shipped 2026-07-10: settings pane, hover speaker, auto-speak). The web needs a cookie-authed `/tts` fetch + MediaSource playback.

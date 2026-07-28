@@ -4,7 +4,7 @@ A provider is how Psmith talks to a model backend. There are three layers to kee
 
 ## Drivers
 
-A driver implements the `Provider` interface in `internal/providers/providers.go`: `Type()`, `Stateful()`, `DiscoverModels()`, and `RenderThinkingToText()`. Each driver lives in its own subpackage and registers itself in `init()` under a type string. Three are shipped:
+A driver implements the `Provider` interface in `server/providers/providers.go`: `Type()`, `Stateful()`, `DiscoverModels()`, and `RenderThinkingToText()`. Each driver lives in its own subpackage and registers itself in `init()` under a type string. Three are shipped:
 
 - **anthropic** — Anthropic Messages API.
 - **openai-compatible** — any OpenAI-shaped backend (OpenAI itself, Azure, OpenRouter, local servers, and so on), covering both Chat Completions and the Responses API.
@@ -28,7 +28,7 @@ For models neither the catalog nor discovery knows — brand-new releases, fine-
 
 ## The model-metadata catalog
 
-`internal/modelmeta` holds a `LiveCatalog` that enriches discovered models with metadata (context window, capabilities, pricing hints) from models.dev. It is lazy: it fetches on first use and caches in memory, with no background ticker and no catalog tables in the database. The snapshot carries a max age (12h): the first lookup past it re-fetches in-line while concurrent callers serve the stale copy, a failed refresh serves stale and backs off five minutes before retrying, and the explicit Refresh RPC still forces a fetch. Without the max age a long-running daemon served its launch-day model list forever, which is how "the new model isn't in discovery" happened. `DiscoverModels` is handed the catalog through `Deps` so a driver can enrich its raw model list with the metadata models.dev knows.
+`server/modelmeta` holds a `LiveCatalog` that enriches discovered models with metadata (context window, capabilities, pricing hints) from models.dev. It is lazy: it fetches on first use and caches in memory, with no background ticker and no catalog tables in the database. The snapshot carries a max age (12h): the first lookup past it re-fetches in-line while concurrent callers serve the stale copy, a failed refresh serves stale and backs off five minutes before retrying, and the explicit Refresh RPC still forces a fetch. Without the max age a long-running daemon served its launch-day model list forever, which is how "the new model isn't in discovery" happened. `DiscoverModels` is handed the catalog through `Deps` so a driver can enrich its raw model list with the metadata models.dev knows.
 
 Separately, `ConstraintsFor(providerType, modelID)` returns hard constraints a model imposes on call settings, resolved by exact match, then model-id prefix, then provider-type default. The shipped case: OpenAI's gpt-5 and o-series models lock temperature at 1.0 and reject an explicit `temperature` or `top_p`. The catalog encodes that as a locked-at constraint, the OpenAI driver omits the sampling parameters for those models, and the client renders the setting as locked rather than as an editable slider. This is why a model can show a fixed setting that the four-layer resolution cannot override.
 

@@ -74,13 +74,14 @@ The full design lives under [`docs/`](docs/README.md), one document per subsyste
 ## Repo layout
 
 ```
-cmd/psmithd/      # server entrypoint
-cmd/psmith/       # operator CLI (install, useradd, genkey)
+cmd/psmithd/     # server entrypoint
+cmd/psmith/      # operator CLI (install, useradd, genkey)
 proto/           # ConnectRPC service definitions
 gen/             # generated Go bindings (buf)
 db/migrations/   # goose-format SQL migrations
-internal/        # server packages (auth, conversations, providers, stream, …)
-plugins/         # in-tree chat plugins
+server/          # server packages (auth, conversations, providers, stream, …)
+pluginapi/       # the plugin contract, importable out-of-tree
+plugins/         # the built-in plugins, one package per folder
 clients/         # PsmithSwift package + macOS and iOS apps
 docs/            # authoritative documentation
 ```

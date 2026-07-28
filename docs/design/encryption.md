@@ -17,7 +17,7 @@ Each secret is stored in its own `*_encrypted BYTEA` column, kept apart from the
 
 ## The cipher
 
-`internal/crypto` is the whole surface. The `Cipher` interface is two methods, `Encrypt` and `Decrypt`. Two implementations:
+`server/crypto` is the whole surface. The `Cipher` interface is two methods, `Encrypt` and `Decrypt`. Two implementations:
 
 - **AESGCM** is the production cipher: AES-256-GCM with a fresh random 12-byte nonce per encryption, laid out as `[nonce 12B][ciphertext + 16B auth tag]` in one allocation. GCM authenticates as well as encrypts, so a tampered ciphertext fails to open rather than decrypting to garbage. A nil plaintext maps to nil output, so callers can encrypt an absent value without special-casing.
 - **Nop** is a passthrough used in tests and as the fallback when no master key is configured and the deployment opts into running without encryption.

@@ -17,7 +17,7 @@ Every build carries an identity: the short commit hash, suffixed `+YYYYMMDDHHMM`
 
 How each artifact gets stamped:
 
-- **psmithd** (`make build` / `make run`): `-ldflags -X` into `internal/auth.buildVersion` (the `PSMITH_VERSION` variable at the top of the Makefile). Bare `go build`/`go test` and the L1 harness's lazily-built `bin/psmithd-test` are deliberately unstamped — Probe returns empty and clients render "dev".
+- **psmithd** (`make build` / `make run`): `-ldflags -X` into `server/auth.buildVersion` (the `PSMITH_VERSION` variable at the top of the Makefile). Bare `go build`/`go test` and the L1 harness's lazily-built `bin/psmithd-test` are deliberately unstamped — Probe returns empty and clients render "dev".
 - **Docker**: pass `--build-arg PSMITH_VERSION=$(git rev-parse --short HEAD)` (docker-compose forwards `$PSMITH_VERSION` from the environment). Unset, the image stamps its build datetime — every deploy still gets a fresh, comparable identifier.
 - **iOS**: `make ios-build` stamps `PsmithBuildCommit` into the built product's Info.plist and re-signs (preserving entitlements). An in-project "Stamp build commit" phase covers incremental direct-from-Xcode builds too, but on a clean Xcode build the build graph can order plist processing after the phase — the Makefile stamp is the authoritative one, so prefer `make ios-build` when the version matters.
 - **Mac**: the `mac-app` target stamps the assembled bundle's Info.plist before re-signing. `swift run PsmithMac` has no bundle and reads "dev".
@@ -47,7 +47,7 @@ make proto    # buf generate
 make sqlc     # sqlc generate
 ```
 
-`sqlc.yaml` reads queries from `db/queries`, the schema from `db/migrations`, and writes the `store` package into `internal/store`. It uses `pgx/v5`, emits pointers for nullable types, and emits a `Querier` interface. Type overrides map `uuid` to `github.com/google/uuid.UUID`, `timestamptz` to `time.Time`, and `vector` to `github.com/pgvector/pgvector-go.Vector` (pointer when nullable, so an unembedded row surfaces as `nil`).
+`sqlc.yaml` reads queries from `db/queries`, the schema from `db/migrations`, and writes the `store` package into `server/store`. It uses `pgx/v5`, emits pointers for nullable types, and emits a `Querier` interface. Type overrides map `uuid` to `github.com/google/uuid.UUID`, `timestamptz` to `time.Time`, and `vector` to `github.com/pgvector/pgvector-go.Vector` (pointer when nullable, so an unembedded row surfaces as `nil`).
 
 ### Lint
 
@@ -64,7 +64,7 @@ make tidy     # go mod tidy
 make test     # go test ./...
 ```
 
-Pure functions get plain unit tests. Anything that touches Postgres uses `pgtestdb` through `internal/testutil.Pool(t)`, which hands each test a fresh, fully migrated database cloned from `template1`. The `vector` extension must be present in `template1` (see [installation.md](installation.md)); without it every migrated test database fails at migration 00034.
+Pure functions get plain unit tests. Anything that touches Postgres uses `pgtestdb` through `server/testutil.Pool(t)`, which hands each test a fresh, fully migrated database cloned from `template1`. The `vector` extension must be present in `template1` (see [installation.md](installation.md)); without it every migrated test database fails at migration 00034.
 
 Override the test database connection with the `PGTESTDB_*` variables in [configuration.md](configuration.md).
 

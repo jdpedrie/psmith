@@ -16,7 +16,7 @@ docker run -d --name clark-postgres \
   -p 5433:5432 pgvector/pgvector:pg16
 ```
 
-Defaults baked into `Makefile` (`GOOSE_DBSTRING`) and `internal/testutil` (pgtestdb config) point at this instance with credentials `clark:clark`. Override via env vars (`PGTESTDB_HOST/PORT/USER/PASSWORD/DB`) if your setup differs.
+Defaults baked into `Makefile` (`GOOSE_DBSTRING`) and `server/testutil` (pgtestdb config) point at this instance with credentials `clark:clark`. Override via env vars (`PGTESTDB_HOST/PORT/USER/PASSWORD/DB`) if your setup differs.
 
 **One-time pgvector install in template1** — pgtestdb clones from `template1`, and the `vector` extension is untrusted so individual test DBs can't `CREATE EXTENSION` themselves. Install it once into `template1` so every cloned test DB inherits it:
 

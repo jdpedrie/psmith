@@ -4,7 +4,7 @@ Three subsystems that hang off the end of a turn: a small model names the conver
 
 ## Auto-titles
 
-When the first assistant message of a conversation lands, the server names the conversation and the context. The logic is in `internal/conversations/titles.go`, dispatched in a detached goroutine so a slow title model never holds up the stream.
+When the first assistant message of a conversation lands, the server names the conversation and the context. The logic is in `server/conversations/titles.go`, dispatched in a detached goroutine so a slow title model never holds up the stream.
 
 Two titles get decided independently. The conversation title is generated when the conversation has none. The context title is generated when the context has none and this is the first assistant turn in that context, which catches both the opening context and every context created by compaction. The first-assistant guard counts assistant rows in the context and only proceeds when exactly one exists, the one just inserted. Without that guard the server would regenerate and pay on every turn until a title stuck, which is the wrong cost shape.
 
@@ -30,7 +30,7 @@ Cost lives in two places: per-message columns on `messages`, which are the sourc
 
 When a model snapshot is enabled onto a provider, its pricing is copied onto the `user_models` row: input, output, cache-read, and cache-write prices per million tokens. That snapshot is what a turn is costed against, so a later price change upstream does not silently rewrite history. There is no separate reasoning-token price; reasoning tokens are counted on the message but priced at zero.
 
-On stream finalization, `internal/stream/consume.go` writes the usage columns onto the messages row: the token counts, the raw provider usage blob, and a computed cost per category plus a total. Each category cost is `tokens * pricePerMillion / 1_000_000`. Tool cost is the sum of every tool result's reported cost over the tool loop, which today is only image generation. The total sums the valid components. If the model row has since vanished, the token counts are still recorded but the token costs are left null; tool cost still flows. Compression turns compute cost the same way but never carry tool cost.
+On stream finalization, `server/stream/consume.go` writes the usage columns onto the messages row: the token counts, the raw provider usage blob, and a computed cost per category plus a total. Each category cost is `tokens * pricePerMillion / 1_000_000`. Tool cost is the sum of every tool result's reported cost over the tool loop, which today is only image generation. The total sums the valid components. If the model row has since vanished, the token counts are still recorded but the token costs are left null; tool cost still flows. Compression turns compute cost the same way but never carry tool cost.
 
 ### The ledger
 
@@ -48,7 +48,7 @@ Langfuse is per-user, opt-in, and fully out of the hot path. A user who has not 
 
 ### The emitter
 
-`internal/langfuse` is an async batching client. It POSTs to the Langfuse ingestion endpoint with HTTP basic auth (public key as user, secret as password), a batch of events per request. There are three event types: a trace per assistant turn (session ID set to the conversation ID, so a chat groups), a generation for the LLM call (input prefix, output text, model, token usage, pre-computed cost), and a span per tool call (marked error-level with a status message on failure, so it renders red).
+`server/langfuse` is an async batching client. It POSTs to the Langfuse ingestion endpoint with HTTP basic auth (public key as user, secret as password), a batch of events per request. There are three event types: a trace per assistant turn (session ID set to the conversation ID, so a chat groups), a generation for the LLM call (input prefix, output text, model, token usage, pre-computed cost), and a span per tool call (marked error-level with a status message on failure, so it renders red).
 
 The emitter flushes every 5 seconds or at 32 queued events, with a bounded queue of 1024. Enqueue is non-blocking: if the queue is full, the event is dropped with a warn rather than blocking the supervisor goroutine. There are no retries; a failed POST is logged, and a restart drops anything unflushed. This is acceptable because tracing is observability, not accounting. The ledger above is where money is tracked, and it is durable.
 

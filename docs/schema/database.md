@@ -8,7 +8,7 @@ Conventions across the schema: UUIDs for IDs (UUIDv7 where the application mints
 
 Production applies the migrations embedded in the `psmith` binary: `psmith install` runs `CREATE EXTENSION IF NOT EXISTS vector` as a preflight, then goose up. The dev loop uses the external `goose` CLI through `make migrate-up` and `make migrate-down`. Tests clone a fresh database per test from `template1` via `pgtestdb`. See [../operations/installation.md](../operations/installation.md).
 
-`sqlc` generates the `internal/store` query layer from `db/queries` against this schema. goose keeps its own version-bookkeeping table that no migration here defines.
+`sqlc` generates the `server/store` query layer from `db/queries` against this schema. goose keeps its own version-bookkeeping table that no migration here defines.
 
 ## Extensions
 

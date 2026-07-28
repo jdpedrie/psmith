@@ -45,7 +45,7 @@ One script is consumed per request. A multi-turn test (for example a tool round-
 
 ## How it fits the test stack
 
-The harness is what makes the deterministic integration tests possible. The conversations service tests (`internal/conversations/*_test.go`) send a message, let the supervisor run the turn against the fake, and assert on the materialized message, usage, cost, and tool calls in a real pgtestdb database. The retry test (`internal/stream/retry_fakellm_test.go`) scripts a mid-stream failure to drive the supervisor's reconnect path. The title tests drive the small-model title call against the fake. Because the fake emits real wire bytes, these tests catch parsing regressions that a stubbed driver would hide. See [building-and-codegen.md](building-and-codegen.md) for the test layers and [streaming.md](../design/streaming.md) for the supervisor the tests exercise.
+The harness is what makes the deterministic integration tests possible. The conversations service tests (`server/conversations/*_test.go`) send a message, let the supervisor run the turn against the fake, and assert on the materialized message, usage, cost, and tool calls in a real pgtestdb database. The retry test (`server/stream/retry_fakellm_test.go`) scripts a mid-stream failure to drive the supervisor's reconnect path. The title tests drive the small-model title call against the fake. Because the fake emits real wire bytes, these tests catch parsing regressions that a stubbed driver would hide. See [building-and-codegen.md](building-and-codegen.md) for the test layers and [streaming.md](../design/streaming.md) for the supervisor the tests exercise.
 
 ## Gotchas
 

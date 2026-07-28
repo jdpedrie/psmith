@@ -12,13 +12,13 @@ The trade is that the web client does not consume the documented wire contract t
 
 ## Stack
 
-- **templ** (`github.com/a-h/templ`) for typed HTML components. Templates live in `internal/web/*.templ` and compile to `*_templ.go` (checked in; regenerate with `make web-generate`).
-- **htmx 2** (vendored at `internal/web/assets/htmx.min.js`) plus its **SSE extension** (`internal/web/assets/sse.js`) for progressive enhancement: `hx-*` attributes drive behavior. The composer `hx-post`s the send and swaps the returned HTML fragment into the transcript; the streamed assistant turn is an element with `hx-ext="sse" sse-connect=...` whose `sse-swap` targets morph as named SSE events arrive. The server speaks plain SSE (no client library on the wire), not a framework-specific patch protocol.
+- **templ** (`github.com/a-h/templ`) for typed HTML components. Templates live in `server/web/*.templ` and compile to `*_templ.go` (checked in; regenerate with `make web-generate`).
+- **htmx 2** (vendored at `server/web/assets/htmx.min.js`) plus its **SSE extension** (`server/web/assets/sse.js`) for progressive enhancement: `hx-*` attributes drive behavior. The composer `hx-post`s the send and swaps the returned HTML fragment into the transcript; the streamed assistant turn is an element with `hx-ext="sse" sse-connect=...` whose `sse-swap` targets morph as named SSE events arrive. The server speaks plain SSE (no client library on the wire), not a framework-specific patch protocol.
 - **embed.FS** for the CSS and the htmx runtime, so the UI ships inside the single binary.
 
 ## How it is wired
 
-`internal/web.New(queries, authSvc, conversationsSvc, supervisor, logger)` builds the handler from the same dependencies `main()` already constructed for the ConnectRPC services. `Mount(mux)` registers the routes on psmithd's mux at paths distinct from the RPC services and the other non-RPC endpoints, so they coexist. Service calls go through the real handler methods with `connect.NewRequest(...)` and a context carrying the authenticated user, the same way the interceptor would set it.
+`server/web.New(queries, authSvc, conversationsSvc, supervisor, logger)` builds the handler from the same dependencies `main()` already constructed for the ConnectRPC services. `Mount(mux)` registers the routes on psmithd's mux at paths distinct from the RPC services and the other non-RPC endpoints, so they coexist. Service calls go through the real handler methods with `connect.NewRequest(...)` and a context carrying the authenticated user, the same way the interceptor would set it.
 
 Routes: `GET /login`, `POST /login`, `POST /logout`, `GET /chats`, `GET /c/{id}`, `POST /c/{id}/send`, `GET /c/{id}/stream`, and `GET /web-assets/` for the embedded assets.
 
@@ -46,4 +46,4 @@ When a tool elicits input mid-run, the stream handler emits an `elicit` SSE even
 
 The generated templ files are checked in, so `go build ./...` and `make build` need no extra step. After editing a `.templ` file, run `make web-generate`. The UI is served by `psmithd` on its normal address; open `/` (it redirects to `/login`). See [operations/configuration.md](../operations/configuration.md) for the server's environment.
 
-Tests live in `internal/web/`. The streaming path has an end-to-end test that drives the real anthropic driver against the fake LLM through the supervisor and asserts the named SSE events (`message`, `done`), the same harness style as the conversations e2e tests ([operations/fakellm.md](../operations/fakellm.md)).
+Tests live in `server/web/`. The streaming path has an end-to-end test that drives the real anthropic driver against the fake LLM through the supervisor and asserts the named SSE events (`message`, `done`), the same harness style as the conversations e2e tests ([operations/fakellm.md](../operations/fakellm.md)).

@@ -1,6 +1,6 @@
 # History builder
 
-Before a stateless provider can run a turn, the server has to turn the stored message tree into a flat, wire-shaped prefix. That is the history builder's whole job: take a conversation and a destination provider, walk the tree, map roles, decide what thinking travels, inline attachments, apply plugin transforms, and hand back a list of `WireMessage`. It lives in `internal/history` and is deliberately pure mechanics. It makes no policy decisions; the caller resolves all the policy (which leaf, whether thinking is allowed, which plugins) and passes the answers in.
+Before a stateless provider can run a turn, the server has to turn the stored message tree into a flat, wire-shaped prefix. That is the history builder's whole job: take a conversation and a destination provider, walk the tree, map roles, decide what thinking travels, inline attachments, apply plugin transforms, and hand back a list of `WireMessage`. It lives in `server/history` and is deliberately pure mechanics. It makes no policy decisions; the caller resolves all the policy (which leaf, whether thinking is allowed, which plugins) and passes the answers in.
 
 ## What it produces
 
