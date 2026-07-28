@@ -451,3 +451,105 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 	}
 	jsonEq(t, state, `{"treasury":73,"turn":9}`)
 }
+
+// TestGameStore_PlaysAFullCampaign drives several turns end to end
+// through the real plugin and the real store, crossing a fresh plugin
+// instance at every turn boundary the way production does. Unit tests
+// cover each link; this is the only thing that proves the chain holds.
+func TestGameStore_PlaysAFullCampaign(t *testing.T) {
+	t.Parallel()
+	f := newGameStoreFixture(t)
+	ctx := context.Background()
+
+	// Turn 1: compile the scenario and open a clock.
+	leaf := f.root
+	assistant := f.addMessage(t, &leaf, "assistant", "turn 1")
+	play(t, f, ctx, leaf, assistant, `{
+	  "kind":"initialize",
+	  "start_clocks":[{"id":"debt","label":"Creditors","length":"medium","weight":"standard","drains":"treasury","strikes":"guile","ominous":true}],
+	  "scenario":{
+	    "title":"C","role":"Margrave","premise":"p",
+	    "resources":[{"id":"treasury","label":"Treasury","start":90,"min":0,"max":200}],
+	    "ratings":[{"id":"guile","label":"Guile","start":5,"min":0,"max":10}],
+	    "loss_when":[{"stat":"treasury","op":"<=","value":0,"label":"Bankrupt"}],
+	    "turn_limit":30,
+	    "opening_situation":{"id":"s1","title":"S1","body":"b","choices":[
+	      {"id":"A","label":"a","rating":"guile","difficulty":"easy","stakes":"minor","advances":"guile","costs":"treasury"},
+	      {"id":"B","label":"b","rating":"guile","difficulty":"hard","stakes":"major","advances":"treasury","costs":"guile"}]}}}`)
+
+	// Turns 2-5: resolve, each on a brand-new plugin instance. Four
+	// resolves so the medium clock (4 turns) runs all the way out and the
+	// expiry path is exercised, not just the drain.
+	for turn := 2; turn <= 5; turn++ {
+		leaf = f.addMessage(t, &assistant, "user", "A")
+		assistant = f.addMessage(t, &leaf, "assistant", "narration")
+		play(t, f, ctx, leaf, assistant, `{
+		  "kind":"resolve","choice_id":"A",
+		  "next_situation":{"id":"s","title":"S","body":"b","choices":[
+		    {"id":"A","label":"a","rating":"guile","difficulty":"easy","stakes":"minor","advances":"guile","costs":"treasury"},
+		    {"id":"B","label":"b","rating":"guile","difficulty":"hard","stakes":"major","advances":"treasury","costs":"guile"}]}}`)
+	}
+
+	// The campaign advanced, the clock ran down and expired, and the
+	// treasury took both the choice costs and the clock's drain.
+	state, version, _, err := f.storeAt(assistant).LoadNearest(ctx)
+	if err != nil {
+		t.Fatalf("final load: %v", err)
+	}
+	var final struct {
+		Meta struct {
+			Turn         int   `json:"turn"`
+			StateVersion int64 `json:"state_version"`
+		} `json:"meta"`
+		Public struct {
+			Resources map[string]int `json:"resources"`
+			History   []struct{}     `json:"history"`
+			Clocks    []struct{}     `json:"clocks"`
+		} `json:"public"`
+	}
+	if err := json.Unmarshal(state, &final); err != nil {
+		t.Fatalf("decode final state: %v", err)
+	}
+	// One initialize (turn 1) plus four resolves.
+	if final.Meta.Turn != 5 {
+		t.Errorf("campaign should be on turn 5; got %d", final.Meta.Turn)
+	}
+	if version != 5 {
+		t.Errorf("state version should track every commit; got %d", version)
+	}
+	if len(final.Public.History) != 4 {
+		t.Errorf("expected four resolved turns in the ledger; got %d", len(final.Public.History))
+	}
+	if final.Public.Resources["treasury"] >= 90 {
+		t.Errorf("four turns of costs and clock drain should have moved the treasury; got %d",
+			final.Public.Resources["treasury"])
+	}
+	if len(final.Public.Clocks) != 0 {
+		t.Errorf("a medium clock ticks once per resolve, so four resolves should retire it; %d still running",
+			len(final.Public.Clocks))
+	}
+}
+
+// play runs one turn the way the runtime does: a fresh plugin instance,
+// a branch-scoped store, then binding whatever it computed to the
+// assistant message.
+func play(t *testing.T, f gameStoreFixture, ctx context.Context, leaf, assistant uuid.UUID, input string) {
+	t.Helper()
+	pl, err := plugins.Build(plugins.StrategyGameName, nil)
+	if err != nil {
+		t.Fatalf("build plugin: %v", err)
+	}
+	toolCtx := plugins.WithGameStore(ctx, f.storeAt(leaf))
+	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
+		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
+	})
+	if _, err := pl.(plugins.ToolProvider).ExecuteTool(toolCtx, "game_commit_turn", json.RawMessage(input)); err != nil {
+		t.Fatalf("commit turn: %v", err)
+	}
+	for _, ps := range (plugins.Pipeline{pl}).PendingPluginStates() {
+		if err := f.svc.newGameStore(ps.PluginName, f.user.ID, f.conv.ID, assistant).
+			Save(ctx, assistant, ps.State, ps.Version); err != nil {
+			t.Fatalf("bind: %v", err)
+		}
+	}
+}
