@@ -170,6 +170,52 @@ public final class ProfilesRepository: Sendable {
         return msg.plugins.map(PsmithProfilePlugin.init(from:))
     }
 
+    // MARK: - Sharing
+
+    /// Serialize a profile into a bundle another account can import.
+    ///
+    /// Flattened by default: the recipient gets one self-contained profile
+    /// rather than the whole ancestor chain as separate rows. Pass
+    /// `preserveChain: true` to keep the structure, which is what you want
+    /// for a backup rather than a share.
+    ///
+    /// The bundle never contains credentials. `notices` on the result says
+    /// what was withheld so you can tell the recipient what they still need.
+    public func exportProfile(id: String, preserveChain: Bool = false) async throws -> PsmithProfileExport {
+        var req = Psmith_V1_ExportProfileRequest()
+        req.profileID = id
+        req.preserveChain = preserveChain
+        let resp = await client.exportProfile(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("export profile") }
+        return PsmithProfileExport(
+            payload: msg.payload,
+            suggestedFilename: msg.suggestedFilename,
+            notices: msg.notices
+        )
+    }
+
+    /// Create profiles from a bundle.
+    ///
+    /// Never overwrites: everything in the bundle becomes a new profile owned
+    /// by the caller. References the bundle carried that this account does not
+    /// have (a provider type, an MCP server) resolve to unset and come back in
+    /// `warnings` rather than failing the import.
+    ///
+    /// Call with `dryRun: true` first to show the user the warnings and any
+    /// renames before committing.
+    public func importProfile(payload: Data, dryRun: Bool = false) async throws -> PsmithImportResult {
+        var req = Psmith_V1_ImportProfileRequest()
+        req.payload = payload
+        req.dryRun = dryRun
+        let resp = await client.importProfile(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("import profile") }
+        return PsmithImportResult(
+            profiles: msg.profiles.map(PsmithProfile.init(from:)),
+            warnings: msg.warnings.map(PsmithImportWarning.init(from:)),
+            renamed: msg.renamed
+        )
+    }
+
     // MARK: - MCP server registry
 
     public func listMCPServers() async throws -> [PsmithMCPServer] {

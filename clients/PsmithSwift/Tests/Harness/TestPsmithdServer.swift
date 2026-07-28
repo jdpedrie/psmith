@@ -255,10 +255,14 @@ private func ensureBinary(repoRoot: String) throws -> String {
     }
     let binPath = (repoRoot as NSString).appendingPathComponent("bin/psmithd-test")
     let fm = FileManager.default
-    if fm.fileExists(atPath: binPath) {
-        return binPath
-    }
-    // Build it: `go build -o bin/psmithd-test ./cmd/psmithd`.
+    // Always rebuild rather than reusing an existing binary.
+    //
+    // Reusing it meant L1 ran against whatever server was compiled the first
+    // time anyone ran the suite. A new RPC came back as a 404 and a changed
+    // handler was simply not tested, which is the worst kind of green: the
+    // suite passes and says nothing about the code you just wrote. Go's build
+    // cache makes a no-op rebuild near-instant, so this costs nothing on the
+    // common path.
     try fm.createDirectory(
         atPath: (repoRoot as NSString).appendingPathComponent("bin"),
         withIntermediateDirectories: true
