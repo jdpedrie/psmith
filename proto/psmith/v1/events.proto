@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package psmith.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
 
 // Account-scoped server push. Lets clients react to server-side
@@ -47,7 +49,26 @@ message AccountEvent {
     // provider+model state wholesale, so finer granularity would buy
     // nothing.
     ProviderChanged provider_changed = 3;
+    // Periodic liveness frame, sent when the account has had no real
+    // events for a while. Carries no state and requires no reaction
+    // beyond noting that bytes arrived.
+    //
+    // Two problems it solves. A stream that transmits nothing gets
+    // reaped by anything between client and server that ages out idle
+    // TCP (NAT, VPN, carrier, proxy), and neither end is told. And
+    // without a steady frame there is nothing for a client to measure
+    // liveness against, so a half-open connection looks identical to a
+    // quiet one until the transport's own timeout fires, which is far
+    // too late to be useful.
+    Heartbeat heartbeat = 4;
   }
+}
+
+message Heartbeat {
+  // Server time when the frame was emitted. Not used for
+  // synchronisation; present so a client can log how stale a
+  // connection had become and so the message is never zero-length.
+  google.protobuf.Timestamp sent_at = 1;
 }
 
 message ProviderChanged {

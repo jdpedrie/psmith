@@ -85,6 +85,13 @@ struct PsmithiOSApp: App {
             }
         case .active:
             bgKeeper.end()
+            // iOS tears sockets down during suspend, so returning to the
+            // foreground is the likeliest moment to be holding an events
+            // stream that is already dead. Without this the subscriber may
+            // sit out its backoff (up to 30s) on a connection that will
+            // never deliver anything, and the liveness watchdog would take
+            // another 50s to notice. Kick it now.
+            accountManager.active?.client.events.kick()
         @unknown default:
             break
         }

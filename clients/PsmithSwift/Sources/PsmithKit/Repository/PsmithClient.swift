@@ -40,9 +40,14 @@ public final class PsmithClient: Sendable {
         // transport error before the server's Terminal event arrives,
         // and the materialised row lands in the DB without the client
         // ever reloading the chain — the assistant turn "disappears."
-        // So the stream transport sits well above the server's
-        // IdleTimeout, letting the server's own timer terminate first
-        // and emit a clean Terminal.
+        // So the stream transport sits well above that, letting the
+        // server's own timer terminate first and emit a clean Terminal.
+        //
+        // That reasoning covers generation only. SubscribeAccountEvents
+        // has no server-side bound, so 600s is the ONLY thing that would
+        // ever notice a dead events stream — far too slow to be useful.
+        // EventsSubscriber runs its own liveness deadline against the
+        // server heartbeat instead; see RPCTimeouts.eventsLivenessDeadline.
         //
         // Unary: that same 600s applied to every list/get, which meant
         // an unreachable host pinned the launch path for ten minutes
@@ -131,8 +136,27 @@ enum RPCTimeouts {
     static let unaryRequest: TimeInterval = 30
     static let unaryResource: TimeInterval = 60
     static let streamingRequest: TimeInterval = 600
-    /// The server-side stream idle timeout these are sized against
-    /// (`internal/stream`). Mirrored here so the test can assert the
-    /// relationship rather than a bare magic number.
-    static let serverStreamIdleTimeout: TimeInterval = 60
+    /// The generation-stream idle timeout on the server
+    /// (`server/stream.IdleTimeout`), which bounds how long the LLM
+    /// upstream may go silent mid-run. `streamingRequest` is sized above
+    /// it so the server's timer fires first and emits a clean Terminal.
+    ///
+    /// This governs generation only. It says nothing about
+    /// SubscribeAccountEvents, which has no server-side bound at all —
+    /// see `eventsLivenessDeadline`.
+    static let generationIdleTimeout: TimeInterval = 60
+
+    /// How long the events stream may go quiet before the client treats
+    /// it as dead and reconnects.
+    ///
+    /// The server heartbeats every 20s (`server/events.HeartbeatInterval`),
+    /// so silence past 50s means roughly two missed frames: long enough
+    /// that a single dropped packet or a brief stall does not churn the
+    /// connection, short enough to be a fraction of the 600s transport
+    /// timeout that would otherwise be the only thing to notice.
+    ///
+    /// Without this, a half-open connection is indistinguishable from a
+    /// quiet one. The app sits looking connected and receiving nothing
+    /// for up to ten minutes.
+    static let eventsLivenessDeadline: TimeInterval = 50
 }

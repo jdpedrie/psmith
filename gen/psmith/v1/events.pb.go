@@ -9,6 +9,7 @@ package psmithv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -227,6 +228,7 @@ type AccountEvent struct {
 	//	*AccountEvent_ProfileChanged
 	//	*AccountEvent_ConversationChanged
 	//	*AccountEvent_ProviderChanged
+	//	*AccountEvent_Heartbeat
 	Kind          isAccountEvent_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -296,6 +298,15 @@ func (x *AccountEvent) GetProviderChanged() *ProviderChanged {
 	return nil
 }
 
+func (x *AccountEvent) GetHeartbeat() *Heartbeat {
+	if x != nil {
+		if x, ok := x.Kind.(*AccountEvent_Heartbeat); ok {
+			return x.Heartbeat
+		}
+	}
+	return nil
+}
+
 type isAccountEvent_Kind interface {
 	isAccountEvent_Kind()
 }
@@ -329,11 +340,75 @@ type AccountEvent_ProviderChanged struct {
 	ProviderChanged *ProviderChanged `protobuf:"bytes,3,opt,name=provider_changed,json=providerChanged,proto3,oneof"`
 }
 
+type AccountEvent_Heartbeat struct {
+	// Periodic liveness frame, sent when the account has had no real
+	// events for a while. Carries no state and requires no reaction
+	// beyond noting that bytes arrived.
+	//
+	// Two problems it solves. A stream that transmits nothing gets
+	// reaped by anything between client and server that ages out idle
+	// TCP (NAT, VPN, carrier, proxy), and neither end is told. And
+	// without a steady frame there is nothing for a client to measure
+	// liveness against, so a half-open connection looks identical to a
+	// quiet one until the transport's own timeout fires, which is far
+	// too late to be useful.
+	Heartbeat *Heartbeat `protobuf:"bytes,4,opt,name=heartbeat,proto3,oneof"`
+}
+
 func (*AccountEvent_ProfileChanged) isAccountEvent_Kind() {}
 
 func (*AccountEvent_ConversationChanged) isAccountEvent_Kind() {}
 
 func (*AccountEvent_ProviderChanged) isAccountEvent_Kind() {}
+
+func (*AccountEvent_Heartbeat) isAccountEvent_Kind() {}
+
+type Heartbeat struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Server time when the frame was emitted. Not used for
+	// synchronisation; present so a client can log how stale a
+	// connection had become and so the message is never zero-length.
+	SentAt        *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Heartbeat) Reset() {
+	*x = Heartbeat{}
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Heartbeat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Heartbeat) ProtoMessage() {}
+
+func (x *Heartbeat) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
+func (*Heartbeat) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Heartbeat) GetSentAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SentAt
+	}
+	return nil
+}
 
 type ProviderChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -345,7 +420,7 @@ type ProviderChanged struct {
 
 func (x *ProviderChanged) Reset() {
 	*x = ProviderChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -357,7 +432,7 @@ func (x *ProviderChanged) String() string {
 func (*ProviderChanged) ProtoMessage() {}
 
 func (x *ProviderChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[2]
+	mi := &file_psmith_v1_events_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -370,7 +445,7 @@ func (x *ProviderChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderChanged.ProtoReflect.Descriptor instead.
 func (*ProviderChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{2}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProviderChanged) GetProviderId() string {
@@ -397,7 +472,7 @@ type ConversationChanged struct {
 
 func (x *ConversationChanged) Reset() {
 	*x = ConversationChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[3]
+	mi := &file_psmith_v1_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -409,7 +484,7 @@ func (x *ConversationChanged) String() string {
 func (*ConversationChanged) ProtoMessage() {}
 
 func (x *ConversationChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[3]
+	mi := &file_psmith_v1_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -422,7 +497,7 @@ func (x *ConversationChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationChanged.ProtoReflect.Descriptor instead.
 func (*ConversationChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{3}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ConversationChanged) GetConversationId() string {
@@ -449,7 +524,7 @@ type ProfileChanged struct {
 
 func (x *ProfileChanged) Reset() {
 	*x = ProfileChanged{}
-	mi := &file_psmith_v1_events_proto_msgTypes[4]
+	mi := &file_psmith_v1_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -461,7 +536,7 @@ func (x *ProfileChanged) String() string {
 func (*ProfileChanged) ProtoMessage() {}
 
 func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_events_proto_msgTypes[4]
+	mi := &file_psmith_v1_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -474,7 +549,7 @@ func (x *ProfileChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileChanged.ProtoReflect.Descriptor instead.
 func (*ProfileChanged) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_events_proto_rawDescGZIP(), []int{4}
+	return file_psmith_v1_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProfileChanged) GetProfileId() string {
@@ -495,13 +570,16 @@ var File_psmith_v1_events_proto protoreflect.FileDescriptor
 
 const file_psmith_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16psmith/v1/events.proto\x12\tpsmith.v1\"\x1f\n" +
-	"\x1dSubscribeAccountEventsRequest\"\xfa\x01\n" +
+	"\x16psmith/v1/events.proto\x12\tpsmith.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1f\n" +
+	"\x1dSubscribeAccountEventsRequest\"\xb0\x02\n" +
 	"\fAccountEvent\x12D\n" +
 	"\x0fprofile_changed\x18\x01 \x01(\v2\x19.psmith.v1.ProfileChangedH\x00R\x0eprofileChanged\x12S\n" +
 	"\x14conversation_changed\x18\x02 \x01(\v2\x1e.psmith.v1.ConversationChangedH\x00R\x13conversationChanged\x12G\n" +
-	"\x10provider_changed\x18\x03 \x01(\v2\x1a.psmith.v1.ProviderChangedH\x00R\x0fproviderChangedB\x06\n" +
-	"\x04kind\"e\n" +
+	"\x10provider_changed\x18\x03 \x01(\v2\x1a.psmith.v1.ProviderChangedH\x00R\x0fproviderChanged\x124\n" +
+	"\theartbeat\x18\x04 \x01(\v2\x14.psmith.v1.HeartbeatH\x00R\theartbeatB\x06\n" +
+	"\x04kind\"@\n" +
+	"\tHeartbeat\x123\n" +
+	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"e\n" +
 	"\x0fProviderChanged\x12\x1f\n" +
 	"\vprovider_id\x18\x01 \x01(\tR\n" +
 	"providerId\x121\n" +
@@ -544,31 +622,35 @@ func file_psmith_v1_events_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_psmith_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_psmith_v1_events_proto_goTypes = []any{
 	(ProviderChangeKind)(0),               // 0: psmith.v1.ProviderChangeKind
 	(ConversationChangeKind)(0),           // 1: psmith.v1.ConversationChangeKind
 	(ProfileChangeKind)(0),                // 2: psmith.v1.ProfileChangeKind
 	(*SubscribeAccountEventsRequest)(nil), // 3: psmith.v1.SubscribeAccountEventsRequest
 	(*AccountEvent)(nil),                  // 4: psmith.v1.AccountEvent
-	(*ProviderChanged)(nil),               // 5: psmith.v1.ProviderChanged
-	(*ConversationChanged)(nil),           // 6: psmith.v1.ConversationChanged
-	(*ProfileChanged)(nil),                // 7: psmith.v1.ProfileChanged
+	(*Heartbeat)(nil),                     // 5: psmith.v1.Heartbeat
+	(*ProviderChanged)(nil),               // 6: psmith.v1.ProviderChanged
+	(*ConversationChanged)(nil),           // 7: psmith.v1.ConversationChanged
+	(*ProfileChanged)(nil),                // 8: psmith.v1.ProfileChanged
+	(*timestamppb.Timestamp)(nil),         // 9: google.protobuf.Timestamp
 }
 var file_psmith_v1_events_proto_depIdxs = []int32{
-	7, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
-	6, // 1: psmith.v1.AccountEvent.conversation_changed:type_name -> psmith.v1.ConversationChanged
-	5, // 2: psmith.v1.AccountEvent.provider_changed:type_name -> psmith.v1.ProviderChanged
-	0, // 3: psmith.v1.ProviderChanged.kind:type_name -> psmith.v1.ProviderChangeKind
-	1, // 4: psmith.v1.ConversationChanged.kind:type_name -> psmith.v1.ConversationChangeKind
-	2, // 5: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
-	3, // 6: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
-	4, // 7: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	8, // 0: psmith.v1.AccountEvent.profile_changed:type_name -> psmith.v1.ProfileChanged
+	7, // 1: psmith.v1.AccountEvent.conversation_changed:type_name -> psmith.v1.ConversationChanged
+	6, // 2: psmith.v1.AccountEvent.provider_changed:type_name -> psmith.v1.ProviderChanged
+	5, // 3: psmith.v1.AccountEvent.heartbeat:type_name -> psmith.v1.Heartbeat
+	9, // 4: psmith.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	0, // 5: psmith.v1.ProviderChanged.kind:type_name -> psmith.v1.ProviderChangeKind
+	1, // 6: psmith.v1.ConversationChanged.kind:type_name -> psmith.v1.ConversationChangeKind
+	2, // 7: psmith.v1.ProfileChanged.kind:type_name -> psmith.v1.ProfileChangeKind
+	3, // 8: psmith.v1.EventsService.SubscribeAccountEvents:input_type -> psmith.v1.SubscribeAccountEventsRequest
+	4, // 9: psmith.v1.EventsService.SubscribeAccountEvents:output_type -> psmith.v1.AccountEvent
+	9, // [9:10] is the sub-list for method output_type
+	8, // [8:9] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_events_proto_init() }
@@ -580,6 +662,7 @@ func file_psmith_v1_events_proto_init() {
 		(*AccountEvent_ProfileChanged)(nil),
 		(*AccountEvent_ConversationChanged)(nil),
 		(*AccountEvent_ProviderChanged)(nil),
+		(*AccountEvent_Heartbeat)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -587,7 +670,7 @@ func file_psmith_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_events_proto_rawDesc), len(file_psmith_v1_events_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

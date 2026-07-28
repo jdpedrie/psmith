@@ -44,10 +44,19 @@ struct RPCTimeoutTests {
 
     @Test("transport timeouts keep both failure modes out of reach")
     func transportTimeoutInvariants() {
-        // Streaming must outlast the server's idle timer, or URLSession
-        // tears down a thinking model's quiet stream before Terminal
-        // arrives and the assistant turn vanishes client-side.
-        #expect(RPCTimeouts.streamingRequest > RPCTimeouts.serverStreamIdleTimeout)
+        // Streaming must outlast the generation-stream idle timer, or
+        // URLSession tears down a thinking model's quiet stream before
+        // Terminal arrives and the assistant turn vanishes client-side.
+        #expect(RPCTimeouts.streamingRequest > RPCTimeouts.generationIdleTimeout)
+
+        // The events stream is a different problem: it has NO server-side
+        // bound, so before the liveness deadline existed the 600s transport
+        // timeout was the only thing that would ever notice a dead one. The
+        // deadline has to be a small fraction of that to be worth anything,
+        // and comfortably above the 20s server heartbeat so a single missed
+        // frame does not churn the connection.
+        #expect(RPCTimeouts.eventsLivenessDeadline < RPCTimeouts.streamingRequest / 5)
+        #expect(RPCTimeouts.eventsLivenessDeadline > 20)
 
         // Unary must NOT inherit that window. It did, which is why an
         // unreachable host pinned every list/get for ten minutes with

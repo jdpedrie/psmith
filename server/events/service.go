@@ -3,12 +3,29 @@ package events
 import (
 	"context"
 	"errors"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/server/auth"
 )
+
+// HeartbeatInterval is how often a subscription with no real events
+// emits a liveness frame.
+//
+// Twenty seconds sits under the shortest idle window we are likely to
+// meet in the wild: consumer NAT tables commonly age out UDP in 30s and
+// TCP in a few minutes, and mobile carriers are the aggressive end.
+// Going lower costs a frame per client per interval for no gain; going
+// much higher reopens the hole this closes. Clients derive their own
+// liveness deadline from this, so the two move together.
+//
+// var rather than const so tests can shorten it.
+var HeartbeatInterval = 20 * time.Second
 
 // Service implements psmith.v1.EventsService. Each subscription opens
 // a per-user channel on the bus and translates internal Event values
@@ -45,26 +62,65 @@ func (s *Service) SubscribeAccountEvents(
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("auth required"))
 	}
 
-	ch, cancel := s.bus.Subscribe(caller.ID)
+	return runSubscription(ctx, s.bus, caller.ID, stream)
+}
+
+// eventSink is the slice of connect.ServerStream the subscription loop uses.
+//
+// Narrowed to an interface because ServerStream is a concrete struct with a
+// transport behind it, so the loop was otherwise only reachable through a live
+// connection. The first version of this kept a copy of the loop in the test,
+// which is a guarantee that the two drift; one of them would keep passing
+// while the other stopped sending heartbeats.
+type eventSink interface {
+	Send(*psmithv1.AccountEvent) error
+}
+
+// runSubscription fans bus events to one subscriber until the context ends,
+// the bus closes the channel, or a send fails.
+//
+// Emits a heartbeat every HeartbeatInterval when nothing else is flowing.
+// Without it a quiet account transmits no bytes at all, and anything between
+// here and the client that ages out idle TCP (NAT, VPN, carrier, proxy) drops
+// the connection without telling either end. The server keeps holding a
+// subscriber that cannot receive; the client keeps believing it is connected
+// until its own transport timeout fires, which on iOS is ten minutes. The
+// heartbeat both keeps the path warm and gives the client a cadence to measure
+// liveness against.
+func runSubscription(ctx context.Context, bus *Bus, userID uuid.UUID, out eventSink) error {
+	ch, cancel := bus.Subscribe(userID)
 	defer cancel()
+
+	ticker := time.NewTicker(HeartbeatInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-ticker.C:
+			if err := out.Send(&psmithv1.AccountEvent{
+				Kind: &psmithv1.AccountEvent_Heartbeat{
+					Heartbeat: &psmithv1.Heartbeat{SentAt: timestamppb.Now()},
+				},
+			}); err != nil {
+				// A heartbeat that cannot be delivered is exactly the signal
+				// this exists to produce: the client is gone and published
+				// nothing to reveal it. Deferred cancel detaches from the bus.
+				return err
+			}
 		case ev, ok := <-ch:
 			if !ok {
-				// Bus closed our channel (subscriber was cancelled
-				// out from under us). Close the stream cleanly.
+				// Bus closed our channel (subscriber cancelled out from under
+				// us). Close the stream cleanly.
 				return nil
 			}
 			proto := eventToProto(ev)
 			if proto == nil {
 				continue
 			}
-			if err := stream.Send(proto); err != nil {
-				// Client disconnected mid-send. Propagate; the
-				// deferred cancel() detaches from the bus.
+			if err := out.Send(proto); err != nil {
+				// Client disconnected mid-send.
 				return err
 			}
 		}

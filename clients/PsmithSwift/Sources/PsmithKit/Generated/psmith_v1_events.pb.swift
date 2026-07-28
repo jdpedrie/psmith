@@ -212,6 +212,25 @@ public nonisolated struct Psmith_V1_AccountEvent: Sendable {
     set {kind = .providerChanged(newValue)}
   }
 
+  /// Periodic liveness frame, sent when the account has had no real
+  /// events for a while. Carries no state and requires no reaction
+  /// beyond noting that bytes arrived.
+  ///
+  /// Two problems it solves. A stream that transmits nothing gets
+  /// reaped by anything between client and server that ages out idle
+  /// TCP (NAT, VPN, carrier, proxy), and neither end is told. And
+  /// without a steady frame there is nothing for a client to measure
+  /// liveness against, so a half-open connection looks identical to a
+  /// quiet one until the transport's own timeout fires, which is far
+  /// too late to be useful.
+  public var heartbeat: Psmith_V1_Heartbeat {
+    get {
+      if case .heartbeat(let v)? = kind {return v}
+      return Psmith_V1_Heartbeat()
+    }
+    set {kind = .heartbeat(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Kind: Equatable, Sendable {
@@ -235,10 +254,46 @@ public nonisolated struct Psmith_V1_AccountEvent: Sendable {
     /// provider+model state wholesale, so finer granularity would buy
     /// nothing.
     case providerChanged(Psmith_V1_ProviderChanged)
+    /// Periodic liveness frame, sent when the account has had no real
+    /// events for a while. Carries no state and requires no reaction
+    /// beyond noting that bytes arrived.
+    ///
+    /// Two problems it solves. A stream that transmits nothing gets
+    /// reaped by anything between client and server that ages out idle
+    /// TCP (NAT, VPN, carrier, proxy), and neither end is told. And
+    /// without a steady frame there is nothing for a client to measure
+    /// liveness against, so a half-open connection looks identical to a
+    /// quiet one until the transport's own timeout fires, which is far
+    /// too late to be useful.
+    case heartbeat(Psmith_V1_Heartbeat)
 
   }
 
   public init() {}
+}
+
+public nonisolated struct Psmith_V1_Heartbeat: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Server time when the frame was emitted. Not used for
+  /// synchronisation; present so a client can log how stale a
+  /// connection had become and so the message is never zero-length.
+  public var sentAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_sentAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_sentAt = newValue}
+  }
+  /// Returns true if `sentAt` has been explicitly set.
+  public var hasSentAt: Bool {self._sentAt != nil}
+  /// Clears the value of `sentAt`. Subsequent reads from it will return its default value.
+  public mutating func clearSentAt() {self._sentAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _sentAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public nonisolated struct Psmith_V1_ProviderChanged: Sendable {
@@ -320,7 +375,7 @@ nonisolated extension Psmith_V1_SubscribeAccountEventsRequest: SwiftProtobuf.Mes
 
 nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AccountEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0\u{3}conversation_changed\0\u{3}provider_changed\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}profile_changed\0\u{3}conversation_changed\0\u{3}provider_changed\0\u{1}heartbeat\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -367,6 +422,19 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
           self.kind = .providerChanged(v)
         }
       }()
+      case 4: try {
+        var v: Psmith_V1_Heartbeat?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .heartbeat(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .heartbeat(v)
+        }
+      }()
       default: break
       }
     }
@@ -390,6 +458,10 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
       guard case .providerChanged(let v)? = self.kind else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     }()
+    case .heartbeat?: try {
+      guard case .heartbeat(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -397,6 +469,40 @@ nonisolated extension Psmith_V1_AccountEvent: SwiftProtobuf.Message, SwiftProtob
 
   public static func ==(lhs: Psmith_V1_AccountEvent, rhs: Psmith_V1_AccountEvent) -> Bool {
     if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_Heartbeat: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Heartbeat"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}sent_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._sentAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._sentAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_Heartbeat, rhs: Psmith_V1_Heartbeat) -> Bool {
+    if lhs._sentAt != rhs._sentAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

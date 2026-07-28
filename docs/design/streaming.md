@@ -62,3 +62,29 @@ When the run completes, the accumulated chunks become one `messages` row. Visibl
 ## Why this shape
 
 Two properties fall out of it. First, the client is thin and replaceable: it holds no authoritative stream state, only a sequence cursor, so any client can attach to any run at any time. Second, work is never lost to a network event: the turn runs to completion on the server regardless of who is watching, and the result is durable the instant it materializes. The cost is that the server carries the whole stream and a Postgres write per chunk, which is the deliberate trade. See [the iOS reference](../clients/ios-reference.md) for how a client consumes this, and [the client spec](../clients/client-spec.md) for the contract any client must honor.
+
+## Events-stream liveness
+
+`SubscribeAccountEvents` is long-lived and, unlike a generation stream, has no
+natural end. That made it the one connection nothing bounded: the server loops
+on the bus with no timeout, `http.Server` sets none, and an account with no
+activity transmitted zero bytes indefinitely. Anything in the path that ages out
+idle TCP (NAT, VPN, carrier, proxy) would drop it without telling either end.
+The server kept a subscriber that could not receive; the client kept believing
+it was connected until URLSession's 600s timeout fired.
+
+The server now emits a `Heartbeat` event every `events.HeartbeatInterval` (20s)
+when nothing else is flowing. It keeps the path warm and, more importantly,
+gives the client a cadence to measure against. A heartbeat that fails to send is
+itself the signal that a silent client has gone.
+
+The client runs a watchdog at `RPCTimeouts.eventsLivenessDeadline` (50s, about
+two missed frames). Past that it cancels the stream, which surfaces as an error
+and hands off to the existing reconnect loop. Two further triggers skip the
+backoff entirely: `scenePhase` becoming active, because iOS tears sockets down
+during suspend, and `NWPathMonitor` reporting a path becoming satisfied, because
+a wifi-to-cellular handoff leaves a dead connection the OS already knows about.
+
+The two constants are a pair. Clients size the deadline off the server interval,
+so changing one without the other reopens the gap; `TestHeartbeat_IntervalIsTheDocumentedValue`
+and the RPC timeout invariants both pin it.

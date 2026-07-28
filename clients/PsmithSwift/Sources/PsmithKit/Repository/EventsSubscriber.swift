@@ -1,5 +1,6 @@
 import Foundation
 import Connect
+import Network
 import os.log
 
 private let syncLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "Sync")
@@ -48,7 +49,46 @@ public final class EventsSubscriber: @unchecked Sendable {
 
     /// Begin the subscription. Idempotent — calling twice while
     /// already running is a no-op.
+    /// Watches the network path and reconnects the moment it changes.
+    ///
+    /// A wifi-to-cellular handoff, a VPN flap, or airplane mode coming off
+    /// leaves the current connection dead but does not fail the read. Without
+    /// this the subscriber waits out its backoff (up to 30s) and then the
+    /// liveness watchdog (another 50s) before recovering from something the OS
+    /// told us about immediately.
+    ///
+    /// Handlers fire on a background queue; `kick()` mutates `task`, which the
+    /// other callers touch from the main actor, so hop before calling it.
+    private func startPathMonitor() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        // Handlers are Sendable, so the previous-state flag cannot be a
+        // captured var. Updates arrive on one serial queue, but a lock states
+        // that rather than relying on it.
+        let wasSatisfied = OSAllocatedUnfairLock(initialState: true)
+        monitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            let previously = wasSatisfied.withLock { prev -> Bool in
+                let was = prev
+                prev = satisfied
+                return was
+            }
+            // Only act on the transition INTO a usable path. Reacting to the
+            // drop as well would just cancel a stream that is already dead and
+            // start a reconnect that cannot succeed yet.
+            guard satisfied, !previously else { return }
+            syncLog.notice("network path became satisfied; reconnecting events stream")
+            Task { @MainActor in self?.kick() }
+        }
+        monitor.start(queue: pathQueue)
+        pathMonitor = monitor
+    }
+
+    private var pathMonitor: NWPathMonitor?
+    private let pathQueue = DispatchQueue(label: "dev.jdpedrie.psmith.events.path")
+
     public func start() {
+        startPathMonitor()
         guard task == nil else { return }
         task = Task { [weak self] in
             await self?.runLoop()
@@ -115,7 +155,35 @@ public final class EventsSubscriber: @unchecked Sendable {
         defer { stream.cancel() }
         try stream.send(Psmith_V1_SubscribeAccountEventsRequest())
         syncLog.notice("events stream connected")
+
+        // Liveness watchdog.
+        //
+        // A stream whose network path has gone away does not fail: the read
+        // simply never returns. Nothing else here would notice, because the
+        // only other bound is the transport's 600s timeout, so the app sits
+        // looking connected and receiving nothing for up to ten minutes. The
+        // server heartbeats every 20s specifically so silence can be measured;
+        // this cancels the stream when that silence runs past the deadline,
+        // which surfaces as an error from `results()` and lets the existing
+        // reconnect loop do its job.
+        let watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(RPCTimeouts.eventsLivenessDeadline))
+                if Task.isCancelled { return }
+                guard let self else { return }
+                let quietFor = self.frameClock.quietFor()
+                if quietFor >= .seconds(RPCTimeouts.eventsLivenessDeadline) {
+                    syncLog.notice("events stream silent for \(quietFor, privacy: .public); assuming dead, reconnecting")
+                    stream.cancel()
+                    return
+                }
+            }
+        }
+        defer { watchdog.cancel() }
+
+        markFrame()
         for await result in stream.results() {
+            markFrame()
             switch result {
             case .headers, .complete:
                 // Headers carry no payload we need; complete ends
@@ -124,6 +192,32 @@ public final class EventsSubscriber: @unchecked Sendable {
             case .message(let event):
                 dispatch(event)
             }
+        }
+    }
+
+    /// When a frame last arrived. Heartbeats count: their whole purpose is to
+    /// keep this moving on an account with no real activity.
+    ///
+    /// Written by the stream loop and read by the watchdog task, so it needs a
+    /// lock. This class is `@unchecked Sendable`, which means the compiler
+    /// will not flag the race for us.
+    private let frameClock = FrameClock()
+
+    private func markFrame() { frameClock.mark() }
+
+    /// Tiny lock-guarded timestamp. `OSAllocatedUnfairLock` rather than a
+    /// serial queue: the critical section is one store or one load, and a
+    /// queue hop per received frame would be real overhead on a chatty stream.
+    private final class FrameClock: @unchecked Sendable {
+        private let lock = OSAllocatedUnfairLock(initialState: ContinuousClock.Instant.now)
+
+        func mark() {
+            lock.withLock { $0 = .now }
+        }
+
+        /// How long since the last frame.
+        func quietFor() -> Duration {
+            lock.withLock { ContinuousClock.now - $0 }
         }
     }
 
@@ -139,6 +233,10 @@ public final class EventsSubscriber: @unchecked Sendable {
             onConversationChanged?(payload.conversationID)
         case .providerChanged(let payload):
             onProviderChanged?(payload.providerID)
+        case .heartbeat:
+            // Liveness only. Arriving at all is the entire contribution;
+            // markFrame already recorded it.
+            break
         }
     }
 }
