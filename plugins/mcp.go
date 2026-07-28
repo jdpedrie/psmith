@@ -151,7 +151,8 @@ func init() {
 	Register(MCPName, newMCP)
 }
 
-func (p *mcpPlugin) Name() string        { return MCPName }
+func (p *mcpPlugin) Name() string { return MCPName }
+
 // DisplayName demotes the raw transport-level entry in pickers: with
 // the MCP registry live, users attach REGISTERED servers (which
 // surface as their own pseudo-plugin entries named after the server);

@@ -1,4 +1,4 @@
-package strategygame
+package gamemaster
 
 import (
 	"encoding/binary"
@@ -160,7 +160,7 @@ type Roll struct {
 // advancing a different number of times. And a regenerated turn re-rolls
 // nothing — narration changes, the mechanical result does not. Getting a
 // different outcome means making a different decision, which is the
-// point of a strategy game.
+// point of a game about decisions.
 func RollFor(seed uint64, turn int, situationID, choiceID string, modifier, target int) Roll {
 	h := fnv.New64a()
 	var buf [8]byte

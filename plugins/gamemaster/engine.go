@@ -1,4 +1,4 @@
-package strategygame
+package gamemaster
 
 import (
 	"fmt"

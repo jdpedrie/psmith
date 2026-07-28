@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// stubGameStore stands in for Postgres so these stay pure Go. Captures
+// stubStateStore stands in for Postgres so these stay pure Go. Captures
 // what it was asked to do so scoping can be asserted.
-type stubGameStore struct {
+type stubStateStore struct {
 	state   json.RawMessage
 	version int64
 	loadErr error
@@ -21,40 +21,40 @@ type stubGameStore struct {
 	savedTo      uuid.UUID
 }
 
-func (s *stubGameStore) LoadNearest(context.Context) (json.RawMessage, int64, uuid.UUID, error) {
+func (s *stubStateStore) LoadNearest(context.Context) (json.RawMessage, int64, uuid.UUID, error) {
 	if s.loadErr != nil {
 		return nil, 0, uuid.Nil, s.loadErr
 	}
 	if len(s.state) == 0 {
-		return nil, 0, uuid.Nil, ErrNoGameState
+		return nil, 0, uuid.Nil, ErrNoPluginState
 	}
 	return s.state, s.version, uuid.New(), nil
 }
 
-func (s *stubGameStore) Save(_ context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error {
+func (s *stubStateStore) Save(_ context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error {
 	s.savedTo, s.savedState, s.savedVersion = messageID, state, version
 	return nil
 }
 
-func newGameForTest(t *testing.T, cfg string) *strategyGame {
+func newGameForTest(t *testing.T, cfg string) *gameMaster {
 	t.Helper()
 	var raw json.RawMessage
 	if cfg != "" {
 		raw = json.RawMessage(cfg)
 	}
-	pl, err := newStrategyGame(raw)
+	pl, err := newGameMaster(raw)
 	if err != nil {
 		t.Fatalf("construct: %v", err)
 	}
-	g, ok := pl.(*strategyGame)
+	g, ok := pl.(*gameMaster)
 	if !ok {
 		t.Fatalf("unexpected type %T", pl)
 	}
 	return g
 }
 
-func gameCtx(store GameStore) context.Context {
-	ctx := WithGameStore(context.Background(), store)
+func gameCtx(store PluginStateStore) context.Context {
+	ctx := WithPluginStateStore(context.Background(), store)
 	return WithCallerInfo(ctx, CallerInfo{
 		UserID:          uuid.New(),
 		ConversationID:  uuid.New(),
@@ -93,20 +93,20 @@ const initInput = `{
 // nextTurn models what actually happens between turns: the pipeline is
 // rebuilt per send, so turn N+1 runs on a brand-new plugin instance
 // whose only knowledge of turn N is what was written to the store.
-func nextTurn(t *testing.T, prev *strategyGame) (*strategyGame, *stubGameStore) {
+func nextTurn(t *testing.T, prev *gameMaster) (*gameMaster, *stubStateStore) {
 	t.Helper()
 	state, version, ok := prev.PendingPluginState()
 	if !ok {
 		t.Fatal("previous turn committed no state to carry forward")
 	}
-	return newGameForTest(t, ""), &stubGameStore{state: state, version: version}
+	return newGameForTest(t, ""), &stubStateStore{state: state, version: version}
 }
 
-func TestStrategyGame_Descriptor(t *testing.T) {
+func TestGameMaster_Descriptor(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 
-	if g.Name() != StrategyGameName {
+	if g.Name() != GameMasterName {
 		t.Errorf("name: %q", g.Name())
 	}
 	if g.DisplayName() == "" || g.Description() == "" {
@@ -136,7 +136,7 @@ func TestStrategyGame_Descriptor(t *testing.T) {
 		}
 	}
 	// The capability gate depends on this being auto-derived.
-	desc, err := Describe(StrategyGameName)
+	desc, err := Describe(GameMasterName)
 	if err != nil {
 		t.Fatalf("describe: %v", err)
 	}
@@ -145,11 +145,11 @@ func TestStrategyGame_Descriptor(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_NilConfigIsUsable matters because Describe builds
+// TestGameMaster_NilConfigIsUsable matters because Describe builds
 // every registered plugin with a nil config to introspect it — an
 // erroring constructor would break ListPluginTypes for the whole
 // registry, not just this plugin.
-func TestStrategyGame_NilConfigIsUsable(t *testing.T) {
+func TestGameMaster_NilConfigIsUsable(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	if !g.cfg.ShowOdds || !g.cfg.ShowRolls {
@@ -157,19 +157,19 @@ func TestStrategyGame_NilConfigIsUsable(t *testing.T) {
 	}
 }
 
-func TestStrategyGame_RequiresStore(t *testing.T) {
+func TestGameMaster_RequiresStore(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	_, err := g.ExecuteTool(context.Background(), "game_commit_turn", json.RawMessage(initInput))
-	if err == nil || !strings.Contains(err.Error(), "no GameStore") {
+	if err == nil || !strings.Contains(err.Error(), "no PluginStateStore") {
 		t.Errorf("unwired store should produce a clean tool error; got %v", err)
 	}
 }
 
-func TestStrategyGame_InitializeStartsCampaign(t *testing.T) {
+func TestGameMaster_InitializeStartsCampaign(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	store := &stubGameStore{}
+	store := &stubStateStore{}
 
 	res, err := g.ExecuteTool(gameCtx(store), "game_commit_turn", json.RawMessage(initInput))
 	if err != nil {
@@ -196,12 +196,12 @@ func TestStrategyGame_InitializeStartsCampaign(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_RejectsSecondInitialize is the phase gate: the model
+// TestGameMaster_RejectsSecondInitialize is the phase gate: the model
 // does not get to decide whether a campaign exists.
-func TestStrategyGame_RejectsSecondInitialize(t *testing.T) {
+func TestGameMaster_RejectsSecondInitialize(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("first initialize: %v", err)
 	}
 	// A later send, with the campaign already on the branch.
@@ -212,43 +212,43 @@ func TestStrategyGame_RejectsSecondInitialize(t *testing.T) {
 	}
 }
 
-func TestStrategyGame_ResolveRequiresCampaign(t *testing.T) {
+func TestGameMaster_ResolveRequiresCampaign(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	_, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn",
+	_, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn",
 		json.RawMessage(`{"kind":"resolve","choice_id":"A"}`))
 	if err == nil || !strings.Contains(err.Error(), "no campaign yet") {
 		t.Errorf("resolve before initialize should be refused; got %v", err)
 	}
 }
 
-func TestStrategyGame_RejectsUnknownKind(t *testing.T) {
+func TestGameMaster_RejectsUnknownKind(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	_, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn",
+	_, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn",
 		json.RawMessage(`{"kind":"cheat"}`))
 	if err == nil || !strings.Contains(err.Error(), "kind must be") {
 		t.Errorf("unknown kind should be refused; got %v", err)
 	}
 }
 
-// TestStrategyGame_RejectsModelInventedDifficulty verifies the tag
+// TestGameMaster_RejectsModelInventedDifficulty verifies the tag
 // vocabulary is enforced server-side rather than merely requested in the
 // prompt — the whole reason the model picks bands instead of integers.
-func TestStrategyGame_RejectsModelInventedDifficulty(t *testing.T) {
+func TestGameMaster_RejectsModelInventedDifficulty(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	bad := strings.Replace(initInput, `"difficulty":"moderate"`, `"difficulty":"basically impossible"`, 1)
-	_, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(bad))
+	_, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(bad))
 	if err == nil || !strings.Contains(err.Error(), "unknown difficulty") {
 		t.Errorf("invented difficulty should be refused; got %v", err)
 	}
 }
 
-func TestStrategyGame_ResolveAppliesTurn(t *testing.T) {
+func TestGameMaster_ResolveAppliesTurn(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	g2, store2 := nextTurn(t, g)
@@ -283,13 +283,13 @@ func TestStrategyGame_ResolveAppliesTurn(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_AppendsAuthoritativeBlock is the heart of the "model
+// TestGameMaster_AppendsAuthoritativeBlock is the heart of the "model
 // never publishes a number" guarantee: the model's prose goes in
 // untouched and the engine's own figures are appended before persist.
-func TestStrategyGame_AppendsAuthoritativeBlock(t *testing.T) {
+func TestGameMaster_AppendsAuthoritativeBlock(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 
@@ -323,9 +323,9 @@ func TestStrategyGame_AppendsAuthoritativeBlock(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_NoPendingLeavesContentAlone covers ordinary turns
+// TestGameMaster_NoPendingLeavesContentAlone covers ordinary turns
 // where the tool was never called — the plugin must not decorate them.
-func TestStrategyGame_NoPendingLeavesContentAlone(t *testing.T) {
+func TestGameMaster_NoPendingLeavesContentAlone(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	const prose = "Just talking, no game move."
@@ -337,7 +337,7 @@ func TestStrategyGame_NoPendingLeavesContentAlone(t *testing.T) {
 	}
 }
 
-func TestStrategyGame_StripsBlockFromDisplay(t *testing.T) {
+func TestGameMaster_StripsBlockFromDisplay(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	raw := "Prose here.\n\n" + gameOpenTag + `{"turn":1,"stats":[]}` + gameCloseTag
@@ -346,13 +346,13 @@ func TestStrategyGame_StripsBlockFromDisplay(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_RendersNativeComponents verifies the block becomes
+// TestGameMaster_RendersNativeComponents verifies the block becomes
 // real UI rather than JSON in the transcript, using the existing
 // component vocabulary so no client change is needed.
-func TestStrategyGame_RendersNativeComponents(t *testing.T) {
+func TestGameMaster_RendersNativeComponents(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	content := g.TransformAssistantContent("The granary is empty.")
@@ -404,12 +404,12 @@ func TestStrategyGame_RendersNativeComponents(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_OddsCanBeHidden verifies the presentation config
+// TestGameMaster_OddsCanBeHidden verifies the presentation config
 // actually reaches the rendered label.
-func TestStrategyGame_OddsCanBeHidden(t *testing.T) {
+func TestGameMaster_OddsCanBeHidden(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, `{"show_odds":false}`)
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	content := g.TransformAssistantContent("Prose.")
@@ -426,12 +426,12 @@ func TestStrategyGame_OddsCanBeHidden(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_PlainProseSurvivesRendering guards a nasty failure
+// TestGameMaster_PlainProseSurvivesRendering guards a nasty failure
 // mode: WalkText splices the callback's return in place of the part, so
 // a renderer that returns nil for "nothing to do" deletes the message.
 // With this plugin attached to a profile that would silently erase every
 // ordinary assistant turn in the conversation.
-func TestStrategyGame_PlainProseSurvivesRendering(t *testing.T) {
+func TestGameMaster_PlainProseSurvivesRendering(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	const prose = "No game block in this message at all."
@@ -442,9 +442,9 @@ func TestStrategyGame_PlainProseSurvivesRendering(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_MalformedBlockSurvivesAsText follows the house rule
+// TestGameMaster_MalformedBlockSurvivesAsText follows the house rule
 // that a renderer never silently drops model output.
-func TestStrategyGame_MalformedBlockSurvivesAsText(t *testing.T) {
+func TestGameMaster_MalformedBlockSurvivesAsText(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	raw := "Prose.\n\n" + gameOpenTag + `{not json` + gameCloseTag
@@ -462,7 +462,7 @@ func TestStrategyGame_MalformedBlockSurvivesAsText(t *testing.T) {
 func TestPipeline_CollectsPendingState(t *testing.T) {
 	t.Parallel()
 	played := newGameForTest(t, "")
-	if _, err := played.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := played.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	idle := newGameForTest(t, "")
@@ -475,7 +475,7 @@ func TestPipeline_CollectsPendingState(t *testing.T) {
 	if len(pending) != 1 {
 		t.Fatalf("only the plugin that played should report state; got %d", len(pending))
 	}
-	if pending[0].PluginName != StrategyGameName {
+	if pending[0].PluginName != GameMasterName {
 		t.Errorf("plugin name: got %q", pending[0].PluginName)
 	}
 	if pending[0].Version != 1 {
@@ -486,15 +486,15 @@ func TestPipeline_CollectsPendingState(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_RefusesSecondCommitInOneTurn guards against a model
+// TestGameMaster_RefusesSecondCommitInOneTurn guards against a model
 // that calls the tool twice — retry logic, a confused tool loop, or
 // fishing for a better roll. Without the guard the campaign advances
 // several turns behind a single narration and only the last state ever
 // gets bound to a message.
-func TestStrategyGame_RefusesSecondCommitInOneTurn(t *testing.T) {
+func TestGameMaster_RefusesSecondCommitInOneTurn(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	ctx := gameCtx(&stubGameStore{})
+	ctx := gameCtx(&stubStateStore{})
 	if _, err := g.ExecuteTool(ctx, "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
@@ -508,10 +508,10 @@ func TestStrategyGame_RefusesSecondCommitInOneTurn(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_StateVersionConflict verifies the optimistic
+// TestGameMaster_StateVersionConflict verifies the optimistic
 // concurrency check rejects a call acting on state that has since moved,
 // rather than applying it on top of newer state.
-func TestStrategyGame_StateVersionConflict(t *testing.T) {
+func TestGameMaster_StateVersionConflict(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	// A campaign already at version 7 on the branch.
@@ -523,7 +523,7 @@ func TestStrategyGame_StateVersionConflict(t *testing.T) {
 	      {"id":"A","label":"go","rating":"guile","difficulty":"easy","target":8,"modifier":3,
 	       "odds":{"favorable":90,"disaster":0},"stakes":"minor","advances":"treasury","costs":"treasury"}]}},
 	  "protocol":{"phase":"awaiting_player_action","allowed_commit_kind":"resolve","legal_choice_ids":["A"]}}`
-	store := &stubGameStore{state: json.RawMessage(stored), version: 7}
+	store := &stubStateStore{state: json.RawMessage(stored), version: 7}
 
 	_, err := g.ExecuteTool(gameCtx(store), "game_commit_turn", json.RawMessage(
 		`{"kind":"resolve","expected_state_version":3,"choice_id":"A"}`))
@@ -532,12 +532,12 @@ func TestStrategyGame_StateVersionConflict(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_MatchingVersionProceeds is the other half: the guard
+// TestGameMaster_MatchingVersionProceeds is the other half: the guard
 // must not fire on a correct call.
-func TestStrategyGame_MatchingVersionProceeds(t *testing.T) {
+func TestGameMaster_MatchingVersionProceeds(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	ctx := gameCtx(&stubGameStore{})
+	ctx := gameCtx(&stubStateStore{})
 	// A fresh campaign has no state, so an expected version cannot
 	// conflict — initialize must go through.
 	if _, err := g.ExecuteTool(ctx, "game_commit_turn",
@@ -549,15 +549,15 @@ func TestStrategyGame_MatchingVersionProceeds(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_PricesImprovisedActionWithoutCommitting covers the
+// TestGameMaster_PricesImprovisedActionWithoutCommitting covers the
 // move that justifies running this on a language model: the player says
 // something that is not on the list and gets a real, priced gamble.
 // Quoting must not change anything — showing odds means committing to
 // them, so the player has to see the price before paying it.
-func TestStrategyGame_PricesImprovisedActionWithoutCommitting(t *testing.T) {
+func TestGameMaster_PricesImprovisedActionWithoutCommitting(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	g2, store2 := nextTurn(t, g)
@@ -586,15 +586,15 @@ func TestStrategyGame_PricesImprovisedActionWithoutCommitting(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_ImprovisedActionResolvesLikeAnyOther verifies free
+// TestGameMaster_ImprovisedActionResolvesLikeAnyOther verifies free
 // text goes through the same pricing, rolling and effects as a listed
 // option. A separate, softer path for improvised play would make
 // off-menu actions strictly better than the buttons, and the listed
 // options would stop being decisions.
-func TestStrategyGame_ImprovisedActionResolvesLikeAnyOther(t *testing.T) {
+func TestGameMaster_ImprovisedActionResolvesLikeAnyOther(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	g2, store2 := nextTurn(t, g)
@@ -621,10 +621,10 @@ func TestStrategyGame_ImprovisedActionResolvesLikeAnyOther(t *testing.T) {
 	}
 }
 
-func TestStrategyGame_ImprovisedRejectsBothForms(t *testing.T) {
+func TestGameMaster_ImprovisedRejectsBothForms(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	g2, store2 := nextTurn(t, g)
@@ -637,12 +637,12 @@ func TestStrategyGame_ImprovisedRejectsBothForms(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_ImprovisedRejectsInventedTags proves free text does
+// TestGameMaster_ImprovisedRejectsInventedTags proves free text does
 // not escape the vocabulary enforcement.
-func TestStrategyGame_ImprovisedRejectsInventedTags(t *testing.T) {
+func TestGameMaster_ImprovisedRejectsInventedTags(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
 	g2, store2 := nextTurn(t, g)
@@ -654,15 +654,15 @@ func TestStrategyGame_ImprovisedRejectsInventedTags(t *testing.T) {
 	}
 }
 
-// TestStrategyGame_ClocksSurfaceInTheStatusPanel verifies background
+// TestGameMaster_ClocksSurfaceInTheStatusPanel verifies background
 // pressure is visible next to the stats it is eating, at the moment of
 // choosing rather than buried in prose.
-func TestStrategyGame_ClocksSurfaceInTheStatusPanel(t *testing.T) {
+func TestGameMaster_ClocksSurfaceInTheStatusPanel(t *testing.T) {
 	t.Parallel()
 	g := newGameForTest(t, "")
 	withClock := strings.Replace(initInput, `"kind": "initialize",`,
 		`"kind": "initialize","start_clocks":[{"id":"debt","label":"The creditors call in","length":"medium","weight":"major","drains":"treasury","strikes":"standing","ominous":true}],`, 1)
-	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(withClock)); err != nil {
+	if _, err := g.ExecuteTool(gameCtx(&stubStateStore{}), "game_commit_turn", json.RawMessage(withClock)); err != nil {
 		t.Fatalf("initialize with clock: %v", err)
 	}
 	content := g.TransformAssistantContent("The ledgers are grim.")

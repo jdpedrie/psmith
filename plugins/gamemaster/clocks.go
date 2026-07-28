@@ -1,4 +1,4 @@
-package strategygame
+package gamemaster
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 // Clock is a background pressure running alongside the focal situation:
 // a famine, a siege, an investigation closing in.
 //
-// This is the difference between a strategy game and a branching story.
+// This is the difference between a management game and a branching story.
 // Without clocks each turn is a self-contained dilemma and the only
 // question is which option reads best. With them the focal choice is
 // hard because of what else is running: spending the treasury on grain

@@ -7,12 +7,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jdpedrie/psmith/plugins/strategygame"
+	"github.com/jdpedrie/psmith/plugins/gamemaster"
 )
 
-// StrategyGameName is the registered plugin name. Stable forever — it is
+// GameMasterName is the registered plugin name. Stable forever — it is
 // a database value in profile_plugins and in plugin_state.plugin_name.
-const StrategyGameName = "strategy_game"
+const GameMasterName = "game_master"
 
 // gameStateTag wraps the authoritative block the plugin appends to each
 // assistant turn. Distinctive enough not to collide with anything a
@@ -22,7 +22,7 @@ const (
 	gameCloseTag = "</psmith_game>"
 )
 
-// strategyGame runs a turn-based narrative strategy game inside an
+// gameMaster runs a turn-based narrative management game inside an
 // ordinary conversation.
 //
 // The division of labour is the whole design: this plugin owns every
@@ -35,8 +35,8 @@ const (
 // State lives in plugin_state keyed to the assistant message that
 // produced it, so forking a conversation forks the campaign. See
 // plugins/game_store.go.
-type strategyGame struct {
-	cfg strategyGameConfig
+type gameMaster struct {
+	cfg gameMasterConfig
 
 	// mu guards pending, which is written by ExecuteTool during the tool
 	// loop and read by TransformAssistantContent at assistant finalize.
@@ -44,37 +44,37 @@ type strategyGame struct {
 	// send), which is what lets the plugin inject authoritative numbers
 	// into content the model never wrote.
 	mu      sync.Mutex
-	pending *strategygame.State
+	pending *gamemaster.State
 	// lastTransition is the mechanical result of the turn just resolved,
 	// kept so the appended block can explain the outcome.
-	lastTransition *strategygame.Transition
+	lastTransition *gamemaster.Transition
 }
 
-type strategyGameConfig struct {
+type gameMasterConfig struct {
 	ShowOdds  bool `json:"show_odds"`
 	ShowRolls bool `json:"show_rolls"`
 }
 
-func newStrategyGame(configBytes json.RawMessage) (Plugin, error) {
+func newGameMaster(configBytes json.RawMessage) (Plugin, error) {
 	// Defaults live here, not only in ConfigField.Default — Describe
 	// builds every plugin with a nil config to introspect it, so the
 	// constructor has to produce a usable instance from nothing.
-	cfg := strategyGameConfig{ShowOdds: true, ShowRolls: true}
+	cfg := gameMasterConfig{ShowOdds: true, ShowRolls: true}
 	if len(configBytes) > 0 {
 		if err := json.Unmarshal(configBytes, &cfg); err != nil {
-			return nil, fmt.Errorf("strategy_game: parse config: %w", err)
+			return nil, fmt.Errorf("game_master: parse config: %w", err)
 		}
 	}
-	return &strategyGame{cfg: cfg}, nil
+	return &gameMaster{cfg: cfg}, nil
 }
 
-func init() { Register(StrategyGameName, newStrategyGame) }
+func init() { Register(GameMasterName, newGameMaster) }
 
-func (p *strategyGame) Name() string        { return StrategyGameName }
-func (p *strategyGame) DisplayName() string { return "Strategy Game" }
+func (p *gameMaster) Name() string        { return GameMasterName }
+func (p *gameMaster) DisplayName() string { return "Game Master" }
 
-func (p *strategyGame) Description() string {
-	return "Turns a conversation into a turn-based strategy game. You hold a position of " +
+func (p *gameMaster) Description() string {
+	return "Runs a turn-based game in the conversation. You hold a position of " +
 		"authority — ruler, commander, administrator — and each turn poses a situation with " +
 		"structured choices that show their real odds. The plugin owns the rules, stats, dice " +
 		"and win/loss conditions; the model only writes the fiction, so the numbers never drift. " +
@@ -84,7 +84,7 @@ func (p *strategyGame) Description() string {
 
 // --- Configurable ---
 
-func (p *strategyGame) ConfigFields() []ConfigField {
+func (p *gameMaster) ConfigFields() []ConfigField {
 	return []ConfigField{
 		{
 			Name:        "show_odds",
@@ -111,13 +111,13 @@ func (p *strategyGame) ConfigFields() []ConfigField {
 // conversation, so it teaches the protocol rather than carrying state.
 // Live state reaches the model through the tool result.
 
-func (p *strategyGame) PrependSystemMessage() string { return "" }
+func (p *gameMaster) PrependSystemMessage() string { return "" }
 
-func (p *strategyGame) AppendSystemMessage() string {
+func (p *gameMaster) AppendSystemMessage() string {
 	return strings.Join([]string{
-		"## Strategy game protocol",
+		"## Game master protocol",
 		"",
-		"This conversation is a turn-based strategy game. You are the narrator and scenario",
+		"This conversation is a turn-based game. You are its narrator and scenario",
 		"director. You do NOT track state, do arithmetic, roll dice, or decide outcomes — the",
 		"game engine owns all of that and will reject anything that tries.",
 		"",
@@ -139,8 +139,8 @@ func (p *strategyGame) AppendSystemMessage() string {
 		"attempt was a disaster, write a disaster.",
 		"",
 		"Choices are described in tags, never numbers. Each names the rating it tests, a",
-		"difficulty band (" + strings.Join(strategygame.DifficultyNames(), ", ") + "), a stakes tier (" +
-			strings.Join(strategygame.StakesNames(), ", ") + "), the stat it advances on success, and the stat it costs.",
+		"difficulty band (" + strings.Join(gamemaster.DifficultyNames(), ", ") + "), a stakes tier (" +
+			strings.Join(gamemaster.StakesNames(), ", ") + "), the stat it advances on success, and the stat it costs.",
 		"Make choices genuinely different: a safe option, an expensive certain one, a risky",
 		"high-reward one. The player should be choosing between kinds of damage, not between an",
 		"obvious right answer and an obvious wrong one.",
@@ -169,7 +169,7 @@ func (p *strategyGame) AppendSystemMessage() string {
 
 // --- ToolProvider ---
 
-func (p *strategyGame) Tools() []ToolDef {
+func (p *gameMaster) Tools() []ToolDef {
 	return []ToolDef{
 		{
 			Name: "game_commit_turn",
@@ -198,10 +198,10 @@ func (p *strategyGame) Tools() []ToolDef {
 	}
 }
 
-func (p *strategyGame) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
-	store := GameStoreFrom(ctx)
+func (p *gameMaster) ExecuteTool(ctx context.Context, name string, input json.RawMessage) (ToolResult, error) {
+	store := PluginStateStoreFrom(ctx)
 	if store == nil {
-		return ToolResult{}, fmt.Errorf("strategy_game: no GameStore in context — server not wired for stateful plugins")
+		return ToolResult{}, fmt.Errorf("game_master: no PluginStateStore in context — server not wired for stateful plugins")
 	}
 	switch name {
 	case "game_inspect":
@@ -219,7 +219,7 @@ func (p *strategyGame) ExecuteTool(ctx context.Context, name string, input json.
 	case "game_commit_turn":
 		return p.commitTurn(ctx, store, input)
 	}
-	return ToolResult{}, fmt.Errorf("strategy_game: unknown tool %q", name)
+	return ToolResult{}, fmt.Errorf("game_master: unknown tool %q", name)
 }
 
 // commitTurnInput is the model-facing shape. Note what is absent: any
@@ -231,25 +231,25 @@ type commitTurnInput struct {
 	// on. Optional but strongly encouraged: it turns a duplicated,
 	// retried or replayed tool call from a silent double-application into
 	// a clean rejection the model can recover from.
-	ExpectedStateVersion *int64                       `json:"expected_state_version,omitempty"`
-	Scenario             *strategygame.Scenario       `json:"scenario,omitempty"`
-	ChoiceID             string                       `json:"choice_id,omitempty"`
-	Next                 *strategygame.SituationDraft `json:"next_situation,omitempty"`
+	ExpectedStateVersion *int64                     `json:"expected_state_version,omitempty"`
+	Scenario             *gamemaster.Scenario       `json:"scenario,omitempty"`
+	ChoiceID             string                     `json:"choice_id,omitempty"`
+	Next                 *gamemaster.SituationDraft `json:"next_situation,omitempty"`
 	// StartClocks opens background pressures that tick every turn;
 	// ResolveClocks closes ones the player genuinely dealt with, without
 	// firing their payload.
-	StartClocks   []strategygame.ClockDraft `json:"start_clocks,omitempty"`
-	ResolveClocks []string                  `json:"resolve_clocks,omitempty"`
+	StartClocks   []gamemaster.ClockDraft `json:"start_clocks,omitempty"`
+	ResolveClocks []string                `json:"resolve_clocks,omitempty"`
 	// Improvised carries a free-text action the player confirmed after
 	// seeing its price from game_price_action. Mutually exclusive with
 	// choice_id.
-	Improvised *strategygame.ChoiceDraft `json:"improvised_action,omitempty"`
+	Improvised *gamemaster.ChoiceDraft `json:"improvised_action,omitempty"`
 }
 
-func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json.RawMessage) (ToolResult, error) {
+func (p *gameMaster) commitTurn(ctx context.Context, store PluginStateStore, raw json.RawMessage) (ToolResult, error) {
 	var in commitTurnInput
 	if err := json.Unmarshal(raw, &in); err != nil {
-		return ToolResult{}, fmt.Errorf("strategy_game: parse input: %w", err)
+		return ToolResult{}, fmt.Errorf("game_master: parse input: %w", err)
 	}
 	current, exists, err := p.loadStateOptional(ctx, store)
 	if err != nil {
@@ -265,7 +265,7 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 	p.mu.Unlock()
 	if alreadyCommitted {
 		return ToolResult{}, fmt.Errorf(
-			"strategy_game: this turn is already committed — narrate the result you were given rather than committing again")
+			"game_master: this turn is already committed — narrate the result you were given rather than committing again")
 	}
 
 	// Optimistic concurrency. Compares against the version actually on
@@ -275,7 +275,7 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 	if in.ExpectedStateVersion != nil && exists {
 		if got := current.Meta.StateVersion; got != *in.ExpectedStateVersion {
 			return ToolResult{}, fmt.Errorf(
-				"strategy_game: state conflict — you acted on version %d but the campaign is at version %d; call game_inspect and reconsider",
+				"game_master: state conflict — you acted on version %d but the campaign is at version %d; call game_inspect and reconsider",
 				*in.ExpectedStateVersion, got)
 		}
 	}
@@ -284,19 +284,19 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 	case "initialize":
 		// Phase gate: the model cannot restart a running campaign, and
 		// it does not get to decide whether one exists.
-		if exists && current.Protocol.Phase != strategygame.PhaseUninitialized {
+		if exists && current.Protocol.Phase != gamemaster.PhaseUninitialized {
 			return ToolResult{}, fmt.Errorf(
-				"strategy_game: this campaign is already underway (turn %d) — use kind=\"resolve\"", current.Meta.Turn)
+				"game_master: this campaign is already underway (turn %d) — use kind=\"resolve\"", current.Meta.Turn)
 		}
 		if in.Scenario == nil {
-			return ToolResult{}, fmt.Errorf("strategy_game: initialize requires a scenario")
+			return ToolResult{}, fmt.Errorf("game_master: initialize requires a scenario")
 		}
-		next, err := strategygame.Initialize(*in.Scenario, seedFor(ctx))
+		next, err := gamemaster.Initialize(*in.Scenario, seedFor(ctx))
 		if err != nil {
-			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+			return ToolResult{}, fmt.Errorf("game_master: %w", err)
 		}
 		if err := applyClockChanges(&next, in); err != nil {
-			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+			return ToolResult{}, fmt.Errorf("game_master: %w", err)
 		}
 		p.setPending(&next, nil)
 		return jsonResult(map[string]any{
@@ -309,11 +309,11 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		})
 
 	case "resolve":
-		if !exists || current.Protocol.Phase == strategygame.PhaseUninitialized {
-			return ToolResult{}, fmt.Errorf("strategy_game: no campaign yet — call kind=\"initialize\" first")
+		if !exists || current.Protocol.Phase == gamemaster.PhaseUninitialized {
+			return ToolResult{}, fmt.Errorf("game_master: no campaign yet — call kind=\"initialize\" first")
 		}
-		if current.Protocol.Phase == strategygame.PhaseFinished {
-			return ToolResult{}, fmt.Errorf("strategy_game: this campaign ended on turn %d", current.Meta.Turn)
+		if current.Protocol.Phase == gamemaster.PhaseFinished {
+			return ToolResult{}, fmt.Errorf("game_master: this campaign ended on turn %d", current.Meta.Turn)
 		}
 		// An improvised action is spliced onto the situation as a real
 		// choice first, so it goes through exactly the same pricing,
@@ -323,27 +323,27 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		resolveAgainst, choiceID := current, in.ChoiceID
 		if in.Improvised != nil {
 			if in.ChoiceID != "" {
-				return ToolResult{}, fmt.Errorf("strategy_game: pass either choice_id or improvised_action, not both")
+				return ToolResult{}, fmt.Errorf("game_master: pass either choice_id or improvised_action, not both")
 			}
-			withImprov, err := strategygame.AttachImprovised(current, *in.Improvised)
+			withImprov, err := gamemaster.AttachImprovised(current, *in.Improvised)
 			if err != nil {
-				return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+				return ToolResult{}, fmt.Errorf("game_master: %w", err)
 			}
-			resolveAgainst, choiceID = withImprov, strategygame.ImprovisedChoiceID
+			resolveAgainst, choiceID = withImprov, gamemaster.ImprovisedChoiceID
 		}
-		tr, next, err := strategygame.Resolve(resolveAgainst, choiceID)
+		tr, next, err := gamemaster.Resolve(resolveAgainst, choiceID)
 		if err != nil {
-			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+			return ToolResult{}, fmt.Errorf("game_master: %w", err)
 		}
 		// A finished campaign needs no next situation; otherwise one is
 		// required or the player would have nothing to do.
-		if next.Protocol.Phase != strategygame.PhaseFinished {
+		if next.Protocol.Phase != gamemaster.PhaseFinished {
 			if in.Next == nil {
-				return ToolResult{}, fmt.Errorf("strategy_game: resolve requires next_situation unless the campaign ended")
+				return ToolResult{}, fmt.Errorf("game_master: resolve requires next_situation unless the campaign ended")
 			}
-			sit, err := strategygame.PriceSituation(next, *in.Next)
+			sit, err := gamemaster.PriceSituation(next, *in.Next)
 			if err != nil {
-				return ToolResult{}, fmt.Errorf("strategy_game: next_situation: %w", err)
+				return ToolResult{}, fmt.Errorf("game_master: next_situation: %w", err)
 			}
 			next.Public.Situation = &sit
 			next.Protocol.LegalChoiceIDs = nil
@@ -352,7 +352,7 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 			}
 		}
 		if err := applyClockChanges(&next, in); err != nil {
-			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+			return ToolResult{}, fmt.Errorf("game_master: %w", err)
 		}
 		p.setPending(&next, &tr)
 		out := map[string]any{
@@ -380,13 +380,13 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		}
 		return jsonResult(out)
 	}
-	return ToolResult{}, fmt.Errorf("strategy_game: kind must be \"initialize\" or \"resolve\", got %q", in.Kind)
+	return ToolResult{}, fmt.Errorf("game_master: kind must be \"initialize\" or \"resolve\", got %q", in.Kind)
 }
 
 // priceAction quotes a free-text action without committing it.
 //
 // This is the move no board game can adjudicate, and the main reason to
-// run a strategy game on a language model at all: the player types "I'll
+// run a game like this on a language model at all: the player types "I'll
 // marry my daughter to the duke and buy his cavalry" and gets a real,
 // priced, honest gamble rather than a shrug or a rubber stamp. The model
 // supplies interpretation; the engine still owns every number, so an
@@ -397,7 +397,7 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 // Deliberately read-only. Showing odds means committing to them, and a
 // player must be able to see the price before paying it — so this quotes,
 // and a following game_commit_turn with the same tags actually resolves.
-func (p *strategyGame) priceAction(ctx context.Context, store GameStore, raw json.RawMessage) (ToolResult, error) {
+func (p *gameMaster) priceAction(ctx context.Context, store PluginStateStore, raw json.RawMessage) (ToolResult, error) {
 	var in struct {
 		Summary    string `json:"summary"`
 		Rating     string `json:"rating"`
@@ -407,18 +407,18 @@ func (p *strategyGame) priceAction(ctx context.Context, store GameStore, raw jso
 		Costs      string `json:"costs"`
 	}
 	if err := json.Unmarshal(raw, &in); err != nil {
-		return ToolResult{}, fmt.Errorf("strategy_game: parse input: %w", err)
+		return ToolResult{}, fmt.Errorf("game_master: parse input: %w", err)
 	}
 	st, _, err := p.loadState(ctx, store)
 	if err != nil {
 		return ToolResult{}, err
 	}
-	if st.Protocol.Phase == strategygame.PhaseFinished {
-		return ToolResult{}, fmt.Errorf("strategy_game: this campaign has ended")
+	if st.Protocol.Phase == gamemaster.PhaseFinished {
+		return ToolResult{}, fmt.Errorf("game_master: this campaign has ended")
 	}
 
-	quote, err := strategygame.PriceImprovised(st, strategygame.ChoiceDraft{
-		ID:         strategygame.ImprovisedChoiceID,
+	quote, err := gamemaster.PriceImprovised(st, gamemaster.ChoiceDraft{
+		ID:         gamemaster.ImprovisedChoiceID,
 		Label:      in.Summary,
 		Rating:     in.Rating,
 		Difficulty: in.Difficulty,
@@ -427,7 +427,7 @@ func (p *strategyGame) priceAction(ctx context.Context, store GameStore, raw jso
 		Costs:      in.Costs,
 	})
 	if err != nil {
-		return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+		return ToolResult{}, fmt.Errorf("game_master: %w", err)
 	}
 	return jsonResult(map[string]any{
 		"quoted":        true,
@@ -445,7 +445,7 @@ func (p *strategyGame) priceAction(ctx context.Context, store GameStore, raw jso
 // applyClockChanges opens and closes background pressures. Resolving a
 // clock removes it WITHOUT firing its payload — that is the reward for
 // actually dealing with the underlying problem rather than riding it out.
-func applyClockChanges(st *strategygame.State, in commitTurnInput) error {
+func applyClockChanges(st *gamemaster.State, in commitTurnInput) error {
 	stats := map[string]bool{}
 	for k := range st.Public.Resources {
 		stats[k] = true
@@ -462,7 +462,7 @@ func applyClockChanges(st *strategygame.State, in commitTurnInput) error {
 		if _, exists := st.ClockByID(d.ID); exists {
 			return fmt.Errorf("clock %q is already running", d.ID)
 		}
-		c, err := strategygame.PriceClock(d, stats)
+		c, err := gamemaster.PriceClock(d, stats)
 		if err != nil {
 			return err
 		}
@@ -471,18 +471,18 @@ func applyClockChanges(st *strategygame.State, in commitTurnInput) error {
 	return nil
 }
 
-func (p *strategyGame) loadState(ctx context.Context, store GameStore) (strategygame.State, bool, error) {
+func (p *gameMaster) loadState(ctx context.Context, store PluginStateStore) (gamemaster.State, bool, error) {
 	st, exists, err := p.loadStateOptional(ctx, store)
 	if err != nil {
-		return strategygame.State{}, false, err
+		return gamemaster.State{}, false, err
 	}
 	if !exists {
-		return strategygame.State{}, false, fmt.Errorf("strategy_game: no campaign has been started in this conversation")
+		return gamemaster.State{}, false, fmt.Errorf("game_master: no campaign has been started in this conversation")
 	}
 	return st, true, nil
 }
 
-func (p *strategyGame) loadStateOptional(ctx context.Context, store GameStore) (strategygame.State, bool, error) {
+func (p *gameMaster) loadStateOptional(ctx context.Context, store PluginStateStore) (gamemaster.State, bool, error) {
 	// A state computed earlier in this same turn wins over the stored
 	// one — the model may call inspect after committing.
 	p.mu.Lock()
@@ -495,22 +495,22 @@ func (p *strategyGame) loadStateOptional(ctx context.Context, store GameStore) (
 
 	raw, _, _, err := store.LoadNearest(ctx)
 	if err != nil {
-		if err == ErrNoGameState {
-			return strategygame.State{}, false, nil
+		if err == ErrNoPluginState {
+			return gamemaster.State{}, false, nil
 		}
-		return strategygame.State{}, false, fmt.Errorf("strategy_game: load state: %w", err)
+		return gamemaster.State{}, false, fmt.Errorf("game_master: load state: %w", err)
 	}
-	var st strategygame.State
+	var st gamemaster.State
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return strategygame.State{}, false, fmt.Errorf("strategy_game: stored state is unreadable: %w", err)
+		return gamemaster.State{}, false, fmt.Errorf("game_master: stored state is unreadable: %w", err)
 	}
 	if err := st.Validate(); err != nil {
-		return strategygame.State{}, false, fmt.Errorf("strategy_game: %w", err)
+		return gamemaster.State{}, false, fmt.Errorf("game_master: %w", err)
 	}
 	return st, true, nil
 }
 
-func (p *strategyGame) setPending(st *strategygame.State, tr *strategygame.Transition) {
+func (p *gameMaster) setPending(st *gamemaster.State, tr *gamemaster.Transition) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pending = st
@@ -519,7 +519,7 @@ func (p *strategyGame) setPending(st *strategygame.State, tr *strategygame.Trans
 
 // --- PendingStateProvider ---
 
-func (p *strategyGame) PendingPluginState() (json.RawMessage, int64, bool) {
+func (p *gameMaster) PendingPluginState() (json.RawMessage, int64, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.pending == nil {
@@ -547,8 +547,8 @@ func (p *strategyGame) PendingPluginState() (json.RawMessage, int64, bool) {
 // Director facts are included: the model is the game's director and is
 // told to keep them secret. They never reach the renderer, which only
 // ever sees the block appended to assistant content.
-func (p *strategyGame) BuildTurnContext(ctx context.Context, turn TurnInfo) (string, error) {
-	store := GameStoreFrom(ctx)
+func (p *gameMaster) BuildTurnContext(ctx context.Context, turn TurnInfo) (string, error) {
+	store := PluginStateStoreFrom(ctx)
 	if store == nil {
 		return "", nil
 	}
@@ -557,7 +557,7 @@ func (p *strategyGame) BuildTurnContext(ctx context.Context, turn TurnInfo) (str
 		// No campaign yet is the normal first-turn case, not a failure.
 		return "", nil
 	}
-	var st strategygame.State
+	var st gamemaster.State
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return "", err
 	}
@@ -636,7 +636,7 @@ func (p *strategyGame) BuildTurnContext(ctx context.Context, turn TurnInfo) (str
 // choices: it cannot mistype a number it never wrote. The block is
 // stored, so every later fetch re-renders the same figures the engine
 // resolved against, and a scroll-back turn still shows its real odds.
-func (p *strategyGame) TransformAssistantContent(content string) string {
+func (p *gameMaster) TransformAssistantContent(content string) string {
 	p.mu.Lock()
 	st, tr := p.pending, p.lastTransition
 	p.mu.Unlock()
@@ -719,7 +719,7 @@ type choiceLine struct {
 // TransformForDisplay strips the machine block from the human-readable
 // text. The ContentRenderer below turns it into real components, so
 // leaving the JSON in the prose would show it twice.
-func (p *strategyGame) TransformForDisplay(content string) string {
+func (p *gameMaster) TransformForDisplay(content string) string {
 	for {
 		start := strings.Index(content, gameOpenTag)
 		if start < 0 {
@@ -735,7 +735,7 @@ func (p *strategyGame) TransformForDisplay(content string) string {
 
 // --- StreamingTagProvider ---
 
-func (p *strategyGame) StreamingTags() []StreamingTag {
+func (p *gameMaster) StreamingTags() []StreamingTag {
 	// The block is appended at finalize rather than streamed, so there
 	// is no live tag to hand the client. Declared empty deliberately:
 	// the plugin owns the structured output end to end.
@@ -747,7 +747,7 @@ func (p *strategyGame) StreamingTags() []StreamingTag {
 // RenderContent turns the stored block into native components. Reuses
 // the existing key_value and choice_list vocabulary rather than
 // introducing bespoke ones, so no client change is needed to play.
-func (p *strategyGame) RenderContent(parts []ContentPart, role string) []ContentPart {
+func (p *gameMaster) RenderContent(parts []ContentPart, role string) []ContentPart {
 	if role != "assistant" {
 		return parts
 	}

@@ -1694,7 +1694,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// Stateful plugins need their branch-scoped store to build a
 		// turn-context block, the same way tool dispatch gives them one.
 		PluginContext: func(c context.Context, pluginName string) context.Context {
-			return plugins.WithGameStore(c, s.newGameStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
+			return plugins.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
 		},
 	})
 	if err != nil {
@@ -1840,8 +1840,8 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// re-issues the request with tool_results. The supervisor sees a
 		// single linear chunk stream.
 		sendFunc = makeToolLoopSendFunc(stateless, sendReq, pipeline, s.logger, appendToolAttachment, appendToolCost, appendToolSpan, s.newProviderResolver(conv.UserID), s.elicit, conv.ID, conv.UserID, activeCtx.ID, s.searcher, s.deviceToolBroker, s.deviceToolRegistry,
-			func(pluginName string) plugins.GameStore {
-				return s.newGameStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID)
+			func(pluginName string) plugins.PluginStateStore {
+				return s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID)
 			})
 	} else {
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
@@ -1881,7 +1881,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		//     finding the previous one — the campaign replays that turn
 		//     rather than advancing on a state nobody recorded.
 		for _, ps := range pipeline.PendingPluginStates() {
-			gs := s.newGameStore(ps.PluginName, ownerUserID, conv.ID, assistantMsgID)
+			gs := s.newPluginStateStore(ps.PluginName, ownerUserID, conv.ID, assistantMsgID)
 			if err := gs.Save(persistCtx, assistantMsgID, ps.State, ps.Version); err != nil {
 				s.logger.Warn("bind plugin state failed",
 					"err", err,

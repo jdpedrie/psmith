@@ -125,20 +125,20 @@ func makeToolLoopSendFunc(
 	// tool error.
 	deviceToolBroker *devicetools.Broker,
 	deviceToolRegistry *devicetools.Registry,
-	// gameStoreFor, when non-nil, mints a branch-scoped state store for
+	// stateStoreFor, when non-nil, mints a branch-scoped state store for
 	// the plugin that owns the tool being dispatched. A factory rather
 	// than a single instance because the store is scoped per plugin —
 	// two stateful plugins in one pipeline must not see each other's
 	// rows. Nil leaves the capability unwired and the plugin reports a
 	// clean "persistence not available" tool error.
-	gameStoreFor func(pluginName string) plugins.GameStore,
+	stateStoreFor func(pluginName string) plugins.PluginStateStore,
 ) func(ctx context.Context) (<-chan providers.Chunk, error) {
 	dispatch := buildToolDispatch(pipeline, resolver, searcher,
 		plugins.CallerInfo{
 			UserID:          userID,
 			ConversationID:  conversationID,
 			ActiveContextID: activeContextID,
-		}, gameStoreFor)
+		}, stateStoreFor)
 
 	return func(ctx context.Context) (<-chan providers.Chunk, error) {
 		out := make(chan providers.Chunk, 32)
@@ -379,7 +379,7 @@ func buildToolDispatch(
 	resolver plugins.ProviderResolver,
 	searcher plugins.Searcher,
 	caller plugins.CallerInfo,
-	gameStoreFor func(pluginName string) plugins.GameStore,
+	stateStoreFor func(pluginName string) plugins.PluginStateStore,
 ) func(ctx context.Context, name string, input json.RawMessage) (plugins.ToolResult, error) {
 	owners := map[string]plugins.ToolProvider{}
 	for _, pl := range pipeline {
@@ -409,9 +409,9 @@ func buildToolDispatch(
 		// pipeline holding two stateful plugins can't cross-read. The
 		// ToolProvider is always also a Plugin; the assertion is
 		// defensive rather than expected to fail.
-		if gameStoreFor != nil {
+		if stateStoreFor != nil {
 			if named, ok := owner.(plugins.Plugin); ok {
-				ctx = plugins.WithGameStore(ctx, gameStoreFor(named.Name()))
+				ctx = plugins.WithPluginStateStore(ctx, stateStoreFor(named.Name()))
 			}
 		}
 		return owner.ExecuteTool(ctx, name, input)

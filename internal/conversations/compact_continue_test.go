@@ -39,7 +39,6 @@ func (p *scriptedProvider) Send(ctx context.Context, req providers.SendRequest) 
 	return ch, nil
 }
 
-
 // collect drains the wrapper's output and reconstructs the effective
 // text the way consume.go does: concatenate text deltas, reset on
 // ChunkContentReset.

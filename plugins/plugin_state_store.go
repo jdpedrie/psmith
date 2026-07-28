@@ -8,17 +8,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// ErrNoGameState is returned by GameStore.LoadNearest when no snapshot
+// ErrNoPluginState is returned by PluginStateStore.LoadNearest when no snapshot
 // exists anywhere on the branch — the normal signal for "this campaign
 // hasn't been initialized yet", not an error condition.
-var ErrNoGameState = errors.New("plugins: no game state on this branch")
+var ErrNoPluginState = errors.New("plugins: no game state on this branch")
 
-// GameStore is the runtime-injected persistence dependency for stateful
+// PluginStateStore is the runtime-injected persistence dependency for stateful
 // plugins that key their state to a message rather than a conversation.
 // Same context-injection pattern as Searcher and ProviderResolver: the
 // conversations service attaches a user- and conversation-scoped
 // instance right before ExecuteTool, and the plugin reads it via
-// GameStoreFrom(ctx).
+// PluginStateStoreFrom(ctx).
 //
 // Deliberately narrow and expressed in domain terms — uuid.UUID and raw
 // JSON, never store or pgx types — so plugin tests can stub it without
@@ -29,11 +29,11 @@ var ErrNoGameState = errors.New("plugins: no game state on this branch")
 // instance is built per send with the owner's id baked in, and refuses
 // to read or write rows belonging to anyone else. A plugin cannot widen
 // its own scope by passing different ids.
-type GameStore interface {
+type PluginStateStore interface {
 	// LoadNearest walks the message parent chain upward from THIS turn's
 	// leaf — baked into the store at construction, not passed by the
 	// caller — and returns the first snapshot found along with the
-	// message it was bound to. Returns ErrNoGameState when the branch
+	// message it was bound to. Returns ErrNoPluginState when the branch
 	// carries none, which is the normal "new campaign" signal.
 	//
 	// The walk is what makes forks work: two branches off the same
@@ -50,23 +50,23 @@ type GameStore interface {
 	Save(ctx context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error
 }
 
-type gameStoreKey struct{}
+type pluginStateStoreKey struct{}
 
-// WithGameStore attaches a GameStore to ctx. Called by the dispatch site
+// WithPluginStateStore attaches a PluginStateStore to ctx. Called by the dispatch site
 // right before invoking the owning plugin's ExecuteTool. A nil store is
-// a no-op — ctx comes back unchanged so GameStoreFrom can report the
+// a no-op — ctx comes back unchanged so PluginStateStoreFrom can report the
 // unwired case and the plugin can surface a clean tool error.
-func WithGameStore(ctx context.Context, s GameStore) context.Context {
+func WithPluginStateStore(ctx context.Context, s PluginStateStore) context.Context {
 	if s == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, gameStoreKey{}, s)
+	return context.WithValue(ctx, pluginStateStoreKey{}, s)
 }
 
-// GameStoreFrom returns the GameStore attached to ctx, or nil when the
+// PluginStateStoreFrom returns the PluginStateStore attached to ctx, or nil when the
 // runtime didn't wire one. Plugins must treat nil as "persistence is not
 // available" and return a friendly tool error rather than panicking.
-func GameStoreFrom(ctx context.Context) GameStore {
-	v, _ := ctx.Value(gameStoreKey{}).(GameStore)
+func PluginStateStoreFrom(ctx context.Context) PluginStateStore {
+	v, _ := ctx.Value(pluginStateStoreKey{}).(PluginStateStore)
 	return v
 }

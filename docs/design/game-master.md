@@ -1,7 +1,19 @@
-# Strategy game
+# Game master
 
-A turn-based narrative strategy game that runs inside an ordinary
-conversation. The player holds a position of authority — ruler,
+A turn-based narrative management game that runs inside an ordinary
+conversation. The plugin is the game master: it holds the rules, the
+dice and the ledger, and the model supplies the voice.
+
+Naming note, because the genre label matters here. This is not a strategy
+game in the Civilization sense — there is no map, no build order, and the
+player picks from a handful of authored options rather than planning
+across a space they control. Nor is it a simulator: nothing is modelled
+underneath, and stats move because an authored table says so rather than
+because an economy computed it. The family is Reigns and King of Dragon
+Pass, and the machinery is tabletop-derived (the clocks are Blades in the
+Dark clocks; 3d6 against a target read by margin is close to how PbtA
+games resolve). What the plugin provides to a conversation is a game
+master, which is what it is named for. The player holds a position of authority — ruler,
 commander, colony administrator — and each turn poses a situation with
 structured choices that show their real odds. Choices resolve against
 dice plus player ratings, effects move persistent stats, and campaigns
@@ -26,12 +38,12 @@ major stakes") and the engine turns those tags into numbers from authored
 tables.
 
 That is also why rebalancing a campaign that plays too soft is an edit to
-one table in `plugins/strategygame/engine.go` rather than a
+one table in `plugins/gamemaster/engine.go` rather than a
 prompt-tuning session.
 
 ## Where the numbers come from
 
-`plugins/strategygame/` is pure Go with no dependencies on the rest of
+`plugins/gamemaster/` is pure Go with no dependencies on the rest of
 the app, so all of it is unit-testable without a database.
 
 **Stats split in two.** Resources are spent and accumulated and run to
@@ -113,7 +125,7 @@ clock: a famine, a siege, an inquiry closing in. Each bleeds a stat a
 little every turn and lands hard when it expires, and each is visible in
 the status panel with its remaining turns.
 
-This is the difference between a strategy game and a branching story.
+This is the difference between a management game and a branching story.
 Without clocks every turn is a self-contained dilemma and the only real
 question is which option reads best. With them the focal choice is hard
 because of what else is running: spending the treasury on grain is a
@@ -135,7 +147,7 @@ and `game_price_action` returns real odds without committing anything.
 The player sees the price, then confirms or picks something else.
 
 This is the move no board game can adjudicate and the main reason to run
-a strategy game on a language model at all: "I'll marry my daughter to
+a game like this on a language model at all: "I'll marry my daughter to
 the duke and buy his cavalry" gets a genuine priced gamble rather than a
 shrug or a rubber stamp.
 

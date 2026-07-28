@@ -16,7 +16,7 @@ How the system works, one subsystem per document.
 - [design/history-builder.md](design/history-builder.md) — building the wire prefix: walking the tree, role mapping, thinking, tool history, attachments, plugin contributions.
 - [design/streaming.md](design/streaming.md) — the stream supervisor, durable chunks, the broker, retry, subscribe and replay, the chunk vocabulary.
 - [design/plugins.md](design/plugins.md) — the plugin interface set, the pipeline and its inheritance, where each capability runs, the shipped catalog.
-- [design/strategy-game.md](design/strategy-game.md) — the strategy-game plugin: why the engine owns every number, how 3d6 and outcome bands work, and how branch-scoped state makes forking a conversation fork the campaign.
+- [design/game-master.md](design/game-master.md) — the game-master plugin: why the engine owns every number, how 3d6 and outcome bands work, clocks and off-menu actions, and how branch-scoped state makes forking a conversation fork the campaign.
 - [design/tools.md](design/tools.md) — the tool loop, server tools, device tools, the brokers, elicitation.
 - [design/compression.md](design/compression.md) — two-stage compaction and the context lifecycle.
 - [design/embeddings-and-search.md](design/embeddings-and-search.md) — embedder config, the background worker, semantic history search, the memory plugin.

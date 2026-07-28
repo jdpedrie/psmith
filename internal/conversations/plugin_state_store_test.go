@@ -18,11 +18,11 @@ import (
 	"github.com/jdpedrie/psmith/plugins"
 )
 
-// gameStoreFixture stands up a user + conversation and returns the
+// stateStoreFixture stands up a user + conversation and returns the
 // context row so tests can hang messages off it directly. Going through
 // the queries layer rather than SendMessage keeps these focused on the
 // branch semantics rather than the whole send path.
-type gameStoreFixture struct {
+type stateStoreFixture struct {
 	svc    *Service
 	q      *store.Queries
 	user   store.User
@@ -31,7 +31,7 @@ type gameStoreFixture struct {
 	root   uuid.UUID
 }
 
-func newGameStoreFixture(t *testing.T) gameStoreFixture {
+func newStateStoreFixture(t *testing.T) stateStoreFixture {
 	t.Helper()
 	svc, q := newTestSvc(t)
 	user := mustCreateUser(t, q, "gs_"+uuid.NewString()[:8])
@@ -53,12 +53,12 @@ func newGameStoreFixture(t *testing.T) gameStoreFixture {
 		t.Fatalf("GetActiveContextByConversation: %v", err)
 	}
 
-	f := gameStoreFixture{svc: svc, q: q, user: user, conv: conv, ctxRow: ctxRow}
+	f := stateStoreFixture{svc: svc, q: q, user: user, conv: conv, ctxRow: ctxRow}
 	f.root = f.addMessage(t, nil, "user", "turn 0")
 	return f
 }
 
-func (f gameStoreFixture) addMessage(t *testing.T, parent *uuid.UUID, role, content string) uuid.UUID {
+func (f stateStoreFixture) addMessage(t *testing.T, parent *uuid.UUID, role, content string) uuid.UUID {
 	t.Helper()
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -93,29 +93,29 @@ func jsonEq(t *testing.T, got json.RawMessage, want string) {
 	}
 }
 
-func (f gameStoreFixture) storeAt(leaf uuid.UUID) plugins.GameStore {
-	return f.svc.newGameStore("strategy_game", f.user.ID, f.conv.ID, leaf)
+func (f stateStoreFixture) storeAt(leaf uuid.UUID) plugins.PluginStateStore {
+	return f.svc.newPluginStateStore("game_master", f.user.ID, f.conv.ID, leaf)
 }
 
-// TestGameStore_NoStateIsNotAnError verifies the "new campaign" signal is
+// TestPluginStateStore_NoStateIsNotAnError verifies the "new campaign" signal is
 // a sentinel rather than a failure, since every first turn hits it.
-func TestGameStore_NoStateIsNotAnError(t *testing.T) {
+func TestPluginStateStore_NoStateIsNotAnError(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 
 	_, _, _, err := f.storeAt(f.root).LoadNearest(context.Background())
-	if !errors.Is(err, plugins.ErrNoGameState) {
-		t.Fatalf("want ErrNoGameState on a fresh branch; got %v", err)
+	if !errors.Is(err, plugins.ErrNoPluginState) {
+		t.Fatalf("want ErrNoPluginState on a fresh branch; got %v", err)
 	}
 }
 
-// TestGameStore_WalksToNearestAncestor is the core read-path contract: a
+// TestPluginStateStore_WalksToNearestAncestor is the core read-path contract: a
 // snapshot several messages up the chain is still found, so turns that
 // wrote no state (or messages deleted out from under one) don't strand
 // the campaign.
-func TestGameStore_WalksToNearestAncestor(t *testing.T) {
+func TestPluginStateStore_WalksToNearestAncestor(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	a := f.addMessage(t, &f.root, "assistant", "turn 1")
@@ -139,13 +139,13 @@ func TestGameStore_WalksToNearestAncestor(t *testing.T) {
 	jsonEq(t, state, `{"turn":1}`)
 }
 
-// TestGameStore_ForksAreIndependent is the property the whole
+// TestPluginStateStore_ForksAreIndependent is the property the whole
 // message-keyed design exists for. Two branches off one parent each keep
 // their own lineage, and neither sees the other's — this is what makes
 // regenerating a turn safe and "what if I'd chosen differently" coherent.
-func TestGameStore_ForksAreIndependent(t *testing.T) {
+func TestPluginStateStore_ForksAreIndependent(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	// Shared history: one committed turn.
@@ -189,12 +189,12 @@ func TestGameStore_ForksAreIndependent(t *testing.T) {
 	}
 }
 
-// TestGameStore_SaveIsIdempotent covers the retried-bind case: the
+// TestPluginStateStore_SaveIsIdempotent covers the retried-bind case: the
 // assistant row is materialized before the binding hook runs, so a
 // re-fired bind must overwrite rather than blow up on the primary key.
-func TestGameStore_SaveIsIdempotent(t *testing.T) {
+func TestPluginStateStore_SaveIsIdempotent(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	a := f.addMessage(t, &f.root, "assistant", "turn 1")
@@ -215,16 +215,16 @@ func TestGameStore_SaveIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestGameStore_RefusesForeignConversation verifies the ownership gate:
+// TestPluginStateStore_RefusesForeignConversation verifies the ownership gate:
 // a message in someone else's conversation reads as absent rather than
 // as a permission error, so existence doesn't leak.
-func TestGameStore_RefusesForeignConversation(t *testing.T) {
+func TestPluginStateStore_RefusesForeignConversation(t *testing.T) {
 	t.Parallel()
-	mine := newGameStoreFixture(t)
+	mine := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	// A second conversation owned by a different user, sharing nothing.
-	theirs := newGameStoreFixture(t)
+	theirs := newStateStoreFixture(t)
 	foreign := theirs.addMessage(t, &theirs.root, "assistant", "not yours")
 
 	// Writing onto a foreign message must fail.
@@ -236,53 +236,53 @@ func TestGameStore_RefusesForeignConversation(t *testing.T) {
 	if err := theirs.storeAt(theirs.root).Save(ctx, foreign, json.RawMessage(`{"x":1}`), 1); err != nil {
 		t.Fatalf("owner save: %v", err)
 	}
-	crossReader := mine.svc.newGameStore("strategy_game", mine.user.ID, mine.conv.ID, foreign)
-	if _, _, _, err := crossReader.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoGameState) {
+	crossReader := mine.svc.newPluginStateStore("game_master", mine.user.ID, mine.conv.ID, foreign)
+	if _, _, _, err := crossReader.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoPluginState) {
 		t.Errorf("cross-conversation read should look absent; got %v", err)
 	}
 }
 
-// TestGameStore_ScopedPerPlugin verifies two stateful plugins in one
+// TestPluginStateStore_ScopedPerPlugin verifies two stateful plugins in one
 // pipeline cannot see each other's rows.
-func TestGameStore_ScopedPerPlugin(t *testing.T) {
+func TestPluginStateStore_ScopedPerPlugin(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	a := f.addMessage(t, &f.root, "assistant", "turn 1")
-	if err := f.svc.newGameStore("strategy_game", f.user.ID, f.conv.ID, f.root).
+	if err := f.svc.newPluginStateStore("game_master", f.user.ID, f.conv.ID, f.root).
 		Save(ctx, a, json.RawMessage(`{"game":true}`), 1); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	other := f.svc.newGameStore("some_other_plugin", f.user.ID, f.conv.ID, a)
-	if _, _, _, err := other.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoGameState) {
+	other := f.svc.newPluginStateStore("some_other_plugin", f.user.ID, f.conv.ID, a)
+	if _, _, _, err := other.LoadNearest(ctx); !errors.Is(err, plugins.ErrNoPluginState) {
 		t.Errorf("a different plugin must not see the game's rows; got %v", err)
 	}
 }
 
-// TestGameStore_CampaignSurvivesTheTurnBoundary is the seam the unit
+// TestPluginStateStore_CampaignSurvivesTheTurnBoundary is the seam the unit
 // tests cannot reach on their own. Plugin instances are rebuilt on every
 // send, so turn two runs against a brand-new object with nothing in
 // memory: everything it knows has to come back out of Postgres. This
 // drives the real plugin against the real store across that boundary.
-func TestGameStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
+func TestPluginStateStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	// --- turn 1: a fresh plugin instance starts a campaign ---
-	turn1Plugin, err := plugins.Build(plugins.StrategyGameName, nil)
+	turn1Plugin, err := plugins.Build(plugins.GameMasterName, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
 	tp, ok := turn1Plugin.(plugins.ToolProvider)
 	if !ok {
-		t.Fatal("strategy_game must provide tools")
+		t.Fatal("game_master must provide tools")
 	}
 
 	assistant1 := f.addMessage(t, &f.root, "assistant", "The granary stands empty.")
-	toolCtx := plugins.WithGameStore(ctx, f.storeAt(f.root))
+	toolCtx := plugins.WithPluginStateStore(ctx, f.storeAt(f.root))
 	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
@@ -293,7 +293,7 @@ func TestGameStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 	// Materialization binds whatever the turn computed to the assistant
 	// message — the same loop postMaterialize runs.
 	for _, ps := range (plugins.Pipeline{turn1Plugin}).PendingPluginStates() {
-		gs := f.svc.newGameStore(ps.PluginName, f.user.ID, f.conv.ID, assistant1)
+		gs := f.svc.newPluginStateStore(ps.PluginName, f.user.ID, f.conv.ID, assistant1)
 		if err := gs.Save(ctx, assistant1, ps.State, ps.Version); err != nil {
 			t.Fatalf("bind: %v", err)
 		}
@@ -301,12 +301,12 @@ func TestGameStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
 
 	// --- turn 2: a NEW instance, no memory of turn 1 ---
 	choice := f.addMessage(t, &assistant1, "user", "A")
-	turn2Plugin, err := plugins.Build(plugins.StrategyGameName, nil)
+	turn2Plugin, err := plugins.Build(plugins.GameMasterName, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
 	tp2 := turn2Plugin.(plugins.ToolProvider)
-	turn2Ctx := plugins.WithGameStore(ctx, f.storeAt(choice))
+	turn2Ctx := plugins.WithPluginStateStore(ctx, f.storeAt(choice))
 	turn2Ctx = plugins.WithCallerInfo(turn2Ctx, plugins.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
@@ -352,12 +352,12 @@ const resolveTurn = `{
     ]}
 }`
 
-// TestGameStore_SurvivesCompaction is the gap that made a campaign
+// TestPluginStateStore_SurvivesCompaction is the gap that made a campaign
 // unplayable past its first compaction: the new context is seeded with a
 // fresh root, so the message parent chain does not cross the boundary
 // and the plugin's ancestor walk comes up empty on the other side. The
 // story survived and the numbers vanished.
-func TestGameStore_SurvivesCompaction(t *testing.T) {
+func TestPluginStateStore_SurvivesCompaction(t *testing.T) {
 	t.Parallel()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
@@ -390,7 +390,7 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 	// A campaign several turns deep on the branch that will be compacted.
 	u1 := add(nil, "user", "start")
 	a1 := add(&u1, "assistant", "turn 1")
-	gs := svc.newGameStore("strategy_game", user.ID, conv.ID, u1)
+	gs := svc.newPluginStateStore("game_master", user.ID, conv.ID, u1)
 	if err := gs.Save(ctx, a1, json.RawMessage(`{"treasury":73,"turn":9}`), 9); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 	// A sibling branch the player abandoned, carrying different numbers.
 	// The copy must NOT pick this one up just because it is newer.
 	abandoned := add(&u1, "assistant", "abandoned branch")
-	if err := svc.newGameStore("strategy_game", user.ID, conv.ID, u1).
+	if err := svc.newPluginStateStore("game_master", user.ID, conv.ID, u1).
 		Save(ctx, abandoned, json.RawMessage(`{"treasury":5,"turn":99}`), 99); err != nil {
 		t.Fatalf("save abandoned: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 
 	// The new context's seed message must carry the campaign forward.
 	rows, err := q.ListPluginStateInContext(ctx, store.ListPluginStateInContextParams{
-		PluginName: "strategy_game", ContextID: newCtxID,
+		PluginName: "game_master", ContextID: newCtxID,
 	})
 	if err != nil {
 		t.Fatalf("list new context state: %v", err)
@@ -442,7 +442,7 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 	if firstNewMsg == (uuid.UUID{}) {
 		t.Fatal("new context has no framing message")
 	}
-	state, version, _, err := svc.newGameStore("strategy_game", user.ID, conv.ID, firstNewMsg).LoadNearest(ctx)
+	state, version, _, err := svc.newPluginStateStore("game_master", user.ID, conv.ID, firstNewMsg).LoadNearest(ctx)
 	if err != nil {
 		t.Fatalf("load after compaction: %v", err)
 	}
@@ -452,13 +452,13 @@ func TestGameStore_SurvivesCompaction(t *testing.T) {
 	jsonEq(t, state, `{"treasury":73,"turn":9}`)
 }
 
-// TestGameStore_PlaysAFullCampaign drives several turns end to end
+// TestPluginStateStore_PlaysAFullCampaign drives several turns end to end
 // through the real plugin and the real store, crossing a fresh plugin
 // instance at every turn boundary the way production does. Unit tests
 // cover each link; this is the only thing that proves the chain holds.
-func TestGameStore_PlaysAFullCampaign(t *testing.T) {
+func TestPluginStateStore_PlaysAFullCampaign(t *testing.T) {
 	t.Parallel()
-	f := newGameStoreFixture(t)
+	f := newStateStoreFixture(t)
 	ctx := context.Background()
 
 	// Turn 1: compile the scenario and open a clock.
@@ -533,13 +533,13 @@ func TestGameStore_PlaysAFullCampaign(t *testing.T) {
 // play runs one turn the way the runtime does: a fresh plugin instance,
 // a branch-scoped store, then binding whatever it computed to the
 // assistant message.
-func play(t *testing.T, f gameStoreFixture, ctx context.Context, leaf, assistant uuid.UUID, input string) {
+func play(t *testing.T, f stateStoreFixture, ctx context.Context, leaf, assistant uuid.UUID, input string) {
 	t.Helper()
-	pl, err := plugins.Build(plugins.StrategyGameName, nil)
+	pl, err := plugins.Build(plugins.GameMasterName, nil)
 	if err != nil {
 		t.Fatalf("build plugin: %v", err)
 	}
-	toolCtx := plugins.WithGameStore(ctx, f.storeAt(leaf))
+	toolCtx := plugins.WithPluginStateStore(ctx, f.storeAt(leaf))
 	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
 		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
 	})
@@ -547,7 +547,7 @@ func play(t *testing.T, f gameStoreFixture, ctx context.Context, leaf, assistant
 		t.Fatalf("commit turn: %v", err)
 	}
 	for _, ps := range (plugins.Pipeline{pl}).PendingPluginStates() {
-		if err := f.svc.newGameStore(ps.PluginName, f.user.ID, f.conv.ID, assistant).
+		if err := f.svc.newPluginStateStore(ps.PluginName, f.user.ID, f.conv.ID, assistant).
 			Save(ctx, assistant, ps.State, ps.Version); err != nil {
 			t.Fatalf("bind: %v", err)
 		}

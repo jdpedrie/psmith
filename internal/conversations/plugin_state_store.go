@@ -13,7 +13,7 @@ import (
 	"github.com/jdpedrie/psmith/plugins"
 )
 
-// userScopedGameStore is the concrete plugins.GameStore handed to the
+// userScopedStateStore is the concrete plugins.PluginStateStore handed to the
 // tool dispatch context. Same shape as userScopedResolver: built per
 // send with the owner and conversation baked in, so a plugin cannot
 // widen its own scope no matter what ids it passes.
@@ -21,7 +21,7 @@ import (
 // Ownership is enforced on every call rather than trusted from the
 // caller, and a row belonging to someone else reads as absent — the
 // plugin can't tell the difference and we'd rather not leak existence.
-type userScopedGameStore struct {
+type userScopedStateStore struct {
 	svc            *Service
 	pluginName     string
 	userID         uuid.UUID
@@ -34,14 +34,14 @@ type userScopedGameStore struct {
 	leafID uuid.UUID
 }
 
-var _ plugins.GameStore = (*userScopedGameStore)(nil)
+var _ plugins.PluginStateStore = (*userScopedStateStore)(nil)
 
-// newGameStore builds a per-send store bound to one plugin, one owner,
+// newPluginStateStore builds a per-send store bound to one plugin, one owner,
 // and one conversation. Constructed inline in SendMessage — never
 // stashed on Service, which would let a later send inherit an earlier
 // send's scope.
-func (s *Service) newGameStore(pluginName string, userID, conversationID, leafID uuid.UUID) plugins.GameStore {
-	return &userScopedGameStore{
+func (s *Service) newPluginStateStore(pluginName string, userID, conversationID, leafID uuid.UUID) plugins.PluginStateStore {
+	return &userScopedStateStore{
 		svc:            s,
 		pluginName:     pluginName,
 		userID:         userID,
@@ -50,9 +50,9 @@ func (s *Service) newGameStore(pluginName string, userID, conversationID, leafID
 	}
 }
 
-func (g *userScopedGameStore) LoadNearest(ctx context.Context) (json.RawMessage, int64, uuid.UUID, error) {
+func (g *userScopedStateStore) LoadNearest(ctx context.Context) (json.RawMessage, int64, uuid.UUID, error) {
 	if g.leafID == uuid.Nil {
-		return nil, 0, uuid.Nil, plugins.ErrNoGameState
+		return nil, 0, uuid.Nil, plugins.ErrNoPluginState
 	}
 	row, err := g.svc.queries.GetNearestPluginState(ctx, store.GetNearestPluginStateParams{
 		PluginName: g.pluginName,
@@ -60,7 +60,7 @@ func (g *userScopedGameStore) LoadNearest(ctx context.Context) (json.RawMessage,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, 0, uuid.Nil, plugins.ErrNoGameState
+			return nil, 0, uuid.Nil, plugins.ErrNoPluginState
 		}
 		return nil, 0, uuid.Nil, fmt.Errorf("game_store: load nearest: %w", err)
 	}
@@ -68,12 +68,12 @@ func (g *userScopedGameStore) LoadNearest(ctx context.Context) (json.RawMessage,
 	// on belongs to this conversation before handing it back. A
 	// mismatch means the leaf id came from somewhere it shouldn't have.
 	if row.ConversationID != g.conversationID {
-		return nil, 0, uuid.Nil, plugins.ErrNoGameState
+		return nil, 0, uuid.Nil, plugins.ErrNoPluginState
 	}
 	return json.RawMessage(row.StateJson), row.StateVersion, row.MessageID, nil
 }
 
-func (g *userScopedGameStore) Save(ctx context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error {
+func (g *userScopedStateStore) Save(ctx context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error {
 	if messageID == uuid.Nil {
 		return errors.New("game_store: save requires a message id")
 	}
