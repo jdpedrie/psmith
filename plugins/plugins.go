@@ -704,6 +704,45 @@ func (p Pipeline) TransformForDisplay(content string) string {
 // implement the interface are skipped. Called from
 // stream.materializeAssistant before the message row is inserted, so
 // the persisted bytes match the returned string.
+// PendingStateProvider is implemented by plugins that compute
+// authoritative state during a turn which must be bound to the assistant
+// message once it exists.
+//
+// The split is forced by when things happen: a tool runs mid-generation,
+// before there is any assistant row to key state to, so the plugin holds
+// its result on the (per-send) instance and the runtime collects it at
+// materialization. Returning ok=false means "this turn changed nothing",
+// which is the common case for a plugin whose tool wasn't called.
+type PendingStateProvider interface {
+	PendingPluginState() (state json.RawMessage, version int64, ok bool)
+}
+
+// PendingState is one plugin's computed state awaiting a message to
+// bind to.
+type PendingState struct {
+	PluginName string
+	State      json.RawMessage
+	Version    int64
+}
+
+// PendingPluginStates collects every plugin's pending state after a
+// turn. Called by the runtime at assistant materialization.
+func (p Pipeline) PendingPluginStates() []PendingState {
+	var out []PendingState
+	for _, pl := range p {
+		sp, ok := pl.(PendingStateProvider)
+		if !ok {
+			continue
+		}
+		state, version, has := sp.PendingPluginState()
+		if !has || len(state) == 0 {
+			continue
+		}
+		out = append(out, PendingState{PluginName: pl.Name(), State: state, Version: version})
+	}
+	return out
+}
+
 func (p Pipeline) TransformAssistantContent(content string) string {
 	for _, pl := range p {
 		if t, ok := pl.(AssistantContentTransformer); ok {
@@ -838,8 +877,8 @@ var ErrUnknownPlugin = errors.New("plugins: unknown plugin")
 // UIs to decide which config knobs to expose, and by the server to skip
 // phases a plugin doesn't participate in.
 type Capabilities struct {
-	Configurable                bool
-	SystemPrompter              bool
+	Configurable   bool
+	SystemPrompter bool
 	// MessageEnvelope: contributes persisted header/trailer blocks to
 	// outgoing user messages. Rides the proto's legacy
 	// `outgoing_user_transformer` field — same meaning ("this plugin

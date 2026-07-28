@@ -32,6 +32,7 @@ A turn touches the pipeline at several points, and each capability has exactly o
 - **Tool dispatch**: ToolProvider execution, inside the tool loop.
 - **Fetch / display**: DisplayTransformer then ContentRenderer, when messages are read back.
 - **Lifecycle points**: MessageLifecycleHook.
+- **Assistant materialization**: PendingStateProvider. A tool runs mid-generation, before any assistant row exists to key state to, so a stateful plugin holds its result on the per-send instance and the runtime collects it once the message id is known. Unlike MessageLifecycleHook this runs synchronously, so the state lands before the run closes.
 
 The pipeline is the same ordered list everywhere; each stage just invokes the plugins that implement the relevant interface, in pipeline order.
 
@@ -68,9 +69,10 @@ The registered plugins:
 - **imagegen** (`imagegen`) — ToolProvider. One server tool, `generate_image`. The only plugin that reports a cost.
 - **app_tools** (`app_tools`) — ToolProvider over the device-tools catalog (Calendar, Reminders, Health), routed through the device-tool broker. See [tools.md](tools.md).
 - **files** (`files`) — ToolProvider over a bookmarked notes folder on the device (an Obsidian vault is the flagship use; frontmatter preserved, content stays markdown), its own five-tool catalog, sharing the device-tool broker. Shipped as `obsidian` originally; migration 00046 renamed persisted references and the config parser normalizes old `obsidian_*` enabled-keys.
+- **strategy_game** (`strategy_game`) — ToolProvider, SystemPrompter, AssistantContentTransformer, DisplayTransformer, ContentRenderer, PendingStateProvider. Runs a turn-based strategy game in the conversation. The plugin owns every rule, stat, die roll and win/loss check; the model writes only fiction and proposes situations in tag vocabulary (a difficulty band, a stakes tier), never integers. It is the first user of branch-scoped `plugin_state`, so forking a conversation forks the campaign. Engine lives in `plugins/strategygame/` as pure functions. See [strategy-game.md](strategy-game.md).
 - **mcp** (`mcp`) — ToolProvider that bridges to an MCP server over stdio, HTTP, or in-process. Proxies the MCP server's tools as Psmith tools. The in-process transport is the elicitation path. Usually attached via the MCP server registry's `mcp:<id>` pseudo-plugins (see above) rather than configured inline. See [tools.md](tools.md) and the MCP section of the API docs.
 
-Alongside these, a few non-plugin support files in the same package are wiring shims rather than registered plugins: `caller_info` and `provider_resolver` and `searcher` thread caller, provider-resolution, and search dependencies onto the dispatch context for tools to pull, and `device_tool_broker` is the broker handle. They are not attachable to a profile.
+Alongside these, a few non-plugin support files in the same package are wiring shims rather than registered plugins: `caller_info` and `provider_resolver` and `searcher` and `game_store` thread caller identity, provider resolution, search, and branch-scoped state onto the dispatch context for tools to pull, and `device_tool_broker` is the broker handle. They are not attachable to a profile.
 
 ## Adding a plugin
 

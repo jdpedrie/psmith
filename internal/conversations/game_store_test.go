@@ -257,3 +257,94 @@ func TestGameStore_ScopedPerPlugin(t *testing.T) {
 		t.Errorf("a different plugin must not see the game's rows; got %v", err)
 	}
 }
+
+// TestGameStore_CampaignSurvivesTheTurnBoundary is the seam the unit
+// tests cannot reach on their own. Plugin instances are rebuilt on every
+// send, so turn two runs against a brand-new object with nothing in
+// memory: everything it knows has to come back out of Postgres. This
+// drives the real plugin against the real store across that boundary.
+func TestGameStore_CampaignSurvivesTheTurnBoundary(t *testing.T) {
+	t.Parallel()
+	f := newGameStoreFixture(t)
+	ctx := context.Background()
+
+	// --- turn 1: a fresh plugin instance starts a campaign ---
+	turn1Plugin, err := plugins.Build(plugins.StrategyGameName, nil)
+	if err != nil {
+		t.Fatalf("build plugin: %v", err)
+	}
+	tp, ok := turn1Plugin.(plugins.ToolProvider)
+	if !ok {
+		t.Fatal("strategy_game must provide tools")
+	}
+
+	assistant1 := f.addMessage(t, &f.root, "assistant", "The granary stands empty.")
+	toolCtx := plugins.WithGameStore(ctx, f.storeAt(f.root))
+	toolCtx = plugins.WithCallerInfo(toolCtx, plugins.CallerInfo{
+		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
+	})
+	if _, err := tp.ExecuteTool(toolCtx, "game_commit_turn", json.RawMessage(openingScenario)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+
+	// Materialization binds whatever the turn computed to the assistant
+	// message — the same loop postMaterialize runs.
+	for _, ps := range (plugins.Pipeline{turn1Plugin}).PendingPluginStates() {
+		gs := f.svc.newGameStore(ps.PluginName, f.user.ID, f.conv.ID, assistant1)
+		if err := gs.Save(ctx, assistant1, ps.State, ps.Version); err != nil {
+			t.Fatalf("bind: %v", err)
+		}
+	}
+
+	// --- turn 2: a NEW instance, no memory of turn 1 ---
+	choice := f.addMessage(t, &assistant1, "user", "A")
+	turn2Plugin, err := plugins.Build(plugins.StrategyGameName, nil)
+	if err != nil {
+		t.Fatalf("build plugin: %v", err)
+	}
+	tp2 := turn2Plugin.(plugins.ToolProvider)
+	turn2Ctx := plugins.WithGameStore(ctx, f.storeAt(choice))
+	turn2Ctx = plugins.WithCallerInfo(turn2Ctx, plugins.CallerInfo{
+		UserID: f.user.ID, ConversationID: f.conv.ID, ActiveContextID: f.ctxRow.ID,
+	})
+
+	res, err := tp2.ExecuteTool(turn2Ctx, "game_commit_turn", json.RawMessage(resolveTurn))
+	if err != nil {
+		t.Fatalf("resolve on a fresh instance: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatalf("output: %v", err)
+	}
+	if out["turn"] != float64(2) {
+		t.Errorf("turn 2 should have read turn 1 from the database; got turn %v", out["turn"])
+	}
+	if out["outcome"] == nil {
+		t.Error("resolve should report an outcome band")
+	}
+}
+
+const openingScenario = `{
+  "kind":"initialize",
+  "scenario":{
+    "title":"The Lean Winter","role":"Margrave","premise":"A border march.",
+    "resources":[{"id":"treasury","label":"Treasury","start":60,"min":0,"max":200}],
+    "ratings":[{"id":"guile","label":"Guile","start":4,"min":0,"max":10}],
+    "loss_when":[{"stat":"treasury","op":"<=","value":0,"label":"Bankrupt"}],
+    "turn_limit":12,
+    "opening_situation":{"id":"granary","title":"The Empty Granary","body":"Stores were overstated.",
+      "choices":[
+        {"id":"A","label":"Buy grain","rating":"guile","difficulty":"moderate","stakes":"standard","advances":"guile","costs":"treasury"},
+        {"id":"B","label":"Seize it","rating":"guile","difficulty":"hard","stakes":"major","advances":"treasury","costs":"guile"}
+      ]}
+  }
+}`
+
+const resolveTurn = `{
+  "kind":"resolve","choice_id":"A",
+  "next_situation":{"id":"tithe","title":"The Books","body":"The rolls do not add up.",
+    "choices":[
+      {"id":"A","label":"Audit quietly","rating":"guile","difficulty":"easy","stakes":"minor","advances":"treasury","costs":"guile"},
+      {"id":"B","label":"Make an example","rating":"guile","difficulty":"moderate","stakes":"major","advances":"guile","costs":"treasury"}
+    ]}
+}`

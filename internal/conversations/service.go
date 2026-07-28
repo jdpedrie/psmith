@@ -1861,6 +1861,31 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 			}
 		}
 
+		// 1b. Bind any plugin state computed during the turn to the
+		//     assistant message that produced it. This is the only
+		//     moment the binding can happen: a tool runs mid-generation,
+		//     when no assistant row exists yet to key state to, so the
+		//     plugin holds its result on the per-send instance until
+		//     here. Keying to the message rather than the conversation
+		//     is what makes a fork or a regenerate an independent
+		//     lineage instead of an overwrite.
+		//
+		//     Best-effort per plugin: a failure logs and the others
+		//     still bind. A missed bind leaves the turn without a
+		//     snapshot, which the next turn's ancestor walk absorbs by
+		//     finding the previous one — the campaign replays that turn
+		//     rather than advancing on a state nobody recorded.
+		for _, ps := range pipeline.PendingPluginStates() {
+			gs := s.newGameStore(ps.PluginName, ownerUserID, conv.ID, assistantMsgID)
+			if err := gs.Save(persistCtx, assistantMsgID, ps.State, ps.Version); err != nil {
+				s.logger.Warn("bind plugin state failed",
+					"err", err,
+					"plugin", ps.PluginName,
+					"assistant_msg_id", assistantMsgID,
+					"state_version", ps.Version)
+			}
+		}
+
 		// 2. Drain the tool-span buffer. Spans land in Langfuse
 		//    nested under the assistant trace, so we hand them to
 		//    EmitLangfuseTurn which builds the parent trace + gen
