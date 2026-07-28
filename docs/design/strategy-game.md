@@ -90,9 +90,16 @@ Reads walk the message parent chain to the nearest ancestor carrying a
 row, which absorbs stitch deletes, interleaved non-game messages, and any
 turn that failed to bind. The walk stops at a context boundary because
 the parent chain does too — compaction seeds a new context with a fresh
-root — so carrying a campaign through compaction is an explicit copy.
-That copy is not built yet; a campaign that compacts today loses its
-mechanical state while keeping its narrative.
+root — so carrying a campaign across one is an explicit copy, made inside
+the transaction that creates the context so the new context never exists
+without its state. The same applies to a manual context switch.
+
+Which snapshot gets copied is the subtle part. A context can hold several
+leaves, and the copy has to take the one on the same chain the summary
+was written from, not simply the newest row. Taking the newest would hand
+the player mechanical state from a branch they abandoned while the
+summary describes the branch they actually played, and nothing about the
+mismatch would be visible.
 
 The plugin never writes state itself. A tool runs mid-generation, when no
 assistant row exists to key state to, so the plugin holds its result on
