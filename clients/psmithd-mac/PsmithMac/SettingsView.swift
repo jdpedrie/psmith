@@ -298,6 +298,11 @@ struct SettingsListHeader: View {
     let onBack: () -> Void
     let onCreate: () -> Void
     let createDisabled: Bool
+    /// Optional secondary action rendered left of the create button. `var`
+    /// with a default so the memberwise init keeps it optional and the
+    /// categories that have nothing to import stay untouched.
+    var onImport: (() -> Void)? = nil
+    var importDisabled: Bool = false
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -315,6 +320,17 @@ struct SettingsListHeader: View {
             }
 
             Spacer()
+
+            // Secondary before primary: create stays rightmost, where it is
+            // in every other pane header.
+            if let onImport {
+                GlassCircleButton(
+                    systemImage: "square.and.arrow.down",
+                    action: onImport,
+                    help: "Import from a file",
+                    disabled: importDisabled
+                )
+            }
 
             GlassCircleButton(
                 systemImage: "plus",

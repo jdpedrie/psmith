@@ -25,23 +25,10 @@ struct ProfilesMiddleColumn: View {
                 countNoun: "profile",
                 onBack: onBack,
                 onCreate: { model.detailMode = .adding },
-                createDisabled: model.detailMode == .adding
+                createDisabled: model.detailMode == .adding,
+                onImport: { importProfile(into: model) },
+                importDisabled: model.isSharing
             )
-
-            HStack {
-                Button {
-                    importProfile(into: model)
-                } label: {
-                    Label("Import profile", systemImage: "square.and.arrow.down")
-                        .scaledFont(.caption)
-                }
-                .buttonStyle(.glass)
-                .disabled(model.isSharing)
-                .help("Open a .psmithprofile file someone shared with you")
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
 
             if model.isLoading {
                 ProgressView().padding()
