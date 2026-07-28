@@ -244,3 +244,7 @@ snapshot, which is safe but quietly costs a turn.
 Presentation reuses `key_value` and `choice_list`, so odds and clocks
 ride in label strings. Bespoke components would give the odds a real
 two-column layout and the clocks a progress treatment.
+
+## Ready-made campaigns
+
+Three scenarios ship as an importable bundle in [../profiles/](../profiles/README.md): The Crown, The Regency and The Usurper, sharing one `parent_only` base. They exist partly to exercise parts of the engine that are otherwise untested by hand, notably `Director.HiddenFacts`, which is what makes an intrigue campaign work and which nothing else uses.
