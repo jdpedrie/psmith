@@ -106,6 +106,48 @@ assistant row exists to key state to, so the plugin holds its result on
 the per-send instance and the runtime binds it at materialization via
 `PendingStateProvider`.
 
+## Clocks
+
+A situation the player cannot solve in one turn becomes a background
+clock: a famine, a siege, an inquiry closing in. Each bleeds a stat a
+little every turn and lands hard when it expires, and each is visible in
+the status panel with its remaining turns.
+
+This is the difference between a strategy game and a branching story.
+Without clocks every turn is a self-contained dilemma and the only real
+question is which option reads best. With them the focal choice is hard
+because of what else is running: spending the treasury on grain is a
+different decision when the creditors come due in two turns, and the
+player can see both at once.
+
+The bleed is deliberately a fraction of the payload. A clock has to hurt
+a little while it runs and a lot when it lands, so ignoring one is a real
+gamble rather than a free delay. Resolving a clock removes it without
+firing the payload, which is the reward for actually dealing with the
+problem instead of riding it out. Length and weight are tag vocabulary
+priced from the same authored tables as everything else.
+
+## Off-menu actions
+
+The player can ignore the buttons and say what they actually want to do.
+The model reads the intent, describes it in the ordinary tag vocabulary,
+and `game_price_action` returns real odds without committing anything.
+The player sees the price, then confirms or picks something else.
+
+This is the move no board game can adjudicate and the main reason to run
+a strategy game on a language model at all: "I'll marry my daughter to
+the duke and buy his cavalry" gets a genuine priced gamble rather than a
+shrug or a rubber stamp.
+
+The pricing goes through the same path as an authored choice, and the
+improvised action is spliced onto the situation as a real option before
+resolving. There is no second, softer code path for free text — if there
+were, off-menu actions would end up strictly better than the buttons, and
+once players noticed, the listed options would stop being decisions.
+
+Quoting is read-only on purpose. Showing odds means committing to them,
+so the player has to be able to see the price before paying it.
+
 ## Staying honest across turns
 
 Three guards, each for a failure this design invites.
@@ -174,15 +216,19 @@ box.
 
 ## What is not built yet
 
-Phase 1 is the loop and Phase 2 is durability. Deliberately still
-missing from the game itself: multi-stage situations and concurrent
-clocks, delayed and conditional effects, free-text actions priced on the
-fly, policies and projects, factions and characters with loyalty tracked
-separately from power, and turn capacity limits.
+Still missing from the game: multi-stage situations that branch within
+themselves, delayed and conditional effects that fire on a state
+predicate rather than a countdown, policies and projects the player sets
+once and lets run, factions and characters with loyalty tracked
+separately from power, and turn capacity limits that force triage across
+several problems in one turn.
 
-On the durability side, what remains is prepared-then-committed
-transitions with an idempotency key and a transitions ledger. Today a
-tool that mutates state followed by a failed generation leaves the turn
-bound to no message; the next turn's ancestor walk absorbs that by
-replaying from the previous snapshot, which is safe but quietly costs a
-turn.
+On durability: prepared-then-committed transitions with an idempotency
+key, and a transitions ledger. Today a tool that mutates state followed
+by a failed generation leaves the turn bound to no message; the next
+turn's ancestor walk absorbs that by replaying from the previous
+snapshot, which is safe but quietly costs a turn.
+
+Presentation reuses `key_value` and `choice_list`, so odds and clocks
+ride in label strings. Bespoke components would give the odds a real
+two-column layout and the clocks a progress treatment.

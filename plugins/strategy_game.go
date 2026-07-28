@@ -145,6 +145,19 @@ func (p *strategyGame) AppendSystemMessage() string {
 		"high-reward one. The player should be choosing between kinds of damage, not between an",
 		"obvious right answer and an obvious wrong one.",
 		"",
+		"If the player proposes something that is not on the list, do not refuse it and do not",
+		"wave it through. Call game_price_action with your reading of their intent in the usual",
+		"tags, tell them the odds it comes back with, and wait for them to confirm before you",
+		"commit it with improvised_action. Improvised actions are priced by the same tables as",
+		"the buttons, so a clever plan is not automatically a cheap one.",
+		"",
+		"Use clocks. A situation the player cannot solve in one turn should become a background",
+		"clock that bleeds a stat every turn and lands hard when it expires — a famine, a siege,",
+		"an inquiry closing in. Clocks are what make the focal choice hard: spending the treasury",
+		"is a different decision when something else comes due in two turns. Start them with",
+		"start_clocks, and when the player genuinely solves the underlying problem, close them",
+		"with resolve_clocks so the payload never fires. Two or three running at once is plenty.",
+		"",
 		"Call game_commit_turn exactly ONCE per turn. Every result carries a state_version;",
 		"pass it back as expected_state_version on your next commit so a replayed or stale call",
 		"is rejected instead of silently double-applied.",
@@ -166,6 +179,15 @@ func (p *strategyGame) Tools() []ToolDef {
 				"applies effects and checks win/loss, then returns what actually happened. Only " +
 				"narrate from the returned result.",
 			InputSchema: []byte(commitTurnSchema),
+		},
+		{
+			Name: "game_price_action",
+			Description: "Price a free-text action the player proposed instead of taking one of the " +
+				"listed options. Interpret their intent, describe it in the same tag vocabulary a " +
+				"choice uses, and this returns the real odds and what it would cost — WITHOUT " +
+				"committing anything. Show the player those odds and let them confirm or withdraw " +
+				"before you resolve it.",
+			InputSchema: []byte(priceActionSchema),
 		},
 		{
 			Name: "game_inspect",
@@ -192,6 +214,8 @@ func (p *strategyGame) ExecuteTool(ctx context.Context, name string, input json.
 			"turn":   st.Meta.Turn,
 			"public": st.Public,
 		})
+	case "game_price_action":
+		return p.priceAction(ctx, store, input)
 	case "game_commit_turn":
 		return p.commitTurn(ctx, store, input)
 	}
@@ -211,6 +235,15 @@ type commitTurnInput struct {
 	Scenario             *strategygame.Scenario       `json:"scenario,omitempty"`
 	ChoiceID             string                       `json:"choice_id,omitempty"`
 	Next                 *strategygame.SituationDraft `json:"next_situation,omitempty"`
+	// StartClocks opens background pressures that tick every turn;
+	// ResolveClocks closes ones the player genuinely dealt with, without
+	// firing their payload.
+	StartClocks   []strategygame.ClockDraft `json:"start_clocks,omitempty"`
+	ResolveClocks []string                  `json:"resolve_clocks,omitempty"`
+	// Improvised carries a free-text action the player confirmed after
+	// seeing its price from game_price_action. Mutually exclusive with
+	// choice_id.
+	Improvised *strategygame.ChoiceDraft `json:"improvised_action,omitempty"`
 }
 
 func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json.RawMessage) (ToolResult, error) {
@@ -262,6 +295,9 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		if err != nil {
 			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
 		}
+		if err := applyClockChanges(&next, in); err != nil {
+			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+		}
 		p.setPending(&next, nil)
 		return jsonResult(map[string]any{
 			"committed":     true,
@@ -279,7 +315,23 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		if current.Protocol.Phase == strategygame.PhaseFinished {
 			return ToolResult{}, fmt.Errorf("strategy_game: this campaign ended on turn %d", current.Meta.Turn)
 		}
-		tr, next, err := strategygame.Resolve(current, in.ChoiceID)
+		// An improvised action is spliced onto the situation as a real
+		// choice first, so it goes through exactly the same pricing,
+		// rolling and effect application as a listed one. There is no
+		// second code path for free text, which is what stops it from
+		// drifting cheaper than the buttons.
+		resolveAgainst, choiceID := current, in.ChoiceID
+		if in.Improvised != nil {
+			if in.ChoiceID != "" {
+				return ToolResult{}, fmt.Errorf("strategy_game: pass either choice_id or improvised_action, not both")
+			}
+			withImprov, err := strategygame.AttachImprovised(current, *in.Improvised)
+			if err != nil {
+				return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+			}
+			resolveAgainst, choiceID = withImprov, strategygame.ImprovisedChoiceID
+		}
+		tr, next, err := strategygame.Resolve(resolveAgainst, choiceID)
 		if err != nil {
 			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
 		}
@@ -299,6 +351,9 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 				next.Protocol.LegalChoiceIDs = append(next.Protocol.LegalChoiceIDs, c.ID)
 			}
 		}
+		if err := applyClockChanges(&next, in); err != nil {
+			return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+		}
 		p.setPending(&next, &tr)
 		out := map[string]any{
 			"committed":     true,
@@ -312,6 +367,12 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 			"narrate": "Narrate this outcome in the fiction. The band is authoritative — if it " +
 				"says disaster, write a disaster. Do not restate any numbers.",
 		}
+		if len(tr.ClockEvents) > 0 {
+			out["clock_events"] = tr.ClockEvents
+		}
+		if len(tr.ClockDeltas) > 0 {
+			out["ongoing_pressure"] = tr.ClockDeltas
+		}
 		if tr.Outcome != nil {
 			out["campaign_over"] = true
 			out["victory"] = tr.Outcome.Victory
@@ -320,6 +381,94 @@ func (p *strategyGame) commitTurn(ctx context.Context, store GameStore, raw json
 		return jsonResult(out)
 	}
 	return ToolResult{}, fmt.Errorf("strategy_game: kind must be \"initialize\" or \"resolve\", got %q", in.Kind)
+}
+
+// priceAction quotes a free-text action without committing it.
+//
+// This is the move no board game can adjudicate, and the main reason to
+// run a strategy game on a language model at all: the player types "I'll
+// marry my daughter to the duke and buy his cavalry" and gets a real,
+// priced, honest gamble rather than a shrug or a rubber stamp. The model
+// supplies interpretation; the engine still owns every number, so an
+// improvised action is costed by the same tables as an authored one and
+// cannot be cheaper than the listed options just because it was
+// eloquently argued.
+//
+// Deliberately read-only. Showing odds means committing to them, and a
+// player must be able to see the price before paying it — so this quotes,
+// and a following game_commit_turn with the same tags actually resolves.
+func (p *strategyGame) priceAction(ctx context.Context, store GameStore, raw json.RawMessage) (ToolResult, error) {
+	var in struct {
+		Summary    string `json:"summary"`
+		Rating     string `json:"rating"`
+		Difficulty string `json:"difficulty"`
+		Stakes     string `json:"stakes"`
+		Advances   string `json:"advances"`
+		Costs      string `json:"costs"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return ToolResult{}, fmt.Errorf("strategy_game: parse input: %w", err)
+	}
+	st, _, err := p.loadState(ctx, store)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	if st.Protocol.Phase == strategygame.PhaseFinished {
+		return ToolResult{}, fmt.Errorf("strategy_game: this campaign has ended")
+	}
+
+	quote, err := strategygame.PriceImprovised(st, strategygame.ChoiceDraft{
+		ID:         strategygame.ImprovisedChoiceID,
+		Label:      in.Summary,
+		Rating:     in.Rating,
+		Difficulty: in.Difficulty,
+		Stakes:     in.Stakes,
+		Advances:   in.Advances,
+		Costs:      in.Costs,
+	})
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("strategy_game: %w", err)
+	}
+	return jsonResult(map[string]any{
+		"quoted":        true,
+		"choice_id":     quote.ID,
+		"summary":       quote.Label,
+		"odds":          quote.Odds,
+		"checks":        st.Public.Label(quote.Rating),
+		"state_version": st.Meta.StateVersion,
+		"narrate": "Tell the player what this would take and what the odds are, then ask them to " +
+			"confirm or pick something else. Do NOT resolve it until they say go — and when they " +
+			"do, call game_commit_turn with improvised_action carrying these exact same tags.",
+	})
+}
+
+// applyClockChanges opens and closes background pressures. Resolving a
+// clock removes it WITHOUT firing its payload — that is the reward for
+// actually dealing with the underlying problem rather than riding it out.
+func applyClockChanges(st *strategygame.State, in commitTurnInput) error {
+	stats := map[string]bool{}
+	for k := range st.Public.Resources {
+		stats[k] = true
+	}
+	for k := range st.Public.Ratings {
+		stats[k] = true
+	}
+	for _, id := range in.ResolveClocks {
+		if !st.ResolveClock(id) {
+			return fmt.Errorf("no running clock %q to resolve", id)
+		}
+	}
+	for _, d := range in.StartClocks {
+		if _, exists := st.ClockByID(d.ID); exists {
+			return fmt.Errorf("clock %q is already running", d.ID)
+		}
+		c, err := strategygame.PriceClock(d, stats)
+		if err != nil {
+			return err
+		}
+		st.Public.Clocks = append(st.Public.Clocks, c)
+	}
+	return nil
 }
 
 func (p *strategyGame) loadState(ctx context.Context, store GameStore) (strategygame.State, bool, error) {
@@ -442,6 +591,12 @@ func (p *strategyGame) BuildTurnContext(ctx context.Context, turn TurnInfo) (str
 		}
 		b.WriteString("\n")
 	}
+	if len(st.Public.Clocks) > 0 {
+		b.WriteString("Running pressures:\n")
+		for _, c := range st.Public.Clocks {
+			fmt.Fprintf(&b, "  - %s (id %s), %d turns left\n", c.Label, c.ID, c.Remaining)
+		}
+	}
 	if st.Public.Situation != nil {
 		fmt.Fprintf(&b, "Current situation: %s (id %s)\n", st.Public.Situation.Title, st.Public.Situation.ID)
 		b.WriteString("Options on the table: ")
@@ -500,6 +655,9 @@ func (p *strategyGame) TransformAssistantContent(content string) string {
 	for _, id := range ratings {
 		block.Stats = append(block.Stats, statLine{Label: st.Public.Label(id), Value: st.Public.Ratings[id]})
 	}
+	for _, c := range st.Public.Clocks {
+		block.Clocks = append(block.Clocks, clockLine{Label: c.Label, Remaining: c.Remaining, Ominous: c.Ominous})
+	}
 	if tr != nil && p.cfg.ShowRolls {
 		block.Resolution = tr.Explain
 	}
@@ -529,6 +687,7 @@ type gameBlock struct {
 	Turn       int          `json:"turn"`
 	DateLabel  string       `json:"date_label,omitempty"`
 	Stats      []statLine   `json:"stats"`
+	Clocks     []clockLine  `json:"clocks,omitempty"`
 	Situation  string       `json:"situation,omitempty"`
 	Choices    []choiceLine `json:"choices,omitempty"`
 	Resolution []string     `json:"resolution,omitempty"`
@@ -540,6 +699,12 @@ type gameBlock struct {
 type statLine struct {
 	Label string `json:"label"`
 	Value int    `json:"value"`
+}
+
+type clockLine struct {
+	Label     string `json:"label"`
+	Remaining int    `json:"remaining"`
+	Ominous   bool   `json:"ominous"`
 }
 
 type choiceLine struct {
@@ -615,9 +780,26 @@ func (p *strategyGame) RenderContent(parts []ContentPart, role string) []Content
 			out = append(out, NewTextPart(prose))
 		}
 		if len(block.Stats) > 0 {
-			pairs := make([]map[string]string, 0, len(block.Stats))
+			pairs := make([]map[string]string, 0, len(block.Stats)+len(block.Clocks))
 			for _, s := range block.Stats {
 				pairs = append(pairs, map[string]string{"key": s.Label, "value": fmt.Sprintf("%d", s.Value)})
+			}
+			// Clocks sit in the same panel as the stats they are eating,
+			// so the pressure is visible at the moment of choosing rather
+			// than buried in prose.
+			for _, c := range block.Clocks {
+				marker := ""
+				if c.Ominous {
+					marker = " ⚠"
+				}
+				turns := "turns"
+				if c.Remaining == 1 {
+					turns = "turn"
+				}
+				pairs = append(pairs, map[string]string{
+					"key":   c.Label + marker,
+					"value": fmt.Sprintf("%d %s", c.Remaining, turns),
+				})
 			}
 			title := fmt.Sprintf("Turn %d", block.Turn)
 			if block.DateLabel != "" {
@@ -739,8 +921,40 @@ const commitTurnSchema = `{
       },
       "required": ["role", "premise", "resources", "ratings", "loss_when", "opening_situation"]
     },
-    "choice_id": {"type": "string", "description": "Required when kind=resolve. Which option the player took."},
-    "next_situation": {"$ref": "#/$defs/situation"}
+    "choice_id": {"type": "string", "description": "Which listed option the player took. Omit when using improvised_action."},
+    "improvised_action": {
+      "type": "object",
+      "description": "A free-text action the player confirmed after seeing its price. Use the SAME tags you passed to game_price_action.",
+      "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string", "description": "What the player decided to do, in their voice."},
+        "rating": {"type": "string"},
+        "difficulty": {"type": "string", "enum": ["trivial", "easy", "moderate", "hard", "daunting", "forlorn"]},
+        "stakes": {"type": "string", "enum": ["minor", "standard", "major"]},
+        "advances": {"type": "string"},
+        "costs": {"type": "string"}
+      },
+      "required": ["label", "rating", "difficulty", "stakes", "advances", "costs"]
+    },
+    "next_situation": {"$ref": "#/$defs/situation"},
+    "start_clocks": {
+      "type": "array",
+      "description": "Background pressures that tick every turn and land hard when they expire (a famine, a siege, an inquiry). Use them to make the focal choice cost something.",
+      "items": {"type": "object", "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string", "description": "Short player-facing name, e.g. 'The creditors call in'."},
+        "length": {"type": "string", "enum": ["short", "medium", "long"]},
+        "weight": {"type": "string", "enum": ["minor", "standard", "major"]},
+        "drains": {"type": "string", "description": "Stat bled a little each turn while this runs."},
+        "strikes": {"type": "string", "description": "Stat hit hard when it expires."},
+        "ominous": {"type": "boolean", "description": "True when expiry is bad news."}
+      }, "required": ["id", "label", "length", "weight", "drains", "strikes"]}
+    },
+    "resolve_clocks": {
+      "type": "array",
+      "description": "Ids of running clocks the player has genuinely dealt with. Removes them without firing their payload.",
+      "items": {"type": "string"}
+    }
   },
   "required": ["kind"],
   "$defs": {
@@ -767,4 +981,17 @@ const commitTurnSchema = `{
       "required": ["id", "title", "body", "choices"]
     }
   }
+}`
+
+const priceActionSchema = `{
+  "type": "object",
+  "properties": {
+    "summary": {"type": "string", "description": "The player's proposed action, restated plainly in their voice."},
+    "rating": {"type": "string", "description": "Which declared rating this would test."},
+    "difficulty": {"type": "string", "enum": ["trivial", "easy", "moderate", "hard", "daunting", "forlorn"]},
+    "stakes": {"type": "string", "enum": ["minor", "standard", "major"]},
+    "advances": {"type": "string", "description": "Stat that improves if it goes well."},
+    "costs": {"type": "string", "description": "Stat spent regardless."}
+  },
+  "required": ["summary", "rating", "difficulty", "stakes", "advances", "costs"]
 }`

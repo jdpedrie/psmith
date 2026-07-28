@@ -108,11 +108,17 @@ var bandEffects = map[Band]bandEffect{
 
 // Transition is the mechanical result of one decision.
 type Transition struct {
-	Band    Band           `json:"band"`
-	Roll    Roll           `json:"roll"`
-	Deltas  map[string]int `json:"deltas"`
-	Explain []string       `json:"explain"`
-	Outcome *Outcome       `json:"outcome,omitempty"`
+	Band   Band           `json:"band"`
+	Roll   Roll           `json:"roll"`
+	Deltas map[string]int `json:"deltas"`
+	// ClockDeltas and ClockEvents are what the background pressures did
+	// this turn, kept separate from the choice's own effects so the
+	// narration can attribute them correctly — losing four treasury to a
+	// famine is a different sentence from spending it on a bribe.
+	ClockDeltas map[string]int `json:"clock_deltas,omitempty"`
+	ClockEvents []string       `json:"clock_events,omitempty"`
+	Explain     []string       `json:"explain"`
+	Outcome     *Outcome       `json:"outcome,omitempty"`
 }
 
 // ValidateScenario rejects a setup that could not produce a playable
@@ -187,24 +193,34 @@ func validateDraft(d SituationDraft, stats, ratings map[string]bool) error {
 			return fmt.Errorf("situation %q: duplicate choice id %q", d.ID, c.ID)
 		}
 		ids[c.ID] = true
-		if strings.TrimSpace(c.Label) == "" {
-			return fmt.Errorf("choice %q: label is required", c.ID)
+		if err := validateChoice(c, stats, ratings); err != nil {
+			return fmt.Errorf("situation %q: %w", d.ID, err)
 		}
-		if !ratings[c.Rating] {
-			return fmt.Errorf("choice %q: rating %q is not a declared rating", c.ID, c.Rating)
-		}
-		if _, err := TargetFor(c.Difficulty); err != nil {
-			return fmt.Errorf("choice %q: %w", c.ID, err)
-		}
-		if _, ok := stakesUnits[c.Stakes]; !ok {
-			return fmt.Errorf("choice %q: unknown stakes %q (want one of %v)", c.ID, c.Stakes, StakesNames())
-		}
-		if !stats[c.Advances] {
-			return fmt.Errorf("choice %q: advances unknown stat %q", c.ID, c.Advances)
-		}
-		if !stats[c.Costs] {
-			return fmt.Errorf("choice %q: costs unknown stat %q", c.ID, c.Costs)
-		}
+	}
+	return nil
+}
+
+// validateChoice enforces the tag vocabulary on one option. Split out so
+// an improvised off-menu action is held to exactly the same standard as
+// an authored one — there is no looser path for free text.
+func validateChoice(c ChoiceDraft, stats, ratings map[string]bool) error {
+	if strings.TrimSpace(c.Label) == "" {
+		return fmt.Errorf("choice %q: label is required", c.ID)
+	}
+	if !ratings[c.Rating] {
+		return fmt.Errorf("choice %q: rating %q is not a declared rating", c.ID, c.Rating)
+	}
+	if _, err := TargetFor(c.Difficulty); err != nil {
+		return fmt.Errorf("choice %q: %w", c.ID, err)
+	}
+	if _, ok := stakesUnits[c.Stakes]; !ok {
+		return fmt.Errorf("choice %q: unknown stakes %q (want one of %v)", c.ID, c.Stakes, StakesNames())
+	}
+	if !stats[c.Advances] {
+		return fmt.Errorf("choice %q: advances unknown stat %q", c.ID, c.Advances)
+	}
+	if !stats[c.Costs] {
+		return fmt.Errorf("choice %q: costs unknown stat %q", c.ID, c.Costs)
 	}
 	return nil
 }
@@ -343,6 +359,13 @@ func Resolve(st State, choiceID string) (Transition, State, error) {
 	next.Meta.StateVersion++
 	next.Meta.Turn++
 
+	// Background pressures advance whether or not the player looked at
+	// them. This is the whole point of clocks: the focal decision is
+	// made under a cost that keeps accruing elsewhere.
+	remainingClocks, clockDeltas, clockEvents := TickClocks(next.Public.Clocks)
+	next.Public.Clocks = remainingClocks
+	next.applyDeltas(clockDeltas)
+
 	tr := Transition{
 		Band:   roll.Band,
 		Roll:   roll,
@@ -354,6 +377,14 @@ func Resolve(st State, choiceID string) (Transition, State, error) {
 	}
 	for _, stat := range sortedKeys(deltas) {
 		tr.Explain = append(tr.Explain, fmt.Sprintf("%s %+d", next.Public.Label(stat), deltas[stat]))
+	}
+	tr.ClockEvents = clockEvents
+	if len(clockDeltas) > 0 {
+		tr.ClockDeltas = clockDeltas
+		for _, stat := range sortedKeys(clockDeltas) {
+			tr.Explain = append(tr.Explain,
+				fmt.Sprintf("ongoing pressure: %s %+d", next.Public.Label(stat), clockDeltas[stat]))
+		}
 	}
 
 	next.Public.History = append(next.Public.History, Entry{
@@ -453,6 +484,7 @@ func (s State) clone() State {
 		out.Public.Limits[k] = v
 	}
 	out.Public.History = append([]Entry(nil), s.Public.History...)
+	out.Public.Clocks = append([]Clock(nil), s.Public.Clocks...)
 	out.Public.Loss = append([]Condition(nil), s.Public.Loss...)
 	out.Public.Victory = append([]Condition(nil), s.Public.Victory...)
 	out.Director.HiddenFacts = append([]string(nil), s.Director.HiddenFacts...)

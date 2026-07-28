@@ -117,8 +117,17 @@ func TestStrategyGame_Descriptor(t *testing.T) {
 		t.Fatal("must implement ToolProvider")
 	}
 	tools := tp.Tools()
-	if len(tools) != 2 {
-		t.Fatalf("expected 2 tools; got %d", len(tools))
+	got := map[string]bool{}
+	for _, tool := range tools {
+		got[tool.Name] = true
+	}
+	for _, want := range []string{"game_commit_turn", "game_price_action", "game_inspect"} {
+		if !got[want] {
+			t.Errorf("missing tool %q (have %v)", want, got)
+		}
+	}
+	if len(tools) != 3 {
+		t.Errorf("tool surface should stay small; got %d tools", len(tools))
 	}
 	for _, tool := range tools {
 		var schema map[string]any
@@ -537,5 +546,138 @@ func TestStrategyGame_MatchingVersionProceeds(t *testing.T) {
 	}
 	if _, version, ok := g.PendingPluginState(); !ok || version != 1 {
 		t.Errorf("expected version 1 after initialize; got ok=%v v=%d", ok, version)
+	}
+}
+
+// TestStrategyGame_PricesImprovisedActionWithoutCommitting covers the
+// move that justifies running this on a language model: the player says
+// something that is not on the list and gets a real, priced gamble.
+// Quoting must not change anything — showing odds means committing to
+// them, so the player has to see the price before paying it.
+func TestStrategyGame_PricesImprovisedActionWithoutCommitting(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	g2, store2 := nextTurn(t, g)
+
+	res, err := g2.ExecuteTool(gameCtx(store2), "game_price_action", json.RawMessage(`{
+	  "summary":"Marry my daughter to the duke and buy his cavalry",
+	  "rating":"standing","difficulty":"hard","stakes":"major",
+	  "advances":"treasury","costs":"standing"}`))
+	if err != nil {
+		t.Fatalf("price: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatalf("output: %v", err)
+	}
+	if out["quoted"] != true {
+		t.Errorf("expected a quote; got %v", out)
+	}
+	odds, ok := out["odds"].(map[string]any)
+	if !ok || odds["favorable"] == nil {
+		t.Fatalf("quote must carry real odds; got %v", out["odds"])
+	}
+	// Nothing was committed: quoting is read-only.
+	if _, _, pending := g2.PendingPluginState(); pending {
+		t.Error("pricing an action must not commit state")
+	}
+}
+
+// TestStrategyGame_ImprovisedActionResolvesLikeAnyOther verifies free
+// text goes through the same pricing, rolling and effects as a listed
+// option. A separate, softer path for improvised play would make
+// off-menu actions strictly better than the buttons, and the listed
+// options would stop being decisions.
+func TestStrategyGame_ImprovisedActionResolvesLikeAnyOther(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	g2, store2 := nextTurn(t, g)
+
+	res, err := g2.ExecuteTool(gameCtx(store2), "game_commit_turn", json.RawMessage(`{
+	  "kind":"resolve",
+	  "improvised_action":{"label":"Marry into the duchy","rating":"standing","difficulty":"hard",
+	    "stakes":"major","advances":"treasury","costs":"standing"},
+	  "next_situation":{"id":"after","title":"After","body":"b","choices":[
+	    {"id":"A","label":"one","rating":"guile","difficulty":"easy","stakes":"minor","advances":"treasury","costs":"treasury"},
+	    {"id":"B","label":"two","rating":"guile","difficulty":"easy","stakes":"minor","advances":"treasury","costs":"treasury"}]}}`))
+	if err != nil {
+		t.Fatalf("resolve improvised: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(res.Output, &out); err != nil {
+		t.Fatalf("output: %v", err)
+	}
+	if out["outcome"] == nil || out["outcome"] == "" {
+		t.Error("an improvised action must resolve to a real outcome band")
+	}
+	if out["turn"] != float64(2) {
+		t.Errorf("the turn should advance; got %v", out["turn"])
+	}
+}
+
+func TestStrategyGame_ImprovisedRejectsBothForms(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	g2, store2 := nextTurn(t, g)
+	_, err := g2.ExecuteTool(gameCtx(store2), "game_commit_turn", json.RawMessage(`{
+	  "kind":"resolve","choice_id":"A",
+	  "improvised_action":{"label":"both","rating":"guile","difficulty":"easy","stakes":"minor",
+	    "advances":"treasury","costs":"treasury"}}`))
+	if err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Errorf("passing both a choice id and an improvised action should be refused; got %v", err)
+	}
+}
+
+// TestStrategyGame_ImprovisedRejectsInventedTags proves free text does
+// not escape the vocabulary enforcement.
+func TestStrategyGame_ImprovisedRejectsInventedTags(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(initInput)); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	g2, store2 := nextTurn(t, g)
+	_, err := g2.ExecuteTool(gameCtx(store2), "game_price_action", json.RawMessage(`{
+	  "summary":"Something clever","rating":"guile","difficulty":"effortless",
+	  "stakes":"minor","advances":"treasury","costs":"treasury"}`))
+	if err == nil || !strings.Contains(err.Error(), "unknown difficulty") {
+		t.Errorf("improvised actions must use the same tag vocabulary; got %v", err)
+	}
+}
+
+// TestStrategyGame_ClocksSurfaceInTheStatusPanel verifies background
+// pressure is visible next to the stats it is eating, at the moment of
+// choosing rather than buried in prose.
+func TestStrategyGame_ClocksSurfaceInTheStatusPanel(t *testing.T) {
+	t.Parallel()
+	g := newGameForTest(t, "")
+	withClock := strings.Replace(initInput, `"kind": "initialize",`,
+		`"kind": "initialize","start_clocks":[{"id":"debt","label":"The creditors call in","length":"medium","weight":"major","drains":"treasury","strikes":"standing","ominous":true}],`, 1)
+	if _, err := g.ExecuteTool(gameCtx(&stubGameStore{}), "game_commit_turn", json.RawMessage(withClock)); err != nil {
+		t.Fatalf("initialize with clock: %v", err)
+	}
+	content := g.TransformAssistantContent("The ledgers are grim.")
+	parts := g.RenderContent([]ContentPart{NewTextPart(content)}, "assistant")
+
+	var panel string
+	for _, p := range parts {
+		if p.Fragment != nil && p.Fragment.Component == "key_value" {
+			panel = string(p.Fragment.Props)
+		}
+	}
+	if !strings.Contains(panel, "creditors call in") {
+		t.Errorf("a running clock should appear in the status panel; got %s", panel)
+	}
+	if !strings.Contains(panel, "4 turns") {
+		t.Errorf("the clock's remaining turns should be visible; got %s", panel)
 	}
 }

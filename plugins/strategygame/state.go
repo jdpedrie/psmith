@@ -58,7 +58,10 @@ type Public struct {
 	// scenario promised rather than drifting unbounded.
 	Limits    map[string]Limit `json:"limits,omitempty"`
 	Situation *Situation       `json:"situation,omitempty"`
-	Outcome   *Outcome         `json:"outcome,omitempty"`
+	// Clocks are the background pressures running alongside the focal
+	// situation. They are what make the focal choice hard.
+	Clocks  []Clock  `json:"clocks,omitempty"`
+	Outcome *Outcome `json:"outcome,omitempty"`
 	// Loss / Victory / TurnLimit ride on the state rather than being
 	// re-read from the scenario, so the end conditions a campaign was
 	// started under cannot change under the player mid-game.
