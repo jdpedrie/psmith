@@ -45,22 +45,25 @@ public struct PluginConfigEditor: View {
     }
 
     public var body: some View {
-        // SwiftUI builds a single AnyView-wrapped subtree from the
-        // switch so the dispatcher itself can stay non-generic.
-        // Adding a new custom form is a one-line case + a new
-        // file under Composite/.
-        switch pluginName {
-        case "component_builder":
-            ComponentBuilderConfigForm(config: $config)
-        default:
-            PluginConfigForm(
-                fields: fields,
-                config: $config,
-                availableModels: availableModels,
-                providerLabels: providerLabels,
-                providerTypes: providerTypes,
-                providerPresetIDs: providerPresetIDs
-            )
-        }
+        // No switch on plugin name any more.
+        //
+        // There used to be one, with a hand-written form for
+        // component_builder, because the field vocabulary could not express
+        // "a list of records" and that plugin needed one. `ConfigFieldList`
+        // closed that gap, so the bespoke form was deleted and every plugin
+        // — including any added later — renders from its own declared schema.
+        //
+        // If a plugin ever needs something this form cannot draw, grow the
+        // field vocabulary rather than reintroducing a case here: a new type
+        // serves every plugin, a case serves one and has to be maintained in
+        // every client.
+        PluginConfigForm(
+            fields: fields,
+            config: $config,
+            availableModels: availableModels,
+            providerLabels: providerLabels,
+            providerTypes: providerTypes,
+            providerPresetIDs: providerPresetIDs
+        )
     }
 }

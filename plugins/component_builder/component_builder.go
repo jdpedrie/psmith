@@ -160,8 +160,71 @@ func (p *componentBuilder) ConfigFields() []pluginapi.ConfigField {
 		{
 			Name:        "components",
 			Display:     "Component definitions",
-			Description: "Edited via the Component Builder settings page (Mac + iOS). Stored as a JSON array; each entry has name, component, open_tag, close_tag, position, instructions, reminder_mode (none/always/when_appropriate).",
-			Type:        pluginapi.ConfigFieldTextarea,
+			Description: "Each definition teaches the model one structured-output convention.",
+			Type:        pluginapi.ConfigFieldList,
+			ItemFields: []pluginapi.ConfigField{
+				{
+					Name:        "name",
+					Display:     "Name",
+					Description: "Unique within this plugin. Referenced by the system message and any reminder, so it disambiguates two definitions sharing one component.",
+					Type:        pluginapi.ConfigFieldText,
+					Required:    true,
+				},
+				{
+					Name:    "component",
+					Display: "Renders as",
+					Description: "Which client renderer draws the block: card_list, choice_list, key_value, " +
+						"image, image_grid, error, raw_json. Any other name is allowed and falls back to " +
+						"the unknown-component renderer.",
+					Type:     pluginapi.ConfigFieldText,
+					Required: true,
+				},
+				{
+					Name:        "open_tag",
+					Display:     "Opening tag",
+					Description: "e.g. <choices>",
+					Type:        pluginapi.ConfigFieldText,
+					Required:    true,
+				},
+				{
+					Name:        "close_tag",
+					Display:     "Closing tag",
+					Description: "e.g. </choices>",
+					Type:        pluginapi.ConfigFieldText,
+					Required:    true,
+				},
+				{
+					Name:        "position",
+					Display:     "Where in the reply",
+					Description: "Taught to the model, not enforced by the parser.",
+					Type:        pluginapi.ConfigFieldSelect,
+					Default:     "anywhere",
+					Options: []pluginapi.ConfigOption{
+						{Value: "anywhere", Label: "Anywhere"},
+						{Value: "start", Label: "At the start"},
+						{Value: "end", Label: "At the end"},
+					},
+				},
+				{
+					Name:    "instructions",
+					Display: "Instructions",
+					Description: "When and how to use this component, plus an example of the body JSON. " +
+						"The wrap-it-in-tags scaffolding is added for you.",
+					Type: pluginapi.ConfigFieldTextarea,
+				},
+				{
+					Name:        "reminder_mode",
+					Display:     "Per-turn reminder",
+					Description: "Re-grounds the convention on the head user message so a long conversation does not drift off it.",
+					Type:        pluginapi.ConfigFieldSelect,
+					Default:     "none",
+					Options: []pluginapi.ConfigOption{
+						{Value: "none", Label: "None"},
+						{Value: "when_appropriate", Label: "When appropriate"},
+						{Value: "always", Label: "Always"},
+					},
+				},
+			},
 		},
 	}
 }

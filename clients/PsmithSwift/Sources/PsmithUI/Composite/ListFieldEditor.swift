@@ -19,6 +19,9 @@ struct ListFieldEditor: View {
     /// Which row is expanded. One at a time: rows can carry long text, and a
     /// form with every row open is unreadable past about three entries.
     @State private var expanded: String?
+    @State private var showingPaste = false
+    @State private var pasteText = ""
+    @State private var pasteError: String?
 
     private var rows: [[String: Any]] {
         (config[field.name] as? [[String: Any]]) ?? []
@@ -36,13 +39,104 @@ struct ListFieldEditor: View {
                 rowView(index: index, row: row)
             }
 
-            Button {
-                addRow()
-            } label: {
-                Label("Add", systemImage: "plus.circle")
-                    .scaledFont(.callout)
+            HStack(spacing: 16) {
+                Button {
+                    addRow()
+                } label: {
+                    Label("Add", systemImage: "plus.circle")
+                        .scaledFont(.callout)
+                }
+                .buttonStyle(.borderless)
+
+                Button {
+                    showingPaste.toggle()
+                    pasteError = nil
+                } label: {
+                    Label("Paste JSON", systemImage: "doc.on.clipboard")
+                        .scaledFont(.callout)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
+
+            if showingPaste {
+                pasteBox
+            }
+        }
+    }
+
+    /// Bulk-replace escape hatch.
+    ///
+    /// Kept generic rather than per-plugin: seeding a list from a
+    /// model-generated config, or copying one between profiles, is plausible
+    /// for any list field, and hand-editing twenty rows through a form is not
+    /// something to force on someone who already has the JSON.
+    @ViewBuilder
+    private var pasteBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Paste a JSON array of rows. Replaces everything above.")
+                .scaledFont(.caption2)
+                .foregroundStyle(.secondary)
+            TextEditor(text: $pasteText)
+                .frame(minHeight: 100)
+                .scaledFont(.caption)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary, lineWidth: 1))
+            if let pasteError {
+                Text(pasteError)
+                    .scaledFont(.caption2)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Button("Apply") { applyPaste() }
+                    .buttonStyle(.borderless)
+                    .disabled(pasteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel") {
+                    showingPaste = false
+                    pasteText = ""
+                    pasteError = nil
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Accepts a bare array or a `{"<field>": [...]}` wrapper, since both
+    /// shapes circulate: the first is what someone copies out of a config
+    /// blob, the second is what they copy out of a whole plugin config.
+    /// Nothing is applied unless parsing fully succeeds.
+    private func applyPaste() {
+        guard let data = pasteText.data(using: .utf8) else {
+            pasteError = "Could not read that text."
+            return
+        }
+        do {
+            let parsed = try JSONSerialization.jsonObject(with: data)
+            var array: [[String: Any]]
+            if let direct = parsed as? [[String: Any]] {
+                array = direct
+            } else if let wrapper = parsed as? [String: Any],
+                      let inner = wrapper[field.name] as? [[String: Any]] {
+                array = inner
+            } else {
+                pasteError = "Expected a JSON array of objects."
+                return
+            }
+            // Backfill identity for rows that arrived without one, so pasted
+            // content is indistinguishable from content added through the form.
+            if let idField = field.itemFields.first(where: { $0.type == .autoID }) {
+                for i in array.indices {
+                    if (array[i][idField.name] as? String)?.isEmpty ?? true {
+                        array[i][idField.name] = UUID().uuidString
+                    }
+                }
+            }
+            config[field.name] = array
+            showingPaste = false
+            pasteText = ""
+            pasteError = nil
+        } catch {
+            pasteError = "Not valid JSON: \(error.localizedDescription)"
         }
     }
 
@@ -116,6 +210,14 @@ struct ListFieldEditor: View {
         case .boolean:
             Toggle("", isOn: boolBinding(item, index: index))
                 .labelsHidden()
+        case .select:
+            Picker("", selection: stringBinding(item, index: index)) {
+                ForEach(item.options, id: \.value) { option in
+                    Text(option.label.isEmpty ? option.value : option.label).tag(option.value)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
         default:
             // text, number, select and anything a newer server sends all edit
             // as text. Losing a purpose-built control is better than losing

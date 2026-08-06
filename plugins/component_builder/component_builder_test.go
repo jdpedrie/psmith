@@ -223,3 +223,77 @@ func TestComponentBuilder_RegisteredAtInit(t *testing.T) {
 		t.Error("must implement pluginapi.Configurable")
 	}
 }
+
+// The components field is what every client renders. It was a JSON textarea
+// with a hand-written form compiled into each app; the form is gone, so if
+// this stops being a list with an element schema the plugin becomes
+// unconfigurable rather than merely ugly.
+func TestConfigFields_ComponentsIsAnEditableList(t *testing.T) {
+	t.Parallel()
+	d, err := pluginapi.Describe(Name)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+
+	var components *pluginapi.ConfigField
+	for i := range d.ConfigFields {
+		if d.ConfigFields[i].Name == "components" {
+			components = &d.ConfigFields[i]
+		}
+	}
+	if components == nil {
+		t.Fatal("no components field")
+	}
+	if components.Type != pluginapi.ConfigFieldList {
+		t.Fatalf("components should be a list, got %q", components.Type)
+	}
+
+	byName := map[string]pluginapi.ConfigField{}
+	for _, f := range components.ItemFields {
+		byName[f.Name] = f
+	}
+	// These names are the stored JSON keys. Renaming one silently orphans
+	// every existing definition, because the plugin decodes by tag.
+	for _, want := range []string{"name", "component", "open_tag", "close_tag", "position", "instructions", "reminder_mode"} {
+		if _, ok := byName[want]; !ok {
+			t.Errorf("element schema is missing %q", want)
+		}
+	}
+
+	// The enumerated fields must offer exactly the values the plugin accepts,
+	// or the form can produce a config its own parser rejects.
+	assertOptions := func(field string, want ...string) {
+		t.Helper()
+		got := map[string]bool{}
+		for _, o := range byName[field].Options {
+			got[o.Value] = true
+		}
+		for _, w := range want {
+			if !got[w] {
+				t.Errorf("%s is missing option %q", field, w)
+			}
+		}
+		if len(got) != len(want) {
+			t.Errorf("%s offers %d options, plugin accepts %d", field, len(got), len(want))
+		}
+	}
+	assertOptions("reminder_mode", reminderModeNone, reminderModeAlways, reminderModeWhenAppropriate)
+	assertOptions("position", "anywhere", "start", "end")
+}
+
+// Switching the field type must not orphan definitions written under the old
+// textarea: the stored shape is the same array of objects either way.
+func TestConfig_ExistingDefinitionsStillParse(t *testing.T) {
+	t.Parallel()
+	const legacy = `{"components":[{"name":"choices","component":"choice_list",` +
+		`"open_tag":"<choices>","close_tag":"</choices>","position":"end",` +
+		`"instructions":"Offer options.","reminder_mode":"always"}]}`
+	p, err := newComponentBuilder([]byte(legacy))
+	if err != nil {
+		t.Fatalf("a config written before the list field must still parse: %v", err)
+	}
+	cb := p.(*componentBuilder)
+	if len(cb.defs) != 1 || cb.defs[0].Name != "choices" {
+		t.Errorf("definition did not survive: %+v", cb.defs)
+	}
+}

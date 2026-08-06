@@ -172,6 +172,29 @@ Why split: things like API keys are intrinsically per-user (you don't want to re
 
 ### Defaults
 
+### Record lists
+
+`ConfigFieldList` is a repeating group of records; its element schema rides on
+the field as `ItemFields`. Clients render rows using the same controls they use
+for flat fields, so a plugin that needs "a list of things with several
+properties each" declares one and gets an editor everywhere without shipping a
+form. The stored value is a JSON array of objects keyed by the element names.
+
+`ConfigFieldAutoID` pairs with it: machine row identity, filled once by the
+client when a row is created and never displayed. Use it when the plugin keys
+state to config rows, since a user-typed id is unreliable and a positional one
+breaks as soon as rows move.
+
+Nesting is one level deep on purpose. A form that can nest arbitrarily is a
+form nobody can lay out, and no plugin has needed it.
+
+If a plugin wants something the form cannot draw, grow this vocabulary rather
+than shipping a per-plugin editor. `component_builder` had one for months; it
+was deleted once `ConfigFieldList` existed, and no client switches on plugin
+name any more.
+
+### Defaults
+
 `ConfigField.Default any` is JSON-marshaled when shipped over the wire. Empty / nil means "no default." Defaults are populated into the form when a plugin is freshly attached, so users see sensible starting values rather than blank fields.
 
 ---
