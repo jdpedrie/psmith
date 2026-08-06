@@ -839,19 +839,29 @@ private struct ProfileEditSheet: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Remove plugin")
             if drillable {
+                // The chevron IS the link.
+                //
+                // It used to be an overlay on a zero-width, zero-opacity
+                // NavigationLink, which draws the affordance without giving it
+                // a hit area: SwiftUI clips hit testing to a view's bounds, and
+                // those bounds were empty. Plugin config was unreachable, and
+                // the nearest real target was the destructive remove button
+                // right beside it.
                 NavigationLink(value: ProfileSubScreen.pluginConfig(
                     localID: plugin.localID,
                     pluginName: plugin.pluginName
                 )) {
-                    EmptyView()
-                }
-                .frame(width: 0)
-                .opacity(0)
-                .overlay(alignment: .trailing) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        // Padding first, then contentShape: a bare chevron is
+                        // well under the 44pt minimum and sits next to delete.
+                        .padding(.leading, 10)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Configure \(title)")
             }
         }
     }

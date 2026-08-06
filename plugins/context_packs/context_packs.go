@@ -153,13 +153,41 @@ func (p *contextPacks) find(id string) (pack, bool) {
 func (p *contextPacks) ConfigFields() []pluginapi.ConfigField {
 	return []pluginapi.ConfigField{
 		{
-			Name:    "packs",
-			Display: "Packs",
-			Description: "JSON array of packs. Each needs a unique `id`, a `name` shown in the " +
-				"picker, a short `description` (the model sees this, so write it as a hint " +
-				"about when the pack is relevant), and a `body` delivered verbatim. " +
-				`e.g. [{"id":"runbook","name":"Deploy runbook","description":"Release steps and rollback","body":"…"}]`,
-			Type: pluginapi.ConfigFieldTextarea,
+			Name:        "packs",
+			Display:     "Packs",
+			Description: "Each pack is delivered once, when you choose it from the composer.",
+			Type:        pluginapi.ConfigFieldList,
+			ItemFields: []pluginapi.ConfigField{
+				{
+					// Never shown. The delivery ledger keys off this, so it has
+					// to survive renaming and reordering; a user-typed id or a
+					// positional one would not.
+					Name: "id",
+					Type: pluginapi.ConfigFieldAutoID,
+				},
+				{
+					Name:        "name",
+					Display:     "Name",
+					Description: "Shown in the picker and to the model.",
+					Type:        pluginapi.ConfigFieldText,
+					Required:    true,
+				},
+				{
+					Name:    "description",
+					Display: "When it is relevant",
+					Description: "One line. The model sees this and nothing else about the pack " +
+						"until you deliver it, so write it as the hint that would make the " +
+						"model ask for it.",
+					Type: pluginapi.ConfigFieldText,
+				},
+				{
+					Name:        "body",
+					Display:     "Contents",
+					Description: "Delivered verbatim, once.",
+					Type:        pluginapi.ConfigFieldTextarea,
+					Required:    true,
+				},
+			},
 		},
 		{
 			Name:    "announce_to_model",

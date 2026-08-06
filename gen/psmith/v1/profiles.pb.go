@@ -98,6 +98,14 @@ const (
 	// is the catalog model id, mirroring how the conversation
 	// settings persist a chosen model.
 	ConfigField_MODEL_PICKER ConfigField_Type = 6
+	// A repeating group of records. The stored value is a JSON array of
+	// objects keyed by the names in `item_fields`. Clients render a row
+	// editor rather than making the user hand-write JSON.
+	ConfigField_LIST ConfigField_Type = 7
+	// A machine key the client fills once when a list row is created and
+	// never displays. Plugins that key state to config rows need identity
+	// that survives renaming and reordering.
+	ConfigField_AUTO_ID ConfigField_Type = 8
 )
 
 // Enum value maps for ConfigField_Type.
@@ -110,6 +118,8 @@ var (
 		4: "BOOLEAN",
 		5: "SELECT",
 		6: "MODEL_PICKER",
+		7: "LIST",
+		8: "AUTO_ID",
 	}
 	ConfigField_Type_value = map[string]int32{
 		"TYPE_UNSPECIFIED": 0,
@@ -119,6 +129,8 @@ var (
 		"BOOLEAN":          4,
 		"SELECT":           5,
 		"MODEL_PICKER":     6,
+		"LIST":             7,
+		"AUTO_ID":          8,
 	}
 )
 
@@ -1419,6 +1431,10 @@ type ConfigField struct {
 	// the per-profile config blob handed to the plugin constructor at
 	// pipeline-build time.
 	Global bool `protobuf:"varint,8,opt,name=global,proto3" json:"global,omitempty"`
+	// One element's schema when type == LIST. Empty otherwise. Not
+	// recursive: a list inside a list is not supported, because a form that
+	// nests arbitrarily is a form nobody can lay out.
+	ItemFields []*ConfigField `protobuf:"bytes,13,rep,name=item_fields,json=itemFields,proto3" json:"item_fields,omitempty"`
 	// True when the field holds a credential. Profile export strips it, and
 	// UIs may mask it on input. Distinct from `global`, which is about
 	// scope: mcp's env/headers are profile-scoped but secret.
@@ -1531,6 +1547,13 @@ func (x *ConfigField) GetGlobal() bool {
 		return x.Global
 	}
 	return false
+}
+
+func (x *ConfigField) GetItemFields() []*ConfigField {
+	if x != nil {
+		return x.ItemFields
+	}
+	return nil
 }
 
 func (x *ConfigField) GetSecret() bool {
@@ -3751,7 +3774,7 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\vPluginPanel\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x1b\n" +
 	"\tsf_symbol\x18\x02 \x01(\tR\bsfSymbol\x12\x1a\n" +
-	"\bsubtitle\x18\x03 \x01(\tR\bsubtitle\"\xa4\x05\n" +
+	"\bsubtitle\x18\x03 \x01(\tR\bsubtitle\"\xf5\x05\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
@@ -3761,11 +3784,13 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\aoptions\x18\x06 \x03(\v2\x17.psmith.v1.ConfigOptionR\aoptions\x12Q\n" +
 	"\x13model_picker_filter\x18\t \x01(\v2\x1c.psmith.v1.ModelPickerFilterH\x00R\x11modelPickerFilter\x88\x01\x01\x12\x1a\n" +
 	"\brequired\x18\a \x01(\bR\brequired\x12\x16\n" +
-	"\x06global\x18\b \x01(\bR\x06global\x12\x16\n" +
+	"\x06global\x18\b \x01(\bR\x06global\x127\n" +
+	"\vitem_fields\x18\r \x03(\v2\x16.psmith.v1.ConfigFieldR\n" +
+	"itemFields\x12\x16\n" +
 	"\x06secret\x18\f \x01(\bR\x06secret\x122\n" +
 	"\x05merge\x18\n" +
 	" \x01(\x0e2\x1c.psmith.v1.ConfigField.MergeR\x05merge\x12\x1a\n" +
-	"\bcategory\x18\v \x01(\tR\bcategory\"k\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\"\x82\x01\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +
@@ -3775,7 +3800,9 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\aBOOLEAN\x10\x04\x12\n" +
 	"\n" +
 	"\x06SELECT\x10\x05\x12\x10\n" +
-	"\fMODEL_PICKER\x10\x06\"J\n" +
+	"\fMODEL_PICKER\x10\x06\x12\b\n" +
+	"\x04LIST\x10\a\x12\v\n" +
+	"\aAUTO_ID\x10\b\"J\n" +
 	"\x05Merge\x12\x15\n" +
 	"\x11MERGE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rMERGE_REPLACE\x10\x01\x12\x17\n" +
@@ -4065,68 +4092,69 @@ var file_psmith_v1_profiles_proto_depIdxs = []int32{
 	1,  // 14: psmith.v1.ConfigField.type:type_name -> psmith.v1.ConfigField.Type
 	19, // 15: psmith.v1.ConfigField.options:type_name -> psmith.v1.ConfigOption
 	20, // 16: psmith.v1.ConfigField.model_picker_filter:type_name -> psmith.v1.ModelPickerFilter
-	2,  // 17: psmith.v1.ConfigField.merge:type_name -> psmith.v1.ConfigField.Merge
-	16, // 18: psmith.v1.ListPluginTypesResponse.plugin_types:type_name -> psmith.v1.PluginType
-	21, // 19: psmith.v1.GetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
-	21, // 20: psmith.v1.SetProfilePluginsRequest.plugins:type_name -> psmith.v1.ProfilePlugin
-	21, // 21: psmith.v1.SetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
-	28, // 22: psmith.v1.GetUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	28, // 23: psmith.v1.ListUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	28, // 24: psmith.v1.UpsertUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	35, // 25: psmith.v1.ListMCPServersResponse.servers:type_name -> psmith.v1.MCPServer
-	35, // 26: psmith.v1.UpsertMCPServerResponse.server:type_name -> psmith.v1.MCPServer
-	45, // 27: psmith.v1.ProfileBundle.profiles:type_name -> psmith.v1.BundledProfile
-	58, // 28: psmith.v1.ProfileBundle.exported_at:type_name -> google.protobuf.Timestamp
-	53, // 29: psmith.v1.BundledProfile.compression_mode:type_name -> psmith.v1.CompressionMode
-	59, // 30: psmith.v1.BundledProfile.call_settings:type_name -> psmith.v1.CallSettings
-	46, // 31: psmith.v1.BundledProfile.default_model:type_name -> psmith.v1.ModelRef
-	46, // 32: psmith.v1.BundledProfile.compression_model:type_name -> psmith.v1.ModelRef
-	46, // 33: psmith.v1.BundledProfile.title_model:type_name -> psmith.v1.ModelRef
-	47, // 34: psmith.v1.BundledProfile.plugins:type_name -> psmith.v1.BundledPlugin
-	55, // 35: psmith.v1.ImportProfileResponse.profiles:type_name -> psmith.v1.Profile
-	52, // 36: psmith.v1.ImportProfileResponse.warnings:type_name -> psmith.v1.ImportWarning
-	0,  // 37: psmith.v1.ImportWarning.kind:type_name -> psmith.v1.ImportWarningKind
-	3,  // 38: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
-	5,  // 39: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
-	7,  // 40: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
-	9,  // 41: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
-	11, // 42: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
-	13, // 43: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
-	22, // 44: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
-	24, // 45: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
-	26, // 46: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
-	29, // 47: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
-	31, // 48: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
-	33, // 49: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
-	36, // 50: psmith.v1.ProfilesService.ListMCPServers:input_type -> psmith.v1.ListMCPServersRequest
-	38, // 51: psmith.v1.ProfilesService.UpsertMCPServer:input_type -> psmith.v1.UpsertMCPServerRequest
-	40, // 52: psmith.v1.ProfilesService.DeleteMCPServer:input_type -> psmith.v1.DeleteMCPServerRequest
-	42, // 53: psmith.v1.ProfilesService.TestMCPServer:input_type -> psmith.v1.TestMCPServerRequest
-	48, // 54: psmith.v1.ProfilesService.ExportProfile:input_type -> psmith.v1.ExportProfileRequest
-	50, // 55: psmith.v1.ProfilesService.ImportProfile:input_type -> psmith.v1.ImportProfileRequest
-	4,  // 56: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
-	6,  // 57: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
-	8,  // 58: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
-	10, // 59: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
-	12, // 60: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
-	14, // 61: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
-	23, // 62: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
-	25, // 63: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
-	27, // 64: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
-	30, // 65: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
-	32, // 66: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
-	34, // 67: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
-	37, // 68: psmith.v1.ProfilesService.ListMCPServers:output_type -> psmith.v1.ListMCPServersResponse
-	39, // 69: psmith.v1.ProfilesService.UpsertMCPServer:output_type -> psmith.v1.UpsertMCPServerResponse
-	41, // 70: psmith.v1.ProfilesService.DeleteMCPServer:output_type -> psmith.v1.DeleteMCPServerResponse
-	43, // 71: psmith.v1.ProfilesService.TestMCPServer:output_type -> psmith.v1.TestMCPServerResponse
-	49, // 72: psmith.v1.ProfilesService.ExportProfile:output_type -> psmith.v1.ExportProfileResponse
-	51, // 73: psmith.v1.ProfilesService.ImportProfile:output_type -> psmith.v1.ImportProfileResponse
-	56, // [56:74] is the sub-list for method output_type
-	38, // [38:56] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	18, // 17: psmith.v1.ConfigField.item_fields:type_name -> psmith.v1.ConfigField
+	2,  // 18: psmith.v1.ConfigField.merge:type_name -> psmith.v1.ConfigField.Merge
+	16, // 19: psmith.v1.ListPluginTypesResponse.plugin_types:type_name -> psmith.v1.PluginType
+	21, // 20: psmith.v1.GetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
+	21, // 21: psmith.v1.SetProfilePluginsRequest.plugins:type_name -> psmith.v1.ProfilePlugin
+	21, // 22: psmith.v1.SetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
+	28, // 23: psmith.v1.GetUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	28, // 24: psmith.v1.ListUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	28, // 25: psmith.v1.UpsertUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	35, // 26: psmith.v1.ListMCPServersResponse.servers:type_name -> psmith.v1.MCPServer
+	35, // 27: psmith.v1.UpsertMCPServerResponse.server:type_name -> psmith.v1.MCPServer
+	45, // 28: psmith.v1.ProfileBundle.profiles:type_name -> psmith.v1.BundledProfile
+	58, // 29: psmith.v1.ProfileBundle.exported_at:type_name -> google.protobuf.Timestamp
+	53, // 30: psmith.v1.BundledProfile.compression_mode:type_name -> psmith.v1.CompressionMode
+	59, // 31: psmith.v1.BundledProfile.call_settings:type_name -> psmith.v1.CallSettings
+	46, // 32: psmith.v1.BundledProfile.default_model:type_name -> psmith.v1.ModelRef
+	46, // 33: psmith.v1.BundledProfile.compression_model:type_name -> psmith.v1.ModelRef
+	46, // 34: psmith.v1.BundledProfile.title_model:type_name -> psmith.v1.ModelRef
+	47, // 35: psmith.v1.BundledProfile.plugins:type_name -> psmith.v1.BundledPlugin
+	55, // 36: psmith.v1.ImportProfileResponse.profiles:type_name -> psmith.v1.Profile
+	52, // 37: psmith.v1.ImportProfileResponse.warnings:type_name -> psmith.v1.ImportWarning
+	0,  // 38: psmith.v1.ImportWarning.kind:type_name -> psmith.v1.ImportWarningKind
+	3,  // 39: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
+	5,  // 40: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
+	7,  // 41: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
+	9,  // 42: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
+	11, // 43: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
+	13, // 44: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
+	22, // 45: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
+	24, // 46: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
+	26, // 47: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
+	29, // 48: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
+	31, // 49: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
+	33, // 50: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
+	36, // 51: psmith.v1.ProfilesService.ListMCPServers:input_type -> psmith.v1.ListMCPServersRequest
+	38, // 52: psmith.v1.ProfilesService.UpsertMCPServer:input_type -> psmith.v1.UpsertMCPServerRequest
+	40, // 53: psmith.v1.ProfilesService.DeleteMCPServer:input_type -> psmith.v1.DeleteMCPServerRequest
+	42, // 54: psmith.v1.ProfilesService.TestMCPServer:input_type -> psmith.v1.TestMCPServerRequest
+	48, // 55: psmith.v1.ProfilesService.ExportProfile:input_type -> psmith.v1.ExportProfileRequest
+	50, // 56: psmith.v1.ProfilesService.ImportProfile:input_type -> psmith.v1.ImportProfileRequest
+	4,  // 57: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
+	6,  // 58: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
+	8,  // 59: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
+	10, // 60: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
+	12, // 61: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
+	14, // 62: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
+	23, // 63: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
+	25, // 64: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
+	27, // 65: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
+	30, // 66: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
+	32, // 67: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
+	34, // 68: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
+	37, // 69: psmith.v1.ProfilesService.ListMCPServers:output_type -> psmith.v1.ListMCPServersResponse
+	39, // 70: psmith.v1.ProfilesService.UpsertMCPServer:output_type -> psmith.v1.UpsertMCPServerResponse
+	41, // 71: psmith.v1.ProfilesService.DeleteMCPServer:output_type -> psmith.v1.DeleteMCPServerResponse
+	43, // 72: psmith.v1.ProfilesService.TestMCPServer:output_type -> psmith.v1.TestMCPServerResponse
+	49, // 73: psmith.v1.ProfilesService.ExportProfile:output_type -> psmith.v1.ExportProfileResponse
+	51, // 74: psmith.v1.ProfilesService.ImportProfile:output_type -> psmith.v1.ImportProfileResponse
+	57, // [57:75] is the sub-list for method output_type
+	39, // [39:57] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_profiles_proto_init() }

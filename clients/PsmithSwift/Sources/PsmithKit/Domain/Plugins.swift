@@ -44,6 +44,11 @@ public struct PsmithPluginCapabilities: Sendable, Hashable {
 
 public enum PsmithConfigFieldType: Sendable, Hashable {
     case number, text, textarea, boolean, select, modelPicker
+    /// A repeating group of records. Value is an array of objects keyed by
+    /// `itemFields`.
+    case list
+    /// A machine key the client fills once per row and never displays.
+    case autoID
 }
 
 /// How one field's value combines across the resolver's layered view
@@ -118,6 +123,8 @@ public struct PsmithConfigField: Sendable, Hashable, Identifiable {
     /// which models to surface in the chooser. nil = no filter
     /// (irrelevant on non-`.modelPicker` types).
     public let modelPickerFilter: PsmithModelPickerFilter?
+    /// One element's schema when `type == .list`. Empty otherwise.
+    public let itemFields: [PsmithConfigField]
     /// How this field combines across the resolver's layered view.
     /// `.replace` (default) keeps the existing leaf-wins behaviour;
     /// `.appendString` means each layer's non-empty contribution
@@ -140,7 +147,8 @@ public struct PsmithConfigField: Sendable, Hashable, Identifiable {
         global: Bool = false,
         modelPickerFilter: PsmithModelPickerFilter? = nil,
         merge: PsmithConfigFieldMerge = .replace,
-        category: String = ""
+        category: String = "",
+        itemFields: [PsmithConfigField] = []
     ) {
         self.name = name
         self.display = display
@@ -153,6 +161,7 @@ public struct PsmithConfigField: Sendable, Hashable, Identifiable {
         self.modelPickerFilter = modelPickerFilter
         self.merge = merge
         self.category = category
+        self.itemFields = itemFields
     }
 
     /// True when `value` is missing or blank for a required field.
@@ -166,6 +175,15 @@ public struct PsmithConfigField: Sendable, Hashable, Identifiable {
             return true
         case .number:
             return value == nil
+        case .list:
+            // A required list needs at least one row; an empty array is the
+            // same as unset.
+            if let rows = value as? [Any] { return rows.isEmpty }
+            return true
+        case .autoID:
+            // Machine-filled and never shown, so it cannot be "missing" in a
+            // way the user could act on.
+            return false
         case .boolean:
             // For required booleans, "false" still counts as a chosen value.
             return value == nil
@@ -341,7 +359,11 @@ extension PsmithConfigFieldType {
         case .boolean:     self = .boolean
         case .select:      self = .select
         case .modelPicker: self = .modelPicker
+        case .list:        self = .list
+        case .autoID:      self = .autoID
         case .unspecified, .UNRECOGNIZED:
+            // A server newer than this client: fall back to a text box rather
+            // than dropping the field, so the value is still editable.
             self = .text
         }
     }
@@ -387,7 +409,8 @@ extension PsmithConfigField {
             global: p.global,
             modelPickerFilter: filter,
             merge: merge,
-            category: p.category
+            category: p.category,
+            itemFields: p.itemFields.map(PsmithConfigField.init(from:))
         )
     }
 }

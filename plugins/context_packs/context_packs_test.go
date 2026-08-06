@@ -396,3 +396,60 @@ func TestPanelAction_IgnoresOtherSchemes(t *testing.T) {
 		}
 	}
 }
+
+// --- config schema ----------------------------------------------------------
+
+// The packs field is what a client renders. If it stops being a list with an
+// element schema, every client silently falls back to a raw-JSON textarea,
+// which is the thing this replaced.
+func TestConfigFields_PacksIsAnEditableList(t *testing.T) {
+	t.Parallel()
+	d, err := pluginapi.Describe(Name)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+
+	var packs *pluginapi.ConfigField
+	for i := range d.ConfigFields {
+		if d.ConfigFields[i].Name == "packs" {
+			packs = &d.ConfigFields[i]
+		}
+	}
+	if packs == nil {
+		t.Fatal("no packs field")
+	}
+	if packs.Type != pluginapi.ConfigFieldList {
+		t.Errorf("packs should be a list, got %q", packs.Type)
+	}
+
+	byName := map[string]pluginapi.ConfigField{}
+	for _, f := range packs.ItemFields {
+		byName[f.Name] = f
+	}
+	for _, want := range []string{"id", "name", "description", "body"} {
+		if _, ok := byName[want]; !ok {
+			t.Errorf("element schema is missing %q", want)
+		}
+	}
+	// The ledger keys off the id, so it has to be machine-assigned. A
+	// user-typed or positional id breaks the moment a row is renamed or moved.
+	if byName["id"].Type != pluginapi.ConfigFieldAutoID {
+		t.Errorf("id must be auto-assigned, got %q", byName["id"].Type)
+	}
+	if !byName["name"].Required || !byName["body"].Required {
+		t.Error("a pack with no name or no body cannot do anything useful")
+	}
+}
+
+// The list editor writes the same array-of-objects shape the plugin already
+// parsed, so switching the field type must not orphan existing configs.
+func TestConfig_StorageShapeUnchangedByListField(t *testing.T) {
+	t.Parallel()
+	p := build(t, twoPacks)
+	if len(p.cfg.Packs) != 2 {
+		t.Fatalf("expected the pre-existing JSON shape to still parse, got %d packs", len(p.cfg.Packs))
+	}
+	if p.cfg.Packs[0].ID != "runbook" {
+		t.Errorf("ids should survive: %+v", p.cfg.Packs[0])
+	}
+}

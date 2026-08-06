@@ -152,6 +152,11 @@ public struct PluginConfigForm: View {
         case .boolean:     booleanField(field)
         case .select:      selectField(field)
         case .modelPicker: modelPickerField(field)
+        case .list:        ListFieldEditor(field: field, config: $config)
+        case .autoID:
+            // Machine-filled row identity. Never rendered — it exists so a
+            // plugin can key state to a config row, not for a user to set.
+            EmptyView()
         }
     }
 

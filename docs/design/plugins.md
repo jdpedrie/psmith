@@ -33,6 +33,18 @@ Every plugin implements the base `Plugin` interface (a name and not much else). 
 - **PendingStateProvider** — hands the runtime state to bind to the assistant message once it exists. Forced by ordering: a tool runs mid-generation, before there is any assistant row to key state to, so the plugin holds its result on the per-send instance and the runtime collects it at materialization.
 - **DeviceFactRequester** — declares which on-device facts (timezone, locale, platform, location) the client should gather before each send. A fact no plugin requests is a permission the user is never prompted for, so the list stays short.
 
+The field vocabulary is `text`, `textarea`, `number`, `boolean`, `select`,
+`model_picker`, plus `list` and `auto_id`. A `list` is a repeating group of
+records whose element schema rides on the field itself, so a plugin needing "a
+list of things with several properties each" declares one and every client
+renders an editor without shipping a form. `auto_id` is machine row identity,
+filled once on create and never displayed, for plugins that key state to config
+rows and need that key to survive a rename or a reorder.
+
+Growing the vocabulary is the intended response to a plugin wanting a bespoke
+editor: every plugin gets the new type, where a per-plugin form would have to
+be compiled into every client.
+
 `ConfigField` carries two flags that look similar and are not. `Global` is about scope: the value lives at user scope in `user_plugin_settings` rather than on the profile, so it is entered once across every profile that uses the plugin. `Secret` is about sensitivity: the value is a credential and must never leave the deployment, which is what profile export checks. They often coincide (brave_search's `api_key` is both) but not always: mcp's `env` and `headers` are per-instance profile config holding exactly the API keys and bearer tokens you would not want to share. Export skips a key when either flag is set, read from the plugin's own declaration, so a new plugin with a new credential field is covered without changing the export code.
 - **PanelProvider** — contributes a surface to the composer's add menu. The descriptor is a title and an icon; the body is `[]ContentPart`, the same structure ContentRenderer emits into a message. Clients draw panels with the fragment renderer they already have, so adding a plugin with a panel changes nothing in any client. The trade is that a panel can only say what the fragment vocabulary can say, which is deliberate: a plugin needing something new is an argument for growing the vocabulary, which every plugin then gets, rather than compiling a bespoke form into every app.
 - **ActionHandler** — receives `plugin:<action>?<k>=<v>` actions dispatched from a panel it rendered. This is the return path the fragment vocabulary was missing: `compose:`, `send:` and `external:` all terminate in the client, so a panel could display state but never change it.

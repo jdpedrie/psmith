@@ -32,6 +32,22 @@ const (
 	ConfigFieldBoolean     ConfigFieldType = "boolean"
 	ConfigFieldSelect      ConfigFieldType = "select"
 	ConfigFieldModelPicker ConfigFieldType = "model_picker"
+	// ConfigFieldList is a repeating group of records. The stored value is a
+	// JSON array of objects keyed by the names in ItemFields.
+	//
+	// Exists because the flat vocabulary could not express "a list of things
+	// with several properties each", and the workaround was a textarea of raw
+	// JSON. That is a bad form for a user and it pushes plugins toward
+	// shipping bespoke editors, which every client then has to compile in.
+	ConfigFieldList ConfigFieldType = "list"
+	// ConfigFieldAutoID is a machine key the client fills in once, when a list
+	// row is created, and never shows.
+	//
+	// A plugin that keys state to config rows (context_packs' delivery ledger)
+	// needs row identity that survives renaming and reordering. Asking a user
+	// to invent a stable id is both hostile and unreliable, and deriving one
+	// from position breaks the moment rows move.
+	ConfigFieldAutoID ConfigFieldType = "auto_id"
 )
 
 // ConfigFieldMerge picks how a field's value combines across the
@@ -107,6 +123,12 @@ type ConfigField struct {
 	// layer's contribution adds to the parent rather than supersedes
 	// it (text_injector's prefix/suffix/reminder fields).
 	Merge ConfigFieldMerge
+	// ItemFields describes one element of a ConfigFieldList. Ignored for
+	// every other type. Nesting a list inside a list is not supported: the
+	// renderer is one level deep by design, because a form that can nest
+	// arbitrarily is a form nobody can lay out.
+	ItemFields []ConfigField
+
 	// Category lets a plugin group related fields under a shared
 	// section header in the UI. Empty = ungrouped (rendered with
 	// the other top-level fields). Used today by app_tools and

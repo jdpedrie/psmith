@@ -996,6 +996,20 @@ func pluginPanelToProto(d pluginapi.TypeDescriptor) *psmithv1.PluginPanel {
 // capabilityRequirementsToProto converts the plugins-package shape to its
 // proto twin. Returns nil when the requirement set is empty so the proto
 // field stays unset (mirroring the optional<ModelCapabilities> on the wire).
+// itemFieldsToProto converts a list field's element schema. One level only:
+// nested lists are not part of the contract.
+func itemFieldsToProto(fields []pluginapi.ConfigField) []*psmithv1.ConfigField {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]*psmithv1.ConfigField, 0, len(fields))
+	for _, f := range fields {
+		f.ItemFields = nil
+		out = append(out, configFieldToProto(f))
+	}
+	return out
+}
+
 func capabilityRequirementsToProto(r pluginapi.ModelCapabilityRequirements) *psmithv1.ModelCapabilities {
 	if r.Empty() {
 		return nil
@@ -1048,6 +1062,7 @@ func configFieldToProto(f pluginapi.ConfigField) *psmithv1.ConfigField {
 		Secret:      f.Secret,
 		Merge:       configFieldMergeToProto(f.Merge),
 		Category:    f.Category,
+		ItemFields:  itemFieldsToProto(f.ItemFields),
 	}
 	if f.Default != nil {
 		// json.Marshal on a typed value (int, string, bool) is total — the
@@ -1099,6 +1114,10 @@ func configFieldTypeToProto(t pluginapi.ConfigFieldType) psmithv1.ConfigField_Ty
 		return psmithv1.ConfigField_BOOLEAN
 	case pluginapi.ConfigFieldSelect:
 		return psmithv1.ConfigField_SELECT
+	case pluginapi.ConfigFieldList:
+		return psmithv1.ConfigField_LIST
+	case pluginapi.ConfigFieldAutoID:
+		return psmithv1.ConfigField_AUTO_ID
 	case pluginapi.ConfigFieldModelPicker:
 		return psmithv1.ConfigField_MODEL_PICKER
 	default:

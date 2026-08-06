@@ -827,6 +827,14 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
     set {_uniqueStorage()._global = newValue}
   }
 
+  /// One element's schema when type == LIST. Empty otherwise. Not
+  /// recursive: a list inside a list is not supported, because a form that
+  /// nests arbitrarily is a form nobody can lay out.
+  public var itemFields: [Psmith_V1_ConfigField] {
+    get {_storage._itemFields}
+    set {_uniqueStorage()._itemFields = newValue}
+  }
+
   /// True when the field holds a credential. Profile export strips it, and
   /// UIs may mask it on input. Distinct from `global`, which is about
   /// scope: mcp's env/headers are profile-scoped but secret.
@@ -875,6 +883,16 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
     /// is the catalog model id, mirroring how the conversation
     /// settings persist a chosen model.
     case modelPicker // = 6
+
+    /// A repeating group of records. The stored value is a JSON array of
+    /// objects keyed by the names in `item_fields`. Clients render a row
+    /// editor rather than making the user hand-write JSON.
+    case list // = 7
+
+    /// A machine key the client fills once when a list row is created and
+    /// never displays. Plugins that key state to config rows need identity
+    /// that survives renaming and reordering.
+    case autoID // = 8
     case UNRECOGNIZED(Int)
 
     public init() {
@@ -890,6 +908,8 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       case 4: self = .boolean
       case 5: self = .select
       case 6: self = .modelPicker
+      case 7: self = .list
+      case 8: self = .autoID
       default: self = .UNRECOGNIZED(rawValue)
       }
     }
@@ -903,6 +923,8 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       case .boolean: return 4
       case .select: return 5
       case .modelPicker: return 6
+      case .list: return 7
+      case .autoID: return 8
       case .UNRECOGNIZED(let i): return i
       }
     }
@@ -916,6 +938,8 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       .boolean,
       .select,
       .modelPicker,
+      .list,
+      .autoID,
     ]
 
   }
@@ -2696,7 +2720,7 @@ nonisolated extension Psmith_V1_PluginPanel: SwiftProtobuf.Message, SwiftProtobu
 
 nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConfigField"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0\u{1}category\0\u{1}secret\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}display\0\u{1}description\0\u{1}type\0\u{3}default_json\0\u{1}options\0\u{1}required\0\u{1}global\0\u{3}model_picker_filter\0\u{1}merge\0\u{1}category\0\u{1}secret\0\u{3}item_fields\0")
 
   fileprivate class _StorageClass {
     var _name: String = String()
@@ -2708,6 +2732,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
     var _modelPickerFilter: Psmith_V1_ModelPickerFilter? = nil
     var _required: Bool = false
     var _global: Bool = false
+    var _itemFields: [Psmith_V1_ConfigField] = []
     var _secret: Bool = false
     var _merge: Psmith_V1_ConfigField.Merge = .unspecified
     var _category: String = String()
@@ -2730,6 +2755,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
       _modelPickerFilter = source._modelPickerFilter
       _required = source._required
       _global = source._global
+      _itemFields = source._itemFields
       _secret = source._secret
       _merge = source._merge
       _category = source._category
@@ -2763,6 +2789,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
         case 10: try { try decoder.decodeSingularEnumField(value: &_storage._merge) }()
         case 11: try { try decoder.decodeSingularStringField(value: &_storage._category) }()
         case 12: try { try decoder.decodeSingularBoolField(value: &_storage._secret) }()
+        case 13: try { try decoder.decodeRepeatedMessageField(value: &_storage._itemFields) }()
         default: break
         }
       }
@@ -2811,6 +2838,9 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
       if _storage._secret != false {
         try visitor.visitSingularBoolField(value: _storage._secret, fieldNumber: 12)
       }
+      if !_storage._itemFields.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._itemFields, fieldNumber: 13)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2829,6 +2859,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
         if _storage._modelPickerFilter != rhs_storage._modelPickerFilter {return false}
         if _storage._required != rhs_storage._required {return false}
         if _storage._global != rhs_storage._global {return false}
+        if _storage._itemFields != rhs_storage._itemFields {return false}
         if _storage._secret != rhs_storage._secret {return false}
         if _storage._merge != rhs_storage._merge {return false}
         if _storage._category != rhs_storage._category {return false}
@@ -2842,7 +2873,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
 }
 
 nonisolated extension Psmith_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0\u{1}LIST\0\u{1}AUTO_ID\0")
 }
 
 nonisolated extension Psmith_V1_ConfigField.Merge: SwiftProtobuf._ProtoNameProviding {

@@ -49,10 +49,11 @@ block into the prefix.
 | `packs` | JSON array of `{id, name, description, body}`. `id` must be unique; duplicates are rejected at construction because they would make the ledger ambiguous. |
 | `announce_to_model` | Default on. Puts names and descriptions in the system prompt so the model can say which pack it needs. Bodies never appear. |
 
-The JSON textarea is the known rough edge. The plain `ConfigField` vocabulary
-cannot express a list of records, and the alternative was a bespoke form
-compiled into every client, which is the coupling the panel system exists to
-avoid. A structured editor is the obvious follow-up.
+`packs` is a `ConfigFieldList`, so clients render a row editor rather than a
+JSON textarea. The element schema travels with the field, which is why no
+client ships a packs-specific form. `id` is a `ConfigFieldAutoID`: never shown,
+assigned once when a row is created, because the delivery ledger keys off it
+and has to survive renaming and reordering.
 
 ## Failure modes
 
