@@ -1,6 +1,7 @@
 package pluginapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -138,7 +139,7 @@ type fakeEnvelope struct {
 	header, trailer string
 }
 
-func (f *fakeEnvelope) OutgoingMessageEnvelope(_ map[string]string) (string, string) {
+func (f *fakeEnvelope) OutgoingMessageEnvelope(_ context.Context, _ map[string]string) (string, string) {
 	return f.header, f.trailer
 }
 
@@ -152,7 +153,7 @@ func TestPipeline_Empty(t *testing.T) {
 	if prep != "" || app != "" {
 		t.Errorf("empty SystemPrompts should be (\"\", \"\"); got (%q, %q)", prep, app)
 	}
-	if h, tr := p.OutgoingEnvelope(nil); h != "" || tr != "" {
+	if h, tr := p.OutgoingEnvelope(context.Background(), nil, nil); h != "" || tr != "" {
 		t.Errorf("empty OutgoingEnvelope should contribute nothing; got (%q, %q)", h, tr)
 	}
 	if got := p.TransformForDisplay("x"); got != "x" {
@@ -187,7 +188,7 @@ func TestPipeline_OutgoingEnvelope_JoinsInOrder(t *testing.T) {
 		&fakeEnvelope{dummyPlugin{name: "b"}, "", "TAIL-B"},
 		&fakeEnvelope{dummyPlugin{name: "c"}, "HEAD-C", ""},
 	}
-	h, tr := p.OutgoingEnvelope(nil)
+	h, tr := p.OutgoingEnvelope(context.Background(), nil, nil)
 	if h != "HEAD-A\n\nHEAD-C" {
 		t.Errorf("headers = %q want %q", h, "HEAD-A\n\nHEAD-C")
 	}
@@ -240,7 +241,7 @@ func TestPipeline_PluginsWithoutCapabilityAreSkipped(t *testing.T) {
 		t.Errorf("got (%q, %q) want (PRE, POST)", pre, post)
 	}
 	// And OutgoingEnvelope contributes nothing since neither plugin implements it.
-	if h, tr := p.OutgoingEnvelope(nil); h != "" || tr != "" {
+	if h, tr := p.OutgoingEnvelope(context.Background(), nil, nil); h != "" || tr != "" {
 		t.Errorf("got (%q, %q) want empty", h, tr)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	_ "github.com/jdpedrie/psmith/plugins/basic_grounding"
 	_ "github.com/jdpedrie/psmith/plugins/brave_search"
 	_ "github.com/jdpedrie/psmith/plugins/component_builder"
+	_ "github.com/jdpedrie/psmith/plugins/context_packs"
 	_ "github.com/jdpedrie/psmith/plugins/files"
 	_ "github.com/jdpedrie/psmith/plugins/game_master"
 	_ "github.com/jdpedrie/psmith/plugins/imagegen"

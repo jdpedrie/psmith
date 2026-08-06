@@ -13,6 +13,8 @@
 package pluginapi
 
 import (
+	"context"
+
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
@@ -48,8 +50,12 @@ type SystemPrompter interface {
 // plugin returned from `RequestedDeviceFacts`. Map may be nil if
 // the client didn't supply any — plugins should treat missing
 // keys as "not available" rather than failing.
+// The context carries the same host capabilities tool dispatch gets
+// (PluginStateStore, CallerInfo, …), so a plugin whose envelope depends
+// on stored state can read it. Envelope rendering happens inside the
+// send, before the user row is written.
 type MessageEnvelope interface {
-	OutgoingMessageEnvelope(facts map[string]string) (header, trailer string)
+	OutgoingMessageEnvelope(ctx context.Context, facts map[string]string) (header, trailer string)
 }
 
 // DeviceFactRequester is the opt-in interface for plugins that
@@ -139,11 +145,18 @@ func (p Pipeline) SystemPrompts() (prepend, appendStr string) {
 // verbatim to each plugin so those requesting facts can read them.
 // Plugins that don't implement the interface are skipped. Empty
 // strings mean "no contribution on that side."
-func (p Pipeline) OutgoingEnvelope(facts map[string]string) (headers, trailers string) {
+func (p Pipeline) OutgoingEnvelope(ctx context.Context, facts map[string]string, decorate func(context.Context, string) context.Context) (headers, trailers string) {
 	var hs, ts []string
 	for _, pl := range p {
 		if t, ok := pl.(MessageEnvelope); ok {
-			h, tr := t.OutgoingMessageEnvelope(facts)
+			// Same per-plugin decoration tool dispatch uses, so a
+			// stateful envelope can reach its own state and no other
+			// plugin's.
+			pctx := ctx
+			if decorate != nil {
+				pctx = decorate(ctx, pl.Name())
+			}
+			h, tr := t.OutgoingMessageEnvelope(pctx, facts)
 			if h != "" {
 				hs = append(hs, h)
 			}

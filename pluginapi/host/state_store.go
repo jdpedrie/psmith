@@ -48,6 +48,28 @@ type PluginStateStore interface {
 	// retried bind overwrites rather than failing. Callers pass the
 	// version they computed; the store does not interpret the blob.
 	Save(ctx context.Context, messageID uuid.UUID, state json.RawMessage, version int64) error
+
+	// LoadConversation reads state scoped to the whole conversation rather
+	// than to a branch. Returns ErrNoPluginState when there is none.
+	//
+	// Use it for intent about a send that has not happened yet — a queue, a
+	// pending selection — which belongs to the conversation and must be
+	// writable before it has any messages at all. Use the branch-scoped pair
+	// above for anything recording what actually happened.
+	LoadConversation(ctx context.Context) (state json.RawMessage, version int64, err error)
+
+	// SaveConversation overwrites the conversation-scoped row in place.
+	SaveConversation(ctx context.Context, state json.RawMessage, version int64) error
+
+	// Leaf is the message this store was built against: the branch head at
+	// the moment the caller was handed it.
+	//
+	// Needed by work that happens OUTSIDE a send — a panel action, say —
+	// which has no new message to bind to and must write against the branch
+	// as it currently stands. Returns uuid.Nil for a conversation with no
+	// messages yet, where there is nothing to anchor to; callers should treat
+	// that as "cannot persist yet" rather than writing somewhere arbitrary.
+	Leaf() uuid.UUID
 }
 
 type pluginStateStoreKey struct{}

@@ -84,6 +84,12 @@ const (
 	// ConversationsServiceSetConversationPluginsProcedure is the fully-qualified name of the
 	// ConversationsService's SetConversationPlugins RPC.
 	ConversationsServiceSetConversationPluginsProcedure = "/psmith.v1.ConversationsService/SetConversationPlugins"
+	// ConversationsServiceGetPluginPanelProcedure is the fully-qualified name of the
+	// ConversationsService's GetPluginPanel RPC.
+	ConversationsServiceGetPluginPanelProcedure = "/psmith.v1.ConversationsService/GetPluginPanel"
+	// ConversationsServiceInvokePluginActionProcedure is the fully-qualified name of the
+	// ConversationsService's InvokePluginAction RPC.
+	ConversationsServiceInvokePluginActionProcedure = "/psmith.v1.ConversationsService/InvokePluginAction"
 	// ConversationsServiceResolveConversationPipelineProcedure is the fully-qualified name of the
 	// ConversationsService's ResolveConversationPipeline RPC.
 	ConversationsServiceResolveConversationPipelineProcedure = "/psmith.v1.ConversationsService/ResolveConversationPipeline"
@@ -169,6 +175,16 @@ type ConversationsServiceClient interface {
 	// it needs to render a preview.
 	GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error)
 	SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error)
+	// --- Plugin panels -----------------------------------------------------
+	// Render one plugin's panel for this conversation. The body is the same
+	// UIFragment structure plugins emit into messages, so a client draws it
+	// with the renderer it already has and never learns what the plugin is.
+	GetPluginPanel(context.Context, *connect.Request[v1.GetPluginPanelRequest]) (*connect.Response[v1.GetPluginPanelResponse], error)
+	// Dispatch a `plugin:` action from a rendered panel back to the plugin
+	// that drew it. Returns the re-rendered panel, because every action this
+	// exists for changes what the panel should show, and a second round trip
+	// to discover that would just be latency.
+	InvokePluginAction(context.Context, *connect.Request[v1.InvokePluginActionRequest]) (*connect.Response[v1.InvokePluginActionResponse], error)
 	// Server-resolved merged view: profile chain + conversation
 	// overrides, with `disabled` rows already applied. Used by the
 	// conversation-settings UI to show "what's actually running."
@@ -334,6 +350,18 @@ func NewConversationsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(conversationsServiceMethods.ByName("SetConversationPlugins")),
 			connect.WithClientOptions(opts...),
 		),
+		getPluginPanel: connect.NewClient[v1.GetPluginPanelRequest, v1.GetPluginPanelResponse](
+			httpClient,
+			baseURL+ConversationsServiceGetPluginPanelProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("GetPluginPanel")),
+			connect.WithClientOptions(opts...),
+		),
+		invokePluginAction: connect.NewClient[v1.InvokePluginActionRequest, v1.InvokePluginActionResponse](
+			httpClient,
+			baseURL+ConversationsServiceInvokePluginActionProcedure,
+			connect.WithSchema(conversationsServiceMethods.ByName("InvokePluginAction")),
+			connect.WithClientOptions(opts...),
+		),
 		resolveConversationPipeline: connect.NewClient[v1.ResolveConversationPipelineRequest, v1.ResolveConversationPipelineResponse](
 			httpClient,
 			baseURL+ConversationsServiceResolveConversationPipelineProcedure,
@@ -416,6 +444,8 @@ type conversationsServiceClient struct {
 	deleteContext                 *connect.Client[v1.DeleteContextRequest, v1.DeleteContextResponse]
 	getConversationPlugins        *connect.Client[v1.GetConversationPluginsRequest, v1.GetConversationPluginsResponse]
 	setConversationPlugins        *connect.Client[v1.SetConversationPluginsRequest, v1.SetConversationPluginsResponse]
+	getPluginPanel                *connect.Client[v1.GetPluginPanelRequest, v1.GetPluginPanelResponse]
+	invokePluginAction            *connect.Client[v1.InvokePluginActionRequest, v1.InvokePluginActionResponse]
 	resolveConversationPipeline   *connect.Client[v1.ResolveConversationPipelineRequest, v1.ResolveConversationPipelineResponse]
 	listMessages                  *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
 	getMessage                    *connect.Client[v1.GetMessageRequest, v1.GetMessageResponse]
@@ -511,6 +541,16 @@ func (c *conversationsServiceClient) GetConversationPlugins(ctx context.Context,
 // SetConversationPlugins calls psmith.v1.ConversationsService.SetConversationPlugins.
 func (c *conversationsServiceClient) SetConversationPlugins(ctx context.Context, req *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error) {
 	return c.setConversationPlugins.CallUnary(ctx, req)
+}
+
+// GetPluginPanel calls psmith.v1.ConversationsService.GetPluginPanel.
+func (c *conversationsServiceClient) GetPluginPanel(ctx context.Context, req *connect.Request[v1.GetPluginPanelRequest]) (*connect.Response[v1.GetPluginPanelResponse], error) {
+	return c.getPluginPanel.CallUnary(ctx, req)
+}
+
+// InvokePluginAction calls psmith.v1.ConversationsService.InvokePluginAction.
+func (c *conversationsServiceClient) InvokePluginAction(ctx context.Context, req *connect.Request[v1.InvokePluginActionRequest]) (*connect.Response[v1.InvokePluginActionResponse], error) {
+	return c.invokePluginAction.CallUnary(ctx, req)
 }
 
 // ResolveConversationPipeline calls psmith.v1.ConversationsService.ResolveConversationPipeline.
@@ -616,6 +656,16 @@ type ConversationsServiceHandler interface {
 	// it needs to render a preview.
 	GetConversationPlugins(context.Context, *connect.Request[v1.GetConversationPluginsRequest]) (*connect.Response[v1.GetConversationPluginsResponse], error)
 	SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error)
+	// --- Plugin panels -----------------------------------------------------
+	// Render one plugin's panel for this conversation. The body is the same
+	// UIFragment structure plugins emit into messages, so a client draws it
+	// with the renderer it already has and never learns what the plugin is.
+	GetPluginPanel(context.Context, *connect.Request[v1.GetPluginPanelRequest]) (*connect.Response[v1.GetPluginPanelResponse], error)
+	// Dispatch a `plugin:` action from a rendered panel back to the plugin
+	// that drew it. Returns the re-rendered panel, because every action this
+	// exists for changes what the panel should show, and a second round trip
+	// to discover that would just be latency.
+	InvokePluginAction(context.Context, *connect.Request[v1.InvokePluginActionRequest]) (*connect.Response[v1.InvokePluginActionResponse], error)
 	// Server-resolved merged view: profile chain + conversation
 	// overrides, with `disabled` rows already applied. Used by the
 	// conversation-settings UI to show "what's actually running."
@@ -777,6 +827,18 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 		connect.WithSchema(conversationsServiceMethods.ByName("SetConversationPlugins")),
 		connect.WithHandlerOptions(opts...),
 	)
+	conversationsServiceGetPluginPanelHandler := connect.NewUnaryHandler(
+		ConversationsServiceGetPluginPanelProcedure,
+		svc.GetPluginPanel,
+		connect.WithSchema(conversationsServiceMethods.ByName("GetPluginPanel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	conversationsServiceInvokePluginActionHandler := connect.NewUnaryHandler(
+		ConversationsServiceInvokePluginActionProcedure,
+		svc.InvokePluginAction,
+		connect.WithSchema(conversationsServiceMethods.ByName("InvokePluginAction")),
+		connect.WithHandlerOptions(opts...),
+	)
 	conversationsServiceResolveConversationPipelineHandler := connect.NewUnaryHandler(
 		ConversationsServiceResolveConversationPipelineProcedure,
 		svc.ResolveConversationPipeline,
@@ -873,6 +935,10 @@ func NewConversationsServiceHandler(svc ConversationsServiceHandler, opts ...con
 			conversationsServiceGetConversationPluginsHandler.ServeHTTP(w, r)
 		case ConversationsServiceSetConversationPluginsProcedure:
 			conversationsServiceSetConversationPluginsHandler.ServeHTTP(w, r)
+		case ConversationsServiceGetPluginPanelProcedure:
+			conversationsServiceGetPluginPanelHandler.ServeHTTP(w, r)
+		case ConversationsServiceInvokePluginActionProcedure:
+			conversationsServiceInvokePluginActionHandler.ServeHTTP(w, r)
 		case ConversationsServiceResolveConversationPipelineProcedure:
 			conversationsServiceResolveConversationPipelineHandler.ServeHTTP(w, r)
 		case ConversationsServiceListMessagesProcedure:
@@ -968,6 +1034,14 @@ func (UnimplementedConversationsServiceHandler) GetConversationPlugins(context.C
 
 func (UnimplementedConversationsServiceHandler) SetConversationPlugins(context.Context, *connect.Request[v1.SetConversationPluginsRequest]) (*connect.Response[v1.SetConversationPluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.SetConversationPlugins is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) GetPluginPanel(context.Context, *connect.Request[v1.GetPluginPanelRequest]) (*connect.Response[v1.GetPluginPanelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.GetPluginPanel is not implemented"))
+}
+
+func (UnimplementedConversationsServiceHandler) InvokePluginAction(context.Context, *connect.Request[v1.InvokePluginActionRequest]) (*connect.Response[v1.InvokePluginActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ConversationsService.InvokePluginAction is not implemented"))
 }
 
 func (UnimplementedConversationsServiceHandler) ResolveConversationPipeline(context.Context, *connect.Request[v1.ResolveConversationPipelineRequest]) (*connect.Response[v1.ResolveConversationPipelineResponse], error) {

@@ -1,6 +1,7 @@
 package basicgrounding
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -211,7 +212,7 @@ func (p *basicGrounding) RequestedDeviceFacts() []string {
 
 // --- MessageEnvelope ---
 
-func (p *basicGrounding) OutgoingMessageEnvelope(facts map[string]string) (header, trailer string) {
+func (p *basicGrounding) OutgoingMessageEnvelope(_ context.Context, facts map[string]string) (header, trailer string) {
 	lines := p.factLines(facts)
 	if len(lines) == 0 {
 		return "", ""

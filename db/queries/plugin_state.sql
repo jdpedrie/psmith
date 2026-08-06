@@ -66,3 +66,20 @@ WHERE plugin_name = $1 AND conversation_id = $2;
 SELECT DISTINCT plugin_name FROM plugin_state
 WHERE context_id = $1
 ORDER BY plugin_name;
+
+-- name: UpsertPluginConversationState :one
+-- Conversation-scoped write. One row per plugin per conversation,
+-- overwritten in place: this is current intent, not a history to preserve.
+INSERT INTO plugin_conversation_state (
+    plugin_name, conversation_id, state_version, schema_version, state_json
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (plugin_name, conversation_id) DO UPDATE
+SET state_version  = EXCLUDED.state_version,
+    schema_version = EXCLUDED.schema_version,
+    state_json     = EXCLUDED.state_json,
+    updated_at     = NOW()
+RETURNING *;
+
+-- name: GetPluginConversationState :one
+SELECT * FROM plugin_conversation_state
+WHERE plugin_name = $1 AND conversation_id = $2;

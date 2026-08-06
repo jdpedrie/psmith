@@ -219,6 +219,10 @@ message PluginCapabilities {
   // pipeline. UIs surface this as the "Renderer" capability chip;
   // see plugins/CONTENT_RENDERERS.md for the component vocabulary.
   bool content_renderer = 11;
+  // Contributes a panel to the composer's add menu.
+  bool panel_provider = 12;
+  // Accepts `plugin:` actions dispatched from a panel it rendered.
+  bool action_handler = 13;
 }
 
 // PluginType is one entry in the server's compiled-in plugin registry.
@@ -239,6 +243,13 @@ message PluginType {
   // profile; values it can gather (with permission as needed) ride
   // back on `SendMessageRequest.device_facts`.
   repeated DeviceFactKey requested_device_facts = 6;
+  // The composer add-menu entry this plugin contributes. Unset unless
+  // `capabilities.panel_provider` is true.
+  //
+  // Clients build the menu by filtering descriptors against the
+  // conversation's resolved pipeline — they do not know which plugins
+  // exist, only that some of them have panels.
+  optional PluginPanel panel = 10;
   // Model capabilities the plugin needs from the conversation's assigned
   // model. Sparse: any field left false is "no requirement here." Auto-
   // derived: every plugin with `capabilities.tool_provider == true` reports
@@ -252,6 +263,19 @@ message PluginType {
 // ConfigField is one entry in a plugin's per-instance config descriptor.
 // The list is flat — there's no nesting — so a UI can render a form by
 // walking the array once.
+// PluginPanel labels a plugin-contributed surface in the composer's add menu.
+//
+// Deliberately just a label and an icon. The panel's BODY is UIFragments —
+// the same structure plugins already emit into messages — so a client renders
+// it with the fragment renderer it has rather than with a view per plugin.
+message PluginPanel {
+  string title = 1;
+  // SF Symbol name. Apple clients render it; others may ignore it, and an
+  // unrecognised name degrades to no icon rather than an error.
+  string sf_symbol = 2;
+  string subtitle = 3;
+}
+
 message ConfigField {
   enum Type {
     TYPE_UNSPECIFIED = 0;

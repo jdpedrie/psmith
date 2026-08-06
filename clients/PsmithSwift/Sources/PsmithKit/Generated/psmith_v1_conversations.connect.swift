@@ -96,6 +96,20 @@ public protocol Psmith_V1_ConversationsServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `setConversationPlugins`(request: Psmith_V1_SetConversationPluginsRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_SetConversationPluginsResponse>
 
+    /// --- Plugin panels -----------------------------------------------------
+    /// Render one plugin's panel for this conversation. The body is the same
+    /// UIFragment structure plugins emit into messages, so a client draws it
+    /// with the renderer it already has and never learns what the plugin is.
+    @available(iOS 13, *)
+    func `getPluginPanel`(request: Psmith_V1_GetPluginPanelRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_GetPluginPanelResponse>
+
+    /// Dispatch a `plugin:` action from a rendered panel back to the plugin
+    /// that drew it. Returns the re-rendered panel, because every action this
+    /// exists for changes what the panel should show, and a second round trip
+    /// to discover that would just be latency.
+    @available(iOS 13, *)
+    func `invokePluginAction`(request: Psmith_V1_InvokePluginActionRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_InvokePluginActionResponse>
+
     /// Server-resolved merged view: profile chain + conversation
     /// overrides, with `disabled` rows already applied. Used by the
     /// conversation-settings UI to show "what's actually running."
@@ -259,6 +273,16 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
     }
 
     @available(iOS 13, *)
+    public func `getPluginPanel`(request: Psmith_V1_GetPluginPanelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_GetPluginPanelResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/GetPluginPanel", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `invokePluginAction`(request: Psmith_V1_InvokePluginActionRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_InvokePluginActionResponse> {
+        return await self.client.unary(path: "/psmith.v1.ConversationsService/InvokePluginAction", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `resolveConversationPipeline`(request: Psmith_V1_ResolveConversationPipelineRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ResolveConversationPipelineResponse> {
         return await self.client.unary(path: "/psmith.v1.ConversationsService/ResolveConversationPipeline", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -327,6 +351,8 @@ public final class Psmith_V1_ConversationsServiceClient: Psmith_V1_Conversations
             public static let deleteContext = Connect.MethodSpec(name: "DeleteContext", service: "psmith.v1.ConversationsService", type: .unary)
             public static let getConversationPlugins = Connect.MethodSpec(name: "GetConversationPlugins", service: "psmith.v1.ConversationsService", type: .unary)
             public static let setConversationPlugins = Connect.MethodSpec(name: "SetConversationPlugins", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let getPluginPanel = Connect.MethodSpec(name: "GetPluginPanel", service: "psmith.v1.ConversationsService", type: .unary)
+            public static let invokePluginAction = Connect.MethodSpec(name: "InvokePluginAction", service: "psmith.v1.ConversationsService", type: .unary)
             public static let resolveConversationPipeline = Connect.MethodSpec(name: "ResolveConversationPipeline", service: "psmith.v1.ConversationsService", type: .unary)
             public static let listMessages = Connect.MethodSpec(name: "ListMessages", service: "psmith.v1.ConversationsService", type: .unary)
             public static let getMessage = Connect.MethodSpec(name: "GetMessage", service: "psmith.v1.ConversationsService", type: .unary)

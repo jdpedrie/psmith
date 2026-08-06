@@ -162,6 +162,7 @@ type Querier interface {
 	// parent chain does not either — compaction seeds the new context with a
 	// fresh root. Carrying a campaign through compaction is an explicit copy.
 	GetNearestPluginState(ctx context.Context, arg GetNearestPluginStateParams) (PluginState, error)
+	GetPluginConversationState(ctx context.Context, arg GetPluginConversationStateParams) (PluginConversationState, error)
 	// Exact lookup for one message's snapshot.
 	GetPluginState(ctx context.Context, arg GetPluginStateParams) (PluginState, error)
 	GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error)
@@ -521,6 +522,9 @@ type Querier interface {
 	UpdateUserModelProviderLabel(ctx context.Context, arg UpdateUserModelProviderLabelParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertExplicitCache(ctx context.Context, arg UpsertExplicitCacheParams) error
+	// Conversation-scoped write. One row per plugin per conversation,
+	// overwritten in place: this is current intent, not a history to preserve.
+	UpsertPluginConversationState(ctx context.Context, arg UpsertPluginConversationStateParams) (PluginConversationState, error)
 	// Write the snapshot a completed turn produced. Upsert rather than insert
 	// because the assistant message is materialized before the binding hook
 	// runs, and a retried bind must be idempotent rather than a duplicate-key

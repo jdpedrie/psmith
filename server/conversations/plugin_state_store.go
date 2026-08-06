@@ -172,3 +172,32 @@ func copyPluginStateAcrossContexts(ctx context.Context, q *store.Queries, p copy
 	}
 	return nil
 }
+
+// Leaf exposes the branch head this store was constructed against, so callers
+// working outside a send (panel actions) have somewhere to bind a write.
+func (s *userScopedStateStore) Leaf() uuid.UUID { return s.leafID }
+
+// LoadConversation reads the conversation-scoped row.
+func (s *userScopedStateStore) LoadConversation(ctx context.Context) (json.RawMessage, int64, error) {
+	row, err := s.svc.queries.GetPluginConversationState(ctx, store.GetPluginConversationStateParams{
+		PluginName:     s.pluginName,
+		ConversationID: s.conversationID,
+	})
+	if err != nil {
+		// Absent is the normal first-use condition, not a failure.
+		return nil, 0, host.ErrNoPluginState
+	}
+	return row.StateJson, row.StateVersion, nil
+}
+
+// SaveConversation overwrites the conversation-scoped row.
+func (s *userScopedStateStore) SaveConversation(ctx context.Context, state json.RawMessage, version int64) error {
+	_, err := s.svc.queries.UpsertPluginConversationState(ctx, store.UpsertPluginConversationStateParams{
+		PluginName:     s.pluginName,
+		ConversationID: s.conversationID,
+		StateVersion:   version,
+		SchemaVersion:  1,
+		StateJson:      state,
+	})
+	return err
+}

@@ -1588,7 +1588,20 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		// wire. Device-fact envelope from the request is translated from
 		// the proto enum to the plugin-side string keys; plugins ignore
 		// keys they don't recognize.
-		headers, trailers := pipeline.OutgoingEnvelope(deviceFactsFromProto(req.Msg.DeviceFacts))
+		// Anchor the envelope's state reads at the branch leaf as it stands
+		// BEFORE this turn: the user row does not exist yet, and what a
+		// plugin needs to know here is what the branch already carries.
+		var envelopeLeaf uuid.UUID
+		if parentMessageID != nil {
+			envelopeLeaf = *parentMessageID
+		}
+		headers, trailers := pipeline.OutgoingEnvelope(
+			ctx,
+			deviceFactsFromProto(req.Msg.DeviceFacts),
+			func(c context.Context, pluginName string) context.Context {
+				return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, envelopeLeaf))
+			},
+		)
 		var headersPtr, trailersPtr *string
 		if headers != "" {
 			headersPtr = &headers

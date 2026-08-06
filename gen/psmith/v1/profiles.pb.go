@@ -146,7 +146,7 @@ func (x ConfigField_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigField_Type.Descriptor instead.
 func (ConfigField_Type) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{14, 0}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{15, 0}
 }
 
 type ConfigField_Merge int32
@@ -195,7 +195,7 @@ func (x ConfigField_Merge) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigField_Merge.Descriptor instead.
 func (ConfigField_Merge) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{14, 1}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{15, 1}
 }
 
 type CreateProfileRequest struct {
@@ -1068,8 +1068,12 @@ type PluginCapabilities struct {
 	// pipeline. UIs surface this as the "Renderer" capability chip;
 	// see plugins/CONTENT_RENDERERS.md for the component vocabulary.
 	ContentRenderer bool `protobuf:"varint,11,opt,name=content_renderer,json=contentRenderer,proto3" json:"content_renderer,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Contributes a panel to the composer's add menu.
+	PanelProvider bool `protobuf:"varint,12,opt,name=panel_provider,json=panelProvider,proto3" json:"panel_provider,omitempty"`
+	// Accepts `plugin:` actions dispatched from a panel it rendered.
+	ActionHandler bool `protobuf:"varint,13,opt,name=action_handler,json=actionHandler,proto3" json:"action_handler,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PluginCapabilities) Reset() {
@@ -1179,6 +1183,20 @@ func (x *PluginCapabilities) GetContentRenderer() bool {
 	return false
 }
 
+func (x *PluginCapabilities) GetPanelProvider() bool {
+	if x != nil {
+		return x.PanelProvider
+	}
+	return false
+}
+
+func (x *PluginCapabilities) GetActionHandler() bool {
+	if x != nil {
+		return x.ActionHandler
+	}
+	return false
+}
+
 // PluginType is one entry in the server's compiled-in plugin registry.
 type PluginType struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -1198,6 +1216,13 @@ type PluginType struct {
 	// profile; values it can gather (with permission as needed) ride
 	// back on `SendMessageRequest.device_facts`.
 	RequestedDeviceFacts []DeviceFactKey `protobuf:"varint,6,rep,packed,name=requested_device_facts,json=requestedDeviceFacts,proto3,enum=psmith.v1.DeviceFactKey" json:"requested_device_facts,omitempty"`
+	// The composer add-menu entry this plugin contributes. Unset unless
+	// `capabilities.panel_provider` is true.
+	//
+	// Clients build the menu by filtering descriptors against the
+	// conversation's resolved pipeline — they do not know which plugins
+	// exist, only that some of them have panels.
+	Panel *PluginPanel `protobuf:"bytes,10,opt,name=panel,proto3,oneof" json:"panel,omitempty"`
 	// Model capabilities the plugin needs from the conversation's assigned
 	// model. Sparse: any field left false is "no requirement here." Auto-
 	// derived: every plugin with `capabilities.tool_provider == true` reports
@@ -1282,6 +1307,13 @@ func (x *PluginType) GetRequestedDeviceFacts() []DeviceFactKey {
 	return nil
 }
 
+func (x *PluginType) GetPanel() *PluginPanel {
+	if x != nil {
+		return x.Panel
+	}
+	return nil
+}
+
 func (x *PluginType) GetRequiredModelCapabilities() *ModelCapabilities {
 	if x != nil {
 		return x.RequiredModelCapabilities
@@ -1292,6 +1324,73 @@ func (x *PluginType) GetRequiredModelCapabilities() *ModelCapabilities {
 // ConfigField is one entry in a plugin's per-instance config descriptor.
 // The list is flat — there's no nesting — so a UI can render a form by
 // walking the array once.
+// PluginPanel labels a plugin-contributed surface in the composer's add menu.
+//
+// Deliberately just a label and an icon. The panel's BODY is UIFragments —
+// the same structure plugins already emit into messages — so a client renders
+// it with the fragment renderer it has rather than with a view per plugin.
+type PluginPanel struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Title string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	// SF Symbol name. Apple clients render it; others may ignore it, and an
+	// unrecognised name degrades to no icon rather than an error.
+	SfSymbol      string `protobuf:"bytes,2,opt,name=sf_symbol,json=sfSymbol,proto3" json:"sf_symbol,omitempty"`
+	Subtitle      string `protobuf:"bytes,3,opt,name=subtitle,proto3" json:"subtitle,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginPanel) Reset() {
+	*x = PluginPanel{}
+	mi := &file_psmith_v1_profiles_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginPanel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginPanel) ProtoMessage() {}
+
+func (x *PluginPanel) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_profiles_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginPanel.ProtoReflect.Descriptor instead.
+func (*PluginPanel) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PluginPanel) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *PluginPanel) GetSfSymbol() string {
+	if x != nil {
+		return x.SfSymbol
+	}
+	return ""
+}
+
+func (x *PluginPanel) GetSubtitle() string {
+	if x != nil {
+		return x.Subtitle
+	}
+	return ""
+}
+
 type ConfigField struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1343,7 +1442,7 @@ type ConfigField struct {
 
 func (x *ConfigField) Reset() {
 	*x = ConfigField{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[14]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1355,7 +1454,7 @@ func (x *ConfigField) String() string {
 func (*ConfigField) ProtoMessage() {}
 
 func (x *ConfigField) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[14]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1368,7 +1467,7 @@ func (x *ConfigField) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigField.ProtoReflect.Descriptor instead.
 func (*ConfigField) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{14}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConfigField) GetName() string {
@@ -1466,7 +1565,7 @@ type ConfigOption struct {
 
 func (x *ConfigOption) Reset() {
 	*x = ConfigOption{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[15]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1478,7 +1577,7 @@ func (x *ConfigOption) String() string {
 func (*ConfigOption) ProtoMessage() {}
 
 func (x *ConfigOption) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[15]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1491,7 +1590,7 @@ func (x *ConfigOption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigOption.ProtoReflect.Descriptor instead.
 func (*ConfigOption) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{15}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ConfigOption) GetValue() string {
@@ -1527,7 +1626,7 @@ type ModelPickerFilter struct {
 
 func (x *ModelPickerFilter) Reset() {
 	*x = ModelPickerFilter{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[16]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +1638,7 @@ func (x *ModelPickerFilter) String() string {
 func (*ModelPickerFilter) ProtoMessage() {}
 
 func (x *ModelPickerFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[16]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +1651,7 @@ func (x *ModelPickerFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelPickerFilter.ProtoReflect.Descriptor instead.
 func (*ModelPickerFilter) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{16}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ModelPickerFilter) GetRequiresStreaming() bool {
@@ -1616,7 +1715,7 @@ type ProfilePlugin struct {
 
 func (x *ProfilePlugin) Reset() {
 	*x = ProfilePlugin{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[17]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1628,7 +1727,7 @@ func (x *ProfilePlugin) String() string {
 func (*ProfilePlugin) ProtoMessage() {}
 
 func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[17]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1641,7 +1740,7 @@ func (x *ProfilePlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfilePlugin.ProtoReflect.Descriptor instead.
 func (*ProfilePlugin) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{17}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ProfilePlugin) GetPluginName() string {
@@ -1680,7 +1779,7 @@ type ListPluginTypesRequest struct {
 
 func (x *ListPluginTypesRequest) Reset() {
 	*x = ListPluginTypesRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[18]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1692,7 +1791,7 @@ func (x *ListPluginTypesRequest) String() string {
 func (*ListPluginTypesRequest) ProtoMessage() {}
 
 func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[18]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1705,7 +1804,7 @@ func (x *ListPluginTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{18}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{19}
 }
 
 type ListPluginTypesResponse struct {
@@ -1717,7 +1816,7 @@ type ListPluginTypesResponse struct {
 
 func (x *ListPluginTypesResponse) Reset() {
 	*x = ListPluginTypesResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[19]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1729,7 +1828,7 @@ func (x *ListPluginTypesResponse) String() string {
 func (*ListPluginTypesResponse) ProtoMessage() {}
 
 func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[19]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1742,7 +1841,7 @@ func (x *ListPluginTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginTypesResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{19}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListPluginTypesResponse) GetPluginTypes() []*PluginType {
@@ -1761,7 +1860,7 @@ type GetProfilePluginsRequest struct {
 
 func (x *GetProfilePluginsRequest) Reset() {
 	*x = GetProfilePluginsRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[20]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1773,7 +1872,7 @@ func (x *GetProfilePluginsRequest) String() string {
 func (*GetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[20]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1786,7 +1885,7 @@ func (x *GetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{20}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetProfilePluginsRequest) GetProfileId() string {
@@ -1805,7 +1904,7 @@ type GetProfilePluginsResponse struct {
 
 func (x *GetProfilePluginsResponse) Reset() {
 	*x = GetProfilePluginsResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[21]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1817,7 +1916,7 @@ func (x *GetProfilePluginsResponse) String() string {
 func (*GetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[21]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1830,7 +1929,7 @@ func (x *GetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*GetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{21}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1850,7 +1949,7 @@ type SetProfilePluginsRequest struct {
 
 func (x *SetProfilePluginsRequest) Reset() {
 	*x = SetProfilePluginsRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[22]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1862,7 +1961,7 @@ func (x *SetProfilePluginsRequest) String() string {
 func (*SetProfilePluginsRequest) ProtoMessage() {}
 
 func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[22]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1875,7 +1974,7 @@ func (x *SetProfilePluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsRequest.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{22}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SetProfilePluginsRequest) GetProfileId() string {
@@ -1901,7 +2000,7 @@ type SetProfilePluginsResponse struct {
 
 func (x *SetProfilePluginsResponse) Reset() {
 	*x = SetProfilePluginsResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[23]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1913,7 +2012,7 @@ func (x *SetProfilePluginsResponse) String() string {
 func (*SetProfilePluginsResponse) ProtoMessage() {}
 
 func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[23]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1926,7 +2025,7 @@ func (x *SetProfilePluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProfilePluginsResponse.ProtoReflect.Descriptor instead.
 func (*SetProfilePluginsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{23}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetProfilePluginsResponse) GetPlugins() []*ProfilePlugin {
@@ -1949,7 +2048,7 @@ type UserPluginSettings struct {
 
 func (x *UserPluginSettings) Reset() {
 	*x = UserPluginSettings{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[24]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1961,7 +2060,7 @@ func (x *UserPluginSettings) String() string {
 func (*UserPluginSettings) ProtoMessage() {}
 
 func (x *UserPluginSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[24]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1974,7 +2073,7 @@ func (x *UserPluginSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserPluginSettings.ProtoReflect.Descriptor instead.
 func (*UserPluginSettings) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{24}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UserPluginSettings) GetPluginName() string {
@@ -2000,7 +2099,7 @@ type GetUserPluginSettingsRequest struct {
 
 func (x *GetUserPluginSettingsRequest) Reset() {
 	*x = GetUserPluginSettingsRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[25]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2012,7 +2111,7 @@ func (x *GetUserPluginSettingsRequest) String() string {
 func (*GetUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *GetUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[25]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2025,7 +2124,7 @@ func (x *GetUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{25}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetUserPluginSettingsRequest) GetPluginName() string {
@@ -2044,7 +2143,7 @@ type GetUserPluginSettingsResponse struct {
 
 func (x *GetUserPluginSettingsResponse) Reset() {
 	*x = GetUserPluginSettingsResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[26]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2056,7 +2155,7 @@ func (x *GetUserPluginSettingsResponse) String() string {
 func (*GetUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *GetUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[26]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2069,7 +2168,7 @@ func (x *GetUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{26}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
@@ -2087,7 +2186,7 @@ type ListUserPluginSettingsRequest struct {
 
 func (x *ListUserPluginSettingsRequest) Reset() {
 	*x = ListUserPluginSettingsRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[27]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +2198,7 @@ func (x *ListUserPluginSettingsRequest) String() string {
 func (*ListUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *ListUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[27]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +2211,7 @@ func (x *ListUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*ListUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{27}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{28}
 }
 
 type ListUserPluginSettingsResponse struct {
@@ -2124,7 +2223,7 @@ type ListUserPluginSettingsResponse struct {
 
 func (x *ListUserPluginSettingsResponse) Reset() {
 	*x = ListUserPluginSettingsResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[28]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2136,7 +2235,7 @@ func (x *ListUserPluginSettingsResponse) String() string {
 func (*ListUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *ListUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[28]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2149,7 +2248,7 @@ func (x *ListUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*ListUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{28}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListUserPluginSettingsResponse) GetSettings() []*UserPluginSettings {
@@ -2169,7 +2268,7 @@ type UpsertUserPluginSettingsRequest struct {
 
 func (x *UpsertUserPluginSettingsRequest) Reset() {
 	*x = UpsertUserPluginSettingsRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[29]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2181,7 +2280,7 @@ func (x *UpsertUserPluginSettingsRequest) String() string {
 func (*UpsertUserPluginSettingsRequest) ProtoMessage() {}
 
 func (x *UpsertUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[29]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2194,7 +2293,7 @@ func (x *UpsertUserPluginSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertUserPluginSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpsertUserPluginSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{29}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UpsertUserPluginSettingsRequest) GetPluginName() string {
@@ -2220,7 +2319,7 @@ type UpsertUserPluginSettingsResponse struct {
 
 func (x *UpsertUserPluginSettingsResponse) Reset() {
 	*x = UpsertUserPluginSettingsResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[30]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2232,7 +2331,7 @@ func (x *UpsertUserPluginSettingsResponse) String() string {
 func (*UpsertUserPluginSettingsResponse) ProtoMessage() {}
 
 func (x *UpsertUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[30]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2245,7 +2344,7 @@ func (x *UpsertUserPluginSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertUserPluginSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpsertUserPluginSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{30}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UpsertUserPluginSettingsResponse) GetSettings() *UserPluginSettings {
@@ -2289,7 +2388,7 @@ type MCPServer struct {
 
 func (x *MCPServer) Reset() {
 	*x = MCPServer{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2301,7 +2400,7 @@ func (x *MCPServer) String() string {
 func (*MCPServer) ProtoMessage() {}
 
 func (x *MCPServer) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[31]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2314,7 +2413,7 @@ func (x *MCPServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServer.ProtoReflect.Descriptor instead.
 func (*MCPServer) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{31}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *MCPServer) GetId() string {
@@ -2388,7 +2487,7 @@ type ListMCPServersRequest struct {
 
 func (x *ListMCPServersRequest) Reset() {
 	*x = ListMCPServersRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2400,7 +2499,7 @@ func (x *ListMCPServersRequest) String() string {
 func (*ListMCPServersRequest) ProtoMessage() {}
 
 func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[32]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2413,7 +2512,7 @@ func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPServersRequest.ProtoReflect.Descriptor instead.
 func (*ListMCPServersRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{32}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{33}
 }
 
 type ListMCPServersResponse struct {
@@ -2425,7 +2524,7 @@ type ListMCPServersResponse struct {
 
 func (x *ListMCPServersResponse) Reset() {
 	*x = ListMCPServersResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2437,7 +2536,7 @@ func (x *ListMCPServersResponse) String() string {
 func (*ListMCPServersResponse) ProtoMessage() {}
 
 func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[33]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2450,7 +2549,7 @@ func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPServersResponse.ProtoReflect.Descriptor instead.
 func (*ListMCPServersResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{33}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListMCPServersResponse) GetServers() []*MCPServer {
@@ -2483,7 +2582,7 @@ type UpsertMCPServerRequest struct {
 
 func (x *UpsertMCPServerRequest) Reset() {
 	*x = UpsertMCPServerRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2495,7 +2594,7 @@ func (x *UpsertMCPServerRequest) String() string {
 func (*UpsertMCPServerRequest) ProtoMessage() {}
 
 func (x *UpsertMCPServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[34]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2508,7 +2607,7 @@ func (x *UpsertMCPServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertMCPServerRequest.ProtoReflect.Descriptor instead.
 func (*UpsertMCPServerRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{34}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *UpsertMCPServerRequest) GetId() string {
@@ -2583,7 +2682,7 @@ type UpsertMCPServerResponse struct {
 
 func (x *UpsertMCPServerResponse) Reset() {
 	*x = UpsertMCPServerResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2595,7 +2694,7 @@ func (x *UpsertMCPServerResponse) String() string {
 func (*UpsertMCPServerResponse) ProtoMessage() {}
 
 func (x *UpsertMCPServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[35]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2608,7 +2707,7 @@ func (x *UpsertMCPServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertMCPServerResponse.ProtoReflect.Descriptor instead.
 func (*UpsertMCPServerResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{35}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *UpsertMCPServerResponse) GetServer() *MCPServer {
@@ -2627,7 +2726,7 @@ type DeleteMCPServerRequest struct {
 
 func (x *DeleteMCPServerRequest) Reset() {
 	*x = DeleteMCPServerRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2639,7 +2738,7 @@ func (x *DeleteMCPServerRequest) String() string {
 func (*DeleteMCPServerRequest) ProtoMessage() {}
 
 func (x *DeleteMCPServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[36]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2652,7 +2751,7 @@ func (x *DeleteMCPServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMCPServerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMCPServerRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{36}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeleteMCPServerRequest) GetId() string {
@@ -2670,7 +2769,7 @@ type DeleteMCPServerResponse struct {
 
 func (x *DeleteMCPServerResponse) Reset() {
 	*x = DeleteMCPServerResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2682,7 +2781,7 @@ func (x *DeleteMCPServerResponse) String() string {
 func (*DeleteMCPServerResponse) ProtoMessage() {}
 
 func (x *DeleteMCPServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[37]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2695,7 +2794,7 @@ func (x *DeleteMCPServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMCPServerResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMCPServerResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{37}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{38}
 }
 
 type TestMCPServerRequest struct {
@@ -2707,7 +2806,7 @@ type TestMCPServerRequest struct {
 
 func (x *TestMCPServerRequest) Reset() {
 	*x = TestMCPServerRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[38]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2719,7 +2818,7 @@ func (x *TestMCPServerRequest) String() string {
 func (*TestMCPServerRequest) ProtoMessage() {}
 
 func (x *TestMCPServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[38]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2732,7 +2831,7 @@ func (x *TestMCPServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestMCPServerRequest.ProtoReflect.Descriptor instead.
 func (*TestMCPServerRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{38}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TestMCPServerRequest) GetId() string {
@@ -2755,7 +2854,7 @@ type TestMCPServerResponse struct {
 
 func (x *TestMCPServerResponse) Reset() {
 	*x = TestMCPServerResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[39]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2767,7 +2866,7 @@ func (x *TestMCPServerResponse) String() string {
 func (*TestMCPServerResponse) ProtoMessage() {}
 
 func (x *TestMCPServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[39]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2780,7 +2879,7 @@ func (x *TestMCPServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestMCPServerResponse.ProtoReflect.Descriptor instead.
 func (*TestMCPServerResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{39}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TestMCPServerResponse) GetOk() bool {
@@ -2826,7 +2925,7 @@ type ProfileBundle struct {
 
 func (x *ProfileBundle) Reset() {
 	*x = ProfileBundle{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[40]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2838,7 +2937,7 @@ func (x *ProfileBundle) String() string {
 func (*ProfileBundle) ProtoMessage() {}
 
 func (x *ProfileBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[40]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2851,7 +2950,7 @@ func (x *ProfileBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileBundle.ProtoReflect.Descriptor instead.
 func (*ProfileBundle) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{40}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ProfileBundle) GetVersion() int32 {
@@ -2917,7 +3016,7 @@ type BundledProfile struct {
 
 func (x *BundledProfile) Reset() {
 	*x = BundledProfile{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[41]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2929,7 +3028,7 @@ func (x *BundledProfile) String() string {
 func (*BundledProfile) ProtoMessage() {}
 
 func (x *BundledProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[41]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2942,7 +3041,7 @@ func (x *BundledProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BundledProfile.ProtoReflect.Descriptor instead.
 func (*BundledProfile) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{41}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *BundledProfile) GetRef() string {
@@ -3085,7 +3184,7 @@ type ModelRef struct {
 
 func (x *ModelRef) Reset() {
 	*x = ModelRef{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[42]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3097,7 +3196,7 @@ func (x *ModelRef) String() string {
 func (*ModelRef) ProtoMessage() {}
 
 func (x *ModelRef) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[42]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3110,7 +3209,7 @@ func (x *ModelRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelRef.ProtoReflect.Descriptor instead.
 func (*ModelRef) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{42}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ModelRef) GetProviderType() string {
@@ -3145,7 +3244,7 @@ type BundledPlugin struct {
 
 func (x *BundledPlugin) Reset() {
 	*x = BundledPlugin{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[43]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3157,7 +3256,7 @@ func (x *BundledPlugin) String() string {
 func (*BundledPlugin) ProtoMessage() {}
 
 func (x *BundledPlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[43]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3170,7 +3269,7 @@ func (x *BundledPlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BundledPlugin.ProtoReflect.Descriptor instead.
 func (*BundledPlugin) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{43}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *BundledPlugin) GetPluginName() string {
@@ -3223,7 +3322,7 @@ type ExportProfileRequest struct {
 
 func (x *ExportProfileRequest) Reset() {
 	*x = ExportProfileRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[44]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3235,7 +3334,7 @@ func (x *ExportProfileRequest) String() string {
 func (*ExportProfileRequest) ProtoMessage() {}
 
 func (x *ExportProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[44]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3248,7 +3347,7 @@ func (x *ExportProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportProfileRequest.ProtoReflect.Descriptor instead.
 func (*ExportProfileRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{44}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ExportProfileRequest) GetProfileId() string {
@@ -3282,7 +3381,7 @@ type ExportProfileResponse struct {
 
 func (x *ExportProfileResponse) Reset() {
 	*x = ExportProfileResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[45]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3294,7 +3393,7 @@ func (x *ExportProfileResponse) String() string {
 func (*ExportProfileResponse) ProtoMessage() {}
 
 func (x *ExportProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[45]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3307,7 +3406,7 @@ func (x *ExportProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportProfileResponse.ProtoReflect.Descriptor instead.
 func (*ExportProfileResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{45}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ExportProfileResponse) GetPayload() []byte {
@@ -3343,7 +3442,7 @@ type ImportProfileRequest struct {
 
 func (x *ImportProfileRequest) Reset() {
 	*x = ImportProfileRequest{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[46]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3355,7 +3454,7 @@ func (x *ImportProfileRequest) String() string {
 func (*ImportProfileRequest) ProtoMessage() {}
 
 func (x *ImportProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[46]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3368,7 +3467,7 @@ func (x *ImportProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportProfileRequest.ProtoReflect.Descriptor instead.
 func (*ImportProfileRequest) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{46}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ImportProfileRequest) GetPayload() []byte {
@@ -3403,7 +3502,7 @@ type ImportProfileResponse struct {
 
 func (x *ImportProfileResponse) Reset() {
 	*x = ImportProfileResponse{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[47]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3415,7 +3514,7 @@ func (x *ImportProfileResponse) String() string {
 func (*ImportProfileResponse) ProtoMessage() {}
 
 func (x *ImportProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[47]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3428,7 +3527,7 @@ func (x *ImportProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportProfileResponse.ProtoReflect.Descriptor instead.
 func (*ImportProfileResponse) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{47}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ImportProfileResponse) GetProfiles() []*Profile {
@@ -3466,7 +3565,7 @@ type ImportWarning struct {
 
 func (x *ImportWarning) Reset() {
 	*x = ImportWarning{}
-	mi := &file_psmith_v1_profiles_proto_msgTypes[48]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3478,7 +3577,7 @@ func (x *ImportWarning) String() string {
 func (*ImportWarning) ProtoMessage() {}
 
 func (x *ImportWarning) ProtoReflect() protoreflect.Message {
-	mi := &file_psmith_v1_profiles_proto_msgTypes[48]
+	mi := &file_psmith_v1_profiles_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3491,7 +3590,7 @@ func (x *ImportWarning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWarning.ProtoReflect.Descriptor instead.
 func (*ImportWarning) Descriptor() ([]byte, []int) {
-	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{48}
+	return file_psmith_v1_profiles_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ImportWarning) GetKind() ImportWarningKind {
@@ -3620,7 +3719,7 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x18SetDefaultProfileRequest\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\"\x1b\n" +
-	"\x19SetDefaultProfileResponse\"\xaa\x04\n" +
+	"\x19SetDefaultProfileResponse\"\xf8\x04\n" +
 	"\x12PluginCapabilities\x12\"\n" +
 	"\fconfigurable\x18\x01 \x01(\bR\fconfigurable\x12'\n" +
 	"\x0fsystem_prompter\x18\x02 \x01(\bR\x0esystemPrompter\x12:\n" +
@@ -3633,7 +3732,9 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x16message_lifecycle_hook\x18\t \x01(\bR\x14messageLifecycleHook\x122\n" +
 	"\x15device_fact_requester\x18\n" +
 	" \x01(\bR\x13deviceFactRequester\x12)\n" +
-	"\x10content_renderer\x18\v \x01(\bR\x0fcontentRenderer\"\xb8\x03\n" +
+	"\x10content_renderer\x18\v \x01(\bR\x0fcontentRenderer\x12%\n" +
+	"\x0epanel_provider\x18\f \x01(\bR\rpanelProvider\x12%\n" +
+	"\x0eaction_handler\x18\r \x01(\bR\ractionHandler\"\xf5\x03\n" +
 	"\n" +
 	"PluginType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -3641,9 +3742,16 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\rconfig_fields\x18\x03 \x03(\v2\x16.psmith.v1.ConfigFieldR\fconfigFields\x12A\n" +
 	"\fcapabilities\x18\x04 \x01(\v2\x1d.psmith.v1.PluginCapabilitiesR\fcapabilities\x12!\n" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12N\n" +
-	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x18.psmith.v1.DeviceFactKeyR\x14requestedDeviceFacts\x12a\n" +
-	"\x1brequired_model_capabilities\x18\a \x01(\v2\x1c.psmith.v1.ModelCapabilitiesH\x00R\x19requiredModelCapabilities\x88\x01\x01B\x1e\n" +
-	"\x1c_required_model_capabilities\"\xa4\x05\n" +
+	"\x16requested_device_facts\x18\x06 \x03(\x0e2\x18.psmith.v1.DeviceFactKeyR\x14requestedDeviceFacts\x121\n" +
+	"\x05panel\x18\n" +
+	" \x01(\v2\x16.psmith.v1.PluginPanelH\x00R\x05panel\x88\x01\x01\x12a\n" +
+	"\x1brequired_model_capabilities\x18\a \x01(\v2\x1c.psmith.v1.ModelCapabilitiesH\x01R\x19requiredModelCapabilities\x88\x01\x01B\b\n" +
+	"\x06_panelB\x1e\n" +
+	"\x1c_required_model_capabilities\"\\\n" +
+	"\vPluginPanel\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x1b\n" +
+	"\tsf_symbol\x18\x02 \x01(\tR\bsfSymbol\x12\x1a\n" +
+	"\bsubtitle\x18\x03 \x01(\tR\bsubtitle\"\xa4\x05\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
@@ -3876,7 +3984,7 @@ func file_psmith_v1_profiles_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_profiles_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_psmith_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_psmith_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_psmith_v1_profiles_proto_goTypes = []any{
 	(ImportWarningKind)(0),                   // 0: psmith.v1.ImportWarningKind
 	(ConfigField_Type)(0),                    // 1: psmith.v1.ConfigField.Type
@@ -3895,128 +4003,130 @@ var file_psmith_v1_profiles_proto_goTypes = []any{
 	(*SetDefaultProfileResponse)(nil),        // 14: psmith.v1.SetDefaultProfileResponse
 	(*PluginCapabilities)(nil),               // 15: psmith.v1.PluginCapabilities
 	(*PluginType)(nil),                       // 16: psmith.v1.PluginType
-	(*ConfigField)(nil),                      // 17: psmith.v1.ConfigField
-	(*ConfigOption)(nil),                     // 18: psmith.v1.ConfigOption
-	(*ModelPickerFilter)(nil),                // 19: psmith.v1.ModelPickerFilter
-	(*ProfilePlugin)(nil),                    // 20: psmith.v1.ProfilePlugin
-	(*ListPluginTypesRequest)(nil),           // 21: psmith.v1.ListPluginTypesRequest
-	(*ListPluginTypesResponse)(nil),          // 22: psmith.v1.ListPluginTypesResponse
-	(*GetProfilePluginsRequest)(nil),         // 23: psmith.v1.GetProfilePluginsRequest
-	(*GetProfilePluginsResponse)(nil),        // 24: psmith.v1.GetProfilePluginsResponse
-	(*SetProfilePluginsRequest)(nil),         // 25: psmith.v1.SetProfilePluginsRequest
-	(*SetProfilePluginsResponse)(nil),        // 26: psmith.v1.SetProfilePluginsResponse
-	(*UserPluginSettings)(nil),               // 27: psmith.v1.UserPluginSettings
-	(*GetUserPluginSettingsRequest)(nil),     // 28: psmith.v1.GetUserPluginSettingsRequest
-	(*GetUserPluginSettingsResponse)(nil),    // 29: psmith.v1.GetUserPluginSettingsResponse
-	(*ListUserPluginSettingsRequest)(nil),    // 30: psmith.v1.ListUserPluginSettingsRequest
-	(*ListUserPluginSettingsResponse)(nil),   // 31: psmith.v1.ListUserPluginSettingsResponse
-	(*UpsertUserPluginSettingsRequest)(nil),  // 32: psmith.v1.UpsertUserPluginSettingsRequest
-	(*UpsertUserPluginSettingsResponse)(nil), // 33: psmith.v1.UpsertUserPluginSettingsResponse
-	(*MCPServer)(nil),                        // 34: psmith.v1.MCPServer
-	(*ListMCPServersRequest)(nil),            // 35: psmith.v1.ListMCPServersRequest
-	(*ListMCPServersResponse)(nil),           // 36: psmith.v1.ListMCPServersResponse
-	(*UpsertMCPServerRequest)(nil),           // 37: psmith.v1.UpsertMCPServerRequest
-	(*UpsertMCPServerResponse)(nil),          // 38: psmith.v1.UpsertMCPServerResponse
-	(*DeleteMCPServerRequest)(nil),           // 39: psmith.v1.DeleteMCPServerRequest
-	(*DeleteMCPServerResponse)(nil),          // 40: psmith.v1.DeleteMCPServerResponse
-	(*TestMCPServerRequest)(nil),             // 41: psmith.v1.TestMCPServerRequest
-	(*TestMCPServerResponse)(nil),            // 42: psmith.v1.TestMCPServerResponse
-	(*ProfileBundle)(nil),                    // 43: psmith.v1.ProfileBundle
-	(*BundledProfile)(nil),                   // 44: psmith.v1.BundledProfile
-	(*ModelRef)(nil),                         // 45: psmith.v1.ModelRef
-	(*BundledPlugin)(nil),                    // 46: psmith.v1.BundledPlugin
-	(*ExportProfileRequest)(nil),             // 47: psmith.v1.ExportProfileRequest
-	(*ExportProfileResponse)(nil),            // 48: psmith.v1.ExportProfileResponse
-	(*ImportProfileRequest)(nil),             // 49: psmith.v1.ImportProfileRequest
-	(*ImportProfileResponse)(nil),            // 50: psmith.v1.ImportProfileResponse
-	(*ImportWarning)(nil),                    // 51: psmith.v1.ImportWarning
-	(CompressionMode)(0),                     // 52: psmith.v1.CompressionMode
-	(*ProfileDefaults)(nil),                  // 53: psmith.v1.ProfileDefaults
-	(*Profile)(nil),                          // 54: psmith.v1.Profile
-	(DeviceFactKey)(0),                       // 55: psmith.v1.DeviceFactKey
-	(*ModelCapabilities)(nil),                // 56: psmith.v1.ModelCapabilities
-	(*timestamppb.Timestamp)(nil),            // 57: google.protobuf.Timestamp
-	(*CallSettings)(nil),                     // 58: psmith.v1.CallSettings
+	(*PluginPanel)(nil),                      // 17: psmith.v1.PluginPanel
+	(*ConfigField)(nil),                      // 18: psmith.v1.ConfigField
+	(*ConfigOption)(nil),                     // 19: psmith.v1.ConfigOption
+	(*ModelPickerFilter)(nil),                // 20: psmith.v1.ModelPickerFilter
+	(*ProfilePlugin)(nil),                    // 21: psmith.v1.ProfilePlugin
+	(*ListPluginTypesRequest)(nil),           // 22: psmith.v1.ListPluginTypesRequest
+	(*ListPluginTypesResponse)(nil),          // 23: psmith.v1.ListPluginTypesResponse
+	(*GetProfilePluginsRequest)(nil),         // 24: psmith.v1.GetProfilePluginsRequest
+	(*GetProfilePluginsResponse)(nil),        // 25: psmith.v1.GetProfilePluginsResponse
+	(*SetProfilePluginsRequest)(nil),         // 26: psmith.v1.SetProfilePluginsRequest
+	(*SetProfilePluginsResponse)(nil),        // 27: psmith.v1.SetProfilePluginsResponse
+	(*UserPluginSettings)(nil),               // 28: psmith.v1.UserPluginSettings
+	(*GetUserPluginSettingsRequest)(nil),     // 29: psmith.v1.GetUserPluginSettingsRequest
+	(*GetUserPluginSettingsResponse)(nil),    // 30: psmith.v1.GetUserPluginSettingsResponse
+	(*ListUserPluginSettingsRequest)(nil),    // 31: psmith.v1.ListUserPluginSettingsRequest
+	(*ListUserPluginSettingsResponse)(nil),   // 32: psmith.v1.ListUserPluginSettingsResponse
+	(*UpsertUserPluginSettingsRequest)(nil),  // 33: psmith.v1.UpsertUserPluginSettingsRequest
+	(*UpsertUserPluginSettingsResponse)(nil), // 34: psmith.v1.UpsertUserPluginSettingsResponse
+	(*MCPServer)(nil),                        // 35: psmith.v1.MCPServer
+	(*ListMCPServersRequest)(nil),            // 36: psmith.v1.ListMCPServersRequest
+	(*ListMCPServersResponse)(nil),           // 37: psmith.v1.ListMCPServersResponse
+	(*UpsertMCPServerRequest)(nil),           // 38: psmith.v1.UpsertMCPServerRequest
+	(*UpsertMCPServerResponse)(nil),          // 39: psmith.v1.UpsertMCPServerResponse
+	(*DeleteMCPServerRequest)(nil),           // 40: psmith.v1.DeleteMCPServerRequest
+	(*DeleteMCPServerResponse)(nil),          // 41: psmith.v1.DeleteMCPServerResponse
+	(*TestMCPServerRequest)(nil),             // 42: psmith.v1.TestMCPServerRequest
+	(*TestMCPServerResponse)(nil),            // 43: psmith.v1.TestMCPServerResponse
+	(*ProfileBundle)(nil),                    // 44: psmith.v1.ProfileBundle
+	(*BundledProfile)(nil),                   // 45: psmith.v1.BundledProfile
+	(*ModelRef)(nil),                         // 46: psmith.v1.ModelRef
+	(*BundledPlugin)(nil),                    // 47: psmith.v1.BundledPlugin
+	(*ExportProfileRequest)(nil),             // 48: psmith.v1.ExportProfileRequest
+	(*ExportProfileResponse)(nil),            // 49: psmith.v1.ExportProfileResponse
+	(*ImportProfileRequest)(nil),             // 50: psmith.v1.ImportProfileRequest
+	(*ImportProfileResponse)(nil),            // 51: psmith.v1.ImportProfileResponse
+	(*ImportWarning)(nil),                    // 52: psmith.v1.ImportWarning
+	(CompressionMode)(0),                     // 53: psmith.v1.CompressionMode
+	(*ProfileDefaults)(nil),                  // 54: psmith.v1.ProfileDefaults
+	(*Profile)(nil),                          // 55: psmith.v1.Profile
+	(DeviceFactKey)(0),                       // 56: psmith.v1.DeviceFactKey
+	(*ModelCapabilities)(nil),                // 57: psmith.v1.ModelCapabilities
+	(*timestamppb.Timestamp)(nil),            // 58: google.protobuf.Timestamp
+	(*CallSettings)(nil),                     // 59: psmith.v1.CallSettings
 }
 var file_psmith_v1_profiles_proto_depIdxs = []int32{
-	52, // 0: psmith.v1.CreateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
-	53, // 1: psmith.v1.CreateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
-	54, // 2: psmith.v1.CreateProfileResponse.profile:type_name -> psmith.v1.Profile
-	54, // 3: psmith.v1.ListProfilesResponse.profiles:type_name -> psmith.v1.Profile
-	54, // 4: psmith.v1.GetProfileResponse.profile:type_name -> psmith.v1.Profile
-	54, // 5: psmith.v1.GetProfileResponse.resolved:type_name -> psmith.v1.Profile
-	52, // 6: psmith.v1.UpdateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
-	53, // 7: psmith.v1.UpdateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
-	54, // 8: psmith.v1.UpdateProfileResponse.profile:type_name -> psmith.v1.Profile
-	17, // 9: psmith.v1.PluginType.config_fields:type_name -> psmith.v1.ConfigField
+	53, // 0: psmith.v1.CreateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
+	54, // 1: psmith.v1.CreateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
+	55, // 2: psmith.v1.CreateProfileResponse.profile:type_name -> psmith.v1.Profile
+	55, // 3: psmith.v1.ListProfilesResponse.profiles:type_name -> psmith.v1.Profile
+	55, // 4: psmith.v1.GetProfileResponse.profile:type_name -> psmith.v1.Profile
+	55, // 5: psmith.v1.GetProfileResponse.resolved:type_name -> psmith.v1.Profile
+	53, // 6: psmith.v1.UpdateProfileRequest.compression_mode:type_name -> psmith.v1.CompressionMode
+	54, // 7: psmith.v1.UpdateProfileRequest.default_settings:type_name -> psmith.v1.ProfileDefaults
+	55, // 8: psmith.v1.UpdateProfileResponse.profile:type_name -> psmith.v1.Profile
+	18, // 9: psmith.v1.PluginType.config_fields:type_name -> psmith.v1.ConfigField
 	15, // 10: psmith.v1.PluginType.capabilities:type_name -> psmith.v1.PluginCapabilities
-	55, // 11: psmith.v1.PluginType.requested_device_facts:type_name -> psmith.v1.DeviceFactKey
-	56, // 12: psmith.v1.PluginType.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
-	1,  // 13: psmith.v1.ConfigField.type:type_name -> psmith.v1.ConfigField.Type
-	18, // 14: psmith.v1.ConfigField.options:type_name -> psmith.v1.ConfigOption
-	19, // 15: psmith.v1.ConfigField.model_picker_filter:type_name -> psmith.v1.ModelPickerFilter
-	2,  // 16: psmith.v1.ConfigField.merge:type_name -> psmith.v1.ConfigField.Merge
-	16, // 17: psmith.v1.ListPluginTypesResponse.plugin_types:type_name -> psmith.v1.PluginType
-	20, // 18: psmith.v1.GetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
-	20, // 19: psmith.v1.SetProfilePluginsRequest.plugins:type_name -> psmith.v1.ProfilePlugin
-	20, // 20: psmith.v1.SetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
-	27, // 21: psmith.v1.GetUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	27, // 22: psmith.v1.ListUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	27, // 23: psmith.v1.UpsertUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
-	34, // 24: psmith.v1.ListMCPServersResponse.servers:type_name -> psmith.v1.MCPServer
-	34, // 25: psmith.v1.UpsertMCPServerResponse.server:type_name -> psmith.v1.MCPServer
-	44, // 26: psmith.v1.ProfileBundle.profiles:type_name -> psmith.v1.BundledProfile
-	57, // 27: psmith.v1.ProfileBundle.exported_at:type_name -> google.protobuf.Timestamp
-	52, // 28: psmith.v1.BundledProfile.compression_mode:type_name -> psmith.v1.CompressionMode
-	58, // 29: psmith.v1.BundledProfile.call_settings:type_name -> psmith.v1.CallSettings
-	45, // 30: psmith.v1.BundledProfile.default_model:type_name -> psmith.v1.ModelRef
-	45, // 31: psmith.v1.BundledProfile.compression_model:type_name -> psmith.v1.ModelRef
-	45, // 32: psmith.v1.BundledProfile.title_model:type_name -> psmith.v1.ModelRef
-	46, // 33: psmith.v1.BundledProfile.plugins:type_name -> psmith.v1.BundledPlugin
-	54, // 34: psmith.v1.ImportProfileResponse.profiles:type_name -> psmith.v1.Profile
-	51, // 35: psmith.v1.ImportProfileResponse.warnings:type_name -> psmith.v1.ImportWarning
-	0,  // 36: psmith.v1.ImportWarning.kind:type_name -> psmith.v1.ImportWarningKind
-	3,  // 37: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
-	5,  // 38: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
-	7,  // 39: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
-	9,  // 40: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
-	11, // 41: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
-	13, // 42: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
-	21, // 43: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
-	23, // 44: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
-	25, // 45: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
-	28, // 46: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
-	30, // 47: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
-	32, // 48: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
-	35, // 49: psmith.v1.ProfilesService.ListMCPServers:input_type -> psmith.v1.ListMCPServersRequest
-	37, // 50: psmith.v1.ProfilesService.UpsertMCPServer:input_type -> psmith.v1.UpsertMCPServerRequest
-	39, // 51: psmith.v1.ProfilesService.DeleteMCPServer:input_type -> psmith.v1.DeleteMCPServerRequest
-	41, // 52: psmith.v1.ProfilesService.TestMCPServer:input_type -> psmith.v1.TestMCPServerRequest
-	47, // 53: psmith.v1.ProfilesService.ExportProfile:input_type -> psmith.v1.ExportProfileRequest
-	49, // 54: psmith.v1.ProfilesService.ImportProfile:input_type -> psmith.v1.ImportProfileRequest
-	4,  // 55: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
-	6,  // 56: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
-	8,  // 57: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
-	10, // 58: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
-	12, // 59: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
-	14, // 60: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
-	22, // 61: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
-	24, // 62: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
-	26, // 63: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
-	29, // 64: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
-	31, // 65: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
-	33, // 66: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
-	36, // 67: psmith.v1.ProfilesService.ListMCPServers:output_type -> psmith.v1.ListMCPServersResponse
-	38, // 68: psmith.v1.ProfilesService.UpsertMCPServer:output_type -> psmith.v1.UpsertMCPServerResponse
-	40, // 69: psmith.v1.ProfilesService.DeleteMCPServer:output_type -> psmith.v1.DeleteMCPServerResponse
-	42, // 70: psmith.v1.ProfilesService.TestMCPServer:output_type -> psmith.v1.TestMCPServerResponse
-	48, // 71: psmith.v1.ProfilesService.ExportProfile:output_type -> psmith.v1.ExportProfileResponse
-	50, // 72: psmith.v1.ProfilesService.ImportProfile:output_type -> psmith.v1.ImportProfileResponse
-	55, // [55:73] is the sub-list for method output_type
-	37, // [37:55] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	56, // 11: psmith.v1.PluginType.requested_device_facts:type_name -> psmith.v1.DeviceFactKey
+	17, // 12: psmith.v1.PluginType.panel:type_name -> psmith.v1.PluginPanel
+	57, // 13: psmith.v1.PluginType.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
+	1,  // 14: psmith.v1.ConfigField.type:type_name -> psmith.v1.ConfigField.Type
+	19, // 15: psmith.v1.ConfigField.options:type_name -> psmith.v1.ConfigOption
+	20, // 16: psmith.v1.ConfigField.model_picker_filter:type_name -> psmith.v1.ModelPickerFilter
+	2,  // 17: psmith.v1.ConfigField.merge:type_name -> psmith.v1.ConfigField.Merge
+	16, // 18: psmith.v1.ListPluginTypesResponse.plugin_types:type_name -> psmith.v1.PluginType
+	21, // 19: psmith.v1.GetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
+	21, // 20: psmith.v1.SetProfilePluginsRequest.plugins:type_name -> psmith.v1.ProfilePlugin
+	21, // 21: psmith.v1.SetProfilePluginsResponse.plugins:type_name -> psmith.v1.ProfilePlugin
+	28, // 22: psmith.v1.GetUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	28, // 23: psmith.v1.ListUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	28, // 24: psmith.v1.UpsertUserPluginSettingsResponse.settings:type_name -> psmith.v1.UserPluginSettings
+	35, // 25: psmith.v1.ListMCPServersResponse.servers:type_name -> psmith.v1.MCPServer
+	35, // 26: psmith.v1.UpsertMCPServerResponse.server:type_name -> psmith.v1.MCPServer
+	45, // 27: psmith.v1.ProfileBundle.profiles:type_name -> psmith.v1.BundledProfile
+	58, // 28: psmith.v1.ProfileBundle.exported_at:type_name -> google.protobuf.Timestamp
+	53, // 29: psmith.v1.BundledProfile.compression_mode:type_name -> psmith.v1.CompressionMode
+	59, // 30: psmith.v1.BundledProfile.call_settings:type_name -> psmith.v1.CallSettings
+	46, // 31: psmith.v1.BundledProfile.default_model:type_name -> psmith.v1.ModelRef
+	46, // 32: psmith.v1.BundledProfile.compression_model:type_name -> psmith.v1.ModelRef
+	46, // 33: psmith.v1.BundledProfile.title_model:type_name -> psmith.v1.ModelRef
+	47, // 34: psmith.v1.BundledProfile.plugins:type_name -> psmith.v1.BundledPlugin
+	55, // 35: psmith.v1.ImportProfileResponse.profiles:type_name -> psmith.v1.Profile
+	52, // 36: psmith.v1.ImportProfileResponse.warnings:type_name -> psmith.v1.ImportWarning
+	0,  // 37: psmith.v1.ImportWarning.kind:type_name -> psmith.v1.ImportWarningKind
+	3,  // 38: psmith.v1.ProfilesService.CreateProfile:input_type -> psmith.v1.CreateProfileRequest
+	5,  // 39: psmith.v1.ProfilesService.ListProfiles:input_type -> psmith.v1.ListProfilesRequest
+	7,  // 40: psmith.v1.ProfilesService.GetProfile:input_type -> psmith.v1.GetProfileRequest
+	9,  // 41: psmith.v1.ProfilesService.UpdateProfile:input_type -> psmith.v1.UpdateProfileRequest
+	11, // 42: psmith.v1.ProfilesService.DeleteProfile:input_type -> psmith.v1.DeleteProfileRequest
+	13, // 43: psmith.v1.ProfilesService.SetDefaultProfile:input_type -> psmith.v1.SetDefaultProfileRequest
+	22, // 44: psmith.v1.ProfilesService.ListPluginTypes:input_type -> psmith.v1.ListPluginTypesRequest
+	24, // 45: psmith.v1.ProfilesService.GetProfilePlugins:input_type -> psmith.v1.GetProfilePluginsRequest
+	26, // 46: psmith.v1.ProfilesService.SetProfilePlugins:input_type -> psmith.v1.SetProfilePluginsRequest
+	29, // 47: psmith.v1.ProfilesService.GetUserPluginSettings:input_type -> psmith.v1.GetUserPluginSettingsRequest
+	31, // 48: psmith.v1.ProfilesService.ListUserPluginSettings:input_type -> psmith.v1.ListUserPluginSettingsRequest
+	33, // 49: psmith.v1.ProfilesService.UpsertUserPluginSettings:input_type -> psmith.v1.UpsertUserPluginSettingsRequest
+	36, // 50: psmith.v1.ProfilesService.ListMCPServers:input_type -> psmith.v1.ListMCPServersRequest
+	38, // 51: psmith.v1.ProfilesService.UpsertMCPServer:input_type -> psmith.v1.UpsertMCPServerRequest
+	40, // 52: psmith.v1.ProfilesService.DeleteMCPServer:input_type -> psmith.v1.DeleteMCPServerRequest
+	42, // 53: psmith.v1.ProfilesService.TestMCPServer:input_type -> psmith.v1.TestMCPServerRequest
+	48, // 54: psmith.v1.ProfilesService.ExportProfile:input_type -> psmith.v1.ExportProfileRequest
+	50, // 55: psmith.v1.ProfilesService.ImportProfile:input_type -> psmith.v1.ImportProfileRequest
+	4,  // 56: psmith.v1.ProfilesService.CreateProfile:output_type -> psmith.v1.CreateProfileResponse
+	6,  // 57: psmith.v1.ProfilesService.ListProfiles:output_type -> psmith.v1.ListProfilesResponse
+	8,  // 58: psmith.v1.ProfilesService.GetProfile:output_type -> psmith.v1.GetProfileResponse
+	10, // 59: psmith.v1.ProfilesService.UpdateProfile:output_type -> psmith.v1.UpdateProfileResponse
+	12, // 60: psmith.v1.ProfilesService.DeleteProfile:output_type -> psmith.v1.DeleteProfileResponse
+	14, // 61: psmith.v1.ProfilesService.SetDefaultProfile:output_type -> psmith.v1.SetDefaultProfileResponse
+	23, // 62: psmith.v1.ProfilesService.ListPluginTypes:output_type -> psmith.v1.ListPluginTypesResponse
+	25, // 63: psmith.v1.ProfilesService.GetProfilePlugins:output_type -> psmith.v1.GetProfilePluginsResponse
+	27, // 64: psmith.v1.ProfilesService.SetProfilePlugins:output_type -> psmith.v1.SetProfilePluginsResponse
+	30, // 65: psmith.v1.ProfilesService.GetUserPluginSettings:output_type -> psmith.v1.GetUserPluginSettingsResponse
+	32, // 66: psmith.v1.ProfilesService.ListUserPluginSettings:output_type -> psmith.v1.ListUserPluginSettingsResponse
+	34, // 67: psmith.v1.ProfilesService.UpsertUserPluginSettings:output_type -> psmith.v1.UpsertUserPluginSettingsResponse
+	37, // 68: psmith.v1.ProfilesService.ListMCPServers:output_type -> psmith.v1.ListMCPServersResponse
+	39, // 69: psmith.v1.ProfilesService.UpsertMCPServer:output_type -> psmith.v1.UpsertMCPServerResponse
+	41, // 70: psmith.v1.ProfilesService.DeleteMCPServer:output_type -> psmith.v1.DeleteMCPServerResponse
+	43, // 71: psmith.v1.ProfilesService.TestMCPServer:output_type -> psmith.v1.TestMCPServerResponse
+	49, // 72: psmith.v1.ProfilesService.ExportProfile:output_type -> psmith.v1.ExportProfileResponse
+	51, // 73: psmith.v1.ProfilesService.ImportProfile:output_type -> psmith.v1.ImportProfileResponse
+	56, // [56:74] is the sub-list for method output_type
+	38, // [38:56] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_profiles_proto_init() }
@@ -4029,17 +4139,17 @@ func file_psmith_v1_profiles_proto_init() {
 	file_psmith_v1_profiles_proto_msgTypes[5].OneofWrappers = []any{}
 	file_psmith_v1_profiles_proto_msgTypes[6].OneofWrappers = []any{}
 	file_psmith_v1_profiles_proto_msgTypes[13].OneofWrappers = []any{}
-	file_psmith_v1_profiles_proto_msgTypes[14].OneofWrappers = []any{}
-	file_psmith_v1_profiles_proto_msgTypes[34].OneofWrappers = []any{}
-	file_psmith_v1_profiles_proto_msgTypes[41].OneofWrappers = []any{}
-	file_psmith_v1_profiles_proto_msgTypes[43].OneofWrappers = []any{}
+	file_psmith_v1_profiles_proto_msgTypes[15].OneofWrappers = []any{}
+	file_psmith_v1_profiles_proto_msgTypes[35].OneofWrappers = []any{}
+	file_psmith_v1_profiles_proto_msgTypes[42].OneofWrappers = []any{}
+	file_psmith_v1_profiles_proto_msgTypes[44].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_profiles_proto_rawDesc), len(file_psmith_v1_profiles_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   49,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

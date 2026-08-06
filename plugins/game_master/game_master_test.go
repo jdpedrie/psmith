@@ -727,3 +727,13 @@ type silentPlugin struct{}
 func (silentPlugin) Name() string        { return "silent" }
 func (silentPlugin) DisplayName() string { return "Silent" }
 func (silentPlugin) Description() string { return "contributes nothing" }
+
+// Conversation-scoped half of the store. This stub's plugin does not use it;
+// present so the type still satisfies host.PluginStateStore.
+func (s *stubStateStore) LoadConversation(context.Context) (json.RawMessage, int64, error) {
+	return nil, 0, host.ErrNoPluginState
+}
+
+func (s *stubStateStore) SaveConversation(context.Context, json.RawMessage, int64) error { return nil }
+
+func (s *stubStateStore) Leaf() uuid.UUID { return uuid.Nil }

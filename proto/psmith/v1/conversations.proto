@@ -65,6 +65,17 @@ service ConversationsService {
   // it needs to render a preview.
   rpc GetConversationPlugins(GetConversationPluginsRequest) returns (GetConversationPluginsResponse);
   rpc SetConversationPlugins(SetConversationPluginsRequest) returns (SetConversationPluginsResponse);
+
+  // --- Plugin panels -----------------------------------------------------
+  // Render one plugin's panel for this conversation. The body is the same
+  // UIFragment structure plugins emit into messages, so a client draws it
+  // with the renderer it already has and never learns what the plugin is.
+  rpc GetPluginPanel(GetPluginPanelRequest) returns (GetPluginPanelResponse);
+  // Dispatch a `plugin:` action from a rendered panel back to the plugin
+  // that drew it. Returns the re-rendered panel, because every action this
+  // exists for changes what the panel should show, and a second round trip
+  // to discover that would just be latency.
+  rpc InvokePluginAction(InvokePluginActionRequest) returns (InvokePluginActionResponse);
   // Server-resolved merged view: profile chain + conversation
   // overrides, with `disabled` rows already applied. Used by the
   // conversation-settings UI to show "what's actually running."
@@ -464,4 +475,33 @@ message CountContextTokensRequest {
 message CountContextTokensResponse {
   int32 token_count = 1;
   int32 context_window = 2;  // for the target model, for convenience
+}
+
+// --- Plugin panels ---------------------------------------------------------
+
+message GetPluginPanelRequest {
+  string conversation_id = 1;
+  // Which plugin's panel. Resolved against the conversation's active
+  // pipeline, so a stale name from a client whose menu predates a profile
+  // edit is a clean NotFound rather than another plugin's panel.
+  string plugin_name = 2;
+}
+message GetPluginPanelResponse {
+  // Panel body. Empty renders the panel's empty state — "nothing here yet"
+  // is a normal condition, not a failure.
+  repeated UIFragment fragments = 1;
+}
+
+message InvokePluginActionRequest {
+  string conversation_id = 1;
+  string plugin_name = 2;
+  // Action name and params, already split from the `plugin:<action>?<k>=<v>`
+  // form the fragment carried. The client parses; the server does not
+  // re-derive, so the wire stays explicit.
+  string action = 3;
+  map<string, string> params = 4;
+}
+message InvokePluginActionResponse {
+  // The panel after the action, so a client updates in one round trip.
+  repeated UIFragment fragments = 1;
 }

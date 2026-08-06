@@ -631,6 +631,12 @@ public nonisolated struct Psmith_V1_PluginCapabilities: Sendable {
   /// see plugins/CONTENT_RENDERERS.md for the component vocabulary.
   public var contentRenderer: Bool = false
 
+  /// Contributes a panel to the composer's add menu.
+  public var panelProvider: Bool = false
+
+  /// Accepts `plugin:` actions dispatched from a panel it rendered.
+  public var actionHandler: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -686,6 +692,21 @@ public nonisolated struct Psmith_V1_PluginType: @unchecked Sendable {
     set {_uniqueStorage()._requestedDeviceFacts = newValue}
   }
 
+  /// The composer add-menu entry this plugin contributes. Unset unless
+  /// `capabilities.panel_provider` is true.
+  ///
+  /// Clients build the menu by filtering descriptors against the
+  /// conversation's resolved pipeline — they do not know which plugins
+  /// exist, only that some of them have panels.
+  public var panel: Psmith_V1_PluginPanel {
+    get {_storage._panel ?? Psmith_V1_PluginPanel()}
+    set {_uniqueStorage()._panel = newValue}
+  }
+  /// Returns true if `panel` has been explicitly set.
+  public var hasPanel: Bool {_storage._panel != nil}
+  /// Clears the value of `panel`. Subsequent reads from it will return its default value.
+  public mutating func clearPanel() {_uniqueStorage()._panel = nil}
+
   /// Model capabilities the plugin needs from the conversation's assigned
   /// model. Sparse: any field left false is "no requirement here." Auto-
   /// derived: every plugin with `capabilities.tool_provider == true` reports
@@ -712,6 +733,29 @@ public nonisolated struct Psmith_V1_PluginType: @unchecked Sendable {
 /// ConfigField is one entry in a plugin's per-instance config descriptor.
 /// The list is flat — there's no nesting — so a UI can render a form by
 /// walking the array once.
+/// PluginPanel labels a plugin-contributed surface in the composer's add menu.
+///
+/// Deliberately just a label and an icon. The panel's BODY is UIFragments —
+/// the same structure plugins already emit into messages — so a client renders
+/// it with the fragment renderer it has rather than with a view per plugin.
+public nonisolated struct Psmith_V1_PluginPanel: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var title: String = String()
+
+  /// SF Symbol name. Apple clients render it; others may ignore it, and an
+  /// unrecognised name degrades to no icon rather than an error.
+  public var sfSymbol: String = String()
+
+  public var subtitle: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -2403,7 +2447,7 @@ nonisolated extension Psmith_V1_SetDefaultProfileResponse: SwiftProtobuf.Message
 
 nonisolated extension Psmith_V1_PluginCapabilities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginCapabilities"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0\u{3}content_renderer\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}configurable\0\u{3}system_prompter\0\u{3}outgoing_user_transformer\0\u{3}history_transformer\0\u{3}chunk_transformer\0\u{3}display_transformer\0\u{3}tool_provider\0\u{3}assistant_content_transformer\0\u{3}message_lifecycle_hook\0\u{3}device_fact_requester\0\u{3}content_renderer\0\u{3}panel_provider\0\u{3}action_handler\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2422,6 +2466,8 @@ nonisolated extension Psmith_V1_PluginCapabilities: SwiftProtobuf.Message, Swift
       case 9: try { try decoder.decodeSingularBoolField(value: &self.messageLifecycleHook) }()
       case 10: try { try decoder.decodeSingularBoolField(value: &self.deviceFactRequester) }()
       case 11: try { try decoder.decodeSingularBoolField(value: &self.contentRenderer) }()
+      case 12: try { try decoder.decodeSingularBoolField(value: &self.panelProvider) }()
+      case 13: try { try decoder.decodeSingularBoolField(value: &self.actionHandler) }()
       default: break
       }
     }
@@ -2461,6 +2507,12 @@ nonisolated extension Psmith_V1_PluginCapabilities: SwiftProtobuf.Message, Swift
     if self.contentRenderer != false {
       try visitor.visitSingularBoolField(value: self.contentRenderer, fieldNumber: 11)
     }
+    if self.panelProvider != false {
+      try visitor.visitSingularBoolField(value: self.panelProvider, fieldNumber: 12)
+    }
+    if self.actionHandler != false {
+      try visitor.visitSingularBoolField(value: self.actionHandler, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2476,6 +2528,8 @@ nonisolated extension Psmith_V1_PluginCapabilities: SwiftProtobuf.Message, Swift
     if lhs.messageLifecycleHook != rhs.messageLifecycleHook {return false}
     if lhs.deviceFactRequester != rhs.deviceFactRequester {return false}
     if lhs.contentRenderer != rhs.contentRenderer {return false}
+    if lhs.panelProvider != rhs.panelProvider {return false}
+    if lhs.actionHandler != rhs.actionHandler {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2483,7 +2537,7 @@ nonisolated extension Psmith_V1_PluginCapabilities: SwiftProtobuf.Message, Swift
 
 nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PluginType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0\u{3}required_model_capabilities\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}description\0\u{3}config_fields\0\u{1}capabilities\0\u{3}display_name\0\u{3}requested_device_facts\0\u{3}required_model_capabilities\0\u{2}\u{3}panel\0")
 
   fileprivate class _StorageClass {
     var _name: String = String()
@@ -2492,6 +2546,7 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
     var _capabilities: Psmith_V1_PluginCapabilities? = nil
     var _displayName: String = String()
     var _requestedDeviceFacts: [Psmith_V1_DeviceFactKey] = []
+    var _panel: Psmith_V1_PluginPanel? = nil
     var _requiredModelCapabilities: Psmith_V1_ModelCapabilities? = nil
 
       // This property is used as the initial default value for new instances of the type.
@@ -2509,6 +2564,7 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
       _capabilities = source._capabilities
       _displayName = source._displayName
       _requestedDeviceFacts = source._requestedDeviceFacts
+      _panel = source._panel
       _requiredModelCapabilities = source._requiredModelCapabilities
     }
   }
@@ -2535,6 +2591,7 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
         case 5: try { try decoder.decodeSingularStringField(value: &_storage._displayName) }()
         case 6: try { try decoder.decodeRepeatedEnumField(value: &_storage._requestedDeviceFacts) }()
         case 7: try { try decoder.decodeSingularMessageField(value: &_storage._requiredModelCapabilities) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._panel) }()
         default: break
         }
       }
@@ -2568,6 +2625,9 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
       try { if let v = _storage._requiredModelCapabilities {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
       } }()
+      try { if let v = _storage._panel {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2583,11 +2643,52 @@ nonisolated extension Psmith_V1_PluginType: SwiftProtobuf.Message, SwiftProtobuf
         if _storage._capabilities != rhs_storage._capabilities {return false}
         if _storage._displayName != rhs_storage._displayName {return false}
         if _storage._requestedDeviceFacts != rhs_storage._requestedDeviceFacts {return false}
+        if _storage._panel != rhs_storage._panel {return false}
         if _storage._requiredModelCapabilities != rhs_storage._requiredModelCapabilities {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_PluginPanel: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PluginPanel"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}title\0\u{3}sf_symbol\0\u{1}subtitle\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.title) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.sfSymbol) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.subtitle) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 1)
+    }
+    if !self.sfSymbol.isEmpty {
+      try visitor.visitSingularStringField(value: self.sfSymbol, fieldNumber: 2)
+    }
+    if !self.subtitle.isEmpty {
+      try visitor.visitSingularStringField(value: self.subtitle, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_PluginPanel, rhs: Psmith_V1_PluginPanel) -> Bool {
+    if lhs.title != rhs.title {return false}
+    if lhs.sfSymbol != rhs.sfSymbol {return false}
+    if lhs.subtitle != rhs.subtitle {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

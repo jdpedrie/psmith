@@ -79,6 +79,31 @@ func (q *Queries) GetNearestPluginState(ctx context.Context, arg GetNearestPlugi
 	return i, err
 }
 
+const getPluginConversationState = `-- name: GetPluginConversationState :one
+SELECT plugin_name, conversation_id, state_version, schema_version, state_json, created_at, updated_at FROM plugin_conversation_state
+WHERE plugin_name = $1 AND conversation_id = $2
+`
+
+type GetPluginConversationStateParams struct {
+	PluginName     string
+	ConversationID uuid.UUID
+}
+
+func (q *Queries) GetPluginConversationState(ctx context.Context, arg GetPluginConversationStateParams) (PluginConversationState, error) {
+	row := q.db.QueryRow(ctx, getPluginConversationState, arg.PluginName, arg.ConversationID)
+	var i PluginConversationState
+	err := row.Scan(
+		&i.PluginName,
+		&i.ConversationID,
+		&i.StateVersion,
+		&i.SchemaVersion,
+		&i.StateJson,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPluginState = `-- name: GetPluginState :one
 SELECT plugin_name, message_id, conversation_id, context_id, state_version, schema_version, state_json, created_at FROM plugin_state
 WHERE plugin_name = $1 AND message_id = $2
@@ -174,6 +199,49 @@ func (q *Queries) ListPluginStateInContext(ctx context.Context, arg ListPluginSt
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertPluginConversationState = `-- name: UpsertPluginConversationState :one
+INSERT INTO plugin_conversation_state (
+    plugin_name, conversation_id, state_version, schema_version, state_json
+) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (plugin_name, conversation_id) DO UPDATE
+SET state_version  = EXCLUDED.state_version,
+    schema_version = EXCLUDED.schema_version,
+    state_json     = EXCLUDED.state_json,
+    updated_at     = NOW()
+RETURNING plugin_name, conversation_id, state_version, schema_version, state_json, created_at, updated_at
+`
+
+type UpsertPluginConversationStateParams struct {
+	PluginName     string
+	ConversationID uuid.UUID
+	StateVersion   int64
+	SchemaVersion  int32
+	StateJson      []byte
+}
+
+// Conversation-scoped write. One row per plugin per conversation,
+// overwritten in place: this is current intent, not a history to preserve.
+func (q *Queries) UpsertPluginConversationState(ctx context.Context, arg UpsertPluginConversationStateParams) (PluginConversationState, error) {
+	row := q.db.QueryRow(ctx, upsertPluginConversationState,
+		arg.PluginName,
+		arg.ConversationID,
+		arg.StateVersion,
+		arg.SchemaVersion,
+		arg.StateJson,
+	)
+	var i PluginConversationState
+	err := row.Scan(
+		&i.PluginName,
+		&i.ConversationID,
+		&i.StateVersion,
+		&i.SchemaVersion,
+		&i.StateJson,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertPluginState = `-- name: UpsertPluginState :one

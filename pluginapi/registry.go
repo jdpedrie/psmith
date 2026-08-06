@@ -134,6 +134,8 @@ type Capabilities struct {
 	MessageLifecycleHook        bool
 	DeviceFactRequester         bool
 	ContentRenderer             bool
+	PanelProvider               bool
+	ActionHandler               bool
 }
 
 // ModelCapabilityRequirements is the set of model capabilities a plugin needs
@@ -217,6 +219,9 @@ type TypeDescriptor struct {
 	// interface; additional requirements come from the
 	// CapabilityRequirer interface.
 	RequiredModelCapabilities ModelCapabilityRequirements
+	// Panel describes the composer menu entry this plugin contributes.
+	// Zero-valued unless Capabilities.PanelProvider is true.
+	Panel PanelDescriptor
 }
 
 // Describe instantiates the plugin with a nil config (the Constructor
@@ -264,6 +269,13 @@ func Describe(name string) (TypeDescriptor, error) {
 	}
 	if _, ok := inst.(MessageLifecycleHook); ok {
 		desc.Capabilities.MessageLifecycleHook = true
+	}
+	if pv, ok := inst.(PanelProvider); ok {
+		desc.Capabilities.PanelProvider = true
+		desc.Panel = pv.Panel()
+	}
+	if _, ok := inst.(ActionHandler); ok {
+		desc.Capabilities.ActionHandler = true
 	}
 	if _, ok := inst.(ContentRenderer); ok {
 		desc.Capabilities.ContentRenderer = true

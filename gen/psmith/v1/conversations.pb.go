@@ -2988,6 +2988,223 @@ func (x *CountContextTokensResponse) GetContextWindow() int32 {
 	return 0
 }
 
+type GetPluginPanelRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	// Which plugin's panel. Resolved against the conversation's active
+	// pipeline, so a stale name from a client whose menu predates a profile
+	// edit is a clean NotFound rather than another plugin's panel.
+	PluginName    string `protobuf:"bytes,2,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPluginPanelRequest) Reset() {
+	*x = GetPluginPanelRequest{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPluginPanelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPluginPanelRequest) ProtoMessage() {}
+
+func (x *GetPluginPanelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPluginPanelRequest.ProtoReflect.Descriptor instead.
+func (*GetPluginPanelRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *GetPluginPanelRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *GetPluginPanelRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+type GetPluginPanelResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Panel body. Empty renders the panel's empty state — "nothing here yet"
+	// is a normal condition, not a failure.
+	Fragments     []*UIFragment `protobuf:"bytes,1,rep,name=fragments,proto3" json:"fragments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPluginPanelResponse) Reset() {
+	*x = GetPluginPanelResponse{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPluginPanelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPluginPanelResponse) ProtoMessage() {}
+
+func (x *GetPluginPanelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPluginPanelResponse.ProtoReflect.Descriptor instead.
+func (*GetPluginPanelResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *GetPluginPanelResponse) GetFragments() []*UIFragment {
+	if x != nil {
+		return x.Fragments
+	}
+	return nil
+}
+
+type InvokePluginActionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	PluginName     string                 `protobuf:"bytes,2,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	// Action name and params, already split from the `plugin:<action>?<k>=<v>`
+	// form the fragment carried. The client parses; the server does not
+	// re-derive, so the wire stays explicit.
+	Action        string            `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	Params        map[string]string `protobuf:"bytes,4,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvokePluginActionRequest) Reset() {
+	*x = InvokePluginActionRequest{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvokePluginActionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvokePluginActionRequest) ProtoMessage() {}
+
+func (x *InvokePluginActionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvokePluginActionRequest.ProtoReflect.Descriptor instead.
+func (*InvokePluginActionRequest) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *InvokePluginActionRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *InvokePluginActionRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *InvokePluginActionRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *InvokePluginActionRequest) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+type InvokePluginActionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The panel after the action, so a client updates in one round trip.
+	Fragments     []*UIFragment `protobuf:"bytes,1,rep,name=fragments,proto3" json:"fragments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvokePluginActionResponse) Reset() {
+	*x = InvokePluginActionResponse{}
+	mi := &file_psmith_v1_conversations_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvokePluginActionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvokePluginActionResponse) ProtoMessage() {}
+
+func (x *InvokePluginActionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_psmith_v1_conversations_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvokePluginActionResponse.ProtoReflect.Descriptor instead.
+func (*InvokePluginActionResponse) Descriptor() ([]byte, []int) {
+	return file_psmith_v1_conversations_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *InvokePluginActionResponse) GetFragments() []*UIFragment {
+	if x != nil {
+		return x.Fragments
+	}
+	return nil
+}
+
 var File_psmith_v1_conversations_proto protoreflect.FileDescriptor
 
 const file_psmith_v1_conversations_proto_rawDesc = "" +
@@ -3182,7 +3399,24 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x1aCountContextTokensResponse\x12\x1f\n" +
 	"\vtoken_count\x18\x01 \x01(\x05R\n" +
 	"tokenCount\x12%\n" +
-	"\x0econtext_window\x18\x02 \x01(\x05R\rcontextWindow*\x86\x01\n" +
+	"\x0econtext_window\x18\x02 \x01(\x05R\rcontextWindow\"a\n" +
+	"\x15GetPluginPanelRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x1f\n" +
+	"\vplugin_name\x18\x02 \x01(\tR\n" +
+	"pluginName\"M\n" +
+	"\x16GetPluginPanelResponse\x123\n" +
+	"\tfragments\x18\x01 \x03(\v2\x15.psmith.v1.UIFragmentR\tfragments\"\x82\x02\n" +
+	"\x19InvokePluginActionRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x1f\n" +
+	"\vplugin_name\x18\x02 \x01(\tR\n" +
+	"pluginName\x12\x16\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x12H\n" +
+	"\x06params\x18\x04 \x03(\v20.psmith.v1.InvokePluginActionRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
+	"\x1aInvokePluginActionResponse\x123\n" +
+	"\tfragments\x18\x01 \x03(\v2\x15.psmith.v1.UIFragmentR\tfragments*\x86\x01\n" +
 	"\x11ConversationOrder\x12\"\n" +
 	"\x1eCONVERSATION_ORDER_UNSPECIFIED\x10\x00\x12$\n" +
 	" CONVERSATION_ORDER_RECENTLY_USED\x10\x01\x12'\n" +
@@ -3190,7 +3424,7 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x16ResolvedPipelineSource\x12(\n" +
 	"$RESOLVED_PIPELINE_SOURCE_UNSPECIFIED\x10\x00\x12$\n" +
 	" RESOLVED_PIPELINE_SOURCE_PROFILE\x10\x01\x12)\n" +
-	"%RESOLVED_PIPELINE_SOURCE_CONVERSATION\x10\x022\x9f\x14\n" +
+	"%RESOLVED_PIPELINE_SOURCE_CONVERSATION\x10\x022\xd9\x15\n" +
 	"\x14ConversationsService\x12a\n" +
 	"\x12CreateConversation\x12$.psmith.v1.CreateConversationRequest\x1a%.psmith.v1.CreateConversationResponse\x12^\n" +
 	"\x11ListConversations\x12#.psmith.v1.ListConversationsRequest\x1a$.psmith.v1.ListConversationsResponse\x12X\n" +
@@ -3208,7 +3442,9 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\rUpdateContext\x12\x1f.psmith.v1.UpdateContextRequest\x1a .psmith.v1.UpdateContextResponse\x12R\n" +
 	"\rDeleteContext\x12\x1f.psmith.v1.DeleteContextRequest\x1a .psmith.v1.DeleteContextResponse\x12m\n" +
 	"\x16GetConversationPlugins\x12(.psmith.v1.GetConversationPluginsRequest\x1a).psmith.v1.GetConversationPluginsResponse\x12m\n" +
-	"\x16SetConversationPlugins\x12(.psmith.v1.SetConversationPluginsRequest\x1a).psmith.v1.SetConversationPluginsResponse\x12|\n" +
+	"\x16SetConversationPlugins\x12(.psmith.v1.SetConversationPluginsRequest\x1a).psmith.v1.SetConversationPluginsResponse\x12U\n" +
+	"\x0eGetPluginPanel\x12 .psmith.v1.GetPluginPanelRequest\x1a!.psmith.v1.GetPluginPanelResponse\x12a\n" +
+	"\x12InvokePluginAction\x12$.psmith.v1.InvokePluginActionRequest\x1a%.psmith.v1.InvokePluginActionResponse\x12|\n" +
 	"\x1bResolveConversationPipeline\x12-.psmith.v1.ResolveConversationPipelineRequest\x1a..psmith.v1.ResolveConversationPipelineResponse\x12O\n" +
 	"\fListMessages\x12\x1e.psmith.v1.ListMessagesRequest\x1a\x1f.psmith.v1.ListMessagesResponse\x12I\n" +
 	"\n" +
@@ -3234,7 +3470,7 @@ func file_psmith_v1_conversations_proto_rawDescGZIP() []byte {
 }
 
 var file_psmith_v1_conversations_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_psmith_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
+var file_psmith_v1_conversations_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
 var file_psmith_v1_conversations_proto_goTypes = []any{
 	(ConversationOrder)(0),                        // 0: psmith.v1.ConversationOrder
 	(ResolvedPipelineSource)(0),                   // 1: psmith.v1.ResolvedPipelineSource
@@ -3294,108 +3530,121 @@ var file_psmith_v1_conversations_proto_goTypes = []any{
 	(*CompactResponse)(nil),                       // 55: psmith.v1.CompactResponse
 	(*CountContextTokensRequest)(nil),             // 56: psmith.v1.CountContextTokensRequest
 	(*CountContextTokensResponse)(nil),            // 57: psmith.v1.CountContextTokensResponse
-	(*ConversationSettings)(nil),                  // 58: psmith.v1.ConversationSettings
-	(*Conversation)(nil),                          // 59: psmith.v1.Conversation
-	(*Context)(nil),                               // 60: psmith.v1.Context
-	(*Message)(nil),                               // 61: psmith.v1.Message
-	(MessageRole)(0),                              // 62: psmith.v1.MessageRole
-	(CompressionMode)(0),                          // 63: psmith.v1.CompressionMode
-	(*CallSettings)(nil),                          // 64: psmith.v1.CallSettings
-	(*DeviceFact)(nil),                            // 65: psmith.v1.DeviceFact
-	(*StreamRun)(nil),                             // 66: psmith.v1.StreamRun
+	(*GetPluginPanelRequest)(nil),                 // 58: psmith.v1.GetPluginPanelRequest
+	(*GetPluginPanelResponse)(nil),                // 59: psmith.v1.GetPluginPanelResponse
+	(*InvokePluginActionRequest)(nil),             // 60: psmith.v1.InvokePluginActionRequest
+	(*InvokePluginActionResponse)(nil),            // 61: psmith.v1.InvokePluginActionResponse
+	nil,                                           // 62: psmith.v1.InvokePluginActionRequest.ParamsEntry
+	(*ConversationSettings)(nil),                  // 63: psmith.v1.ConversationSettings
+	(*Conversation)(nil),                          // 64: psmith.v1.Conversation
+	(*Context)(nil),                               // 65: psmith.v1.Context
+	(*Message)(nil),                               // 66: psmith.v1.Message
+	(MessageRole)(0),                              // 67: psmith.v1.MessageRole
+	(CompressionMode)(0),                          // 68: psmith.v1.CompressionMode
+	(*CallSettings)(nil),                          // 69: psmith.v1.CallSettings
+	(*DeviceFact)(nil),                            // 70: psmith.v1.DeviceFact
+	(*StreamRun)(nil),                             // 71: psmith.v1.StreamRun
+	(*UIFragment)(nil),                            // 72: psmith.v1.UIFragment
 }
 var file_psmith_v1_conversations_proto_depIdxs = []int32{
-	58, // 0: psmith.v1.CreateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
-	59, // 1: psmith.v1.CreateConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	60, // 2: psmith.v1.CreateConversationResponse.initial_context:type_name -> psmith.v1.Context
-	61, // 3: psmith.v1.CreateConversationResponse.seed_messages:type_name -> psmith.v1.Message
+	63, // 0: psmith.v1.CreateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
+	64, // 1: psmith.v1.CreateConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	65, // 2: psmith.v1.CreateConversationResponse.initial_context:type_name -> psmith.v1.Context
+	66, // 3: psmith.v1.CreateConversationResponse.seed_messages:type_name -> psmith.v1.Message
 	0,  // 4: psmith.v1.ListConversationsRequest.order:type_name -> psmith.v1.ConversationOrder
-	59, // 5: psmith.v1.ListConversationsResponse.conversations:type_name -> psmith.v1.Conversation
-	59, // 6: psmith.v1.GetConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	60, // 7: psmith.v1.GetConversationResponse.active_context:type_name -> psmith.v1.Context
-	58, // 8: psmith.v1.UpdateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
-	59, // 9: psmith.v1.UpdateConversationResponse.conversation:type_name -> psmith.v1.Conversation
-	60, // 10: psmith.v1.ListContextsResponse.contexts:type_name -> psmith.v1.Context
-	60, // 11: psmith.v1.ActivateContextResponse.context:type_name -> psmith.v1.Context
-	60, // 12: psmith.v1.SetCurrentLeafResponse.context:type_name -> psmith.v1.Context
-	60, // 13: psmith.v1.UpdateContextResponse.context:type_name -> psmith.v1.Context
-	61, // 14: psmith.v1.ListMessagesResponse.messages:type_name -> psmith.v1.Message
-	61, // 15: psmith.v1.GetMessageResponse.message:type_name -> psmith.v1.Message
-	62, // 16: psmith.v1.EditMessageRequest.role:type_name -> psmith.v1.MessageRole
-	61, // 17: psmith.v1.EditMessageResponse.message:type_name -> psmith.v1.Message
+	64, // 5: psmith.v1.ListConversationsResponse.conversations:type_name -> psmith.v1.Conversation
+	64, // 6: psmith.v1.GetConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	65, // 7: psmith.v1.GetConversationResponse.active_context:type_name -> psmith.v1.Context
+	63, // 8: psmith.v1.UpdateConversationRequest.settings:type_name -> psmith.v1.ConversationSettings
+	64, // 9: psmith.v1.UpdateConversationResponse.conversation:type_name -> psmith.v1.Conversation
+	65, // 10: psmith.v1.ListContextsResponse.contexts:type_name -> psmith.v1.Context
+	65, // 11: psmith.v1.ActivateContextResponse.context:type_name -> psmith.v1.Context
+	65, // 12: psmith.v1.SetCurrentLeafResponse.context:type_name -> psmith.v1.Context
+	65, // 13: psmith.v1.UpdateContextResponse.context:type_name -> psmith.v1.Context
+	66, // 14: psmith.v1.ListMessagesResponse.messages:type_name -> psmith.v1.Message
+	66, // 15: psmith.v1.GetMessageResponse.message:type_name -> psmith.v1.Message
+	67, // 16: psmith.v1.EditMessageRequest.role:type_name -> psmith.v1.MessageRole
+	66, // 17: psmith.v1.EditMessageResponse.message:type_name -> psmith.v1.Message
 	40, // 18: psmith.v1.GetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
 	40, // 19: psmith.v1.SetConversationPluginsRequest.plugins:type_name -> psmith.v1.ConversationPlugin
 	40, // 20: psmith.v1.SetConversationPluginsResponse.plugins:type_name -> psmith.v1.ConversationPlugin
 	47, // 21: psmith.v1.ResolveConversationPipelineResponse.entries:type_name -> psmith.v1.ResolvedPipelineEntry
 	1,  // 22: psmith.v1.ResolvedPipelineEntry.source:type_name -> psmith.v1.ResolvedPipelineSource
-	60, // 23: psmith.v1.PromoteCompactionToNewContextResponse.context:type_name -> psmith.v1.Context
-	63, // 24: psmith.v1.CreateContextManualRequest.mode:type_name -> psmith.v1.CompressionMode
-	60, // 25: psmith.v1.CreateContextManualResponse.context:type_name -> psmith.v1.Context
-	61, // 26: psmith.v1.CreateContextManualResponse.user_message:type_name -> psmith.v1.Message
-	64, // 27: psmith.v1.SendMessageRequest.call_settings:type_name -> psmith.v1.CallSettings
-	65, // 28: psmith.v1.SendMessageRequest.device_facts:type_name -> psmith.v1.DeviceFact
-	61, // 29: psmith.v1.SendMessageResponse.user_message:type_name -> psmith.v1.Message
-	66, // 30: psmith.v1.SendMessageResponse.stream_run:type_name -> psmith.v1.StreamRun
-	66, // 31: psmith.v1.CompactResponse.stream_run:type_name -> psmith.v1.StreamRun
-	2,  // 32: psmith.v1.ConversationsService.CreateConversation:input_type -> psmith.v1.CreateConversationRequest
-	4,  // 33: psmith.v1.ConversationsService.ListConversations:input_type -> psmith.v1.ListConversationsRequest
-	6,  // 34: psmith.v1.ConversationsService.GetConversation:input_type -> psmith.v1.GetConversationRequest
-	8,  // 35: psmith.v1.ConversationsService.UpdateConversation:input_type -> psmith.v1.UpdateConversationRequest
-	10, // 36: psmith.v1.ConversationsService.DeleteConversation:input_type -> psmith.v1.DeleteConversationRequest
-	12, // 37: psmith.v1.ConversationsService.ArchiveConversation:input_type -> psmith.v1.ArchiveConversationRequest
-	14, // 38: psmith.v1.ConversationsService.UnarchiveConversation:input_type -> psmith.v1.UnarchiveConversationRequest
-	18, // 39: psmith.v1.ConversationsService.PinConversation:input_type -> psmith.v1.PinConversationRequest
-	16, // 40: psmith.v1.ConversationsService.GenerateConversationTitle:input_type -> psmith.v1.GenerateConversationTitleRequest
-	20, // 41: psmith.v1.ConversationsService.UnpinConversation:input_type -> psmith.v1.UnpinConversationRequest
-	22, // 42: psmith.v1.ConversationsService.ListContexts:input_type -> psmith.v1.ListContextsRequest
-	24, // 43: psmith.v1.ConversationsService.ActivateContext:input_type -> psmith.v1.ActivateContextRequest
-	26, // 44: psmith.v1.ConversationsService.SetCurrentLeaf:input_type -> psmith.v1.SetCurrentLeafRequest
-	28, // 45: psmith.v1.ConversationsService.UpdateContext:input_type -> psmith.v1.UpdateContextRequest
-	30, // 46: psmith.v1.ConversationsService.DeleteContext:input_type -> psmith.v1.DeleteContextRequest
-	41, // 47: psmith.v1.ConversationsService.GetConversationPlugins:input_type -> psmith.v1.GetConversationPluginsRequest
-	43, // 48: psmith.v1.ConversationsService.SetConversationPlugins:input_type -> psmith.v1.SetConversationPluginsRequest
-	45, // 49: psmith.v1.ConversationsService.ResolveConversationPipeline:input_type -> psmith.v1.ResolveConversationPipelineRequest
-	32, // 50: psmith.v1.ConversationsService.ListMessages:input_type -> psmith.v1.ListMessagesRequest
-	34, // 51: psmith.v1.ConversationsService.GetMessage:input_type -> psmith.v1.GetMessageRequest
-	36, // 52: psmith.v1.ConversationsService.EditMessage:input_type -> psmith.v1.EditMessageRequest
-	38, // 53: psmith.v1.ConversationsService.DeleteMessage:input_type -> psmith.v1.DeleteMessageRequest
-	48, // 54: psmith.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> psmith.v1.PromoteCompactionToNewContextRequest
-	50, // 55: psmith.v1.ConversationsService.CreateContextManual:input_type -> psmith.v1.CreateContextManualRequest
-	52, // 56: psmith.v1.ConversationsService.SendMessage:input_type -> psmith.v1.SendMessageRequest
-	54, // 57: psmith.v1.ConversationsService.Compact:input_type -> psmith.v1.CompactRequest
-	56, // 58: psmith.v1.ConversationsService.CountContextTokens:input_type -> psmith.v1.CountContextTokensRequest
-	3,  // 59: psmith.v1.ConversationsService.CreateConversation:output_type -> psmith.v1.CreateConversationResponse
-	5,  // 60: psmith.v1.ConversationsService.ListConversations:output_type -> psmith.v1.ListConversationsResponse
-	7,  // 61: psmith.v1.ConversationsService.GetConversation:output_type -> psmith.v1.GetConversationResponse
-	9,  // 62: psmith.v1.ConversationsService.UpdateConversation:output_type -> psmith.v1.UpdateConversationResponse
-	11, // 63: psmith.v1.ConversationsService.DeleteConversation:output_type -> psmith.v1.DeleteConversationResponse
-	13, // 64: psmith.v1.ConversationsService.ArchiveConversation:output_type -> psmith.v1.ArchiveConversationResponse
-	15, // 65: psmith.v1.ConversationsService.UnarchiveConversation:output_type -> psmith.v1.UnarchiveConversationResponse
-	19, // 66: psmith.v1.ConversationsService.PinConversation:output_type -> psmith.v1.PinConversationResponse
-	17, // 67: psmith.v1.ConversationsService.GenerateConversationTitle:output_type -> psmith.v1.GenerateConversationTitleResponse
-	21, // 68: psmith.v1.ConversationsService.UnpinConversation:output_type -> psmith.v1.UnpinConversationResponse
-	23, // 69: psmith.v1.ConversationsService.ListContexts:output_type -> psmith.v1.ListContextsResponse
-	25, // 70: psmith.v1.ConversationsService.ActivateContext:output_type -> psmith.v1.ActivateContextResponse
-	27, // 71: psmith.v1.ConversationsService.SetCurrentLeaf:output_type -> psmith.v1.SetCurrentLeafResponse
-	29, // 72: psmith.v1.ConversationsService.UpdateContext:output_type -> psmith.v1.UpdateContextResponse
-	31, // 73: psmith.v1.ConversationsService.DeleteContext:output_type -> psmith.v1.DeleteContextResponse
-	42, // 74: psmith.v1.ConversationsService.GetConversationPlugins:output_type -> psmith.v1.GetConversationPluginsResponse
-	44, // 75: psmith.v1.ConversationsService.SetConversationPlugins:output_type -> psmith.v1.SetConversationPluginsResponse
-	46, // 76: psmith.v1.ConversationsService.ResolveConversationPipeline:output_type -> psmith.v1.ResolveConversationPipelineResponse
-	33, // 77: psmith.v1.ConversationsService.ListMessages:output_type -> psmith.v1.ListMessagesResponse
-	35, // 78: psmith.v1.ConversationsService.GetMessage:output_type -> psmith.v1.GetMessageResponse
-	37, // 79: psmith.v1.ConversationsService.EditMessage:output_type -> psmith.v1.EditMessageResponse
-	39, // 80: psmith.v1.ConversationsService.DeleteMessage:output_type -> psmith.v1.DeleteMessageResponse
-	49, // 81: psmith.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> psmith.v1.PromoteCompactionToNewContextResponse
-	51, // 82: psmith.v1.ConversationsService.CreateContextManual:output_type -> psmith.v1.CreateContextManualResponse
-	53, // 83: psmith.v1.ConversationsService.SendMessage:output_type -> psmith.v1.SendMessageResponse
-	55, // 84: psmith.v1.ConversationsService.Compact:output_type -> psmith.v1.CompactResponse
-	57, // 85: psmith.v1.ConversationsService.CountContextTokens:output_type -> psmith.v1.CountContextTokensResponse
-	59, // [59:86] is the sub-list for method output_type
-	32, // [32:59] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	65, // 23: psmith.v1.PromoteCompactionToNewContextResponse.context:type_name -> psmith.v1.Context
+	68, // 24: psmith.v1.CreateContextManualRequest.mode:type_name -> psmith.v1.CompressionMode
+	65, // 25: psmith.v1.CreateContextManualResponse.context:type_name -> psmith.v1.Context
+	66, // 26: psmith.v1.CreateContextManualResponse.user_message:type_name -> psmith.v1.Message
+	69, // 27: psmith.v1.SendMessageRequest.call_settings:type_name -> psmith.v1.CallSettings
+	70, // 28: psmith.v1.SendMessageRequest.device_facts:type_name -> psmith.v1.DeviceFact
+	66, // 29: psmith.v1.SendMessageResponse.user_message:type_name -> psmith.v1.Message
+	71, // 30: psmith.v1.SendMessageResponse.stream_run:type_name -> psmith.v1.StreamRun
+	71, // 31: psmith.v1.CompactResponse.stream_run:type_name -> psmith.v1.StreamRun
+	72, // 32: psmith.v1.GetPluginPanelResponse.fragments:type_name -> psmith.v1.UIFragment
+	62, // 33: psmith.v1.InvokePluginActionRequest.params:type_name -> psmith.v1.InvokePluginActionRequest.ParamsEntry
+	72, // 34: psmith.v1.InvokePluginActionResponse.fragments:type_name -> psmith.v1.UIFragment
+	2,  // 35: psmith.v1.ConversationsService.CreateConversation:input_type -> psmith.v1.CreateConversationRequest
+	4,  // 36: psmith.v1.ConversationsService.ListConversations:input_type -> psmith.v1.ListConversationsRequest
+	6,  // 37: psmith.v1.ConversationsService.GetConversation:input_type -> psmith.v1.GetConversationRequest
+	8,  // 38: psmith.v1.ConversationsService.UpdateConversation:input_type -> psmith.v1.UpdateConversationRequest
+	10, // 39: psmith.v1.ConversationsService.DeleteConversation:input_type -> psmith.v1.DeleteConversationRequest
+	12, // 40: psmith.v1.ConversationsService.ArchiveConversation:input_type -> psmith.v1.ArchiveConversationRequest
+	14, // 41: psmith.v1.ConversationsService.UnarchiveConversation:input_type -> psmith.v1.UnarchiveConversationRequest
+	18, // 42: psmith.v1.ConversationsService.PinConversation:input_type -> psmith.v1.PinConversationRequest
+	16, // 43: psmith.v1.ConversationsService.GenerateConversationTitle:input_type -> psmith.v1.GenerateConversationTitleRequest
+	20, // 44: psmith.v1.ConversationsService.UnpinConversation:input_type -> psmith.v1.UnpinConversationRequest
+	22, // 45: psmith.v1.ConversationsService.ListContexts:input_type -> psmith.v1.ListContextsRequest
+	24, // 46: psmith.v1.ConversationsService.ActivateContext:input_type -> psmith.v1.ActivateContextRequest
+	26, // 47: psmith.v1.ConversationsService.SetCurrentLeaf:input_type -> psmith.v1.SetCurrentLeafRequest
+	28, // 48: psmith.v1.ConversationsService.UpdateContext:input_type -> psmith.v1.UpdateContextRequest
+	30, // 49: psmith.v1.ConversationsService.DeleteContext:input_type -> psmith.v1.DeleteContextRequest
+	41, // 50: psmith.v1.ConversationsService.GetConversationPlugins:input_type -> psmith.v1.GetConversationPluginsRequest
+	43, // 51: psmith.v1.ConversationsService.SetConversationPlugins:input_type -> psmith.v1.SetConversationPluginsRequest
+	58, // 52: psmith.v1.ConversationsService.GetPluginPanel:input_type -> psmith.v1.GetPluginPanelRequest
+	60, // 53: psmith.v1.ConversationsService.InvokePluginAction:input_type -> psmith.v1.InvokePluginActionRequest
+	45, // 54: psmith.v1.ConversationsService.ResolveConversationPipeline:input_type -> psmith.v1.ResolveConversationPipelineRequest
+	32, // 55: psmith.v1.ConversationsService.ListMessages:input_type -> psmith.v1.ListMessagesRequest
+	34, // 56: psmith.v1.ConversationsService.GetMessage:input_type -> psmith.v1.GetMessageRequest
+	36, // 57: psmith.v1.ConversationsService.EditMessage:input_type -> psmith.v1.EditMessageRequest
+	38, // 58: psmith.v1.ConversationsService.DeleteMessage:input_type -> psmith.v1.DeleteMessageRequest
+	48, // 59: psmith.v1.ConversationsService.PromoteCompactionToNewContext:input_type -> psmith.v1.PromoteCompactionToNewContextRequest
+	50, // 60: psmith.v1.ConversationsService.CreateContextManual:input_type -> psmith.v1.CreateContextManualRequest
+	52, // 61: psmith.v1.ConversationsService.SendMessage:input_type -> psmith.v1.SendMessageRequest
+	54, // 62: psmith.v1.ConversationsService.Compact:input_type -> psmith.v1.CompactRequest
+	56, // 63: psmith.v1.ConversationsService.CountContextTokens:input_type -> psmith.v1.CountContextTokensRequest
+	3,  // 64: psmith.v1.ConversationsService.CreateConversation:output_type -> psmith.v1.CreateConversationResponse
+	5,  // 65: psmith.v1.ConversationsService.ListConversations:output_type -> psmith.v1.ListConversationsResponse
+	7,  // 66: psmith.v1.ConversationsService.GetConversation:output_type -> psmith.v1.GetConversationResponse
+	9,  // 67: psmith.v1.ConversationsService.UpdateConversation:output_type -> psmith.v1.UpdateConversationResponse
+	11, // 68: psmith.v1.ConversationsService.DeleteConversation:output_type -> psmith.v1.DeleteConversationResponse
+	13, // 69: psmith.v1.ConversationsService.ArchiveConversation:output_type -> psmith.v1.ArchiveConversationResponse
+	15, // 70: psmith.v1.ConversationsService.UnarchiveConversation:output_type -> psmith.v1.UnarchiveConversationResponse
+	19, // 71: psmith.v1.ConversationsService.PinConversation:output_type -> psmith.v1.PinConversationResponse
+	17, // 72: psmith.v1.ConversationsService.GenerateConversationTitle:output_type -> psmith.v1.GenerateConversationTitleResponse
+	21, // 73: psmith.v1.ConversationsService.UnpinConversation:output_type -> psmith.v1.UnpinConversationResponse
+	23, // 74: psmith.v1.ConversationsService.ListContexts:output_type -> psmith.v1.ListContextsResponse
+	25, // 75: psmith.v1.ConversationsService.ActivateContext:output_type -> psmith.v1.ActivateContextResponse
+	27, // 76: psmith.v1.ConversationsService.SetCurrentLeaf:output_type -> psmith.v1.SetCurrentLeafResponse
+	29, // 77: psmith.v1.ConversationsService.UpdateContext:output_type -> psmith.v1.UpdateContextResponse
+	31, // 78: psmith.v1.ConversationsService.DeleteContext:output_type -> psmith.v1.DeleteContextResponse
+	42, // 79: psmith.v1.ConversationsService.GetConversationPlugins:output_type -> psmith.v1.GetConversationPluginsResponse
+	44, // 80: psmith.v1.ConversationsService.SetConversationPlugins:output_type -> psmith.v1.SetConversationPluginsResponse
+	59, // 81: psmith.v1.ConversationsService.GetPluginPanel:output_type -> psmith.v1.GetPluginPanelResponse
+	61, // 82: psmith.v1.ConversationsService.InvokePluginAction:output_type -> psmith.v1.InvokePluginActionResponse
+	46, // 83: psmith.v1.ConversationsService.ResolveConversationPipeline:output_type -> psmith.v1.ResolveConversationPipelineResponse
+	33, // 84: psmith.v1.ConversationsService.ListMessages:output_type -> psmith.v1.ListMessagesResponse
+	35, // 85: psmith.v1.ConversationsService.GetMessage:output_type -> psmith.v1.GetMessageResponse
+	37, // 86: psmith.v1.ConversationsService.EditMessage:output_type -> psmith.v1.EditMessageResponse
+	39, // 87: psmith.v1.ConversationsService.DeleteMessage:output_type -> psmith.v1.DeleteMessageResponse
+	49, // 88: psmith.v1.ConversationsService.PromoteCompactionToNewContext:output_type -> psmith.v1.PromoteCompactionToNewContextResponse
+	51, // 89: psmith.v1.ConversationsService.CreateContextManual:output_type -> psmith.v1.CreateContextManualResponse
+	53, // 90: psmith.v1.ConversationsService.SendMessage:output_type -> psmith.v1.SendMessageResponse
+	55, // 91: psmith.v1.ConversationsService.Compact:output_type -> psmith.v1.CompactResponse
+	57, // 92: psmith.v1.ConversationsService.CountContextTokens:output_type -> psmith.v1.CountContextTokensResponse
+	64, // [64:93] is the sub-list for method output_type
+	35, // [35:64] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_conversations_proto_init() }
@@ -3419,7 +3668,7 @@ func file_psmith_v1_conversations_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_conversations_proto_rawDesc), len(file_psmith_v1_conversations_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   56,
+			NumMessages:   61,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
