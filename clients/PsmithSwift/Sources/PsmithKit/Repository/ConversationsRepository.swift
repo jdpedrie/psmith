@@ -469,6 +469,43 @@ public final class ConversationsRepository: Sendable {
         return PsmithContext(from: msg.context)
     }
 
+    // MARK: - Plugin panels
+
+    /// Render one plugin's panel for this conversation.
+    ///
+    /// The body is fragments, the same structure that arrives on messages, so
+    /// the caller draws it with `FragmentView` and never learns what the
+    /// plugin is or what its panel means.
+    public func pluginPanel(conversationID: String, pluginName: String) async throws -> [PsmithUIFragment] {
+        var req = Psmith_V1_GetPluginPanelRequest()
+        req.conversationID = conversationID
+        req.pluginName = pluginName
+        let resp = await client.getPluginPanel(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("plugin panel") }
+        return msg.fragments.map(PsmithUIFragment.init(from:))
+    }
+
+    /// Send a `plugin:` action from a rendered panel back to its plugin.
+    ///
+    /// Returns the panel as it stands afterwards. Every action this exists for
+    /// changes what the panel should show, so re-rendering server-side avoids
+    /// a second round trip during which the UI would display stale state.
+    public func invokePluginAction(
+        conversationID: String,
+        pluginName: String,
+        action: String,
+        params: [String: String]
+    ) async throws -> [PsmithUIFragment] {
+        var req = Psmith_V1_InvokePluginActionRequest()
+        req.conversationID = conversationID
+        req.pluginName = pluginName
+        req.action = action
+        req.params = params
+        let resp = await client.invokePluginAction(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("plugin action") }
+        return msg.fragments.map(PsmithUIFragment.init(from:))
+    }
+
     // MARK: - Conversation plugin overrides
 
     /// Read the conversation's literal plugin overrides (not the merged view).

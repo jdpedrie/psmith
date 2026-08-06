@@ -46,6 +46,9 @@ struct Composer: View {
     /// Whether the system file importer is presented (for PDFs,
     /// audio, video — anything not in the Photos library).
     @State private var showingFileImporter = false
+    /// Which plugin panel is open, if any. Identifiable, so `.sheet(item:)`
+    /// rebuilds when the user picks a different one without a dismiss cycle.
+    @State private var openPanel: PsmithPluginType?
     /// Whether the camera-capture sheet is presented. Separate
     /// from the photos picker because they're distinct UX:
     /// camera = "take a new photo right now", PhotosPicker =
@@ -108,6 +111,22 @@ struct Composer: View {
                     await model.attachImage(data: data, originalFilename: filename)
                 }
             }
+        }
+        .sheet(item: $openPanel) { type in
+            if let panel = type.panel {
+                PluginPanelSheet(
+                    pluginName: type.name,
+                    panel: panel,
+                    conversationID: model.conversation.id,
+                    client: app.client,
+                    onCompose: { text in model.draft += text }
+                )
+            }
+        }
+        // Panels are resolved per conversation, so this reloads when the user
+        // switches chats rather than once per app launch.
+        .task(id: model.conversation.id) {
+            await model.loadPanels(pluginTypes: app.profiles.pluginTypes)
         }
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)
@@ -207,19 +226,52 @@ struct Composer: View {
                     Label(filePickerLabel(docOK: docOK, avOK: avOK), systemImage: "folder")
                 }
             }
+            // Plugin-contributed entries. The composer does not know what any
+            // of these are: it lists the titles the descriptors carry and
+            // opens a panel that renders whatever fragments the server sends.
+            if !model.panelPlugins.isEmpty {
+                Divider()
+                ForEach(model.panelPlugins) { type in
+                    if let panel = type.panel {
+                        Button {
+                            openPanel = type
+                        } label: {
+                            Label(panel.title, systemImage: panel.sfSymbol.isEmpty ? "square.grid.2x2" : panel.sfSymbol)
+                        }
+                    }
+                }
+            }
         } label: {
             // Bare glyph — the composer island is the chrome surface;
             // per-control fills and borders read as widget stacking.
-            Image(systemName: "paperclip")
+            // Plus rather than a paperclip: the menu carries plugin panels
+            // alongside attachments now, so a paperclip would under-describe
+            // it. Falls back to being attachment-only when no plugin
+            // contributes a panel, which is the common case.
+            Image(systemName: model.panelPlugins.isEmpty ? "paperclip" : "plus")
                 .font(.body)
-                .foregroundStyle(anyOK ? .secondary : .tertiary)
+                .foregroundStyle(menuEnabled ? .secondary : .tertiary)
                 .frame(width: 34, height: 34)
                 .contentShape(Circle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
-        .disabled(!anyOK)
-        .accessibilityLabel(anyOK ? "Attach a file" : "Attachments not supported by this model")
+        .disabled(!menuEnabled)
+        .accessibilityLabel(menuAccessibilityLabel(anyOK: anyOK))
+    }
+
+    /// The menu is usable when EITHER attachments or a panel is available.
+    /// Gating on attachments alone would hide plugin panels behind a model
+    /// that happens not to take files.
+    private var menuEnabled: Bool {
+        activeModelAccepts(.image) || activeModelAccepts(.document)
+            || activeModelAccepts(.audioVideo) || !model.panelPlugins.isEmpty
+    }
+
+    private func menuAccessibilityLabel(anyOK: Bool) -> String {
+        if !menuEnabled { return "Attachments not supported by this model" }
+        if model.panelPlugins.isEmpty { return "Attach a file" }
+        return anyOK ? "Attach a file or add context" : "Add context"
     }
 
     private func filePickerLabel(docOK: Bool, avOK: Bool) -> String {

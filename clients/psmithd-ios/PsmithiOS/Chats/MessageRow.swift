@@ -721,6 +721,12 @@ struct MessageRow: View {
             }
         case .external(let url):
             UIApplication.shared.open(url)
+        case .plugin:
+            // A `plugin:` action is only meaningful inside the panel that
+            // rendered it, where the owning plugin is known. A fragment in the
+            // transcript carries no such owner, so there is nothing to
+            // dispatch to and ignoring it is correct rather than lossy.
+            break
         }
     }
 

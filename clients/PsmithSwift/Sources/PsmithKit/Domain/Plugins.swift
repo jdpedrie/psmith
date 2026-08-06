@@ -10,6 +10,10 @@ public struct PsmithPluginCapabilities: Sendable, Hashable {
     public let toolProvider: Bool
     public let assistantContentTransformer: Bool
     public let messageLifecycleHook: Bool
+    /// Contributes a panel to the composer's add menu.
+    public let panelProvider: Bool
+    /// Accepts `plugin:` actions from a panel it rendered.
+    public let actionHandler: Bool
 
     public init(
         configurable: Bool = false,
@@ -20,7 +24,9 @@ public struct PsmithPluginCapabilities: Sendable, Hashable {
         displayTransformer: Bool = false,
         toolProvider: Bool = false,
         assistantContentTransformer: Bool = false,
-        messageLifecycleHook: Bool = false
+        messageLifecycleHook: Bool = false,
+        panelProvider: Bool = false,
+        actionHandler: Bool = false
     ) {
         self.configurable = configurable
         self.systemPrompter = systemPrompter
@@ -31,6 +37,8 @@ public struct PsmithPluginCapabilities: Sendable, Hashable {
         self.toolProvider = toolProvider
         self.assistantContentTransformer = assistantContentTransformer
         self.messageLifecycleHook = messageLifecycleHook
+        self.panelProvider = panelProvider
+        self.actionHandler = actionHandler
     }
 }
 
@@ -184,19 +192,28 @@ public struct PsmithPluginType: Sendable, Hashable, Identifiable {
     public let description: String
     public let capabilities: PsmithPluginCapabilities
     public let configFields: [PsmithConfigField]
+    /// The composer add-menu entry this plugin contributes, if any.
+    ///
+    /// A client builds that menu by filtering plugin types on this being
+    /// non-nil. It never learns which plugins exist or what their panels
+    /// mean — the panel body arrives as fragments it already knows how to
+    /// draw.
+    public let panel: PsmithPluginPanel?
 
     public init(
         name: String,
         displayName: String? = nil,
         description: String,
         capabilities: PsmithPluginCapabilities,
-        configFields: [PsmithConfigField]
+        configFields: [PsmithConfigField],
+        panel: PsmithPluginPanel? = nil
     ) {
         self.name = name
         self.displayName = displayName ?? name
         self.description = description
         self.capabilities = capabilities
         self.configFields = configFields
+        self.panel = panel
     }
 
     /// Fields that live on the per-profile plugin form.
@@ -308,7 +325,9 @@ extension PsmithPluginCapabilities {
             displayTransformer: p.displayTransformer,
             toolProvider: p.toolProvider,
             assistantContentTransformer: p.assistantContentTransformer,
-            messageLifecycleHook: p.messageLifecycleHook
+            messageLifecycleHook: p.messageLifecycleHook,
+            panelProvider: p.panelProvider,
+            actionHandler: p.actionHandler
         )
     }
 }
@@ -380,7 +399,8 @@ extension PsmithPluginType {
             displayName: p.displayName.isEmpty ? p.name : p.displayName,
             description: p.description_p,
             capabilities: PsmithPluginCapabilities(from: p.capabilities),
-            configFields: p.configFields.map(PsmithConfigField.init(from:))
+            configFields: p.configFields.map(PsmithConfigField.init(from:)),
+            panel: p.hasPanel ? PsmithPluginPanel(from: p.panel) : nil
         )
     }
 }
@@ -444,5 +464,31 @@ extension PsmithResolvedPipelineEntry {
             config: p.config,
             source: PsmithResolvedPipelineSource(from: p.source)
         )
+    }
+}
+
+
+/// A plugin-contributed surface in the composer's add menu.
+///
+/// Just a label and an icon on purpose. The panel's body is `[PsmithUIFragment]`
+/// — the same structure plugins emit into messages — so clients render it with
+/// the fragment renderer they already have rather than a view per plugin.
+public struct PsmithPluginPanel: Sendable, Hashable {
+    public let title: String
+    /// SF Symbol name. An unrecognised name degrades to no icon rather than
+    /// failing, since the server may know symbols this client's SDK does not.
+    public let sfSymbol: String
+    public let subtitle: String
+
+    public init(title: String, sfSymbol: String = "", subtitle: String = "") {
+        self.title = title
+        self.sfSymbol = sfSymbol
+        self.subtitle = subtitle
+    }
+
+    init(from p: Psmith_V1_PluginPanel) {
+        self.title = p.title
+        self.sfSymbol = p.sfSymbol
+        self.subtitle = p.subtitle
     }
 }

@@ -969,9 +969,27 @@ func pluginTypeToProto(d pluginapi.TypeDescriptor) *psmithv1.PluginType {
 			MessageLifecycleHook:        d.Capabilities.MessageLifecycleHook,
 			DeviceFactRequester:         d.Capabilities.DeviceFactRequester,
 			ContentRenderer:             d.Capabilities.ContentRenderer,
+			PanelProvider:               d.Capabilities.PanelProvider,
+			ActionHandler:               d.Capabilities.ActionHandler,
 		},
 		RequestedDeviceFacts:      requestedFacts,
 		RequiredModelCapabilities: capabilityRequirementsToProto(d.RequiredModelCapabilities),
+		Panel:                     pluginPanelToProto(d),
+	}
+}
+
+// pluginPanelToProto carries the composer add-menu entry to the client.
+//
+// Returns nil unless the plugin actually provides a panel, so the optional
+// field stays unset and a client can filter on its presence alone.
+func pluginPanelToProto(d pluginapi.TypeDescriptor) *psmithv1.PluginPanel {
+	if !d.Capabilities.PanelProvider {
+		return nil
+	}
+	return &psmithv1.PluginPanel{
+		Title:    d.Panel.Title,
+		SfSymbol: d.Panel.SFSymbol,
+		Subtitle: d.Panel.Subtitle,
 	}
 }
 

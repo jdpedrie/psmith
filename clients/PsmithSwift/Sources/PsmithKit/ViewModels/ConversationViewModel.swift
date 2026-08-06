@@ -73,6 +73,11 @@ public final class ConversationViewModel {
     // Load state
     public var activeContext: PsmithContext?
     public var messages: [PsmithMessage] = []
+    /// Panel-bearing plugins active on this conversation. Populated by
+    /// `loadPanels`; empty until then and after a failure, since a panel menu
+    /// is an affordance rather than something the composer depends on.
+    public internal(set) var availablePanels: [PsmithPluginType] = []
+
     public var loadError: String?
     public var loading = false
 
@@ -1831,5 +1836,45 @@ public final class ConversationViewModel {
             // the error silently and leave the tree empty.
             self.treeMessages = []
         }
+    }
+}
+
+// MARK: - Plugin panels
+
+extension ConversationViewModel {
+    /// Plugins active on this conversation that contribute a composer panel.
+    ///
+    /// The client never learns what any of them are: it filters descriptors on
+    /// having a panel, shows the titles it is given, and renders whatever
+    /// fragments come back. A new plugin with a panel appears here with no
+    /// change to this file.
+    public var panelPlugins: [PsmithPluginType] { availablePanels }
+
+    // Storage lives on the class; see the class declaration.
+
+    /// Load the panel-bearing plugins for this conversation.
+    ///
+    /// Resolved server-side (`GetConversationPlugins` returns the post-merge
+    /// view), so a profile-level plugin and a conversation-level override both
+    /// land here without the client re-implementing the merge.
+    public func loadPanels(pluginTypes: [PsmithPluginType]) async {
+        let active: Set<String>
+        do {
+            let resolved = try await client.conversations.getPlugins(conversationID: conversation.id)
+            if resolved.isEmpty {
+                // No conversation-level overrides means the profile chain
+                // decides, and the descriptors the caller passed already
+                // reflect it.
+                active = Set(pluginTypes.map(\.name))
+            } else {
+                active = Set(resolved.filter { !$0.disabled }.map(\.pluginName))
+            }
+        } catch {
+            // A panel menu is an affordance, not load-bearing. Failing to
+            // resolve it should cost the entry, not the composer.
+            availablePanels = []
+            return
+        }
+        availablePanels = pluginTypes.filter { $0.panel != nil && active.contains($0.name) }
     }
 }
