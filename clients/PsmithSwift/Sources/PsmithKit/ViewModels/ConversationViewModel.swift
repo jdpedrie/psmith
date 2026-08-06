@@ -1854,27 +1854,33 @@ extension ConversationViewModel {
 
     /// Load the panel-bearing plugins for this conversation.
     ///
-    /// Resolved server-side (`GetConversationPlugins` returns the post-merge
-    /// view), so a profile-level plugin and a conversation-level override both
-    /// land here without the client re-implementing the merge.
-    public func loadPanels(pluginTypes: [PsmithPluginType]) async {
-        let active: Set<String>
-        do {
-            let resolved = try await client.conversations.getPlugins(conversationID: conversation.id)
-            if resolved.isEmpty {
-                // No conversation-level overrides means the profile chain
-                // decides, and the descriptors the caller passed already
-                // reflect it.
-                active = Set(pluginTypes.map(\.name))
-            } else {
-                active = Set(resolved.filter { !$0.disabled }.map(\.pluginName))
-            }
-        } catch {
-            // A panel menu is an affordance, not load-bearing. Failing to
-            // resolve it should cost the entry, not the composer.
+    /// Fetches the plugin catalog itself rather than reading
+    /// `ProfilesViewModel.pluginTypes`. That list is populated only by the two
+    /// settings screens that call `loadPluginTypes()`, so a user who goes
+    /// straight from launch into a chat — the normal path — would find it
+    /// empty and see no panels at all.
+    public func loadPanels() async {
+        guard let catalog = try? await client.profiles.listPluginTypes() else {
+            // A panel menu is an affordance, not load-bearing: failing to
+            // resolve it costs the entry, not the composer.
             availablePanels = []
             return
         }
-        availablePanels = pluginTypes.filter { $0.panel != nil && active.contains($0.name) }
+        let withPanels = catalog.filter { $0.panel != nil }
+        guard !withPanels.isEmpty else {
+            availablePanels = []
+            return
+        }
+
+        // Conversation-level rows are OVERRIDES, not the merged pipeline —
+        // empty means "inherit the profile chain". Only narrow to them when
+        // some exist; otherwise every panel-bearing plugin is a candidate.
+        if let overrides = try? await client.conversations.getPlugins(conversationID: conversation.id),
+           !overrides.isEmpty {
+            let active = Set(overrides.filter { !$0.disabled }.map(\.pluginName))
+            availablePanels = withPanels.filter { active.contains($0.name) }
+            return
+        }
+        availablePanels = withPanels
     }
 }

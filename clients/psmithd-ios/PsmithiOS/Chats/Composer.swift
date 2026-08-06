@@ -126,7 +126,7 @@ struct Composer: View {
         // Panels are resolved per conversation, so this reloads when the user
         // switches chats rather than once per app launch.
         .task(id: model.conversation.id) {
-            await model.loadPanels(pluginTypes: app.profiles.pluginTypes)
+            await model.loadPanels()
         }
         .sheet(isPresented: $model.showingModelPicker) {
             ModelPickerSheet(model: model)

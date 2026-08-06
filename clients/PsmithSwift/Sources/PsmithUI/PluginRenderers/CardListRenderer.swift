@@ -15,7 +15,8 @@ import PsmithKit
 ///       "description": "optional summary",
 ///       "url": "https://…",       // optional; renders as an external link
 ///       "image": "https://…",     // optional thumbnail
-///       "badges": ["news", "2026"] // optional pill labels
+///       "badges": ["news", "2026"], // optional pill labels
+///       "action": "plugin:arm?id=x"  // optional; makes the whole row tappable
 ///     }
 ///   ]
 /// }
@@ -36,6 +37,11 @@ public struct CardListRenderer: View {
             let url: String?
             let image: String?
             let badges: [String]?
+            /// Optional action fired by tapping the whole card. Distinct from
+            /// `url`, which is a link affordance in the corner: this makes the
+            /// row itself the control, which is what a card_list used as a
+            /// picker needs.
+            let action: String?
         }
         let items: [Item]
     }
@@ -44,7 +50,20 @@ public struct CardListRenderer: View {
         let props = (try? JSONDecoder().decode(Props.self, from: fragment.props))
         VStack(alignment: .leading, spacing: 8) {
             ForEach(props?.items ?? [], id: \.self) { item in
-                card(item)
+                if let raw = item.action, let parsed = FragmentActionParser.parse(raw) {
+                    Button {
+                        onAction?(parsed)
+                    } label: {
+                        card(item)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                } else {
+                    // No action: a static row, which is also how a card
+                    // signals "nothing left to do here" without the renderer
+                    // needing to know what that means.
+                    card(item)
+                }
             }
         }
     }
