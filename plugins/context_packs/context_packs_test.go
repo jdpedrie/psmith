@@ -147,10 +147,45 @@ func TestSystemPrompt_AnnouncesNamesNotBodies(t *testing.T) {
 	}
 }
 
-func TestSystemPrompt_SilentWhenAnnounceDisabled(t *testing.T) {
+// announce_to_model hides the CATALOG. It must not also suppress the
+// acknowledgement instruction: a user who chose to send a pack should still be
+// told it arrived, and telling them reveals nothing they did not already know.
+func TestSystemPrompt_AnnounceOffHidesCatalogNotAcknowledgement(t *testing.T) {
 	t.Parallel()
-	cfg := `{"announce_to_model":false,"packs":[{"id":"a","name":"A","body":"X"}]}`
-	if out := build(t, cfg).AppendSystemMessage(); out != "" {
+	cfg := `{"announce_to_model":false,"packs":[{"id":"a","name":"Secret Pack","description":"hidden","body":"X"}]}`
+	out := build(t, cfg).AppendSystemMessage()
+
+	if strings.Contains(out, "Secret Pack") || strings.Contains(out, "hidden") {
+		t.Errorf("the catalog must stay private when announce is off: %q", out)
+	}
+	if !strings.Contains(out, "context_pack") {
+		t.Errorf("the acknowledgement instruction should survive: %q", out)
+	}
+}
+
+// Delivery is invisible — the pack rides in message headers, so the transcript
+// shows only what the user typed. Without the model naming it, the user has no
+// confirmation the thing they chose actually arrived.
+func TestSystemPrompt_AsksTheModelToAcknowledgeDelivery(t *testing.T) {
+	t.Parallel()
+	out := build(t, twoPacks).AppendSystemMessage()
+
+	for _, want := range []string{
+		"cannot see it",       // why the acknowledgement is needed at all
+		"message you are answering", // scoped to this turn, not the whole prefix
+		"earlier turn",        // and explicitly not repeated on later ones
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("acknowledgement guidance is missing %q: %q", want, out)
+		}
+	}
+}
+
+// A profile with no packs should contribute nothing at all — the instruction
+// would describe a block that can never arrive.
+func TestSystemPrompt_SilentWithNoPacks(t *testing.T) {
+	t.Parallel()
+	if out := build(t, `{"packs":[]}`).AppendSystemMessage(); out != "" {
 		t.Errorf("expected silence, got %q", out)
 	}
 }

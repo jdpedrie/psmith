@@ -31,6 +31,26 @@ Delivery checks both. A pack already on the branch is skipped even if something
 armed it again, so double-arming is harmless rather than duplicating a large
 block into the prefix.
 
+## Delivery is invisible, so the model says so
+
+A pack rides in `message_headers`, which is what keeps the transcript showing
+only what the user typed. The cost is that the user gets no confirmation the
+pack they chose actually arrived, short of reopening the panel.
+
+The system prompt closes that: it tells the model a `<context_pack>` block is
+material the user attached and cannot see, and asks it to open its reply by
+naming the pack in a short clause before answering. That instruction is not
+gated on `announce_to_model` — that switch keeps the *catalog* private, and
+acknowledging something the user just chose to send reveals nothing new.
+
+It is scoped to the pack arriving with the message being answered, because a
+delivered pack stays in the prefix forever. Without that scoping a model on
+turn nine still sees turn one's block and re-announces it every turn.
+
+This is a prompt, so it is a strong convention rather than a guarantee. A
+deterministic marker would mean surfacing header state to the client, which is
+a bigger change and not yet warranted.
+
 ## Capabilities
 
 | Interface | Why |

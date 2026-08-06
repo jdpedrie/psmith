@@ -204,25 +204,48 @@ func (p *contextPacks) ConfigFields() []pluginapi.ConfigField {
 
 func (p *contextPacks) PrependSystemMessage() string { return "" }
 
-// AppendSystemMessage advertises the catalog without spending the bodies.
+// AppendSystemMessage tells the model how to handle a delivered pack, and
+// optionally advertises the catalog without spending the bodies.
 //
 // Byte-stable for a given config, so it costs one cached prefix rather than
-// re-hashing every turn. Deliberately says the model cannot fetch a pack
-// itself: without that, a model told a pack exists will invent a tool call for
-// it and then narrate a failure.
+// re-hashing every turn.
+//
+// Two clauses, and only the second is optional.
+//
+// The acknowledgement clause is unconditional because delivery is invisible.
+// A pack rides in the user message's headers, so the transcript shows only
+// what the user typed: they get no confirmation the thing they chose actually
+// arrived, short of opening the panel. Having the model name it in its reply
+// is the receipt. This is deliberately not gated on announce_to_model — that
+// switch is about keeping the CATALOG private, and acknowledging something the
+// user just chose to send reveals nothing they do not already know.
+//
+// The instruction is scoped to the pack arriving with the message being
+// answered, because a delivered pack stays in the prefix forever. Without that
+// scoping a model on turn nine still sees turn one's block and re-announces it
+// every turn.
 func (p *contextPacks) AppendSystemMessage() string {
-	if !p.announces() || len(p.cfg.Packs) == 0 {
+	if len(p.cfg.Packs) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("\n\nAdditional context is available in packs the user can deliver on request. " +
-		"You cannot load one yourself. If a pack would answer the question, say which one you need.\n")
-	for _, pk := range p.cfg.Packs {
-		b.WriteString("\n- ")
-		b.WriteString(pk.Name)
-		if d := strings.TrimSpace(pk.Description); d != "" {
-			b.WriteString(": ")
-			b.WriteString(d)
+	b.WriteString("\n\nSome user messages carry a <context_pack name=\"...\"> block. That block is " +
+		"reference material the user chose to attach; they did not type it and they cannot see " +
+		"it in their transcript. When one arrives with the message you are answering, open your " +
+		"reply by naming it in a short clause — \"Got the Deploy runbook.\" — then answer. Do not " +
+		"quote it back, summarise it unprompted, or re-acknowledge a pack that arrived on an " +
+		"earlier turn.")
+
+	if p.announces() {
+		b.WriteString("\n\nPacks that exist but have not been delivered are listed below. " +
+			"You cannot load one yourself. If a pack would answer the question, say which one you need.\n")
+		for _, pk := range p.cfg.Packs {
+			b.WriteString("\n- ")
+			b.WriteString(pk.Name)
+			if d := strings.TrimSpace(pk.Description); d != "" {
+				b.WriteString(": ")
+				b.WriteString(d)
+			}
 		}
 	}
 	return b.String()
