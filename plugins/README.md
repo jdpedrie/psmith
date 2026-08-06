@@ -14,8 +14,8 @@ public extension surface, not a server internal.
 | [`app_tools`](app_tools/) | Calendar, Reminders and Health tools on the user's device | Configurable, ToolProvider |
 | [`basic_grounding`](basic_grounding/) | Date, time, locale, platform and location as a persisted header | Configurable, MessageEnvelope, DisplayTransformer, DeviceFactRequester |
 | [`brave_search`](brave_search/) | `web_search` against the Brave index | Configurable, ToolProvider |
-| [`context_packs`](context_packs/) | Deferred profile background delivered on demand | Configurable, SystemPrompter, MessageEnvelope, PendingStateProvider, PanelProvider, ActionHandler |
 | [`component_builder`](component_builder/) | User-defined structured-output recipes rendered as components | Configurable, SystemPrompter, HistoryTransformer, ContentRenderer |
+| [`context_packs`](context_packs/) | Deferred profile background delivered on demand | Configurable, SystemPrompter, MessageEnvelope, PendingStateProvider, PanelProvider, ActionHandler |
 | [`files`](files/) | Read and write a granted folder of markdown or text files | Configurable, ToolProvider |
 | [`game_master`](game_master/) | A turn-based management game with the rules held server-side | Configurable, SystemPrompter, ToolProvider, AssistantContentTransformer, DisplayTransformer, ContentRenderer |
 | [`imagegen`](imagegen/) | `generate_image`, returned as a tool attachment | Configurable, ToolProvider |
