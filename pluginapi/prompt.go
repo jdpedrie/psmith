@@ -15,6 +15,8 @@ package pluginapi
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
@@ -108,6 +110,16 @@ type HistoryPos struct {
 	// vary by provider — e.g. a history rewrite that would break
 	// Anthropic's prompt-cache prefix can be skipped on that provider.
 	DestProviderType string
+
+	// MessageID identifies the stored row this wire message came from, so a
+	// transform can look up state it froze against that message rather than
+	// recomputing it. Position alone is not enough for that: it shifts
+	// whenever an assistant message that the plugin did not produce sits in
+	// the chain, and recomputing frozen text is what moves bytes mid-prefix
+	// and costs a cache read.
+	//
+	// Zero for messages a transform invented, which have no stored row.
+	MessageID uuid.UUID
 }
 
 // HistoryTransformer rewrites a history message at prefix-build time.

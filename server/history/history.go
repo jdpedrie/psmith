@@ -273,6 +273,10 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 	type assembled struct {
 		wm         providers.WireMessage
 		storedRole string
+		// messageID is the stored row this came from, handed to transforms so
+		// they can find state they froze against it. Zero for the synthetic
+		// tool-result turn, which has no row of its own.
+		messageID uuid.UUID
 	}
 	asm := make([]assembled, 0, len(chain))
 	for _, m := range chain {
@@ -318,7 +322,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 			uses, results, ok := splitStoredToolCalls(m.ToolCalls)
 			if ok {
 				wm.ToolUses = uses
-				asm = append(asm, assembled{wm: wm, storedRole: m.Role})
+				asm = append(asm, assembled{wm: wm, storedRole: m.Role, messageID: m.ID})
 				toolResultMsg := providers.WireMessage{
 					Role:        wireUser,
 					ToolResults: results,
@@ -327,7 +331,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 				continue
 			}
 		}
-		asm = append(asm, assembled{wm: wm, storedRole: m.Role})
+		asm = append(asm, assembled{wm: wm, storedRole: m.Role, messageID: m.ID})
 	}
 
 	// Apply HistoryTransformer plugins to original user/assistant messages.
@@ -361,13 +365,14 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 				FromHead:         (n - 1) - i,
 				FromHeadSameRole: samePos[i],
 				DestProviderType: params.DestProviderType,
+				MessageID:        asm[i].messageID,
 			}
 			for _, wm := range params.Plugins.TransformHistoryMessage(asm[i].wm, pos) {
 				// storedRole tracks the row this came from, so an invented
 				// message inherits it. Nothing downstream reads storedRole
 				// after this point; it exists to gate which rows transforms
 				// see at all.
-				expanded = append(expanded, assembled{wm: wm, storedRole: asm[i].storedRole})
+				expanded = append(expanded, assembled{wm: wm, storedRole: asm[i].storedRole, messageID: asm[i].messageID})
 			}
 		}
 		asm = expanded
