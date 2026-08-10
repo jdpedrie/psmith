@@ -348,9 +348,13 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 			samePos[i] = seenByWire[r]
 			seenByWire[r]++
 		}
+		// A transform may expand one stored message into several wire
+		// messages, so this rebuilds the list rather than mutating in place.
+		expanded := make([]assembled, 0, len(asm))
 		for i := range asm {
 			role := asm[i].storedRole
 			if role != roleUser && role != roleAssistant {
+				expanded = append(expanded, asm[i])
 				continue
 			}
 			pos := pluginapi.HistoryPos{
@@ -358,8 +362,15 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 				FromHeadSameRole: samePos[i],
 				DestProviderType: params.DestProviderType,
 			}
-			asm[i].wm = params.Plugins.TransformHistoryMessage(asm[i].wm, pos)
+			for _, wm := range params.Plugins.TransformHistoryMessage(asm[i].wm, pos) {
+				// storedRole tracks the row this came from, so an invented
+				// message inherits it. Nothing downstream reads storedRole
+				// after this point; it exists to gate which rows transforms
+				// see at all.
+				expanded = append(expanded, assembled{wm: wm, storedRole: asm[i].storedRole})
+			}
 		}
+		asm = expanded
 	}
 
 	out := make([]providers.WireMessage, len(asm))

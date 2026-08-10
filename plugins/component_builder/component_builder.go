@@ -275,9 +275,9 @@ func (p *componentBuilder) AppendSystemMessage() string {
 // from the mode + the definition's Name — no free-form text
 // to maintain. Only the head user message gets the reminder,
 // so older turns don't accumulate.
-func (p *componentBuilder) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) providers.WireMessage {
+func (p *componentBuilder) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) []providers.WireMessage {
 	if msg.Role != "user" || pos.FromHeadSameRole != 0 {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	var reminders []string
 	for _, d := range p.defs {
@@ -288,11 +288,11 @@ func (p *componentBuilder) TransformHistoryMessage(msg providers.WireMessage, po
 		reminders = append(reminders, fmt.Sprintf("[system_reminder %s]", text))
 	}
 	if len(reminders) == 0 {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	out := msg
 	out.Content = msg.Content + "\n\n" + strings.Join(reminders, "\n")
-	return out
+	return pluginapi.OneMessage(out)
 }
 
 // reminderTextFor renders the per-mode reminder string. Empty

@@ -114,13 +114,13 @@ type fakeHistoryTransformer struct {
 	replace   string
 }
 
-func (f *fakeHistoryTransformer) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage {
+func (f *fakeHistoryTransformer) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) []providers.WireMessage {
 	if msg.Role == "assistant" && pos.FromHead >= f.threshold {
 		out := msg
 		out.Content = f.replace
-		return out
+		return OneMessage(out)
 	}
-	return msg
+	return OneMessage(msg)
 }
 
 // fakeDisplayTransformer wraps content with brackets.
@@ -160,7 +160,7 @@ func TestPipeline_Empty(t *testing.T) {
 		t.Errorf("empty TransformForDisplay should be no-op; got %q", got)
 	}
 	msg := providers.WireMessage{Role: "assistant", Content: "y"}
-	if got := p.TransformHistoryMessage(msg, HistoryPos{FromHead: 3}); got.Content != "y" {
+	if got := onlyMsg(t, p.TransformHistoryMessage(msg, HistoryPos{FromHead: 3})); got.Content != "y" {
 		t.Errorf("empty TransformHistoryMessage should be no-op; got %q", got.Content)
 	}
 }
@@ -206,12 +206,12 @@ func TestPipeline_TransformHistoryMessage_AppliesInOrder(t *testing.T) {
 		&fakeHistoryTransformer{dummyPlugin{name: "b"}, 0, "SECOND"},
 	}
 	msg := providers.WireMessage{Role: "assistant", Content: "orig"}
-	got := p.TransformHistoryMessage(msg, HistoryPos{FromHead: 5})
+	got := onlyMsg(t, p.TransformHistoryMessage(msg, HistoryPos{FromHead: 5}))
 	if got.Content != "SECOND" {
 		t.Errorf("got %q want SECOND (last writer wins)", got.Content)
 	}
 	// And at pos < first.threshold, only the second should apply.
-	got = p.TransformHistoryMessage(msg, HistoryPos{FromHead: 0})
+	got = onlyMsg(t, p.TransformHistoryMessage(msg, HistoryPos{FromHead: 0}))
 	if got.Content != "SECOND" {
 		t.Errorf("got %q want SECOND", got.Content)
 	}
@@ -442,3 +442,79 @@ func TestErrUnknownPluginDeclared(t *testing.T) {
 		t.Fatal("sanity")
 	}
 }
+
+// onlyMsg unwraps a HistoryTransformer result that is expected to be a single
+// message. The interface returns a slice so a transform can expand one stored
+// message into several; every transform here rewrites in place.
+func onlyMsg(t *testing.T, got []providers.WireMessage) providers.WireMessage {
+	t.Helper()
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 message, got %d", len(got))
+	}
+	return got[0]
+}
+
+// expandPlugin turns one assistant message into an assistant message followed
+// by a synthetic user turn. This is the shape a multi-voice conversation
+// needs: each speaker in its own turn, separated by a turn that exists only on
+// the wire.
+type expandPlugin struct {
+	dummyPlugin
+	inject string
+}
+
+func (e *expandPlugin) TransformHistoryMessage(msg providers.WireMessage, _ HistoryPos) []providers.WireMessage {
+	if msg.Role != "assistant" {
+		return OneMessage(msg)
+	}
+	return []providers.WireMessage{msg, {Role: "user", Content: e.inject}}
+}
+
+type dropPlugin struct{ dummyPlugin }
+
+func (d *dropPlugin) TransformHistoryMessage(_ providers.WireMessage, _ HistoryPos) []providers.WireMessage {
+	return nil
+}
+
+func TestPipeline_TransformHistoryMessage_Expands(t *testing.T) {
+	p := Pipeline{&expandPlugin{dummyPlugin: dummyPlugin{name: "x"}, inject: "NEXT"}}
+	got := p.TransformHistoryMessage(providers.WireMessage{Role: "assistant", Content: "a"}, HistoryPos{})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(got))
+	}
+	if got[0].Role != "assistant" || got[1].Role != "user" || got[1].Content != "NEXT" {
+		t.Fatalf("unexpected expansion: %+v", got)
+	}
+}
+
+// A later plugin must see what an earlier one produced, including messages the
+// earlier one invented. Otherwise expansion and rewriting couldn't coexist.
+func TestPipeline_TransformHistoryMessage_LaterPluginSeesInventedMessages(t *testing.T) {
+	p := Pipeline{
+		&expandPlugin{dummyPlugin: dummyPlugin{name: "expand"}, inject: "NEXT"},
+		&fakeHistoryTransformer{dummyPlugin: dummyPlugin{name: "rewrite"}, threshold: 0, replace: "REWRITTEN"},
+	}
+	got := p.TransformHistoryMessage(providers.WireMessage{Role: "assistant", Content: "a"}, HistoryPos{})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(got))
+	}
+	if got[0].Content != "REWRITTEN" {
+		t.Errorf("second plugin did not see the first plugin's output: %q", got[0].Content)
+	}
+	if got[1].Content != "NEXT" {
+		t.Errorf("invented message should survive a non-matching transform: %q", got[1].Content)
+	}
+}
+
+func TestPipeline_TransformHistoryMessage_NilDropsMessage(t *testing.T) {
+	p := Pipeline{&dropPlugin{dummyPlugin: dummyPlugin{name: "drop"}}}
+	if got := p.TransformHistoryMessage(providers.WireMessage{Role: "user", Content: "gone"}, HistoryPos{}); len(got) != 0 {
+		t.Fatalf("expected the message dropped, got %+v", got)
+	}
+}
+
+// A plugin that keeps the pre-widening signature silently stops satisfying
+// HistoryTransformer and gets skipped, which is invisible at build time. This
+// pins the interface so that failure is a compile error in this package
+// instead of a mystery at runtime.
+var _ HistoryTransformer = (*expandPlugin)(nil)

@@ -82,10 +82,14 @@ type HistoryPos struct {
     FromHeadSameRole int  // 0 = most-recent same-role, ...
 }
 type HistoryTransformer interface {
-    TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage
+    TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) []providers.WireMessage
 }
 ```
-Mutates messages **at prefix-build time**, on every history fetch. NOT persisted. Use for "keep only last N assistant choice blocks" / "strip diffs after K turns" / "trim verbose markers from older turns" patterns. Position info lets policies be role-aware and fork-stable.
+Rewrites messages **at prefix-build time**, on every history fetch. NOT persisted. Use for "keep only last N assistant choice blocks" / "strip diffs after K turns" / "trim verbose markers from older turns" patterns. Position info lets policies be role-aware and fork-stable.
+
+The return is a slice, so one stored message can become several wire messages. That is what a multi-voice conversation needs: a panel of personas has to keep each speaker in its own turn, and the turn separating two of them exists only on the wire. Returning nil drops the message from the prefix. Most implementations rewrite in place and return `pluginapi.OneMessage(m)`.
+
+Expansion composes with ordering: a later plugin sees every message an earlier one produced, including invented ones. `HistoryPos` is not recomputed for invented messages, since it describes where a *stored* message sits in the chain.
 
 ### `ChunkTransformer` / `InboundProcessor`
 ```go
@@ -241,7 +245,7 @@ Pipeline methods (one per capability surface):
 ```go
 func (p Pipeline) SystemPrompts() (prepend, appendStr string)
 func (p Pipeline) OutgoingEnvelope(facts map[string]string) (headers, trailers string)
-func (p Pipeline) TransformHistoryMessage(msg WireMessage, pos HistoryPos) WireMessage
+func (p Pipeline) TransformHistoryMessage(msg WireMessage, pos HistoryPos) []WireMessage
 func (p Pipeline) TransformForDisplay(content string) string
 func (p Pipeline) TransformAssistantContent(content string) string
 func (p Pipeline) RenderContent(content string, role string) []ContentPart
@@ -266,7 +270,7 @@ For one turn of `SendMessage`:
 2. **Build wire prefix** (`server/history/history.go::Build`):
    - `Pipeline.SystemPrompts` contributes prepend/append to the system slot.
    - `Pipeline.BuildTurnContexts` contributes per-turn context blocks.
-   - `Pipeline.TransformHistoryMessage` rewrites each historical message. Wire only, never persisted.
+   - `Pipeline.TransformHistoryMessage` rewrites each historical message, and may expand one into several. Wire only, never persisted.
 3. **In-stream** (`server/stream/consume.go`):
    - Driver streams chunks; `Pipeline.StreamingTags` tells the consumer which tag pairs to treat as structured rather than prose.
    - Tool calls dispatch through `server/conversations/tool_loop.go`, which injects the `pluginapi/host` capabilities onto the dispatch context. `ExecuteTool` is the only entry point that gets an identity-carrying context.

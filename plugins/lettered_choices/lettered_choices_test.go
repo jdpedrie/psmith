@@ -123,7 +123,7 @@ func TestLetteredChoices_HistoryTransformer_KeepRecent(t *testing.T) {
 		Content: "Body text.\n\n<choices>\nA) Yes\nB) No\n</choices>",
 	}
 	// FromHeadSameRole=0 = most recent assistant; KeepLastN=1 keeps it.
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 1, FromHeadSameRole: 0})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 1, FromHeadSameRole: 0}))
 	if got.Content != msg.Content {
 		t.Errorf("most-recent assistant should be untouched; got %q", got.Content)
 	}
@@ -139,7 +139,7 @@ func TestLetteredChoices_HistoryTransformer_StripOlder(t *testing.T) {
 	}
 	// FromHeadSameRole=1 = the assistant turn before the most recent;
 	// KeepLastN=1 strips it.
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 3, FromHeadSameRole: 1})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 3, FromHeadSameRole: 1}))
 	want := "Body text."
 	if got.Content != want {
 		t.Errorf("older assistant strip = %q want %q", got.Content, want)
@@ -157,21 +157,21 @@ func TestLetteredChoices_HistoryTransformer_AnthropicNeverStrips(t *testing.T) {
 	// An older assistant turn that would normally be stripped — but on
 	// Anthropic the choice block is kept intact so the prompt-cache
 	// prefix stays byte-stable.
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{
 		FromHead:         3,
 		FromHeadSameRole: 1,
 		DestProviderType: "anthropic",
-	})
+	}))
 	if got.Content != msg.Content {
 		t.Errorf("Anthropic should never strip; got %q want unchanged", got.Content)
 	}
 
 	// Same position on a non-Anthropic provider still strips.
-	got = lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{
+	got = onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{
 		FromHead:         3,
 		FromHeadSameRole: 1,
 		DestProviderType: "openai-compatible",
-	})
+	}))
 	if got.Content != "Body text." {
 		t.Errorf("non-Anthropic strip = %q want %q", got.Content, "Body text.")
 	}
@@ -186,12 +186,12 @@ func TestLetteredChoices_HistoryTransformer_KeepLastN_2KeepsTwo(t *testing.T) {
 	}
 	// FromHeadSameRole 0 and 1 are kept; 2 is stripped.
 	for _, sr := range []int{0, 1} {
-		got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 99, FromHeadSameRole: sr})
+		got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 99, FromHeadSameRole: sr}))
 		if got.Content != msg.Content {
 			t.Errorf("FromHeadSameRole=%d should be kept; got %q", sr, got.Content)
 		}
 	}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 99, FromHeadSameRole: 2})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 99, FromHeadSameRole: 2}))
 	if got.Content != "Body." {
 		t.Errorf("FromHeadSameRole=2 strip = %q want %q", got.Content, "Body.")
 	}
@@ -207,7 +207,7 @@ func TestLetteredChoices_HistoryTransformer_OlderUserUntouched(t *testing.T) {
 	// User at FromHeadSameRole=5 is NOT the head user; choices-strip
 	// logic only touches assistants, and the system-reminder tail only
 	// goes on the head user — so older users are pass-through.
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5}))
 	if got.Content != msg.Content {
 		t.Errorf("older user message should be untouched; got %q", got.Content)
 	}
@@ -217,7 +217,7 @@ func TestLetteredChoices_HistoryTransformer_HeadUserGetsReminder(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, ``)
 	msg := providers.WireMessage{Role: "user", Content: "what should I do?"}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0}))
 	if !strings.HasPrefix(got.Content, "what should I do?") {
 		t.Errorf("original content must be preserved as the prefix; got %q", got.Content)
 	}
@@ -230,7 +230,7 @@ func TestLetteredChoices_HistoryTransformer_SecondUserNoReminder(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, ``)
 	msg := providers.WireMessage{Role: "user", Content: "earlier turn"}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 2, FromHeadSameRole: 1})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 2, FromHeadSameRole: 1}))
 	if got.Content != msg.Content {
 		t.Errorf("non-head user must not receive the reminder; got %q", got.Content)
 	}
@@ -240,7 +240,7 @@ func TestLetteredChoices_HistoryTransformer_NoTagsIsNoOp(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"keep_last_n": 0}`)
 	msg := providers.WireMessage{Role: "assistant", Content: "Just narrative, no choices."}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5}))
 	if got.Content != msg.Content {
 		t.Errorf("no-tags message should be unchanged; got %q", got.Content)
 	}
@@ -255,7 +255,7 @@ func TestLetteredChoices_HistoryTransformer_UnmatchedOpenLeftAlone(t *testing.T)
 		Role:    "assistant",
 		Content: "Body. <choices>A) X (no close tag)",
 	}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5}))
 	if got.Content != msg.Content {
 		t.Errorf("unmatched open should be left alone; got %q", got.Content)
 	}
@@ -269,7 +269,7 @@ func TestLetteredChoices_HistoryTransformer_MultipleBlocksAllStripped(t *testing
 		Content: "Intro.\n\n<choices>A) one\nB) two</choices>\n\n" +
 			"More body.\n\n<choices>X) alt\nY) other</choices>",
 	}
-	got := lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5})
+	got := onlyMsg(t, lc.TransformHistoryMessage(msg, pluginapi.HistoryPos{FromHead: 5, FromHeadSameRole: 5}))
 	want := "Intro.\n\nMore body."
 	if got.Content != want {
 		t.Errorf("multi-block strip = %q want %q", got.Content, want)
@@ -436,4 +436,15 @@ func TestLetteredChoices_RegisteredByDefault(t *testing.T) {
 	if pl.Name() != Name {
 		t.Errorf("name=%q want %q", pl.Name(), Name)
 	}
+}
+
+// onlyMsg unwraps a HistoryTransformer result that is expected to be a single
+// message. The interface returns a slice so a transform can expand one stored
+// message into several; every transform here rewrites in place.
+func onlyMsg(t *testing.T, got []providers.WireMessage) providers.WireMessage {
+	t.Helper()
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 message, got %d", len(got))
+	}
+	return got[0]
 }

@@ -31,7 +31,7 @@ func TestTextInjector_DefaultsAreNoOps(t *testing.T) {
 		t.Errorf("default AppendSystemMessage = %q; want empty", got)
 	}
 	in := providers.WireMessage{Role: "user", Content: "hi"}
-	out := ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0})
+	out := onlyMsg(t, ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0}))
 	if out.Content != in.Content {
 		t.Errorf("default transform should be a no-op; got %q", out.Content)
 	}
@@ -60,7 +60,7 @@ func TestTextInjector_SkipsNonUserRoles(t *testing.T) {
 	ti := buildTextInjector(t, `{"user_prefix": "PRE", "user_suffix": "POST", "user_head_reminder": "REMIND"}`)
 	for _, role := range []string{"system", "assistant", "context"} {
 		in := providers.WireMessage{Role: role, Content: "body"}
-		out := ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0})
+		out := onlyMsg(t, ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0}))
 		if out.Content != in.Content {
 			t.Errorf("role %q should pass through; got %q", role, out.Content)
 		}
@@ -73,7 +73,7 @@ func TestTextInjector_UserPrefixSuffixOnEveryUserMessage(t *testing.T) {
 	// pos is a non-head position so the head reminder doesn't fire
 	// here; only prefix + suffix should land.
 	in := providers.WireMessage{Role: "user", Content: "what time is it"}
-	out := ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 4, FromHeadSameRole: 2})
+	out := onlyMsg(t, ti.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHead: 4, FromHeadSameRole: 2}))
 	want := "PRE\n\nwhat time is it\n\nPOST"
 	if out.Content != want {
 		t.Errorf("got %q\nwant %q", out.Content, want)
@@ -84,18 +84,18 @@ func TestTextInjector_HeadReminderOnlyAtHead(t *testing.T) {
 	t.Parallel()
 	ti := buildTextInjector(t, `{"user_head_reminder": "[system_reminder do the thing]"}`)
 	// Head: reminder appended.
-	head := ti.TransformHistoryMessage(
+	head := onlyMsg(t, ti.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "ok"},
 		pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0},
-	)
+	))
 	if !strings.HasSuffix(head.Content, "[system_reminder do the thing]") {
 		t.Errorf("head reminder missing; got %q", head.Content)
 	}
 	// Older user message: untouched.
-	older := ti.TransformHistoryMessage(
+	older := onlyMsg(t, ti.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "ok"},
 		pluginapi.HistoryPos{FromHead: 4, FromHeadSameRole: 2},
-	)
+	))
 	if older.Content != "ok" {
 		t.Errorf("older user message should not get the head reminder; got %q", older.Content)
 	}
@@ -108,10 +108,10 @@ func TestTextInjector_AllUserHooksCompose(t *testing.T) {
 		"user_suffix": "AFTER",
 		"user_head_reminder": "REMIND"
 	}`)
-	out := ti.TransformHistoryMessage(
+	out := onlyMsg(t, ti.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "body"},
 		pluginapi.HistoryPos{FromHead: 0, FromHeadSameRole: 0},
-	)
+	))
 	want := "BEFORE\n\nbody\n\nAFTER\n\nREMIND"
 	if out.Content != want {
 		t.Errorf("got %q\nwant %q", out.Content, want)
@@ -155,4 +155,15 @@ func TestTextInjector_RegisteredAtInit(t *testing.T) {
 	if _, ok := pl.(pluginapi.Configurable); !ok {
 		t.Error("text_injector must implement pluginapi.Configurable")
 	}
+}
+
+// onlyMsg unwraps a HistoryTransformer result that is expected to be a single
+// message. The interface returns a slice so a transform can expand one stored
+// message into several; every transform here rewrites in place.
+func onlyMsg(t *testing.T, got []providers.WireMessage) providers.WireMessage {
+	t.Helper()
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 message, got %d", len(got))
+	}
+	return got[0]
 }

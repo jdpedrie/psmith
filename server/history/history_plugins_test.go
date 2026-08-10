@@ -31,9 +31,9 @@ type stripAfterNPlugin struct {
 func (p *stripAfterNPlugin) Name() string        { return "test-strip-after-n" }
 func (p *stripAfterNPlugin) DisplayName() string { return "Test Strip After N" }
 func (p *stripAfterNPlugin) Description() string { return "test" }
-func (p *stripAfterNPlugin) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) providers.WireMessage {
+func (p *stripAfterNPlugin) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) []providers.WireMessage {
 	if msg.Role != "assistant" || pos.FromHeadSameRole < p.keepLast {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	// minimal in-place strip; leave it ugly to keep the test simple — the
 	// real lettered_choices plugin has its own stripping tests.
@@ -50,7 +50,7 @@ func (p *stripAfterNPlugin) TransformHistoryMessage(msg providers.WireMessage, p
 		end := i + len(p.open) + j + len(p.close)
 		out.Content = out.Content[:i] + out.Content[end:]
 	}
-	return out
+	return pluginapi.OneMessage(out)
 }
 
 // indexOf is a tiny strings.Index alias to avoid importing strings just here.

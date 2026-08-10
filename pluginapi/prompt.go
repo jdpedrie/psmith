@@ -110,11 +110,26 @@ type HistoryPos struct {
 	DestProviderType string
 }
 
-// HistoryTransformer mutates a history message at prefix-build time.
+// HistoryTransformer rewrites a history message at prefix-build time.
 // Returning the message unchanged is fine; the plugin decides based on
 // position whether to apply.
+//
+// The return is a slice so a transform can expand one stored message into
+// several wire messages, which is what a multi-voice conversation needs: a
+// panel of personas has to keep each speaker in its own turn, and the turn
+// that separates two of them exists only on the wire. Returning nil drops the
+// message from the prefix entirely.
+//
+// Most implementations return a one-element slice. `pluginapi.OneMessage` is
+// the shorthand.
 type HistoryTransformer interface {
-	TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage
+	TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) []providers.WireMessage
+}
+
+// OneMessage wraps a single message for a HistoryTransformer return. Nothing
+// but sugar for the common case of rewriting a message in place.
+func OneMessage(m providers.WireMessage) []providers.WireMessage {
+	return []providers.WireMessage{m}
 }
 
 // SystemPrompts walks the pipeline and concatenates the prepend/append
@@ -171,11 +186,24 @@ func (p Pipeline) OutgoingEnvelope(ctx context.Context, facts map[string]string,
 // TransformHistoryMessage walks the pipeline, applying every
 // HistoryTransformer in order to the given message at the given position.
 // Plugins that don't implement the interface are skipped.
-func (p Pipeline) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) providers.WireMessage {
+//
+// A transform that expands one message into several hands every result to the
+// next plugin in turn, so ordering composes: a later plugin sees whatever an
+// earlier one produced, including messages the earlier one invented. Position
+// is deliberately NOT recomputed for those, since it describes where the
+// stored message sits in the chain and an invented message has no place there.
+func (p Pipeline) TransformHistoryMessage(msg providers.WireMessage, pos HistoryPos) []providers.WireMessage {
+	cur := OneMessage(msg)
 	for _, pl := range p {
-		if t, ok := pl.(HistoryTransformer); ok {
-			msg = t.TransformHistoryMessage(msg, pos)
+		t, ok := pl.(HistoryTransformer)
+		if !ok {
+			continue
 		}
+		next := make([]providers.WireMessage, 0, len(cur))
+		for _, m := range cur {
+			next = append(next, t.TransformHistoryMessage(m, pos)...)
+		}
+		cur = next
 	}
-	return msg
+	return cur
 }

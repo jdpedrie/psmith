@@ -29,7 +29,7 @@ func TestComponentBuilder_EmptyConfigIsNoOp(t *testing.T) {
 		t.Errorf("empty config should produce empty system message; got %q", got)
 	}
 	in := providers.WireMessage{Role: "user", Content: "hi"}
-	if got := cb.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHeadSameRole: 0}); got.Content != "hi" {
+	if got := onlyMsg(t, cb.TransformHistoryMessage(in, pluginapi.HistoryPos{FromHeadSameRole: 0})); got.Content != "hi" {
 		t.Errorf("empty config should leave user message untouched; got %q", got.Content)
 	}
 	parts := cb.RenderContent([]pluginapi.ContentPart{pluginapi.NewTextPart("hello")}, "assistant")
@@ -87,10 +87,10 @@ func TestComponentBuilder_ReminderHeadOnlyAndModes(t *testing.T) {
 	]}`
 	cb := buildComponentBuilder(t, cfg)
 	// Head: always + when_appropriate reminders fire; none is skipped.
-	head := cb.TransformHistoryMessage(
+	head := onlyMsg(t, cb.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "ok"},
 		pluginapi.HistoryPos{FromHeadSameRole: 0},
-	)
+	))
 	if !strings.Contains(head.Content, "[system_reminder Always generate the combat_choices component.]") {
 		t.Errorf("always-mode reminder missing; got %q", head.Content)
 	}
@@ -101,10 +101,10 @@ func TestComponentBuilder_ReminderHeadOnlyAndModes(t *testing.T) {
 		t.Errorf("none-mode reminder leaked into head; got %q", head.Content)
 	}
 	// Older user message: untouched.
-	older := cb.TransformHistoryMessage(
+	older := onlyMsg(t, cb.TransformHistoryMessage(
 		providers.WireMessage{Role: "user", Content: "ok"},
 		pluginapi.HistoryPos{FromHeadSameRole: 2},
-	)
+	))
 	if older.Content != "ok" {
 		t.Errorf("older user message should not get reminders; got %q", older.Content)
 	}
@@ -296,4 +296,15 @@ func TestConfig_ExistingDefinitionsStillParse(t *testing.T) {
 	if len(cb.defs) != 1 || cb.defs[0].Name != "choices" {
 		t.Errorf("definition did not survive: %+v", cb.defs)
 	}
+}
+
+// onlyMsg unwraps a HistoryTransformer result that is expected to be a single
+// message. The interface returns a slice so a transform can expand one stored
+// message into several; every transform here rewrites in place.
+func onlyMsg(t *testing.T, got []providers.WireMessage) providers.WireMessage {
+	t.Helper()
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 message, got %d", len(got))
+	}
+	return got[0]
 }

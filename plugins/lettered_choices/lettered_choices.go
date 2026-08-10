@@ -251,7 +251,7 @@ func (p *letteredChoices) AppendSystemMessage() string {
 
 // --- HistoryTransformer ---
 
-func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) providers.WireMessage {
+func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) []providers.WireMessage {
 	// User-message tail reminder: append the system-reminder tag to the
 	// most-recent user message only (FromHeadSameRole == 0 with user role).
 	// HistoryTransformer runs at wire-build time and its output is NOT
@@ -260,10 +260,10 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 	if msg.Role == "user" && pos.FromHeadSameRole == 0 {
 		out := msg
 		out.Content = msg.Content + lcUserReminderTail
-		return out
+		return pluginapi.OneMessage(out)
 	}
 	if msg.Role != "assistant" {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	// Anthropic prompt-cache preservation. Anthropic places its single
 	// cache breakpoint on the last assistant turn, so the cached prefix
@@ -279,7 +279,7 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 	// stays warm. Other providers (no implicit prefix cache keyed on
 	// exact bytes the same way) keep the token-saving strip.
 	if pos.DestProviderType == "anthropic" {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	// FromHeadSameRole counts only assistant messages back from the head:
 	// 0 = most recent assistant turn, 1 = the one before, etc. KeepLastN=1
@@ -287,15 +287,15 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 	// every older assistant — independent of how user/assistant rows
 	// interleave (which can vary under forks).
 	if pos.FromHeadSameRole < p.cfg.KeepLastN {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	stripped := stripBetween(msg.Content, lcOpenTag, lcCloseTag)
 	if stripped == msg.Content {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	out := msg
 	out.Content = stripped
-	return out
+	return pluginapi.OneMessage(out)
 }
 
 // --- DisplayTransformer ---

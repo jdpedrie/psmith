@@ -156,14 +156,14 @@ func (p *textInjector) AppendSystemMessage() string  { return p.cfg.SystemSuffix
 // The output isn't persisted (pluginapi.HistoryTransformer runs at wire-build
 // time on a per-send basis), so editing config affects only future
 // sends — the messages table never sees these additions.
-func (p *textInjector) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) providers.WireMessage {
+func (p *textInjector) TransformHistoryMessage(msg providers.WireMessage, pos pluginapi.HistoryPos) []providers.WireMessage {
 	if msg.Role != "user" {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 	// Skip allocation entirely when nothing applies.
 	if p.cfg.UserPrefix == "" && p.cfg.UserSuffix == "" &&
 		(p.cfg.UserHeadReminder == "" || pos.FromHeadSameRole != 0) {
-		return msg
+		return pluginapi.OneMessage(msg)
 	}
 
 	var b strings.Builder
@@ -182,5 +182,5 @@ func (p *textInjector) TransformHistoryMessage(msg providers.WireMessage, pos pl
 	}
 	out := msg
 	out.Content = b.String()
-	return out
+	return pluginapi.OneMessage(out)
 }
