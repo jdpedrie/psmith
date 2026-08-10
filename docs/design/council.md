@@ -129,8 +129,8 @@ user       [panel] Skeptic, briefly. Three exchanges left.
 
 This satisfies alternation, gives the length directive a natural home, and puts
 the moderator's voice on the wire without ever creating a message row. The user
-never sees any of it: the directions are wire-only, and the speaker tags live
-in `message_headers`, which composes into wire content and never touches
+never sees any of it: the directions are wire-only, and the speaker tag is
+rendered into wire content from the message's `persona`, never into
 `messages.content`.
 
 It also carries length discipline forward by example, which is the strongest
@@ -160,44 +160,65 @@ loses the in-context example of a short turn being asked for and delivered, and
 because merging voices on the wire is the failure mode this whole design exists
 to avoid, even where the rows stay separate.
 
-## What this needs from pluginapi
+## What this needs elsewhere
 
-Three interface changes, all of them generalizations rather than council
-hooks. A review pass against the current code found each of these as a hard
-blocker, not a preference.
+Two changes, both generalizations rather than council hooks.
+
+**Messages grow an optional persona.** A `persona` column on `messages` and a
+matching optional field on the proto `Message`, defaulting to "Assistant" when
+absent. It does two jobs at once, which is why it's the right shape: it's what
+`history.Build` renders into the wire as the speaker tag, and it's what the
+client renders as the bubble's name. Any plugin can set it; no client learns
+what a council is.
+
+For color, the persona carries a palette index alongside the name. A bare name
+would leave the client to assign colors by order of first appearance, which
+shifts under pagination when an older message loads later and changes what slot
+everyone got. Absent index means default styling, so an ordinary assistant
+message is untouched.
+
+**The server sends an index, never a color.** That single rule is what keeps
+councils from breaking themes. The palette belongs to the client, so a council
+built under Sage renders in Nordic's colors when you switch, and a persona can
+never specify something that fights the palette.
 
 **`HistoryTransformer` has to go one-to-many.** It is
 `TransformHistoryMessage(msg, pos) WireMessage` today, one in and one out
 (`pluginapi/prompt.go:174`), so it cannot insert the interstitial directions
-this design is built on. Widening the return to `[]providers.WireMessage` is the
-natural generalization and touches three implementors (`lettered_choices`,
-`component_builder`, `text_injector`), each of which returns a one-element
-slice. Without this change the wire shape above is unbuildable.
+this design is built on. Widening the return to `[]providers.WireMessage`
+touches three implementors (`lettered_choices`, `component_builder`,
+`text_injector`), each of which returns a one-element slice, and turns the
+pipeline's fold into a flat-map. That's the whole change, and without it the
+wire shape above is unbuildable.
 
-**`AssistantContentTransformer` has to grow an envelope.** The speaker tag
-belongs in the assistant row's `message_headers`, frozen at write time like
-every other envelope. But `MessageEnvelope` only covers outgoing user messages,
-and `AssistantContentTransformer` is `TransformAssistantContent(string) string`,
-content only. Nothing today can write headers onto an assistant row. It wants
-the same `(header, trailer)` return shape `MessageEnvelope` already has, which
-makes the two symmetric instead of arbitrarily different.
+**What we don't need.** An earlier draft had `AssistantContentTransformer`
+growing a `(header, trailer)` return so the speaker tag could live in the
+assistant row's `message_headers`. With a persona column that's redundant: the
+name is already stored, and `history.Build` renders the tag from it. Headers
+exist because `basic_grounding`'s envelope contains volatile facts (time,
+location) that have to be frozen at write time or every rebuild moves bytes. A
+persona name is not volatile.
 
-The alternative is deriving the speaker tag at wire-build time from
-`plugin_state`, which needs no new write path. We prefer the header because it
-makes the bytes literally immutable rather than immutable-by-convention, and the
-cache depends on them never moving.
+## Coalescing, and a bug this review found
 
-**Messages need generic attribution on the wire to clients.** The proto
-`Message` carries `provider_id` and `model_id` but nothing a client can render
-as a speaker. A new field, a label plus a palette index, lets any plugin
-attribute any message. The client renders a name and looks up a color; it never
-learns what a council is, which is the constraint that kept the panel system
-generic.
+`history.Build` appends one wire message per stored row and never coalesces
+consecutive same-role turns, and neither does any driver. That's already
+producing malformed requests today, independent of councils.
 
-**The server sends an index, never a color.** That single rule is what keeps
-councils from breaking themes. The palette belongs to the client, so a council
-built under Sage renders in Nordic's colors when you switch themes, and a
-persona can never specify something that fights the palette.
+Regenerating against an assistant parent skips the user-row insert and parents
+the new assistant on the old one, so the stored chain reads user, assistant,
+assistant. The service knows this and appends a synthetic single-space user turn
+so the prefix doesn't end on an assistant
+(`server/conversations/service.go:1738`). That handles the *end* of the array
+but not the middle. Do it once and the wire is user, assistant, user, which is
+fine. Do it twice on the same branch and the wire is user, assistant, assistant,
+user. Anthropic and Gemini both reject that. `ConversationViewModel.swift:1426`
+reaches this path.
+
+So `history.Build` wants a normalization pass that coalesces consecutive
+same-role wire messages. It fixes the live bug, and it's the safety net for
+councils: if a direction ever fails to insert, the request degrades to merged
+turns instead of a 400.
 
 ## Cache
 
@@ -374,15 +395,15 @@ moderator's voice.
 
 Nothing. This document is the design; no code exists.
 
-The three pluginapi changes come first, because nothing else can be built on top
-of them and two of them are one-line signature widenings that ripple through
-existing plugins. Then the roster, the router interface with the deterministic
+The persona column, the `HistoryTransformer` widening and the coalescing pass
+come first. Nothing else can be built on top of them, and the coalescing pass
+is worth landing on its own regardless. Then the roster, the router interface with the deterministic
 implementation behind it, interstitial directions with the merge and freeze
 rules, per-hop `max_output_tokens`, the continue chip, and the hard cap. The
 model-backed moderator is the second implementation of an interface that already
 has a working one under it.
 
-The visual layer splits cleanly: message attribution and the rail work with any
+The visual layer splits cleanly: the persona name and the rail work for any
 plugin that sets the field, and `Theme.personaColors` is independent of every
 other part of this.
 

@@ -37,6 +37,8 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### History builder
 
+- **`server/history` no longer coalesces consecutive same-role wire messages — live bug.** `Build` appends one wire message per stored row, and no driver merges either (verified against `anthropic.translateMessages`). Regenerating on an assistant parent leaves the stored chain reading user, assistant, assistant; `service.go:1738` appends a synthetic user turn so the array doesn't *end* on an assistant, which fixes the tail but not the middle. Continue from the last assistant twice on one branch and the wire is user, assistant, assistant, user, which Anthropic and Gemini both reject. Reachable from `ConversationViewModel.swift:1426`. Fix is a coalescing normalization pass at the end of `Build`. Found during the [council-mode design review](design/council.md); council needs the same pass as its safety net.
+
 - **`server/history`** — cross-provider thinking is **omitted entirely** when destination ≠ producer. The architecture doc's "Thinking handling" section spec'd "render to plain text and inject into content" for this case. Deferred until tool use lands so we don't have to redo it. Code comment in `history.go` references this.
 
 ### Conversations / SendMessage
