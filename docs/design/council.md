@@ -105,17 +105,26 @@ see whether it grates, decide then.
 
 ## The wire shape
 
-All three drivers map wire messages one to one with no merging. Anthropic's
-translator documents the expectation in its own comment ("the alternating
-user/assistant message list that Anthropic wants",
-`server/providers/anthropic/send.go:386`), and Gemini's `contents` is strict the
-same way. Only OpenAI Chat Completions is lenient. So three persona turns in a
-row reach Anthropic as three consecutive assistant messages and the request is
-rejected: the obvious shape, every persona turn as an assistant message
-distinguished by a speaker header, does not survive contact with Claude.
+The obvious shape is every persona turn as an assistant message with a speaker
+tag, one after another. It fails, but not for the reason it looks like it
+should.
+
+Nothing rejects it. Anthropic's docs say plainly that "consecutive `user` or
+`assistant` turns in your request will be combined into a single turn", and
+OpenAI is lenient too. **That combining is the problem.** Skeptic's turn and
+Optimist's turn arrive at the model as one assistant turn. The speaker tags
+survive as text inside it, but the turn structure that says these were two
+different speakers is gone, and what the model sees is a single long block of
+its own prior voice. That is precisely the voice-blurring this design exists to
+prevent, and it happens silently, with no error to notice.
+
+So the failure is semantic rather than a 400, which makes it worse: a council
+built the obvious way would look like it worked and quietly converge into one
+voice.
 
 The fix is to put the moderator's direction on the wire as the interstitial
-user turn:
+user turn. It keeps every persona turn structurally separate, because there is
+always a user turn between two of them:
 
 ```
 system     roster, etiquette, length examples
@@ -127,11 +136,11 @@ assistant  <speaker name="Optimist">Rollback is solved. The real risk is...
 user       [panel] Skeptic, briefly. Three exchanges left.
 ```
 
-This satisfies alternation, gives the length directive a natural home, and puts
-the moderator's voice on the wire without ever creating a message row. The user
-never sees any of it: the directions are wire-only, and the speaker tag is
-rendered into wire content from the message's `persona`, never into
-`messages.content`.
+This keeps each persona in its own turn, gives the length directive a natural
+home, and puts the moderator's voice on the wire without ever creating a message
+row. The user never sees any of it: the directions are wire-only, and the
+speaker tag is rendered into wire content from the message's `persona`, never
+into `messages.content`.
 
 It also carries length discipline forward by example, which is the strongest
 argument for it. A persona told to be brief, immediately after seeing another
@@ -199,26 +208,25 @@ exist because `basic_grounding`'s envelope contains volatile facts (time,
 location) that have to be frozen at write time or every rebuild moves bytes. A
 persona name is not volatile.
 
-## Coalescing, and a bug this review found
+## The same shape already exists outside councils
 
 `history.Build` appends one wire message per stored row and never coalesces
-consecutive same-role turns, and neither does any driver. That's already
-producing malformed requests today, independent of councils.
+consecutive same-role turns, and neither does any driver. Regenerating against
+an assistant parent parents the new assistant on the old one, so the stored
+chain reads user, assistant, assistant
+(`server/conversations/service.go:1738`). Continue from the last assistant twice
+on one branch and the wire carries consecutive assistant turns today, reachable
+from `ConversationViewModel.swift:1426`.
 
-Regenerating against an assistant parent skips the user-row insert and parents
-the new assistant on the old one, so the stored chain reads user, assistant,
-assistant. The service knows this and appends a synthetic single-space user turn
-so the prefix doesn't end on an assistant
-(`server/conversations/service.go:1738`). That handles the *end* of the array
-but not the middle. Do it once and the wire is user, assistant, user, which is
-fine. Do it twice on the same branch and the wire is user, assistant, assistant,
-user. Anthropic and Gemini both reject that. `ConversationViewModel.swift:1426`
-reaches this path.
+Anthropic combines them, so it isn't an error. It's the same silent quality loss
+described above, in miniature: two distinct answers become one turn. Gemini's
+behaviour is unverified.
 
-So `history.Build` wants a normalization pass that coalesces consecutive
-same-role wire messages. It fixes the live bug, and it's the safety net for
-councils: if a direction ever fails to insert, the request degrades to merged
-turns instead of a 400.
+The implication for councils is the useful part. Getting the wire shape wrong
+here does not fail loudly, so there is no test that catches it by watching for a
+400. The check has to be structural: assert that no two adjacent wire messages
+share a role, and assert it in the council's own tests rather than trusting a
+provider to complain.
 
 ## Cache
 
