@@ -83,7 +83,9 @@ INSERT INTO messages (
     error_payload,
     explicit_cache_attached,
     tool_calls,
-    finish_reason
+    finish_reason,
+    persona,
+    persona_index
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -96,9 +98,11 @@ INSERT INTO messages (
     $25,
     $26,
     $27,
-    $28
+    $28,
+    $29,
+    $30
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index
 `
 
 type CreateAssistantMessageWithUsageParams struct {
@@ -130,6 +134,8 @@ type CreateAssistantMessageWithUsageParams struct {
 	ExplicitCacheAttached *bool
 	ToolCalls             []byte
 	FinishReason          *string
+	Persona               *string
+	PersonaIndex          *int32
 }
 
 // Used by the stream supervisor at materialization. Allows the assistant turn
@@ -170,6 +176,8 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		arg.ExplicitCacheAttached,
 		arg.ToolCalls,
 		arg.FinishReason,
+		arg.Persona,
+		arg.PersonaIndex,
 	)
 	var i Message
 	err := row.Scan(
@@ -209,6 +217,8 @@ func (q *Queries) CreateAssistantMessageWithUsage(ctx context.Context, arg Creat
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
@@ -223,7 +233,7 @@ INSERT INTO messages (
     $6, $7, $8, $9,
     $10, $11, $12, $13
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index
 `
 
 type CreateMessageParams struct {
@@ -296,6 +306,8 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
@@ -306,7 +318,7 @@ INSERT INTO messages (
 ) VALUES (
     $1, $2, $3, 'assistant', $4, TRUE
 )
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index
 `
 
 type CreateWelcomeMessageParams struct {
@@ -365,6 +377,8 @@ func (q *Queries) CreateWelcomeMessage(ctx context.Context, arg CreateWelcomeMes
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
@@ -381,7 +395,7 @@ func (q *Queries) DeleteMessageByID(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCompressionSummaryInContext = `-- name: GetCompressionSummaryInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages
 WHERE context_id = $1 AND role = 'compression_summary'
 ORDER BY created_at DESC
 LIMIT 1
@@ -430,12 +444,14 @@ func (q *Queries) GetCompressionSummaryInContext(ctx context.Context, contextID 
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
 
 const getContextLeafMessage = `-- name: GetContextLeafMessage :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages m
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages m
 WHERE m.context_id = $1
   AND NOT EXISTS (
     SELECT 1 FROM messages c
@@ -494,12 +510,14 @@ func (q *Queries) GetContextLeafMessage(ctx context.Context, contextID uuid.UUID
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
 
 const getContextRoleMessageInContext = `-- name: GetContextRoleMessageInContext :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages
 WHERE context_id = $1 AND role = 'context'
 ORDER BY created_at
 LIMIT 1
@@ -547,12 +565,14 @@ func (q *Queries) GetContextRoleMessageInContext(ctx context.Context, contextID 
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
 
 const getLatestAssistantMessage = `-- name: GetLatestAssistantMessage :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages
 WHERE context_id = $1 AND role = 'assistant'
 ORDER BY created_at DESC, id DESC
 LIMIT 1
@@ -600,6 +620,8 @@ func (q *Queries) GetLatestAssistantMessage(ctx context.Context, contextID uuid.
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
@@ -623,7 +645,7 @@ func (q *Queries) GetLatestMessageID(ctx context.Context, contextID uuid.UUID) (
 }
 
 const getMessageByID = `-- name: GetMessageByID :one
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages WHERE id = $1
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages WHERE id = $1
 `
 
 func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error) {
@@ -666,6 +688,8 @@ func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, er
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }
@@ -726,11 +750,11 @@ func (q *Queries) ListContextLeafIDs(ctx context.Context, contextID uuid.UUID) (
 
 const listMessageAncestorChain = `-- name: ListMessageAncestorChain :many
 WITH RECURSIVE chain AS (
-    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, messages.finish_reason, messages.tool_cost_usd, messages.is_welcome, messages.embedding, messages.embedding_model, messages.embedding_at, messages.message_headers, messages.message_trailers, 0 AS depth
+    SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, messages.finish_reason, messages.tool_cost_usd, messages.is_welcome, messages.embedding, messages.embedding_model, messages.embedding_at, messages.message_headers, messages.message_trailers, messages.persona, messages.persona_index, 0 AS depth
     FROM messages
     WHERE messages.id = $1
     UNION ALL
-    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, m.error_payload, m.thinking_duration_ms, m.explicit_cache_attached, m.tool_calls, m.finish_reason, m.tool_cost_usd, m.is_welcome, m.embedding, m.embedding_model, m.embedding_at, m.message_headers, m.message_trailers, c.depth + 1
+    SELECT m.id, m.context_id, m.parent_id, m.role, m.content, m.raw_content, m.thinking, m.thinking_provider_type, m.thinking_rendered_text, m.provider_id, m.model_id, m.created_at, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens, m.reasoning_tokens, m.provider_usage_raw, m.input_cost_usd, m.output_cost_usd, m.cache_read_cost_usd, m.cache_write_cost_usd, m.total_cost_usd, m.edited_at, m.error_payload, m.thinking_duration_ms, m.explicit_cache_attached, m.tool_calls, m.finish_reason, m.tool_cost_usd, m.is_welcome, m.embedding, m.embedding_model, m.embedding_at, m.message_headers, m.message_trailers, m.persona, m.persona_index, c.depth + 1
     FROM messages m
     INNER JOIN chain c ON m.id = c.parent_id
 )
@@ -858,7 +882,7 @@ WITH RECURSIVE chain AS (
     FROM messages p
     JOIN chain ON chain.parent_id = p.id
 )
-SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, messages.finish_reason, messages.tool_cost_usd, messages.is_welcome, messages.embedding, messages.embedding_model, messages.embedding_at, messages.message_headers, messages.message_trailers
+SELECT messages.id, messages.context_id, messages.parent_id, messages.role, messages.content, messages.raw_content, messages.thinking, messages.thinking_provider_type, messages.thinking_rendered_text, messages.provider_id, messages.model_id, messages.created_at, messages.input_tokens, messages.output_tokens, messages.cache_read_tokens, messages.cache_write_tokens, messages.reasoning_tokens, messages.provider_usage_raw, messages.input_cost_usd, messages.output_cost_usd, messages.cache_read_cost_usd, messages.cache_write_cost_usd, messages.total_cost_usd, messages.edited_at, messages.error_payload, messages.thinking_duration_ms, messages.explicit_cache_attached, messages.tool_calls, messages.finish_reason, messages.tool_cost_usd, messages.is_welcome, messages.embedding, messages.embedding_model, messages.embedding_at, messages.message_headers, messages.message_trailers, messages.persona, messages.persona_index
 FROM messages
 JOIN chain ON chain.id = messages.id
 ORDER BY chain.depth DESC
@@ -919,6 +943,8 @@ func (q *Queries) ListMessageChainForHistory(ctx context.Context, id uuid.UUID) 
 			&i.Message.EmbeddingAt,
 			&i.Message.MessageHeaders,
 			&i.Message.MessageTrailers,
+			&i.Message.Persona,
+			&i.Message.PersonaIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -975,7 +1001,7 @@ func (q *Queries) ListMessageTreeStructure(ctx context.Context, contextID uuid.U
 }
 
 const listMessagesByContext = `-- name: ListMessagesByContext :many
-SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers FROM messages
+SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages
 WHERE context_id = $1
 ORDER BY created_at, id
 `
@@ -1026,6 +1052,8 @@ func (q *Queries) ListMessagesByContext(ctx context.Context, contextID uuid.UUID
 			&i.EmbeddingAt,
 			&i.MessageHeaders,
 			&i.MessageTrailers,
+			&i.Persona,
+			&i.PersonaIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -1275,7 +1303,7 @@ SET content   = $2,
     role      = COALESCE($3, role),
     edited_at = NOW()
 WHERE id = $1
-RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers
+RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index
 `
 
 type UpdateMessageContentRoleParams struct {
@@ -1328,6 +1356,8 @@ func (q *Queries) UpdateMessageContentRole(ctx context.Context, arg UpdateMessag
 		&i.EmbeddingAt,
 		&i.MessageHeaders,
 		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
 	)
 	return i, err
 }

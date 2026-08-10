@@ -2559,6 +2559,36 @@ public nonisolated struct Psmith_V1_Message: @unchecked Sendable {
     set {_uniqueStorage()._isWelcome = newValue}
   }
 
+  /// Speaker attribution. Unset is the ordinary case and clients render
+  /// the message as "Assistant"; a value names the persona that produced
+  /// it, which is what makes a council conversation readable.
+  ///
+  /// Any plugin may set this. Clients render a name and a palette slot and
+  /// never learn what produced them, which is what keeps multi-persona
+  /// support out of the client core.
+  public var persona: String {
+    get {_storage._persona ?? String()}
+    set {_uniqueStorage()._persona = newValue}
+  }
+  /// Returns true if `persona` has been explicitly set.
+  public var hasPersona: Bool {_storage._persona != nil}
+  /// Clears the value of `persona`. Subsequent reads from it will return its default value.
+  public mutating func clearPersona() {_uniqueStorage()._persona = nil}
+
+  /// Palette slot for `persona`, not a color. Themes own their persona
+  /// palettes and the client resolves this index against the active one,
+  /// so a conversation authored under one theme renders correctly under
+  /// another and no server-side actor can pick something that fights the
+  /// palette. Unset means default styling.
+  public var personaIndex: Int32 {
+    get {_storage._personaIndex ?? 0}
+    set {_uniqueStorage()._personaIndex = newValue}
+  }
+  /// Returns true if `personaIndex` has been explicitly set.
+  public var hasPersonaIndex: Bool {_storage._personaIndex != nil}
+  /// Clears the value of `personaIndex`. Subsequent reads from it will return its default value.
+  public mutating func clearPersonaIndex() {_uniqueStorage()._personaIndex = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -5004,7 +5034,7 @@ nonisolated extension Psmith_V1_Context: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0\u{3}ui_fragments\0\u{3}is_welcome\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}context_id\0\u{3}parent_id\0\u{1}role\0\u{1}content\0\u{3}raw_content\0\u{1}thinking\0\u{3}thinking_provider_type\0\u{3}thinking_rendered_text\0\u{3}provider_id\0\u{3}model_id\0\u{3}created_at\0\u{1}usage\0\u{3}sibling_count\0\u{3}display_content\0\u{3}edited_at\0\u{3}error_text\0\u{3}thinking_duration_ms\0\u{3}tool_calls\0\u{3}finish_reason\0\u{1}attachments\0\u{3}ui_fragments\0\u{3}is_welcome\0\u{1}persona\0\u{3}persona_index\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -5030,6 +5060,8 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
     var _attachments: [Psmith_V1_MessageAttachment] = []
     var _uiFragments: [Psmith_V1_UIFragment] = []
     var _isWelcome: Bool = false
+    var _persona: String? = nil
+    var _personaIndex: Int32? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -5063,6 +5095,8 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
       _attachments = source._attachments
       _uiFragments = source._uiFragments
       _isWelcome = source._isWelcome
+      _persona = source._persona
+      _personaIndex = source._personaIndex
     }
   }
 
@@ -5104,6 +5138,8 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
         case 21: try { try decoder.decodeRepeatedMessageField(value: &_storage._attachments) }()
         case 22: try { try decoder.decodeRepeatedMessageField(value: &_storage._uiFragments) }()
         case 23: try { try decoder.decodeSingularBoolField(value: &_storage._isWelcome) }()
+        case 24: try { try decoder.decodeSingularStringField(value: &_storage._persona) }()
+        case 25: try { try decoder.decodeSingularInt32Field(value: &_storage._personaIndex) }()
         default: break
         }
       }
@@ -5185,6 +5221,12 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
       if _storage._isWelcome != false {
         try visitor.visitSingularBoolField(value: _storage._isWelcome, fieldNumber: 23)
       }
+      try { if let v = _storage._persona {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 24)
+      } }()
+      try { if let v = _storage._personaIndex {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 25)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -5217,6 +5259,8 @@ nonisolated extension Psmith_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._M
         if _storage._attachments != rhs_storage._attachments {return false}
         if _storage._uiFragments != rhs_storage._uiFragments {return false}
         if _storage._isWelcome != rhs_storage._isWelcome {return false}
+        if _storage._persona != rhs_storage._persona {return false}
+        if _storage._personaIndex != rhs_storage._personaIndex {return false}
         return true
       }
       if !storagesAreEqual {return false}

@@ -148,11 +148,12 @@ persona told to be brief and answer in one line, is far more likely to comply
 than one reading an instruction alone.
 
 **The merge rule.** A direction placed after a user turn would produce two
-consecutive user messages, which breaks alternation just as badly. So when a
-direction would follow a user turn, it appends to that turn instead of becoming
-its own. That's why the first direction in the example above sits inside the
-user's message. The rule is deterministic, so the merged bytes are identical on
-every rebuild.
+consecutive user messages, which the provider then combines on our behalf. So we
+do it ourselves: when a direction would follow a user turn, it appends to that
+turn instead of becoming its own. That's why the first direction in the example
+above sits inside the user's message. Doing it explicitly means the bytes are
+ours and are identical on every rebuild, rather than depending on a provider's
+undocumented join.
 
 **The freeze rule.** Directions are frozen when issued and replayed verbatim.
 Each hop's direction is stored in `plugin_state` alongside the speaker and the

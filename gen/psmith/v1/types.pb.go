@@ -3264,7 +3264,21 @@ type Message struct {
 	// in history. Clients gate a fake-stream reveal animation on this
 	// flag (first open in an app session). Same wire shape as a normal
 	// assistant turn otherwise.
-	IsWelcome     bool `protobuf:"varint,23,opt,name=is_welcome,json=isWelcome,proto3" json:"is_welcome,omitempty"`
+	IsWelcome bool `protobuf:"varint,23,opt,name=is_welcome,json=isWelcome,proto3" json:"is_welcome,omitempty"`
+	// Speaker attribution. Unset is the ordinary case and clients render
+	// the message as "Assistant"; a value names the persona that produced
+	// it, which is what makes a council conversation readable.
+	//
+	// Any plugin may set this. Clients render a name and a palette slot and
+	// never learn what produced them, which is what keeps multi-persona
+	// support out of the client core.
+	Persona *string `protobuf:"bytes,24,opt,name=persona,proto3,oneof" json:"persona,omitempty"`
+	// Palette slot for `persona`, not a color. Themes own their persona
+	// palettes and the client resolves this index against the active one,
+	// so a conversation authored under one theme renders correctly under
+	// another and no server-side actor can pick something that fights the
+	// palette. Unset means default styling.
+	PersonaIndex  *int32 `protobuf:"varint,25,opt,name=persona_index,json=personaIndex,proto3,oneof" json:"persona_index,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3458,6 +3472,20 @@ func (x *Message) GetIsWelcome() bool {
 		return x.IsWelcome
 	}
 	return false
+}
+
+func (x *Message) GetPersona() string {
+	if x != nil && x.Persona != nil {
+		return *x.Persona
+	}
+	return ""
+}
+
+func (x *Message) GetPersonaIndex() int32 {
+	if x != nil && x.PersonaIndex != nil {
+		return *x.PersonaIndex
+	}
+	return 0
 }
 
 // UIFragment is one structured UI component the server hands the
@@ -4540,7 +4568,8 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x11cache_savings_usd\x18\v \x01(\x01R\x0fcacheSavingsUsdB\x14\n" +
 	"\x12_parent_context_idB\x1a\n" +
 	"\x18_current_leaf_message_idB\b\n" +
-	"\x06_title\"\xae\t\n" +
+	"\x06_title\"\x95\n" +
+	"\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4573,7 +4602,9 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\vattachments\x18\x15 \x03(\v2\x1c.psmith.v1.MessageAttachmentR\vattachments\x128\n" +
 	"\fui_fragments\x18\x16 \x03(\v2\x15.psmith.v1.UIFragmentR\vuiFragments\x12\x1d\n" +
 	"\n" +
-	"is_welcome\x18\x17 \x01(\bR\tisWelcomeB\f\n" +
+	"is_welcome\x18\x17 \x01(\bR\tisWelcome\x12\x1d\n" +
+	"\apersona\x18\x18 \x01(\tH\vR\apersona\x88\x01\x01\x12(\n" +
+	"\rpersona_index\x18\x19 \x01(\x05H\fR\fpersonaIndex\x88\x01\x01B\f\n" +
 	"\n" +
 	"_parent_idB\x0e\n" +
 	"\f_raw_contentB\x19\n" +
@@ -4586,7 +4617,10 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"_edited_atB\r\n" +
 	"\v_error_textB\x17\n" +
 	"\x15_thinking_duration_msB\x10\n" +
-	"\x0e_finish_reason\"R\n" +
+	"\x0e_finish_reasonB\n" +
+	"\n" +
+	"\b_personaB\x10\n" +
+	"\x0e_persona_index\"R\n" +
 	"\n" +
 	"UIFragment\x12\x1c\n" +
 	"\tcomponent\x18\x01 \x01(\tR\tcomponent\x12\x14\n" +

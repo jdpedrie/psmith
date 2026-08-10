@@ -136,6 +136,8 @@ type Message struct {
 	EmbeddingAt           *time.Time
 	MessageHeaders        *string
 	MessageTrailers       *string
+	Persona               *string
+	PersonaIndex          *int32
 }
 
 type MessageAttachment struct {

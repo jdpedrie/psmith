@@ -43,7 +43,9 @@ INSERT INTO messages (
     error_payload,
     explicit_cache_attached,
     tool_calls,
-    finish_reason
+    finish_reason,
+    persona,
+    persona_index
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -56,7 +58,9 @@ INSERT INTO messages (
     $25,
     $26,
     $27,
-    $28
+    $28,
+    $29,
+    $30
 )
 RETURNING *;
 

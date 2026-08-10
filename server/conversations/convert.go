@@ -256,6 +256,12 @@ func messageToProto(m store.Message) *psmithv1.Message {
 		out.FinishReason = m.FinishReason
 	}
 	out.IsWelcome = m.IsWelcome
+	if m.Persona != nil && *m.Persona != "" {
+		out.Persona = m.Persona
+		// Only meaningful alongside a name. An index with no persona would
+		// tint a message the client is still labelling "Assistant".
+		out.PersonaIndex = m.PersonaIndex
+	}
 	return out
 }
 

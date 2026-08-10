@@ -624,6 +624,22 @@ message Message {
   // flag (first open in an app session). Same wire shape as a normal
   // assistant turn otherwise.
   bool is_welcome = 23;
+
+  // Speaker attribution. Unset is the ordinary case and clients render
+  // the message as "Assistant"; a value names the persona that produced
+  // it, which is what makes a council conversation readable.
+  //
+  // Any plugin may set this. Clients render a name and a palette slot and
+  // never learn what produced them, which is what keeps multi-persona
+  // support out of the client core.
+  optional string persona = 24;
+
+  // Palette slot for `persona`, not a color. Themes own their persona
+  // palettes and the client resolves this index against the active one,
+  // so a conversation authored under one theme renders correctly under
+  // another and no server-side actor can pick something that fights the
+  // palette. Unset means default styling.
+  optional int32 persona_index = 25;
 }
 
 // UIFragment is one structured UI component the server hands the

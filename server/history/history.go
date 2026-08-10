@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -366,6 +367,10 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		out[i] = a.wm
 	}
 
+	// Normalize before the system and turn-context passes, so both see the
+	// same message list the provider will.
+	out = coalesceAssistants(out)
+
 	// Apply SystemPrompter contributions. If a system message is already at
 	// the head of the prefix, wrap its content with the prepend/append
 	// strings; otherwise insert a new system message.
@@ -550,10 +555,14 @@ func composeEnvelope(m store.Message) string {
 	if m.MessageTrailers != nil {
 		trailer = *m.MessageTrailers
 	}
-	if header == "" && trailer == "" {
+	speaker := speakerTag(m)
+	if header == "" && trailer == "" && speaker == "" {
 		return m.Content
 	}
 	var parts []string
+	if speaker != "" {
+		parts = append(parts, speaker)
+	}
 	if header != "" {
 		parts = append(parts, header)
 	}
@@ -564,6 +573,90 @@ func composeEnvelope(m store.Message) string {
 		parts = append(parts, trailer)
 	}
 	return joinParts(parts)
+}
+
+// speakerTag renders a message's persona as a wire-side label, so a model
+// reading a multi-voice transcript can tell who said what. Empty for the
+// ordinary single-assistant case.
+//
+// The tag is self-closing on purpose. An open tag invites the model to close
+// it, and a closing tag it emits into its own reply would end up in content
+// the user reads.
+func speakerTag(m store.Message) string {
+	if m.Persona == nil {
+		return ""
+	}
+	name := sanitizePersonaName(*m.Persona)
+	if name == "" {
+		return ""
+	}
+	return `<speaker name="` + name + `"/>`
+}
+
+// personaNameStripper removes the characters a persona name could use to forge
+// structure the model would read as ours.
+//
+// A persona name is user-authored and lands in a tag the model treats as
+// trustworthy framing, so this is a prompt-injection boundary, not cosmetics.
+// Quotes and `=` would let a name close the attribute and add its own; angle
+// brackets and slashes would let it close the tag or open another; newlines
+// are the worst of them, since a name containing one could forge an entire
+// turn. Everything else, including non-Latin scripts, passes through: the goal
+// is to remove structure, not to police what people call things.
+var personaNameStripper = strings.NewReplacer(
+	`"`, "", `'`, "", "<", "", ">", "", "=", "", "/", "",
+	"\n", " ", "\r", " ", "\t", " ",
+)
+
+func sanitizePersonaName(raw string) string {
+	return strings.TrimSpace(strings.Join(strings.Fields(personaNameStripper.Replace(raw)), " "))
+}
+
+// coalesceAssistants merges adjacent plain assistant turns.
+//
+// Providers do this for us whether we ask or not: Anthropic's docs say
+// consecutive user or assistant turns "will be combined into a single turn".
+// Doing it here means the bytes are ours and identical on every rebuild,
+// instead of depending on a join that varies per provider and is undocumented
+// for two of the three. Regenerating twice against an assistant parent is the
+// path that produces this today.
+//
+// Assistant turns only, deliberately. Consecutive USER turns are a normal,
+// long-standing shape here: role=context rewrites to wire user and always
+// precedes a real user message, and a reconstructed tool_result turn is
+// followed by whatever the user said next. Those work, are covered by tests,
+// and merging them would quietly change what compaction sends. The assistant
+// side has no such established meaning, so it is the only side worth
+// normalizing.
+//
+// Only plain turns merge. Anything carrying tool blocks, thinking or
+// attachments is left alone: tool_use and tool_result pair positionally,
+// thinking blocks carry signatures bound to the turn they were produced in,
+// and attachment ordering is meaningful. Merging any of those trades a
+// cosmetic win for a real corruption.
+func coalesceAssistants(msgs []providers.WireMessage) []providers.WireMessage {
+	if len(msgs) < 2 {
+		return msgs
+	}
+	mergeable := func(m providers.WireMessage) bool {
+		return m.Role == wireAssistant &&
+			len(m.ToolUses) == 0 &&
+			len(m.ToolResults) == 0 &&
+			len(m.Thinking) == 0 &&
+			len(m.Attachments) == 0
+	}
+	out := make([]providers.WireMessage, 0, len(msgs))
+	for _, m := range msgs {
+		if n := len(out); n > 0 {
+			prev := &out[n-1]
+			if prev.Role == m.Role && mergeable(*prev) && mergeable(m) {
+				prev.Content = joinParts([]string{prev.Content, m.Content})
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // wireRoleFor maps a stored role to its wire-side role. role=context is
