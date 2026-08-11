@@ -520,11 +520,20 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		s := "user_cancelled"
 		finishReason = &s
 	}
+	var persona *string
+	var personaIndex *int32
+	if params.Persona != "" {
+		persona = &params.Persona
+		idx := params.PersonaIndex
+		personaIndex = &idx
+	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                    msgID,
 		ContextID:             params.ContextID,
 		ParentID:              params.ParentMessageID,
 		Role:                  "assistant",
+		Persona:               persona,
+		PersonaIndex:          personaIndex,
 		Content:               content,
 		RawContent:            nil,
 		Thinking:              thinkingJSON,

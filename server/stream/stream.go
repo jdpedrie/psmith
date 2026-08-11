@@ -149,6 +149,13 @@ type StartParams struct {
 	// columns to NULL — the same behaviour as before this hook existed.
 	Provider providers.Provider
 
+	// Persona and PersonaIndex attribute the assistant message this run
+	// produces to a named speaker, for conversations with more than one voice
+	// in them. Empty persona leaves both columns NULL, which is the ordinary
+	// single-assistant case clients render as "Assistant".
+	Persona      string
+	PersonaIndex int32
+
 	// ExplicitCacheAttached records whether Psmith attached an explicit
 	// Gemini cachedContents reference to the request that produced this
 	// run. Stamped onto the materialized assistant message's

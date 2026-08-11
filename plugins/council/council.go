@@ -5,6 +5,7 @@
 package council
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
@@ -39,6 +41,12 @@ type council struct {
 	// from plugin_state; nil outside a council turn. Safe on the instance
 	// because the pipeline is resolved once per send.
 	directions map[uuid.UUID]string
+
+	// pendingHop carries this turn's routing decision from RouteTurn, which
+	// runs before any assistant row exists, to materialization, which is the
+	// first moment there is a message id to bind it to.
+	pendingHop        *hop
+	pendingDiscussion *discussion
 }
 
 // SetDirections hands the plugin this branch's frozen directions for the send
@@ -365,3 +373,175 @@ func MergeDirections(msgs []providers.WireMessage) []providers.WireMessage {
 	}
 	return out
 }
+
+// --- TurnRouter ------------------------------------------------------------
+
+// stateVersion is bumped when the persisted shape changes incompatibly.
+const stateVersion = 1
+
+// RouteTurn picks who speaks and freezes the direction for this hop.
+//
+// Runs before provider/model resolution, which is the only moment a plugin can
+// still change which model answers. It reads the branch's discussion state,
+// asks the router, and hands back a profile for the server to resolve.
+//
+// Returns false, meaning "not my turn to decide", whenever there is no panel,
+// whenever persistence is unavailable, and whenever the discussion is over. In
+// all three the conversation falls through to its ordinary model, which is the
+// only safe failure: a council that cannot route should behave like a normal
+// chat, not like a broken one.
+func (c *council) RouteTurn(ctx context.Context) (pluginapi.TurnRoute, bool) {
+	if !c.active() {
+		return pluginapi.TurnRoute{}, false
+	}
+	store := host.PluginStateStoreFrom(ctx)
+	if store == nil {
+		return pluginapi.TurnRoute{}, false
+	}
+
+	d := c.loadDiscussion(ctx, store)
+	dec := c.route(d)
+	if dec.End {
+		return pluginapi.TurnRoute{}, false
+	}
+	m, idx, ok := c.memberByID(dec.MemberID)
+	if !ok {
+		return pluginapi.TurnRoute{}, false
+	}
+
+	// Held for the materialization hook, which is the first moment an
+	// assistant message id exists to bind the hop to.
+	c.pendingHop = &hop{MemberID: m.ID, Direction: dec.Direction}
+	c.pendingDiscussion = d
+
+	return pluginapi.TurnRoute{
+		ProfileID:       m.ProfileID,
+		Persona:         m.Name,
+		PersonaIndex:    int32(idx),
+		Direction:       dec.Direction,
+		MaxOutputTokens: int32(dec.MaxTokens),
+	}, true
+}
+
+// loadDiscussion reads the branch's discussion, treating any failure as a
+// fresh one. A council that cannot read its history should start a new
+// discussion rather than refuse to speak.
+func (c *council) loadDiscussion(ctx context.Context, s host.PluginStateStore) *discussion {
+	raw, _, _, err := s.LoadNearest(ctx)
+	if err != nil || len(raw) == 0 {
+		return &discussion{}
+	}
+	var d discussion
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return &discussion{}
+	}
+	return &d
+}
+
+// --- PendingStateProvider --------------------------------------------------
+
+// PendingPluginState binds this hop to the assistant message it produced.
+//
+// The bind can only happen here. Routing runs before the assistant row exists,
+// so the hop is carried on the instance until materialization, exactly the way
+// a tool result is. Binding to the message rather than the conversation is
+// what makes a fork carry its own speaking order and its own remaining budget.
+func (c *council) PendingPluginState() (json.RawMessage, int64, bool) {
+	if c.pendingHop == nil {
+		return nil, 0, false
+	}
+	d := c.pendingDiscussion
+	if d == nil {
+		d = &discussion{}
+	}
+	next := discussion{
+		Hops:   append(append([]hop(nil), d.Hops...), *c.pendingHop),
+		Closed: d.Closed,
+	}
+	// A discussion that just spent its last exchange is closed here rather
+	// than left for the next route to notice, so a stale continue cannot
+	// reopen it.
+	if len(next.Hops) >= c.maxExchanges() {
+		next.Closed = true
+	}
+	blob, err := json.Marshal(next)
+	if err != nil {
+		return nil, 0, false
+	}
+	return blob, stateVersion, true
+}
+
+// The signature hazard, again. A capability method with the wrong shape does
+// not fail to compile; the plugin just quietly stops implementing the
+// interface and the runtime skips it. These assertions turn that into a build
+// error in this package.
+var (
+	_ pluginapi.TurnRouter           = (*council)(nil)
+	_ pluginapi.PendingStateProvider = (*council)(nil)
+)
+
+// --- Configurable ----------------------------------------------------------
+
+func (c *council) ConfigFields() []pluginapi.ConfigField {
+	return []pluginapi.ConfigField{
+		{
+			Name:        "members",
+			Display:     "Panel",
+			Description: "Each member answers as its own message. Order is speaking order.",
+			Type:        pluginapi.ConfigFieldList,
+			ItemFields: []pluginapi.ConfigField{
+				{
+					// Never shown. The discussion ledger and the palette slot
+					// key off this, so it has to survive renaming and
+					// reordering.
+					Name: "id",
+					Type: pluginapi.ConfigFieldAutoID,
+				},
+				{
+					Name:        "name",
+					Display:     "Name",
+					Description: "What the panel calls them, and what you see on their messages.",
+					Type:        pluginapi.ConfigFieldText,
+					Required:    true,
+				},
+				{
+					Name:        "profile_id",
+					Display:     "Profile",
+					Description: "Supplies this member's system prompt, model and plugins.",
+					Type:        pluginapi.ConfigFieldProfilePicker,
+					Required:    true,
+				},
+				{
+					Name:        "stance",
+					Display:     "Stance",
+					Description: "One line, shown to the other members so they know who is who.",
+					Type:        pluginapi.ConfigFieldText,
+				},
+			},
+		},
+		{
+			Name:        "max_exchanges",
+			Display:     "Maximum exchanges",
+			Description: "Hard cap on one discussion. Reached, the panel stops.",
+			Type:        pluginapi.ConfigFieldNumber,
+			Default:     defaultMaxExchanges,
+		},
+		{
+			Name:        "opening_tokens",
+			Display:     "Opening length (tokens)",
+			Description: "Room for the first, full answer.",
+			Type:        pluginapi.ConfigFieldNumber,
+			Default:     defaultOpeningTokens,
+		},
+		{
+			Name:    "discussion_tokens",
+			Display: "Reply length (tokens)",
+			Description: "Room for each turn after the opener. Keep it small: this is what " +
+				"makes short replies happen rather than merely be requested.",
+			Type:    pluginapi.ConfigFieldNumber,
+			Default: defaultDiscussionTokens,
+		},
+	}
+}
+
+var _ pluginapi.Configurable = (*council)(nil)

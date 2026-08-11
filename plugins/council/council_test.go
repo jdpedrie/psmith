@@ -1,6 +1,7 @@
 package council
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jdpedrie/psmith/pluginapi"
+	"github.com/jdpedrie/psmith/pluginapi/host"
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
@@ -348,3 +350,170 @@ func roleList(msgs []providers.WireMessage) string {
 // that keeps the old shape silently stops satisfying it and gets skipped.
 var _ pluginapi.HistoryTransformer = (*council)(nil)
 var _ pluginapi.SystemPrompter = (*council)(nil)
+
+// --- Routing through the capability ---------------------------------------
+
+// fakeStore is the minimal PluginStateStore a router needs.
+type fakeStore struct {
+	state   json.RawMessage
+	saved   json.RawMessage
+	version int64
+}
+
+func (f *fakeStore) LoadNearest(context.Context) (json.RawMessage, int64, uuid.UUID, error) {
+	if len(f.state) == 0 {
+		return nil, 0, uuid.Nil, host.ErrNoPluginState
+	}
+	return f.state, f.version, uuid.New(), nil
+}
+func (f *fakeStore) Save(_ context.Context, _ uuid.UUID, s json.RawMessage, v int64) error {
+	f.saved, f.version = s, v
+	return nil
+}
+func (f *fakeStore) LoadConversation(context.Context) (json.RawMessage, int64, error) {
+	return nil, 0, host.ErrNoPluginState
+}
+func (f *fakeStore) SaveConversation(context.Context, json.RawMessage, int64) error { return nil }
+func (f *fakeStore) Leaf() uuid.UUID                                                { return uuid.Nil }
+
+func routeWith(t *testing.T, c *council, st *fakeStore) (pluginapi.TurnRoute, bool) {
+	t.Helper()
+	return c.RouteTurn(host.WithPluginStateStore(context.Background(), st))
+}
+
+func TestRouteTurn_PicksAMemberProfileAndPersona(t *testing.T) {
+	c := build(t, `{"members":[
+	  {"id":"a","name":"Skeptic","profile_id":"11111111-1111-1111-1111-111111111111"},
+	  {"id":"b","name":"Optimist","profile_id":"22222222-2222-2222-2222-222222222222"}]}`)
+	got, ok := routeWith(t, c, &fakeStore{})
+	if !ok {
+		t.Fatal("first turn should be routed")
+	}
+	if got.ProfileID != "11111111-1111-1111-1111-111111111111" {
+		t.Errorf("wrong profile: %q", got.ProfileID)
+	}
+	if got.Persona != "Skeptic" || got.PersonaIndex != 0 {
+		t.Errorf("wrong attribution: %q/%d", got.Persona, got.PersonaIndex)
+	}
+	if got.MaxOutputTokens != defaultOpeningTokens {
+		t.Errorf("opener should carry the long cap, got %d", got.MaxOutputTokens)
+	}
+}
+
+// The palette slot is roster position, so a member keeps its color as the
+// discussion goes on.
+func TestRouteTurn_PersonaIndexIsRosterPosition(t *testing.T) {
+	c := build(t, threeMembers)
+	st := &fakeStore{state: json.RawMessage(`{"hops":[{"member_id":"a"}]}`), version: stateVersion}
+	got, ok := routeWith(t, c, st)
+	if !ok {
+		t.Fatal("second turn should be routed")
+	}
+	if got.Persona != "Optimist" || got.PersonaIndex != 1 {
+		t.Errorf("expected Optimist at slot 1, got %q/%d", got.Persona, got.PersonaIndex)
+	}
+}
+
+// Every failure mode falls through to the conversation's ordinary model.
+// Losing the panel beats losing the turn.
+func TestRouteTurn_DeclinesRatherThanFailing(t *testing.T) {
+	cases := map[string]struct {
+		cfg   string
+		store host.PluginStateStore
+	}{
+		"no panel":             {`{"members":[{"id":"a","name":"Solo"}]}`, &fakeStore{}},
+		"no persistence":       {threeMembers, nil},
+		"discussion exhausted": {`{"members":[{"id":"a","name":"A"},{"id":"b","name":"B"}],"max_exchanges":1}`, &fakeStore{state: json.RawMessage(`{"hops":[{"member_id":"a"}]}`)}},
+		"discussion closed":    {threeMembers, &fakeStore{state: json.RawMessage(`{"hops":[],"closed":true}`)}},
+		"unparseable state":    {threeMembers, &fakeStore{state: json.RawMessage(`{{{`)}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := build(t, tc.cfg)
+			ctx := context.Background()
+			if tc.store != nil {
+				ctx = host.WithPluginStateStore(ctx, tc.store)
+			}
+			_, ok := c.RouteTurn(ctx)
+			if name == "unparseable state" {
+				// Corrupt state starts a fresh discussion rather than
+				// refusing to speak.
+				if !ok {
+					t.Error("corrupt state should start a new discussion, not decline")
+				}
+				return
+			}
+			if ok {
+				t.Error("expected the router to decline")
+			}
+		})
+	}
+}
+
+// --- State binding --------------------------------------------------------
+
+func TestPendingState_RecordsTheHopWithItsFrozenDirection(t *testing.T) {
+	c := build(t, threeMembers)
+	route, ok := routeWith(t, c, &fakeStore{})
+	if !ok {
+		t.Fatal("expected a route")
+	}
+	blob, version, has := c.PendingPluginState()
+	if !has {
+		t.Fatal("a routed turn must bind state")
+	}
+	if version != stateVersion {
+		t.Errorf("version = %d want %d", version, stateVersion)
+	}
+	var d discussion
+	if err := json.Unmarshal(blob, &d); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(d.Hops) != 1 {
+		t.Fatalf("expected 1 hop, got %d", len(d.Hops))
+	}
+	if d.Hops[0].Direction != route.Direction {
+		t.Errorf("stored direction must match the one issued:\n got %q\nwant %q",
+			d.Hops[0].Direction, route.Direction)
+	}
+}
+
+func TestPendingState_AppendsToAnExistingDiscussion(t *testing.T) {
+	c := build(t, threeMembers)
+	st := &fakeStore{state: json.RawMessage(`{"hops":[{"member_id":"a","direction":"[panel] first"}]}`)}
+	if _, ok := routeWith(t, c, st); !ok {
+		t.Fatal("expected a route")
+	}
+	blob, _, _ := c.PendingPluginState()
+	var d discussion
+	_ = json.Unmarshal(blob, &d)
+	if len(d.Hops) != 2 {
+		t.Fatalf("expected the earlier hop kept, got %d", len(d.Hops))
+	}
+	if d.Hops[0].Direction != "[panel] first" {
+		t.Errorf("earlier direction was rewritten: %q", d.Hops[0].Direction)
+	}
+}
+
+// Closing on the last hop rather than waiting for the next route means a
+// stale continue cannot reopen a spent discussion.
+func TestPendingState_ClosesOnTheLastExchange(t *testing.T) {
+	c := build(t, `{"members":[{"id":"a","name":"A"},{"id":"b","name":"B"}],"max_exchanges":2}`)
+	st := &fakeStore{state: json.RawMessage(`{"hops":[{"member_id":"a","direction":"d1"}]}`)}
+	if _, ok := routeWith(t, c, st); !ok {
+		t.Fatal("expected a route")
+	}
+	blob, _, _ := c.PendingPluginState()
+	var d discussion
+	_ = json.Unmarshal(blob, &d)
+	if !d.Closed {
+		t.Error("spending the last exchange must close the discussion")
+	}
+}
+
+func TestPendingState_NothingWhenNotRouted(t *testing.T) {
+	c := build(t, threeMembers)
+	if _, _, has := c.PendingPluginState(); has {
+		t.Error("a turn this plugin did not route must not bind state")
+	}
+}

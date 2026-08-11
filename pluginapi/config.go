@@ -32,6 +32,14 @@ const (
 	ConfigFieldBoolean     ConfigFieldType = "boolean"
 	ConfigFieldSelect      ConfigFieldType = "select"
 	ConfigFieldModelPicker ConfigFieldType = "model_picker"
+	// ConfigFieldProfilePicker chooses one of the user's profiles. The stored
+	// value is the profile's uuid.
+	//
+	// The counterpart to ConfigFieldModelPicker, for plugins that delegate to
+	// a profile rather than to a bare model: a council member is a whole
+	// profile, so it brings its own system prompt, model and plugins, and
+	// inherits from a shared base like any other.
+	ConfigFieldProfilePicker ConfigFieldType = "profile_picker"
 	// ConfigFieldList is a repeating group of records. The stored value is a
 	// JSON array of objects keyed by the names in ItemFields.
 	//

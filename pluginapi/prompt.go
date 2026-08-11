@@ -219,3 +219,68 @@ func (p Pipeline) TransformHistoryMessage(msg providers.WireMessage, pos History
 	}
 	return cur
 }
+
+// TurnRoute is a plugin's answer to "who speaks this turn".
+//
+// It names a profile rather than a provider and model, because picking a
+// speaker is a plugin decision and resolving that speaker's credentials is
+// not. The server turns the profile into a provider and model through the
+// same inheritance chain a conversation's own default uses, so a plugin never
+// touches the provider tables.
+type TurnRoute struct {
+	// ProfileID whose resolved defaults supply the provider and model.
+	ProfileID string
+
+	// Persona and PersonaIndex are stamped on the assistant row this turn
+	// produces. PersonaIndex is a palette slot, never a color: themes own
+	// their palettes so a conversation renders correctly under any of them.
+	Persona      string
+	PersonaIndex int32
+
+	// Direction is framing shown to the model but never to the user, and
+	// never stored on a message. Whoever returns it is responsible for
+	// freezing it, since it is replayed verbatim into every later prefix and
+	// re-rendering it moves bytes mid-prefix.
+	Direction string
+
+	// MaxOutputTokens bounds this turn's reply, layered above the four-layer
+	// call-settings chain. Zero leaves the chain alone. This is the only lever
+	// that actually stops a model rather than asking it to stop, which is what
+	// "answer in one word" needs to be more than a suggestion.
+	MaxOutputTokens int32
+}
+
+// TurnRouter chooses who answers, before the model is resolved.
+//
+// This is the one hook that runs ahead of provider/model selection. Every
+// other capability runs once the model is already chosen, which is too late to
+// change it. Returning false means "not my turn to decide" and resolution
+// continues down the normal chain.
+//
+// The context carries the same host capabilities tool dispatch gets, anchored
+// at the branch leaf as it stands before this turn, so a router can read the
+// state its previous turns wrote.
+type TurnRouter interface {
+	RouteTurn(ctx context.Context) (TurnRoute, bool)
+}
+
+// RouteTurn asks each TurnRouter in pipeline order and returns the first
+// answer. First rather than last: a router that has claimed the turn has
+// already committed to a speaker, and letting a later plugin override it would
+// make the choice depend on plugin ordering nobody can see.
+func (p Pipeline) RouteTurn(ctx context.Context, decorate func(context.Context, string) context.Context) (TurnRoute, bool) {
+	for _, pl := range p {
+		r, ok := pl.(TurnRouter)
+		if !ok {
+			continue
+		}
+		pctx := ctx
+		if decorate != nil {
+			pctx = decorate(ctx, pl.Name())
+		}
+		if route, claimed := r.RouteTurn(pctx); claimed {
+			return route, true
+		}
+	}
+	return TurnRoute{}, false
+}

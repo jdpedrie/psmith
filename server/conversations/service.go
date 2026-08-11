@@ -1441,8 +1441,34 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		return nil, err
 	}
 
-	// Resolve provider/model from request → conversation settings → profile defaults.
-	providerID, modelID, err := s.resolveProviderModel(ctx, conv, req.Msg)
+	// Resolve the chat-plugin pipeline before the model, not after.
+	//
+	// A TurnRouter gets to choose who answers, and that has to happen ahead of
+	// provider/model resolution because it changes the answer. Pipeline
+	// resolution depends only on the conversation, so hoisting it above the
+	// provider lookup is safe; everything between here and the user-row INSERT
+	// still sees it. It is reused for history.Build (SystemPrompter +
+	// HistoryTransformer), for the OutgoingEnvelope that rewrites what gets
+	// persisted, and for the response's display transform.
+	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
+	}
+
+	// Ask the pipeline who speaks this turn, anchored at the branch as it
+	// stands before this send. A router that declines leaves resolution to the
+	// ordinary chain.
+	routeLeaf, err := s.currentLeaf(ctx, activeCtx, req.Msg.ParentMessageId)
+	if err != nil {
+		return nil, err
+	}
+	route, routed := pipeline.RouteTurn(ctx, func(c context.Context, pluginName string) context.Context {
+		return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
+	})
+
+	// Resolve provider/model from route → request → conversation settings →
+	// profile defaults.
+	providerID, modelID, err := s.resolveProviderModel(ctx, conv, req.Msg, route, routed)
 	if err != nil {
 		return nil, err
 	}
@@ -1477,19 +1503,6 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// drop the offending plugin.
 	if err := s.validateModelCapabilities(ctx, conv.ProfileID, modelID, enabledModel.Capabilities); err != nil {
 		return nil, err
-	}
-
-	// Resolve the chat-plugin pipeline up front. Needed before the user-row
-	// INSERT so OutgoingUserTransformer plugins (e.g. basic_grounding's
-	// `<grounding>` block) can rewrite the content that gets persisted —
-	// per the plugin contract, the rewritten text is what lands on the row,
-	// is what history.Build re-emits on every subsequent turn, and is what
-	// keeps the prefix-cache stable. Reused later for history.Build
-	// (SystemPrompter + HistoryTransformer) and for the SendMessage
-	// response's display transform.
-	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
 	}
 
 	// Critical section: resolve parent → insert user message → advance cursor,
@@ -1753,6 +1766,15 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
 	}
 
+	// A routed turn may bound its own reply, layered above the four-layer
+	// chain. This is what makes "answer in one word" a bound rather than a
+	// request: a model asked to be brief will elaborate anyway, and the token
+	// cap is the only thing that actually stops it.
+	if routed && route.MaxOutputTokens > 0 {
+		max := int(route.MaxOutputTokens)
+		callSettings.MaxOutputTokens = &max
+	}
+
 	// Gemini explicit cache hook. When call_settings.google.explicit_cache
 	// is true and we're sending to a google driver, look up (or create)
 	// a cachedContents resource for this (context, model). On hit:
@@ -1950,6 +1972,8 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		ProviderID:      providerID,
 		ModelID:         modelID,
 		Purpose:         stream.PurposeAssistantResponse,
+		Persona:         route.Persona,
+		PersonaIndex:    route.PersonaIndex,
 		SendFunc:        sendFunc,
 		// Hand the constructed driver to the supervisor so it can populate
 		// thinking_provider_type + thinking_rendered_text on the assistant
@@ -1998,9 +2022,75 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	}), nil
 }
 
-// resolveProviderModel walks the per-turn → conversation → profile chain to
-// determine which provider/model to use. Both ids must be set together.
-func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversation, msg *psmithv1.SendMessageRequest) (uuid.UUID, string, error) {
+// currentLeaf returns the branch head this send will extend, for state reads
+// that have to happen before the user row exists. An explicit parent wins; a
+// conversation with no messages yet returns the zero uuid, which the state
+// store already treats as "nothing to anchor to".
+func (s *Service) currentLeaf(ctx context.Context, activeCtx store.Context, requestedParent *string) (uuid.UUID, error) {
+	if requestedParent != nil && *requestedParent != "" {
+		id, err := uuid.Parse(*requestedParent)
+		if err != nil {
+			return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_message_id: %w", err))
+		}
+		return id, nil
+	}
+	if activeCtx.CurrentLeafMessageID != nil {
+		return *activeCtx.CurrentLeafMessageID, nil
+	}
+	// A conversation with no messages yet. Not an error: the caller only wants
+	// an anchor for reading state, and resolveParent does the authoritative
+	// resolution inside the critical section.
+	return uuid.Nil, nil
+}
+
+// defaultsForProfile resolves a profile id to its inherited provider/model
+// defaults. Returns zero values when the profile has none, which callers treat
+// as "fall through" rather than as an error.
+func (s *Service) defaultsForProfile(ctx context.Context, profileID string) (uuid.UUID, string, error) {
+	id, err := uuid.Parse(profileID)
+	if err != nil {
+		return uuid.Nil, "", nil
+	}
+	profile, err := s.queries.GetProfileByID(ctx, id)
+	if err != nil {
+		// A member profile that has been deleted should not brick the
+		// conversation.
+		return uuid.Nil, "", nil
+	}
+	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	if err != nil {
+		return uuid.Nil, "", nil
+	}
+	if resolved.DefaultSettings == nil {
+		return uuid.Nil, "", nil
+	}
+	defaults, err := profiles.DefaultsFromJSON(resolved.DefaultSettings)
+	if err != nil || defaults == nil ||
+		defaults.DefaultProviderId == nil || defaults.DefaultModelId == nil {
+		return uuid.Nil, "", nil
+	}
+	pid, err := uuid.Parse(*defaults.DefaultProviderId)
+	if err != nil {
+		return uuid.Nil, "", nil
+	}
+	return pid, *defaults.DefaultModelId, nil
+}
+
+// resolveProviderModel walks the route → per-turn → conversation → profile
+// chain to determine which provider/model to use. Both ids must be set
+// together.
+//
+// A TurnRoute sits below the per-turn override deliberately. When the user
+// names a speaker, that beats whatever the router would have picked; when they
+// don't, the router's choice beats the conversation default, which is the
+// whole point of routing.
+func (s *Service) resolveProviderModel(
+	ctx context.Context,
+	conv store.Conversation,
+	msg *psmithv1.SendMessageRequest,
+	route pluginapi.TurnRoute,
+	routed bool,
+) (uuid.UUID, string, error) {
 	// Per-turn override.
 	if msg.ProviderId != nil || msg.ModelId != nil {
 		if msg.ProviderId == nil || msg.ModelId == nil {
@@ -2011,6 +2101,21 @@ func (s *Service) resolveProviderModel(ctx context.Context, conv store.Conversat
 			return uuid.Nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid provider_id: %w", err))
 		}
 		return pid, *msg.ModelId, nil
+	}
+
+	// Routed speaker. Resolved through the same profile inheritance a
+	// conversation default uses, so a member profile inherits its model from
+	// a shared base exactly like any other profile.
+	if routed && route.ProfileID != "" {
+		pid, mid, err := s.defaultsForProfile(ctx, route.ProfileID)
+		if err != nil {
+			return uuid.Nil, "", err
+		}
+		if pid != uuid.Nil && mid != "" {
+			return pid, mid, nil
+		}
+		// A member with no resolvable model falls through rather than failing
+		// the send. Losing the panel is better than losing the turn.
 	}
 
 	// Conversation settings.
