@@ -19,6 +19,9 @@ import PsmithUI
 ///    the per-turn token + cost + cache breakdown.
 struct MessageRow: View {
     let message: PsmithMessage
+    /// Whoever spoke immediately before, so a repeated speaker's name can
+    /// collapse. nil means "no predecessor", which always shows the label.
+    var previousMessage: PsmithMessage? = nil
     let model: ConversationViewModel
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -555,10 +558,16 @@ struct MessageRow: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Collapse \(roleLabel.lowercased())")
             } else if let slot = message.personaSlot, let name = message.persona, !isErrored {
+                // Collapsed to a bare dot when the same speaker continues, so
+                // the column of rails still reads as one voice.
                 // A named speaker replaces the generic role label rather than
                 // sitting beside it: "ASSISTANT · Skeptic" is noise when every
                 // message in the discussion is an assistant.
-                PersonaLabel(name: name, index: slot)
+                PersonaLabel(
+                    name: name,
+                    index: slot,
+                    showsName: message.showsPersonaLabel(after: previousMessage)
+                )
             } else {
                 Text(roleLabel)
                     .font(.caption2)

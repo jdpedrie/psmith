@@ -520,7 +520,11 @@ struct ConversationBody: View {
                                 // Edit action DO something on Mac
                                 // (iOS presents a sheet instead; Mac
                                 // edits in place).
-                                MessageRow(message: msg, model: model)
+                                MessageRow(
+                                    message: msg,
+                                    previousMessage: model.messages.first(where: { $0.id == msg.parentID }),
+                                    model: model
+                                )
                                     .id(msg.id)
                             }
                         }
@@ -618,8 +622,34 @@ struct ConversationBody: View {
 
     // MARK: Composer
 
+    /// Lets the panel take another turn.
+    ///
+    /// Mirrors the iOS chip so the two platforms read as one design. Neutral
+    /// chrome on purpose: it is not a speaker, and a persona color here would
+    /// read as another voice in the discussion.
+    @ViewBuilder
+    private var continueChip: some View {
+        if model.canContinueDiscussion {
+            HStack {
+                Button {
+                    Task { await model.continueDiscussion() }
+                } label: {
+                    Label("Continue the discussion", systemImage: "arrow.turn.down.right")
+                        .scaledFont(.caption)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .disabled(app.connectivity.state == .offline)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+        }
+    }
+
     private var composer: some View {
         VStack(spacing: 0) {
+            continueChip
             if model.hasPendingCompression {
                 HStack(spacing: 6) {
                     Image(systemName: "wand.and.stars").foregroundStyle(.orange)
@@ -1043,6 +1073,9 @@ struct ConversationBody: View {
 
 private struct MessageRow: View {
     let message: PsmithMessage
+    /// Whoever spoke immediately before, so a repeated speaker's name can
+    /// collapse. nil means "no predecessor", which always shows the label.
+    var previousMessage: PsmithMessage? = nil
     let model: ConversationViewModel
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -1218,7 +1251,11 @@ private struct MessageRow: View {
                     // A named speaker replaces the generic role label rather
                     // than sitting beside it: "ASSISTANT · Skeptic" is noise
                     // when every message in the discussion is an assistant.
-                    PersonaLabel(name: name, index: slot)
+                    PersonaLabel(
+                        name: name,
+                        index: slot,
+                        showsName: message.showsPersonaLabel(after: previousMessage)
+                    )
                 } else {
                     Text(roleLabel)
                         .scaledFont(.caption2)

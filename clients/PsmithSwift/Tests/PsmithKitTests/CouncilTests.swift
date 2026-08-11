@@ -127,3 +127,47 @@ struct CouncilTests {
         #expect(after.filter { $0.role == .assistant }.count >= 2)
     }
 }
+
+// MARK: - Label collapse
+
+/// A repeated speaker's name collapses, the way every chat client collapses a
+/// repeated sender. The rail still runs down all of them, so attribution is
+/// never lost — only the redundant text.
+@Suite("PersonaLabelCollapse")
+struct PersonaLabelCollapseTests {
+    private func msg(_ persona: String?, role: PsmithMessageRole = .assistant) -> PsmithMessage {
+        PsmithMessage(
+            id: UUID().uuidString, contextID: "c", parentID: nil,
+            role: role, content: "x", persona: persona,
+            personaIndex: persona == nil ? nil : 0
+        )
+    }
+
+    @Test("the first speaker always shows a name")
+    func firstShows() {
+        #expect(msg("Skeptic").showsPersonaLabel(after: nil))
+        #expect(msg("Skeptic").showsPersonaLabel(after: msg(nil, role: .user)))
+    }
+
+    @Test("a different speaker shows a name")
+    func differentShows() {
+        #expect(msg("Optimist").showsPersonaLabel(after: msg("Skeptic")))
+    }
+
+    @Test("the same speaker twice collapses")
+    func sameCollapses() {
+        #expect(msg("Skeptic").showsPersonaLabel(after: msg("Skeptic")) == false)
+    }
+
+    @Test("a message with no persona never shows one")
+    func noPersonaNeverShows() {
+        #expect(msg(nil).showsPersonaLabel(after: msg("Skeptic")) == false)
+    }
+
+    /// A user turn between two turns by the same speaker breaks the run: the
+    /// name has to reappear, or the reader loses track of who resumed.
+    @Test("an intervening user turn reintroduces the name")
+    func userTurnBreaksTheRun() {
+        #expect(msg("Skeptic").showsPersonaLabel(after: msg(nil, role: .user)))
+    }
+}

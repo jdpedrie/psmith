@@ -418,6 +418,11 @@ member, the transcript shows who spoke, and the panel can take another turn.
 - `Theme.personaColors` per theme, the rail and name in both clients, and the
   continue chip on iOS.
 - `ConfigFieldProfilePicker`, so a member is chosen by name rather than uuid.
+- `host.Completer`, a one-shot model call for plugins, and the model-backed
+  moderator built on it: it overrides roster order, can end a discussion early,
+  and falls back to round-robin on every failure.
+- Same-speaker label collapse, a roster cap of five enforced at config time,
+  and the continue chip on Mac as well as iOS.
 
 ## What is not built yet
 

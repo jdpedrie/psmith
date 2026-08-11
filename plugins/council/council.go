@@ -53,6 +53,12 @@ type council struct {
 // about to happen. Called by the server wiring after loading plugin_state.
 func (c *council) SetDirections(d map[uuid.UUID]string) { c.directions = d }
 
+// modelRef mirrors what a MODEL_PICKER field stores.
+type modelRef struct {
+	ProviderID string `json:"provider_id"`
+	ModelID    string `json:"model_id"`
+}
+
 type config struct {
 	// Members is the roster, in speaking order for the deterministic router.
 	Members []member `json:"members"`
@@ -70,7 +76,36 @@ type config struct {
 	// you get truncation mid-sentence.
 	OpeningTokens    int `json:"opening_tokens,omitempty"`
 	DiscussionTokens int `json:"discussion_tokens,omitempty"`
+
+	// Moderator model. Unset means round-robin, which is a supported way to
+	// run a panel rather than a degraded one.
+	//
+	// Kept separate from every member's model on purpose: paying opener rates
+	// to answer "who talks next" is the easiest way to make this mode cost
+	// twice what it should.
+	ModeratorModel *modelRef `json:"moderator_model,omitempty"`
 }
+
+func (c config) moderatorProviderID() string {
+	if c.ModeratorModel == nil {
+		return ""
+	}
+	return c.ModeratorModel.ProviderID
+}
+
+func (c config) moderatorModelID() string {
+	if c.ModeratorModel == nil {
+		return ""
+	}
+	return c.ModeratorModel.ModelID
+}
+
+// maxMembers caps the roster.
+//
+// Past five, no palette discriminates and a discussion is unreadable
+// regardless. Enforced at config time so the failure is a clear error while
+// someone is editing, rather than two members quietly sharing a rail later.
+const maxMembers = 5
 
 type member struct {
 	// ID keys the roster and the palette slot, so it has to survive renaming
@@ -122,6 +157,9 @@ func newCouncil(raw json.RawMessage) (pluginapi.Plugin, error) {
 		if err := json.Unmarshal(raw, &cfg); err != nil {
 			return nil, fmt.Errorf("council: bad config: %w", err)
 		}
+	}
+	if len(cfg.Members) > maxMembers {
+		return nil, fmt.Errorf("council: %d members, maximum is %d", len(cfg.Members), maxMembers)
 	}
 	seen := map[string]bool{}
 	for i, m := range cfg.Members {
@@ -191,6 +229,11 @@ type discussion struct {
 type hop struct {
 	MemberID  string `json:"member_id"`
 	Direction string `json:"direction"`
+	// Excerpt is the opening of what the member actually said, for the
+	// moderator to read. Truncated hard: the moderator decides who speaks
+	// next, and giving it whole replies would make routing cost as much as
+	// answering.
+	Excerpt string `json:"excerpt,omitempty"`
 	// MessageID is the assistant message this hop produced, backfilled on the
 	// following route.
 	//
@@ -388,7 +431,14 @@ func (c *council) RouteTurn(ctx context.Context) (pluginapi.TurnRoute, bool) {
 	// preceded each earlier message on this branch.
 	c.directions = d.directionsByMessage()
 
+	// Ask the moderator, fall back to round-robin. The cap is checked first
+	// either way: a moderator cannot spend a budget it does not control.
 	dec := c.route(d)
+	if !dec.End {
+		if md, ok := c.moderate(ctx, d); ok {
+			dec = md
+		}
+	}
 	if dec.End {
 		return pluginapi.TurnRoute{}, false
 	}
@@ -528,6 +578,13 @@ func (c *council) ConfigFields() []pluginapi.ConfigField {
 			},
 		},
 		{
+			Name:    "moderator_model",
+			Display: "Moderator model",
+			Description: "Decides who speaks next and how long they take. It never says anything. " +
+				"Leave unset for plain round-robin. Pick something small and fast: this runs once per turn.",
+			Type: pluginapi.ConfigFieldModelPicker,
+		},
+		{
 			Name:        "max_exchanges",
 			Display:     "Maximum exchanges",
 			Description: "Hard cap on one discussion. Reached, the panel stops.",
@@ -553,3 +610,31 @@ func (c *council) ConfigFields() []pluginapi.ConfigField {
 }
 
 var _ pluginapi.Configurable = (*council)(nil)
+
+// --- AssistantContentTransformer -------------------------------------------
+
+// TransformAssistantContent captures the opening of what the speaker said, so
+// the next moderator call can see the shape of the argument rather than only
+// who spoke.
+//
+// It returns the content unchanged. This hook is used purely as the moment the
+// reply is known and the row has not been written yet, which is the only point
+// where the excerpt can be attached to the hop that is about to be persisted.
+func (c *council) TransformAssistantContent(content string) string {
+	if c.pendingHop != nil {
+		c.pendingHop.Excerpt = excerpt(content, 160)
+	}
+	return content
+}
+
+// excerpt truncates on a rune boundary and collapses whitespace, so a
+// multi-paragraph reply becomes one readable line in the moderator brief.
+func excerpt(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len([]rune(s)) <= max {
+		return s
+	}
+	return string([]rune(s)[:max]) + "…"
+}
+
+var _ pluginapi.AssistantContentTransformer = (*council)(nil)

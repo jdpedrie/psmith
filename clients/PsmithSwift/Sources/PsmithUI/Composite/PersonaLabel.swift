@@ -20,12 +20,14 @@ import SwiftUI
 public struct PersonaLabel: View {
     private let name: String
     private let index: Int
+    private let showsName: Bool
 
     @Environment(\.theme) private var theme
 
-    public init(name: String, index: Int) {
+    public init(name: String, index: Int, showsName: Bool = true) {
         self.name = name
         self.index = index
+        self.showsName = showsName
     }
 
     public var body: some View {
@@ -33,10 +35,12 @@ public struct PersonaLabel: View {
             Circle()
                 .fill(theme.personaColor(index))
                 .frame(width: 7, height: 7)
-            Text(name)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(theme.personaColor(index))
-                .lineLimit(1)
+            if showsName {
+                Text(name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.personaColor(index))
+                    .lineLimit(1)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Said by \(name)")

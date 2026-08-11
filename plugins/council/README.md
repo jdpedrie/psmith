@@ -22,9 +22,32 @@ no message, and has no presence in the UI. Its decisions are state.
 |---|---|
 | `pluginapi.Configurable` | The roster and the caps. |
 | `pluginapi.TurnRouter` | Picks who answers, before the model is resolved. |
+| `pluginapi.AssistantContentTransformer` | Captures an excerpt of the reply for the moderator to read. Returns content unchanged. |
 | `pluginapi.SystemPrompter` | One shared roster block, identical for every member. |
 | `pluginapi.HistoryTransformer` | Expands each persona turn into its direction plus the message. |
 | `pluginapi.PendingStateProvider` | Binds the hop to the assistant message it produced. |
+
+## The moderator
+
+Set a moderator model and it decides who speaks next and for how long, reading
+a window of the discussion and returning JSON. It never says anything: no
+message row, no presence in the UI. Leave it unset and the panel takes turns in
+roster order, which is a supported way to run a council rather than a degraded
+one.
+
+Every failure falls back to round-robin: no model configured, no completer
+wired, the call errored, the reply was not JSON, the named speaker is not on
+the roster. A panel that goes silent because a cheap model timed out is worse
+than a panel that takes turns in order.
+
+Two things it cannot do. It cannot exceed `max_exchanges`, because the cap is
+checked before it is consulted. And it cannot name someone off the roster; a
+hallucinated name falls through rather than being mapped onto whoever seems
+closest, since substituting a speaker puts words in a member's mouth.
+
+It reads a windowed brief, not the transcript: the roster, the last six turns
+with a short excerpt each, and the remaining count. Routing must not cost as
+much as answering.
 
 ## Why the wire looks like that
 

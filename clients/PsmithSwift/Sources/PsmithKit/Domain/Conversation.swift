@@ -546,6 +546,21 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
         return personaIndex ?? 0
     }
 
+    /// Whether this message should print its speaker's name, given whoever
+    /// spoke immediately before it.
+    ///
+    /// Repeats collapse, the way every chat client collapses a repeated
+    /// sender. Printing "Skeptic" three times in a row is noise that works
+    /// against the grouping the label exists to create: the eye reads a
+    /// repeated name as three separate turns rather than one continued
+    /// thought. The rail still runs down all three, so the attribution is
+    /// never actually lost.
+    public func showsPersonaLabel(after previous: PsmithMessage?) -> Bool {
+        guard persona != nil else { return false }
+        guard let previous, previous.role == role else { return true }
+        return previous.persona != persona
+    }
+
     /// True when the model reasoned during this turn. Combines the captured
     /// rendered text (visible reasoning) and `usage.reasoningTokens > 0`
     /// (reasoning happened but the provider only reported tokens — e.g.

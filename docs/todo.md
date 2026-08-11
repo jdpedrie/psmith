@@ -72,15 +72,18 @@ key, so it wants to be explicit rather than automatic, and a probe that fails
 for an unrelated reason (rate limit, outage) must not clear a capability that
 is genuinely there. Additive-only on success is probably the right rule.
 
-## Council mode (first slice shipped — `plugins/council`)
+## Council mode (shipped — `plugins/council`)
 
-Design in [design/council.md](design/council.md). What is deliberately left:
+Design in [design/council.md](design/council.md). Built: roster, deterministic
+round-robin router, model-backed moderator behind the same interface, frozen
+directions, per-hop token caps, continue, persona attribution and rails on both
+clients, per-theme persona palettes.
 
-- **The model-backed moderator.** `pluginapi.TurnRouter` has one implementation, the deterministic round-robin. The model version is a second implementation behind the same interface. The deterministic one is not a stepping stone: it is the fallback for when a moderator call fails, and having both makes the model's contribution measurable rather than assumed. It needs its own `ConfigFieldModelPicker` (NOT yet declared; the config today is roster plus caps) pointed at a small fast model, and it must read message rows rather than the wire prefix, since building the prefix needs the model it is still choosing.
-- **Consecutive same-speaker label collapse.** Every turn shows its name. Round-robin never lets a member speak twice in a row, so this only matters once a smarter router exists.
-- **Roster cap.** The design says five; nothing enforces it. `Theme.personaColors` wraps rather than running out, so exceeding it means two members share a rail rather than one rendering unlabelled.
-- **Speculative moderation.** Running the moderator when the previous hop terminates would hide its round-trip behind the user's tap, at the cost of a call for every abandoned discussion. Only worth it if the serial version grates.
+Left deliberately:
+
+- **Speculative moderation.** The moderator is a serial round-trip in front of every hop. Running it when the previous hop terminates would hide that behind the user's tap, at the cost of a call for every abandoned discussion. Only worth it if the serial version grates in practice.
 - **Gemini consecutive same-role behaviour is unverified.** Anthropic documents combining; Gemini's docs are silent and we have not tested it. `history.coalesceAssistants` makes it moot for assistant turns.
+- **Per-hop `max_output_tokens` is unproven on a real wire.** Unit-tested and threaded through `assembleCallSettings`, but the scratch fake used for end-to-end runs only read `max_tokens` while the openai driver sends `max_completion_tokens`, so the live log showed 0.
 
 ## Strategic deferrals
 

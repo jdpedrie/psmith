@@ -291,6 +291,14 @@ public enum SnapshotFixtures {
                 content: "We said that in March.",
                 persona: "Historian", personaIndex: 2
             ),
+            // Same speaker twice: the second turn's name collapses and only
+            // the rail carries the attribution.
+            PsmithMessage(
+                id: "msg-council-4", contextID: contextID, parentID: "msg-council-3",
+                role: .assistant,
+                content: "And the March rollback took four hours.",
+                persona: "Historian", personaIndex: 2
+            ),
         ]
     }
 

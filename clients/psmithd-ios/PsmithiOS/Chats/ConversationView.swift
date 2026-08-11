@@ -1173,7 +1173,11 @@ private struct ChatHistoryArea: View, @MainActor Equatable {
                     .chatRowFlip()
                     .id(msg.id)
             } else {
-                MessageRow(message: msg, model: model)
+                MessageRow(
+                    message: msg,
+                    previousMessage: model.messages.first(where: { $0.id == msg.parentID }),
+                    model: model
+                )
                     .frame(width: rowWidth, alignment: .leading)
                     .chatRowFlip()
                     .id(msg.id)

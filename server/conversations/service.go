@@ -1490,7 +1490,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		return nil, err
 	}
 	route, routed := pipeline.RouteTurn(ctx, func(c context.Context, pluginName string) context.Context {
-		return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
+		c = host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
+		// A router may want to ask a cheap model who should speak. Scoped to
+		// the conversation's owner, so it can only spend their credentials.
+		return host.WithCompleter(c, s.newPluginCompleter(conv.UserID))
 	})
 
 	// Resolve provider/model from route → request → conversation settings →
