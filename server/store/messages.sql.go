@@ -772,6 +772,8 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.finish_reason,
        chain.created_at,
        chain.edited_at,
+       chain.persona,
+       chain.persona_index,
        (
            SELECT COUNT(*)::INT FROM messages m
            WHERE m.id <> chain.id
@@ -814,6 +816,8 @@ type ListMessageAncestorChainRow struct {
 	FinishReason         *string
 	CreatedAt            time.Time
 	EditedAt             *time.Time
+	Persona              *string
+	PersonaIndex         *int32
 	SiblingCount         int32
 }
 
@@ -860,6 +864,8 @@ func (q *Queries) ListMessageAncestorChain(ctx context.Context, id uuid.UUID) ([
 			&i.FinishReason,
 			&i.CreatedAt,
 			&i.EditedAt,
+			&i.Persona,
+			&i.PersonaIndex,
 			&i.SiblingCount,
 		); err != nil {
 			return nil, err
@@ -1295,6 +1301,64 @@ func (q *Queries) SetMessageEmbedding(ctx context.Context, arg SetMessageEmbeddi
 		arg.EmbeddingAt,
 	)
 	return err
+}
+
+const setMessagePersonaForTest = `-- name: SetMessagePersonaForTest :one
+UPDATE messages SET persona = $2, persona_index = $3 WHERE id = $1 RETURNING id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index
+`
+
+type SetMessagePersonaForTestParams struct {
+	ID           uuid.UUID
+	Persona      *string
+	PersonaIndex *int32
+}
+
+// Test-only: stamps speaker attribution on an existing row. Production writes
+// these columns at materialization via CreateAssistantMessageWithUsage.
+func (q *Queries) SetMessagePersonaForTest(ctx context.Context, arg SetMessagePersonaForTestParams) (Message, error) {
+	row := q.db.QueryRow(ctx, setMessagePersonaForTest, arg.ID, arg.Persona, arg.PersonaIndex)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ContextID,
+		&i.ParentID,
+		&i.Role,
+		&i.Content,
+		&i.RawContent,
+		&i.Thinking,
+		&i.ThinkingProviderType,
+		&i.ThinkingRenderedText,
+		&i.ProviderID,
+		&i.ModelID,
+		&i.CreatedAt,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CacheReadTokens,
+		&i.CacheWriteTokens,
+		&i.ReasoningTokens,
+		&i.ProviderUsageRaw,
+		&i.InputCostUsd,
+		&i.OutputCostUsd,
+		&i.CacheReadCostUsd,
+		&i.CacheWriteCostUsd,
+		&i.TotalCostUsd,
+		&i.EditedAt,
+		&i.ErrorPayload,
+		&i.ThinkingDurationMs,
+		&i.ExplicitCacheAttached,
+		&i.ToolCalls,
+		&i.FinishReason,
+		&i.ToolCostUsd,
+		&i.IsWelcome,
+		&i.Embedding,
+		&i.EmbeddingModel,
+		&i.EmbeddingAt,
+		&i.MessageHeaders,
+		&i.MessageTrailers,
+		&i.Persona,
+		&i.PersonaIndex,
+	)
+	return i, err
 }
 
 const updateMessageContentRole = `-- name: UpdateMessageContentRole :one

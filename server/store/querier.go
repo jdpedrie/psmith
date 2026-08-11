@@ -449,6 +449,9 @@ type Querier interface {
 	// enforces all-three-or-none on every row already, so calling with the
 	// same triple over and over is fine.
 	SetMessageEmbedding(ctx context.Context, arg SetMessageEmbeddingParams) error
+	// Test-only: stamps speaker attribution on an existing row. Production writes
+	// these columns at materialization via CreateAssistantMessageWithUsage.
+	SetMessagePersonaForTest(ctx context.Context, arg SetMessagePersonaForTestParams) (Message, error)
 	// Records the per-message hashes of the rendered wire-prefix for a run plus
 	// the diagnostics computed against the previous turn (NULL on the first
 	// turn for a context — no comparison possible).

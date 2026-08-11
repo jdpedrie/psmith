@@ -176,6 +176,8 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.finish_reason,
        chain.created_at,
        chain.edited_at,
+       chain.persona,
+       chain.persona_index,
        (
            SELECT COUNT(*)::INT FROM messages m
            WHERE m.id <> chain.id
@@ -359,3 +361,8 @@ SELECT * FROM messages
 WHERE context_id = $1 AND role = 'assistant'
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
+
+-- name: SetMessagePersonaForTest :one
+-- Test-only: stamps speaker attribution on an existing row. Production writes
+-- these columns at materialization via CreateAssistantMessageWithUsage.
+UPDATE messages SET persona = $2, persona_index = $3 WHERE id = $1 RETURNING *;

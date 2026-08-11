@@ -1,12 +1,14 @@
 package conversations
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/fakellm"
+	"github.com/jdpedrie/psmith/server/store"
 )
 
 // continue_discussion extends a turn with another speaker instead of replacing
@@ -159,4 +161,52 @@ func indexOfStr(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// The chain query and chainRowToProto both list columns explicitly, so a new
+// message column reaches clients only if it is added in BOTH places. Persona
+// was dropped in exactly that way: it was written correctly, visible in the
+// database, and absent from every client. The unit converter passed the whole
+// time, because it is not the converter that was wrong.
+//
+// This asserts the path clients actually use, end to end through the RPC.
+func TestListMessages_CarriesPersonaOnTheChainPath(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
+
+	persona := "Skeptic"
+	var idx int32 = 2
+	user := insertMessage(t, q, f.contextID, nil, "user", "q")
+	asst := insertMessage(t, q, f.contextID, &user.ID, "assistant", "a")
+	// Set the columns directly: the supervisor writes them at materialization,
+	// and this test is about the READ path.
+	if _, err := q.SetMessagePersonaForTest(context.Background(), store.SetMessagePersonaForTestParams{
+		ID: asst.ID, Persona: &persona, PersonaIndex: &idx,
+	}); err != nil {
+		t.Fatalf("set persona: %v", err)
+	}
+
+	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ListMessagesRequest{
+		ContextId: f.contextID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var found *psmithv1.Message
+	for _, m := range resp.Msg.Messages {
+		if m.Role == psmithv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+			found = m
+		}
+	}
+	if found == nil {
+		t.Fatal("no assistant message returned")
+	}
+	if found.Persona == nil || *found.Persona != persona {
+		t.Errorf("persona did not reach the wire: %v", found.Persona)
+	}
+	if found.PersonaIndex == nil || *found.PersonaIndex != idx {
+		t.Errorf("persona index did not reach the wire: %v", found.PersonaIndex)
+	}
 }

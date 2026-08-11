@@ -510,6 +510,8 @@ func chainRowToProto(r store.ListMessageAncestorChainRow) *psmithv1.Message {
 		ErrorPayload:         r.ErrorPayload,
 		ToolCalls:            r.ToolCalls,
 		FinishReason:         r.FinishReason,
+		Persona:              r.Persona,
+		PersonaIndex:         r.PersonaIndex,
 	})
 	out.SiblingCount = r.SiblingCount
 	return out

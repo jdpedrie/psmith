@@ -52,11 +52,31 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ---
 
+## Model capability probe
+
+Capabilities on `user_models` come from catalog metadata and hand-editing, so
+they are a claim rather than an observation. A provider that omits a flag, a
+custom endpoint with no catalog at all, or a model whose support changed since
+it was added all leave us with definitions that are wrong in the direction that
+hurts: a capability the model has but we do not know about stays switched off,
+and `validateModelCapabilities` then refuses sends that would have worked.
+
+A probe would exercise the model directly — a tiny streaming call, a one-tool
+call, a 1px image, a thinking request — and write back what actually worked,
+augmenting the definition rather than replacing it. Pairs with the existing
+`RefreshUserModelMetadata` RPC, which refreshes from the catalog; this is the
+empirical counterpart.
+
+Worth thinking about before building: probes cost real tokens on the user's
+key, so it wants to be explicit rather than automatic, and a probe that fails
+for an unrelated reason (rate limit, outage) must not clear a capability that
+is genuinely there. Additive-only on success is probably the right rule.
+
 ## Council mode (first slice shipped — `plugins/council`)
 
 Design in [design/council.md](design/council.md). What is deliberately left:
 
-- **The model-backed moderator.** `pluginapi.TurnRouter` has one implementation, the deterministic round-robin. The model version is a second implementation behind the same interface. The deterministic one is not a stepping stone: it is the fallback for when a moderator call fails, and having both makes the model's contribution measurable rather than assumed. It needs its own `ConfigFieldModelPicker` (already declared) pointed at a small fast model, and it must read message rows rather than the wire prefix, since building the prefix needs the model it is still choosing.
+- **The model-backed moderator.** `pluginapi.TurnRouter` has one implementation, the deterministic round-robin. The model version is a second implementation behind the same interface. The deterministic one is not a stepping stone: it is the fallback for when a moderator call fails, and having both makes the model's contribution measurable rather than assumed. It needs its own `ConfigFieldModelPicker` (NOT yet declared; the config today is roster plus caps) pointed at a small fast model, and it must read message rows rather than the wire prefix, since building the prefix needs the model it is still choosing.
 - **Consecutive same-speaker label collapse.** Every turn shows its name. Round-robin never lets a member speak twice in a row, so this only matters once a smarter router exists.
 - **Roster cap.** The design says five; nothing enforces it. `Theme.personaColors` wraps rather than running out, so exceeding it means two members share a rail rather than one rendering unlabelled.
 - **Speculative moderation.** Running the moderator when the previous hop terminates would hide its round-trip behind the user's tap, at the cost of a call for every abandoned discussion. Only worth it if the serial version grates.
