@@ -38,7 +38,30 @@ public struct Theme: Identifiable, Hashable, Sendable {
     /// through naturally.
     public let chrome: Color
 
-    public init(id: String, name: String, blurb: String, accent: Color, bubbleTint: Color, highlight: Color, chrome: Color) {
+    /// Colors for messages attributed to a named speaker, indexed by the
+    /// server's palette slot. Used for the rail and monogram on a persona
+    /// message, never for text or fills.
+    ///
+    /// Hand-picked per theme rather than derived from `accent`, because
+    /// rotating one hue fails on exactly the themes that need help most: every
+    /// derived color on Nordic Mist is another pale icy blue, and
+    /// discriminability is the whole point.
+    ///
+    /// No set contains a red, orange or yellow. Those are reserved app-wide
+    /// for error, warning and delete, and a speaker whose rail reads as an
+    /// error is worse than a speaker with no color at all.
+    public let personaColors: [Color]
+
+    public init(
+        id: String,
+        name: String,
+        blurb: String,
+        accent: Color,
+        bubbleTint: Color,
+        highlight: Color,
+        chrome: Color,
+        personaColors: [Color] = []
+    ) {
         self.id = id
         self.name = name
         self.blurb = blurb
@@ -46,6 +69,19 @@ public struct Theme: Identifiable, Hashable, Sendable {
         self.bubbleTint = bubbleTint
         self.highlight = highlight
         self.chrome = chrome
+        self.personaColors = personaColors
+    }
+
+    /// The color for a palette slot, wrapping around when a council has more
+    /// members than the theme has colors.
+    ///
+    /// Wrapping rather than failing because a roster is user-authored and a
+    /// missing color would render an unlabelled message. Two members sharing a
+    /// rail past the fifth is a legibility problem the roster cap already
+    /// discourages; a blank one is a bug.
+    public func personaColor(_ index: Int) -> Color {
+        guard !personaColors.isEmpty, index >= 0 else { return .secondary }
+        return personaColors[index % personaColors.count]
     }
 
     public static let system = Theme(
@@ -55,7 +91,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent: .accentColor,
         bubbleTint: .accentColor,
         highlight: .accentColor,
-        chrome: .systemChrome
+        chrome: .systemChrome,
+        personaColors: [
+            .dynamic(light: .hex("#5B6B7A"), dark: .hex("#93A5B5")),
+            .dynamic(light: .hex("#6E7F63"), dark: .hex("#A3B594")),
+            .dynamic(light: .hex("#7A6A80"), dark: .hex("#AE9BB4")),
+            .dynamic(light: .hex("#4F7A78"), dark: .hex("#85B0AD")),
+            .dynamic(light: .hex("#7C7060"), dark: .hex("#B3A48D")),
+        ]
     )
 
     // Chrome dark-mode values are bumped well above the original near-black
@@ -72,7 +115,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent:    .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
         bubbleTint: .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
         highlight: .dynamic(light: .hex("#C5D8CB"), dark: .hex("#A8C5B2")),
-        chrome:    .dynamic(light: .hex("#EAF0EC"), dark: .hex("#1F2A24"))
+        chrome:    .dynamic(light: .hex("#EAF0EC"), dark: .hex("#1F2A24")),
+        personaColors: [
+            .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
+            .dynamic(light: .hex("#6F7F4E"), dark: .hex("#9DAE78")),
+            .dynamic(light: .hex("#41756F"), dark: .hex("#74A39C")),
+            .dynamic(light: .hex("#77705A"), dark: .hex("#ADA184")),
+            .dynamic(light: .hex("#516B86"), dark: .hex("#8AA6BE")),
+        ]
     )
 
     public static let clay = Theme(
@@ -82,7 +132,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent:    .dynamic(light: .hex("#B25E33"), dark: .hex("#C77A4F")),
         bubbleTint: .dynamic(light: .hex("#B25E33"), dark: .hex("#C77A4F")),
         highlight: .dynamic(light: .hex("#DBA987"), dark: .hex("#E0A574")),
-        chrome:    .dynamic(light: .hex("#F2E9DC"), dark: .hex("#2A211A"))
+        chrome:    .dynamic(light: .hex("#F2E9DC"), dark: .hex("#2A211A")),
+        personaColors: [
+            .dynamic(light: .hex("#8A6A52"), dark: .hex("#BC9A7E")),
+            .dynamic(light: .hex("#6B7358"), dark: .hex("#A0A981")),
+            .dynamic(light: .hex("#7B5A63"), dark: .hex("#B08A93")),
+            .dynamic(light: .hex("#4F6E74"), dark: .hex("#87A9AF")),
+            .dynamic(light: .hex("#6E6480"), dark: .hex("#A198B5")),
+        ]
     )
 
     public static let slate = Theme(
@@ -92,7 +149,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent:    .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
         bubbleTint: .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
         highlight: .dynamic(light: .hex("#6B8AA4"), dark: .hex("#9DB6CC")),
-        chrome:    .dynamic(light: .hex("#E8EEF4"), dark: .hex("#1C2530"))
+        chrome:    .dynamic(light: .hex("#E8EEF4"), dark: .hex("#1C2530")),
+        personaColors: [
+            .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
+            .dynamic(light: .hex("#57786E"), dark: .hex("#87A99E")),
+            .dynamic(light: .hex("#6A6480"), dark: .hex("#9992B0")),
+            .dynamic(light: .hex("#7A6B5C"), dark: .hex("#ADA08F")),
+            .dynamic(light: .hex("#3F7A85"), dark: .hex("#74AAB4")),
+        ]
     )
 
     public static let aubergine = Theme(
@@ -102,7 +166,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent:    .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
         bubbleTint: .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
         highlight: .dynamic(light: .hex("#B8A296"), dark: .hex("#D9C8B5")),
-        chrome:    .dynamic(light: .hex("#F1E8EE"), dark: .hex("#251D2C"))
+        chrome:    .dynamic(light: .hex("#F1E8EE"), dark: .hex("#251D2C")),
+        personaColors: [
+            .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
+            .dynamic(light: .hex("#5A6A85"), dark: .hex("#8698B4")),
+            .dynamic(light: .hex("#6E6355"), dark: .hex("#A39581")),
+            .dynamic(light: .hex("#4E7168"), dark: .hex("#83A79C")),
+            .dynamic(light: .hex("#834F6B"), dark: .hex("#B07E96")),
+        ]
     )
 
     public static let nordic = Theme(
@@ -112,7 +183,14 @@ public struct Theme: Identifiable, Hashable, Sendable {
         accent:    .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
         bubbleTint: .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
         highlight: .dynamic(light: .hex("#88B0BF"), dark: .hex("#B8CDD6")),
-        chrome:    .dynamic(light: .hex("#E6EDF2"), dark: .hex("#1A242E"))
+        chrome:    .dynamic(light: .hex("#E6EDF2"), dark: .hex("#1A242E")),
+        personaColors: [
+            .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
+            .dynamic(light: .hex("#5C7385"), dark: .hex("#97A9B8")),
+            .dynamic(light: .hex("#4A7A6E"), dark: .hex("#84AEA2")),
+            .dynamic(light: .hex("#6A6D84"), dark: .hex("#9FA2B8")),
+            .dynamic(light: .hex("#7A6E7E"), dark: .hex("#AFA1B2")),
+        ]
     )
 
     public static let allThemes: [Theme] = [.system, .sage, .clay, .slate, .aubergine, .nordic]

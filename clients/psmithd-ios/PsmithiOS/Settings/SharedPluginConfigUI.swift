@@ -21,6 +21,9 @@ struct PluginConfigSubScreen: View {
     let providerLabels: [String: String]
     let providerTypes: [String: String]
     let providerPresetIDs: [String: String]
+    /// Offered by `.profilePicker` fields. A council member is a whole
+    /// profile, so the roster editor needs names rather than uuids.
+    var availableProfiles: [(id: String, name: String)] = []
 
     var body: some View {
         ScrollView {
@@ -46,7 +49,8 @@ struct PluginConfigSubScreen: View {
                             availableModels: availableModels,
                             providerLabels: providerLabels,
                             providerTypes: providerTypes,
-                            providerPresetIDs: providerPresetIDs
+                            providerPresetIDs: providerPresetIDs,
+                            availableProfiles: availableProfiles
                         )
                     }
                 } else {

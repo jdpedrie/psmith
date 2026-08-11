@@ -55,6 +55,33 @@ struct Composer: View {
     /// "pick from history".
     @State private var showingCamera = false
 
+    /// Lets the panel take another turn.
+    ///
+    /// A chip above the composer rather than a modal or an automatic loop:
+    /// continuing has to sit next to typing, because those are the two things
+    /// a user can do at that moment and neither should interrupt the other.
+    ///
+    /// Neutral chrome on purpose. It is not a speaker, and giving it a persona
+    /// color would read as a fourth voice in the discussion.
+    private var continueChip: some View {
+        HStack {
+            Button {
+                Task { await model.continueDiscussion() }
+            } label: {
+                Label("Continue the discussion", systemImage: "arrow.turn.down.right")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .glassEffect(in: .capsule)
+            .disabled(app.connectivity.state == .offline)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             if app.connectivity.state == .offline {
@@ -62,6 +89,9 @@ struct Composer: View {
             }
             if !model.pendingAttachments.isEmpty || model.attachmentUploadCount > 0 {
                 attachmentChips
+            }
+            if model.canContinueDiscussion {
+                continueChip
             }
             // One floating glass surface: input on top, attach / model /
             // settings + send on a footer row inside the same rounded

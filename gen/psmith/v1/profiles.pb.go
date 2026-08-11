@@ -106,6 +106,11 @@ const (
 	// never displays. Plugins that key state to config rows need identity
 	// that survives renaming and reordering.
 	ConfigField_AUTO_ID ConfigField_Type = 8
+	// PROFILE_PICKER chooses one of the user's profiles; the stored value is
+	// the profile uuid. The counterpart to MODEL_PICKER, for plugins that
+	// delegate to a whole profile rather than a bare model, so the chosen
+	// thing brings its own system prompt, model and plugins.
+	ConfigField_PROFILE_PICKER ConfigField_Type = 9
 )
 
 // Enum value maps for ConfigField_Type.
@@ -120,6 +125,7 @@ var (
 		6: "MODEL_PICKER",
 		7: "LIST",
 		8: "AUTO_ID",
+		9: "PROFILE_PICKER",
 	}
 	ConfigField_Type_value = map[string]int32{
 		"TYPE_UNSPECIFIED": 0,
@@ -131,6 +137,7 @@ var (
 		"MODEL_PICKER":     6,
 		"LIST":             7,
 		"AUTO_ID":          8,
+		"PROFILE_PICKER":   9,
 	}
 )
 
@@ -3774,7 +3781,7 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\vPluginPanel\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x1b\n" +
 	"\tsf_symbol\x18\x02 \x01(\tR\bsfSymbol\x12\x1a\n" +
-	"\bsubtitle\x18\x03 \x01(\tR\bsubtitle\"\xf5\x05\n" +
+	"\bsubtitle\x18\x03 \x01(\tR\bsubtitle\"\x89\x06\n" +
 	"\vConfigField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\adisplay\x18\x02 \x01(\tR\adisplay\x12 \n" +
@@ -3790,7 +3797,7 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x06secret\x18\f \x01(\bR\x06secret\x122\n" +
 	"\x05merge\x18\n" +
 	" \x01(\x0e2\x1c.psmith.v1.ConfigField.MergeR\x05merge\x12\x1a\n" +
-	"\bcategory\x18\v \x01(\tR\bcategory\"\x82\x01\n" +
+	"\bcategory\x18\v \x01(\tR\bcategory\"\x96\x01\n" +
 	"\x04Type\x12\x14\n" +
 	"\x10TYPE_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +
@@ -3802,7 +3809,8 @@ const file_psmith_v1_profiles_proto_rawDesc = "" +
 	"\x06SELECT\x10\x05\x12\x10\n" +
 	"\fMODEL_PICKER\x10\x06\x12\b\n" +
 	"\x04LIST\x10\a\x12\v\n" +
-	"\aAUTO_ID\x10\b\"J\n" +
+	"\aAUTO_ID\x10\b\x12\x12\n" +
+	"\x0ePROFILE_PICKER\x10\t\"J\n" +
 	"\x05Merge\x12\x15\n" +
 	"\x11MERGE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rMERGE_REPLACE\x10\x01\x12\x17\n" +

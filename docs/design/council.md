@@ -400,6 +400,25 @@ row. The continue chip is neutral system chrome and shows the discussion's
 remaining exchanges, because that's the user's own spend rather than the
 moderator's voice.
 
+## What is built
+
+The whole first slice, end to end. A council profile answers with a named
+member, the transcript shows who spoke, and the panel can take another turn.
+
+- `messages.persona` / `persona_index` (migration 00049) and matching proto
+  fields. The column feeds both the wire speaker tag and the client's label, so
+  the name a persona answers to and the name you read cannot drift.
+- `pluginapi.TurnRouter`, the one capability that runs before provider/model
+  resolution, plus `HistoryTransformer` returning a slice so one stored message
+  can become several wire messages.
+- The `council` plugin: roster, deterministic round-robin router, shared roster
+  system prompt, frozen directions replayed into the wire, per-hop token caps.
+- `continue_discussion` on SendMessage, which extends a turn instead of
+  replacing it and is refused when the leaf has already moved.
+- `Theme.personaColors` per theme, the rail and name in both clients, and the
+  continue chip on iOS.
+- `ConfigFieldProfilePicker`, so a member is chosen by name rather than uuid.
+
 ## What is not built yet
 
 Nothing. This document is the design; no code exists.

@@ -893,6 +893,12 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
     /// never displays. Plugins that key state to config rows need identity
     /// that survives renaming and reordering.
     case autoID // = 8
+
+    /// PROFILE_PICKER chooses one of the user's profiles; the stored value is
+    /// the profile uuid. The counterpart to MODEL_PICKER, for plugins that
+    /// delegate to a whole profile rather than a bare model, so the chosen
+    /// thing brings its own system prompt, model and plugins.
+    case profilePicker // = 9
     case UNRECOGNIZED(Int)
 
     public init() {
@@ -910,6 +916,7 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       case 6: self = .modelPicker
       case 7: self = .list
       case 8: self = .autoID
+      case 9: self = .profilePicker
       default: self = .UNRECOGNIZED(rawValue)
       }
     }
@@ -925,6 +932,7 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       case .modelPicker: return 6
       case .list: return 7
       case .autoID: return 8
+      case .profilePicker: return 9
       case .UNRECOGNIZED(let i): return i
       }
     }
@@ -940,6 +948,7 @@ public nonisolated struct Psmith_V1_ConfigField: @unchecked Sendable {
       .modelPicker,
       .list,
       .autoID,
+      .profilePicker,
     ]
 
   }
@@ -2873,7 +2882,7 @@ nonisolated extension Psmith_V1_ConfigField: SwiftProtobuf.Message, SwiftProtobu
 }
 
 nonisolated extension Psmith_V1_ConfigField.TypeEnum: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0\u{1}LIST\0\u{1}AUTO_ID\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TYPE_UNSPECIFIED\0\u{1}NUMBER\0\u{1}TEXT\0\u{1}TEXTAREA\0\u{1}BOOLEAN\0\u{1}SELECT\0\u{1}MODEL_PICKER\0\u{1}LIST\0\u{1}AUTO_ID\0\u{1}PROFILE_PICKER\0")
 }
 
 nonisolated extension Psmith_V1_ConfigField.Merge: SwiftProtobuf._ProtoNameProviding {

@@ -2606,9 +2606,19 @@ type SendMessageRequest struct {
 	// recognize. Ignored when `regenerate` is true — re-runs reuse
 	// the original user message, whose grounding block was frozen
 	// at first send.
-	DeviceFacts   []*DeviceFact `protobuf:"bytes,9,rep,name=device_facts,json=deviceFacts,proto3" json:"device_facts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DeviceFacts []*DeviceFact `protobuf:"bytes,9,rep,name=device_facts,json=deviceFacts,proto3" json:"device_facts,omitempty"`
+	// continue_discussion extends the current turn with another speaker,
+	// rather than replacing it. Mechanically it takes the same path as
+	// regenerate (parent on the leaf, no user row inserted), but the two mean
+	// opposite things to a reader and the clients present them differently:
+	// regenerate discards an answer, continue keeps it and adds to it.
+	//
+	// parent_message_id carries the leaf the client saw. The server rejects the
+	// send if the leaf has already moved, so two clients tapping continue at the
+	// same moment cannot produce two speakers on one turn.
+	ContinueDiscussion bool `protobuf:"varint,10,opt,name=continue_discussion,json=continueDiscussion,proto3" json:"continue_discussion,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SendMessageRequest) Reset() {
@@ -2702,6 +2712,13 @@ func (x *SendMessageRequest) GetDeviceFacts() []*DeviceFact {
 		return x.DeviceFacts
 	}
 	return nil
+}
+
+func (x *SendMessageRequest) GetContinueDiscussion() bool {
+	if x != nil {
+		return x.ContinueDiscussion
+	}
+	return false
 }
 
 type SendMessageResponse struct {
@@ -3357,7 +3374,7 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x1bCreateContextManualResponse\x12,\n" +
 	"\acontext\x18\x01 \x01(\v2\x12.psmith.v1.ContextR\acontext\x12:\n" +
 	"\fuser_message\x18\x02 \x01(\v2\x12.psmith.v1.MessageH\x00R\vuserMessage\x88\x01\x01B\x0f\n" +
-	"\r_user_message\"\xe0\x03\n" +
+	"\r_user_message\"\x91\x04\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12/\n" +
 	"\x11parent_message_id\x18\x02 \x01(\tH\x00R\x0fparentMessageId\x88\x01\x01\x12\x18\n" +
@@ -3370,7 +3387,9 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"regenerate\x18\a \x01(\bR\n" +
 	"regenerate\x12.\n" +
 	"\x13attachment_file_ids\x18\b \x03(\tR\x11attachmentFileIds\x128\n" +
-	"\fdevice_facts\x18\t \x03(\v2\x15.psmith.v1.DeviceFactR\vdeviceFactsB\x14\n" +
+	"\fdevice_facts\x18\t \x03(\v2\x15.psmith.v1.DeviceFactR\vdeviceFacts\x12/\n" +
+	"\x13continue_discussion\x18\n" +
+	" \x01(\bR\x12continueDiscussionB\x14\n" +
 	"\x12_parent_message_idB\x0e\n" +
 	"\f_provider_idB\v\n" +
 	"\t_model_idB\x10\n" +

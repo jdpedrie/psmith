@@ -443,6 +443,17 @@ message SendMessageRequest {
   // the original user message, whose grounding block was frozen
   // at first send.
   repeated DeviceFact device_facts = 9;
+
+  // continue_discussion extends the current turn with another speaker,
+  // rather than replacing it. Mechanically it takes the same path as
+  // regenerate (parent on the leaf, no user row inserted), but the two mean
+  // opposite things to a reader and the clients present them differently:
+  // regenerate discards an answer, continue keeps it and adds to it.
+  //
+  // parent_message_id carries the leaf the client saw. The server rejects the
+  // send if the leaf has already moved, so two clients tapping continue at the
+  // same moment cannot produce two speakers on one turn.
+  bool continue_discussion = 10;
 }
 message SendMessageResponse {
   // Echo of the user message that anchors this turn. When `regenerate`

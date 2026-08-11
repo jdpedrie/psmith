@@ -1462,6 +1462,49 @@ public final class ConversationViewModel {
         }
     }
 
+    /// Ask the next speaker to weigh in, extending the current turn.
+    ///
+    /// Deliberately not a loop. The turn ends after every speaker, so the
+    /// composer stays live and there is nothing to interrupt: continuing is a
+    /// thing the user asks for, not something that runs at them.
+    ///
+    /// No provider/model is sent. Who speaks next is the server's decision,
+    /// and passing the composer's current selection would override the panel
+    /// with whatever model happens to be picked in the chip.
+    public func continueDiscussion() async {
+        guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
+        guard let leaf = messages.last, leaf.role == .assistant else { return }
+        sending = true
+        defer { sending = false }
+
+        do {
+            let (_, run) = try await client.conversations.continueDiscussion(
+                conversationID: conversation.id,
+                leafMessageID: leaf.id
+            )
+            await load()
+            hub.register(
+                runID: run.id,
+                conversationID: conversation.id,
+                contextID: run.contextID,
+                purpose: .assistantResponse
+            )
+        } catch {
+            // Losing a race means someone else already continued it, so the
+            // reload is the fix rather than the error being worth showing.
+            await load()
+            loadError = PsmithError.display(error)
+        }
+    }
+
+    /// True when the transcript's last message came from a named speaker, so
+    /// the panel has somewhere to go next.
+    public var canContinueDiscussion: Bool {
+        guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return false }
+        guard let last = messages.last else { return false }
+        return last.role == .assistant && last.persona != nil
+    }
+
     /// Send-with-explicit-parent. Powers send() (parent = current leaf,
     /// implicit) and reloadFromMessage (parent = explicit, forking).
     /// Keeps the streaming/teardown machinery in one place — both call

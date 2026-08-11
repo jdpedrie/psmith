@@ -300,6 +300,11 @@ message ConfigField {
     // never displays. Plugins that key state to config rows need identity
     // that survives renaming and reordering.
     AUTO_ID = 8;
+    // PROFILE_PICKER chooses one of the user's profiles; the stored value is
+    // the profile uuid. The counterpart to MODEL_PICKER, for plugins that
+    // delegate to a whole profile rather than a bare model, so the chosen
+    // thing brings its own system prompt, model and plugins.
+    PROFILE_PICKER = 9;
   }
   string name = 1;
   string display = 2;

@@ -29,6 +29,11 @@ public struct PluginConfigForm: View {
     let providerLabels: [String: String]
     let providerTypes: [String: String]
     let providerPresetIDs: [String: String]
+    /// Profiles offered by `.profilePicker` fields, as (id, name). Empty when
+    /// the host passes none, in which case the control degrades to showing the
+    /// stored id rather than an empty chooser — a raw uuid the user can still
+    /// see beats a control that looks broken.
+    let availableProfiles: [(id: String, name: String)]
 
     public init(
         fields: [PsmithConfigField],
@@ -36,7 +41,8 @@ public struct PluginConfigForm: View {
         availableModels: [PsmithUserModel] = [],
         providerLabels: [String: String] = [:],
         providerTypes: [String: String] = [:],
-        providerPresetIDs: [String: String] = [:]
+        providerPresetIDs: [String: String] = [:],
+        availableProfiles: [(id: String, name: String)] = []
     ) {
         self.fields = fields
         self._config = config
@@ -44,6 +50,7 @@ public struct PluginConfigForm: View {
         self.providerLabels = providerLabels
         self.providerTypes = providerTypes
         self.providerPresetIDs = providerPresetIDs
+        self.availableProfiles = availableProfiles
     }
 
     public var body: some View {
@@ -152,11 +159,41 @@ public struct PluginConfigForm: View {
         case .boolean:     booleanField(field)
         case .select:      selectField(field)
         case .modelPicker: modelPickerField(field)
-        case .list:        ListFieldEditor(field: field, config: $config)
+        case .list:        ListFieldEditor(field: field, config: $config, availableProfiles: availableProfiles)
+        case .profilePicker: profilePickerField(field)
         case .autoID:
             // Machine-filled row identity. Never rendered — it exists so a
             // plugin can key state to a config row, not for a user to set.
             EmptyView()
+        }
+    }
+
+    // MARK: profile picker
+
+    /// Chooses a whole profile, so the chosen thing brings its own system
+    /// prompt, model and plugins rather than just a model id.
+    @ViewBuilder
+    private func profilePickerField(_ field: PsmithConfigField) -> some View {
+        let current = (config[field.name] as? String) ?? ""
+        if availableProfiles.isEmpty {
+            // No list to choose from. Show what is stored rather than an
+            // empty menu, so the value is at least legible and copyable.
+            Text(current.isEmpty ? "No profiles available" : current)
+                .scaledFont(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        } else {
+            Picker("", selection: Binding(
+                get: { current },
+                set: { config[field.name] = $0 }
+            )) {
+                Text("Choose a profile").tag("")
+                ForEach(availableProfiles, id: \.id) { p in
+                    Text(p.name).tag(p.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
         }
     }
 

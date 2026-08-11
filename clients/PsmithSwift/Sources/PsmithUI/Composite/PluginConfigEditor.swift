@@ -25,6 +25,7 @@ public struct PluginConfigEditor: View {
     let providerLabels: [String: String]
     let providerTypes: [String: String]
     let providerPresetIDs: [String: String]
+    let availableProfiles: [(id: String, name: String)]
 
     public init(
         pluginName: String,
@@ -33,7 +34,8 @@ public struct PluginConfigEditor: View {
         availableModels: [PsmithUserModel] = [],
         providerLabels: [String: String] = [:],
         providerTypes: [String: String] = [:],
-        providerPresetIDs: [String: String] = [:]
+        providerPresetIDs: [String: String] = [:],
+        availableProfiles: [(id: String, name: String)] = []
     ) {
         self.pluginName = pluginName
         self.fields = fields
@@ -42,6 +44,7 @@ public struct PluginConfigEditor: View {
         self.providerLabels = providerLabels
         self.providerTypes = providerTypes
         self.providerPresetIDs = providerPresetIDs
+        self.availableProfiles = availableProfiles
     }
 
     public var body: some View {
@@ -63,7 +66,8 @@ public struct PluginConfigEditor: View {
             availableModels: availableModels,
             providerLabels: providerLabels,
             providerTypes: providerTypes,
-            providerPresetIDs: providerPresetIDs
+            providerPresetIDs: providerPresetIDs,
+            availableProfiles: availableProfiles
         )
     }
 }

@@ -764,7 +764,8 @@ private struct ProfileEditSheet: View {
                         availableModels: app.profiles.availableModels,
                         providerLabels: app.profiles.providerLabels,
                         providerTypes: app.profiles.providerTypes,
-                        providerPresetIDs: app.profiles.providerPresetIDs
+                        providerPresetIDs: app.profiles.providerPresetIDs,
+                        availableProfiles: app.profiles.profiles.map { ($0.id, $0.name) }
                     )
                 case let .longTextEditor(field):
                     LongTextEditorScreen(

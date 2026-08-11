@@ -1118,6 +1118,8 @@ func configFieldTypeToProto(t pluginapi.ConfigFieldType) psmithv1.ConfigField_Ty
 		return psmithv1.ConfigField_LIST
 	case pluginapi.ConfigFieldAutoID:
 		return psmithv1.ConfigField_AUTO_ID
+	case pluginapi.ConfigFieldProfilePicker:
+		return psmithv1.ConfigField_PROFILE_PICKER
 	case pluginapi.ConfigFieldModelPicker:
 		return psmithv1.ConfigField_MODEL_PICKER
 	default:

@@ -167,8 +167,13 @@ struct MessageRow: View {
                     Spacer(minLength: 0)
                     forkPill
                 }
+                // The rail is what the eye tracks when scrolling past a
+                // discussion quickly; it reads as a continuous stripe without
+                // being read. No-op when there is no speaker, so an ordinary
+                // conversation keeps its exact current layout.
                 content()
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .personaRail(index: message.personaSlot)
             }
         default:
             content()
@@ -549,6 +554,11 @@ struct MessageRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Collapse \(roleLabel.lowercased())")
+            } else if let slot = message.personaSlot, let name = message.persona, !isErrored {
+                // A named speaker replaces the generic role label rather than
+                // sitting beside it: "ASSISTANT · Skeptic" is noise when every
+                // message in the discussion is an assistant.
+                PersonaLabel(name: name, index: slot)
             } else {
                 Text(roleLabel)
                     .font(.caption2)

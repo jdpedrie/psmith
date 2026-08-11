@@ -15,6 +15,10 @@ import SwiftUI
 struct ListFieldEditor: View {
     let field: PsmithConfigField
     @Binding var config: [String: Any]
+    /// Profiles offered by `.profilePicker` item fields, as (id, name).
+    /// Empty degrades to a text field: a raw uuid the user can still edit
+    /// beats a chooser with nothing in it.
+    var availableProfiles: [(id: String, name: String)] = []
 
     /// Which row is expanded. One at a time: rows can carry long text, and a
     /// form with every row open is unreadable past about three entries.
@@ -214,6 +218,15 @@ struct ListFieldEditor: View {
             Picker("", selection: stringBinding(item, index: index)) {
                 ForEach(item.options, id: \.value) { option in
                     Text(option.label.isEmpty ? option.value : option.label).tag(option.value)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        case .profilePicker where !availableProfiles.isEmpty:
+            Picker("", selection: stringBinding(item, index: index)) {
+                Text("Choose a profile").tag("")
+                ForEach(availableProfiles, id: \.id) { p in
+                    Text(p.name).tag(p.id)
                 }
             }
             .labelsHidden()

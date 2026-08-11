@@ -49,6 +49,8 @@ public enum PsmithConfigFieldType: Sendable, Hashable {
     case list
     /// A machine key the client fills once per row and never displays.
     case autoID
+    /// Chooses one of the user's profiles; the value is the profile uuid.
+    case profilePicker
 }
 
 /// How one field's value combines across the resolver's layered view
@@ -170,7 +172,9 @@ public struct PsmithConfigField: Sendable, Hashable, Identifiable {
     public func isUnsatisfied(by value: Any?) -> Bool {
         guard required else { return false }
         switch type {
-        case .text, .textarea, .select:
+        case .text, .textarea, .select, .profilePicker:
+            // A profile picker stores a bare uuid string, so the same
+            // non-empty check applies.
             if let s = value as? String { return s.trimmingCharacters(in: .whitespaces).isEmpty }
             return true
         case .number:
@@ -359,6 +363,7 @@ extension PsmithConfigFieldType {
         case .boolean:     self = .boolean
         case .select:      self = .select
         case .modelPicker: self = .modelPicker
+        case .profilePicker: self = .profilePicker
         case .list:        self = .list
         case .autoID:      self = .autoID
         case .unspecified, .UNRECOGNIZED:

@@ -1407,11 +1407,23 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// that mode (the user row already carries it). Non-regen requires
 	// EITHER non-empty content OR ≥1 attachment — an "image-only" turn
 	// ("look at this") is a valid first message.
-	if !req.Msg.Regenerate && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
+	//
+	// continue_discussion takes the same structural path: it also parents off
+	// an existing row and inserts no user message. The two are kept as
+	// separate flags because they mean opposite things to a reader and the
+	// clients present them differently — regenerate discards an answer,
+	// continue keeps it and adds another speaker — while sharing every
+	// mechanic below.
+	extendsTurn := req.Msg.Regenerate || req.Msg.ContinueDiscussion
+	if !extendsTurn && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content or attachment is required"))
 	}
-	if req.Msg.Regenerate && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id"))
+	if extendsTurn && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
+		verb := "regenerate"
+		if req.Msg.ContinueDiscussion {
+			verb = "continue_discussion"
+		}
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s requires parent_message_id", verb))
 	}
 	user := auth.MustFromContext(ctx)
 
@@ -1439,6 +1451,21 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	}
 	if err := s.requireNoPendingCompactionSummary(ctx, activeCtx.ID); err != nil {
 		return nil, err
+	}
+
+	// A continue extends whatever the client was looking at, so it is only
+	// valid against the branch head the client saw. Two clients tapping
+	// continue at the same moment would otherwise each add a speaker to the
+	// same turn, and the second would read as a duplicate rather than as a
+	// reply to the first.
+	//
+	// Regenerate deliberately skips this: forking off a non-leaf message is
+	// the whole point of it.
+	if req.Msg.ContinueDiscussion && activeCtx.CurrentLeafMessageID != nil {
+		if *req.Msg.ParentMessageId != activeCtx.CurrentLeafMessageID.String() {
+			return nil, connect.NewError(connect.CodeAborted,
+				errors.New("the discussion has already moved on"))
+		}
 	}
 
 	// Resolve the chat-plugin pipeline before the model, not after.
@@ -1521,7 +1548,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	var userMsgRow store.Message
-	if req.Msg.Regenerate {
+	if extendsTurn {
 		// Regenerate: parent_message_id references an existing row in the
 		// active context. Don't insert a new user row; just load the
 		// parent and let the rest of the handler use it as the stream's
@@ -1707,7 +1734,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// message (skipped on Regenerate where userMsgRow is the existing
 	// parent assistant turn, not a freshly-persisted user message).
 	// Detached goroutines, no back-pressure on this RPC.
-	if !pipeline.Empty() && !req.Msg.Regenerate {
+	if !pipeline.Empty() && !extendsTurn {
 		pipeline.FireMessagePersisted(context.Background(), pluginapi.PersistedMessage{
 			ID:        userMsgRow.ID.String(),
 			ContextID: userMsgRow.ContextID.String(),
@@ -1748,7 +1775,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// stored chain still reads user → assistant → assistant. The space
 	// is a minimal-content nudge — using " " over "Continue." avoids
 	// putting words in the user's mouth that they didn't type.
-	if req.Msg.Regenerate && userMsgRow.Role == "assistant" {
+	if extendsTurn && userMsgRow.Role == "assistant" {
 		wireMessages = append(wireMessages, providers.WireMessage{
 			Role:    "user",
 			Content: " ",

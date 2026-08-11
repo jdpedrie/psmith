@@ -37,7 +37,7 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### History builder
 
-- **`server/history` does not coalesce consecutive same-role wire messages.** `Build` appends one wire message per stored row and no driver merges either (verified against `anthropic.translateMessages`). Regenerating on an assistant parent leaves the stored chain reading user, assistant, assistant, so continuing from the last assistant twice on one branch sends consecutive assistant turns. **Not an error.** Anthropic's docs are explicit that "consecutive `user` or `assistant` turns in your request will be combined into a single turn", and OpenAI is lenient. The cost is silent quality loss rather than a 400: two distinct answers become one turn, so the model sees a single merged block where the transcript shows two replies. Gemini's behaviour here is **unverified** (its docs don't cover it; the known constraint is that `contents` must end on a user turn, which `service.go:1738` already handles). Worth a normalization pass at the end of `Build` for explicitness and Gemini safety, but it is defensive work, not a bug fix. Downgraded from "live bug" after checking the Anthropic docs during the [council-mode design review](design/council.md).
+- **`server/history` coalesces adjacent assistant turns, not user turns.** `coalesceAssistants` runs at the end of `Build`. Assistant-only is deliberate: `role=context` rewrites to wire user and always precedes a real user message, and a reconstructed tool-result turn is followed by whatever the user said next, so consecutive user turns are a normal shape compaction depends on. Neither case is an error anyway — Anthropic's docs say consecutive same-role turns "will be combined into a single turn" — so this is determinism rather than a fix: doing it ourselves keeps the bytes identical on every rebuild instead of depending on a join that is undocumented for two of the three drivers.
 
 - **`server/history`** — cross-provider thinking is **omitted entirely** when destination ≠ producer. The architecture doc's "Thinking handling" section spec'd "render to plain text and inject into content" for this case. Deferred until tool use lands so we don't have to redo it. Code comment in `history.go` references this.
 
@@ -51,6 +51,16 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 - **`codex-subprocess` driver** — package doesn't exist. Same shape as above; talks to Codex CLI via JSON-RPC over stdio. Community reference: `hishamkaram/codex-agent-sdk-go`.
 
 ---
+
+## Council mode (first slice shipped — `plugins/council`)
+
+Design in [design/council.md](design/council.md). What is deliberately left:
+
+- **The model-backed moderator.** `pluginapi.TurnRouter` has one implementation, the deterministic round-robin. The model version is a second implementation behind the same interface. The deterministic one is not a stepping stone: it is the fallback for when a moderator call fails, and having both makes the model's contribution measurable rather than assumed. It needs its own `ConfigFieldModelPicker` (already declared) pointed at a small fast model, and it must read message rows rather than the wire prefix, since building the prefix needs the model it is still choosing.
+- **Consecutive same-speaker label collapse.** Every turn shows its name. Round-robin never lets a member speak twice in a row, so this only matters once a smarter router exists.
+- **Roster cap.** The design says five; nothing enforces it. `Theme.personaColors` wraps rather than running out, so exceeding it means two members share a rail rather than one rendering unlabelled.
+- **Speculative moderation.** Running the moderator when the previous hop terminates would hide its round-trip behind the user's tap, at the cost of a call for every abandoned discussion. Only worth it if the serial version grates.
+- **Gemini consecutive same-role behaviour is unverified.** Anthropic documents combining; Gemini's docs are silent and we have not tested it. `history.coalesceAssistants` makes it moot for assistant turns.
 
 ## Strategic deferrals
 

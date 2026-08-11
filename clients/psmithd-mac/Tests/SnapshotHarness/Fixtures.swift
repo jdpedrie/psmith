@@ -265,6 +265,35 @@ public enum SnapshotFixtures {
         )
     }
 
+    /// A discussion: one question, three named speakers. Exercises the
+    /// grouping cues the design leans on — a rail per speaker, the name in
+    /// place of the generic role label, and adjacent turns from different
+    /// members reading as distinct rather than as one wall.
+    public static func councilMessages(contextID: String = "context-conv-1-1") -> [PsmithMessage] {
+        [
+            systemMessage(contextID: contextID),
+            userMessage(contextID: contextID, content: "Should we roll back the migration?"),
+            PsmithMessage(
+                id: "msg-council-1", contextID: contextID, parentID: "msg-user-1",
+                role: .assistant,
+                content: "The rollback path is the problem. We tested the forward migration under load but the reverse has never run against production-sized data, and the column drop is not reversible once it lands.",
+                persona: "Skeptic", personaIndex: 0
+            ),
+            PsmithMessage(
+                id: "msg-council-2", contextID: contextID, parentID: "msg-council-1",
+                role: .assistant,
+                content: "Rollback is solved. The real risk is sitting here another day.",
+                persona: "Optimist", personaIndex: 1
+            ),
+            PsmithMessage(
+                id: "msg-council-3", contextID: contextID, parentID: "msg-council-2",
+                role: .assistant,
+                content: "We said that in March.",
+                persona: "Historian", personaIndex: 2
+            ),
+        ]
+    }
+
     public static func assistantMessage(
         id: String = "msg-assistant-1",
         contextID: String = "context-conv-1-1",

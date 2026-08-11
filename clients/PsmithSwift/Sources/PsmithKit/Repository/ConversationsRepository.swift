@@ -281,6 +281,25 @@ public final class ConversationsRepository: Sendable {
         return (PsmithMessage(from: msg.userMessage), PsmithStreamRun(from: msg.streamRun))
     }
 
+    /// Extends the current turn with another speaker rather than replacing the
+    /// answer. Structurally the regenerate path, but a different verb: the
+    /// server refuses it when the leaf has already moved, so two clients
+    /// tapping continue cannot both add a speaker to one turn.
+    public func continueDiscussion(
+        conversationID: String,
+        leafMessageID: String
+    ) async throws -> (parentMessage: PsmithMessage, streamRun: PsmithStreamRun) {
+        var req = Psmith_V1_SendMessageRequest()
+        req.conversationID = conversationID
+        req.parentMessageID = leafMessageID
+        req.continueDiscussion = true
+        let resp = await client.sendMessage(request: req, headers: [:])
+        guard let msg = resp.message else {
+            throw resp.error.map(PsmithError.from) ?? .missingPayload("continue")
+        }
+        return (PsmithMessage(from: msg.userMessage), PsmithStreamRun(from: msg.streamRun))
+    }
+
     public func listMessages(
         contextID: String,
         leafMessageID: String? = nil,

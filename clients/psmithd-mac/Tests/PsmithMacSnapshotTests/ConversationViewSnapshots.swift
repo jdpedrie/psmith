@@ -58,6 +58,18 @@ struct ConversationViewSnapshots {
         assertViewSnapshots(body(for: model), sizes: columnSizes)
     }
 
+    /// A multi-voice discussion. The point of the snapshot is the grouping:
+    /// three consecutive assistant messages have to read as three speakers,
+    /// not as one long answer, and the one-line replies have to stay legible
+    /// next to the long opener.
+    @Test
+    func councilDiscussion() {
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.councilMessages()
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
     @Test
     func userAndAssistantPair() {
         let model = SnapshotStubs.makeConversationViewModel(

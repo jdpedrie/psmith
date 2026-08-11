@@ -1086,6 +1086,17 @@ public nonisolated struct Psmith_V1_SendMessageRequest: Sendable {
   /// at first send.
   public var deviceFacts: [Psmith_V1_DeviceFact] = []
 
+  /// continue_discussion extends the current turn with another speaker,
+  /// rather than replacing it. Mechanically it takes the same path as
+  /// regenerate (parent on the leaf, no user row inserted), but the two mean
+  /// opposite things to a reader and the clients present them differently:
+  /// regenerate discards an answer, continue keeps it and adds to it.
+  ///
+  /// parent_message_id carries the leaf the client saw. The server rejects the
+  /// send if the leaf has already moved, so two clients tapping continue at the
+  /// same moment cannot produce two speakers on one turn.
+  public var continueDiscussion: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2951,7 +2962,7 @@ nonisolated extension Psmith_V1_CreateContextManualResponse: SwiftProtobuf.Messa
 
 nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}parent_message_id\0\u{1}content\0\u{3}provider_id\0\u{3}model_id\0\u{3}call_settings\0\u{1}regenerate\0\u{3}attachment_file_ids\0\u{3}device_facts\0\u{3}continue_discussion\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2968,6 +2979,7 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
       case 7: try { try decoder.decodeSingularBoolField(value: &self.regenerate) }()
       case 8: try { try decoder.decodeRepeatedStringField(value: &self.attachmentFileIds) }()
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.deviceFacts) }()
+      case 10: try { try decoder.decodeSingularBoolField(value: &self.continueDiscussion) }()
       default: break
       }
     }
@@ -3005,6 +3017,9 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
     if !self.deviceFacts.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.deviceFacts, fieldNumber: 9)
     }
+    if self.continueDiscussion != false {
+      try visitor.visitSingularBoolField(value: self.continueDiscussion, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3018,6 +3033,7 @@ nonisolated extension Psmith_V1_SendMessageRequest: SwiftProtobuf.Message, Swift
     if lhs.regenerate != rhs.regenerate {return false}
     if lhs.attachmentFileIds != rhs.attachmentFileIds {return false}
     if lhs.deviceFacts != rhs.deviceFacts {return false}
+    if lhs.continueDiscussion != rhs.continueDiscussion {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

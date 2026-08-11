@@ -1145,8 +1145,11 @@ private struct MessageRow: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .assistant:
             HStack(alignment: .top, spacing: 8) {
+                // No-op without a speaker, so an ordinary conversation keeps
+                // its exact current layout.
                 content()
                     .frame(maxWidth: cap, alignment: .leading)
+                    .personaRail(index: message.personaSlot)
                 branchSwitcher
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1211,10 +1214,17 @@ private struct MessageRow: View {
                         .foregroundStyle(.orange)
                         .imageScale(.small)
                 }
-                Text(roleLabel)
-                    .scaledFont(.caption2)
-                    .foregroundStyle(isErrored ? .orange : .secondary)
-                    .fontWeight(isErrored ? .semibold : .regular)
+                if let slot = message.personaSlot, let name = message.persona, !isErrored {
+                    // A named speaker replaces the generic role label rather
+                    // than sitting beside it: "ASSISTANT · Skeptic" is noise
+                    // when every message in the discussion is an assistant.
+                    PersonaLabel(name: name, index: slot)
+                } else {
+                    Text(roleLabel)
+                        .scaledFont(.caption2)
+                        .foregroundStyle(isErrored ? .orange : .secondary)
+                        .fontWeight(isErrored ? .semibold : .regular)
+                }
                 if isErrored {
                     Text("FAILED")
                         .scaledFont(.caption2)

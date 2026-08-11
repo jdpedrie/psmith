@@ -523,8 +523,28 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
     /// the message renders in an app session.
     public let isWelcome: Bool
 
+    /// Who said this, when the conversation has more than one voice in it.
+    /// nil is the ordinary case and renders as "Assistant".
+    public let persona: String?
+
+    /// Palette slot for `persona`, resolved against the active theme. The
+    /// server never sends a color: themes own their palettes, so a
+    /// conversation authored under one renders correctly under another.
+    public let personaIndex: Int?
+
     /// Convenience forwarder used by costToDate roll-ups.
     public var totalCostUsd: Double? { usage?.totalCostUsd }
+
+    /// Whether this message shows speaker attribution, and under which palette
+    /// slot. nil for the ordinary single-assistant case.
+    ///
+    /// Index defaults to 0 rather than nil-ing out the whole thing, so a
+    /// persona that arrives without a slot still renders with a color instead
+    /// of silently losing its label.
+    public var personaSlot: Int? {
+        guard let persona, !persona.isEmpty else { return nil }
+        return personaIndex ?? 0
+    }
 
     /// True when the model reasoned during this turn. Combines the captured
     /// rendered text (visible reasoning) and `usage.reasoningTokens > 0`
@@ -559,7 +579,9 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
         createdAt: Date = Date(timeIntervalSince1970: 0),
         attachments: [PsmithMessageAttachment] = [],
         uiFragments: [PsmithUIFragment] = [],
-        isWelcome: Bool = false
+        isWelcome: Bool = false,
+        persona: String? = nil,
+        personaIndex: Int? = nil
     ) {
         self.id = id
         self.contextID = contextID
@@ -581,6 +603,8 @@ public struct PsmithMessage: Sendable, Hashable, Identifiable, Codable {
         self.attachments = attachments
         self.uiFragments = uiFragments
         self.isWelcome = isWelcome
+        self.persona = persona
+        self.personaIndex = personaIndex
     }
 }
 
@@ -697,7 +721,9 @@ extension PsmithMessage {
             createdAt: p.hasCreatedAt ? p.createdAt.date : Date(timeIntervalSince1970: 0),
             attachments: p.attachments.map(PsmithMessageAttachment.init(from:)),
             uiFragments: p.uiFragments.map(PsmithUIFragment.init(from:)),
-            isWelcome: p.isWelcome
+            isWelcome: p.isWelcome,
+            persona: p.hasPersona && !p.persona.isEmpty ? p.persona : nil,
+            personaIndex: p.hasPersonaIndex ? Int(p.personaIndex) : nil
         )
     }
 }

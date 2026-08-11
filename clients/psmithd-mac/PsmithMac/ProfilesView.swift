@@ -1562,7 +1562,8 @@ private struct ProfileForm: View {
                                 availableModels: model.availableModels,
                                 providerLabels: model.providerLabels,
                                 providerTypes: model.providerTypes,
-                                providerPresetIDs: model.providerPresetIDs
+                                providerPresetIDs: model.providerPresetIDs,
+                                availableProfiles: model.profiles.map { ($0.id, $0.name) }
                             )
                             if !globalFields.isEmpty {
                                 Divider().padding(.vertical, 6)
