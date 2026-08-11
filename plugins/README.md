@@ -16,6 +16,7 @@ public extension surface, not a server internal.
 | [`brave_search`](brave_search/) | `web_search` against the Brave index | Configurable, ToolProvider |
 | [`component_builder`](component_builder/) | User-defined structured-output recipes rendered as components | Configurable, SystemPrompter, HistoryTransformer, ContentRenderer |
 | [`context_packs`](context_packs/) | Deferred profile background delivered on demand | Configurable, SystemPrompter, MessageEnvelope, PendingStateProvider, PanelProvider, ActionHandler |
+| [`council`](council/) | A panel of personas answering and then arguing, each as its own message | Configurable, TurnRouter, SystemPrompter, HistoryTransformer, PendingStateProvider |
 | [`files`](files/) | Read and write a granted folder of markdown or text files | Configurable, ToolProvider |
 | [`game_master`](game_master/) | A turn-based management game with the rules held server-side | Configurable, SystemPrompter, ToolProvider, AssistantContentTransformer, DisplayTransformer, ContentRenderer |
 | [`imagegen`](imagegen/) | `generate_image`, returned as a tool attachment | Configurable, ToolProvider |
@@ -25,7 +26,7 @@ public extension surface, not a server internal.
 | [`text_injector`](text_injector/) | Free-form prompt shaping without writing Go | Configurable, SystemPrompter, HistoryTransformer |
 
 `plugins/all` is not a plugin. It is the blank-import aggregator that links the
-other eleven into the binary.
+other twelve into the binary.
 
 ## Conventions
 

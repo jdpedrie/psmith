@@ -216,3 +216,53 @@ func TestCoalesce_NoTwoAdjacentAssistants(t *testing.T) {
 		}
 	}
 }
+
+// --- AppendDirection -------------------------------------------------------
+
+// The opening direction has to land inside the user's own message. Left as its
+// own turn it would sit next to the user's question, and the provider would
+// combine them on terms that are undocumented for two of the three drivers.
+func TestAppendDirection_FoldsIntoAPrecedingUserTurn(t *testing.T) {
+	got := AppendDirection([]providers.WireMessage{
+		{Role: "user", Content: "What should we do?"},
+	}, "[panel] Skeptic, your turn.")
+	if len(got) != 1 {
+		t.Fatalf("expected the direction folded in, got %s", roles(got))
+	}
+	if !strings.Contains(got[0].Content, "What should we do?") ||
+		!strings.Contains(got[0].Content, "[panel]") {
+		t.Errorf("merged content lost a side: %q", got[0].Content)
+	}
+}
+
+func TestAppendDirection_AddsATurnAfterAnAssistant(t *testing.T) {
+	got := AppendDirection([]providers.WireMessage{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "a"},
+	}, "[panel] Optimist, briefly.")
+	if r := roles(got); r != "user,assistant,user" {
+		t.Fatalf("expected a new user turn, got %s", r)
+	}
+}
+
+func TestAppendDirection_LeavesToolAndAttachmentTurnsAlone(t *testing.T) {
+	got := AppendDirection([]providers.WireMessage{
+		{Role: "user", ToolResults: []providers.ToolResultBlock{{ToolUseID: "t"}}},
+	}, "[panel] next")
+	if len(got) != 2 {
+		t.Fatalf("a tool-result turn must not absorb a direction: %s", roles(got))
+	}
+	got = AppendDirection([]providers.WireMessage{
+		{Role: "user", Content: "look", Attachments: []providers.Attachment{{MimeType: "image/png"}}},
+	}, "[panel] next")
+	if len(got) != 2 {
+		t.Fatalf("an attachment turn must not absorb a direction: %s", roles(got))
+	}
+}
+
+func TestAppendDirection_EmptyIsANoOp(t *testing.T) {
+	in := []providers.WireMessage{{Role: "user", Content: "q"}}
+	if got := AppendDirection(in, ""); len(got) != 1 || got[0].Content != "q" {
+		t.Errorf("empty direction should change nothing: %+v", got)
+	}
+}

@@ -191,6 +191,17 @@ type discussion struct {
 type hop struct {
 	MemberID  string `json:"member_id"`
 	Direction string `json:"direction"`
+	// MessageID is the assistant message this hop produced, backfilled on the
+	// following route.
+	//
+	// It cannot be written when the hop is created, because routing happens
+	// before the message exists. But each snapshot is BOUND to the message it
+	// closed, so the next LoadNearest reports that id as foundAt, and one
+	// backfill per route is enough to give every past hop an id. That is what
+	// lets the history transform match a stored direction to the exact message
+	// it preceded, rather than counting positions and getting it wrong the
+	// first time a non-council assistant message appears in the chain.
+	MessageID string `json:"message_id,omitempty"`
 }
 
 func (d *discussion) used() int { return len(d.Hops) }
@@ -347,33 +358,6 @@ func (c *council) TransformHistoryMessage(msg providers.WireMessage, pos plugina
 	}
 }
 
-// MergeDirections folds a hop's directions into a built prefix, applying the
-// rule that a direction never lands next to a user turn.
-//
-// Two consecutive user messages would be combined by the provider anyway. We
-// do it ourselves so the bytes are deterministic and ours, rather than
-// depending on a join that is undocumented for two of the three drivers. In
-// practice this is what puts the opening direction inside the user's own
-// message instead of after it.
-func MergeDirections(msgs []providers.WireMessage) []providers.WireMessage {
-	out := make([]providers.WireMessage, 0, len(msgs))
-	for _, m := range msgs {
-		if n := len(out); n > 0 && m.Role == "user" && out[n-1].Role == "user" &&
-			len(m.ToolResults) == 0 && len(out[n-1].ToolResults) == 0 &&
-			len(m.Attachments) == 0 && len(out[n-1].Attachments) == 0 {
-			prev := &out[n-1]
-			if prev.Content == "" {
-				prev.Content = m.Content
-			} else if m.Content != "" {
-				prev.Content = prev.Content + "\n\n" + m.Content
-			}
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
-}
-
 // --- TurnRouter ------------------------------------------------------------
 
 // stateVersion is bumped when the persisted shape changes incompatibly.
@@ -400,6 +384,10 @@ func (c *council) RouteTurn(ctx context.Context) (pluginapi.TurnRoute, bool) {
 	}
 
 	d := c.loadDiscussion(ctx, store)
+	// Everything the transform needs for THIS send: the frozen direction that
+	// preceded each earlier message on this branch.
+	c.directions = d.directionsByMessage()
+
 	dec := c.route(d)
 	if dec.End {
 		return pluginapi.TurnRoute{}, false
@@ -427,7 +415,7 @@ func (c *council) RouteTurn(ctx context.Context) (pluginapi.TurnRoute, bool) {
 // fresh one. A council that cannot read its history should start a new
 // discussion rather than refuse to speak.
 func (c *council) loadDiscussion(ctx context.Context, s host.PluginStateStore) *discussion {
-	raw, _, _, err := s.LoadNearest(ctx)
+	raw, _, foundAt, err := s.LoadNearest(ctx)
 	if err != nil || len(raw) == 0 {
 		return &discussion{}
 	}
@@ -435,7 +423,27 @@ func (c *council) loadDiscussion(ctx context.Context, s host.PluginStateStore) *
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return &discussion{}
 	}
+	// The snapshot was bound to the message that closed the last hop, so this
+	// is the only place that id is knowable. Backfilling here keeps the write
+	// to one per turn instead of a second, racier one after materialization.
+	if n := len(d.Hops); n > 0 && d.Hops[n-1].MessageID == "" && foundAt != uuid.Nil {
+		d.Hops[n-1].MessageID = foundAt.String()
+	}
 	return &d
+}
+
+// directionsByMessage indexes the frozen directions for the history transform.
+func (d *discussion) directionsByMessage() map[uuid.UUID]string {
+	out := make(map[uuid.UUID]string, len(d.Hops))
+	for _, h := range d.Hops {
+		if h.MessageID == "" || h.Direction == "" {
+			continue
+		}
+		if id, err := uuid.Parse(h.MessageID); err == nil {
+			out[id] = h.Direction
+		}
+	}
+	return out
 }
 
 // --- PendingStateProvider --------------------------------------------------

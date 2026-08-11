@@ -675,6 +675,37 @@ func coalesceAssistants(msgs []providers.WireMessage) []providers.WireMessage {
 	return out
 }
 
+// AppendDirection puts a router's per-turn framing at the end of the prefix,
+// folding it into the preceding user turn when there is one.
+//
+// The tail is the right place for anything that changes every turn. The system
+// slot is shared and cached, so per-turn text there invalidates the whole
+// prefix on every send; here, everything in front stays byte-identical and one
+// cache lineage serves every speaker.
+//
+// The fold matters because two consecutive user turns get combined by the
+// provider anyway, on terms that are undocumented for two of the three
+// drivers. Doing it here makes the bytes ours and identical on every rebuild.
+// Turns carrying tool results or attachments are left alone, since those pair
+// positionally and their ordering is meaningful.
+func AppendDirection(msgs []providers.WireMessage, text string) []providers.WireMessage {
+	if text == "" {
+		return msgs
+	}
+	if n := len(msgs); n > 0 {
+		prev := &msgs[n-1]
+		if prev.Role == wireUser && len(prev.ToolResults) == 0 && len(prev.Attachments) == 0 {
+			if prev.Content == "" {
+				prev.Content = text
+			} else {
+				prev.Content = joinParts([]string{prev.Content, text})
+			}
+			return msgs
+		}
+	}
+	return append(msgs, providers.WireMessage{Role: wireUser, Content: text})
+}
+
 // wireRoleFor maps a stored role to its wire-side role. role=context is
 // rewritten to user; the other roles are passed through.
 func wireRoleFor(stored string) (string, error) {

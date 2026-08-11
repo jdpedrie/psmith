@@ -1755,6 +1755,22 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		})
 	}
 
+	// A routed turn ends with the direction naming who speaks and how long to
+	// take. Wire only: it is never persisted, and the user never sees it.
+	//
+	// It goes at the tail rather than in the system slot on purpose. The
+	// system slot is shared and cached; this changes every hop, so putting it
+	// here leaves the whole prefix in front of it byte-identical and lets one
+	// cache lineage serve every member.
+	//
+	// The normalize pass then folds it into the preceding user turn when there
+	// is one, which is what puts the opening direction inside the user's own
+	// message. Two consecutive user turns would be combined by the provider
+	// anyway; doing it ourselves keeps the bytes deterministic.
+	if routed {
+		wireMessages = history.AppendDirection(wireMessages, route.Direction)
+	}
+
 	// Resolve effective call settings via the 4-layer chain (high precedence
 	// → low): conversation > resolved profile > model > provider. The
 	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat

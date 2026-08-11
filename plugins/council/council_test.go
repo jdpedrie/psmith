@@ -273,6 +273,12 @@ func TestTransform_ReplaysStoredTextVerbatim(t *testing.T) {
 // No provider reports this violation. Anthropic silently combines the turns,
 // which erases the structure saying these were different speakers. So it has
 // to be asserted directly.
+//
+// The invariant is about ASSISTANT turns specifically. Two adjacent user turns
+// are fine and happen normally here: the user's question is followed by the
+// first direction, and combining those is correct, since the direction is
+// addressed to the same turn the question opened. Only merged assistant turns
+// destroy information.
 func TestExpansion_NoTwoPersonaTurnsEndUpAdjacent(t *testing.T) {
 	c := build(t, threeMembers)
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
@@ -292,49 +298,22 @@ func TestExpansion_NoTwoPersonaTurnsEndUpAdjacent(t *testing.T) {
 			pluginapi.HistoryPos{MessageID: id},
 		)...)
 	}
-	out = MergeDirections(out)
 
 	for i := 1; i < len(out); i++ {
-		if out[i].Role == out[i-1].Role {
-			t.Fatalf("adjacent %q turns at %d: %s", out[i].Role, i, roleList(out))
+		if out[i].Role == "assistant" && out[i-1].Role == "assistant" {
+			t.Fatalf("adjacent persona turns at %d: %s", i, roleList(out))
 		}
 	}
-}
 
-// --- MergeDirections ------------------------------------------------------
-
-// The opening direction has to land inside the user's own message. Left as its
-// own turn it would sit next to the user's question, and the provider would
-// combine them on its own terms rather than ours.
-func TestMergeDirections_FoldsIntoAPrecedingUserTurn(t *testing.T) {
-	got := MergeDirections([]providers.WireMessage{
-		{Role: "user", Content: "What should we do?"},
-		{Role: "user", Content: "[panel] Skeptic, your turn."},
-		{Role: "assistant", Content: "reply"},
-	})
-	if len(got) != 2 {
-		t.Fatalf("expected the direction folded in, got %s", roleList(got))
-	}
-	if !strings.Contains(got[0].Content, "What should we do?") ||
-		!strings.Contains(got[0].Content, "[panel]") {
-		t.Errorf("merged content lost a side: %q", got[0].Content)
-	}
-}
-
-func TestMergeDirections_LeavesToolAndAttachmentTurnsAlone(t *testing.T) {
-	got := MergeDirections([]providers.WireMessage{
-		{Role: "user", ToolResults: []providers.ToolResultBlock{{ToolUseID: "t"}}},
-		{Role: "user", Content: "[panel] next"},
-	})
-	if len(got) != 2 {
-		t.Fatalf("tool-result turns must not absorb a direction: %s", roleList(got))
-	}
-	got = MergeDirections([]providers.WireMessage{
-		{Role: "user", Content: "look", Attachments: []providers.Attachment{{MimeType: "image/png"}}},
-		{Role: "user", Content: "[panel] next"},
-	})
-	if len(got) != 2 {
-		t.Fatalf("attachment turns must not absorb a direction: %s", roleList(got))
+	// And every persona turn is preceded by its direction, which is what keeps
+	// them separated in the first place.
+	for i, m := range out {
+		if m.Role != "assistant" {
+			continue
+		}
+		if i == 0 || out[i-1].Role != "user" {
+			t.Fatalf("persona turn at %d is not preceded by a direction: %s", i, roleList(out))
+		}
 	}
 }
 
