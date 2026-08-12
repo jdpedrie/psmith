@@ -19,7 +19,7 @@ How the system works, one subsystem per document.
 - [design/streaming.md](design/streaming.md) — the stream supervisor, durable chunks, the broker, retry, subscribe and replay, the chunk vocabulary.
 - [design/plugins.md](design/plugins.md) — the plugin code layout (`pluginapi`, `pluginapi/host`, `plugins/<name>/`), the interface set, the pipeline and its inheritance, where each capability runs, the shipped catalog.
 - [design/game-master.md](design/game-master.md) — the game-master plugin: why the engine owns every number, how 3d6 and outcome bands work, clocks and off-menu actions, and how branch-scoped state makes forking a conversation fork the campaign.
-- [design/council.md](design/council.md) — council mode: several persona profiles answering one question and arguing it out, an invisible moderator routing turns, why alternation forces interstitial directions, what it costs in cache, and how personas stay visually distinct without breaking themes. Design only, no code yet.
+- [design/council.md](design/council.md) — council mode: several persona profiles answering one question and arguing it out, an invisible moderator routing turns, why alternation forces interstitial directions, what it costs in cache, and how personas stay visually distinct without breaking themes.
 - [design/tools.md](design/tools.md) — the tool loop, server tools, device tools, the brokers, elicitation.
 - [design/compression.md](design/compression.md) — two-stage compaction and the context lifecycle.
 - [design/embeddings-and-search.md](design/embeddings-and-search.md) — embedder config, the background worker, semantic history search, the memory plugin.
