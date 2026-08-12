@@ -37,6 +37,7 @@ import (
 	"github.com/jdpedrie/psmith/server/pagetoken"
 	"github.com/jdpedrie/psmith/server/profiles"
 	"github.com/jdpedrie/psmith/server/protoconv"
+	"github.com/jdpedrie/psmith/server/providerkit"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/storage"
 	"github.com/jdpedrie/psmith/server/store"
@@ -223,15 +224,19 @@ func (s *Service) SetLangfuseEmitter(e *langfuse.Emitter) {
 // to plaintext provRow.Config for legacy rows). Mirrors the helper in
 // internal/modelproviders so the conversation send path does the same
 // thing the model-providers admin path does.
+// opener turns a stored provider row into a driver. See server/providerkit:
+// the load / ownership-check / decrypt / build / assert sequence was written
+// out by hand in six places before this existed.
+func (s *Service) opener() providerkit.Opener {
+	return providerkit.Opener{
+		Queries: s.queries,
+		Cipher:  s.cipher,
+		Deps:    providers.Deps{Catalog: s.catalog, Logger: s.logger},
+	}
+}
+
 func (s *Service) resolveProviderConfig(row store.UserModelProvider) ([]byte, error) {
-	b, err := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt provider config: %w", err)
-	}
-	if len(b) == 0 {
-		return []byte("{}"), nil
-	}
-	return b, nil
+	return s.opener().Config(row)
 }
 
 // --- CreateConversation ---
@@ -1722,11 +1727,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	}
 
 	// Build the driver instance for this provider.
-	provCfg, err := s.resolveProviderConfig(provRow)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
+	driver, err := s.opener().Build(provRow)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}
@@ -2970,11 +2971,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	}
 
 	// Build the driver and call Send.
-	provCfg, err := s.resolveProviderConfig(provRow)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
+	driver, err := s.opener().Build(provRow)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build compression driver: %w", err))
 	}
@@ -3194,11 +3191,7 @@ func (s *Service) CountContextTokens(ctx context.Context, req *connect.Request[p
 	}
 
 	// Build driver, type-assert to TokenCounter.
-	provCfg, err := s.resolveProviderConfig(provRow)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
+	driver, err := s.opener().Build(provRow)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}

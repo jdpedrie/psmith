@@ -16,6 +16,7 @@ import (
 	"github.com/jdpedrie/psmith/server/auth"
 	"github.com/jdpedrie/psmith/server/events"
 	"github.com/jdpedrie/psmith/server/profiles"
+	"github.com/jdpedrie/psmith/server/providerkit"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/stream"
@@ -361,24 +362,15 @@ func (s *Service) callTitleModel(ctx context.Context, providerID uuid.UUID, mode
 	if s.catalog == nil {
 		return "", errors.New("title: catalog dep is nil")
 	}
-	provRow, err := s.queries.GetUserModelProvider(ctx, providerID)
+	// Ownership is established by the caller (the conversation is already
+	// known to belong to this user), so uuid.Nil here rather than a redundant
+	// second check against a user id this function does not carry.
+	stateless, _, err := s.opener().OpenStateless(ctx, providerID, uuid.Nil)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, providerkit.ErrNotFound) {
 			return "", fmt.Errorf("title provider %s not found", providerID)
 		}
-		return "", fmt.Errorf("load title provider: %w", err)
-	}
-	provCfg, err := s.resolveProviderConfig(provRow)
-	if err != nil {
-		return "", fmt.Errorf("decrypt title provider config: %w", err)
-	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, provCfg)
-	if err != nil {
-		return "", fmt.Errorf("build title driver: %w", err)
-	}
-	stateless, ok := driver.(providers.StatelessProvider)
-	if !ok {
-		return "", fmt.Errorf("title driver %q is not a stateless provider", provRow.Type)
+		return "", fmt.Errorf("open title provider: %w", err)
 	}
 
 	srcCh, err := stateless.Send(ctx, providers.SendRequest{

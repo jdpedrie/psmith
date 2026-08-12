@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/jdpedrie/psmith/pluginapi/host"
+	"github.com/jdpedrie/psmith/server/providerkit"
 	"github.com/jdpedrie/psmith/server/providers"
 )
 
@@ -45,29 +45,14 @@ func (c *pluginCompleter) Complete(
 	if err != nil {
 		return "", host.ErrNoCompleter
 	}
-	provRow, err := c.svc.queries.GetUserModelProvider(ctx, pid)
+	// Scoped to the conversation's owner, so a plugin cannot name any provider
+	// id and spend someone else's credentials. The opener enforces it.
+	stateless, _, err := c.svc.opener().OpenStateless(ctx, pid, c.userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, providerkit.ErrNotFound) || errors.Is(err, providerkit.ErrNotStateless) {
 			return "", host.ErrNoCompleter
 		}
-		return "", fmt.Errorf("load provider: %w", err)
-	}
-	// Ownership check. Without it a plugin could name any provider id and
-	// spend another user's credentials.
-	if provRow.UserID != c.userID {
-		return "", host.ErrNoCompleter
-	}
-	cfg, err := c.svc.resolveProviderConfig(provRow)
-	if err != nil {
-		return "", fmt.Errorf("decrypt provider config: %w", err)
-	}
-	driver, err := providers.Build(provRow.Type, providers.Deps{Catalog: c.svc.catalog, Logger: c.svc.logger}, cfg)
-	if err != nil {
-		return "", fmt.Errorf("build driver: %w", err)
-	}
-	stateless, ok := driver.(providers.StatelessProvider)
-	if !ok {
-		return "", host.ErrNoCompleter
+		return "", err
 	}
 
 	req := providers.SendRequest{

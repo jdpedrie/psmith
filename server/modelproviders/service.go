@@ -26,6 +26,7 @@ import (
 	"github.com/jdpedrie/psmith/server/events"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/profiles"
+	"github.com/jdpedrie/psmith/server/providerkit"
 	"github.com/jdpedrie/psmith/server/providers"
 	openaidriver "github.com/jdpedrie/psmith/server/providers/openai"
 	"github.com/jdpedrie/psmith/server/store"
@@ -93,15 +94,17 @@ func NewService(queries *store.Queries, catalog modelmeta.Catalog, cipher crypto
 // falling back to the plaintext column for rows that haven't been
 // touched since the encryption rollout. Returns []byte("{}") when
 // both columns are unset so callers can unmarshal unconditionally.
+// opener turns a stored provider row into a driver. See server/providerkit.
+func (s *Service) opener() providerkit.Opener {
+	return providerkit.Opener{
+		Queries: s.queries,
+		Cipher:  s.cipher,
+		Deps:    providers.Deps{Catalog: s.catalog, Logger: s.logger},
+	}
+}
+
 func (s *Service) resolveProviderConfig(row store.UserModelProvider) ([]byte, error) {
-	b, err := crypto.ResolveSecret(s.cipher, row.ConfigEncrypted, row.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt provider config: %w", err)
-	}
-	if len(b) == 0 {
-		return []byte("{}"), nil
-	}
-	return b, nil
+	return s.opener().Config(row)
 }
 
 // mergeJSONConfig applies a shallow patch (matching the old SQL-side
@@ -434,7 +437,7 @@ func (s *Service) DiscoverModels(ctx context.Context, req *connect.Request[psmit
 		return connect.NewResponse(&psmithv1.DiscoverModelsResponse{Models: out}), nil
 	}
 
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
+	driver, err := s.opener().Build(row)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
 	}

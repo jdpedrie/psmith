@@ -378,13 +378,9 @@ func (s *Service) ProbeUserModel(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("model %q is not enabled on this provider", modelID))
 	}
 
-	cfg, err := s.resolveProviderConfig(row)
+	driver, err := s.opener().Build(row)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	stateless, ok := driver.(providers.StatelessProvider)
 	if !ok {

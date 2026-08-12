@@ -31,10 +31,10 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 Full findings and reasoning in [server-assessment.md](server-assessment.md). Ordered by what to do first; none is urgent today, the first three are what shows up as concurrency rises.
 
-1. **`TouchSession` writes on every authenticated request** (`server/auth/interceptor.go:112`). Turns every read into a write on a hot row, serializes concurrent requests from one session, and accumulates dead tuples at request rate. Fix: only touch when `last_used_at` is older than a few minutes.
-2. **Chunk persistence is one round-trip per chunk** (`server/stream/consume.go:105`). The flush buffers to 16 and then issues 16 separate inserts, paying the buffer's memory cost without its round-trip benefit. Fix: one multi-row insert or `pgx.Batch` per flush.
-3. **`SendMessage` resolves the profile four times** (`resolvePipelineForConversation`, `resolveProviderModel`, `resolveIncludeThinking`, `assembleCallSettings`). Each walks the inheritance chain with a query per level. Fix: resolve once at the top and thread the result.
-4. **Provider open sequence copy-pasted six times** and `resolveProviderConfig` duplicated between `conversations` and `modelproviders`. Fix: one `OpenStateless(ctx, providerID)` helper; the ownership check stops being per-caller discipline.
+~~1. **`TouchSession` writes on every authenticated request** ~~ **Done** (`2136e93`): touches only when `last_used_at` is older than five minutes.
+~~2. **Chunk persistence is one round-trip per chunk**~~ **Done** (`2136e93`): one UNNEST insert per flush.
+~~3. **`SendMessage` resolves the profile four times**~~ **Done** (`c6c419a`): request-scoped `profileCache` installed at the top of the send.
+~~4. **Provider open sequence copy-pasted six times**~~ **Done**: `server/providerkit` owns load / ownership / decrypt / build / assert.
 5. **Attachment bytes re-read and re-uploaded every turn** (`server/history/history.go:236`). Rows are batched correctly but the bytes are re-read from storage and re-sent upstream on every send, and billed every time. Fix: in-process cache keyed by sha256 (they are content-addressed already), then provider file references via the unused `Attachment.ProviderFileID`.
 6. **Decompose `SendMessage`** (669 lines, no seams). Extract a resolved-inputs struct plus `prepareTurn` / `insertUserMessage` / `buildRequest` / `startRun`. No behaviour change; worth doing before the next feature lands in it.
 7. Smaller: `stream_chunks.payload` is JSONB but never read structurally (JSON or TEXT is cheaper on the hottest write path); `pgxpool.New` takes library defaults with no `MaxConns`; `ListMessagesByContext` / `ListStreamChunks` / `ListMessageTreeStructure` have no bound and want cursors.

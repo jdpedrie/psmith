@@ -48,13 +48,9 @@ func (s *Service) TestUserModelProvider(ctx context.Context, req *connect.Reques
 		return nil, err
 	}
 
-	cfg, err := s.resolveProviderConfig(row)
+	driver, err := s.opener().Build(row)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 
 	start := time.Now()
@@ -89,13 +85,9 @@ func (s *Service) TestUserModel(ctx context.Context, req *connect.Request[psmith
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model_id is required"))
 	}
 
-	cfg, err := s.resolveProviderConfig(row)
+	driver, err := s.opener().Build(row)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	driver, err := providers.Build(row.Type, providers.Deps{Catalog: s.catalog, Logger: s.logger}, cfg)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	stateless, ok := driver.(providers.StatelessProvider)
 	if !ok {
