@@ -12,6 +12,8 @@ import (
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/gen/psmith/v1/psmithv1connect"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/testutil"
 )
@@ -35,6 +37,14 @@ func (c *captureSvc) Login(ctx context.Context, _ *connect.Request[psmithv1.Logi
 
 func newInterceptedServer(t *testing.T) (*captureSvc, *store.Queries, psmithv1connect.AuthServiceClient) {
 	t.Helper()
+	capture, q, c, _ := newInterceptedServerWithPool(t)
+	return capture, q, c
+}
+
+// newInterceptedServerWithPool is the same harness, plus the pool, for tests
+// that need to manipulate rows the store's queries deliberately do not expose.
+func newInterceptedServerWithPool(t *testing.T) (*captureSvc, *store.Queries, psmithv1connect.AuthServiceClient, *pgxpool.Pool) {
+	t.Helper()
 	pool := testutil.Pool(t)
 	q := store.New(pool)
 	capture := &captureSvc{}
@@ -44,7 +54,7 @@ func newInterceptedServer(t *testing.T) (*captureSvc, *store.Queries, psmithv1co
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	client := psmithv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
-	return capture, q, client
+	return capture, q, client, pool
 }
 
 // loginAndGetToken establishes a real session row (created via the Service)
@@ -122,30 +132,52 @@ func TestInterceptor_ValidToken_AttachesUser(t *testing.T) {
 	}
 }
 
-func TestInterceptor_ValidToken_TouchesSession(t *testing.T) {
+// The touch is coarse by design: it runs on every authenticated request, and
+// writing on every one of them turns a read into a write on a hot row. A
+// request against a freshly-used session must therefore leave the row alone,
+// and only a session that has gone quiet gets a new timestamp.
+func TestInterceptor_ValidToken_TouchesSessionOnAnInterval(t *testing.T) {
 	t.Parallel()
-	_, q, client := newInterceptedServer(t)
+	_, q, client, pool := newInterceptedServerWithPool(t)
 	token := loginAndGetToken(t, q, "alice", "x")
 
 	row, err := q.GetSessionWithUser(context.Background(), hashToken(token))
 	if err != nil {
 		t.Fatalf("seed lookup: %v", err)
 	}
-	originalLastUsed := row.LastUsedAt
+	fresh := row.LastUsedAt
 
-	// Wait a hair so the timestamp can differ, then call.
-	req := connect.NewRequest(&psmithv1.WhoAmIRequest{})
-	req.Header().Set("Authorization", "Bearer "+token)
-	if _, err := client.WhoAmI(context.Background(), req); err != nil {
-		t.Fatalf("WhoAmI: %v", err)
+	call := func() {
+		req := connect.NewRequest(&psmithv1.WhoAmIRequest{})
+		req.Header().Set("Authorization", "Bearer "+token)
+		if _, err := client.WhoAmI(context.Background(), req); err != nil {
+			t.Fatalf("WhoAmI: %v", err)
+		}
+	}
+	read := func() time.Time {
+		r, err := q.GetSessionWithUser(context.Background(), hashToken(token))
+		if err != nil {
+			t.Fatalf("lookup: %v", err)
+		}
+		return r.LastUsedAt
 	}
 
-	row2, err := q.GetSessionWithUser(context.Background(), hashToken(token))
-	if err != nil {
-		t.Fatalf("post lookup: %v", err)
+	// The hot path: session used a moment ago, so no write.
+	call()
+	if got := read(); !got.Equal(fresh) {
+		t.Errorf("a request against a fresh session must not write: %v -> %v", fresh, got)
 	}
-	if !row2.LastUsedAt.After(originalLastUsed) {
-		t.Errorf("last_used_at not advanced: was %v, now %v", originalLastUsed, row2.LastUsedAt)
+
+	// A session that has gone quiet still gets tracked.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE sessions SET last_used_at = NOW() - INTERVAL '1 hour' WHERE token_hash = $1`,
+		hashToken(token)); err != nil {
+		t.Fatalf("age session: %v", err)
+	}
+	aged := read()
+	call()
+	if got := read(); !got.After(aged) {
+		t.Errorf("a request against a quiet session must advance it: %v -> %v", aged, got)
 	}
 }
 
