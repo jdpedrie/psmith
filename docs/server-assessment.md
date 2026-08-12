@@ -185,6 +185,20 @@ DB tests are real tests. And the comment quality throughout is unusually high:
 most of the non-obvious decisions explain themselves, which is why this
 assessment could be written by reading rather than by running experiments.
 
+## Status
+
+Worked through 2026-08-11. What changed, and what is deliberately still open:
+
+| # | Item | State |
+|---|---|---|
+| 1 | `TouchSession` per request | Fixed: five-minute interval |
+| 2 | Per-chunk inserts | Fixed: one UNNEST insert per flush |
+| 3 | Profile resolved four times | Fixed: request-scoped `profileCache` |
+| 4 | Provider plumbing duplicated | Fixed: `server/providerkit` |
+| 5 | Attachments re-read every turn | Half fixed: `storage.ReadCache` removes the repeated backend reads. The bytes still cross the wire and are billed every send; that needs provider file references. |
+| 6 | `SendMessage` has no seams | Partly: `prepareTurn` extracted, 669 to 543 lines. The insert, request building and handoff all touch state and want extracting one at a time. |
+| 7 | JSONB payload, pool defaults | Fixed. Cursors on the three unbounded queries are still open: that is an RPC contract change, not a query tweak. |
+
 ## Order I would do these in
 
 1. **TouchSession interval** (minutes, removes a write per request)
