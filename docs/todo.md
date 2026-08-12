@@ -83,7 +83,6 @@ Left deliberately:
 
 - **Speculative moderation.** The moderator is a serial round-trip in front of every hop. Running it when the previous hop terminates would hide that behind the user's tap, at the cost of a call for every abandoned discussion. Only worth it if the serial version grates in practice.
 - **Gemini consecutive same-role behaviour is unverified.** Anthropic documents combining; Gemini's docs are silent and we have not tested it. `history.coalesceAssistants` makes it moot for assistant turns.
-- **Per-hop `max_output_tokens` is unproven on a real wire.** Unit-tested and threaded through `assembleCallSettings`, but the scratch fake used for end-to-end runs only read `max_tokens` while the openai driver sends `max_completion_tokens`, so the live log showed 0.
 
 ## Strategic deferrals
 

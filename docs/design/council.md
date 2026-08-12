@@ -320,6 +320,13 @@ request for brevity. Three levers, and only one of them is a bound:
 The cap and the direction have to agree or you get truncation mid-sentence. Say
 two sentences and cap at 60. Never say two sentences and cap at 4000.
 
+The cap is asserted against the real outgoing HTTP body, not against the
+settings struct. The field name differs per API (Anthropic's `max_tokens`, Chat
+Completions' `max_completion_tokens`, Responses' `max_output_tokens`) and
+guessing one is exactly how this went unverified the first time: a scratch fake
+read the wrong name, reported 0, and the miss looked like a bug in the cap
+rather than in the test.
+
 `max_output_tokens` is a request parameter, not part of the cached prefix, so
 varying it per hop costs nothing in cache terms.
 
