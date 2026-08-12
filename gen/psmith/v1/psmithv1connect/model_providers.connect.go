@@ -87,6 +87,9 @@ const (
 	// ModelProvidersServiceTestUserModelProcedure is the fully-qualified name of the
 	// ModelProvidersService's TestUserModel RPC.
 	ModelProvidersServiceTestUserModelProcedure = "/psmith.v1.ModelProvidersService/TestUserModel"
+	// ModelProvidersServiceProbeUserModelProcedure is the fully-qualified name of the
+	// ModelProvidersService's ProbeUserModel RPC.
+	ModelProvidersServiceProbeUserModelProcedure = "/psmith.v1.ModelProvidersService/ProbeUserModel"
 	// ModelProvidersServiceRefreshModelCatalogProcedure is the fully-qualified name of the
 	// ModelProvidersService's RefreshModelCatalog RPC.
 	ModelProvidersServiceRefreshModelCatalogProcedure = "/psmith.v1.ModelProvidersService/RefreshModelCatalog"
@@ -155,6 +158,14 @@ type ModelProvidersServiceClient interface {
 	// and reports latency, tokens, and a sample of the reply. Bills a few
 	// tokens. Failures are packed into the response, not raised as RPC errors.
 	TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error)
+	// ProbeUserModel exercises a model to find out what it can actually do, and
+	// folds the answer into its stored capabilities.
+	//
+	// The empirical counterpart to RefreshUserModelMetadata: that refreshes what
+	// the catalog claims, this reports what the model does. Bills a handful of
+	// tokens per capability (expected, and why it is user-triggered rather than
+	// automatic).
+	ProbeUserModel(context.Context, *connect.Request[v1.ProbeUserModelRequest]) (*connect.Response[v1.ProbeUserModelResponse], error)
 	// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
@@ -285,6 +296,12 @@ func NewModelProvidersServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModel")),
 			connect.WithClientOptions(opts...),
 		),
+		probeUserModel: connect.NewClient[v1.ProbeUserModelRequest, v1.ProbeUserModelResponse](
+			httpClient,
+			baseURL+ModelProvidersServiceProbeUserModelProcedure,
+			connect.WithSchema(modelProvidersServiceMethods.ByName("ProbeUserModel")),
+			connect.WithClientOptions(opts...),
+		),
 		refreshModelCatalog: connect.NewClient[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse](
 			httpClient,
 			baseURL+ModelProvidersServiceRefreshModelCatalogProcedure,
@@ -326,6 +343,7 @@ type modelProvidersServiceClient struct {
 	addManualModel           *connect.Client[v1.AddManualModelRequest, v1.AddManualModelResponse]
 	testUserModelProvider    *connect.Client[v1.TestUserModelProviderRequest, v1.TestUserModelProviderResponse]
 	testUserModel            *connect.Client[v1.TestUserModelRequest, v1.TestUserModelResponse]
+	probeUserModel           *connect.Client[v1.ProbeUserModelRequest, v1.ProbeUserModelResponse]
 	refreshModelCatalog      *connect.Client[v1.RefreshModelCatalogRequest, v1.RefreshModelCatalogResponse]
 	getCatalogStatus         *connect.Client[v1.GetCatalogStatusRequest, v1.GetCatalogStatusResponse]
 	listProviderCosts        *connect.Client[v1.ListProviderCostsRequest, v1.ListProviderCostsResponse]
@@ -421,6 +439,11 @@ func (c *modelProvidersServiceClient) TestUserModel(ctx context.Context, req *co
 	return c.testUserModel.CallUnary(ctx, req)
 }
 
+// ProbeUserModel calls psmith.v1.ModelProvidersService.ProbeUserModel.
+func (c *modelProvidersServiceClient) ProbeUserModel(ctx context.Context, req *connect.Request[v1.ProbeUserModelRequest]) (*connect.Response[v1.ProbeUserModelResponse], error) {
+	return c.probeUserModel.CallUnary(ctx, req)
+}
+
 // RefreshModelCatalog calls psmith.v1.ModelProvidersService.RefreshModelCatalog.
 func (c *modelProvidersServiceClient) RefreshModelCatalog(ctx context.Context, req *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error) {
 	return c.refreshModelCatalog.CallUnary(ctx, req)
@@ -493,6 +516,14 @@ type ModelProvidersServiceHandler interface {
 	// and reports latency, tokens, and a sample of the reply. Bills a few
 	// tokens. Failures are packed into the response, not raised as RPC errors.
 	TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error)
+	// ProbeUserModel exercises a model to find out what it can actually do, and
+	// folds the answer into its stored capabilities.
+	//
+	// The empirical counterpart to RefreshUserModelMetadata: that refreshes what
+	// the catalog claims, this reports what the model does. Bills a handful of
+	// tokens per capability (expected, and why it is user-triggered rather than
+	// automatic).
+	ProbeUserModel(context.Context, *connect.Request[v1.ProbeUserModelRequest]) (*connect.Response[v1.ProbeUserModelResponse], error)
 	// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
 	RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error)
 	// Read-only status snapshot.
@@ -619,6 +650,12 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 		connect.WithSchema(modelProvidersServiceMethods.ByName("TestUserModel")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelProvidersServiceProbeUserModelHandler := connect.NewUnaryHandler(
+		ModelProvidersServiceProbeUserModelProcedure,
+		svc.ProbeUserModel,
+		connect.WithSchema(modelProvidersServiceMethods.ByName("ProbeUserModel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelProvidersServiceRefreshModelCatalogHandler := connect.NewUnaryHandler(
 		ModelProvidersServiceRefreshModelCatalogProcedure,
 		svc.RefreshModelCatalog,
@@ -675,6 +712,8 @@ func NewModelProvidersServiceHandler(svc ModelProvidersServiceHandler, opts ...c
 			modelProvidersServiceTestUserModelProviderHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceTestUserModelProcedure:
 			modelProvidersServiceTestUserModelHandler.ServeHTTP(w, r)
+		case ModelProvidersServiceProbeUserModelProcedure:
+			modelProvidersServiceProbeUserModelHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceRefreshModelCatalogProcedure:
 			modelProvidersServiceRefreshModelCatalogHandler.ServeHTTP(w, r)
 		case ModelProvidersServiceGetCatalogStatusProcedure:
@@ -760,6 +799,10 @@ func (UnimplementedModelProvidersServiceHandler) TestUserModelProvider(context.C
 
 func (UnimplementedModelProvidersServiceHandler) TestUserModel(context.Context, *connect.Request[v1.TestUserModelRequest]) (*connect.Response[v1.TestUserModelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ModelProvidersService.TestUserModel is not implemented"))
+}
+
+func (UnimplementedModelProvidersServiceHandler) ProbeUserModel(context.Context, *connect.Request[v1.ProbeUserModelRequest]) (*connect.Response[v1.ProbeUserModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("psmith.v1.ModelProvidersService.ProbeUserModel is not implemented"))
 }
 
 func (UnimplementedModelProvidersServiceHandler) RefreshModelCatalog(context.Context, *connect.Request[v1.RefreshModelCatalogRequest]) (*connect.Response[v1.RefreshModelCatalogResponse], error) {

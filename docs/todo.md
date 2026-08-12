@@ -52,26 +52,6 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ---
 
-## Model capability probe
-
-Capabilities on `user_models` come from catalog metadata and hand-editing, so
-they are a claim rather than an observation. A provider that omits a flag, a
-custom endpoint with no catalog at all, or a model whose support changed since
-it was added all leave us with definitions that are wrong in the direction that
-hurts: a capability the model has but we do not know about stays switched off,
-and `validateModelCapabilities` then refuses sends that would have worked.
-
-A probe would exercise the model directly — a tiny streaming call, a one-tool
-call, a 1px image, a thinking request — and write back what actually worked,
-augmenting the definition rather than replacing it. Pairs with the existing
-`RefreshUserModelMetadata` RPC, which refreshes from the catalog; this is the
-empirical counterpart.
-
-Worth thinking about before building: probes cost real tokens on the user's
-key, so it wants to be explicit rather than automatic, and a probe that fails
-for an unrelated reason (rate limit, outage) must not clear a capability that
-is genuinely there. Additive-only on success is probably the right rule.
-
 ## Council mode (shipped — `plugins/council`)
 
 Design in [design/council.md](design/council.md). Built: roster, deterministic

@@ -1597,6 +1597,39 @@ private struct ModelEditForm: View {
                 Toggle("Prompt caching",  isOn: $capPromptCaching)
             }
             .toggleStyle(.checkbox)
+
+            // Only for a model that exists: probing needs something to call.
+            if case .editing(let existing, let provider) = formMode {
+                Divider().padding(.vertical, 4)
+                CapabilityProbeView(
+                    status: providersModel.capabilityProbeStatus[
+                        ModelTestKey(providerID: provider.id, modelID: existing.modelID)
+                    ] ?? .idle
+                ) { apply in
+                    Task {
+                        await providersModel.probeModelCapabilities(
+                            providerID: provider.id, modelID: existing.modelID, apply: apply
+                        )
+                        if apply {
+                            // The checkboxes are @State seeded once, so an
+                            // applied probe has to push its result into them or
+                            // saving the form would write the stale set back
+                            // over what it just learned.
+                            if let caps = providersModel.enabledModels
+                                .first(where: { $0.modelID == existing.modelID })?.capabilities {
+                                capStreaming = caps.streaming
+                                capThinking = caps.thinking
+                                capToolUse = caps.toolUse
+                                capVision = caps.vision
+                                capPromptCaching = caps.promptCaching
+                            }
+                        }
+                    }
+                }
+                Text("A probe can switch a capability on. It never switches one off.")
+                    .scaledFont(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 

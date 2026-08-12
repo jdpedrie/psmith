@@ -85,6 +85,15 @@ service ModelProvidersService {
   // tokens. Failures are packed into the response, not raised as RPC errors.
   rpc TestUserModel(TestUserModelRequest) returns (TestUserModelResponse);
 
+  // ProbeUserModel exercises a model to find out what it can actually do, and
+  // folds the answer into its stored capabilities.
+  //
+  // The empirical counterpart to RefreshUserModelMetadata: that refreshes what
+  // the catalog claims, this reports what the model does. Bills a handful of
+  // tokens per capability (expected, and why it is user-triggered rather than
+  // automatic).
+  rpc ProbeUserModel(ProbeUserModelRequest) returns (ProbeUserModelResponse);
+
   // ----- Catalog management -----
 
   // Admin-only. Synchronously fetches models.dev and upserts catalog tables.
@@ -357,4 +366,54 @@ message ProviderCost {
   // Total number of cost-incurring events recorded for this provider —
   // surfaces "X messages" in the UI subtitle without a separate roundtrip.
   int64 event_count = 5;
+}
+
+// ProbeOutcome is what one capability probe learned.
+enum ProbeOutcome {
+  // Unset. Treated as inconclusive.
+  PROBE_OUTCOME_UNSPECIFIED = 0;
+  // The model demonstrated the capability.
+  PROBE_OUTCOME_SUPPORTED = 1;
+  // The upstream refused in a way that names the capability. This is
+  // REPORTED but never acted on: probes do not clear flags.
+  PROBE_OUTCOME_UNSUPPORTED = 2;
+  // Could not tell. Every network failure, timeout and ambiguous reply lands
+  // here, so a bad minute is never recorded as a fact about a model.
+  PROBE_OUTCOME_INCONCLUSIVE = 3;
+  // Not worth probing. Stated rather than omitted, so "we did not ask" is
+  // distinguishable from "we asked and could not tell".
+  PROBE_OUTCOME_SKIPPED = 4;
+}
+
+message CapabilityProbeResult {
+  // One of the ModelCapabilities field names: "streaming", "tool_use",
+  // "vision", "thinking", "prompt_caching", "generates_images".
+  string capability  = 1;
+  ProbeOutcome outcome = 2;
+  // Human-readable reason, shown next to the outcome. For a refusal this is
+  // the upstream's own first line, which is usually the most useful thing
+  // anyone will read.
+  string detail      = 3;
+  int64 latency_ms   = 4;
+}
+
+message ProbeUserModelRequest {
+  string user_model_provider_id = 1;
+  string model_id               = 2;
+  // When false, probe and report without writing anything. The default is a
+  // dry run so a user can see what would change before it does.
+  bool apply = 3;
+}
+
+message ProbeUserModelResponse {
+  repeated CapabilityProbeResult results = 1;
+  // Capabilities as they now stand. Unchanged from the stored set when
+  // apply=false, or when the probe learned nothing new.
+  ModelCapabilities capabilities = 2;
+  // Capability names the probe switched on. Empty means the stored definition
+  // already agreed with reality.
+  repeated string enabled = 3;
+  // Capabilities the stored definition claims but the probe saw refused.
+  // Reported for the user to act on; the server never clears a flag itself.
+  repeated string contradicted = 4;
 }

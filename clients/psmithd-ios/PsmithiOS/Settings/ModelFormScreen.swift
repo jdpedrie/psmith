@@ -178,6 +178,42 @@ struct ModelFormScreen: View {
                 Text("Capabilities gate the model picker: profiles that require a capability hide models without it.")
             }
 
+            // Only for a model that exists: probing needs something to call.
+            if case .edit(let existing) = mode {
+                Section {
+                    CapabilityProbeView(
+                        status: app.providers.capabilityProbeStatus[
+                            ModelTestKey(providerID: provider.id, modelID: existing.modelID)
+                        ] ?? .idle
+                    ) { apply in
+                        Task {
+                            await app.providers.probeModelCapabilities(
+                                providerID: provider.id,
+                                modelID: existing.modelID,
+                                apply: apply
+                            )
+                            if apply {
+                                // The toggles above are @State seeded once at
+                                // init, so an applied probe has to push its
+                                // result into them or the form would save the
+                                // stale set back over what it just learned.
+                                let caps = app.providers.enabledModels
+                                    .first(where: { $0.modelID == existing.modelID })?.capabilities
+                                if let caps {
+                                    capStreaming = caps.streaming
+                                    capThinking = caps.thinking
+                                    capToolUse = caps.toolUse
+                                    capVision = caps.vision
+                                    capPromptCaching = caps.promptCaching
+                                }
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("A probe can switch a capability on. It never switches one off.")
+                }
+            }
+
             Section("Knowledge cutoff") {
                 Toggle("Set knowledge cutoff", isOn: $cutoffEnabled)
                 if cutoffEnabled {

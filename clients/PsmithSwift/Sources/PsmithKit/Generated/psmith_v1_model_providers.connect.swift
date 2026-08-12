@@ -103,6 +103,16 @@ public protocol Psmith_V1_ModelProvidersServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `testUserModel`(request: Psmith_V1_TestUserModelRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_TestUserModelResponse>
 
+    /// ProbeUserModel exercises a model to find out what it can actually do, and
+    /// folds the answer into its stored capabilities.
+    ///
+    /// The empirical counterpart to RefreshUserModelMetadata: that refreshes what
+    /// the catalog claims, this reports what the model does. Bills a handful of
+    /// tokens per capability (expected, and why it is user-triggered rather than
+    /// automatic).
+    @available(iOS 13, *)
+    func `probeUserModel`(request: Psmith_V1_ProbeUserModelRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_ProbeUserModelResponse>
+
     /// Admin-only. Synchronously fetches models.dev and upserts catalog tables.
     @available(iOS 13, *)
     func `refreshModelCatalog`(request: Psmith_V1_RefreshModelCatalogRequest, headers: Connect.Headers) async -> ResponseMessage<Psmith_V1_RefreshModelCatalogResponse>
@@ -218,6 +228,11 @@ public final class Psmith_V1_ModelProvidersServiceClient: Psmith_V1_ModelProvide
     }
 
     @available(iOS 13, *)
+    public func `probeUserModel`(request: Psmith_V1_ProbeUserModelRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_ProbeUserModelResponse> {
+        return await self.client.unary(path: "/psmith.v1.ModelProvidersService/ProbeUserModel", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `refreshModelCatalog`(request: Psmith_V1_RefreshModelCatalogRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Psmith_V1_RefreshModelCatalogResponse> {
         return await self.client.unary(path: "/psmith.v1.ModelProvidersService/RefreshModelCatalog", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -252,6 +267,7 @@ public final class Psmith_V1_ModelProvidersServiceClient: Psmith_V1_ModelProvide
             public static let addManualModel = Connect.MethodSpec(name: "AddManualModel", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let testUserModelProvider = Connect.MethodSpec(name: "TestUserModelProvider", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let testUserModel = Connect.MethodSpec(name: "TestUserModel", service: "psmith.v1.ModelProvidersService", type: .unary)
+            public static let probeUserModel = Connect.MethodSpec(name: "ProbeUserModel", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let refreshModelCatalog = Connect.MethodSpec(name: "RefreshModelCatalog", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let getCatalogStatus = Connect.MethodSpec(name: "GetCatalogStatus", service: "psmith.v1.ModelProvidersService", type: .unary)
             public static let listProviderCosts = Connect.MethodSpec(name: "ListProviderCosts", service: "psmith.v1.ModelProvidersService", type: .unary)

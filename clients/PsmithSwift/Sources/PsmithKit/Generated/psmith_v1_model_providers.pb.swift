@@ -25,6 +25,66 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+/// ProbeOutcome is what one capability probe learned.
+public nonisolated enum Psmith_V1_ProbeOutcome: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+
+  /// Unset. Treated as inconclusive.
+  case unspecified // = 0
+
+  /// The model demonstrated the capability.
+  case supported // = 1
+
+  /// The upstream refused in a way that names the capability. This is
+  /// REPORTED but never acted on: probes do not clear flags.
+  case unsupported // = 2
+
+  /// Could not tell. Every network failure, timeout and ambiguous reply lands
+  /// here, so a bad minute is never recorded as a fact about a model.
+  case inconclusive // = 3
+
+  /// Not worth probing. Stated rather than omitted, so "we did not ask" is
+  /// distinguishable from "we asked and could not tell".
+  case skipped // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .supported
+    case 2: self = .unsupported
+    case 3: self = .inconclusive
+    case 4: self = .skipped
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .supported: return 1
+    case .unsupported: return 2
+    case .inconclusive: return 3
+    case .skipped: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Psmith_V1_ProbeOutcome] = [
+    .unspecified,
+    .supported,
+    .unsupported,
+    .inconclusive,
+    .skipped,
+  ]
+
+}
+
 public nonisolated struct Psmith_V1_ListProviderTypesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1051,9 +1111,87 @@ public nonisolated struct Psmith_V1_ProviderCost: Sendable {
   public init() {}
 }
 
+public nonisolated struct Psmith_V1_CapabilityProbeResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// One of the ModelCapabilities field names: "streaming", "tool_use",
+  /// "vision", "thinking", "prompt_caching", "generates_images".
+  public var capability: String = String()
+
+  public var outcome: Psmith_V1_ProbeOutcome = .unspecified
+
+  /// Human-readable reason, shown next to the outcome. For a refusal this is
+  /// the upstream's own first line, which is usually the most useful thing
+  /// anyone will read.
+  public var detail: String = String()
+
+  public var latencyMs: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ProbeUserModelRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userModelProviderID: String = String()
+
+  public var modelID: String = String()
+
+  /// When false, probe and report without writing anything. The default is a
+  /// dry run so a user can see what would change before it does.
+  public var apply: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Psmith_V1_ProbeUserModelResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var results: [Psmith_V1_CapabilityProbeResult] = []
+
+  /// Capabilities as they now stand. Unchanged from the stored set when
+  /// apply=false, or when the probe learned nothing new.
+  public var capabilities: Psmith_V1_ModelCapabilities {
+    get {_capabilities ?? Psmith_V1_ModelCapabilities()}
+    set {_capabilities = newValue}
+  }
+  /// Returns true if `capabilities` has been explicitly set.
+  public var hasCapabilities: Bool {self._capabilities != nil}
+  /// Clears the value of `capabilities`. Subsequent reads from it will return its default value.
+  public mutating func clearCapabilities() {self._capabilities = nil}
+
+  /// Capability names the probe switched on. Empty means the stored definition
+  /// already agreed with reality.
+  public var enabled: [String] = []
+
+  /// Capabilities the stored definition claims but the probe saw refused.
+  /// Reported for the user to act on; the server never clears a flag itself.
+  public var contradicted: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _capabilities: Psmith_V1_ModelCapabilities? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "psmith.v1"
+
+nonisolated extension Psmith_V1_ProbeOutcome: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PROBE_OUTCOME_UNSPECIFIED\0\u{1}PROBE_OUTCOME_SUPPORTED\0\u{1}PROBE_OUTCOME_UNSUPPORTED\0\u{1}PROBE_OUTCOME_INCONCLUSIVE\0\u{1}PROBE_OUTCOME_SKIPPED\0")
+}
 
 nonisolated extension Psmith_V1_ListProviderTypesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListProviderTypesRequest"
@@ -2866,6 +3004,140 @@ nonisolated extension Psmith_V1_ProviderCost: SwiftProtobuf.Message, SwiftProtob
     if lhs.providerType != rhs.providerType {return false}
     if lhs.totalCostUsd != rhs.totalCostUsd {return false}
     if lhs.eventCount != rhs.eventCount {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_CapabilityProbeResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CapabilityProbeResult"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}capability\0\u{1}outcome\0\u{1}detail\0\u{3}latency_ms\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.capability) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.outcome) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.detail) }()
+      case 4: try { try decoder.decodeSingularInt64Field(value: &self.latencyMs) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.capability.isEmpty {
+      try visitor.visitSingularStringField(value: self.capability, fieldNumber: 1)
+    }
+    if self.outcome != .unspecified {
+      try visitor.visitSingularEnumField(value: self.outcome, fieldNumber: 2)
+    }
+    if !self.detail.isEmpty {
+      try visitor.visitSingularStringField(value: self.detail, fieldNumber: 3)
+    }
+    if self.latencyMs != 0 {
+      try visitor.visitSingularInt64Field(value: self.latencyMs, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_CapabilityProbeResult, rhs: Psmith_V1_CapabilityProbeResult) -> Bool {
+    if lhs.capability != rhs.capability {return false}
+    if lhs.outcome != rhs.outcome {return false}
+    if lhs.detail != rhs.detail {return false}
+    if lhs.latencyMs != rhs.latencyMs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ProbeUserModelRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProbeUserModelRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_model_provider_id\0\u{3}model_id\0\u{1}apply\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.userModelProviderID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.modelID) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.apply) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.userModelProviderID.isEmpty {
+      try visitor.visitSingularStringField(value: self.userModelProviderID, fieldNumber: 1)
+    }
+    if !self.modelID.isEmpty {
+      try visitor.visitSingularStringField(value: self.modelID, fieldNumber: 2)
+    }
+    if self.apply != false {
+      try visitor.visitSingularBoolField(value: self.apply, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ProbeUserModelRequest, rhs: Psmith_V1_ProbeUserModelRequest) -> Bool {
+    if lhs.userModelProviderID != rhs.userModelProviderID {return false}
+    if lhs.modelID != rhs.modelID {return false}
+    if lhs.apply != rhs.apply {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_ProbeUserModelResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProbeUserModelResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}results\0\u{1}capabilities\0\u{1}enabled\0\u{1}contradicted\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.results) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._capabilities) }()
+      case 3: try { try decoder.decodeRepeatedStringField(value: &self.enabled) }()
+      case 4: try { try decoder.decodeRepeatedStringField(value: &self.contradicted) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.results.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.results, fieldNumber: 1)
+    }
+    try { if let v = self._capabilities {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.enabled.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.enabled, fieldNumber: 3)
+    }
+    if !self.contradicted.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.contradicted, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_ProbeUserModelResponse, rhs: Psmith_V1_ProbeUserModelResponse) -> Bool {
+    if lhs.results != rhs.results {return false}
+    if lhs._capabilities != rhs._capabilities {return false}
+    if lhs.enabled != rhs.enabled {return false}
+    if lhs.contradicted != rhs.contradicted {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

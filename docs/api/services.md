@@ -166,6 +166,7 @@ Testing and cost:
 |---|---|
 | `TestUserModelProvider` | Verify auth and reachability; returns ok, error, model count, latency. |
 | `TestUserModel` | Send a tiny test prompt; returns ok, latency, token counts, sample text; optional settings override for constraint discovery. |
+| `ProbeUserModel` | Exercise the model to find out what it actually supports, and fold the answer into its stored capabilities. Bills a few tokens per capability. `apply` defaults to false (dry run). Additive only: a probe switches capabilities on and never off, reporting contradictions for the user to act on. See [design/providers.md](../design/providers.md#model-capability-probing). |
 | `ListProviderCosts` | Per-provider cost rollup from the ledger; optional since/until window; returns per-provider totals and a grand total. See [titles-cost-observability.md](../design/titles-cost-observability.md). |
 | `RefreshModelCatalog` / `GetCatalogStatus` | Refresh the in-memory model-metadata catalog from models.dev / report its status (provider and model counts, last refresh). The catalog is the lazy in-memory `LiveCatalog`, not database tables; refresh re-fetches, status reports the in-memory snapshot. |
 

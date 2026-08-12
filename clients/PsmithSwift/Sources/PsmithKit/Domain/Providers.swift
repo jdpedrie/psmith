@@ -471,3 +471,98 @@ extension PsmithModelTestResult {
     }
 }
 
+
+// MARK: - Capability probe
+
+/// What one capability probe learned.
+public enum PsmithProbeOutcome: Sendable, Hashable {
+    /// The model demonstrated it.
+    case supported
+    /// The upstream refused in a way that named the capability. Reported, but
+    /// never acted on: a probe can switch a capability on and never off.
+    case unsupported
+    /// Could not tell. Every network failure, timeout and ambiguous reply
+    /// lands here, so a bad minute is never recorded as a fact about a model.
+    case inconclusive
+    /// Not worth probing. Distinct from inconclusive on purpose: "we did not
+    /// ask" and "we asked and could not tell" are different answers.
+    case skipped
+}
+
+public struct PsmithCapabilityProbeResult: Sendable, Hashable, Identifiable {
+    /// One of the ModelCapabilities field names.
+    public let capability: String
+    public let outcome: PsmithProbeOutcome
+    /// Human-readable reason. For a refusal this is the upstream's own first
+    /// line, usually the most useful thing anyone will read.
+    public let detail: String
+    public let latencyMs: Int64
+
+    public var id: String { capability }
+
+    /// "tool_use" reads badly in a list of otherwise prose labels.
+    public var displayName: String {
+        capability.split(separator: "_").map(\.capitalized).joined(separator: " ")
+    }
+
+    public init(capability: String, outcome: PsmithProbeOutcome, detail: String, latencyMs: Int64) {
+        self.capability = capability
+        self.outcome = outcome
+        self.detail = detail
+        self.latencyMs = latencyMs
+    }
+}
+
+public struct PsmithCapabilityProbe: Sendable, Hashable {
+    public let results: [PsmithCapabilityProbeResult]
+    /// Capabilities as they now stand: the merged set when applied, the stored
+    /// set on a dry run.
+    public let capabilities: PsmithModelCapabilities
+    /// Names the probe switched on. Empty means the definition already agreed
+    /// with reality.
+    public let enabled: [String]
+    /// Names the definition claims but the probe saw refused. Surfaced for the
+    /// user to act on; the server never clears a flag itself.
+    public let contradicted: [String]
+
+    public init(
+        results: [PsmithCapabilityProbeResult],
+        capabilities: PsmithModelCapabilities,
+        enabled: [String],
+        contradicted: [String]
+    ) {
+        self.results = results
+        self.capabilities = capabilities
+        self.enabled = enabled
+        self.contradicted = contradicted
+    }
+}
+
+extension PsmithProbeOutcome {
+    init(from p: Psmith_V1_ProbeOutcome) {
+        switch p {
+        case .supported: self = .supported
+        case .unsupported: self = .unsupported
+        case .skipped: self = .skipped
+        default: self = .inconclusive
+        }
+    }
+}
+
+extension PsmithCapabilityProbeResult {
+    init(from p: Psmith_V1_CapabilityProbeResult) {
+        capability = p.capability
+        outcome = PsmithProbeOutcome(from: p.outcome)
+        detail = p.detail
+        latencyMs = p.latencyMs
+    }
+}
+
+extension PsmithCapabilityProbe {
+    init(from p: Psmith_V1_ProbeUserModelResponse) {
+        results = p.results.map(PsmithCapabilityProbeResult.init(from:))
+        capabilities = PsmithModelCapabilities(from: p.capabilities)
+        enabled = p.enabled
+        contradicted = p.contradicted
+    }
+}

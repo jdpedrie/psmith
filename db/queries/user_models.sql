@@ -57,3 +57,12 @@ WHERE user_model_provider_id = $1 AND model_id = $2;
 UPDATE user_models
 SET default_settings = $3, metadata_snapshot_at = NOW()
 WHERE user_model_provider_id = $1 AND model_id = $2;
+
+-- name: UpdateUserModelCapabilities :one
+-- Capabilities-only write, used by the capability probe. Narrow on purpose:
+-- the probe learns one thing and should not be able to disturb pricing,
+-- context window, or anything else a user set by hand.
+UPDATE user_models
+SET capabilities = $3
+WHERE user_model_provider_id = $1 AND model_id = $2
+RETURNING *;

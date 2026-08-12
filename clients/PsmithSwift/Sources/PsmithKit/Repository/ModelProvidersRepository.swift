@@ -320,6 +320,30 @@ public final class ModelProvidersRepository: Sendable {
         return PsmithModelTestResult(from: msg)
     }
 
+    /// Exercises the model to find out what it can actually do, and folds the
+    /// answer into its stored capabilities.
+    ///
+    /// The empirical counterpart to `refreshModelMetadata`: that re-reads what
+    /// the catalog claims, this reports what the model does. Bills a handful of
+    /// tokens per capability, which is why it is a button rather than something
+    /// that happens on its own.
+    ///
+    /// `apply` defaults to false so the first call is a dry run. Results come
+    /// back either way, so a user can read them before changing anything.
+    public func probeModelCapabilities(
+        providerID: String,
+        modelID: String,
+        apply: Bool = false
+    ) async throws -> PsmithCapabilityProbe {
+        var req = Psmith_V1_ProbeUserModelRequest()
+        req.userModelProviderID = providerID
+        req.modelID = modelID
+        req.apply = apply
+        let resp = await client.probeUserModel(request: req, headers: [:])
+        guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("probe model") }
+        return PsmithCapabilityProbe(from: msg)
+    }
+
     /// Per-provider running cost totals for the Cost settings screen.
     /// Returns (rows, grand total). Server-computed grand total sidesteps
     /// floating-point reconciliation across clients. The optional

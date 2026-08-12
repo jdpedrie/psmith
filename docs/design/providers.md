@@ -63,3 +63,21 @@ The same generation locks temperature at 1.0 (any other value 400s). The constra
 ## Adding a provider
 
 The `/psmith-add-provider` skill scaffolds a new driver. The shape is always the same: a subpackage with a `Driver` type implementing `Provider` and `StatelessProvider`, an `init()` that registers the type string, a config struct unmarshaled from the instance's JSON, a `DiscoverModels` that lists and enriches models, and a `Send` that translates the backend's stream into the common chunk vocabulary. Tests point the driver's base URL at the fake LLM ([building-and-codegen.md](../operations/building-and-codegen.md)) and exercise the real parsing path.
+
+## Model capability probing
+
+Capabilities on a `user_model` come from catalog metadata and hand-editing, so they are a claim. Claims go stale, catalogs lie by omission, and a custom endpoint has no catalog at all. The failure is asymmetric: a capability the model has but we do not know about stays switched off, and `validateModelCapabilities` then refuses sends that would have worked.
+
+`ProbeUserModel` is the empirical counterpart to `RefreshUserModelMetadata`. That re-reads what the catalog claims; this reports what the model does, by making it do it.
+
+**One probe per capability.** Streaming asks for a word and checks text arrived over a stream. Tool use declares one trivial tool and checks for a tool call. Vision attaches a 1x1 PNG, the smallest thing that is unambiguously an image. Thinking enables reasoning and checks for reasoning chunks.
+
+Two are skipped, and say so. Prompt caching would need two calls with a prefix over the provider's minimum, which costs more than the answer is worth. Generated images would bill for an image and the response shape is not comparable across providers. Skipped is a distinct outcome from inconclusive on purpose: "we did not ask" and "we asked and could not tell" are different answers, and collapsing them would read as a checked-and-found-nothing.
+
+**Additive only.** A probe may switch a capability on and may never switch one off. Three reasons that point the same way: an unsupported verdict can come from a quirk of the probe's own prompt, a user may have set the flag deliberately and know something the probe does not, and clearing a flag silently breaks sends that were working. The asymmetry is the feature. A probe that can only help is one you can run without reading the code first.
+
+Contradictions are still reported. A model marked vision-capable that rejects an image is worth knowing about even though the server will not act on it, so the response carries a `contradicted` list and the clients render it as information with the fix left to the user.
+
+**Inconclusive is the default outcome.** Anything that does not clearly demonstrate support or clearly demonstrate refusal lands there, including every network failure, timeout and rate limit. A bad minute must never be recorded as a fact about a model. Only a refusal that names the capability in its own error text counts as unsupported, and the matching is deliberately narrow: matching loosely would turn an unrelated 400 into a recorded verdict, which is the one mistake that makes a probe worse than no probe.
+
+**User-triggered, dry run first.** Every probe bills a few tokens on the user's own key, so spending their money on a background sweep nobody asked for is not a trade to make on their behalf. `apply` defaults to false, so the first call reports what it would change and changes nothing.

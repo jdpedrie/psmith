@@ -173,6 +173,48 @@ func (q *Queries) SetUserModelFavorite(ctx context.Context, arg SetUserModelFavo
 	return err
 }
 
+const updateUserModelCapabilities = `-- name: UpdateUserModelCapabilities :one
+UPDATE user_models
+SET capabilities = $3
+WHERE user_model_provider_id = $1 AND model_id = $2
+RETURNING user_model_provider_id, model_id, display_name, context_window, max_output_tokens, input_price_per_million, output_price_per_million, cache_read_per_million, cache_write_per_million, knowledge_cutoff, modalities, capabilities, default_settings, metadata_source, metadata_snapshot_at, enabled_at, favorite, pricing_tiers
+`
+
+type UpdateUserModelCapabilitiesParams struct {
+	UserModelProviderID uuid.UUID
+	ModelID             string
+	Capabilities        []byte
+}
+
+// Capabilities-only write, used by the capability probe. Narrow on purpose:
+// the probe learns one thing and should not be able to disturb pricing,
+// context window, or anything else a user set by hand.
+func (q *Queries) UpdateUserModelCapabilities(ctx context.Context, arg UpdateUserModelCapabilitiesParams) (UserModel, error) {
+	row := q.db.QueryRow(ctx, updateUserModelCapabilities, arg.UserModelProviderID, arg.ModelID, arg.Capabilities)
+	var i UserModel
+	err := row.Scan(
+		&i.UserModelProviderID,
+		&i.ModelID,
+		&i.DisplayName,
+		&i.ContextWindow,
+		&i.MaxOutputTokens,
+		&i.InputPricePerMillion,
+		&i.OutputPricePerMillion,
+		&i.CacheReadPerMillion,
+		&i.CacheWritePerMillion,
+		&i.KnowledgeCutoff,
+		&i.Modalities,
+		&i.Capabilities,
+		&i.DefaultSettings,
+		&i.MetadataSource,
+		&i.MetadataSnapshotAt,
+		&i.EnabledAt,
+		&i.Favorite,
+		&i.PricingTiers,
+	)
+	return i, err
+}
+
 const updateUserModelDefaultSettings = `-- name: UpdateUserModelDefaultSettings :exec
 UPDATE user_models
 SET default_settings = $3, metadata_snapshot_at = NOW()

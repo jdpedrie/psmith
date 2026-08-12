@@ -54,6 +54,15 @@ public enum ModelTestStatus: Sendable, Equatable {
     case failure(String)
 }
 
+/// Live state of a capability probe. Mirrors ModelTestStatus so the view layer
+/// treats the two analogously.
+public enum CapabilityProbeStatus: Sendable, Equatable {
+    case idle
+    case probing
+    case done(PsmithCapabilityProbe)
+    case failure(String)
+}
+
 /// Provider list + per-provider model orchestration. Drives the providers
 /// settings category. Reusable across macOS / iOS.
 @Observable
@@ -98,6 +107,10 @@ public final class ProvidersViewModel {
     /// Transient per-model test results — keyed by (providerID, modelID).
     /// Same lifecycle as `providerTestStatus`.
     public var modelTestStatus: [ModelTestKey: ModelTestStatus] = [:]
+
+    /// Transient per-model capability probe results, same lifecycle and key as
+    /// `modelTestStatus`.
+    public var capabilityProbeStatus: [ModelTestKey: CapabilityProbeStatus] = [:]
 
     public init(client: PsmithClient) { self.client = client }
 
@@ -456,6 +469,34 @@ public final class ProvidersViewModel {
             modelTestStatus[key] = .success(result)
         } catch {
             modelTestStatus[key] = .failure(PsmithError.display(error))
+        }
+    }
+
+    /// Exercise a model and report what it can actually do.
+    ///
+    /// `apply` defaults to false, so the button a user reaches for first is a
+    /// dry run: it costs a few tokens and changes nothing. Applying is a second,
+    /// deliberate step once they have read the results.
+    ///
+    /// On success the model list is reloaded, because an applied probe changes
+    /// capability badges that are rendered from `models` rather than from the
+    /// probe response.
+    public func probeModelCapabilities(providerID: String, modelID: String, apply: Bool = false) async {
+        let key = ModelTestKey(providerID: providerID, modelID: modelID)
+        capabilityProbeStatus[key] = .probing
+        do {
+            let probe = try await client.modelProviders.probeModelCapabilities(
+                providerID: providerID, modelID: modelID, apply: apply
+            )
+            capabilityProbeStatus[key] = .done(probe)
+            if apply && !probe.enabled.isEmpty, selectedID == providerID {
+                // Capability badges render from `enabledModels`, not from the
+                // probe response, so an applied probe has to refresh the list
+                // or the screen keeps showing the old flags.
+                await selectProvider(providerID)
+            }
+        } catch {
+            capabilityProbeStatus[key] = .failure(PsmithError.display(error))
         }
     }
 }

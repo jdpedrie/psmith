@@ -505,6 +505,10 @@ type Querier interface {
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	UpdateUserIsAdmin(ctx context.Context, arg UpdateUserIsAdminParams) error
 	UpdateUserMCPServer(ctx context.Context, arg UpdateUserMCPServerParams) (UserMcpServer, error)
+	// Capabilities-only write, used by the capability probe. Narrow on purpose:
+	// the probe learns one thing and should not be able to disturb pricing,
+	// context window, or anything else a user set by hand.
+	UpdateUserModelCapabilities(ctx context.Context, arg UpdateUserModelCapabilitiesParams) (UserModel, error)
 	// Replaces (not merges) the per-model default_settings JSONB blob. NULL
 	// clears it. metadata_snapshot_at is bumped so consumers polling for row
 	// changes notice the update — the row's metadata identity hasn't changed,
