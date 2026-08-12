@@ -210,3 +210,76 @@ func TestListMessages_CarriesPersonaOnTheChainPath(t *testing.T) {
 		t.Errorf("persona index did not reach the wire: %v", found.PersonaIndex)
 	}
 }
+
+// prepareTurn resolves and validates without writing. That is the property
+// that made extracting it from SendMessage safe, and the one a future edit
+// could quietly break by moving an insert up into it — at which point a
+// rejected send would start leaving rows behind.
+func TestPrepareTurn_WritesNothing(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
+
+	count := func() int {
+		rows, err := q.ListMessagesByContext(context.Background(), f.contextID)
+		if err != nil {
+			t.Fatalf("ListMessagesByContext: %v", err)
+		}
+		return len(rows)
+	}
+	before := count()
+
+	pid := f.provider.ID.String()
+	mid := f.modelID
+	_, prepared, err := svc.prepareTurn(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+		Content:        "hello",
+		ProviderId:     &pid,
+		ModelId:        &mid,
+	}))
+	if err != nil {
+		t.Fatalf("prepareTurn: %v", err)
+	}
+	if after := count(); after != before {
+		t.Errorf("prepareTurn wrote %d rows; it must resolve only", after-before)
+	}
+
+	// And it resolved what the send needs, so a passing "wrote nothing" is not
+	// just an early return.
+	if prepared.modelID != f.modelID {
+		t.Errorf("model not resolved: %q", prepared.modelID)
+	}
+	if prepared.providerID != f.provider.ID {
+		t.Errorf("provider not resolved: %v", prepared.providerID)
+	}
+	if prepared.conv.ID != f.conv.ID {
+		t.Errorf("conversation not resolved: %v", prepared.conv.ID)
+	}
+}
+
+// A rejection must also leave nothing behind.
+func TestPrepareTurn_RejectsWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
+
+	before, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	// No content and no attachment on a non-extending send.
+	if _, _, err := svc.prepareTurn(ctxAsUser(f.user), connect.NewRequest(&psmithv1.SendMessageRequest{
+		ConversationId: f.conv.ID.String(),
+	})); err == nil {
+		t.Fatal("expected a rejection for an empty send")
+	}
+	after, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("a rejected send left %d rows behind", len(after)-len(before))
+	}
+}

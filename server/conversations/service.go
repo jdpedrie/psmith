@@ -1409,143 +1409,21 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	if s.supervisor == nil || s.catalog == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires supervisor + catalog dependencies"))
 	}
-	// Regenerate-mode skips the user-message-create step entirely; the
-	// stream parents off an existing user row. Content is meaningless in
-	// that mode (the user row already carries it). Non-regen requires
-	// EITHER non-empty content OR ≥1 attachment — an "image-only" turn
-	// ("look at this") is a valid first message.
-	//
-	// continue_discussion takes the same structural path: it also parents off
-	// an existing row and inserts no user message. The two are kept as
-	// separate flags because they mean opposite things to a reader and the
-	// clients present them differently — regenerate discards an answer,
-	// continue keeps it and adds another speaker — while sharing every
-	// mechanic below.
-	// One profile resolution for the whole send. Four helpers below each ask a
-	// different question of the same profile and each was written to resolve
-	// for itself; without this they walk the same inheritance chain four times.
-	ctx = withProfileCache(ctx, newProfileCache(s.queries))
-
-	extendsTurn := req.Msg.Regenerate || req.Msg.ContinueDiscussion
-	if !extendsTurn && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content or attachment is required"))
-	}
-	if extendsTurn && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
-		verb := "regenerate"
-		if req.Msg.ContinueDiscussion {
-			verb = "continue_discussion"
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s requires parent_message_id", verb))
-	}
-	user := auth.MustFromContext(ctx)
-
-	convID, err := uuid.Parse(req.Msg.ConversationId)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
-	}
-	conv, err := s.fetchOwnedConversation(ctx, convID, user.ID)
+	// Everything below the line is resolved and validated; nothing has been
+	// written yet. prepareTurn returns a context because it installs the
+	// request-scoped profile cache.
+	ctx, t, err := s.prepareTurn(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireNotArchived(conv); err != nil {
-		return nil, err
-	}
-	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
-		return nil, err
-	}
-
-	activeCtx, err := s.queries.GetActiveContextByConversation(ctx, conv.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("conversation has no active context"))
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	if err := s.requireNoPendingCompactionSummary(ctx, activeCtx.ID); err != nil {
-		return nil, err
-	}
-
-	// A continue extends whatever the client was looking at, so it is only
-	// valid against the branch head the client saw. Two clients tapping
-	// continue at the same moment would otherwise each add a speaker to the
-	// same turn, and the second would read as a duplicate rather than as a
-	// reply to the first.
-	//
-	// Regenerate deliberately skips this: forking off a non-leaf message is
-	// the whole point of it.
-	if req.Msg.ContinueDiscussion && activeCtx.CurrentLeafMessageID != nil {
-		if *req.Msg.ParentMessageId != activeCtx.CurrentLeafMessageID.String() {
-			return nil, connect.NewError(connect.CodeAborted,
-				errors.New("the discussion has already moved on"))
-		}
-	}
-
-	// Resolve the chat-plugin pipeline before the model, not after.
-	//
-	// A TurnRouter gets to choose who answers, and that has to happen ahead of
-	// provider/model resolution because it changes the answer. Pipeline
-	// resolution depends only on the conversation, so hoisting it above the
-	// provider lookup is safe; everything between here and the user-row INSERT
-	// still sees it. It is reused for history.Build (SystemPrompter +
-	// HistoryTransformer), for the OutgoingEnvelope that rewrites what gets
-	// persisted, and for the response's display transform.
-	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
-	}
-
-	// Ask the pipeline who speaks this turn, anchored at the branch as it
-	// stands before this send. A router that declines leaves resolution to the
-	// ordinary chain.
-	routeLeaf, err := s.currentLeaf(ctx, activeCtx, req.Msg.ParentMessageId)
-	if err != nil {
-		return nil, err
-	}
-	route, routed := pipeline.RouteTurn(ctx, func(c context.Context, pluginName string) context.Context {
-		c = host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
-		// A router may want to ask a cheap model who should speak. Scoped to
-		// the conversation's owner, so it can only spend their credentials.
-		return host.WithCompleter(c, s.newPluginCompleter(conv.UserID))
-	})
-
-	// Resolve provider/model from route → request → conversation settings →
-	// profile defaults.
-	providerID, modelID, err := s.resolveProviderModel(ctx, conv, req.Msg, route, routed)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate the provider belongs to the caller and the model is enabled on it.
-	provRow, err := s.queries.GetUserModelProvider(ctx, providerID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	if provRow.UserID != user.ID {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
-	}
-	enabledModel, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
-		UserModelProviderID: providerID,
-		ModelID:             modelID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("model %q is not enabled on this provider", modelID))
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	// Capability gate: reject the send before doing any expensive work
-	// when the resolved model can't drive the profile's plugin pipeline
-	// (e.g. an `mcp` plugin attached to a profile pointing at a non-tool-
-	// using model). The error is FailedPrecondition so clients can
-	// surface the mismatch and prompt the user to either change models or
-	// drop the offending plugin.
-	if err := s.validateModelCapabilities(ctx, conv.ProfileID, modelID, enabledModel.Capabilities); err != nil {
-		return nil, err
-	}
+	// Unpacked into locals rather than threaded as t.field throughout: the
+	// body below is dense enough without an extra indirection on every
+	// reference, and these are exactly the names it already used.
+	user, conv, activeCtx := t.user, t.conv, t.activeCtx
+	extendsTurn := t.extendsTurn
+	pipeline, route, routed := t.pipeline, t.route, t.routed
+	providerID, modelID := t.providerID, t.modelID
+	provRow, enabledModel := t.provRow, t.enabledModel
 
 	// Critical section: resolve parent → insert user message → advance cursor,
 	// all serialized via SELECT FOR UPDATE on the contexts row. Without this,
@@ -2124,6 +2002,189 @@ func (s *Service) defaultsForProfile(ctx context.Context, profileID string) (uui
 		return uuid.Nil, "", nil
 	}
 	return pid, *defaults.DefaultModelId, nil
+}
+
+// preparedTurn is everything resolved before a turn touches the database.
+//
+// SendMessage used to compute all of this inline, which made the function's
+// first two hundred lines a mix of validation, resolution and policy with no
+// boundary between them. Pulling it out is not just line count: everything
+// here is side-effect free, so it can be reasoned about and tested without a
+// transaction, and the critical section that follows starts from a value
+// rather than from thirty locals.
+type preparedTurn struct {
+	user      auth.User
+	conv      store.Conversation
+	activeCtx store.Context
+
+	// extendsTurn covers regenerate AND continue_discussion: both parent off
+	// an existing row and insert no user message.
+	extendsTurn bool
+
+	pipeline pluginapi.Pipeline
+	route    pluginapi.TurnRoute
+	routed   bool
+
+	providerID   uuid.UUID
+	modelID      string
+	provRow      store.UserModelProvider
+	enabledModel store.UserModel
+}
+
+// prepareTurn validates the request and resolves everything the send needs,
+// without writing anything. Every failure here is a rejection the caller
+// surfaces unchanged.
+func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1.SendMessageRequest]) (context.Context, preparedTurn, error) {
+	var t preparedTurn
+	// Regenerate-mode skips the user-message-create step entirely; the
+	// stream parents off an existing user row. Content is meaningless in
+	// that mode (the user row already carries it). Non-regen requires
+	// EITHER non-empty content OR ≥1 attachment — an "image-only" turn
+	// ("look at this") is a valid first message.
+	//
+	// continue_discussion takes the same structural path: it also parents off
+	// an existing row and inserts no user message. The two are kept as
+	// separate flags because they mean opposite things to a reader and the
+	// clients present them differently — regenerate discards an answer,
+	// continue keeps it and adds another speaker — while sharing every
+	// mechanic below.
+	// One profile resolution for the whole send. Four helpers below each ask a
+	// different question of the same profile and each was written to resolve
+	// for itself; without this they walk the same inheritance chain four times.
+	ctx = withProfileCache(ctx, newProfileCache(s.queries))
+
+	extendsTurn := req.Msg.Regenerate || req.Msg.ContinueDiscussion
+	if !extendsTurn && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
+		return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("content or attachment is required"))
+	}
+	if extendsTurn && (req.Msg.ParentMessageId == nil || *req.Msg.ParentMessageId == "") {
+		verb := "regenerate"
+		if req.Msg.ContinueDiscussion {
+			verb = "continue_discussion"
+		}
+		return ctx, t, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s requires parent_message_id", verb))
+	}
+	user := auth.MustFromContext(ctx)
+
+	convID, err := uuid.Parse(req.Msg.ConversationId)
+	if err != nil {
+		return ctx, t, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid conversation_id: %w", err))
+	}
+	conv, err := s.fetchOwnedConversation(ctx, convID, user.ID)
+	if err != nil {
+		return ctx, t, err
+	}
+	if err := s.requireNotArchived(conv); err != nil {
+		return ctx, t, err
+	}
+	if err := s.requireNoActiveStream(ctx, conv.ID); err != nil {
+		return ctx, t, err
+	}
+
+	activeCtx, err := s.queries.GetActiveContextByConversation(ctx, conv.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ctx, t, connect.NewError(connect.CodeFailedPrecondition, errors.New("conversation has no active context"))
+		}
+		return ctx, t, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := s.requireNoPendingCompactionSummary(ctx, activeCtx.ID); err != nil {
+		return ctx, t, err
+	}
+
+	// A continue extends whatever the client was looking at, so it is only
+	// valid against the branch head the client saw. Two clients tapping
+	// continue at the same moment would otherwise each add a speaker to the
+	// same turn, and the second would read as a duplicate rather than as a
+	// reply to the first.
+	//
+	// Regenerate deliberately skips this: forking off a non-leaf message is
+	// the whole point of it.
+	if req.Msg.ContinueDiscussion && activeCtx.CurrentLeafMessageID != nil {
+		if *req.Msg.ParentMessageId != activeCtx.CurrentLeafMessageID.String() {
+			return ctx, t, connect.NewError(connect.CodeAborted,
+				errors.New("the discussion has already moved on"))
+		}
+	}
+
+	// Resolve the chat-plugin pipeline before the model, not after.
+	//
+	// A TurnRouter gets to choose who answers, and that has to happen ahead of
+	// provider/model resolution because it changes the answer. Pipeline
+	// resolution depends only on the conversation, so hoisting it above the
+	// provider lookup is safe; everything between here and the user-row INSERT
+	// still sees it. It is reused for history.Build (SystemPrompter +
+	// HistoryTransformer), for the OutgoingEnvelope that rewrites what gets
+	// persisted, and for the response's display transform.
+	pipeline, err := s.resolvePipelineForConversation(ctx, conv)
+	if err != nil {
+		return ctx, t, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve plugin pipeline: %w", err))
+	}
+
+	// Ask the pipeline who speaks this turn, anchored at the branch as it
+	// stands before this send. A router that declines leaves resolution to the
+	// ordinary chain.
+	routeLeaf, err := s.currentLeaf(ctx, activeCtx, req.Msg.ParentMessageId)
+	if err != nil {
+		return ctx, t, err
+	}
+	route, routed := pipeline.RouteTurn(ctx, func(c context.Context, pluginName string) context.Context {
+		c = host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, routeLeaf))
+		// A router may want to ask a cheap model who should speak. Scoped to
+		// the conversation's owner, so it can only spend their credentials.
+		return host.WithCompleter(c, s.newPluginCompleter(conv.UserID))
+	})
+
+	// Resolve provider/model from route → request → conversation settings →
+	// profile defaults.
+	providerID, modelID, err := s.resolveProviderModel(ctx, conv, req.Msg, route, routed)
+	if err != nil {
+		return ctx, t, err
+	}
+
+	// Validate the provider belongs to the caller and the model is enabled on it.
+	provRow, err := s.queries.GetUserModelProvider(ctx, providerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
+		}
+		return ctx, t, connect.NewError(connect.CodeInternal, err)
+	}
+	if provRow.UserID != user.ID {
+		return ctx, t, connect.NewError(connect.CodeInvalidArgument, errors.New("provider not found"))
+	}
+	enabledModel, err := s.queries.GetUserModel(ctx, store.GetUserModelParams{
+		UserModelProviderID: providerID,
+		ModelID:             modelID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ctx, t, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("model %q is not enabled on this provider", modelID))
+		}
+		return ctx, t, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// Capability gate: reject the send before doing any expensive work
+	// when the resolved model can't drive the profile's plugin pipeline
+	// (e.g. an `mcp` plugin attached to a profile pointing at a non-tool-
+	// using model). The error is FailedPrecondition so clients can
+	// surface the mismatch and prompt the user to either change models or
+	// drop the offending plugin.
+	if err := s.validateModelCapabilities(ctx, conv.ProfileID, modelID, enabledModel.Capabilities); err != nil {
+		return ctx, t, err
+	}
+	t.user = user
+	t.conv = conv
+	t.activeCtx = activeCtx
+	t.extendsTurn = extendsTurn
+	t.pipeline = pipeline
+	t.route = route
+	t.routed = routed
+	t.providerID = providerID
+	t.modelID = modelID
+	t.provRow = provRow
+	t.enabledModel = enabledModel
+	return ctx, t, nil
 }
 
 // resolveProviderModel walks the route → per-turn → conversation → profile

@@ -36,7 +36,7 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 ~~3. **`SendMessage` resolves the profile four times**~~ **Done** (`c6c419a`): request-scoped `profileCache` installed at the top of the send.
 ~~4. **Provider open sequence copy-pasted six times**~~ **Done**: `server/providerkit` owns load / ownership / decrypt / build / assert.
 ~~5. **Attachment bytes re-read every turn**~~ **Partly done**: `storage.ReadCache` removes the repeated backend reads (`PSMITH_ATTACHMENT_CACHE_MB`, default 256). The bytes still cross the wire and are billed on every send; that half needs provider file references via the unused `Attachment.ProviderFileID` and is a bigger piece of work.
-6. **Decompose `SendMessage`** (669 lines, no seams). Extract a resolved-inputs struct plus `prepareTurn` / `insertUserMessage` / `buildRequest` / `startRun`. No behaviour change; worth doing before the next feature lands in it.
+6. **Decompose `SendMessage`** — **partly done**: `prepareTurn` now owns validation and resolution (669 → 543 lines), returning a `preparedTurn` and writing nothing, with tests pinning that no-write property. The remaining seams are the transactional insert, request building, and the supervisor handoff; those touch state so they want extracting one at a time rather than in a sweep.
 7. Smaller: ~~`stream_chunks.payload` JSONB~~ **done** (migration 00050, now JSON); ~~`pgxpool` defaults~~ **done** (`PSMITH_DB_MAX_CONNS`, default 25); `ListMessagesByContext` / `ListStreamChunks` / `ListMessageTreeStructure` still have no bound and want cursors, which is an RPC contract change rather than a query tweak.
 
 ## Implementation gaps inside shipped code
