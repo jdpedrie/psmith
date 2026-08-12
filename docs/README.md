@@ -28,6 +28,8 @@ How the system works, one subsystem per document.
 - [design/titles-cost-observability.md](design/titles-cost-observability.md) — auto-titles, the cost ledger, Langfuse tracing.
 - [design/speech.md](design/speech.md) — text-to-speech: the sentence-chunked synthesis paradigm, the driver interface, the /tts endpoint, on-device default. v1 shipped (server + iOS); Mac/web UI deferred.
 
+- [server-assessment.md](server-assessment.md) — architecture review of `server/`: duplication, structural debt, and the things that bite as concurrency rises. Snapshot, not a design doc.
+
 ## API
 
 The wire contract.
