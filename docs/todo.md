@@ -35,7 +35,7 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 ~~2. **Chunk persistence is one round-trip per chunk**~~ **Done** (`2136e93`): one UNNEST insert per flush.
 ~~3. **`SendMessage` resolves the profile four times**~~ **Done** (`c6c419a`): request-scoped `profileCache` installed at the top of the send.
 ~~4. **Provider open sequence copy-pasted six times**~~ **Done**: `server/providerkit` owns load / ownership / decrypt / build / assert.
-5. **Attachment bytes re-read and re-uploaded every turn** (`server/history/history.go:236`). Rows are batched correctly but the bytes are re-read from storage and re-sent upstream on every send, and billed every time. Fix: in-process cache keyed by sha256 (they are content-addressed already), then provider file references via the unused `Attachment.ProviderFileID`.
+~~5. **Attachment bytes re-read every turn**~~ **Partly done**: `storage.ReadCache` removes the repeated backend reads (`PSMITH_ATTACHMENT_CACHE_MB`, default 256). The bytes still cross the wire and are billed on every send; that half needs provider file references via the unused `Attachment.ProviderFileID` and is a bigger piece of work.
 6. **Decompose `SendMessage`** (669 lines, no seams). Extract a resolved-inputs struct plus `prepareTurn` / `insertUserMessage` / `buildRequest` / `startRun`. No behaviour change; worth doing before the next feature lands in it.
 7. Smaller: `stream_chunks.payload` is JSONB but never read structurally (JSON or TEXT is cheaper on the hottest write path); `pgxpool.New` takes library defaults with no `MaxConns`; `ListMessagesByContext` / `ListStreamChunks` / `ListMessageTreeStructure` have no bound and want cursors.
 

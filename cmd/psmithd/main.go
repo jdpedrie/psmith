@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -193,10 +194,23 @@ func run() error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
-	fileStorage, err := storage.NewFS(dataDir)
+	fsStorage, err := storage.NewFS(dataDir)
 	if err != nil {
 		return fmt.Errorf("init storage: %w", err)
 	}
+	// History assembly re-reads every attachment in a conversation on every
+	// send, so the same images are pulled off disk dozens of times over a long
+	// chat. Blobs are content-addressed, so a cache entry can never go stale.
+	// Set PSMITH_ATTACHMENT_CACHE_MB=0 to disable.
+	cacheMB := int64(256)
+	if v := os.Getenv("PSMITH_ATTACHMENT_CACHE_MB"); v != "" {
+		n, perr := strconv.ParseInt(v, 10, 64)
+		if perr != nil {
+			return fmt.Errorf("PSMITH_ATTACHMENT_CACHE_MB: %w", perr)
+		}
+		cacheMB = n
+	}
+	fileStorage := storage.NewReadCache(fsStorage, cacheMB*1024*1024)
 
 	// HMAC key for signed `/files/{id}` URLs, derived off the master
 	// crypto key so URL-signature secret material rotates with the
