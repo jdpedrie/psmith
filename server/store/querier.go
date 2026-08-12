@@ -225,6 +225,14 @@ type Querier interface {
 	// subtract escape hatch for the merge resolver).
 	InsertProfilePlugin(ctx context.Context, arg InsertProfilePluginParams) (ProfilePlugin, error)
 	InsertStreamChunk(ctx context.Context, arg InsertStreamChunkParams) error
+	// Batch form, used by the supervisor's flush. This is the hottest write in the
+	// system: a long reply is hundreds of chunks, and one round-trip each held a
+	// pool connection per flush for no reason, since the caller already has the
+	// whole batch in hand.
+	//
+	// UNNEST rather than a generated VALUES list so the statement text is constant
+	// and stays in the prepared-statement cache regardless of batch size.
+	InsertStreamChunks(ctx context.Context, arg InsertStreamChunksParams) error
 	InsertUserMCPServer(ctx context.Context, arg InsertUserMCPServerParams) (UserMcpServer, error)
 	// Live runs for a specific conversation. Used by ConversationViewModel
 	// on view entry to detect "there's an in-flight assistant turn the
@@ -462,6 +470,16 @@ type Querier interface {
 	// (compare updated_at + active context + leaf) can detect content
 	// mutations that move neither the leaf nor any conversation column.
 	TouchConversationUpdatedAt(ctx context.Context, id uuid.UUID) error
+	// Coarse last-seen tracking, deliberately.
+	//
+	// This runs on every authenticated request, so without the interval guard
+	// every read becomes a write: the same row is dirtied at request rate,
+	// concurrent requests from one session serialize on its lock, and the table
+	// accumulates dead tuples for a column nobody reads with precision. The guard
+	// makes the common case a no-op UPDATE that touches no rows.
+	//
+	// The cost is that last_used_at can lag by up to the interval. Nothing depends
+	// on it being exact; it exists so a human can see whether a session is stale.
 	TouchSession(ctx context.Context, tokenHash string) error
 	UpdateContextActivationTime(ctx context.Context, arg UpdateContextActivationTimeParams) (Context, error)
 	// Sets the per-context cursor for "the tip the user is currently viewing."

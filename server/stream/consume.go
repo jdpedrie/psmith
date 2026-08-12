@@ -101,15 +101,33 @@ func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartP
 		// We still want the cancelled-stream's already-streamed chunks
 		// in the DB so subscribers can read partial content.
 		persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		for _, ch := range buffer {
-			if err := s.queries.InsertStreamChunk(persistCtx, store.InsertStreamChunkParams{
-				StreamRunID: runID,
-				Sequence:    ch.Sequence,
-				ChunkType:   string(ch.Type),
-				Payload:     ch.Payload,
-			}); err != nil {
-				logger.Error("persist chunk failed", "sequence", ch.Sequence, "err", err)
-			}
+		// One round-trip for the whole buffer. Per-chunk inserts took the
+		// buffering's memory cost without its benefit: a long reply is
+		// hundreds of chunks, and each insert held a pool connection for
+		// another network hop.
+		seqs := make([]int64, len(buffer))
+		types := make([]string, len(buffer))
+		payloads := make([][]byte, len(buffer))
+		for i, ch := range buffer {
+			seqs[i] = ch.Sequence
+			types[i] = string(ch.Type)
+			payloads[i] = ch.Payload
+		}
+		if err := s.queries.InsertStreamChunks(persistCtx, store.InsertStreamChunksParams{
+			StreamRunID: runID,
+			Sequences:   seqs,
+			ChunkTypes:  types,
+			Payloads:    payloads,
+		}); err != nil {
+			// The batch is all-or-nothing, so a failure loses this flush's
+			// chunks rather than some of them. Subscribers already have them
+			// live; the loss is felt only by a late subscriber replaying, and
+			// the alternative (per-chunk inserts to salvage a partial flush)
+			// is what this replaced.
+			logger.Error("persist chunk batch failed",
+				"count", len(buffer),
+				"first_sequence", buffer[0].Sequence,
+				"err", err)
 		}
 		persistCancel()
 

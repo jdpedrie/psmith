@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -954,5 +956,54 @@ func TestIdleTimeout_ResetsOnEachChunk(t *testing.T) {
 	}
 	if r.Status != statusCompleted {
 		t.Fatalf("status = %q, want %q (idle timeout fired during a healthy stream)", r.Status, statusCompleted)
+	}
+}
+
+// Chunks persist in one batched insert per flush, so the boundary between
+// flushes is where a batching bug would show: more chunks than
+// flushBatchSize forces several flushes, and a mistake in the column-array
+// packing loses or reorders a whole flush rather than one row.
+func TestStart_PersistsAcrossFlushBoundaries(t *testing.T) {
+	t.Parallel()
+	n := flushBatchSize*3 + 5 // several full batches plus a partial
+
+	f := newFixture(t)
+	src := newFakeSource(n + 4)
+
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for i := 0; i < n; i++ {
+		src.push(textChunk(fmt.Sprintf("c%d", i)))
+	}
+	src.close()
+
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 5*time.Second, "run completed")
+
+	rows, err := f.q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
+		StreamRunID: runID, Sequence: 0,
+	})
+	if err != nil {
+		t.Fatalf("ListStreamChunks: %v", err)
+	}
+	if len(rows) != n {
+		t.Fatalf("expected %d persisted chunks, got %d", n, len(rows))
+	}
+	// Every sequence present exactly once and in order: a packing bug that
+	// crossed arrays would pair the wrong type or payload with a sequence.
+	for i, r := range rows {
+		if r.Sequence != int64(i) {
+			t.Fatalf("row %d sequence = %d, want %d", i, r.Sequence, i)
+		}
+		if r.ChunkType != string(providers.ChunkText) {
+			t.Errorf("row %d type = %q", i, r.ChunkType)
+		}
+		if !strings.Contains(string(r.Payload), fmt.Sprintf("c%d", i)) {
+			t.Errorf("row %d payload = %s, want to contain c%d", i, r.Payload, i)
+		}
 	}
 }

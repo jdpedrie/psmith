@@ -110,9 +110,22 @@ func (q *Queries) GetSessionWithUser(ctx context.Context, tokenHash string) (Get
 }
 
 const touchSession = `-- name: TouchSession :exec
-UPDATE sessions SET last_used_at = NOW() WHERE token_hash = $1
+UPDATE sessions
+SET last_used_at = NOW()
+WHERE token_hash = $1
+  AND last_used_at < NOW() - INTERVAL '5 minutes'
 `
 
+// Coarse last-seen tracking, deliberately.
+//
+// This runs on every authenticated request, so without the interval guard
+// every read becomes a write: the same row is dirtied at request rate,
+// concurrent requests from one session serialize on its lock, and the table
+// accumulates dead tuples for a column nobody reads with precision. The guard
+// makes the common case a no-op UPDATE that touches no rows.
+//
+// The cost is that last_used_at can lag by up to the interval. Nothing depends
+// on it being exact; it exists so a human can see whether a session is stale.
 func (q *Queries) TouchSession(ctx context.Context, tokenHash string) error {
 	_, err := q.db.Exec(ctx, touchSession, tokenHash)
 	return err

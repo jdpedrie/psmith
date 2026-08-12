@@ -62,6 +62,18 @@ WHERE status = 'running';
 INSERT INTO stream_chunks (stream_run_id, sequence, chunk_type, payload)
 VALUES ($1, $2, $3, $4);
 
+-- name: InsertStreamChunks :exec
+-- Batch form, used by the supervisor's flush. This is the hottest write in the
+-- system: a long reply is hundreds of chunks, and one round-trip each held a
+-- pool connection per flush for no reason, since the caller already has the
+-- whole batch in hand.
+--
+-- UNNEST rather than a generated VALUES list so the statement text is constant
+-- and stays in the prepared-statement cache regardless of batch size.
+INSERT INTO stream_chunks (stream_run_id, sequence, chunk_type, payload)
+SELECT sqlc.arg(stream_run_id), UNNEST(sqlc.arg(sequences)::BIGINT[]),
+       UNNEST(sqlc.arg(chunk_types)::TEXT[]), UNNEST(sqlc.arg(payloads)::JSONB[]);
+
 -- name: ListStreamChunks :many
 -- Returns persisted chunks for a run, in sequence order, starting at the given
 -- sequence cursor. Used to replay missed chunks for late subscribers.

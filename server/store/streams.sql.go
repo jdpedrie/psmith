@@ -246,6 +246,36 @@ func (q *Queries) InsertStreamChunk(ctx context.Context, arg InsertStreamChunkPa
 	return err
 }
 
+const insertStreamChunks = `-- name: InsertStreamChunks :exec
+INSERT INTO stream_chunks (stream_run_id, sequence, chunk_type, payload)
+SELECT $1, UNNEST($2::BIGINT[]),
+       UNNEST($3::TEXT[]), UNNEST($4::JSONB[])
+`
+
+type InsertStreamChunksParams struct {
+	StreamRunID uuid.UUID
+	Sequences   []int64
+	ChunkTypes  []string
+	Payloads    [][]byte
+}
+
+// Batch form, used by the supervisor's flush. This is the hottest write in the
+// system: a long reply is hundreds of chunks, and one round-trip each held a
+// pool connection per flush for no reason, since the caller already has the
+// whole batch in hand.
+//
+// UNNEST rather than a generated VALUES list so the statement text is constant
+// and stays in the prepared-statement cache regardless of batch size.
+func (q *Queries) InsertStreamChunks(ctx context.Context, arg InsertStreamChunksParams) error {
+	_, err := q.db.Exec(ctx, insertStreamChunks,
+		arg.StreamRunID,
+		arg.Sequences,
+		arg.ChunkTypes,
+		arg.Payloads,
+	)
+	return err
+}
+
 const listActiveStreamRunsByConversation = `-- name: ListActiveStreamRunsByConversation :many
 SELECT sr.id, sr.conversation_id, sr.context_id, sr.parent_message_id, sr.provider_id, sr.model_id, sr.status, sr.purpose, sr.started_at, sr.ended_at, sr.error_payload, sr.result_message_id, sr.result_context_id, sr.prefix_hashes, sr.prefix_length, sr.cache_stable_prefix_length, sr.cache_trailing_depth
 FROM stream_runs sr
