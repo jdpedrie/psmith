@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -76,7 +77,29 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, dsn)
+	// Pool sizing is explicit rather than pgx's default (4, or NumCPU when
+	// higher). Every active stream holds a connection through each flush, and
+	// the send path issues a dozen short queries before the upstream call, so
+	// the pool saturates long before the database does. Concurrent streams,
+	// not cores, is the dimension that matters.
+	//
+	// The DSN wins if it already carries pool_max_conns, so an operator
+	// tuning through the connection string is not silently overridden.
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("parse dsn: %w", err)
+	}
+	if !strings.Contains(dsn, "pool_max_conns") {
+		poolCfg.MaxConns = 25
+		if v := os.Getenv("PSMITH_DB_MAX_CONNS"); v != "" {
+			n, perr := strconv.ParseInt(v, 10, 32)
+			if perr != nil || n < 1 {
+				return fmt.Errorf("PSMITH_DB_MAX_CONNS must be a positive integer, got %q", v)
+			}
+			poolCfg.MaxConns = int32(n)
+		}
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return err
 	}

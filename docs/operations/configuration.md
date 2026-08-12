@@ -16,6 +16,7 @@ Per-user settings (provider credentials, embedder config, Langfuse keys, plugin 
 | `PSMITH_BOOTSTRAP_ADMIN_PASSWORD` | none | no | First-run admin password (bcrypt-hashed). Both username and password must be set for bootstrap to fire. |
 | `PSMITH_DATA_DIR` | `psmithd-data` (relative to the working directory) | no | Root for file storage. A `files/` subdirectory is created at mode 0700 on boot. |
 | `PSMITH_ATTACHMENT_CACHE_MB` | `256` | In-process cache of attachment bytes, in MB. History assembly re-reads every attachment in a conversation on every send; blobs are content-addressed so entries cannot go stale. `0` disables it. |
+| `PSMITH_DB_MAX_CONNS` | `25` | Postgres pool size. Every active stream holds a connection through each flush, so concurrent streams rather than cores is the dimension that matters. Ignored when the DSN already carries `pool_max_conns`. |
 | `PSMITH_PUBLIC_BASE_URL` | empty | no | Base URL prepended to the signed `/files/{id}` URLs the server hands back. Empty means the client prepends its own base. |
 | `PSMITH_EMBEDDER` | none | no | Name of a server-wide fallback embedder used when a user has no embedder config. Only `openai` is registered (an OpenAI-compatible driver that also covers Ollama-style endpoints). |
 | `PSMITH_EMBEDDER_CONFIG` | none | no | JSON config for the fallback embedder named by `PSMITH_EMBEDDER`. Read only when that is set. |

@@ -37,7 +37,7 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 ~~4. **Provider open sequence copy-pasted six times**~~ **Done**: `server/providerkit` owns load / ownership / decrypt / build / assert.
 ~~5. **Attachment bytes re-read every turn**~~ **Partly done**: `storage.ReadCache` removes the repeated backend reads (`PSMITH_ATTACHMENT_CACHE_MB`, default 256). The bytes still cross the wire and are billed on every send; that half needs provider file references via the unused `Attachment.ProviderFileID` and is a bigger piece of work.
 6. **Decompose `SendMessage`** (669 lines, no seams). Extract a resolved-inputs struct plus `prepareTurn` / `insertUserMessage` / `buildRequest` / `startRun`. No behaviour change; worth doing before the next feature lands in it.
-7. Smaller: `stream_chunks.payload` is JSONB but never read structurally (JSON or TEXT is cheaper on the hottest write path); `pgxpool.New` takes library defaults with no `MaxConns`; `ListMessagesByContext` / `ListStreamChunks` / `ListMessageTreeStructure` have no bound and want cursors.
+7. Smaller: ~~`stream_chunks.payload` JSONB~~ **done** (migration 00050, now JSON); ~~`pgxpool` defaults~~ **done** (`PSMITH_DB_MAX_CONNS`, default 25); `ListMessagesByContext` / `ListStreamChunks` / `ListMessageTreeStructure` still have no bound and want cursors, which is an RPC contract change rather than a query tweak.
 
 ## Implementation gaps inside shipped code
 
