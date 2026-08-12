@@ -1419,11 +1419,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// Unpacked into locals rather than threaded as t.field throughout: the
 	// body below is dense enough without an extra indirection on every
 	// reference, and these are exactly the names it already used.
-	user, conv, activeCtx := t.user, t.conv, t.activeCtx
-	extendsTurn := t.extendsTurn
-	pipeline, route, routed := t.pipeline, t.route, t.routed
+	conv, activeCtx := t.conv, t.activeCtx
+	pipeline, route := t.pipeline, t.route
 	providerID, modelID := t.providerID, t.modelID
-	provRow, enabledModel := t.provRow, t.enabledModel
+	provRow := t.provRow
 
 	// Critical section: resolve parent → insert user message → advance cursor,
 	// all serialized via SELECT FOR UPDATE on the contexts row. Without this,
@@ -1433,175 +1432,9 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// siblings. The lock is held only for these three DB operations — the
 	// slow driver.Send (HTTP to upstream LLM) happens after Commit so we
 	// never block other requests on network I/O.
-	if s.pool == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires pool dependency"))
-	}
-	userMsgID, err := uuid.NewV7()
+	userMsgRow, err := s.commitUserMessage(ctx, req, t)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	var userMsgRow store.Message
-	if extendsTurn {
-		// Regenerate: parent_message_id references an existing row in the
-		// active context. Don't insert a new user row; just load the
-		// parent and let the rest of the handler use it as the stream's
-		// parent. Two valid shapes:
-		//
-		//   - parent.role == "user": new assistant becomes a sibling of
-		//     any previous assistant under this user message. Standard
-		//     "Reload" affordance on an assistant turn.
-		//   - parent.role == "assistant": new assistant chains AFTER the
-		//     parent assistant — produces two assistants in a row. Powers
-		//     "Save and Resend" on an edited assistant: the edit stays
-		//     in place and the model continues from there. The wire
-		//     prefix sent to the LLM ends with the parent assistant; not
-		//     all providers support that gracefully (Anthropic does via
-		//     prefill, OpenAI Chat may error). We surface upstream
-		//     errors verbatim rather than refusing the request.
-		//
-		// Other roles (system, summary, context) remain rejected — they
-		// have no defined "regenerate from here" semantics.
-		pid, perr := uuid.Parse(*req.Msg.ParentMessageId)
-		if perr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_message_id: %w", perr))
-		}
-		row, gerr := s.queries.GetMessageByID(ctx, pid)
-		if gerr != nil {
-			if errors.Is(gerr, pgx.ErrNoRows) {
-				return nil, connect.NewError(connect.CodeNotFound, errors.New("parent_message_id not found"))
-			}
-			return nil, connect.NewError(connect.CodeInternal, gerr)
-		}
-		if row.ContextID != activeCtx.ID {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_message_id does not belong to active context"))
-		}
-		if row.Role != "user" && row.Role != "assistant" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id to reference a user or assistant message"))
-		}
-		userMsgRow = row
-		// Repoint the context's current leaf to this user. Without it,
-		// subsequent non-explicit-parent sends would parent off whatever
-		// leaf the cursor still pointed at, not this regenerated branch.
-		if _, err := s.queries.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
-			ID:                   activeCtx.ID,
-			CurrentLeafMessageID: &row.ID,
-		}); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
-		}
-	} else {
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
-		}
-		// Defer rollback; commit-success is a no-op rollback by pgx.
-		defer func() { _ = tx.Rollback(context.Background()) }()
-		qtx := s.queries.WithTx(tx)
-
-		// Lock the contexts row. Re-read activeCtx through the TX so we see
-		// any concurrent UpdateContextCurrentLeaf committed before we got the lock.
-		lockedCtx, err := qtx.GetContextByIDForUpdate(ctx, activeCtx.ID)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("lock context: %w", err))
-		}
-
-		// Resolve the parent message id. Chain (under the row lock):
-		//   1. caller-specified parent_message_id (explicit fork or continue)
-		//   2. context.current_leaf_message_id (server-tracked cursor)
-		//   3. latest message in the active context (fallback for fresh contexts)
-		parentMessageID, err := s.resolveParent(ctx, qtx, lockedCtx, req.Msg.ParentMessageId)
-		if err != nil {
-			return nil, err
-		}
-
-		// Collect MessageEnvelope plugin contributions (basic_grounding,
-		// future siblings). They persist in the dedicated header/trailer
-		// columns — content stays exactly what the user typed, so edits,
-		// display, TTS, and embeddings never see the envelope. The
-		// history builder composes headers + content + trailers for the
-		// wire. Device-fact envelope from the request is translated from
-		// the proto enum to the plugin-side string keys; plugins ignore
-		// keys they don't recognize.
-		// Anchor the envelope's state reads at the branch leaf as it stands
-		// BEFORE this turn: the user row does not exist yet, and what a
-		// plugin needs to know here is what the branch already carries.
-		var envelopeLeaf uuid.UUID
-		if parentMessageID != nil {
-			envelopeLeaf = *parentMessageID
-		}
-		headers, trailers := pipeline.OutgoingEnvelope(
-			ctx,
-			deviceFactsFromProto(req.Msg.DeviceFacts),
-			func(c context.Context, pluginName string) context.Context {
-				return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, envelopeLeaf))
-			},
-		)
-		var headersPtr, trailersPtr *string
-		if headers != "" {
-			headersPtr = &headers
-		}
-		if trailers != "" {
-			trailersPtr = &trailers
-		}
-
-		row, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
-			ID:              userMsgID,
-			ContextID:       lockedCtx.ID,
-			ParentID:        parentMessageID,
-			Role:            "user",
-			Content:         req.Msg.Content,
-			MessageHeaders:  headersPtr,
-			MessageTrailers: trailersPtr,
-		})
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		userMsgRow = row
-
-		// Advance the per-context cursor to the just-inserted user message.
-		// Inside the TX so the next concurrent SendMessage observing this
-		// row will see the advanced cursor.
-		if _, err := qtx.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
-			ID:                   lockedCtx.ID,
-			CurrentLeafMessageID: &row.ID,
-		}); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
-		}
-
-		// Bind attachments before commit. Each attachment_file_id must
-		// reference a files row owned by the same user — anything else
-		// is a permissions violation we surface as InvalidArgument so a
-		// misbehaving client gets a clean error rather than a silently-
-		// dropped attachment.
-		for i, idStr := range req.Msg.AttachmentFileIds {
-			fileID, perr := uuid.Parse(idStr)
-			if perr != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument,
-					fmt.Errorf("invalid attachment_file_id[%d]: %w", i, perr))
-			}
-			fileRow, ferr := qtx.GetFile(ctx, fileID)
-			if ferr != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument,
-					fmt.Errorf("attachment_file_id[%d] not found", i))
-			}
-			if fileRow.UserID != user.ID {
-				return nil, connect.NewError(connect.CodeInvalidArgument,
-					fmt.Errorf("attachment_file_id[%d] not owned by caller", i))
-			}
-			if _, aerr := qtx.AttachFileToMessage(ctx, store.AttachFileToMessageParams{
-				MessageID: userMsgRow.ID,
-				Ordinal:   int32(i),
-				FileID:    fileID,
-				Kind:      attachmentKindFromMime(fileRow.MimeType),
-				RoleHint:  "user_supplied",
-			}); aerr != nil {
-				return nil, connect.NewError(connect.CodeInternal,
-					fmt.Errorf("bind attachment: %w", aerr))
-			}
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
-		}
+		return nil, err
 	}
 
 	// Build the driver instance for this provider.
@@ -1623,7 +1456,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// message (skipped on Regenerate where userMsgRow is the existing
 	// parent assistant turn, not a freshly-persisted user message).
 	// Detached goroutines, no back-pressure on this RPC.
-	if !pipeline.Empty() && !extendsTurn {
+	if !pipeline.Empty() && !t.extendsTurn {
 		pipeline.FireMessagePersisted(context.Background(), pluginapi.PersistedMessage{
 			ID:        userMsgRow.ID.String(),
 			ContextID: userMsgRow.ContextID.String(),
@@ -1632,116 +1465,13 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		}, s.logger)
 	}
 
-	// Build the wire prefix from history, ending at the just-inserted user message.
-	includeThinking := s.resolveIncludeThinking(ctx, conv)
-	wireMessages, err := history.Build(ctx, s.queries, history.Params{
-		Conversation:     conv,
-		LeafMessageID:    &userMsgRow.ID,
-		DestProviderType: provRow.Type,
-		IncludeThinking:  includeThinking,
-		Plugins:          pipeline,
-		UserID:           user.ID,
-		Attachments:      s.storage,
-		Logger:           s.logger,
-		// Stateful plugins need their branch-scoped store to build a
-		// turn-context block, the same way tool dispatch gives them one.
-		PluginContext: func(c context.Context, pluginName string) context.Context {
-			return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
-		},
-	})
+	built, err := s.buildSendRequest(ctx, req, t, userMsgRow, driver)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
+		return nil, err
 	}
+	sendReq := built.req
+	explicitCacheAttached := built.cacheAttached
 
-	// When regenerating with an assistant parent, the wire prefix
-	// naturally ends in "assistant" (no new user row was inserted). Most
-	// providers — OpenAI Chat, Google Gemini — reject a contents array
-	// that doesn't end with a user turn (Gemini returns 400, OpenAI
-	// errors with "messages with role 'assistant' must be followed by a
-	// user message"). Inject a synthetic single-space user message for
-	// the wire ONLY; nothing is persisted to the messages table. The
-	// new assistant's parent_id remains the parent assistant, so the
-	// stored chain still reads user → assistant → assistant. The space
-	// is a minimal-content nudge — using " " over "Continue." avoids
-	// putting words in the user's mouth that they didn't type.
-	if extendsTurn && userMsgRow.Role == "assistant" {
-		wireMessages = append(wireMessages, providers.WireMessage{
-			Role:    "user",
-			Content: " ",
-		})
-	}
-
-	// A routed turn ends with the direction naming who speaks and how long to
-	// take. Wire only: it is never persisted, and the user never sees it.
-	//
-	// It goes at the tail rather than in the system slot on purpose. The
-	// system slot is shared and cached; this changes every hop, so putting it
-	// here leaves the whole prefix in front of it byte-identical and lets one
-	// cache lineage serve every member.
-	//
-	// The normalize pass then folds it into the preceding user turn when there
-	// is one, which is what puts the opening direction inside the user's own
-	// message. Two consecutive user turns would be combined by the provider
-	// anyway; doing it ourselves keeps the bytes deterministic.
-	if routed {
-		wireMessages = history.AppendDirection(wireMessages, route.Direction)
-	}
-
-	// Resolve effective call settings via the 4-layer chain (high precedence
-	// → low): conversation > resolved profile > model > provider. The
-	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat
-	// but is intentionally NOT merged in v1 — conversation-level granularity
-	// is enough; per-message overrides clutter the composer for marginal
-	// benefit. See the plan's "Resolution chain" section.
-	callSettings, err := s.assembleCallSettings(ctx, conv, providerID, modelID, enabledModel.DefaultSettings)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
-	}
-
-	// A routed turn may bound its own reply, layered above the four-layer
-	// chain. This is what makes "answer in one word" a bound rather than a
-	// request: a model asked to be brief will elaborate anyway, and the token
-	// cap is the only thing that actually stops it.
-	if routed && route.MaxOutputTokens > 0 {
-		max := int(route.MaxOutputTokens)
-		callSettings.MaxOutputTokens = &max
-	}
-
-	// Gemini explicit cache hook. When call_settings.google.explicit_cache
-	// is true and we're sending to a google driver, look up (or create)
-	// a cachedContents resource for this (context, model). On hit:
-	// trim the wire prefix to the new tail and stash the cache name on
-	// settings.Google.CachedContent for the driver to attach. On miss
-	// or error: send normally; failures are non-fatal.
-	// Build the SendRequest before the cache hook so the hook can
-	// mutate Messages + Settings in place via the driver's
-	// ApplyExplicitCacheRef.
-	sendReq := providers.SendRequest{
-		ModelID:        modelID,
-		Messages:       wireMessages,
-		Settings:       callSettings,
-		ConversationID: conv.ID.String(),
-		Tools:          collectPipelineTools(pipeline),
-	}
-
-	// Provider-agnostic explicit-cache hook. The driver opts in by
-	// implementing providers.ExplicitCacheProvider; the conversations
-	// service owns the lifecycle (lookup → check expiry → check
-	// prefix-hash match → attach OR create-and-store). Today only the
-	// Google driver implements the interface; Anthropic could grow
-	// one in the future without changing this code path.
-	//
-	// explicitCacheAttached records the outcome for forensic stamping
-	// onto the assistant message. nil → not applicable (toggle off or
-	// driver doesn't implement caching); &true → cache attached;
-	// &false → toggle was on but no cache attached this turn.
-	var explicitCacheAttached *bool
-	if callSettings.ExplicitCache != nil && *callSettings.ExplicitCache {
-		if cp, ok := driver.(providers.ExplicitCacheProvider); ok {
-			attached := s.maybeAttachExplicitCache(ctx, cp, provRow.Type, activeCtx.ID, modelID, &sendReq)
-			explicitCacheAttached = &attached
-		}
-	}
 	// Build a SendFunc closure for the supervisor. The supervisor calls
 	// it inside its run goroutine with retry + per-attempt 60s timeout
 	// (see `internal/stream/send_retry.go`); on exhaustion the supervisor
@@ -1891,7 +1621,10 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// this context) compute the stable-prefix length + trailing-edge depth.
 	// Failure here is non-fatal — diagnostics, not correctness — so we log and
 	// continue rather than aborting the send.
-	cacheObs, cacheErr := observePrefixCache(ctx, s.queries, activeCtx.ID, wireMessages)
+	// The UNTRIMMED prefix on purpose. An attached explicit cache trims
+	// sendReq.Messages to the uncached tail, and hashing that would read as a
+	// near-total prefix change every time the cache worked.
+	cacheObs, cacheErr := observePrefixCache(ctx, s.queries, activeCtx.ID, built.wirePrefix)
 	if cacheErr != nil {
 		s.logger.Warn("cache observation failed", "err", cacheErr, "context_id", activeCtx.ID)
 	}
@@ -2185,6 +1918,358 @@ func (s *Service) prepareTurn(ctx context.Context, req *connect.Request[psmithv1
 	t.provRow = provRow
 	t.enabledModel = enabledModel
 	return ctx, t, nil
+}
+
+// commitUserMessage runs the write half of a send: resolve the parent, insert
+// the user row, advance the context cursor.
+//
+// Split from SendMessage because it is the only part that writes, and keeping
+// it whole makes the transaction's boundaries something you can see rather
+// than something you have to trace through two hundred lines. Everything
+// before it is resolution; everything after it is network I/O.
+//
+// All three operations are serialized via SELECT FOR UPDATE on the contexts
+// row. Without that, concurrent sends on one context race: the second's
+// resolveParent fallback reads the first's just-inserted row before the
+// first's cursor advances, producing a chain where there should be siblings.
+// The lock covers only these three operations; the slow upstream call happens
+// after Commit so no request ever blocks another on network I/O.
+//
+// On an extending turn (regenerate or continue) nothing is inserted and the
+// returned row is the existing message being extended from.
+func (s *Service) commitUserMessage(
+	ctx context.Context,
+	req *connect.Request[psmithv1.SendMessageRequest],
+	t preparedTurn,
+) (store.Message, error) {
+	user, conv, activeCtx := t.user, t.conv, t.activeCtx
+	extendsTurn := t.extendsTurn
+	pipeline := t.pipeline
+	if s.pool == nil {
+		return store.Message{}, connect.NewError(connect.CodeUnimplemented, errors.New("SendMessage requires pool dependency"))
+	}
+	userMsgID, err := uuid.NewV7()
+	if err != nil {
+		return store.Message{}, connect.NewError(connect.CodeInternal, err)
+	}
+	var userMsgRow store.Message
+	if extendsTurn {
+		// Regenerate: parent_message_id references an existing row in the
+		// active context. Don't insert a new user row; just load the
+		// parent and let the rest of the handler use it as the stream's
+		// parent. Two valid shapes:
+		//
+		//   - parent.role == "user": new assistant becomes a sibling of
+		//     any previous assistant under this user message. Standard
+		//     "Reload" affordance on an assistant turn.
+		//   - parent.role == "assistant": new assistant chains AFTER the
+		//     parent assistant — produces two assistants in a row. Powers
+		//     "Save and Resend" on an edited assistant: the edit stays
+		//     in place and the model continues from there. The wire
+		//     prefix sent to the LLM ends with the parent assistant; not
+		//     all providers support that gracefully (Anthropic does via
+		//     prefill, OpenAI Chat may error). We surface upstream
+		//     errors verbatim rather than refusing the request.
+		//
+		// Other roles (system, summary, context) remain rejected — they
+		// have no defined "regenerate from here" semantics.
+		pid, perr := uuid.Parse(*req.Msg.ParentMessageId)
+		if perr != nil {
+			return store.Message{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid parent_message_id: %w", perr))
+		}
+		row, gerr := s.queries.GetMessageByID(ctx, pid)
+		if gerr != nil {
+			if errors.Is(gerr, pgx.ErrNoRows) {
+				return store.Message{}, connect.NewError(connect.CodeNotFound, errors.New("parent_message_id not found"))
+			}
+			return store.Message{}, connect.NewError(connect.CodeInternal, gerr)
+		}
+		if row.ContextID != activeCtx.ID {
+			return store.Message{}, connect.NewError(connect.CodeInvalidArgument, errors.New("parent_message_id does not belong to active context"))
+		}
+		if row.Role != "user" && row.Role != "assistant" {
+			return store.Message{}, connect.NewError(connect.CodeInvalidArgument, errors.New("regenerate requires parent_message_id to reference a user or assistant message"))
+		}
+		userMsgRow = row
+		// Repoint the context's current leaf to this user. Without it,
+		// subsequent non-explicit-parent sends would parent off whatever
+		// leaf the cursor still pointed at, not this regenerated branch.
+		if _, err := s.queries.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
+			ID:                   activeCtx.ID,
+			CurrentLeafMessageID: &row.ID,
+		}); err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
+		}
+	} else {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, fmt.Errorf("begin tx: %w", err))
+		}
+		// Defer rollback; commit-success is a no-op rollback by pgx.
+		defer func() { _ = tx.Rollback(context.Background()) }()
+		qtx := s.queries.WithTx(tx)
+
+		// Lock the contexts row. Re-read activeCtx through the TX so we see
+		// any concurrent UpdateContextCurrentLeaf committed before we got the lock.
+		lockedCtx, err := qtx.GetContextByIDForUpdate(ctx, activeCtx.ID)
+		if err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, fmt.Errorf("lock context: %w", err))
+		}
+
+		// Resolve the parent message id. Chain (under the row lock):
+		//   1. caller-specified parent_message_id (explicit fork or continue)
+		//   2. context.current_leaf_message_id (server-tracked cursor)
+		//   3. latest message in the active context (fallback for fresh contexts)
+		parentMessageID, err := s.resolveParent(ctx, qtx, lockedCtx, req.Msg.ParentMessageId)
+		if err != nil {
+			return store.Message{}, err
+		}
+
+		// Collect MessageEnvelope plugin contributions (basic_grounding,
+		// future siblings). They persist in the dedicated header/trailer
+		// columns — content stays exactly what the user typed, so edits,
+		// display, TTS, and embeddings never see the envelope. The
+		// history builder composes headers + content + trailers for the
+		// wire. Device-fact envelope from the request is translated from
+		// the proto enum to the plugin-side string keys; plugins ignore
+		// keys they don't recognize.
+		// Anchor the envelope's state reads at the branch leaf as it stands
+		// BEFORE this turn: the user row does not exist yet, and what a
+		// plugin needs to know here is what the branch already carries.
+		var envelopeLeaf uuid.UUID
+		if parentMessageID != nil {
+			envelopeLeaf = *parentMessageID
+		}
+		headers, trailers := pipeline.OutgoingEnvelope(
+			ctx,
+			deviceFactsFromProto(req.Msg.DeviceFacts),
+			func(c context.Context, pluginName string) context.Context {
+				return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, envelopeLeaf))
+			},
+		)
+		var headersPtr, trailersPtr *string
+		if headers != "" {
+			headersPtr = &headers
+		}
+		if trailers != "" {
+			trailersPtr = &trailers
+		}
+
+		row, err := qtx.CreateMessage(ctx, store.CreateMessageParams{
+			ID:              userMsgID,
+			ContextID:       lockedCtx.ID,
+			ParentID:        parentMessageID,
+			Role:            "user",
+			Content:         req.Msg.Content,
+			MessageHeaders:  headersPtr,
+			MessageTrailers: trailersPtr,
+		})
+		if err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, err)
+		}
+		userMsgRow = row
+
+		// Advance the per-context cursor to the just-inserted user message.
+		// Inside the TX so the next concurrent SendMessage observing this
+		// row will see the advanced cursor.
+		if _, err := qtx.UpdateContextCurrentLeaf(ctx, store.UpdateContextCurrentLeafParams{
+			ID:                   lockedCtx.ID,
+			CurrentLeafMessageID: &row.ID,
+		}); err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, fmt.Errorf("advance cursor: %w", err))
+		}
+
+		// Bind attachments before commit. Each attachment_file_id must
+		// reference a files row owned by the same user — anything else
+		// is a permissions violation we surface as InvalidArgument so a
+		// misbehaving client gets a clean error rather than a silently-
+		// dropped attachment.
+		for i, idStr := range req.Msg.AttachmentFileIds {
+			fileID, perr := uuid.Parse(idStr)
+			if perr != nil {
+				return store.Message{}, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("invalid attachment_file_id[%d]: %w", i, perr))
+			}
+			fileRow, ferr := qtx.GetFile(ctx, fileID)
+			if ferr != nil {
+				return store.Message{}, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("attachment_file_id[%d] not found", i))
+			}
+			if fileRow.UserID != user.ID {
+				return store.Message{}, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("attachment_file_id[%d] not owned by caller", i))
+			}
+			if _, aerr := qtx.AttachFileToMessage(ctx, store.AttachFileToMessageParams{
+				MessageID: userMsgRow.ID,
+				Ordinal:   int32(i),
+				FileID:    fileID,
+				Kind:      attachmentKindFromMime(fileRow.MimeType),
+				RoleHint:  "user_supplied",
+			}); aerr != nil {
+				return store.Message{}, connect.NewError(connect.CodeInternal,
+					fmt.Errorf("bind attachment: %w", aerr))
+			}
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return store.Message{}, connect.NewError(connect.CodeInternal, fmt.Errorf("commit: %w", err))
+		}
+	}
+	return userMsgRow, nil
+}
+
+// builtRequest is what a turn sends, plus the two things the caller still
+// needs afterwards.
+type builtRequest struct {
+	req providers.SendRequest
+	// wirePrefix is the prefix BEFORE any explicit-cache trim, for cache
+	// observability: hashing the trimmed request would report a near-total
+	// prefix change on exactly the turns where caching worked.
+	wirePrefix []providers.WireMessage
+	// cacheAttached is nil when explicit caching does not apply, and a
+	// non-nil false when the toggle was on but nothing was attached.
+	cacheAttached *bool
+}
+
+// buildSendRequest assembles what goes upstream: the wire prefix from history,
+// the per-turn direction, the merged call settings, and any explicit-cache
+// reference the driver wants attached.
+//
+// Split out because this is where a turn's SHAPE is decided, and it was
+// previously interleaved with the transaction above it and the closure
+// plumbing below. It reads and computes; the only state it touches is the
+// provider-side cache reference, which the driver owns.
+//
+// Returns the request plus the explicit-cache outcome, which the supervisor
+// stamps onto the assistant row for forensics: nil means not applicable, and
+// a non-nil false means the toggle was on but nothing was attached.
+func (s *Service) buildSendRequest(
+	ctx context.Context,
+	req *connect.Request[psmithv1.SendMessageRequest],
+	t preparedTurn,
+	userMsgRow store.Message,
+	driver providers.Provider,
+) (builtRequest, error) {
+	user, conv, activeCtx := t.user, t.conv, t.activeCtx
+	extendsTurn := t.extendsTurn
+	pipeline, route, routed := t.pipeline, t.route, t.routed
+	modelID := t.modelID
+	provRow, enabledModel := t.provRow, t.enabledModel
+	// Build the wire prefix from history, ending at the just-inserted user message.
+	includeThinking := s.resolveIncludeThinking(ctx, conv)
+	wireMessages, err := history.Build(ctx, s.queries, history.Params{
+		Conversation:     conv,
+		LeafMessageID:    &userMsgRow.ID,
+		DestProviderType: provRow.Type,
+		IncludeThinking:  includeThinking,
+		Plugins:          pipeline,
+		UserID:           user.ID,
+		Attachments:      s.storage,
+		Logger:           s.logger,
+		// Stateful plugins need their branch-scoped store to build a
+		// turn-context block, the same way tool dispatch gives them one.
+		PluginContext: func(c context.Context, pluginName string) context.Context {
+			return host.WithPluginStateStore(c, s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID))
+		},
+	})
+	if err != nil {
+		return builtRequest{}, connect.NewError(connect.CodeInternal, fmt.Errorf("build history: %w", err))
+	}
+
+	// When regenerating with an assistant parent, the wire prefix
+	// naturally ends in "assistant" (no new user row was inserted). Most
+	// providers — OpenAI Chat, Google Gemini — reject a contents array
+	// that doesn't end with a user turn (Gemini returns 400, OpenAI
+	// errors with "messages with role 'assistant' must be followed by a
+	// user message"). Inject a synthetic single-space user message for
+	// the wire ONLY; nothing is persisted to the messages table. The
+	// new assistant's parent_id remains the parent assistant, so the
+	// stored chain still reads user → assistant → assistant. The space
+	// is a minimal-content nudge — using " " over "Continue." avoids
+	// putting words in the user's mouth that they didn't type.
+	if extendsTurn && userMsgRow.Role == "assistant" {
+		wireMessages = append(wireMessages, providers.WireMessage{
+			Role:    "user",
+			Content: " ",
+		})
+	}
+
+	// A routed turn ends with the direction naming who speaks and how long to
+	// take. Wire only: it is never persisted, and the user never sees it.
+	//
+	// It goes at the tail rather than in the system slot on purpose. The
+	// system slot is shared and cached; this changes every hop, so putting it
+	// here leaves the whole prefix in front of it byte-identical and lets one
+	// cache lineage serve every member.
+	//
+	// The normalize pass then folds it into the preceding user turn when there
+	// is one, which is what puts the opening direction inside the user's own
+	// message. Two consecutive user turns would be combined by the provider
+	// anyway; doing it ourselves keeps the bytes deterministic.
+	if routed {
+		wireMessages = history.AppendDirection(wireMessages, route.Direction)
+	}
+
+	// Resolve effective call settings via the 4-layer chain (high precedence
+	// → low): conversation > resolved profile > model > provider. The
+	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat
+	// but is intentionally NOT merged in v1 — conversation-level granularity
+	// is enough; per-message overrides clutter the composer for marginal
+	// benefit. See the plan's "Resolution chain" section.
+	callSettings, err := s.assembleCallSettings(ctx, conv, t.providerID, modelID, enabledModel.DefaultSettings)
+	if err != nil {
+		return builtRequest{}, connect.NewError(connect.CodeInternal, fmt.Errorf("assemble call settings: %w", err))
+	}
+
+	// A routed turn may bound its own reply, layered above the four-layer
+	// chain. This is what makes "answer in one word" a bound rather than a
+	// request: a model asked to be brief will elaborate anyway, and the token
+	// cap is the only thing that actually stops it.
+	if routed && route.MaxOutputTokens > 0 {
+		max := int(route.MaxOutputTokens)
+		callSettings.MaxOutputTokens = &max
+	}
+
+	// Gemini explicit cache hook. When call_settings.google.explicit_cache
+	// is true and we're sending to a google driver, look up (or create)
+	// a cachedContents resource for this (context, model). On hit:
+	// trim the wire prefix to the new tail and stash the cache name on
+	// settings.Google.CachedContent for the driver to attach. On miss
+	// or error: send normally; failures are non-fatal.
+	// Build the SendRequest before the cache hook so the hook can
+	// mutate Messages + Settings in place via the driver's
+	// ApplyExplicitCacheRef.
+	sendReq := providers.SendRequest{
+		ModelID:        modelID,
+		Messages:       wireMessages,
+		Settings:       callSettings,
+		ConversationID: conv.ID.String(),
+		Tools:          collectPipelineTools(pipeline),
+	}
+
+	// Provider-agnostic explicit-cache hook. The driver opts in by
+	// implementing providers.ExplicitCacheProvider; the conversations
+	// service owns the lifecycle (lookup → check expiry → check
+	// prefix-hash match → attach OR create-and-store). Today only the
+	// Google driver implements the interface; Anthropic could grow
+	// one in the future without changing this code path.
+	//
+	// explicitCacheAttached records the outcome for forensic stamping
+	// onto the assistant message. nil → not applicable (toggle off or
+	// driver doesn't implement caching); &true → cache attached;
+	// &false → toggle was on but no cache attached this turn.
+	var explicitCacheAttached *bool
+	if callSettings.ExplicitCache != nil && *callSettings.ExplicitCache {
+		if cp, ok := driver.(providers.ExplicitCacheProvider); ok {
+			attached := s.maybeAttachExplicitCache(ctx, cp, provRow.Type, activeCtx.ID, modelID, &sendReq)
+			explicitCacheAttached = &attached
+		}
+	}
+	return builtRequest{
+		req:           sendReq,
+		wirePrefix:    wireMessages,
+		cacheAttached: explicitCacheAttached,
+	}, nil
 }
 
 // resolveProviderModel walks the route → per-turn → conversation → profile
