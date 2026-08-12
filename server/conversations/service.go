@@ -253,19 +253,21 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[p
 	// cross-user must look like NotFound. We collapse both into NotFound on
 	// the profile lookup to maintain consistency with the rest of the
 	// service.
-	profile, err := s.queries.GetProfileByID(ctx, profileID)
+	profile, err := s.loadProfile(ctx, profileID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("profile not found"))
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Ownership before resolution, so a caller who does not own this profile
+	// never triggers a walk up its inheritance chain.
 	if profile.UserID != caller.ID {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("profile not found"))
 	}
 
 	// Resolve via the parent chain so we snapshot inherited fields.
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	resolved, err := s.resolveProfile(ctx, profileID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve profile: %w", err))
 	}
@@ -1414,6 +1416,11 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	// clients present them differently — regenerate discards an answer,
 	// continue keeps it and adds another speaker — while sharing every
 	// mechanic below.
+	// One profile resolution for the whole send. Four helpers below each ask a
+	// different question of the same profile and each was written to resolve
+	// for itself; without this they walk the same inheritance chain four times.
+	ctx = withProfileCache(ctx, newProfileCache(s.queries))
+
 	extendsTurn := req.Msg.Regenerate || req.Msg.ContinueDiscussion
 	if !extendsTurn && req.Msg.Content == "" && len(req.Msg.AttachmentFileIds) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("content or attachment is required"))
@@ -2097,14 +2104,10 @@ func (s *Service) defaultsForProfile(ctx context.Context, profileID string) (uui
 	if err != nil {
 		return uuid.Nil, "", nil
 	}
-	profile, err := s.queries.GetProfileByID(ctx, id)
+	resolved, err := s.resolveProfile(ctx, id)
 	if err != nil {
 		// A member profile that has been deleted should not brick the
 		// conversation.
-		return uuid.Nil, "", nil
-	}
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
-	if err != nil {
 		return uuid.Nil, "", nil
 	}
 	if resolved.DefaultSettings == nil {
@@ -2178,11 +2181,7 @@ func (s *Service) resolveProviderModel(
 	}
 
 	// Profile defaults (resolved through inheritance).
-	profile, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
-	if err != nil {
-		return uuid.Nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("load profile: %w", err))
-	}
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	resolved, err := s.resolveProfile(ctx, conv.ProfileID)
 	if err != nil {
 		return uuid.Nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
 	}
@@ -2209,11 +2208,7 @@ func (s *Service) resolveIncludeThinking(ctx context.Context, conv store.Convers
 			return *settings.IncludeThinkingInHistory
 		}
 	}
-	profile, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
-	if err != nil {
-		return false
-	}
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	resolved, err := s.resolveProfile(ctx, conv.ProfileID)
 	if err != nil {
 		return false
 	}
@@ -2334,11 +2329,7 @@ func (s *Service) assembleCallSettings(
 
 	// Layer 2: resolved profile (with parent-chain inheritance baked into
 	// resolved.DefaultSettings.call_settings by profiles.Resolve).
-	profile, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
-	if err != nil {
-		return providers.CallSettings{}, fmt.Errorf("load profile: %w", err)
-	}
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	resolved, err := s.resolveProfile(ctx, conv.ProfileID)
 	if err != nil {
 		return providers.CallSettings{}, fmt.Errorf("resolve profile: %w", err)
 	}
@@ -2892,11 +2883,7 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	}
 
 	// Resolve compression settings from the profile inheritance chain.
-	profile, err := s.queries.GetProfileByID(ctx, conv.ProfileID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load profile: %w", err))
-	}
-	resolved, err := profiles.Resolve(ctx, s.queries, profile)
+	resolved, err := s.resolveProfile(ctx, conv.ProfileID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve profile: %w", err))
 	}
