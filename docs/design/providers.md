@@ -81,3 +81,36 @@ Contradictions are still reported. A model marked vision-capable that rejects an
 **Inconclusive is the default outcome.** Anything that does not clearly demonstrate support or clearly demonstrate refusal lands there, including every network failure, timeout and rate limit. A bad minute must never be recorded as a fact about a model. Only a refusal that names the capability in its own error text counts as unsupported, and the matching is deliberately narrow: matching loosely would turn an unrelated 400 into a recorded verdict, which is the one mistake that makes a probe worse than no probe.
 
 **User-triggered, dry run first.** Every probe bills a few tokens on the user's own key, so spending their money on a background sweep nobody asked for is not a trade to make on their behalf. `apply` defaults to false, so the first call reports what it would change and changes nothing.
+
+## Provider-side attachment uploads
+
+History assembly inlines every attachment in a conversation on every send, so
+one image is base64'd and pushed upstream once per turn for the life of the
+chat. `providers.FileUploader` is the optional interface a driver implements to
+take the bytes once and be handed a reference thereafter.
+
+Google implements it today, through Gemini's Files API. It is the provider
+where this matters most: Gemini has no implicit prompt cache to blunt the cost
+of resending, so an image in a long conversation is re-uploaded and re-charged
+on every turn. Anthropic and OpenAI both have Files APIs and can adopt the same
+interface; until they do they keep inlining, which is correct, just chattier.
+
+`provider_files` maps `(user_model_provider, sha256)` to the provider's file id.
+Keyed by the provider ROW rather than its type, because an upload lives behind
+one account's credentials and is invisible to another. Keyed by content hash
+rather than by message, because blobs are content-addressed and one upload
+serves every message that references the same bytes, across conversations.
+
+**Every failure degrades to inline bytes.** No uploader on the driver, an
+unsupported mime type, an upload error, a database error, a reference past its
+expiry: each leaves the attachment's bytes intact and the driver sends them the
+old way. A Files API outage costs bandwidth, never a turn. That is what makes
+this safe to have on by default.
+
+Uploads happen inline before the model call, bounded by a deadline, because a
+slow Files API would otherwise be felt as the send hanging. Past the deadline
+the turn inlines, which is the same outcome as not having the feature.
+
+Expiries come from the provider rather than being assumed, and stale rows are
+filtered at read time as well as swept on the stream-chunk cleanup cadence, so
+a lagging sweep is never a correctness problem.

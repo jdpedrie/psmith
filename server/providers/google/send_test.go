@@ -695,3 +695,54 @@ func TestSend_NoSettingsLeavesGenerationConfigEmpty(t *testing.T) {
 		t.Errorf("generationConfig should be omitted when no settings; body=%s", *captured)
 	}
 }
+
+// An attachment carrying a provider reference must travel as fileData, not as
+// re-encoded bytes. That swap is the entire point of uploading.
+func TestBuildRequestBody_UsesFileDataWhenReferenced(t *testing.T) {
+	body, err := buildRequestBody(providers.SendRequest{
+		ModelID: "gemini-x",
+		Messages: []providers.WireMessage{{
+			Role:    "user",
+			Content: "what is this",
+			Attachments: []providers.Attachment{{
+				Kind:           providers.AttachmentImage,
+				MimeType:       "image/png",
+				ProviderFileID: "https://generativelanguage.googleapis.com/v1beta/files/abc",
+				// Bytes deliberately absent: the orchestration drops them
+				// once a reference exists, and the driver must not need them.
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("buildRequestBody: %v", err)
+	}
+	raw, _ := json.Marshal(body)
+	s := string(raw)
+	if !strings.Contains(s, `"fileUri":"https://generativelanguage.googleapis.com/v1beta/files/abc"`) {
+		t.Errorf("reference did not reach the wire: %s", s)
+	}
+	if strings.Contains(s, "inlineData") {
+		t.Errorf("a referenced attachment must not also inline: %s", s)
+	}
+}
+
+// Without a reference the driver still inlines, which is what keeps every
+// failure path in the upload orchestration safe.
+func TestBuildRequestBody_InlinesWhenUnreferenced(t *testing.T) {
+	body, err := buildRequestBody(providers.SendRequest{
+		ModelID: "gemini-x",
+		Messages: []providers.WireMessage{{
+			Role: "user",
+			Attachments: []providers.Attachment{{
+				Kind: providers.AttachmentImage, MimeType: "image/png", Data: []byte("PNGBYTES"),
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("buildRequestBody: %v", err)
+	}
+	raw, _ := json.Marshal(body)
+	if !strings.Contains(string(raw), "inlineData") {
+		t.Errorf("expected inline bytes without a reference: %s", raw)
+	}
+}

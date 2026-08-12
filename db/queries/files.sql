@@ -34,3 +34,29 @@ LIMIT $2;
 -- the file (or accept the ON DELETE CASCADE on message_attachments).
 DELETE FROM files
 WHERE id = $1;
+
+-- name: GetProviderFile :one
+-- A live upload for (provider, blob). Rows past their stated expiry are
+-- treated as absent rather than deleted here: the sweep owns removal, and a
+-- send that finds nothing simply uploads again.
+SELECT * FROM provider_files
+WHERE user_model_provider_id = $1
+  AND sha256 = $2
+  AND (expires_at IS NULL OR expires_at > NOW());
+
+-- name: UpsertProviderFile :one
+-- Idempotent on (provider, sha256). Two concurrent sends can upload the same
+-- blob; the loser's row wins harmlessly, since either id is valid upstream.
+INSERT INTO provider_files (
+    user_model_provider_id, sha256, user_id, provider_file_id,
+    mime_type, size_bytes, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (user_model_provider_id, sha256) DO UPDATE
+SET provider_file_id = EXCLUDED.provider_file_id,
+    expires_at       = EXCLUDED.expires_at,
+    created_at       = now()
+RETURNING *;
+
+-- name: DeleteExpiredProviderFiles :exec
+DELETE FROM provider_files
+WHERE expires_at IS NOT NULL AND expires_at <= NOW();

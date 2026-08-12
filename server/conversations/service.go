@@ -2210,6 +2210,11 @@ func (s *Service) buildSendRequest(
 		wireMessages = history.AppendDirection(wireMessages, route.Direction)
 	}
 
+	// Swap inline attachment bytes for provider-side references where the
+	// driver supports it. Before the request is built, so both the cache
+	// observation and the driver see the same prefix.
+	s.attachProviderFiles(ctx, driver, provRow, user.ID, wireMessages)
+
 	// Resolve effective call settings via the 4-layer chain (high precedence
 	// → low): conversation > resolved profile > model > provider. The
 	// per-turn `req.Msg.CallSettings` proto field exists for forward-compat

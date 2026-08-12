@@ -77,6 +77,7 @@ type Querier interface {
 	// (their context FKs have no cascade).
 	DeleteContext(ctx context.Context, id uuid.UUID) error
 	DeleteConversation(ctx context.Context, id uuid.UUID) error
+	DeleteExpiredProviderFiles(ctx context.Context) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExplicitCache(ctx context.Context, arg DeleteExplicitCacheParams) error
 	// Caller's responsibility to ensure no message_attachments still reference
@@ -166,6 +167,10 @@ type Querier interface {
 	// Exact lookup for one message's snapshot.
 	GetPluginState(ctx context.Context, arg GetPluginStateParams) (PluginState, error)
 	GetProfileByID(ctx context.Context, id uuid.UUID) (Profile, error)
+	// A live upload for (provider, blob). Rows past their stated expiry are
+	// treated as absent rather than deleted here: the sweep owns removal, and a
+	// send that finds nothing simply uploads again.
+	GetProviderFile(ctx context.Context, arg GetProviderFileParams) (ProviderFile, error)
 	GetSessionWithUser(ctx context.Context, tokenHash string) (GetSessionWithUserRow, error)
 	GetStreamRunByID(ctx context.Context, id uuid.UUID) (StreamRun, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
@@ -555,6 +560,9 @@ type Querier interface {
 	// runs, and a retried bind must be idempotent rather than a duplicate-key
 	// failure.
 	UpsertPluginState(ctx context.Context, arg UpsertPluginStateParams) (PluginState, error)
+	// Idempotent on (provider, sha256). Two concurrent sends can upload the same
+	// blob; the loser's row wins harmlessly, since either id is valid upstream.
+	UpsertProviderFile(ctx context.Context, arg UpsertProviderFileParams) (ProviderFile, error)
 	// Single-row upsert keyed by user_id. Conflict resolves by replacing
 	// every field (no merge semantics) — the UI sends the whole row each
 	// time and "clear my api_key" must work via an empty bytea.

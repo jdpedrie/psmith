@@ -96,6 +96,18 @@ func sweepOnce(ctx context.Context, queries *store.Queries, retention time.Durat
 		Microseconds: retention.Microseconds(),
 		Valid:        true,
 	}
+	// Expired provider-file references ride along on this sweep rather than
+	// getting a goroutine of their own. Both are housekeeping on rows nobody
+	// reads once stale, on the same cadence, and a second ticker to delete a
+	// handful of rows would be more machinery than the work justifies.
+	//
+	// A stale row is already harmless at read time — GetProviderFile filters
+	// on expires_at — so this is about the table not growing, and it is fine
+	// for it to lag.
+	if err := queries.DeleteExpiredProviderFiles(sweepCtx); err != nil {
+		logger.Warn("prune expired provider files failed", "err", err)
+	}
+
 	rows, err := queries.PruneFinalizedStreamChunks(sweepCtx, interval)
 	if err != nil {
 		logger.Error("prune finalized stream chunks failed", "err", err)

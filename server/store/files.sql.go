@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -56,6 +57,16 @@ func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, e
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteExpiredProviderFiles = `-- name: DeleteExpiredProviderFiles :exec
+DELETE FROM provider_files
+WHERE expires_at IS NOT NULL AND expires_at <= NOW()
+`
+
+func (q *Queries) DeleteExpiredProviderFiles(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredProviderFiles)
+	return err
 }
 
 const deleteFile = `-- name: DeleteFile :exec
@@ -117,6 +128,37 @@ func (q *Queries) GetFileByUserAndSHA(ctx context.Context, arg GetFileByUserAndS
 	return i, err
 }
 
+const getProviderFile = `-- name: GetProviderFile :one
+SELECT user_model_provider_id, sha256, user_id, provider_file_id, mime_type, size_bytes, created_at, expires_at FROM provider_files
+WHERE user_model_provider_id = $1
+  AND sha256 = $2
+  AND (expires_at IS NULL OR expires_at > NOW())
+`
+
+type GetProviderFileParams struct {
+	UserModelProviderID uuid.UUID
+	Sha256              string
+}
+
+// A live upload for (provider, blob). Rows past their stated expiry are
+// treated as absent rather than deleted here: the sweep owns removal, and a
+// send that finds nothing simply uploads again.
+func (q *Queries) GetProviderFile(ctx context.Context, arg GetProviderFileParams) (ProviderFile, error) {
+	row := q.db.QueryRow(ctx, getProviderFile, arg.UserModelProviderID, arg.Sha256)
+	var i ProviderFile
+	err := row.Scan(
+		&i.UserModelProviderID,
+		&i.Sha256,
+		&i.UserID,
+		&i.ProviderFileID,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const listFilesForUser = `-- name: ListFilesForUser :many
 SELECT id, user_id, sha256, mime_type, size_bytes, original_filename, created_at FROM files
 WHERE user_id = $1
@@ -155,4 +197,52 @@ func (q *Queries) ListFilesForUser(ctx context.Context, arg ListFilesForUserPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertProviderFile = `-- name: UpsertProviderFile :one
+INSERT INTO provider_files (
+    user_model_provider_id, sha256, user_id, provider_file_id,
+    mime_type, size_bytes, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (user_model_provider_id, sha256) DO UPDATE
+SET provider_file_id = EXCLUDED.provider_file_id,
+    expires_at       = EXCLUDED.expires_at,
+    created_at       = now()
+RETURNING user_model_provider_id, sha256, user_id, provider_file_id, mime_type, size_bytes, created_at, expires_at
+`
+
+type UpsertProviderFileParams struct {
+	UserModelProviderID uuid.UUID
+	Sha256              string
+	UserID              uuid.UUID
+	ProviderFileID      string
+	MimeType            string
+	SizeBytes           int64
+	ExpiresAt           *time.Time
+}
+
+// Idempotent on (provider, sha256). Two concurrent sends can upload the same
+// blob; the loser's row wins harmlessly, since either id is valid upstream.
+func (q *Queries) UpsertProviderFile(ctx context.Context, arg UpsertProviderFileParams) (ProviderFile, error) {
+	row := q.db.QueryRow(ctx, upsertProviderFile,
+		arg.UserModelProviderID,
+		arg.Sha256,
+		arg.UserID,
+		arg.ProviderFileID,
+		arg.MimeType,
+		arg.SizeBytes,
+		arg.ExpiresAt,
+	)
+	var i ProviderFile
+	err := row.Scan(
+		&i.UserModelProviderID,
+		&i.Sha256,
+		&i.UserID,
+		&i.ProviderFileID,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
 }

@@ -52,3 +52,32 @@ type ExplicitCacheProvider interface {
 	// prefix divergence). Idempotent against already-deleted refs.
 	DeleteExplicitCacheRef(ctx context.Context, ref string) error
 }
+
+// FileUploader is the optional interface a driver implements to accept blob
+// uploads and reference them by id instead of resending bytes.
+//
+// The problem it solves: history assembly inlines every attachment in a
+// conversation on every send, so one image is base64'd and pushed upstream
+// once per turn for the life of the chat. Providers with a Files API let the
+// bytes cross once.
+//
+// The conversations service owns the lifecycle (look up, upload on miss,
+// record the id and expiry, fall back to inline bytes on any failure); drivers
+// provide only the upload call and the reference shape. A driver that does not
+// implement this keeps sending inline bytes, which is the current behaviour
+// and stays correct forever.
+type FileUploader interface {
+	// UploadFile sends bytes and returns the provider's id for them, plus the
+	// expiry the provider chose. A zero expiry means the provider stated none
+	// and the reference is treated as durable.
+	//
+	// Errors are non-fatal upstream: the caller falls back to inlining the
+	// bytes, so a Files API outage degrades to today's behaviour rather than
+	// failing the turn.
+	UploadFile(ctx context.Context, mimeType, filename string, data []byte) (fileID string, expiresAt time.Time, err error)
+
+	// SupportsFileReference reports whether a given mime type can travel as a
+	// reference for this provider. Uploading something the request shape
+	// cannot then reference would spend a round-trip to learn nothing.
+	SupportsFileReference(mimeType string) bool
+}

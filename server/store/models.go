@@ -205,6 +205,17 @@ type ProfilePlugin struct {
 	Disabled        bool
 }
 
+type ProviderFile struct {
+	UserModelProviderID uuid.UUID
+	Sha256              string
+	UserID              uuid.UUID
+	ProviderFileID      string
+	MimeType            string
+	SizeBytes           int64
+	CreatedAt           time.Time
+	ExpiresAt           *time.Time
+}
+
 type Session struct {
 	TokenHash   string
 	UserID      uuid.UUID

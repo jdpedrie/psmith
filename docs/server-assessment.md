@@ -195,8 +195,8 @@ Worked through 2026-08-11. What changed, and what is deliberately still open:
 | 2 | Per-chunk inserts | Fixed: one UNNEST insert per flush |
 | 3 | Profile resolved four times | Fixed: request-scoped `profileCache` |
 | 4 | Provider plumbing duplicated | Fixed: `server/providerkit` |
-| 5 | Attachments re-read every turn | Half fixed: `storage.ReadCache` removes the repeated backend reads. The bytes still cross the wire and are billed every send; that needs provider file references. |
-| 6 | `SendMessage` has no seams | Partly: `prepareTurn` extracted, 669 to 543 lines. The insert, request building and handoff all touch state and want extracting one at a time. |
+| 5 | Attachments re-read every turn | Fixed: `storage.ReadCache` for the backend reads, `providers.FileUploader` + `provider_files` so the bytes cross the wire once. Google implements the uploader; the other two keep inlining until they adopt it. |
+| 6 | `SendMessage` has no seams | Fixed: 669 to 280 lines across `prepareTurn`, `commitUserMessage` and `buildSendRequest`. What remains is the tool-loop closures and the supervisor handoff, which belong to starting a run. |
 | 7 | JSONB payload, pool defaults | Fixed. Cursors on the three unbounded queries are still open: that is an RPC contract change, not a query tweak. |
 
 ## Order I would do these in

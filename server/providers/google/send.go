@@ -102,6 +102,12 @@ type geminiContent struct {
 // functionCall) per Gemini's wire shape. It MUST round-trip back on the
 // same part on the next request — Gemini rejects HTTP 400 with
 // "Function call is missing a thought_signature" otherwise.
+// geminiFileData references a Files API upload by uri.
+type geminiFileData struct {
+	MimeType string `json:"mimeType,omitempty"`
+	FileURI  string `json:"fileUri"`
+}
+
 type geminiPart struct {
 	Text             string              `json:"text,omitempty"`
 	Thought          bool                `json:"thought,omitempty"`
@@ -113,6 +119,9 @@ type geminiPart struct {
 	// few MB inline; larger uploads should go through the (deferred)
 	// File API. Mutually exclusive with the other part fields.
 	InlineData *geminiInlineData `json:"inlineData,omitempty"`
+	// FileData references bytes already uploaded through the Files API,
+	// instead of resending them. Mutually exclusive with InlineData.
+	FileData *geminiFileData `json:"fileData,omitempty"`
 }
 
 // geminiInlineData is Gemini's wire shape for an inline binary
@@ -813,13 +822,22 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 			})
 		}
 	}
-	// Attachments → inlineData parts. Gemini supports all four
-	// kinds (image, document, audio, video) via the same
-	// inline_data shape — the model dispatches on mime_type.
-	// v1 inlines bytes; the Files API path is phase 4. Empty-
-	// data attachments are a history-builder bug; drop silently.
+	// Attachments. Gemini takes all four kinds (image, document, audio,
+	// video) through the same shape and dispatches on mime_type.
+	//
+	// A ProviderFileID means the bytes are already uploaded, so the part
+	// references them instead of resending. That is the whole point of the
+	// upload: a conversation's images cross the wire once rather than on
+	// every turn. Anything without a reference still inlines, so a provider
+	// outage or an unsupported mime type degrades to the old behaviour.
+	//
+	// An attachment with neither bytes nor a reference is a history-builder
+	// bug; drop it silently rather than emitting a part Gemini will reject.
 	for _, att := range m.Attachments {
-		if len(att.Data) == 0 || att.MimeType == "" {
+		if att.MimeType == "" {
+			continue
+		}
+		if att.ProviderFileID == "" && len(att.Data) == 0 {
 			continue
 		}
 		switch att.Kind {
@@ -827,6 +845,15 @@ func userPartsFromWire(m providers.WireMessage) []geminiPart {
 			providers.AttachmentDocument,
 			providers.AttachmentAudio,
 			providers.AttachmentVideo:
+			if att.ProviderFileID != "" {
+				parts = append(parts, geminiPart{
+					FileData: &geminiFileData{
+						MimeType: att.MimeType,
+						FileURI:  att.ProviderFileID,
+					},
+				})
+				continue
+			}
 			parts = append(parts, geminiPart{
 				InlineData: &geminiInlineData{
 					MimeType: att.MimeType,
