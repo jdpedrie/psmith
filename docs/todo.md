@@ -59,8 +59,8 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 
 ### Drivers not yet built
 
-- **`claude-code-subprocess` driver** — package doesn't exist. Stateful provider; would manage a `claude` CLI process per session, talk to it via NDJSON over stdio, expose the `--list-models` (or hardcoded) catalog. Community reference: `severity1/claude-agent-sdk-go`.
-- **`codex-subprocess` driver** — package doesn't exist. Same shape as above; talks to Codex CLI via JSON-RPC over stdio. Community reference: `hishamkaram/codex-agent-sdk-go`.
+- **`claude-code-subprocess` driver** — shipped (`server/providers/claudecode`, engine in `claudesdk/`). One CLI invocation per turn, `--resume` + `--fork-session` on every send so handles are immutable per-turn snapshots (plain `--resume` appends to a shared linear transcript — verified against the CLI — so forking is what makes branching work). The StatefulProvider contract was finalized alongside: `SessionConfig` at StartSession, per-turn handles via `ChunkSessionHandle`. Still open: wiring stateful sends into `SendMessage` (above), and the CLI exposes no sampling knobs, so CallSettings passes through empty.
+- **`codex-subprocess` driver** — package doesn't exist. Same contract as claudecode; talks to Codex CLI via JSON-RPC over stdio. Community reference: `hishamkaram/codex-agent-sdk-go`.
 
 ---
 

@@ -35,12 +35,41 @@ type StatelessProvider interface {
 	Send(ctx context.Context, req SendRequest) (<-chan Chunk, error)
 }
 
-// StatefulProvider sends only the latest message to a long-lived harness session.
+// StatefulProvider sends only the latest message to a harness that keeps its
+// own conversation state (Claude Code, Codex, and similar CLI agents). The
+// server never replays a prefix; instead it holds opaque session handles.
+//
+// Handle semantics, which every driver must honor:
+//
+//   - StartSession registers the session's immutable setup (model, system
+//     prompt) and returns a handle. Harnesses that mint their real session
+//     lazily on the first message return a provisional handle here; it is
+//     only guaranteed valid within the same process until the first
+//     SendInSession.
+//   - Each SendInSession turn emits a ChunkSessionHandle carrying the handle
+//     that identifies the conversation state INCLUDING that turn. Handles are
+//     immutable snapshots: sending to a historical handle forks the
+//     conversation from that point without disturbing any other handle's
+//     state. Callers that persist the per-turn handle get branching for free.
+//   - Handles are durable across process restarts (drivers encode whatever
+//     they need to resume — model included — into the handle itself), with
+//     the provisional-handle exception above.
+//   - TerminateSession releases driver-side bookkeeping. For harnesses whose
+//     transcripts live on disk it does not delete them; historical handles
+//     may remain resumable afterward.
 type StatefulProvider interface {
 	Provider
-	StartSession(ctx context.Context, modelID string, settings CallSettings) (sessionID string, err error)
+	StartSession(ctx context.Context, modelID string, cfg SessionConfig) (sessionID string, err error)
 	SendInSession(ctx context.Context, sessionID string, msg WireMessage, settings CallSettings) (<-chan Chunk, error)
 	TerminateSession(ctx context.Context, sessionID string) error
+}
+
+// SessionConfig is the immutable setup for a harness session, fixed at
+// StartSession. Per-turn knobs stay in CallSettings on SendInSession;
+// anything the harness pins for the session's lifetime belongs here.
+type SessionConfig struct {
+	SystemPrompt string
+	Settings     CallSettings
 }
 
 // TokenCounter is implemented by drivers that can report a token count for a
@@ -369,9 +398,14 @@ const (
 	// terminal, when they fetch the (clean) materialized row.
 	// Payload: {}
 	ChunkContentReset ChunkType = "content_reset"
-	ChunkUsage        ChunkType = "usage"
-	ChunkError        ChunkType = "error"
-	ChunkDone         ChunkType = "done"
+	// ChunkSessionHandle is emitted once per turn by stateful drivers,
+	// after the turn's content, carrying the handle that identifies the
+	// conversation state including this turn. See the StatefulProvider
+	// handle semantics. Payload: {"session_id": "..."}
+	ChunkSessionHandle ChunkType = "session_handle"
+	ChunkUsage         ChunkType = "usage"
+	ChunkError         ChunkType = "error"
+	ChunkDone          ChunkType = "done"
 )
 
 // Usage is the normalized token-usage payload emitted via ChunkUsage.

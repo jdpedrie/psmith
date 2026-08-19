@@ -1,0 +1,32 @@
+#!/bin/bash
+# Fake claude CLI for driver tests. Records argv, emits a canned
+# stream-json turn. Session ids are derived from the resume target so
+# tests can assert fork lineage: a creation turn mints "created-<pid>",
+# a resumed turn mints "fork-of-<resumed id>-<pid>".
+set -eu
+ARGS_LOG="${FAKE_CLAUDE_ARGS_LOG:?FAKE_CLAUDE_ARGS_LOG must be set}"
+printf '%s\n' "$@" > "$ARGS_LOG"
+
+prompt="" resume="" fail=""
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --print) prompt="$a" ;;
+    --resume) resume="$a" ;;
+  esac
+  prev="$a"
+done
+case "$prompt" in *FAIL*) fail=1 ;; esac
+
+if [ -n "$fail" ]; then
+  printf '{"type":"result","subtype":"error_during_execution","duration_ms":1,"duration_api_ms":1,"is_error":true,"num_turns":1,"session_id":"dead","result":"synthetic failure"}\n'
+  exit 0
+fi
+
+if [ -n "$resume" ]; then
+  sid="fork-of-${resume}-$$"
+else
+  sid="created-$$"
+fi
+printf '{"type":"assistant","message":{"role":"assistant","model":"haiku","content":[{"type":"text","text":"echo: %s"}]},"session_id":"%s"}\n' "$prompt" "$sid"
+printf '{"type":"result","subtype":"success","duration_ms":5,"duration_api_ms":3,"is_error":false,"num_turns":1,"session_id":"%s","result":"echo: %s","usage":{"input_tokens":11,"output_tokens":7,"cache_read_input_tokens":3}}\n' "$sid" "$prompt"
