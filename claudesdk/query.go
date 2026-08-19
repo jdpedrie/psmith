@@ -95,27 +95,56 @@ func (qi *queryIterator) Next(_ context.Context) (Message, error) {
 	}
 	qi.mu.Unlock()
 
-	// Read from message channels
-	select {
-	case msg, ok := <-qi.msgChan:
-		if !ok {
-			qi.mu.Lock()
-			qi.closed = true
-			qi.mu.Unlock()
-			return nil, ErrNoMoreMessages
+	// Read from message channels. Both channels are closed together when
+	// the stream ends, and messages may still be buffered at that point
+	// (a fast-exiting CLI finishes before the consumer's first read), so
+	// buffered messages are always preferred and a closed error channel
+	// is not itself an error — it just drops out of the select.
+	for {
+		select {
+		case msg, ok := <-qi.msgChan:
+			if !ok {
+				qi.markClosed()
+				return nil, ErrNoMoreMessages
+			}
+			return msg, nil
+		default:
 		}
-		return msg, nil
-	case err := <-qi.errChan:
-		qi.mu.Lock()
-		qi.closed = true
-		qi.mu.Unlock()
-		return nil, err
-	case <-qi.ctx.Done():
-		qi.mu.Lock()
-		qi.closed = true
-		qi.mu.Unlock()
-		return nil, qi.ctx.Err()
+
+		if qi.errChan == nil {
+			msg, ok := <-qi.msgChan
+			if !ok {
+				qi.markClosed()
+				return nil, ErrNoMoreMessages
+			}
+			return msg, nil
+		}
+
+		select {
+		case msg, ok := <-qi.msgChan:
+			if !ok {
+				qi.markClosed()
+				return nil, ErrNoMoreMessages
+			}
+			return msg, nil
+		case err, ok := <-qi.errChan:
+			if ok && err != nil {
+				qi.markClosed()
+				return nil, err
+			}
+			// Closed (or nil) error channel: keep draining messages.
+			qi.errChan = nil
+		case <-qi.ctx.Done():
+			qi.markClosed()
+			return nil, qi.ctx.Err()
+		}
 	}
+}
+
+func (qi *queryIterator) markClosed() {
+	qi.mu.Lock()
+	qi.closed = true
+	qi.mu.Unlock()
 }
 
 func (qi *queryIterator) Close() error {

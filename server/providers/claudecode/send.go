@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -54,7 +55,7 @@ func (d *Driver) pump(ctx context.Context, out chan<- providers.Chunk, iter clau
 	for {
 		m, err := iter.Next(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || errors.Is(err, claudesdk.ErrNoMoreMessages) {
 				emitErr("claudecode: stream ended without a result message")
 				return
 			}
