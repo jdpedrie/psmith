@@ -91,7 +91,9 @@ func TestSendMessage_E2E_AnthropicViaFakeLLM(t *testing.T) {
 	// emitted them with nil payload.
 	chunks, err := q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
 		StreamRunID: runID,
-		Sequence:    0,
+		FromSequence:    0,
+		ToSequence:   1 << 62,
+		RowLimit:     10000,
 	})
 	if err != nil {
 		t.Fatalf("ListStreamChunks: %v", err)

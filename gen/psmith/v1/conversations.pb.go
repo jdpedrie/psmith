@@ -1617,8 +1617,21 @@ func (x *ListMessagesRequest) GetStructureOnly() bool {
 }
 
 type ListMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Messages []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	// truncated is set when a full_tree read hit the server's row cap and the
+	// returned set is NOT the whole tree.
+	//
+	// Reported rather than paginated on purpose: a caller needs the entire tree
+	// to draw the branch switcher, and half a tree is not a smaller tree, it is
+	// a tree with the wrong shape — a fork whose sibling fell off the page
+	// renders as no fork at all. A client seeing this should say the context is
+	// too large to show in full rather than draw the partial one as if it were
+	// complete.
+	//
+	// It takes a pathological context to trigger: compaction bounds a context
+	// long before this in normal use.
+	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1658,6 +1671,13 @@ func (x *ListMessagesResponse) GetMessages() []*Message {
 		return x.Messages
 	}
 	return nil
+}
+
+func (x *ListMessagesResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type GetMessageRequest struct {
@@ -3319,9 +3339,10 @@ const file_psmith_v1_conversations_proto_rawDesc = "" +
 	"\x0fleaf_message_id\x18\x02 \x01(\tH\x00R\rleafMessageId\x88\x01\x01\x12\x1b\n" +
 	"\tfull_tree\x18\x03 \x01(\bR\bfullTree\x12%\n" +
 	"\x0estructure_only\x18\x04 \x01(\bR\rstructureOnlyB\x12\n" +
-	"\x10_leaf_message_id\"F\n" +
+	"\x10_leaf_message_id\"d\n" +
 	"\x14ListMessagesResponse\x12.\n" +
-	"\bmessages\x18\x01 \x03(\v2\x12.psmith.v1.MessageR\bmessages\"#\n" +
+	"\bmessages\x18\x01 \x03(\v2\x12.psmith.v1.MessageR\bmessages\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"#\n" +
 	"\x11GetMessageRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
 	"\x12GetMessageResponse\x12,\n" +

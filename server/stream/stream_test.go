@@ -234,7 +234,9 @@ func TestStart_PersistsChunksMonotonically(t *testing.T) {
 
 	rows, err := f.q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
 		StreamRunID: runID,
-		Sequence:    0,
+		FromSequence:    0,
+		ToSequence:   1 << 62,
+		RowLimit:     10000,
 	})
 	if err != nil {
 		t.Fatalf("ListStreamChunks: %v", err)
@@ -985,7 +987,7 @@ func TestStart_PersistsAcrossFlushBoundaries(t *testing.T) {
 	}, 5*time.Second, "run completed")
 
 	rows, err := f.q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
-		StreamRunID: runID, Sequence: 0,
+		StreamRunID: runID, FromSequence: 0, ToSequence: 1 << 62, RowLimit: 10000,
 	})
 	if err != nil {
 		t.Fatalf("ListStreamChunks: %v", err)
@@ -1005,5 +1007,81 @@ func TestStart_PersistsAcrossFlushBoundaries(t *testing.T) {
 		if !strings.Contains(string(r.Payload), fmt.Sprintf("c%d", i)) {
 			t.Errorf("row %d payload = %s, want to contain c%d", i, r.Payload, i)
 		}
+	}
+}
+
+// Replay pages internally, so a run longer than one page must still deliver
+// every chunk in order. Paging is invisible to subscribers by design; a bug in
+// the cursor arithmetic would drop or duplicate a page silently.
+func TestReplay_CrossesPageBoundaries(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	total := chunkPageSize*2 + 7
+
+	src := newFakeSource(total + 4)
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for i := 0; i < total; i++ {
+		src.push(textChunk(fmt.Sprintf("c%d", i)))
+	}
+	src.close()
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 15*time.Second, "run completed")
+
+	// Subscribe to a terminated run from zero: the replay path.
+	ch, err := f.sup.Subscribe(context.Background(), runID, 0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	var seqs []int64
+	for ev := range ch {
+		if ev.Chunk != nil {
+			seqs = append(seqs, ev.Chunk.Sequence)
+		}
+	}
+	if len(seqs) != total {
+		t.Fatalf("replayed %d chunks, want %d", len(seqs), total)
+	}
+	for i, s := range seqs {
+		if s != int64(i) {
+			t.Fatalf("chunk %d has sequence %d: paging lost or reordered a page", i, s)
+		}
+	}
+}
+
+// Zero on either bound means unbounded. Go zero values make an omitted field
+// the easy mistake, and the literal readings both mean "no rows", so this is
+// the difference between a forgotten field degrading to old behaviour and
+// degrading to silence.
+func TestListStreamChunks_ZeroBoundsMeanUnbounded(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	src := newFakeSource(6)
+	runID, err := f.sup.Start(context.Background(), f.startParams(src.recv(), PurposeAssistantResponse))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		src.push(textChunk("x"))
+	}
+	src.close()
+	waitFor(t, func() bool {
+		r, _ := f.sup.Get(context.Background(), runID)
+		return r.Status == statusCompleted
+	}, 5*time.Second, "run completed")
+
+	// Every field but the run id left at its zero value.
+	rows, err := f.q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
+		StreamRunID: runID,
+	})
+	if err != nil {
+		t.Fatalf("ListStreamChunks: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Errorf("zero bounds returned %d rows, want all 3", len(rows))
 	}
 }

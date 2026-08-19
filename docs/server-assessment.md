@@ -154,10 +154,19 @@ testable pieces. Worth doing before the next feature lands in there.
 
 **Unbounded list queries.** Twenty-eight `:many` queries have no `LIMIT`.
 Most are legitimately small (plugins per profile, models per provider). Three
-are not bounded by anything structural and will grow forever:
-`ListMessagesByContext`, `ListStreamChunks`, `ListMessageTreeStructure`. The
-first two already have callers that want all rows, so the fix is a cap plus a
-cursor rather than a bare limit.
+were not bounded by anything structural: `ListMessagesByContext`,
+`ListStreamChunks`, `ListMessageTreeStructure`.
+
+Fixed, though not all with cursors. `ListStreamChunks` gained an upper bound
+and internal paging: the live-subscribe path only ever uses chunks up to the
+fanout cursor, and was fetching the whole run to discard most of it while
+holding the lock that blocks fan-out to everyone else.
+
+The two full-tree reads are capped and report truncation instead. A cursor
+would be the wrong shape there: a caller needs the entire tree to draw the
+branch switcher, and half a tree is not a smaller tree, it is a tree with the
+wrong shape, since a fork whose sibling fell off the page renders as no fork at
+all.
 
 **No pool tuning.** `pgxpool.New(ctx, dsn)` takes library defaults (4 or
 NumCPU). Under concurrent streams each holding a connection through flushes,
@@ -197,7 +206,7 @@ Worked through 2026-08-11. What changed, and what is deliberately still open:
 | 4 | Provider plumbing duplicated | Fixed: `server/providerkit` |
 | 5 | Attachments re-read every turn | Fixed: `storage.ReadCache` for the backend reads, `providers.FileUploader` + `provider_files` so the bytes cross the wire once. Google implements the uploader; the other two keep inlining until they adopt it. |
 | 6 | `SendMessage` has no seams | Fixed: 669 to 280 lines across `prepareTurn`, `commitUserMessage` and `buildSendRequest`. What remains is the tool-loop closures and the supervisor handoff, which belong to starting a run. |
-| 7 | JSONB payload, pool defaults | Fixed. Cursors on the three unbounded queries are still open: that is an RPC contract change, not a query tweak. |
+| 7 | JSONB payload, pool defaults, unbounded reads | Fixed. Chunks page with an upper bound; the two full-tree reads are capped and report truncation rather than paginating, because a partial tree has the wrong shape rather than being a smaller one. |
 
 ## Order I would do these in
 

@@ -293,6 +293,20 @@ message ListMessagesRequest {
 }
 message ListMessagesResponse {
   repeated Message messages = 1;
+
+  // truncated is set when a full_tree read hit the server's row cap and the
+  // returned set is NOT the whole tree.
+  //
+  // Reported rather than paginated on purpose: a caller needs the entire tree
+  // to draw the branch switcher, and half a tree is not a smaller tree, it is
+  // a tree with the wrong shape — a fork whose sibling fell off the page
+  // renders as no fork at all. A client seeing this should say the context is
+  // too large to show in full rather than draw the partial one as if it were
+  // complete.
+  //
+  // It takes a pathological context to trigger: compaction bounds a context
+  // long before this in normal use.
+  bool truncated = 2;
 }
 
 message GetMessageRequest {

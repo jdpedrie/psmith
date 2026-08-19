@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
-	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/fakellm"
+	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/server/store"
 )
 
@@ -222,7 +223,7 @@ func TestPrepareTurn_WritesNothing(t *testing.T) {
 	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
 
 	count := func() int {
-		rows, err := q.ListMessagesByContext(context.Background(), f.contextID)
+		rows, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: f.contextID})
 		if err != nil {
 			t.Fatalf("ListMessagesByContext: %v", err)
 		}
@@ -265,7 +266,7 @@ func TestPrepareTurn_RejectsWithoutWriting(t *testing.T) {
 	svc, q, _ := newFullSvc(t)
 	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
 
-	before, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	before, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: f.contextID})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -275,11 +276,88 @@ func TestPrepareTurn_RejectsWithoutWriting(t *testing.T) {
 	})); err == nil {
 		t.Fatal("expected a rejection for an empty send")
 	}
-	after, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	after, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: f.contextID})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	if len(after) != len(before) {
 		t.Errorf("a rejected send left %d rows behind", len(after)-len(before))
+	}
+}
+
+// A full-tree read is bounded, and truncation is REPORTED rather than served
+// silently. Half a tree is not a smaller tree: a fork whose sibling fell off
+// the end renders as no fork at all, so a client has to be able to tell.
+func TestListMessages_FullTreeReportsTruncation(t *testing.T) {
+	t.Parallel()
+	svc, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
+
+	// Well under the cap: the ordinary case must not claim truncation.
+	root := insertMessage(t, q, f.contextID, nil, "user", "q")
+	_ = insertMessage(t, q, f.contextID, &root.ID, "assistant", "a")
+
+	resp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ListMessagesRequest{
+		ContextId: f.contextID.String(),
+		FullTree:  true,
+	}))
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if resp.Msg.Truncated {
+		t.Error("a small context must not report truncation")
+	}
+	if len(resp.Msg.Messages) < 2 {
+		t.Errorf("expected the seeded messages, got %d", len(resp.Msg.Messages))
+	}
+
+	// Same for the structure-only path, which has its own query and its own
+	// truncation check.
+	structResp, err := svc.ListMessages(ctxAsUser(f.user), connect.NewRequest(&psmithv1.ListMessagesRequest{
+		ContextId:     f.contextID.String(),
+		FullTree:      true,
+		StructureOnly: true,
+	}))
+	if err != nil {
+		t.Fatalf("ListMessages structureOnly: %v", err)
+	}
+	if structResp.Msg.Truncated {
+		t.Error("a small context must not report truncation on the skeleton path")
+	}
+}
+
+// The cap is enforced in SQL, so a caller cannot be handed an unbounded set
+// even if the handler's slicing were wrong.
+func TestListMessagesByContext_RespectsTheRowLimit(t *testing.T) {
+	t.Parallel()
+	_, q, _ := newFullSvc(t)
+	f := seedAnthropicSendable(t, q, "http://127.0.0.1:1")
+
+	var parent *uuid.UUID
+	for i := 0; i < 6; i++ {
+		row := insertMessage(t, q, f.contextID, parent, "user", "m")
+		id := row.ID
+		parent = &id
+	}
+
+	limited, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{
+		ContextID: f.contextID, RowLimit: 3,
+	})
+	if err != nil {
+		t.Fatalf("ListMessagesByContext: %v", err)
+	}
+	if len(limited) != 3 {
+		t.Errorf("row limit ignored: got %d rows, want 3", len(limited))
+	}
+
+	// Zero means unbounded, the same convention as every other row_limit.
+	all, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{
+		ContextID: f.contextID,
+	})
+	if err != nil {
+		t.Fatalf("ListMessagesByContext: %v", err)
+	}
+	if len(all) <= 3 {
+		t.Errorf("zero limit should be unbounded, got %d rows", len(all))
 	}
 }

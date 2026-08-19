@@ -432,7 +432,7 @@ func TestPluginStateStore_SurvivesCompaction(t *testing.T) {
 
 	// And a plugin walking up from a new message in the new context finds it.
 	firstNewMsg := uuid.UUID{}
-	newMsgs, err := q.ListMessagesByContext(ctx, newCtxID)
+	newMsgs, err := q.ListMessagesByContext(ctx, store.ListMessagesByContextParams{ContextID: newCtxID})
 	if err != nil {
 		t.Fatalf("list new messages: %v", err)
 	}

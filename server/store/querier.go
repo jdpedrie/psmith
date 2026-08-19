@@ -327,8 +327,15 @@ type Querier interface {
 	// Skeleton rows for the branch switcher: the tree SHAPE without
 	// content. Selecting only these columns keeps TOASTed message bodies
 	// entirely unread.
-	ListMessageTreeStructure(ctx context.Context, contextID uuid.UUID) ([]ListMessageTreeStructureRow, error)
-	ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]Message, error)
+	//
+	// Bounded, but NOT paginated. A caller needs the whole tree to draw the branch
+	// switcher: half a tree is not a smaller tree, it is a tree with the wrong
+	// shape, and a fork whose sibling fell off the page renders as no fork at all.
+	// So the limit exists to bound memory, and the handler reports truncation
+	// rather than silently serving a lie. Zero means unbounded, matching every
+	// other row_limit in this file.
+	ListMessageTreeStructure(ctx context.Context, arg ListMessageTreeStructureParams) ([]ListMessageTreeStructureRow, error)
+	ListMessagesByContext(ctx context.Context, arg ListMessagesByContextParams) ([]Message, error)
 	// When the user swaps embedders (different Model() than what's on
 	// existing rows), backfill re-embeds. Returns the rows that need
 	// re-embedding under the new model. Like ListUnembeddedMessages but
@@ -364,6 +371,21 @@ type Querier interface {
 	ListProviderCostTotals(ctx context.Context, arg ListProviderCostTotalsParams) ([]ListProviderCostTotalsRow, error)
 	// Returns persisted chunks for a run, in sequence order, starting at the given
 	// sequence cursor. Used to replay missed chunks for late subscribers.
+	//
+	// Bounded on both ends. The upper bound matters most on the live-subscribe
+	// path, which reads under the broker lock and only ever uses chunks up to the
+	// fanout cursor: without it, a subscriber joining a long run fetched every
+	// chunk in the table and threw most of them away, while holding the lock that
+	// blocks fan-out to everyone else.
+	//
+	// The limit bounds memory per call rather than per run; callers page. A run is
+	// unbounded in principle (a model that streams for ten minutes), so no single
+	// read should be allowed to size itself off it.
+	//
+	// Zero means unbounded on BOTH the upper bound and the limit. Go zero values
+	// make an omitted field the easy mistake, and the literal readings ("sequence
+	// <= 0", "LIMIT 0") both mean no rows — so a caller who forgets would get
+	// silence instead of the old behaviour. This cost a test failure to learn.
 	ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error)
 	ListStreamRunsByConversation(ctx context.Context, conversationID uuid.UUID) ([]StreamRun, error)
 	// Backfill worker's hot path. Skips system messages (framing, not

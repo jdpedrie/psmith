@@ -407,7 +407,7 @@ func TestPromote_REPLACE_SeedsNewContextWithSummaryOnly(t *testing.T) {
 		t.Errorf("new context should be active; active=%s want %s", active.ID, newCtxID)
 	}
 	// New context has role=system (from profile) and role=context (edited summary).
-	msgs, err := q.ListMessagesByContext(context.Background(), newCtxID)
+	msgs, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: newCtxID})
 	if err != nil {
 		t.Fatalf("ListMessagesByContext: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestCreateContextManual_REPLACE_NoFraming(t *testing.T) {
 	if active.ID != newCtxID {
 		t.Errorf("new context should be active; active=%s want %s", active.ID, newCtxID)
 	}
-	msgs, _ := q.ListMessagesByContext(context.Background(), newCtxID)
+	msgs, _ := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: newCtxID})
 	var sysMsg, ctxMsg, userMsg *store.Message
 	for i := range msgs {
 		switch msgs[i].Role {

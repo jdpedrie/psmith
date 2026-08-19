@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import Connect
+
+private let treeLog = Logger(subsystem: "dev.jdpedrie.psmith", category: "MessageTree")
 
 public final class ConversationsRepository: Sendable {
     private let client: Psmith_V1_ConversationsServiceClientInterface
@@ -322,6 +325,19 @@ public final class ConversationsRepository: Sendable {
         let resp = await client.listMessages(request: req, headers: [:])
         if let msg = resp.message {
             let items = msg.messages.map(PsmithMessage.init(from:))
+            if msg.truncated {
+                // The server capped a full-tree read, so this is a tree with
+                // the WRONG SHAPE rather than a smaller one: a fork whose
+                // sibling fell off the end is indistinguishable from no fork.
+                //
+                // Logged rather than surfaced in the UI. The repository is
+                // Sendable and holds no mutable state, and inventing a
+                // "partial tree" mode for a case that needs a pathological
+                // context to reach would be more machinery than the situation
+                // deserves. If it ever fires in the wild, the log says so and
+                // that is the signal to build the UI for it.
+                treeLog.warning("full-tree read was truncated by the server; branch shape may be incomplete")
+            }
             // Cache the linear-chain shape only (fullTree blobs would
             // double-spend the cap on every conversation with branches).
             // Per-leaf overrides are skipped too — the client only

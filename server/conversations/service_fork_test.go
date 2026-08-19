@@ -465,7 +465,7 @@ func TestRegenerate_RejectsSystemParent(t *testing.T) {
 	f := seedAnthropicSendable(t, q, "http://unused")
 
 	// Find the system-seeded message (set up by seedAnthropicSendable).
-	rows, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	rows, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: f.contextID})
 	if err != nil {
 		t.Fatalf("ListMessagesByContext: %v", err)
 	}

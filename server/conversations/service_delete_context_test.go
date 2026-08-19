@@ -54,7 +54,7 @@ func TestDeleteContext_RemovesContextMessagesAndRuns(t *testing.T) {
 		t.Fatalf("CreateContext: %v", err)
 	}
 
-	msgsBefore, err := q.ListMessagesByContext(context.Background(), original)
+	msgsBefore, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: original})
 	if err != nil || len(msgsBefore) == 0 {
 		t.Fatalf("expected messages in original context, got %d (err=%v)", len(msgsBefore), err)
 	}
@@ -70,7 +70,7 @@ func TestDeleteContext_RemovesContextMessagesAndRuns(t *testing.T) {
 		t.Error("original context still exists after delete")
 	}
 	// Messages gone.
-	msgsAfter, err := q.ListMessagesByContext(context.Background(), original)
+	msgsAfter, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: original})
 	if err != nil {
 		t.Fatalf("ListMessagesByContext after delete: %v", err)
 	}

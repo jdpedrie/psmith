@@ -132,7 +132,9 @@ func chunkCount(t *testing.T, f *fixture, runID [16]byte) int {
 	t.Helper()
 	rows, err := f.q.ListStreamChunks(context.Background(), store.ListStreamChunksParams{
 		StreamRunID: runID,
-		Sequence:    0,
+		FromSequence:    0,
+		ToSequence:   1 << 62,
+		RowLimit:     10000,
 	})
 	if err != nil {
 		t.Fatalf("ListStreamChunks: %v", err)

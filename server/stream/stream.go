@@ -448,20 +448,11 @@ func (s *Supervisor) subscribe(ctx context.Context, runID uuid.UUID, fromSequenc
 	cursor := rs.fanoutCursor
 
 	if cursor >= fromSequence {
-		rows, err := s.queries.ListStreamChunks(ctx, store.ListStreamChunksParams{
-			StreamRunID: runID,
-			Sequence:    fromSequence,
-		})
-		if err != nil {
-			rs.mu.Unlock()
-			s.logger.Error("stream replay failed", "run_id", runID, "err", err)
-			safeClose(out)
-			return
-		}
-		for _, row := range rows {
-			if row.Sequence > cursor {
-				break // rest belong to the live broker.
-			}
+		// Upper-bounded by the cursor: chunks past it belong to the live
+		// broker, and fetching them here only to discard them was wasted
+		// work done while holding the lock that blocks fan-out.
+		slow := false
+		err := s.eachPersistedChunk(ctx, runID, fromSequence, cursor, func(row store.StreamChunk) bool {
 			ev := SubscribeEvent{Chunk: &Chunk{
 				Sequence: row.Sequence,
 				Type:     providers.ChunkType(row.ChunkType),
@@ -469,13 +460,24 @@ func (s *Supervisor) subscribe(ctx context.Context, runID uuid.UUID, fromSequenc
 			}}
 			select {
 			case out <- ev:
+				return true
 			default:
 				// Slow consumer — bail before joining broker so the
 				// broker never sees us.
-				rs.mu.Unlock()
-				safeClose(out)
-				return
+				slow = true
+				return false
 			}
+		})
+		if err != nil {
+			rs.mu.Unlock()
+			s.logger.Error("stream replay failed", "run_id", runID, "err", err)
+			safeClose(out)
+			return
+		}
+		if slow {
+			rs.mu.Unlock()
+			safeClose(out)
+			return
 		}
 	}
 
@@ -494,6 +496,54 @@ func (s *Supervisor) subscribe(ctx context.Context, runID uuid.UUID, fromSequenc
 	// caller's range loop exits. removeSubscriber prevents a double-close
 	// from the broker.
 	safeClose(out)
+}
+
+
+// chunkPageSize bounds how many chunks one query materializes.
+//
+// Sized so a typical reply replays in one or two pages while a pathological
+// run cannot make a single read arbitrarily large. Callers page, so this is
+// purely a memory bound and never a limit on what a subscriber receives.
+const chunkPageSize = 512
+
+// eachPersistedChunk walks [from, to] in pages, calling fn for each chunk in
+// sequence order. Stops early when fn returns false.
+//
+// Paging is invisible to callers on purpose: replay has to deliver every chunk
+// in the range to be correct, and the page size exists only so one query
+// cannot size itself off a run of unbounded length.
+func (s *Supervisor) eachPersistedChunk(
+	ctx context.Context,
+	runID uuid.UUID,
+	from, to int64,
+	fn func(row store.StreamChunk) bool,
+) error {
+	for next := from; to == 0 || next <= to; {
+		rows, err := s.queries.ListStreamChunks(ctx, store.ListStreamChunksParams{
+			StreamRunID:  runID,
+			FromSequence: next,
+			ToSequence:   to,
+			RowLimit:     chunkPageSize,
+		})
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		for _, row := range rows {
+			if !fn(row) {
+				return nil
+			}
+		}
+		// Sequences are dense in practice but not guaranteed to be, so
+		// advance from the last row seen rather than by the page size.
+		next = rows[len(rows)-1].Sequence + 1
+		if len(rows) < chunkPageSize {
+			return nil
+		}
+	}
+	return nil
 }
 
 // sendTerminal sends the terminal event for an already-finalized run and
@@ -515,23 +565,16 @@ func (s *Supervisor) sendTerminal(ctx context.Context, r store.StreamRun, out ch
 // Best-effort: a DB read error is logged and treated as "no chunks to
 // replay" so the run still terminates cleanly on the client.
 func (s *Supervisor) replayPersistedChunks(ctx context.Context, runID uuid.UUID, fromSequence int64, out chan SubscribeEvent) {
-	rows, err := s.queries.ListStreamChunks(ctx, store.ListStreamChunksParams{
-		StreamRunID: runID,
-		Sequence:    fromSequence,
-	})
-	if err != nil {
-		s.logger.Error("stream replay failed", "run_id", runID, "err", err)
-		return
-	}
-	for _, row := range rows {
+	// Zero upper bound: a terminated run's chunks are all wanted.
+	if err := s.eachPersistedChunk(ctx, runID, fromSequence, 0, func(row store.StreamChunk) bool {
 		ev := SubscribeEvent{Chunk: &Chunk{
 			Sequence: row.Sequence,
 			Type:     providers.ChunkType(row.ChunkType),
 			Payload:  row.Payload,
 		}}
-		if !sendOrCancel(ctx, out, ev) {
-			return
-		}
+		return sendOrCancel(ctx, out, ev)
+	}); err != nil {
+		s.logger.Error("stream replay failed", "run_id", runID, "err", err)
 	}
 }
 

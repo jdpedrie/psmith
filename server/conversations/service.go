@@ -1119,9 +1119,17 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv
 		// read from disk, no attachments are joined, and the display
 		// pipeline never runs — this path exists because the branch
 		// switcher was paying a full-history transfer on every load.
-		rows, err := s.queries.ListMessageTreeStructure(ctx, contextID)
+		// One over the cap, so a full page is distinguishable from a
+		// truncated one without a second count query.
+		rows, err := s.queryTreeStructure(ctx, contextID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		truncated := len(rows) > maxTreeRows
+		if truncated {
+			rows = rows[:maxTreeRows]
+			s.logger.Warn("full-tree read truncated",
+				"context_id", contextID, "cap", maxTreeRows)
 		}
 		out := make([]*psmithv1.Message, 0, len(rows))
 		for _, r := range rows {
@@ -1137,12 +1145,21 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv
 			}
 			out = append(out, m)
 		}
-		return connect.NewResponse(&psmithv1.ListMessagesResponse{Messages: out}), nil
+		return connect.NewResponse(&psmithv1.ListMessagesResponse{
+			Messages:  out,
+			Truncated: truncated,
+		}), nil
 	}
 	if req.Msg.FullTree {
-		all, err := s.queries.ListMessagesByContext(ctx, contextID)
+		all, err := s.queryFullTree(ctx, contextID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		truncated := len(all) > maxTreeRows
+		if truncated {
+			all = all[:maxTreeRows]
+			s.logger.Warn("full-tree read truncated",
+				"context_id", contextID, "cap", maxTreeRows)
 		}
 		ids := make([]uuid.UUID, 0, len(all))
 		for _, m := range all {
@@ -1159,7 +1176,10 @@ func (s *Service) ListMessages(ctx context.Context, req *connect.Request[psmithv
 			applyDisplay(proto, pipeline)
 			out = append(out, proto)
 		}
-		return connect.NewResponse(&psmithv1.ListMessagesResponse{Messages: out}), nil
+		return connect.NewResponse(&psmithv1.ListMessagesResponse{
+			Messages:  out,
+			Truncated: truncated,
+		}), nil
 	}
 
 	// Resolve the leaf to walk the ancestor chain from. Priority:
@@ -2275,6 +2295,35 @@ func (s *Service) buildSendRequest(
 		wirePrefix:    wireMessages,
 		cacheAttached: explicitCacheAttached,
 	}, nil
+}
+
+
+// maxTreeRows caps a full-tree read.
+//
+// Not a page size: the two full_tree paths need the WHOLE tree to be correct,
+// since a fork whose sibling fell off the end renders as no fork at all. This
+// is the point past which the server refuses to materialize a context rather
+// than risk being sized by one, and the handler reports it instead of quietly
+// serving a tree with the wrong shape.
+//
+// Compaction bounds a context long before this in normal use, so reaching it
+// means something pathological.
+const maxTreeRows = 5000
+
+// queryTreeStructure reads one over the cap, so a full page is
+// distinguishable from a truncated one without a second count query.
+func (s *Service) queryTreeStructure(ctx context.Context, contextID uuid.UUID) ([]store.ListMessageTreeStructureRow, error) {
+	return s.queries.ListMessageTreeStructure(ctx, store.ListMessageTreeStructureParams{
+		ContextID: contextID,
+		RowLimit:  maxTreeRows + 1,
+	})
+}
+
+func (s *Service) queryFullTree(ctx context.Context, contextID uuid.UUID) ([]store.Message, error) {
+	return s.queries.ListMessagesByContext(ctx, store.ListMessagesByContextParams{
+		ContextID: contextID,
+		RowLimit:  maxTreeRows + 1,
+	})
 }
 
 // resolveProviderModel walks the route → per-turn → conversation → profile

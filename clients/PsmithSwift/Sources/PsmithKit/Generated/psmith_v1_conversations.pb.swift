@@ -689,6 +689,20 @@ public nonisolated struct Psmith_V1_ListMessagesResponse: Sendable {
 
   public var messages: [Psmith_V1_Message] = []
 
+  /// truncated is set when a full_tree read hit the server's row cap and the
+  /// returned set is NOT the whole tree.
+  ///
+  /// Reported rather than paginated on purpose: a caller needs the entire tree
+  /// to draw the branch switcher, and half a tree is not a smaller tree, it is
+  /// a tree with the wrong shape — a fork whose sibling fell off the page
+  /// renders as no fork at all. A client seeing this should say the context is
+  /// too large to show in full rather than draw the partial one as if it were
+  /// complete.
+  ///
+  /// It takes a pathological context to trigger: compaction bounds a context
+  /// long before this in normal use.
+  public var truncated: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2318,7 +2332,7 @@ nonisolated extension Psmith_V1_ListMessagesRequest: SwiftProtobuf.Message, Swif
 
 nonisolated extension Psmith_V1_ListMessagesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListMessagesResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0\u{1}truncated\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2327,6 +2341,7 @@ nonisolated extension Psmith_V1_ListMessagesResponse: SwiftProtobuf.Message, Swi
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.messages) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.truncated) }()
       default: break
       }
     }
@@ -2336,11 +2351,15 @@ nonisolated extension Psmith_V1_ListMessagesResponse: SwiftProtobuf.Message, Swi
     if !self.messages.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.messages, fieldNumber: 1)
     }
+    if self.truncated != false {
+      try visitor.visitSingularBoolField(value: self.truncated, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ListMessagesResponse, rhs: Psmith_V1_ListMessagesResponse) -> Bool {
     if lhs.messages != rhs.messages {return false}
+    if lhs.truncated != rhs.truncated {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

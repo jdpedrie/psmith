@@ -384,19 +384,44 @@ func (q *Queries) ListActiveStreamRunsByUser(ctx context.Context, userID uuid.UU
 const listStreamChunks = `-- name: ListStreamChunks :many
 SELECT stream_run_id, sequence, chunk_type, payload, created_at
 FROM stream_chunks
-WHERE stream_run_id = $1 AND sequence >= $2
+WHERE stream_run_id = $1
+  AND sequence >= $2
+  AND ($3::BIGINT = 0 OR sequence <= $3)
 ORDER BY sequence
+LIMIT NULLIF($4::INT, 0)
 `
 
 type ListStreamChunksParams struct {
-	StreamRunID uuid.UUID
-	Sequence    int64
+	StreamRunID  uuid.UUID
+	FromSequence int64
+	ToSequence   int64
+	RowLimit     int32
 }
 
 // Returns persisted chunks for a run, in sequence order, starting at the given
 // sequence cursor. Used to replay missed chunks for late subscribers.
+//
+// Bounded on both ends. The upper bound matters most on the live-subscribe
+// path, which reads under the broker lock and only ever uses chunks up to the
+// fanout cursor: without it, a subscriber joining a long run fetched every
+// chunk in the table and threw most of them away, while holding the lock that
+// blocks fan-out to everyone else.
+//
+// The limit bounds memory per call rather than per run; callers page. A run is
+// unbounded in principle (a model that streams for ten minutes), so no single
+// read should be allowed to size itself off it.
+//
+// Zero means unbounded on BOTH the upper bound and the limit. Go zero values
+// make an omitted field the easy mistake, and the literal readings ("sequence
+// <= 0", "LIMIT 0") both mean no rows — so a caller who forgets would get
+// silence instead of the old behaviour. This cost a test failure to learn.
 func (q *Queries) ListStreamChunks(ctx context.Context, arg ListStreamChunksParams) ([]StreamChunk, error) {
-	rows, err := q.db.Query(ctx, listStreamChunks, arg.StreamRunID, arg.Sequence)
+	rows, err := q.db.Query(ctx, listStreamChunks,
+		arg.StreamRunID,
+		arg.FromSequence,
+		arg.ToSequence,
+		arg.RowLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

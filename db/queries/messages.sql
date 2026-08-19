@@ -69,8 +69,9 @@ SELECT * FROM messages WHERE id = $1;
 
 -- name: ListMessagesByContext :many
 SELECT * FROM messages
-WHERE context_id = $1
-ORDER BY created_at, id;
+WHERE context_id = @context_id
+ORDER BY created_at, id
+LIMIT NULLIF(@row_limit::INT, 0);
 
 -- name: GetContextRoleMessageInContext :one
 -- Returns the (single) role=context message in a Context. Each Context has at
@@ -298,10 +299,18 @@ LIMIT $4;
 -- Skeleton rows for the branch switcher: the tree SHAPE without
 -- content. Selecting only these columns keeps TOASTed message bodies
 -- entirely unread.
+--
+-- Bounded, but NOT paginated. A caller needs the whole tree to draw the branch
+-- switcher: half a tree is not a smaller tree, it is a tree with the wrong
+-- shape, and a fork whose sibling fell off the page renders as no fork at all.
+-- So the limit exists to bound memory, and the handler reports truncation
+-- rather than silently serving a lie. Zero means unbounded, matching every
+-- other row_limit in this file.
 SELECT id, context_id, parent_id, role, created_at
 FROM messages
-WHERE context_id = $1
-ORDER BY created_at ASC, id ASC;
+WHERE context_id = @context_id
+ORDER BY created_at ASC, id ASC
+LIMIT NULLIF(@row_limit::INT, 0);
 
 -- name: ListMessageChainForHistory :many
 -- The ancestor chain of a leaf as FULL message rows (message_headers /

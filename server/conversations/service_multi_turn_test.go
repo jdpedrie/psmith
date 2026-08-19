@@ -219,7 +219,7 @@ func TestMultiTurn_ConcurrentSendsSerialize(t *testing.T) {
 		_ = waitForTerminal(t, sup, runID)
 	}
 
-	all, err := q.ListMessagesByContext(context.Background(), f.contextID)
+	all, err := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{ContextID: f.contextID})
 	if err != nil {
 		t.Fatalf("ListMessagesByContext: %v", err)
 	}

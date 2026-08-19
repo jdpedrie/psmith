@@ -967,7 +967,13 @@ SELECT id, context_id, parent_id, role, created_at
 FROM messages
 WHERE context_id = $1
 ORDER BY created_at ASC, id ASC
+LIMIT NULLIF($2::INT, 0)
 `
+
+type ListMessageTreeStructureParams struct {
+	ContextID uuid.UUID
+	RowLimit  int32
+}
 
 type ListMessageTreeStructureRow struct {
 	ID        uuid.UUID
@@ -980,8 +986,15 @@ type ListMessageTreeStructureRow struct {
 // Skeleton rows for the branch switcher: the tree SHAPE without
 // content. Selecting only these columns keeps TOASTed message bodies
 // entirely unread.
-func (q *Queries) ListMessageTreeStructure(ctx context.Context, contextID uuid.UUID) ([]ListMessageTreeStructureRow, error) {
-	rows, err := q.db.Query(ctx, listMessageTreeStructure, contextID)
+//
+// Bounded, but NOT paginated. A caller needs the whole tree to draw the branch
+// switcher: half a tree is not a smaller tree, it is a tree with the wrong
+// shape, and a fork whose sibling fell off the page renders as no fork at all.
+// So the limit exists to bound memory, and the handler reports truncation
+// rather than silently serving a lie. Zero means unbounded, matching every
+// other row_limit in this file.
+func (q *Queries) ListMessageTreeStructure(ctx context.Context, arg ListMessageTreeStructureParams) ([]ListMessageTreeStructureRow, error) {
+	rows, err := q.db.Query(ctx, listMessageTreeStructure, arg.ContextID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1010,10 +1023,16 @@ const listMessagesByContext = `-- name: ListMessagesByContext :many
 SELECT id, context_id, parent_id, role, content, raw_content, thinking, thinking_provider_type, thinking_rendered_text, provider_id, model_id, created_at, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, provider_usage_raw, input_cost_usd, output_cost_usd, cache_read_cost_usd, cache_write_cost_usd, total_cost_usd, edited_at, error_payload, thinking_duration_ms, explicit_cache_attached, tool_calls, finish_reason, tool_cost_usd, is_welcome, embedding, embedding_model, embedding_at, message_headers, message_trailers, persona, persona_index FROM messages
 WHERE context_id = $1
 ORDER BY created_at, id
+LIMIT NULLIF($2::INT, 0)
 `
 
-func (q *Queries) ListMessagesByContext(ctx context.Context, contextID uuid.UUID) ([]Message, error) {
-	rows, err := q.db.Query(ctx, listMessagesByContext, contextID)
+type ListMessagesByContextParams struct {
+	ContextID uuid.UUID
+	RowLimit  int32
+}
+
+func (q *Queries) ListMessagesByContext(ctx context.Context, arg ListMessagesByContextParams) ([]Message, error) {
+	rows, err := q.db.Query(ctx, listMessagesByContext, arg.ContextID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
