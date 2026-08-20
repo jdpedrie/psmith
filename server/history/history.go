@@ -109,6 +109,19 @@ type Params struct {
 	// included regardless of the destination type.
 	IncludeThinking bool
 
+	// LatestOnly trims the prefix to the leaf message alone.
+	//
+	// For stateful harnesses, which hold the transcript themselves. The walk
+	// still happens in full: it is what validates that the leaf is reachable
+	// and inside the active context, and skipping it would trade a cheap
+	// query for the ability to send into the wrong conversation. Only the
+	// assembly is trimmed.
+	//
+	// The system slot is dropped along with everything else, because a
+	// harness pins its system prompt when the session opens rather than
+	// accepting one per turn. The caller resolves that separately.
+	LatestOnly bool
+
 	// Plugins is the resolved chat-plugin pipeline for this turn. May be nil
 	// or empty. SystemPrompter contributions augment the system slot;
 	// HistoryTransformer mutates user/assistant messages with position
@@ -267,6 +280,14 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 		}
 	}
 
+	// A harness sends one message, so everything before the leaf is dropped
+	// here: after the chain has been validated, before any of the per-message
+	// work (attachment reads, envelope composition, transforms) that only the
+	// surviving message needs.
+	if params.LatestOnly && len(chain) > 0 {
+		chain = chain[len(chain)-1:]
+	}
+
 	// Assemble messages alongside their stored role so plugin transforms can
 	// distinguish original user/assistant turns from system/context-derived
 	// rows (which the architecture says transforms must skip).
@@ -390,7 +411,7 @@ func Build(ctx context.Context, q queries, params Params) ([]providers.WireMessa
 	// Apply SystemPrompter contributions. If a system message is already at
 	// the head of the prefix, wrap its content with the prepend/append
 	// strings; otherwise insert a new system message.
-	if !params.Plugins.Empty() {
+	if !params.Plugins.Empty() && !params.LatestOnly {
 		prepend, appendStr := params.Plugins.SystemPrompts()
 		if prepend != "" || appendStr != "" {
 			out = applySystemContributions(out, prepend, appendStr)

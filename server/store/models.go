@@ -89,16 +89,6 @@ type File struct {
 	CreatedAt        time.Time
 }
 
-type HarnessSession struct {
-	ID                uuid.UUID
-	ConversationID    uuid.UUID
-	ProviderID        *uuid.UUID
-	ExternalSessionID string
-	State             []byte
-	CreatedAt         time.Time
-	LastUsedAt        *time.Time
-}
-
 type Message struct {
 	ID                    uuid.UUID
 	ContextID             uuid.UUID
@@ -138,6 +128,7 @@ type Message struct {
 	MessageTrailers       *string
 	Persona               *string
 	PersonaIndex          *int32
+	HarnessHandle         *string
 }
 
 type MessageAttachment struct {

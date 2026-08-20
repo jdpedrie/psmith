@@ -1,6 +1,6 @@
 # History builder
 
-Before a stateless provider can run a turn, the server has to turn the stored message tree into a flat, wire-shaped prefix. That is the history builder's whole job: take a conversation and a destination provider, walk the tree, map roles, decide what thinking travels, inline attachments, apply plugin transforms, and hand back a list of `WireMessage`. It lives in `server/history` and is deliberately pure mechanics. It makes no policy decisions; the caller resolves all the policy (which leaf, whether thinking is allowed, which plugins) and passes the answers in.
+Before a stateless provider can run a turn, the server has to turn the stored message tree into a flat, wire-shaped prefix. (Stateful providers use the same builder in latest-only mode; see below.) That is the history builder's whole job: take a conversation and a destination provider, walk the tree, map roles, decide what thinking travels, inline attachments, apply plugin transforms, and hand back a list of `WireMessage`. It lives in `server/history` and is deliberately pure mechanics. It makes no policy decisions; the caller resolves all the policy (which leaf, whether thinking is allowed, which plugins) and passes the answers in.
 
 ## What it produces
 
@@ -52,6 +52,14 @@ Two plugin capabilities run inside the builder, both passed in via the resolved 
 - **History transformers** mutate user and assistant messages, given each message's position relative to the head of the prefix. This is how a plugin like lettered-choices rewrites recent turns. The position information is what lets a transformer act only on the last N messages.
 
 The position handed to a transformer also carries the destination provider type. That is what lets a transformer behave differently per backend, which is how the lettered-choices cache fix works: the transformer skips its rewrite for Anthropic so it does not mutate a message inside Anthropic's cached prefix and bust the cache breakpoint every turn. The other plugin capabilities (chunk transforms, display, outgoing-user, tools) run elsewhere in the pipeline, not in the builder. See [plugins.md](plugins.md).
+
+## Latest-only mode
+
+`Params.LatestOnly` trims the result to the leaf message alone. It exists for stateful harnesses, which own the transcript themselves and would see every earlier turn duplicated if we sent a prefix. See [providers.md](providers.md).
+
+The walk still runs in full. Trimming happens after the chain has been validated and before any of the per-message work (attachment reads, envelope composition, transforms) that only the surviving message needs. Skipping the walk would trade one cheap query for the ability to send into the wrong conversation, and the walk is what proves the leaf is reachable and inside the active context.
+
+The system slot goes with everything else, because a harness pins its system prompt when the session opens rather than accepting one per turn. `SystemPrompter` contributions are therefore dropped; the caller resolves the session's prompt separately. `TurnContextInjector` blocks still land, since they prepend to the head message, which is the one thing that does travel.
 
 ## Why it is pure
 

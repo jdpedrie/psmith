@@ -51,6 +51,7 @@ func (s *Supervisor) consume(ctx context.Context, runID uuid.UUID, params StartP
 
 	// Aggregators for materialization.
 	var (
+		agg             turnAggregate
 		contentBuilder  strings.Builder
 		thinkingBuilder strings.Builder
 		thinkingFirstAt time.Time // wall-clock of first thinking_delta seen
@@ -196,7 +197,7 @@ loop:
 					}
 					seq := nextSequence
 					nextSequence++
-					applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
+					agg.observe(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
 					toolCalls.observe(ch)
 					buffer = append(buffer, Chunk{
 						Sequence: seq,
@@ -218,7 +219,7 @@ loop:
 			resetIdle()
 			seq := nextSequence
 			nextSequence++
-			applyAggregator(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
+			agg.observe(ch, &contentBuilder, &thinkingBuilder, &thinkingFirstAt, &thinkingLastAt, &seenError, &usage)
 			toolCalls.observe(ch)
 			buffer = append(buffer, Chunk{
 				Sequence: seq,
@@ -287,7 +288,7 @@ loop:
 			ms := int32(thinkingLastAt.Sub(thinkingFirstAt).Milliseconds())
 			thinkingDurMs = &ms
 		}
-		mid, err := s.materializeAssistant(runID, params, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, cancelled, toolCalls.serialise(), logger)
+		mid, err := s.materializeAssistant(runID, params, agg, contentBuilder.String(), thinkingBuilder.String(), thinkingDurMs, usage, errPayload, cancelled, toolCalls.serialise(), logger)
 		if err != nil {
 			logger.Error("materialize assistant message failed", "err", err)
 		} else if mid != uuid.Nil {
@@ -384,8 +385,32 @@ loop:
 // the first/last wall-clock times a thinking_delta was seen — used at
 // materialization to derive `messages.thinking_duration_ms` for the UI's
 // "Thought for X.Ys" badge.
-func applyAggregator(ch providers.Chunk, content, thinking *strings.Builder, thinkingFirstAt, thinkingLastAt *time.Time, seenError **chunkErrorPayload, usage **providers.Usage) {
+// turnAggregate holds the run-scoped state the aggregator accumulates beyond
+// the builders the caller owns.
+//
+// It exists because the parameter list had reached seven and the session
+// handle would have been the eighth. New per-run state belongs here rather
+// than in another pointer argument.
+type turnAggregate struct {
+	// harnessHandle is the session handle a stateful driver emitted for this
+	// turn. Stamped onto the assistant row at materialization, where it
+	// becomes the fork point for whatever the user sends next.
+	harnessHandle string
+}
+
+// observe updates the running aggregates for one chunk.
+func (a *turnAggregate) observe(ch providers.Chunk, content, thinking *strings.Builder, thinkingFirstAt, thinkingLastAt *time.Time, seenError **chunkErrorPayload, usage **providers.Usage) {
 	switch ch.Type {
+	case providers.ChunkSessionHandle:
+		// Last one wins. A driver emits exactly one per turn, but taking the
+		// latest means a driver that revised it mid-turn would still land the
+		// handle that actually names the finished state.
+		var p struct {
+			SessionID string `json:"session_id"`
+		}
+		if json.Unmarshal(ch.Payload, &p) == nil && p.SessionID != "" {
+			a.harnessHandle = p.SessionID
+		}
 	case providers.ChunkText:
 		content.WriteString(extractDeltaText(ch.Payload))
 	case providers.ChunkContentReset:
@@ -468,7 +493,7 @@ func extractErrorMessage(payload json.RawMessage) string {
 // blocks, OpenAI reasoning items) are NOT reconstructed here — they require
 // driver cooperation and are deferred to the (future) inbound transform
 // pipeline. See "Materialization" in the task spec.
-func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, cancelled bool, toolCallsJSON []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
+func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, agg turnAggregate, content, thinking string, thinkingDurationMs *int32, usage *providers.Usage, errPayload []byte, cancelled bool, toolCallsJSON []byte, logger interface{ Error(string, ...any) }) (uuid.UUID, error) {
 	// We always write a row, even with empty content, so the user can
 	// see that an attempt was made and so result_message_id is non-null
 	// for downstream UX.
@@ -545,6 +570,16 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		idx := params.PersonaIndex
 		personaIndex = &idx
 	}
+	// The handle a stateful driver produced for this turn. Stored on the row
+	// it names, so the next message walks up to it and forks from exactly
+	// here. An errored turn still carries whatever handle arrived; the driver
+	// withholds it on failure, so nil here means there is nothing safe to
+	// fork from and the branch falls back to its previous handle.
+	var harnessHandle *string
+	if agg.harnessHandle != "" {
+		h := agg.harnessHandle
+		harnessHandle = &h
+	}
 	if _, err := s.queries.CreateAssistantMessageWithUsage(insertCtx, store.CreateAssistantMessageWithUsageParams{
 		ID:                    msgID,
 		ContextID:             params.ContextID,
@@ -552,6 +587,7 @@ func (s *Supervisor) materializeAssistant(runID uuid.UUID, params StartParams, c
 		Role:                  "assistant",
 		Persona:               persona,
 		PersonaIndex:          personaIndex,
+		HarnessHandle:         harnessHandle,
 		Content:               content,
 		RawContent:            nil,
 		Thinking:              thinkingJSON,

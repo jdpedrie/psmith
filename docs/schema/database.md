@@ -65,8 +65,15 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00045 | user_models_pricing_tiers | `user_models.pricing_tiers` JSONB — context-size pricing steps; highest threshold under the prompt-token count wins, whole request prices at that tier. |
 | 00046 | rename_obsidian_plugin_to_files | Data migration: `plugin_name` 'obsidian' → 'files' across profile/conversation/user plugin tables (the plugin's identity generalized; encrypted config keys normalize in code). |
 | 00047 | plugin_state | Branch-scoped plugin state keyed to the assistant message that produced it (`PRIMARY KEY (plugin_name, message_id)`), so forks and regenerations each own an independent lineage. Read path walks the message parent chain to the nearest ancestor with a row; the walk does not cross a context boundary, so compaction carries state forward by explicit copy. |
+| 00048 | plugin_conversation_state | Conversation-scoped plugin state (`PRIMARY KEY (plugin_name, conversation_id)`), for state that must not fork with the message tree. |
+| 00049 | message_persona | `messages.persona` / `persona_index` — which council member spoke, and which slot in the roster it maps to for theme-relative coloring. |
+| 00050 | stream_chunks_payload_json | `stream_chunks.payload` JSONB to JSON. Nothing ever queried into it, and JSONB paid parse-and-normalize on the hottest write path in the system. |
+| 00051 | provider_files | Provider-side file references keyed `(user_model_provider_id, sha256)`, so an attachment's bytes cross the wire once instead of on every turn. |
+| 00052 | message_harness_handle | `messages.harness_handle` plus a partial index on `(context_id, id)`. Drops `harness_sessions`. |
 
-Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020).
+Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020), `harness_sessions` (dropped in 00052).
+
+`harness_sessions` is worth a note because its shape was actively wrong. It was created in 00001 for one session per conversation, and no query was ever written against it. Stateful providers fork per turn instead, so the session id belongs on the message that produced it, which is what `messages.harness_handle` is.
 
 ## Tables
 
@@ -92,7 +99,7 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 
 **contexts** — `id` PK; `conversation_id` FK ON DELETE CASCADE; `parent_context_id` self-FK (NO ACTION, the context this was compressed from); `context_activation_time` (newest wins for "active"); `created_at`; `current_leaf_message_id` FK to messages ON DELETE SET NULL; `title` nullable. Index on `(conversation_id, context_activation_time DESC)`.
 
-**messages** — the widest table. `id` PK; `context_id` FK ON DELETE CASCADE; `parent_id` self-FK ON DELETE CASCADE (the message tree); `role` CHECK in (`system`, `context`, `user`, `assistant`, `compression_summary`); `content` NOT NULL; `raw_content` nullable (the pre-plugin form, set only when a transform changed the content); `thinking` JSONB nullable (raw per-provider shape); `thinking_provider_type`, `thinking_rendered_text` nullable; `provider_id` FK to providers ON DELETE SET NULL; `model_id` nullable; `created_at`. Usage and cost: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`, `provider_usage_raw` JSONB, and the matching `*_cost_usd` NUMERIC(12,6) columns plus `total_cost_usd`. Lifecycle and features: `edited_at`, `error_payload` JSONB, `thinking_duration_ms`, `explicit_cache_attached`, `tool_calls` JSONB, `finish_reason`, `tool_cost_usd`, `is_welcome` (default false). Embeddings: `embedding` `vector(768)`, `embedding_model`, `embedding_at`, all nullable and governed by a triple-NULL CHECK (all three NULL together or all three set together). Indexes: `(context_id, parent_id)`; an HNSW index on `embedding` with `vector_cosine_ops` partial on `embedding IS NOT NULL`; and an unembedded index on `created_at` partial on `embedding IS NULL`.
+**messages** — the widest table. `id` PK; `context_id` FK ON DELETE CASCADE; `parent_id` self-FK ON DELETE CASCADE (the message tree); `role` CHECK in (`system`, `context`, `user`, `assistant`, `compression_summary`); `content` NOT NULL; `raw_content` nullable (the pre-plugin form, set only when a transform changed the content); `thinking` JSONB nullable (raw per-provider shape); `thinking_provider_type`, `thinking_rendered_text` nullable; `provider_id` FK to providers ON DELETE SET NULL; `model_id` nullable; `created_at`. Usage and cost: `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`, `provider_usage_raw` JSONB, and the matching `*_cost_usd` NUMERIC(12,6) columns plus `total_cost_usd`. Lifecycle and features: `edited_at`, `error_payload` JSONB, `thinking_duration_ms`, `explicit_cache_attached`, `tool_calls` JSONB, `finish_reason`, `tool_cost_usd`, `is_welcome` (default false), `persona` / `persona_index` (council mode: who spoke and which roster slot they hold), `harness_handle` (a stateful provider's session id for the state *including* this turn; the next turn walks up to the nearest ancestor holding one and forks from there). Embeddings: `embedding` `vector(768)`, `embedding_model`, `embedding_at`, all nullable and governed by a triple-NULL CHECK (all three NULL together or all three set together). Indexes: `(context_id, parent_id)`; `(context_id, id)` partial on `harness_handle IS NOT NULL`; an HNSW index on `embedding` with `vector_cosine_ops` partial on `embedding IS NOT NULL`; and an unembedded index on `created_at` partial on `embedding IS NULL`.
 
 ### Streaming
 
@@ -100,7 +107,6 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 
 **stream_chunks** — composite PK `(stream_run_id, sequence)`; FK to the run ON DELETE CASCADE; `chunk_type`; `payload` JSONB; `created_at`. Transient: pruned after the run finalizes plus a safety window.
 
-**harness_sessions** — `id` PK; `conversation_id` FK ON DELETE CASCADE; `provider_id` FK ON DELETE SET NULL (nullable); `external_session_id` (the harness's own id); `state` JSONB; `created_at`, `last_used_at`. Present for the stateful-provider design; no driver populates it yet.
 
 ### Plugins
 
@@ -136,7 +142,7 @@ Two patterns, applied deliberately.
 
 Ownership edges cascade. Deleting a user removes their sessions, providers, profiles, conversations, plugin settings, and cost events. Deleting a conversation removes its contexts, runs, plugin overrides, and device-tool calls. Deleting a context removes its messages. Deleting a message removes its attachments, its plugin state, and its child messages. Deleting a provider removes its enabled models and cost events.
 
-Audit and display edges set null, so the referencing row survives the delete with a dangling link cleared. This covers `messages.provider_id`, `stream_runs.{provider_id, parent_message_id, result_message_id}`, `harness_sessions.provider_id`, `profiles.{compression_provider_id, title_provider_id}`, `contexts.current_leaf_message_id`, `cost_events.message_id`, and `device_tool_calls.message_id`. A historical stream run keeps its row even after the message it produced is deleted.
+Audit and display edges set null, so the referencing row survives the delete with a dangling link cleared. This covers `messages.provider_id`, `stream_runs.{provider_id, parent_message_id, result_message_id}`, `profiles.{compression_provider_id, title_provider_id}`, `contexts.current_leaf_message_id`, `cost_events.message_id`, and `device_tool_calls.message_id`. A historical stream run keeps its row even after the message it produced is deleted.
 
 ## Enumerations (TEXT plus CHECK)
 

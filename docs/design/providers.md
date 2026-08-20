@@ -4,11 +4,13 @@ A provider is how Psmith talks to a model backend. There are three layers to kee
 
 ## Drivers
 
-A driver implements the `Provider` interface in `server/providers/providers.go`: `Type()`, `Stateful()`, `DiscoverModels()`, and `RenderThinkingToText()`. Each driver lives in its own subpackage and registers itself in `init()` under a type string. Three are shipped:
+A driver implements the `Provider` interface in `server/providers/providers.go`: `Type()`, `Stateful()`, `DiscoverModels()`, and `RenderThinkingToText()`. Each driver lives in its own subpackage and registers itself in `init()` under a type string. Five are shipped, three stateless and two stateful:
 
 - **anthropic** — Anthropic Messages API.
 - **openai-compatible** — any OpenAI-shaped backend (OpenAI itself, Azure, OpenRouter, local servers, and so on), covering both Chat Completions and the Responses API.
 - **google** — Google Gemini.
+- **claude-code-subprocess** — the local `claude` CLI, driven as a harness.
+- **codex-app-server** — the local `codex` binary over its app-server JSON-RPC.
 
 The registry is a compile-time map. `Register(typeName, constructor)` panics on a duplicate so a collision fails at startup, and `Build(typeName, deps, config)` instantiates a driver from a type string, a `Deps` struct (the model-metadata catalog and a logger), and the instance's config JSON. `IsRegistered` lets the settings RPCs validate a type before persisting. Adding a backend means writing a new subpackage and registering it; nothing else in the system needs to know the type string ahead of time.
 
@@ -38,9 +40,50 @@ The interface splits on who owns history.
 
 A **stateless** provider implements `Send(ctx, SendRequest)` and gets the full wire prefix every turn. The server owns history, builds the prefix from the message tree ([history-builder.md](history-builder.md)), and sends it whole. All three shipped drivers are stateless. This is the model that makes Psmith's stream resilience work: because the server holds the authoritative history and re-sends it, a turn does not depend on any provider-side session surviving.
 
-A **stateful** provider would implement `StartSession` / `SendInSession` / `TerminateSession` and get only the newest message, with the backend holding the running session. The interface exists for a harness-style backend, but no stateful driver is implemented today. `Stateful()` returns false for everything shipped.
+A **stateful** provider implements `StartSession` / `SendInSession` / `TerminateSession` and gets only the newest message. The harness holds the transcript. `claude-code-subprocess` and `codex-app-server` are both stateful; you are borrowing a coding agent's local session, and there is no wire format that would let us hand it a prefix.
 
 A driver can optionally implement `TokenCounter` (count tokens for a candidate prefix, used to inform compaction) and `ExplicitCacheProvider` (server-managed explicit caching).
+
+## The stateful send path
+
+The problem with a backend that owns history is that Psmith owns history too, and the two will disagree the first time a user edits an old message. The fix is to never reuse a session: **every turn forks**, and the handle the fork produces is stored on the assistant row that turn produced (`messages.harness_handle`).
+
+That one decision buys the rest. A handle names the harness state *including* the turn it sits on. To send message N+1 you walk up from its parent to the nearest ancestor carrying a handle and fork from there, so:
+
+- Continuing a conversation finds the tip's handle and extends it.
+- Regenerating an old turn finds the handle at *that* point in the tree and forks from there. The abandoned turns are not in the state it forks from, because they were never in it.
+- Two branches off one parent each resolve to their own handle. Branching in the message tree is branching in the harness, for free.
+- No handle above you means no session yet, which is the signal to open one.
+
+`SendMessage` takes the stateful branch when the built driver satisfies `StatefulProvider`. What that branch does differently:
+
+| | Stateless | Stateful |
+|---|---|---|
+| Wire prefix | the whole chain | the newest message only (`history.Params.LatestOnly`) |
+| System prompt | assembled per turn | resolved once, pinned at `StartSession` |
+| Tools | sent | dropped; the harness runs its own |
+| Attachments | inlined or uploaded | refused |
+| Explicit cache | driver's hook | skipped; the harness caches its own |
+
+The history walk still runs in full even though the result is thrown away. It is what proves the leaf is reachable and inside the active context, and skipping it would trade one cheap query for the ability to send into the wrong conversation.
+
+### What this costs
+
+These are consequences of borrowing someone else's session, not bugs to be fixed later.
+
+**The system prompt is fixed for the conversation's life.** The harness pins it when the session opens. Editing the profile afterwards changes nothing until a new conversation starts.
+
+**You cannot switch providers mid-conversation.** Choosing a harness commits the conversation to it. There is no prefix to hand a different backend, because Psmith never built one.
+
+**Editing an assistant turn and resending drifts.** The handle names the state containing the *original* text. The harness has no way to be told it changed, so the edit shows in Psmith's history and not in the harness's.
+
+**Attachments are refused.** Neither driver reads `WireMessage.Attachments`, so the bytes would be loaded out of storage and dropped. The send is rejected before the user's message is persisted: a dropped image reads as the model ignoring it, which is worse than an error.
+
+**Plugin capabilities that operate on history do not fire.** `HistoryTransformer` sees one message. `SystemPrompter` contributions are dropped, since there is no per-turn system slot to put them in. `ToolProvider` tools are dropped. What still works is anything that acts on the outgoing message or on state: `MessageEnvelope`, `TurnContextInjector`, `InboundProcessor`, `DisplayTransformer`, the lifecycle hooks.
+
+**Provisional handles do not survive a restart.** `StartSession` returns a provisional handle that becomes durable only once the harness mints a real session on the first turn. A crash in between leaves nothing to resume.
+
+Both drivers pin their sandbox to read-only and their approval policy to never. That is not the operator's setting to make: their CLI config is tuned for an agent editing files with a human at the keyboard, and a chat turn has nobody to approve anything. An unanswered approval request hangs the turn until it times out.
 
 ## The send request and chunks
 

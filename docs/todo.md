@@ -12,7 +12,7 @@ Ordered by impact on getting Psmith to a "useful for sustained personal chat" st
 
 ### Architecture-flagship features not yet built
 
-- **Stateful harness drivers (Claude Code, Codex, pi.dev)** — entirely missing. Two parts: (a) per-harness Layer-1 implementations (subprocess management, NDJSON event parsing, session lifecycle), (b) Layer-2 abstraction + the stateful-send code path in `SendMessage` (currently only handles `StatelessProvider`). Architecture treats these as first-class; was a stated original motivator (mixing cloud APIs with local agentic CLIs). The `StatefulProvider` interface exists (`server/providers/providers.go`) but has no implementation and no `SendMessage` code path; see the stateless-vs-stateful section of [design/providers.md](design/providers.md).
+- **Stateful harness drivers** — shipped for Claude Code (`server/providers/claudecode` + `claudesdk/`) and Codex (`server/providers/codex` + `codexsdk/`), including the `SendMessage` stateful path. Live-verified end to end: two turns through `SendMessage` against the real `codex` binary, the second recalling the first from a session it was never re-sent. See the stateful-send-path section of [design/providers.md](design/providers.md). Still open: a `pi` driver, and the client affordances below.
 
 ### Nice-to-have
 
@@ -55,12 +55,16 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 
 ### Conversations / SendMessage
 
-- **Stateful provider sends not wired in `SendMessage`** — currently `SendMessage` requires the driver to satisfy `providers.StatelessProvider`; harness providers (when they exist) need a separate code path that calls `StartSession` / `SendInSession`.
+- **Stateful provider sends** — shipped. `SendMessage` branches on `StatefulProvider`, resolves the branch's handle by walking to the nearest ancestor carrying one (`NearestHarnessHandle`), opens a session when there is none, and sends one message via `history.Params.LatestOnly`. Handles land on `messages.harness_handle` at materialization, which is what makes forking work. Open follow-ups:
+  - **No client affordances yet.** A harness conversation cannot change provider, its system prompt is frozen after the first turn, and attachments are refused. The server enforces all three; nothing in the Mac, iOS or web UI says so before the user hits the error.
+  - **Attachments to a harness.** Refused outright today. Both CLIs can read a file given a path, so the shape would be: materialize the blob to a temp file and reference it in the message. Needs a lifetime story for the temp file and interacts with the read-only sandbox pin.
+  - **Editing an assistant turn drifts.** "Save and resend" on an edited assistant forks from a handle naming the state that contains the *original* text. Psmith's history and the harness's disagree from that point. No fix short of a harness that accepts a transcript.
+  - **A `pi` driver.** `pi --fork` is native and records `parentSession`, so it fits the same contract. Not started.
 
 ### Drivers not yet built
 
-- **`claude-code-subprocess` driver** — shipped (`server/providers/claudecode`, engine in `claudesdk/`). One CLI invocation per turn, `--resume` + `--fork-session` on every send so handles are immutable per-turn snapshots (plain `--resume` appends to a shared linear transcript — verified against the CLI — so forking is what makes branching work). The StatefulProvider contract was finalized alongside: `SessionConfig` at StartSession, per-turn handles via `ChunkSessionHandle`. Still open: wiring stateful sends into `SendMessage` (above), and the CLI exposes no sampling knobs, so CallSettings passes through empty.
-- **`codex-subprocess` driver** — package doesn't exist. Same contract as claudecode; talks to Codex CLI via JSON-RPC over stdio. Community reference: `hishamkaram/codex-agent-sdk-go`.
+- **`claude-code-subprocess` driver** — shipped (`server/providers/claudecode`, engine in `claudesdk/`). One CLI invocation per turn, `--resume` + `--fork-session` on every send so handles are immutable per-turn snapshots (plain `--resume` appends to a shared linear transcript — verified against the CLI — so forking is what makes branching work). The StatefulProvider contract was finalized alongside: `SessionConfig` at StartSession, per-turn handles via `ChunkSessionHandle`. Still open: the CLI exposes no sampling knobs, so CallSettings passes through empty.
+- **`codex-app-server` driver** — shipped (`server/providers/codex`, engine in `codexsdk/`). One long-lived `codex app-server` process speaking JSON-RPC over stdio. `SendInSession` always forks (`thread/fork` with `lastTurnId`) and never resumes, so handles stay immutable per-turn snapshots. Sandbox pinned read-only and approval policy pinned to never: the operator's own config is tuned for a file-editing agent, and a chat turn has nobody to answer an approval request, which hangs the turn until it times out. `pmenglund/codex-sdk-go` was evaluated and rejected as a dependency (pins 0.147.0 against the installed 0.144.1, with major/minor enforcement).
 
 ---
 
@@ -328,3 +332,7 @@ Captured after surveying the `pluginapi` capability set. Two entries that lived 
 When you defer something, add a one-bullet entry here with: package/file, what was skipped, why, and (if known) when to revisit. When you complete an item, delete it.
 
 Companion to the [design docs](README.md#design): strategic threads are discussed in the relevant subsystem doc; tactical implementation TODOs live here.
+
+## Test flakes
+
+- **`server/stream` times out intermittently under package-level parallelism.** `TestStart_PersistsAcrossFlushBoundaries` and `TestIdleTimeout_FinalizesAsErrored` each fail roughly one run in four with `waitFor timeout`, and only when the whole package runs together. Confirmed pre-existing against a clean tree (2026-08-20), so it is fixture contention rather than a bug in what they cover. Both use a 5s `waitFor` against a pgtestdb instance shared with every other parallel test in the package.

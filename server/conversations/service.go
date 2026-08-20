@@ -1444,6 +1444,31 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	providerID, modelID := t.providerID, t.modelID
 	provRow := t.provRow
 
+	// Built before the user row is written, not after: which interfaces the
+	// driver satisfies decides whether this turn is possible at all, and a
+	// refusal has to land before anything is persisted.
+	driver, err := s.opener().Build(provRow)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
+	}
+	// Stateful wins when a driver is both. Nothing is today, and if something
+	// ever were, holding the harness session is the reason it exists.
+	stateful, isStateful := driver.(providers.StatefulProvider)
+	stateless, isStateless := driver.(providers.StatelessProvider)
+	if !isStateful && !isStateless {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("driver %q supports neither stateless nor stateful sends", provRow.Type))
+	}
+
+	// Attachments have nowhere to go on a harness: neither driver reads
+	// WireMessage.Attachments, so the bytes would be loaded out of storage and
+	// dropped on the floor. Refused here, above the user-row INSERT, so the
+	// message isn't persisted into a turn that cannot happen — a dropped image
+	// reads as the model ignoring it, which is worse than a refusal.
+	if isStateful && len(req.Msg.AttachmentFileIds) > 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("driver %q cannot receive attachments; harness sessions take text only", provRow.Type))
+	}
+
 	// Critical section: resolve parent → insert user message → advance cursor,
 	// all serialized via SELECT FOR UPDATE on the contexts row. Without this,
 	// concurrent SendMessages on the same context race: the second's
@@ -1455,16 +1480,6 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	userMsgRow, err := s.commitUserMessage(ctx, req, t)
 	if err != nil {
 		return nil, err
-	}
-
-	// Build the driver instance for this provider.
-	driver, err := s.opener().Build(provRow)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("build driver: %w", err))
-	}
-	stateless, ok := driver.(providers.StatelessProvider)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("driver %q is not a stateless provider; stateful harness sends are not yet wired", provRow.Type))
 	}
 
 	// `pipeline` is already resolved above (before the user-row INSERT
@@ -1485,7 +1500,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		}, s.logger)
 	}
 
-	built, err := s.buildSendRequest(ctx, req, t, userMsgRow, driver)
+	built, err := s.buildSendRequest(ctx, req, t, userMsgRow, driver, isStateful)
 	if err != nil {
 		return nil, err
 	}
@@ -1561,7 +1576,30 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 		toolSpanPending = append(toolSpanPending, sp)
 	}
 	var sendFunc func(driverCtx context.Context) (<-chan providers.Chunk, error)
-	if len(sendReq.Tools) > 0 {
+	switch {
+	case isStateful:
+		// Walk up from the row this turn hangs off to find the handle to
+		// extend. userMsgRow is the freshly-inserted user message on a normal
+		// send (no handle of its own, so the walk continues to the assistant
+		// above it) and the parent row on regenerate or continue, which is
+		// exactly the state each of those wants to resume from.
+		//
+		// One known wrong answer: "save and resend" on an EDITED assistant
+		// turn. The handle names the harness state containing the original
+		// text, and the harness has no way to be told it changed. The edit
+		// shows in Psmith's history and not in the harness's.
+		handle, herr := s.resolveHarnessHandle(ctx, userMsgRow.ID)
+		if herr != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resolve harness handle: %w", herr))
+		}
+		var outgoing providers.WireMessage
+		if n := len(sendReq.Messages); n > 0 {
+			outgoing = sendReq.Messages[n-1]
+		}
+		sendFunc = s.statefulSendFunc(stateful, handle, modelID,
+			s.resolveHarnessSystemPrompt(ctx, activeCtx.ID, pipeline),
+			sendReq.Settings, outgoing)
+	case len(sendReq.Tools) > 0:
 		// Tools present → wrap the driver's Send in a per-round tool loop
 		// that drains tool_use, dispatches to the owning plugin, and
 		// re-issues the request with tool_results. The supervisor sees a
@@ -1570,7 +1608,7 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 			func(pluginName string) host.PluginStateStore {
 				return s.newPluginStateStore(pluginName, conv.UserID, conv.ID, userMsgRow.ID)
 			})
-	} else {
+	default:
 		sendFunc = func(driverCtx context.Context) (<-chan providers.Chunk, error) {
 			return stateless.Send(driverCtx, sendReq)
 		}
@@ -2169,6 +2207,7 @@ func (s *Service) buildSendRequest(
 	t preparedTurn,
 	userMsgRow store.Message,
 	driver providers.Provider,
+	stateful bool,
 ) (builtRequest, error) {
 	user, conv, activeCtx := t.user, t.conv, t.activeCtx
 	extendsTurn := t.extendsTurn
@@ -2182,6 +2221,7 @@ func (s *Service) buildSendRequest(
 		LeafMessageID:    &userMsgRow.ID,
 		DestProviderType: provRow.Type,
 		IncludeThinking:  includeThinking,
+		LatestOnly:       stateful,
 		Plugins:          pipeline,
 		UserID:           user.ID,
 		Attachments:      s.storage,
@@ -2272,6 +2312,15 @@ func (s *Service) buildSendRequest(
 		Tools:          collectPipelineTools(pipeline),
 	}
 
+	// A harness runs its own tool loop inside its own sandbox, and our loop
+	// wraps a StatelessProvider it cannot re-issue a request against. Drop the
+	// tools rather than send a list nothing will honour, so a profile carrying
+	// tool plugins still works on a harness with its non-tool capabilities.
+	if stateful {
+		sendReq.Tools = nil
+		return builtRequest{req: sendReq, wirePrefix: wireMessages}, nil
+	}
+
 	// Provider-agnostic explicit-cache hook. The driver opts in by
 	// implementing providers.ExplicitCacheProvider; the conversations
 	// service owns the lifecycle (lookup → check expiry → check
@@ -2296,7 +2345,6 @@ func (s *Service) buildSendRequest(
 		cacheAttached: explicitCacheAttached,
 	}, nil
 }
-
 
 // maxTreeRows caps a full-tree read.
 //

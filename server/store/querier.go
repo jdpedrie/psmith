@@ -424,6 +424,16 @@ type Querier interface {
 	MarkSystemProfilesSeeded(ctx context.Context, id uuid.UUID) error
 	// Returns the highest persisted sequence for a run, or NULL if none persisted.
 	MaxStreamChunkSequence(ctx context.Context, streamRunID uuid.UUID) (int64, error)
+	// The handle for the branch ending at $1: walk parent_id upward and return
+	// the first ancestor that has one.
+	//
+	// The walk is what makes forking work. Two branches off the same parent each
+	// find their own nearest handle and neither can see the other's, so the
+	// harness state follows the message tree without any extra bookkeeping.
+	//
+	// Returns no rows on a branch that has never spoken to a harness, which is
+	// the normal "start a session" signal.
+	NearestHarnessHandle(ctx context.Context, id uuid.UUID) (*string, error)
 	// Deletes stream_chunks belonging to stream_runs that finalized more
 	// than $1 ago. Stream chunks are transient — they exist only to feed
 	// mid-stream subscribers (and to let late reconnects within the

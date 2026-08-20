@@ -45,7 +45,8 @@ INSERT INTO messages (
     tool_calls,
     finish_reason,
     persona,
-    persona_index
+    persona_index,
+    harness_handle
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
@@ -60,7 +61,8 @@ INSERT INTO messages (
     $27,
     $28,
     $29,
-    $30
+    $30,
+    $31
 )
 RETURNING *;
 
@@ -179,6 +181,7 @@ SELECT chain.id, chain.context_id, chain.parent_id, chain.role, chain.content,
        chain.edited_at,
        chain.persona,
        chain.persona_index,
+       chain.harness_handle,
        (
            SELECT COUNT(*)::INT FROM messages m
            WHERE m.id <> chain.id
@@ -375,3 +378,26 @@ LIMIT 1;
 -- Test-only: stamps speaker attribution on an existing row. Production writes
 -- these columns at materialization via CreateAssistantMessageWithUsage.
 UPDATE messages SET persona = $2, persona_index = $3 WHERE id = $1 RETURNING *;
+
+-- name: NearestHarnessHandle :one
+-- The handle for the branch ending at $1: walk parent_id upward and return
+-- the first ancestor that has one.
+--
+-- The walk is what makes forking work. Two branches off the same parent each
+-- find their own nearest handle and neither can see the other's, so the
+-- harness state follows the message tree without any extra bookkeeping.
+--
+-- Returns no rows on a branch that has never spoken to a harness, which is
+-- the normal "start a session" signal.
+WITH RECURSIVE chain AS (
+    SELECT messages.id, messages.parent_id, messages.harness_handle
+    FROM messages
+    WHERE messages.id = $1
+    UNION ALL
+    SELECT m.id, m.parent_id, m.harness_handle
+    FROM messages m
+    INNER JOIN chain c ON m.id = c.parent_id
+)
+SELECT harness_handle FROM chain
+WHERE harness_handle IS NOT NULL
+LIMIT 1;
