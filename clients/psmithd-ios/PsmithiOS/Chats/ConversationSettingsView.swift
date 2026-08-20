@@ -108,6 +108,12 @@ struct ConversationSettingsView: View {
 
     private var callSettingsTab: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Above the overrides on purpose: several of the controls below
+            // are inert on a harness, and the reason should arrive before
+            // them rather than after a save that does nothing.
+            if let harness = model.harness {
+                HarnessBindingCard(binding: harness)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Conversation overrides")
                     .font(.headline)

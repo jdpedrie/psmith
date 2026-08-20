@@ -100,6 +100,59 @@ public final class ConversationViewModel {
     /// Optimistic user message text shown before the RPC returns.
     public var pendingUserText: String?
 
+    // MARK: - Harness constraints
+    //
+    // A conversation that a stateful harness has answered in is committed to
+    // that provider: the harness owns the transcript, so there is nothing to
+    // hand a different backend. Three things follow, and they are computed
+    // here rather than in each client so Mac, iOS and web cannot drift on
+    // what the rules are.
+    //
+    // The server enforces every one of these regardless. These properties
+    // exist to stop the user hitting an error they had no way to predict, not
+    // to be the enforcement.
+
+    /// The conversation's commitment, or nil if it has none.
+    ///
+    /// Also nil before the first successful `load()`, because only the detail
+    /// read carries it. Everything below treats nil as unconstrained, which is
+    /// the right way round: the server still refuses, so the cost of guessing
+    /// wrong is one clear error instead of a control that lies.
+    public var harness: PsmithHarnessBinding? { conversation.harness }
+
+    /// False when this conversation's provider cannot receive attachments.
+    public var canAttachFiles: Bool {
+        guard let harness else { return true }
+        return harness.acceptsAttachments
+    }
+
+    /// False once the conversation is bound. The provider is fixed for good.
+    public var canChangeProvider: Bool { harness == nil }
+
+    /// True when the system prompt was pinned at session start and editing the
+    /// profile will not reach this conversation.
+    public var systemPromptIsFrozen: Bool { harness?.systemPromptFrozen ?? false }
+
+    /// The models a bound conversation may still pick between: same provider,
+    /// different model. Unbound conversations get the full list.
+    ///
+    /// Model changes within one provider are allowed on purpose. The handle
+    /// encodes the model, so the next turn opens against the new one, and both
+    /// harnesses accept that.
+    public var selectableModels: [PsmithUserModel] {
+        guard let harness else { return availableModels }
+        return availableModels.filter { $0.providerID == harness.providerID }
+    }
+
+    /// One line to render beside whatever is disabled. Nil when nothing is.
+    public var harnessNotice: String? { harness?.explanation }
+
+    /// Shown when someone attaches anyway, by paste or drag.
+    var attachmentRefusalMessage: String {
+        guard let harness else { return "This conversation cannot take attachments." }
+        return "\(harness.providerLabel) cannot receive attachments. Send the text on its own, or paste the relevant part into the message."
+    }
+
     // MARK: - Streaming state (read-through to `StreamHub`)
     //
     // The active stream's accumulated text / thinking / tool calls /
@@ -921,6 +974,13 @@ public final class ConversationViewModel {
     /// dedup means re-attaching the same image is essentially
     /// free.
     public func attachImage(data: Data, originalFilename: String?) async {
+        // Refused here rather than at send time so we don't spend an upload on
+        // bytes the server will reject. The composer already hides the
+        // control; this catches the paste and drag paths that bypass it.
+        guard canAttachFiles else {
+            loadError = attachmentRefusalMessage
+            return
+        }
         attachmentUploadCount += 1
         defer { attachmentUploadCount -= 1 }
         do {
@@ -958,6 +1018,13 @@ public final class ConversationViewModel {
     /// `startAccessingSecurityScopedResource` because this method
     /// handles it.
     public func attachFile(from url: URL) async {
+        // Refused here rather than at send time so we don't spend an upload on
+        // bytes the server will reject. The composer already hides the
+        // control; this catches the paste and drag paths that bypass it.
+        guard canAttachFiles else {
+            loadError = attachmentRefusalMessage
+            return
+        }
         attachmentUploadCount += 1
         defer { attachmentUploadCount -= 1 }
         let scoped = url.startAccessingSecurityScopedResource()

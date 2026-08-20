@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/jdpedrie/psmith/pluginapi"
 	"github.com/jdpedrie/psmith/server/providers"
+	"github.com/jdpedrie/psmith/server/store"
 )
 
 // The stateful send path.
@@ -57,6 +59,51 @@ func (s *Service) resolveHarnessHandle(ctx context.Context, fromMessageID uuid.U
 		return "", nil
 	}
 	return *h, nil
+}
+
+// checkHarnessBinding refuses a send that would break a conversation's
+// commitment to one provider.
+//
+// Two ways to break it, and they fail for the same underlying reason: a
+// harness's transcript is the conversation, and it cannot be handed over or
+// walked away from.
+//
+//   - Sending a bound conversation to a different provider. The handles are
+//     the other harness's, and even the encoding differs.
+//   - Sending an already-answered conversation to a harness for the first
+//     time. The harness's transcript would start at the switch, so every
+//     earlier turn stays visible to the user and invisible to the model.
+//
+// Called before the user row is written, so a refusal leaves nothing behind.
+func (s *Service) checkHarnessBinding(
+	ctx context.Context,
+	conv store.Conversation,
+	resolvedProviderID uuid.UUID,
+	resolvedIsStateful bool,
+) error {
+	boundTo, err := s.queries.ConversationHarnessProvider(ctx, conv.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("resolve harness binding: %w", err))
+	}
+	if boundTo != nil && *boundTo != resolvedProviderID {
+		label := "another provider"
+		if row, gerr := s.queries.GetUserModelProvider(ctx, *boundTo); gerr == nil {
+			label = row.Label
+		}
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("this conversation runs on %s and cannot change provider; the harness holds the transcript, so start a new conversation to use a different one", label))
+	}
+	if resolvedIsStateful && boundTo == nil {
+		answered, herr := s.queries.ConversationHasNonHarnessAssistant(ctx, conv.ID)
+		if herr != nil {
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("check conversation history: %w", herr))
+		}
+		if answered {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("this conversation already has replies from a regular provider; a harness cannot pick it up mid-way because it would not see them"))
+		}
+	}
+	return nil
 }
 
 // resolveHarnessSystemPrompt assembles the system prompt a harness session

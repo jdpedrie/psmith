@@ -2219,11 +2219,61 @@ public nonisolated struct Psmith_V1_Conversation: @unchecked Sendable {
   /// Clears the value of `pinnedAt`. Subsequent reads from it will return its default value.
   public mutating func clearPinnedAt() {_uniqueStorage()._pinnedAt = nil}
 
+  /// Present once a stateful harness has answered in this conversation, which
+  /// commits it to that provider permanently. Clients must reflect the three
+  /// constraints it implies; the server enforces all of them regardless.
+  ///
+  /// Populated on the detail reads (Get/Create/Update) only. The list path
+  /// leaves it unset rather than paying a query per row, so absence means
+  /// "unbound OR not asked" everywhere except a conversation you opened.
+  public var harness: Psmith_V1_HarnessBinding {
+    get {_storage._harness ?? Psmith_V1_HarnessBinding()}
+    set {_uniqueStorage()._harness = newValue}
+  }
+  /// Returns true if `harness` has been explicitly set.
+  public var hasHarness: Bool {_storage._harness != nil}
+  /// Clears the value of `harness`. Subsequent reads from it will return its default value.
+  public mutating func clearHarness() {_uniqueStorage()._harness = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// A conversation's commitment to one stateful harness provider.
+///
+/// The harness owns the transcript, which is what makes the commitment
+/// permanent: there is nothing to hand to a different backend, because the
+/// server never built a prefix. See docs/design/providers.md.
+public nonisolated struct Psmith_V1_HarnessBinding: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The provider instance this conversation is bound to. A send naming any
+  /// other provider is refused.
+  public var providerID: String = String()
+
+  /// The instance's user-facing label, so a client can name it in an
+  /// explanation without a second lookup.
+  public var providerLabel: String = String()
+
+  /// Driver type, e.g. 'codex-app-server'.
+  public var driverType: String = String()
+
+  /// The system prompt is fixed for this conversation's life; the harness
+  /// pinned it when the session opened. Editing the profile changes nothing
+  /// here.
+  public var systemPromptFrozen: Bool = false
+
+  /// Attachments are refused. Neither harness driver can receive them.
+  public var acceptsAttachments: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// One (tag-name, renderer-component) pair surfaced by a plugin in
@@ -4768,7 +4818,7 @@ nonisolated extension Psmith_V1_ConversationSettings: SwiftProtobuf.Message, Swi
 
 nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0\u{3}archived_at\0\u{3}pinned_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}profile_id\0\u{1}title\0\u{1}settings\0\u{3}active_context_id\0\u{3}created_at\0\u{3}updated_at\0\u{3}owner_user_id\0\u{3}last_activity_at\0\u{3}streaming_components\0\u{3}archived_at\0\u{3}pinned_at\0\u{1}harness\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -4783,6 +4833,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
     var _streamingComponents: [Psmith_V1_StreamingComponentTag] = []
     var _archivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
     var _pinnedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _harness: Psmith_V1_HarnessBinding? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -4805,6 +4856,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
       _streamingComponents = source._streamingComponents
       _archivedAt = source._archivedAt
       _pinnedAt = source._pinnedAt
+      _harness = source._harness
     }
   }
 
@@ -4835,6 +4887,7 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
         case 10: try { try decoder.decodeRepeatedMessageField(value: &_storage._streamingComponents) }()
         case 11: try { try decoder.decodeSingularMessageField(value: &_storage._archivedAt) }()
         case 12: try { try decoder.decodeSingularMessageField(value: &_storage._pinnedAt) }()
+        case 13: try { try decoder.decodeSingularMessageField(value: &_storage._harness) }()
         default: break
         }
       }
@@ -4883,6 +4936,9 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
       try { if let v = _storage._pinnedAt {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       } }()
+      try { if let v = _storage._harness {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -4904,10 +4960,61 @@ nonisolated extension Psmith_V1_Conversation: SwiftProtobuf.Message, SwiftProtob
         if _storage._streamingComponents != rhs_storage._streamingComponents {return false}
         if _storage._archivedAt != rhs_storage._archivedAt {return false}
         if _storage._pinnedAt != rhs_storage._pinnedAt {return false}
+        if _storage._harness != rhs_storage._harness {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Psmith_V1_HarnessBinding: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".HarnessBinding"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}provider_label\0\u{3}driver_type\0\u{3}system_prompt_frozen\0\u{3}accepts_attachments\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.providerLabel) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.driverType) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.systemPromptFrozen) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.acceptsAttachments) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.providerLabel.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerLabel, fieldNumber: 2)
+    }
+    if !self.driverType.isEmpty {
+      try visitor.visitSingularStringField(value: self.driverType, fieldNumber: 3)
+    }
+    if self.systemPromptFrozen != false {
+      try visitor.visitSingularBoolField(value: self.systemPromptFrozen, fieldNumber: 4)
+    }
+    if self.acceptsAttachments != false {
+      try visitor.visitSingularBoolField(value: self.acceptsAttachments, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Psmith_V1_HarnessBinding, rhs: Psmith_V1_HarnessBinding) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.providerLabel != rhs.providerLabel {return false}
+    if lhs.driverType != rhs.driverType {return false}
+    if lhs.systemPromptFrozen != rhs.systemPromptFrozen {return false}
+    if lhs.acceptsAttachments != rhs.acceptsAttachments {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

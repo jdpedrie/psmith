@@ -202,6 +202,34 @@ type convoVM struct {
 	RelTime string // short relative time, e.g. "3h", "Apr 2"
 	Group   string // date bucket header for the sidebar, e.g. "Today"
 	Pinned  bool
+	// Set once a stateful harness has answered here. Nil for every row the
+	// sidebar renders: the list RPC does not carry it, and the sidebar has
+	// nothing to do with it.
+	Harness *harnessVM
+}
+
+// harnessVM is what a conversation is committed to, in the shape the templates
+// want. See docs/design/providers.md; the constraints all follow from the
+// harness owning the transcript.
+type harnessVM struct {
+	ProviderID    string
+	ProviderLabel string
+	DriverType    string
+	FrozenPrompt  bool
+	NoAttachments bool
+}
+
+func harnessVMFrom(b *psmithv1.HarnessBinding) *harnessVM {
+	if b == nil {
+		return nil
+	}
+	return &harnessVM{
+		ProviderID:    b.GetProviderId(),
+		ProviderLabel: b.GetProviderLabel(),
+		DriverType:    b.GetDriverType(),
+		FrozenPrompt:  b.GetSystemPromptFrozen(),
+		NoAttachments: !b.GetAcceptsAttachments(),
+	}
 }
 
 type msgVM struct {

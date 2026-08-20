@@ -32,11 +32,13 @@ Conversations:
 |---|---|
 | `CreateConversation` | Profile id (+ optional title, settings). Returns the conversation, its initial context, and seed messages (system, optional default user). |
 | `ListConversations` | Keyset-paginated (`page_size` capped at 100, opaque `page_token`, `next_page_token` on the response). Optional `order` (recently used / recently created), `title_query` substring, `profile_id` filter — filters and cursor compose. |
-| `GetConversation` | The conversation and its active context. |
+| `GetConversation` | The conversation and its active context. Carries `harness` when a stateful provider has answered here; see below. |
 | `UpdateConversation` | Sparse: title, settings. |
 | `DeleteConversation` | Delete. |
 | `ArchiveConversation` / `UnarchiveConversation` | Archive hides the conversation from the default list and freezes it read-only (every mutating RPC returns FailedPrecondition until unarchived; reads and DeleteConversation stay open). Refused mid-stream. `ListConversations` takes `archived` to fetch the archive. |
 | `PinConversation` / `UnpinConversation` | Pinned conversations are served ahead of page one of `ListConversations` (newest pin first, same filters), outside the keyset stream so paging never duplicates them. Mutually exclusive with archive: archiving clears the pin, pinning an archived conversation is refused. |
+
+`Conversation.harness` is set once a stateful harness provider (Claude Code, Codex) has answered in the conversation, which commits it to that provider permanently. It names the provider and reports whether the system prompt is frozen and whether attachments are accepted. Only the detail reads populate it (`CreateConversation`, `GetConversation`, `UpdateConversation`); `ListConversations` leaves it unset rather than paying a query per row, so absence means "unbound or not asked" and a client should treat it as unconstrained. `SendMessage` enforces the constraints either way: a bound conversation naming a different provider gets FailedPrecondition, a harness sent an already-answered conversation gets FailedPrecondition, and attachments to a harness get InvalidArgument before the user message is persisted. See [../design/providers.md](../design/providers.md).
 
 Contexts:
 

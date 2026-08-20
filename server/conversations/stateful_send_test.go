@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -365,4 +366,169 @@ func TestStatefulSend_RejectsAttachmentsWithoutPersisting(t *testing.T) {
 			t.Fatalf("a user row was persisted for a refused send: %q", r.Content)
 		}
 	}
+}
+
+// Once a harness has answered, the conversation belongs to it. Sending to a
+// different provider is refused: the handles are the other harness's, and
+// there is no prefix to hand a stateless one.
+func TestStatefulSend_BoundConversationRefusesAnotherProvider(t *testing.T) {
+	svc, q, sup := newFullSvc(t)
+	harnessType, _ := registerFakeStatefulDriver(t)
+	fx := seedSendable(t, q, harnessType)
+
+	first := sendStateful(t, svc, fx, "hello")
+	r1, _ := uuid.Parse(first.StreamRun.Id)
+	waitForTerminal(t, sup, r1)
+
+	// A second, perfectly good provider on the same account.
+	otherType := registerFakeDriver(t, "bound-other",
+		[]providers.Chunk{textChunk("hi"), doneChunk()}, nil)
+	other := seedSecondProvider(t, q, fx.user.ID, otherType)
+
+	otherID := other.ID.String()
+	modelID := fx.modelID
+	_, err := svc.SendMessage(ctxAsUser(fx.user), connect.NewRequest(&psmithv1.SendMessageRequest{
+		ConversationId: fx.conv.ID.String(),
+		Content:        "switch to something else",
+		ProviderId:     &otherID,
+		ModelId:        &modelID,
+	}))
+	if err == nil {
+		t.Fatal("SendMessage let a bound conversation change provider")
+	}
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want %v", got, connect.CodeFailedPrecondition)
+	}
+	// The message the user typed must not be sitting in the tree.
+	rows, _ := q.ListMessagesByContext(context.Background(), store.ListMessagesByContextParams{
+		ContextID: fx.contextID, RowLimit: 100,
+	})
+	for _, r := range rows {
+		if r.Content == "switch to something else" {
+			t.Fatal("the refused message was persisted")
+		}
+	}
+}
+
+// The other direction: a conversation a regular provider has already answered
+// cannot be handed to a harness, which would start its transcript at the
+// switch and never see anything before it.
+func TestStatefulSend_HarnessRefusesAnAnsweredConversation(t *testing.T) {
+	svc, q, sup := newFullSvc(t)
+	statelessType := registerFakeDriver(t, "bound-stateless",
+		[]providers.Chunk{textChunk("regular reply"), doneChunk()}, nil)
+	fx := seedSendable(t, q, statelessType)
+
+	first := sendStateful(t, svc, fx, "hello")
+	r1, _ := uuid.Parse(first.StreamRun.Id)
+	waitForTerminal(t, sup, r1)
+
+	harnessType, drv := registerFakeStatefulDriver(t)
+	harness := seedSecondProvider(t, q, fx.user.ID, harnessType)
+
+	hID := harness.ID.String()
+	modelID := fx.modelID
+	_, err := svc.SendMessage(ctxAsUser(fx.user), connect.NewRequest(&psmithv1.SendMessageRequest{
+		ConversationId: fx.conv.ID.String(),
+		Content:        "take over",
+		ProviderId:     &hID,
+		ModelId:        &modelID,
+	}))
+	if err == nil {
+		t.Fatal("a harness picked up a conversation it cannot see the history of")
+	}
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want %v", got, connect.CodeFailedPrecondition)
+	}
+	if starts, _ := drv.calls(); len(starts) != 0 {
+		t.Errorf("StartSession was called %d times for a refused send", len(starts))
+	}
+}
+
+// A fresh conversation is not bound, so picking a harness for its first turn
+// works. Guards against the check being read as "harness sends are refused".
+func TestStatefulSend_UnansweredConversationAcceptsAHarness(t *testing.T) {
+	svc, q, sup := newFullSvc(t)
+	harnessType, drv := registerFakeStatefulDriver(t)
+	fx := seedSendable(t, q, harnessType)
+
+	resp := sendStateful(t, svc, fx, "first thing anyone has said here")
+	rid, _ := uuid.Parse(resp.StreamRun.Id)
+	if row := waitForTerminal(t, sup, rid); row.Status != "completed" {
+		t.Fatalf("run status = %q, want completed", row.Status)
+	}
+	if _, sends := drv.calls(); len(sends) != 1 {
+		t.Errorf("driver saw %d sends, want 1", len(sends))
+	}
+}
+
+// The binding rides on the conversation proto so clients do not have to join
+// provider type to driver statefulness themselves.
+func TestGetConversation_ReportsTheHarnessBinding(t *testing.T) {
+	svc, q, sup := newFullSvc(t)
+	harnessType, _ := registerFakeStatefulDriver(t)
+	fx := seedSendable(t, q, harnessType)
+
+	before, err := svc.GetConversation(ctxAsUser(fx.user), connect.NewRequest(&psmithv1.GetConversationRequest{
+		Id: fx.conv.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if before.Msg.Conversation.Harness != nil {
+		t.Error("an unanswered conversation reported a binding; nothing has committed it yet")
+	}
+
+	resp := sendStateful(t, svc, fx, "hello")
+	rid, _ := uuid.Parse(resp.StreamRun.Id)
+	waitForTerminal(t, sup, rid)
+
+	after, err := svc.GetConversation(ctxAsUser(fx.user), connect.NewRequest(&psmithv1.GetConversationRequest{
+		Id: fx.conv.ID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	b := after.Msg.Conversation.Harness
+	if b == nil {
+		t.Fatal("no binding reported after a harness answered")
+	}
+	if b.ProviderId != fx.provider.ID.String() {
+		t.Errorf("provider_id = %q, want %q", b.ProviderId, fx.provider.ID)
+	}
+	if b.DriverType != harnessType {
+		t.Errorf("driver_type = %q, want %q", b.DriverType, harnessType)
+	}
+	if b.ProviderLabel == "" {
+		t.Error("provider_label is empty; the client has nothing to name in an explanation")
+	}
+	if b.AcceptsAttachments {
+		t.Error("accepts_attachments is true, but the send path refuses them")
+	}
+	if !b.SystemPromptFrozen {
+		t.Error("system_prompt_frozen is false, but the session pinned it at StartSession")
+	}
+}
+
+func seedSecondProvider(t *testing.T, q *store.Queries, userID uuid.UUID, driverType string) store.UserModelProvider {
+	t.Helper()
+	ctx := context.Background()
+	id, _ := uuid.NewV7()
+	prov, err := q.CreateUserModelProvider(ctx, store.CreateUserModelProviderParams{
+		ID: id, UserID: userID, Type: driverType, Label: "second " + driverType,
+		ConfigEncrypted: []byte("{}"),
+	})
+	if err != nil {
+		t.Fatalf("CreateUserModelProvider: %v", err)
+	}
+	if _, err := q.UpsertUserModel(ctx, store.UpsertUserModelParams{
+		UserModelProviderID: prov.ID,
+		ModelID:             "fake-model",
+		DisplayName:         "Fake Model",
+		MetadataSource:      "manual",
+		MetadataSnapshotAt:  time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("UpsertUserModel: %v", err)
+	}
+	return prov
 }

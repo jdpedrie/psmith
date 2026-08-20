@@ -20,6 +20,13 @@ import (
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
 	"github.com/jdpedrie/psmith/server/testutil"
+
+	// Registered so IsStateful can answer for them.
+	_ "github.com/jdpedrie/psmith/server/providers/anthropic"
+	_ "github.com/jdpedrie/psmith/server/providers/claudecode"
+	_ "github.com/jdpedrie/psmith/server/providers/codex"
+	_ "github.com/jdpedrie/psmith/server/providers/google"
+	_ "github.com/jdpedrie/psmith/server/providers/openai"
 )
 
 // --- helpers ---
@@ -212,17 +219,26 @@ func TestListProviderTypes_IncludesRegistered(t *testing.T) {
 	}
 }
 
-func TestListProviderTypes_StatefulHardcoded(t *testing.T) {
+// Statefulness on the wire comes from the registry, not from a list somebody
+// maintains. The list this replaced named "codex-subprocess", a type that
+// never existed, and its test asserted the list's own contents, so it stayed
+// green while every client was told Codex was stateless.
+func TestListProviderTypes_StatefulComesFromTheRegistry(t *testing.T) {
 	t.Parallel()
-	// Just make sure the helper map flags the known stateful types as such.
-	if !knownStatefulTypes["claude-code-subprocess"] {
-		t.Error("claude-code-subprocess should be stateful")
+	want := map[string]bool{
+		"claude-code-subprocess": true,
+		"codex-app-server":       true,
+		"anthropic":              false,
+		"openai-compatible":      false,
+		"google":                 false,
 	}
-	if !knownStatefulTypes["codex-subprocess"] {
-		t.Error("codex-subprocess should be stateful")
+	for name, expected := range want {
+		if got := providers.IsStateful(name); got != expected {
+			t.Errorf("IsStateful(%q) = %v, want %v", name, got, expected)
+		}
 	}
-	if knownStatefulTypes["openai-compatible"] {
-		t.Error("openai-compatible should not be stateful")
+	if providers.IsStateful("no-such-driver") {
+		t.Error("an unregistered type should not report stateful")
 	}
 }
 

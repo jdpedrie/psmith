@@ -454,6 +454,11 @@ struct Composer: View {
     }
 
     private func activeModelAccepts(_ kind: AttachmentKind) -> Bool {
+        // A harness holds its own transcript and takes text only. The type
+        // whitelist below would fall through to false for one anyway; asking
+        // the binding first means the answer stays right the day a harness
+        // grows file support, and says why in the meantime.
+        guard model.canAttachFiles else { return false }
         guard let pid = model.selectedProviderID else { return false }
         switch (model.providerTypes[pid], kind) {
         case ("anthropic", .image),

@@ -35,6 +35,11 @@ public struct ModelPickerList: View {
     /// callers without a profile context (e.g. plugin config form's
     /// model picker field) pass nil and every model stays selectable.
     let requiredCapabilities: PsmithModelCapabilities?
+    /// Why this list is shorter than the user's full set of models. Rendered
+    /// above the sections. The list itself is already filtered by the caller;
+    /// this exists so a missing provider reads as a rule rather than as
+    /// something broken.
+    let notice: String?
     let onSelect: (_ providerID: String, _ modelID: String) -> Void
 
     @Environment(\.theme) private var theme
@@ -49,6 +54,7 @@ public struct ModelPickerList: View {
         onUnset: (() -> Void)? = nil,
         unsetDescription: String? = nil,
         requiredCapabilities: PsmithModelCapabilities? = nil,
+        notice: String? = nil,
         onSelect: @escaping (_ providerID: String, _ modelID: String) -> Void
     ) {
         self.models = models
@@ -60,6 +66,7 @@ public struct ModelPickerList: View {
         self.onUnset = onUnset
         self.unsetDescription = unsetDescription
         self.requiredCapabilities = requiredCapabilities
+        self.notice = notice
         self.onSelect = onSelect
     }
 
@@ -72,6 +79,9 @@ public struct ModelPickerList: View {
             )
         } else {
             VStack(alignment: .leading, spacing: 16) {
+                if let notice {
+                    noticeBand(notice)
+                }
                 if let onUnset {
                     UnsetRow(isSelected: selectedProviderID == nil && selectedModelID == nil,
                              description: unsetDescription ?? "Use parent profile's setting.",
@@ -83,6 +93,25 @@ public struct ModelPickerList: View {
                 }
             }
         }
+    }
+
+    /// Informational, not a warning. Nothing has gone wrong and there is no
+    /// action to take, so it stays quiet: secondary text on the theme's own
+    /// surface rather than a yellow banner.
+    private func noticeBand(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "lock")
+                .scaledFont(.caption)
+                .foregroundStyle(.tertiary)
+            Text(text)
+                .scaledFont(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(theme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func providerSection(_ group: GroupedProvider) -> some View {

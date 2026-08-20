@@ -29,13 +29,6 @@ func humanizeName(name string) string {
 	return strings.Join(parts, " ")
 }
 
-// knownStatefulTypes lists provider types that satisfy providers.StatefulProvider.
-// Hardcoded for now per the brief — drivers aren't registered for these in this build.
-var knownStatefulTypes = map[string]bool{
-	"claude-code-subprocess": true,
-	"codex-subprocess":       true,
-}
-
 // storeProviderToProto maps a store row to its proto shape. Method
 // form so it can resolve the dual-column config (encrypted preferred,
 // plaintext fallback for unmigrated rows) through the service's

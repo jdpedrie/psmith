@@ -114,7 +114,21 @@ The elicited value flows user to server to tool. It is not persisted as message 
 
 Uploading is client-streaming through `FilesService.UploadFile`: send a header (MIME type, declared size, optional filename), then the bytes in chunks. The cap is 50 MB. The server is content-addressed and dedupes on the user plus content hash, so re-uploading identical bytes is cheap and returns the existing file. The response gives you a file id; pass that id in `SendMessage`'s attachment list to attach it to a turn.
 
+Not every conversation takes attachments. A conversation bound to a stateful harness refuses them, and the server rejects the send before persisting the user's message. Read `Conversation.harness` on the detail reads and hide the attach control when `accepts_attachments` is false, including the paste and drag paths, so no upload is spent on a turn that cannot happen. See "Harness conversations" below.
+
 Displaying an attached image: a message carries attachment metadata (file id, kind, MIME type, hash, size), not bytes. Call `FilesService.GetFileURL` to mint a short-lived signed URL, then load the bytes over plain HTTP from `/files/{id}?token=...`. The URL is good for a few minutes; if a render happens after it expires, mint a fresh one rather than caching the URL forever. The download endpoint returns 404 for an expired or invalid token, a wrong-owner file, or a missing file, all indistinguishable on purpose.
+
+## Harness conversations
+
+Some providers are stateful harnesses (Claude Code, Codex): the harness owns the transcript and Psmith sends it one message at a time. A conversation becomes bound to one the moment it answers there, and stays bound. `Conversation.harness` reports the binding on `CreateConversation`, `GetConversation` and `UpdateConversation`, and carries the provider id, its label, the driver type, and two flags.
+
+Three things a client must reflect:
+
+- **The provider is fixed.** Filter the model picker to `harness.provider_id` and say why. Models within that provider are still free to change.
+- **The system prompt is frozen** when `system_prompt_frozen` is set. The harness pinned it when the session opened; editing the profile will not reach this conversation.
+- **Attachments are refused** when `accepts_attachments` is false.
+
+`ListConversations` does not carry the binding, so absence means "unbound or not asked". Treat that as unconstrained and let the server refuse: a control that quietly lies is worse than one clear error. The server enforces all three whatever the client does, returning FailedPrecondition for a provider change and InvalidArgument for attachments.
 
 ## Offline behavior
 

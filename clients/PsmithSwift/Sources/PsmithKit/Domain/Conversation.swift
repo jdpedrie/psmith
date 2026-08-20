@@ -29,6 +29,13 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
     /// Set while pinned: served ahead of the paged list, newest pin
     /// first. Mutually exclusive with archivedAt.
     public let pinnedAt: Date?
+    /// Present once a stateful harness has answered here, which commits the
+    /// conversation to that provider for good.
+    ///
+    /// Only the detail reads populate it (`get`, `create`, `update`). A
+    /// conversation that came from `list` always reports nil, so treat nil as
+    /// "unknown" outside a conversation the user has actually opened.
+    public let harness: PsmithHarnessBinding?
 
     public init(
         id: String,
@@ -42,7 +49,8 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         settings: PsmithConversationSettings? = nil,
         streamingComponents: [PsmithStreamingComponentTag] = [],
         archivedAt: Date? = nil,
-        pinnedAt: Date? = nil
+        pinnedAt: Date? = nil,
+        harness: PsmithHarnessBinding? = nil
     ) {
         self.id = id
         self.profileID = profileID
@@ -56,6 +64,7 @@ public struct PsmithConversation: Sendable, Hashable, Identifiable, Codable {
         self.streamingComponents = streamingComponents
         self.archivedAt = archivedAt
         self.pinnedAt = pinnedAt
+        self.harness = harness
     }
 }
 
@@ -90,8 +99,60 @@ extension PsmithConversation {
             settings: p.hasSettings ? PsmithConversationSettings(from: p.settings) : nil,
             streamingComponents: p.streamingComponents.map(PsmithStreamingComponentTag.init(from:)),
             archivedAt: p.hasArchivedAt ? p.archivedAt.date : nil,
-            pinnedAt: p.hasPinnedAt ? p.pinnedAt.date : nil
+            pinnedAt: p.hasPinnedAt ? p.pinnedAt.date : nil,
+            harness: p.hasHarness ? PsmithHarnessBinding(from: p.harness) : nil
         )
+    }
+}
+
+/// What a conversation is committed to when a stateful harness answered in it.
+///
+/// A harness (Claude Code, Codex) owns the transcript, so there is nothing to
+/// hand a different backend: the server never built a prefix. That single fact
+/// produces every constraint here, and the server enforces all of them whether
+/// or not a client bothers to check.
+public struct PsmithHarnessBinding: Sendable, Hashable, Codable {
+    /// The only provider this conversation may send to.
+    public let providerID: String
+    /// The instance's label, for naming it in an explanation.
+    public let providerLabel: String
+    /// Driver type, e.g. `codex-app-server`.
+    public let driverType: String
+    /// The system prompt was pinned when the session opened. Editing the
+    /// profile does nothing to this conversation.
+    public let systemPromptFrozen: Bool
+    /// False for every harness shipped today. A field rather than a constant
+    /// so a driver that grows file support needs no client release.
+    public let acceptsAttachments: Bool
+
+    public init(
+        providerID: String,
+        providerLabel: String,
+        driverType: String,
+        systemPromptFrozen: Bool = true,
+        acceptsAttachments: Bool = false
+    ) {
+        self.providerID = providerID
+        self.providerLabel = providerLabel
+        self.driverType = driverType
+        self.systemPromptFrozen = systemPromptFrozen
+        self.acceptsAttachments = acceptsAttachments
+    }
+
+    init(from p: Psmith_V1_HarnessBinding) {
+        self.init(
+            providerID: p.providerID,
+            providerLabel: p.providerLabel,
+            driverType: p.driverType,
+            systemPromptFrozen: p.systemPromptFrozen,
+            acceptsAttachments: p.acceptsAttachments
+        )
+    }
+
+    /// One line explaining why a control is unavailable. Written to be shown
+    /// verbatim next to whatever it disabled.
+    public var explanation: String {
+        "\(providerLabel) holds this conversation's transcript, so it stays on this provider and its system prompt is fixed."
     }
 }
 

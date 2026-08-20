@@ -37,6 +37,9 @@ type convSettingsVM struct {
 	Title      string
 	Tab        string // "call" | "plugins"
 	DriverType string // active provider type, gates the provider-extras section
+	// Set once a stateful harness has answered here; several fields below are
+	// inert when it is.
+	Harness *harnessVM
 
 	// Call settings
 	Temperature     callFieldVM
@@ -86,7 +89,12 @@ func (h *Handler) handleConvSettings(w http.ResponseWriter, r *http.Request) {
 	if tab != "plugins" {
 		tab = "call"
 	}
-	vm := convSettingsVM{ConvID: convID, Title: convoTitle(conv), Tab: tab}
+	vm := convSettingsVM{
+		ConvID:  convID,
+		Title:   convoTitle(conv),
+		Tab:     tab,
+		Harness: harnessVMFrom(conv.GetHarness()),
+	}
 
 	own := conv.GetSettings().GetCallSettings()
 	inherited := h.inheritedCallSettings(r.Context(), conv)

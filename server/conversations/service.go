@@ -415,6 +415,7 @@ func (s *Service) CreateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, convoRow, convoProto)
+	s.attachHarnessBinding(ctx, convoRow, convoProto)
 	s.publishConversationEvent(ctx, caller.ID, convoRow.ID, events.ConversationChangeCreated)
 	return connect.NewResponse(&psmithv1.CreateConversationResponse{
 		Conversation:   convoProto,
@@ -603,6 +604,7 @@ func (s *Service) GetConversation(ctx context.Context, req *connect.Request[psmi
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, row, convoProto)
+	s.attachHarnessBinding(ctx, row, convoProto)
 	return connect.NewResponse(&psmithv1.GetConversationResponse{
 		Conversation:  convoProto,
 		ActiveContext: contextToProto(active),
@@ -669,6 +671,7 @@ func (s *Service) UpdateConversation(ctx context.Context, req *connect.Request[p
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	s.attachStreamingComponents(ctx, updated, proto)
+	s.attachHarnessBinding(ctx, updated, proto)
 	s.publishConversationEvent(ctx, updated.UserID, updated.ID, events.ConversationChangeUpdated)
 	return connect.NewResponse(&psmithv1.UpdateConversationResponse{Conversation: proto}), nil
 }
@@ -1457,6 +1460,12 @@ func (s *Service) SendMessage(ctx context.Context, req *connect.Request[psmithv1
 	stateless, isStateless := driver.(providers.StatelessProvider)
 	if !isStateful && !isStateless {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("driver %q supports neither stateless nor stateful sends", provRow.Type))
+	}
+
+	// A conversation commits to one provider the moment a harness answers in
+	// it. Checked before the user row is written.
+	if err := s.checkHarnessBinding(ctx, conv, providerID, isStateful); err != nil {
+		return nil, err
 	}
 
 	// Attachments have nowhere to go on a harness: neither driver reads

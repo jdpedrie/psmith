@@ -120,7 +120,8 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	convos, sidebarToken, _ := h.listConvosPage(r.Context(), id, "")
-	pick := h.modelPicker(r.Context(), id, currentSettingsModel(t.conv), capsVM{})
+	harness := harnessVMFrom(t.conv.GetHarness())
+	pick := h.modelPicker(r.Context(), id, currentSettingsModel(t.conv), capsVM{}, harness)
 	runID := r.URL.Query().Get("run")
 	if runID == "" {
 		// Entering (or reloading) a conversation with an in-flight run
@@ -128,7 +129,7 @@ func (h *Handler) handleConversation(w http.ResponseWriter, r *http.Request) {
 		// instead of a transcript that ends at the question.
 		runID = h.activeRunID(r, id)
 	}
-	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv)}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated, t.conv.GetArchivedAt() != nil))
+	h.render(w, r, http.StatusOK, conversationPage(convos, sidebarToken, convoVM{ID: t.conv.GetId(), Title: convoTitle(t.conv), Harness: harness}, t.msgs, pick.Current, runID, t.pendingSummaryID, t.pendingTruncated, t.conv.GetArchivedAt() != nil))
 }
 
 // handleMessagesPartial re-renders the #messages region. Triggered by

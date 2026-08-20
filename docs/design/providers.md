@@ -73,7 +73,7 @@ These are consequences of borrowing someone else's session, not bugs to be fixed
 
 **The system prompt is fixed for the conversation's life.** The harness pins it when the session opens. Editing the profile afterwards changes nothing until a new conversation starts.
 
-**You cannot switch providers mid-conversation.** Choosing a harness commits the conversation to it. There is no prefix to hand a different backend, because Psmith never built one.
+**You cannot switch providers mid-conversation.** Choosing a harness commits the conversation to it. There is no prefix to hand a different backend, because Psmith never built one. `checkHarnessBinding` enforces this in both directions, before the user row is written: a bound conversation refuses any other provider, and a conversation a regular provider has already answered refuses a harness, because the harness's transcript would start at the switch and never see what came before.
 
 **Editing an assistant turn and resending drifts.** The handle names the state containing the *original* text. The harness has no way to be told it changed, so the edit shows in Psmith's history and not in the harness's.
 
@@ -82,6 +82,27 @@ These are consequences of borrowing someone else's session, not bugs to be fixed
 **Plugin capabilities that operate on history do not fire.** `HistoryTransformer` sees one message. `SystemPrompter` contributions are dropped, since there is no per-turn system slot to put them in. `ToolProvider` tools are dropped. What still works is anything that acts on the outgoing message or on state: `MessageEnvelope`, `TurnContextInjector`, `InboundProcessor`, `DisplayTransformer`, the lifecycle hooks.
 
 **Provisional handles do not survive a restart.** `StartSession` returns a provisional handle that becomes durable only once the harness mints a real session on the first turn. A crash in between leaves nothing to resume.
+
+### What the clients do about it
+
+The server refuses every one of these regardless of what a client does. The UI exists so the user meets the rule before the error, not after.
+
+`Conversation.harness` carries the binding on the detail reads (`GetConversation`, `CreateConversation`, `UpdateConversation`), populated by `attachHarnessBinding`. It is deliberately absent from `ListConversations`: that would be one query per row to answer a question the sidebar never asks. Absence therefore means "unbound or not asked", so every client treats it as unconstrained and lets the server refuse. A control that quietly lies is worse than one clear error.
+
+The binding carries `system_prompt_frozen` and `accepts_attachments` as fields rather than assuming them from the driver type. Both are true of every harness shipped today, and both are things a driver could grow without a client release.
+
+`ConversationViewModel` derives the affordances once (`canAttachFiles`, `canChangeProvider`, `systemPromptIsFrozen`, `selectableModels`, `harnessNotice`) so Mac and iOS cannot drift on what the rules are; the web client's `harnessVM` is the same shape for templ. What each surface does:
+
+| Surface | Bound behaviour |
+|---|---|
+| Composer attach control | Absent. On Mac and iOS the existing per-kind capability gate answers false; the web template omits the input entirely. |
+| Paste and drag | Refused in the view model before the upload, so no bytes are spent on a send that cannot happen. |
+| Model picker | Filtered to the bound provider, with a one-line notice above it. Filtering rather than disabling: a whole provider of dead rows is noise, one absent section plus a reason is a rule. |
+| Conversation settings | A card at the top of the call-settings tab explaining all three constraints together. |
+
+Model switching stays available inside the bound provider. The handle encodes the model, so the next turn opens against the new one and both harnesses accept that.
+
+Statefulness on the wire (`ProviderType.stateful`) comes from `providers.IsStateful`, which builds a throwaway driver and asks it. The list it replaced named `codex-subprocess`, a type that never existed, and its test asserted the list's own contents, so it stayed green while every client was told Codex was stateless.
 
 Both drivers pin their sandbox to read-only and their approval policy to never. That is not the operator's setting to make: their CLI config is tuned for an agent editing files with a human at the keyboard, and a chat turn has nobody to approve anything. An unanswered approval request hangs the turn until it times out.
 

@@ -762,6 +762,11 @@ struct ConversationBody: View {
     /// gates on: Anthropic images+PDFs, Google everything, OpenAI-
     /// compatible images only.
     private var acceptedAttachmentTypes: (image: Bool, document: Bool, audioVideo: Bool) {
+        // A harness holds its own transcript and takes text only. The type
+        // whitelist below would fall through to none for one anyway; asking
+        // the binding first means the answer stays right the day a harness
+        // grows file support, and says why in the meantime.
+        guard model.canAttachFiles else { return (false, false, false) }
         guard let pid = model.selectedProviderID else { return (false, false, false) }
         switch model.providerTypes[pid] {
         case "anthropic":          return (true, true, false)
@@ -848,7 +853,9 @@ struct ConversationBody: View {
         .disabled(!attachmentsSupported)
         .help(attachmentsSupported
             ? "Attach files — or drop them on the composer"
-            : "Attachments not supported by this model")
+            : (model.canAttachFiles
+               ? "Attachments not supported by this model"
+               : "\(model.harness?.providerLabel ?? "This provider") cannot receive attachments"))
     }
 
     /// Pending-attachment strip above the composer: image thumbnails

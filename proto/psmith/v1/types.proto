@@ -490,6 +490,36 @@ message Conversation {
   // Set while pinned: rendered above the paged list, newest pin first.
   // Mutually exclusive with archived_at (archiving clears the pin).
   optional google.protobuf.Timestamp pinned_at = 12;
+  // Present once a stateful harness has answered in this conversation, which
+  // commits it to that provider permanently. Clients must reflect the three
+  // constraints it implies; the server enforces all of them regardless.
+  //
+  // Populated on the detail reads (Get/Create/Update) only. The list path
+  // leaves it unset rather than paying a query per row, so absence means
+  // "unbound OR not asked" everywhere except a conversation you opened.
+  optional HarnessBinding harness = 13;
+}
+
+// A conversation's commitment to one stateful harness provider.
+//
+// The harness owns the transcript, which is what makes the commitment
+// permanent: there is nothing to hand to a different backend, because the
+// server never built a prefix. See docs/design/providers.md.
+message HarnessBinding {
+  // The provider instance this conversation is bound to. A send naming any
+  // other provider is refused.
+  string provider_id = 1;
+  // The instance's user-facing label, so a client can name it in an
+  // explanation without a second lookup.
+  string provider_label = 2;
+  // Driver type, e.g. 'codex-app-server'.
+  string driver_type = 3;
+  // The system prompt is fixed for this conversation's life; the harness
+  // pinned it when the session opened. Editing the profile changes nothing
+  // here.
+  bool system_prompt_frozen = 4;
+  // Attachments are refused. Neither harness driver can receive them.
+  bool accepts_attachments = 5;
 }
 
 // One (tag-name, renderer-component) pair surfaced by a plugin in

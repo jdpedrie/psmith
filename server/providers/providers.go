@@ -507,6 +507,27 @@ func IsRegistered(typeName string) bool {
 	return ok
 }
 
+// IsStateful reports whether a registered type's driver holds the transcript
+// itself.
+//
+// Answered by building a throwaway driver and asking it, rather than by a list
+// somebody has to remember to update. The list version was wrong within a
+// month of being written: it named "codex-subprocess", a type that never
+// existed, so the wire told every client that Codex was stateless.
+//
+// Safe because a constructor only parses config and stores deps. Nothing
+// starts a subprocess or opens a connection until a turn asks it to. An empty
+// config is enough, because statefulness is a property of the driver and not
+// of how it was configured. A constructor that rejects the empty config
+// answers false, which is the same answer an unregistered type gets.
+func IsStateful(typeName string) bool {
+	d, err := Build(typeName, Deps{}, nil)
+	if err != nil {
+		return false
+	}
+	return d.Stateful()
+}
+
 // Types returns the names of all registered provider types.
 func Types() []string {
 	registryMu.RLock()

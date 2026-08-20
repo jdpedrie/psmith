@@ -26,6 +26,22 @@ type Querier interface {
 	// their result; the FK has no ON DELETE action, so null the pointer
 	// before the context row goes.
 	ClearStreamRunResultContext(ctx context.Context, resultContextID *uuid.UUID) error
+	// ConversationHarnessProvider returns the provider that owns this
+	// conversation's harness session, or NULL if it has never had one.
+	//
+	// Conversation-scoped rather than branch-scoped on purpose. A handle is
+	// branch-scoped because forking is per-branch, but WHICH harness a
+	// conversation belongs to is a property of the whole thing: there is no
+	// coherent conversation where one branch is Codex and another is Claude Code.
+	ConversationHarnessProvider(ctx context.Context, conversationID uuid.UUID) (*uuid.UUID, error)
+	// ConversationHasNonHarnessAssistant reports whether this conversation holds
+	// any successful assistant turn that did NOT come from a harness. If it does,
+	// a harness cannot take it over: the harness's transcript would begin at the
+	// switch, and every turn before it would be invisible to the model while
+	// staying visible to the user.
+	//
+	// Errored turns don't count. They are not history a harness would be missing.
+	ConversationHasNonHarnessAssistant(ctx context.Context, conversationID uuid.UUID) (bool, error)
 	// Capped at 2: the auto-title hook only distinguishes "exactly one
 	// assistant turn exists" from everything else, and it fires on EVERY
 	// assistant materialization — a full-context list per turn just to

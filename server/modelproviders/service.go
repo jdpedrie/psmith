@@ -146,7 +146,7 @@ func (s *Service) ListProviderTypes(ctx context.Context, _ *connect.Request[psmi
 		out = append(out, &psmithv1.ProviderType{
 			Name:         n,
 			DisplayName:  humanizeName(n),
-			Stateful:     knownStatefulTypes[n],
+			Stateful:     providers.IsStateful(n),
 			ConfigSchema: nil,
 		})
 	}

@@ -18,18 +18,19 @@ struct ConversationModelPicker: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if !model.availableModels.isEmpty {
-                    sectionLabel("\(model.availableModels.count) models across \(providerCount) provider\(providerCount == 1 ? "" : "s")")
+                if !model.selectableModels.isEmpty {
+                    sectionLabel("\(model.selectableModels.count) models across \(providerCount) provider\(providerCount == 1 ? "" : "s")")
                         .padding(.horizontal, 4)
                 }
                 ModelPickerList(
-                    models: model.availableModels,
+                    models: model.selectableModels,
                     providerLabels: model.providerLabels,
                     providerTypes: model.providerTypes,
                     providerPresetIDs: model.providerPresetIDs,
                     selectedProviderID: model.selectedProviderID,
                     selectedModelID: model.selectedModelID,
                     requiredCapabilities: model.activeProfileRequiredCapabilities,
+                    notice: model.harnessNotice,
                     onSelect: { providerID, modelID in
                         Task {
                             await model.selectModel(providerID: providerID, modelID: modelID)
@@ -47,7 +48,7 @@ struct ConversationModelPicker: View {
     }
 
     private var providerCount: Int {
-        Set(model.availableModels.map(\.providerID)).count
+        Set(model.selectableModels.map(\.providerID)).count
     }
 
     @ViewBuilder

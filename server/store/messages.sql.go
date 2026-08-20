@@ -30,6 +30,56 @@ func (q *Queries) ClearMessageEmbedding(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const conversationHarnessProvider = `-- name: ConversationHarnessProvider :one
+SELECT m.provider_id
+FROM messages m
+INNER JOIN contexts c ON c.id = m.context_id
+WHERE c.conversation_id = $1
+  AND m.harness_handle IS NOT NULL
+ORDER BY m.created_at DESC
+LIMIT 1
+`
+
+// ConversationHarnessProvider returns the provider that owns this
+// conversation's harness session, or NULL if it has never had one.
+//
+// Conversation-scoped rather than branch-scoped on purpose. A handle is
+// branch-scoped because forking is per-branch, but WHICH harness a
+// conversation belongs to is a property of the whole thing: there is no
+// coherent conversation where one branch is Codex and another is Claude Code.
+func (q *Queries) ConversationHarnessProvider(ctx context.Context, conversationID uuid.UUID) (*uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, conversationHarnessProvider, conversationID)
+	var provider_id *uuid.UUID
+	err := row.Scan(&provider_id)
+	return provider_id, err
+}
+
+const conversationHasNonHarnessAssistant = `-- name: ConversationHasNonHarnessAssistant :one
+SELECT EXISTS (
+    SELECT 1
+    FROM messages m
+    INNER JOIN contexts c ON c.id = m.context_id
+    WHERE c.conversation_id = $1
+      AND m.role = 'assistant'
+      AND m.harness_handle IS NULL
+      AND m.error_payload IS NULL
+)
+`
+
+// ConversationHasNonHarnessAssistant reports whether this conversation holds
+// any successful assistant turn that did NOT come from a harness. If it does,
+// a harness cannot take it over: the harness's transcript would begin at the
+// switch, and every turn before it would be invisible to the model while
+// staying visible to the user.
+//
+// Errored turns don't count. They are not history a harness would be missing.
+func (q *Queries) ConversationHasNonHarnessAssistant(ctx context.Context, conversationID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, conversationHasNonHarnessAssistant, conversationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countAssistantMessagesCapped = `-- name: CountAssistantMessagesCapped :one
 SELECT COUNT(*) FROM (
     SELECT 1 FROM messages

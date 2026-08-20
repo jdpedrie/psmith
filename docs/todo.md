@@ -56,8 +56,8 @@ Full findings and reasoning in [server-assessment.md](server-assessment.md). Ord
 ### Conversations / SendMessage
 
 - **Stateful provider sends** — shipped. `SendMessage` branches on `StatefulProvider`, resolves the branch's handle by walking to the nearest ancestor carrying one (`NearestHarnessHandle`), opens a session when there is none, and sends one message via `history.Params.LatestOnly`. Handles land on `messages.harness_handle` at materialization, which is what makes forking work. Open follow-ups:
-  - **No client affordances yet.** A harness conversation cannot change provider, its system prompt is frozen after the first turn, and attachments are refused. The server enforces all three; nothing in the Mac, iOS or web UI says so before the user hits the error.
-  - **Attachments to a harness.** Refused outright today. Both CLIs can read a file given a path, so the shape would be: materialize the blob to a temp file and reference it in the message. Needs a lifetime story for the temp file and interacts with the read-only sandbox pin.
+  - ~~No client affordances yet.~~ Shipped. `Conversation.harness` carries the binding on the detail reads; `ConversationViewModel` derives the affordances once for Mac and iOS, `harnessVM` does the same for web. Attach controls disappear, the model picker filters to the bound provider with a notice, and a card in conversation settings explains all three constraints together.
+  - **Attachments to a harness.** Refused outright today, with the control hidden and the paste path guarded. Both CLIs can read a file given a path, so the shape would be: materialize the blob to a temp file and reference it in the message. Needs a lifetime story for the temp file and interacts with the read-only sandbox pin.
   - **Editing an assistant turn drifts.** "Save and resend" on an edited assistant forks from a handle naming the state that contains the *original* text. Psmith's history and the harness's disagree from that point. No fix short of a harness that accepts a transcript.
   - **A `pi` driver.** `pi --fork` is native and records `parentSession`, so it fits the same contract. Not started.
 

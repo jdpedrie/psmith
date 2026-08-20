@@ -3,11 +3,13 @@ package conversations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -137,6 +139,45 @@ func conversationToProtoWithActivity(c store.Conversation, activeContextID strin
 		UpdatedAt:       timestamppb.New(c.UpdatedAt),
 		LastActivityAt:  timestamppb.New(lastActivityAt),
 	}, nil
+}
+
+// attachHarnessBinding stamps the conversation's commitment to a stateful
+// provider, if it has one.
+//
+// A service method rather than part of the converter because it needs a query,
+// and deliberately not called from the list path: one query per row to answer
+// a question the sidebar never asks. Same shape as attachStreamingComponents
+// above it, and the same best-effort handling — losing the binding costs the
+// client its affordances, not its ability to open the conversation.
+func (s *Service) attachHarnessBinding(ctx context.Context, conv store.Conversation, out *psmithv1.Conversation) {
+	if out == nil {
+		return
+	}
+	boundTo, err := s.queries.ConversationHarnessProvider(ctx, conv.ID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.Warn("harness binding: lookup failed", "err", err, "conversation_id", conv.ID)
+		}
+		return
+	}
+	if boundTo == nil {
+		return
+	}
+	row, err := s.queries.GetUserModelProvider(ctx, *boundTo)
+	if err != nil {
+		s.logger.Warn("harness binding: provider lookup failed", "err", err, "provider_id", *boundTo)
+		return
+	}
+	out.Harness = &psmithv1.HarnessBinding{
+		ProviderId:    row.ID.String(),
+		ProviderLabel: row.Label,
+		DriverType:    row.Type,
+		// Both are properties of every harness we ship rather than of this
+		// binding. They are fields anyway so a future driver that grows file
+		// support can say so without a client release.
+		SystemPromptFrozen: true,
+		AcceptsAttachments: false,
+	}
 }
 
 // attachStreamingComponents resolves the conversation's plugin pipeline

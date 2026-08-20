@@ -848,3 +848,43 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 	font-weight: 600;
 	cursor: pointer;
 }
+
+/* --- harness binding -------------------------------------------------------
+   A conversation running on a stateful harness (Claude Code, Codex) is fixed
+   to that provider, keeps the system prompt it opened with, and takes no
+   attachments. Styled as information, not as a warning: nothing is broken and
+   there is nothing to fix, so it borrows the accent at low opacity rather than
+   the error red the user learns to scan for. */
+
+.harness-notice {
+	margin: 0 0 12px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--accent-soft);
+	color: var(--text-dim);
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.harness-card {
+	margin: 14px 0 18px;
+	padding: 14px 16px;
+	border: 1px solid var(--border);
+	border-left: 3px solid var(--accent);
+	border-radius: 10px;
+	background: var(--accent-soft);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.harness-card-head {
+	font-weight: 600;
+	color: var(--accent);
+	margin-bottom: 6px;
+}
+
+.harness-card p { margin: 0 0 8px; color: var(--text-dim); }
+.harness-card p:last-child { margin-bottom: 0; }
+.harness-card ul { margin: 0 0 8px; padding-left: 18px; color: var(--text-dim); }
+.harness-card li { margin-bottom: 4px; }
+.harness-card strong { color: var(--text); font-weight: 600; }

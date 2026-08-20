@@ -57,13 +57,16 @@ type pickerData struct {
 	Groups  []providerGroupVM
 	Total   int
 	Current pickerModelVM // the currently-selected model (for the chip)
+	// Why the list is shorter than the account's full set. Rendered above the
+	// groups so a missing provider reads as a rule rather than a bug.
+	Notice string
 }
 
 // modelPicker builds the grouped, metadata-rich model list for a conversation,
 // marking the selected model and disabling any that lack a capability in
 // required. Pass a zero capsVM when only the current chip is needed (the
 // conversation page), to skip pipeline resolution.
-func (h *Handler) modelPicker(ctx context.Context, convID, selected string, required capsVM) pickerData {
+func (h *Handler) modelPicker(ctx context.Context, convID, selected string, required capsVM, harness *harnessVM) pickerData {
 	data := pickerData{ConvID: convID}
 	if h.models == nil {
 		return data
@@ -79,6 +82,12 @@ func (h *Handler) modelPicker(ctx context.Context, convID, selected string, requ
 	for _, e := range resp.Msg.GetEntries() {
 		prov, m := e.GetProvider(), e.GetModel()
 		pid := prov.GetId()
+		// A bound conversation can change model but not provider. Filtering
+		// rather than disabling: a whole provider's worth of dead rows is
+		// noise, where one absent section plus the notice reads as a rule.
+		if harness != nil && pid != harness.ProviderID {
+			continue
+		}
 		g, ok := byProvider[pid]
 		if !ok {
 			label := prov.GetLabel()
@@ -104,6 +113,10 @@ func (h *Handler) modelPicker(ctx context.Context, convID, selected string, requ
 		g := byProvider[pid]
 		sort.Slice(g.Models, func(i, j int) bool { return g.Models[i].DisplayName < g.Models[j].DisplayName })
 		data.Groups = append(data.Groups, *g)
+	}
+
+	if harness != nil {
+		data.Notice = harness.ProviderLabel + " holds this conversation's transcript, so it stays on this provider."
 	}
 
 	// No stored selection yet: default to the first model so the chip isn't blank.
@@ -228,8 +241,9 @@ func (h *Handler) handleModelPicker(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "conversation not found", http.StatusNotFound)
 		return
 	}
-	selected := currentSettingsModel(getResp.Msg.GetConversation())
-	data := h.modelPicker(r.Context(), convID, selected, h.requiredCaps(r.Context(), convID))
+	conv := getResp.Msg.GetConversation()
+	selected := currentSettingsModel(conv)
+	data := h.modelPicker(r.Context(), convID, selected, h.requiredCaps(r.Context(), convID), harnessVMFrom(conv.GetHarness()))
 
 	if r.Header.Get("HX-Request") != "" {
 		h.render(w, r, http.StatusOK, modelPickerModal(data))
@@ -250,7 +264,9 @@ func (h *Handler) handleSetModel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Header.Get("HX-Request") != "" {
-		data := h.modelPicker(r.Context(), convID, value, capsVM{})
+		// Chip-only re-render: no harness filter needed, since it only reads
+		// data.Current, which the caller just chose.
+		data := h.modelPicker(r.Context(), convID, value, capsVM{}, nil)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		// The chip swaps in place; the empty #modal OOB swap closes the overlay.
 		_, _ = w.Write([]byte(renderComp(r.Context(), modelChip(data.ConvID, data.Current))))
