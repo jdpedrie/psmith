@@ -66,6 +66,19 @@ One turn per thread at a time. A second concurrent `Send` is refused rather
 than interleaving two turns' deltas into one channel, which the caller could
 not untangle.
 
+## Requests, not just notifications
+
+The protocol sends the client *requests* as well as notifications, and they are
+distinguished only by carrying an `id` alongside the `method`. Approvals for
+command execution, file changes, tool calls and MCP elicitations all arrive
+that way, and the server blocks the turn until it hears back.
+
+Treating one as a notification and dropping it is a hang, not a missed message:
+`turn/completed` never arrives and the caller's channel never closes. That cost
+a live turn ten minutes before the readLoop learned the difference. Every
+server request is now declined, and there is a test with a fake server that
+only completes its turn after being answered.
+
 ## Failure behaviour
 
 A dead app-server unblocks every in-flight call rather than hanging. A

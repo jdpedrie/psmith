@@ -69,6 +69,8 @@ func (c *Client) StartThread(ctx context.Context, opts ThreadOptions) (*Thread, 
 	raw, err := c.call(ctx, "thread/start", threadStartParams{
 		Model:            opts.Model,
 		BaseInstructions: opts.BaseInstructions,
+		Sandbox:          opts.Sandbox,
+		ApprovalPolicy:   opts.ApprovalPolicy,
 	})
 	if err != nil {
 		return nil, err
@@ -89,6 +91,8 @@ func (c *Client) ResumeThread(ctx context.Context, threadID string, opts ThreadO
 		ThreadID:         threadID,
 		Model:            opts.Model,
 		BaseInstructions: opts.BaseInstructions,
+		Sandbox:          opts.Sandbox,
+		ApprovalPolicy:   opts.ApprovalPolicy,
 	})
 	if err != nil {
 		return nil, err
@@ -112,6 +116,8 @@ func (c *Client) ForkThread(ctx context.Context, threadID, lastTurnID string, op
 		LastTurnID:       lastTurnID,
 		Model:            opts.Model,
 		BaseInstructions: opts.BaseInstructions,
+		Sandbox:          opts.Sandbox,
+		ApprovalPolicy:   opts.ApprovalPolicy,
 	})
 	if err != nil {
 		return nil, err

@@ -120,16 +120,52 @@ func (c *Client) readLoop(r io.Reader) {
 		if err := json.Unmarshal(line, &msg); err != nil {
 			continue // not our framing; ignore rather than die
 		}
-		if msg.ID != nil && msg.Method == "" {
+		switch {
+		case msg.ID != nil && msg.Method == "":
+			// A response to something we asked.
 			c.deliverResult(*msg.ID, msg)
-			continue
-		}
-		if msg.Method != "" {
+		case msg.ID != nil && msg.Method != "":
+			// A REQUEST from the server, which is waiting on our answer.
+			// Distinguished from a notification only by carrying an id, and
+			// getting that wrong is what made turns hang: an unanswered
+			// approval request stalls the turn forever, so turn/completed
+			// never arrives and the caller's channel never closes.
+			c.answerServerRequest(*msg.ID, msg.Method)
+		case msg.Method != "":
 			c.deliverNotification(msg)
 		}
 	}
 	c.exitErr = c.cmd.Wait()
 	c.failPending()
+}
+
+// answerServerRequest declines anything the server asks us to decide.
+//
+// Codex asks the client to approve command execution, file changes, tool calls
+// and MCP elicitations. A chat harness has no user sitting behind it to ask,
+// and no business approving a command in the first place, so every request is
+// declined.
+//
+// Answering at all is the part that matters. The server blocks the turn until
+// it hears back, so silence is a hang rather than a refusal. The driver also
+// pins the thread to read-only with approvals off, which should mean these
+// never arrive; this is what makes a hang impossible if that ever fails to
+// take effect.
+func (c *Client) answerServerRequest(id int64, method string) {
+	// "denied" is the ReviewDecision every approval-shaped request accepts.
+	// Requests with other response shapes ignore the field and see an object
+	// they can parse, which still unblocks them.
+	resp := map[string]any{
+		"id":     id,
+		"result": map[string]any{"decision": "denied"},
+	}
+	c.writeMu.Lock()
+	err := c.enc.Encode(resp)
+	c.writeMu.Unlock()
+	if err != nil {
+		return
+	}
+	_ = method
 }
 
 func (c *Client) deliverResult(id int64, msg response) {

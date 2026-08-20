@@ -275,3 +275,73 @@ func TestNew_ReportsAMissingBinary(t *testing.T) {
 }
 
 var _ = json.Marshal
+
+// approvalServer starts a turn, then asks the client to approve something and
+// waits: it only completes the turn AFTER receiving a response. This is the
+// shape that hung a live turn for ten minutes, because a server request
+// carries both an id and a method and was being dropped as an unknown
+// notification.
+const approvalServer = `package main
+
+import ("bufio";"encoding/json";"fmt";"os")
+
+func main() {
+	sc := bufio.NewScanner(os.Stdin)
+	sc.Buffer(make([]byte, 0, 1<<20), 1<<24)
+	awaiting := false
+	for sc.Scan() {
+		var m struct {
+			ID     *int64          ` + "`json:\"id\"`" + `
+			Method string          ` + "`json:\"method\"`" + `
+			Result json.RawMessage ` + "`json:\"result\"`" + `
+		}
+		if json.Unmarshal(sc.Bytes(), &m) != nil { continue }
+		if awaiting && m.ID != nil && m.Method == "" {
+			// The client answered our approval request; finish the turn.
+			awaiting = false
+			fmt.Println(` + "`{\"method\":\"item/agentMessage/delta\",\"params\":{\"delta\":\"done\",\"threadId\":\"t-new\",\"turnId\":\"turn-1\"}}`" + `)
+			fmt.Println(` + "`{\"method\":\"turn/completed\",\"params\":{\"threadId\":\"t-new\",\"turn\":{\"id\":\"turn-1\"}}}`" + `)
+			continue
+		}
+		switch m.Method {
+		case "initialize":
+			fmt.Printf(` + "`{\"id\":%d,\"result\":{}}` + \"\\n\"" + `, *m.ID)
+		case "thread/start":
+			fmt.Printf(` + "`{\"id\":%d,\"result\":{\"thread\":{\"id\":\"t-new\"}}}` + \"\\n\"" + `, *m.ID)
+		case "turn/start":
+			fmt.Printf(` + "`{\"id\":%d,\"result\":{\"turn\":{\"id\":\"turn-1\"}}}` + \"\\n\"" + `, *m.ID)
+			// A REQUEST, not a notification: it has an id and expects a reply.
+			awaiting = true
+			fmt.Println(` + "`{\"id\":9001,\"method\":\"item/commandExecution/requestApproval\",\"params\":{\"threadId\":\"t-new\"}}`" + `)
+		default:
+			if m.ID != nil { fmt.Printf(` + "`{\"id\":%d,\"result\":{}}` + \"\\n\"" + `, *m.ID) }
+		}
+	}
+}
+`
+
+// A server request must be answered or the turn never completes and the
+// caller's channel never closes. This hung a live turn until the readLoop
+// learned to tell a request (id AND method) from a notification (method only).
+func TestServerRequest_IsAnsweredSoTheTurnCanFinish(t *testing.T) {
+	c := newFake(t, approvalServer)
+	th, err := c.StartThread(context.Background(), ThreadOptions{})
+	if err != nil {
+		t.Fatalf("StartThread: %v", err)
+	}
+	ch, err := th.Send(context.Background(), "do something", ThreadOptions{})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	// drain fails the test on timeout, which is exactly the hang this guards.
+	var sawDone bool
+	for _, ev := range drain(t, ch) {
+		if ev.Kind == EventDone {
+			sawDone = true
+		}
+	}
+	if !sawDone {
+		t.Error("turn never completed; the approval request was not answered")
+	}
+}

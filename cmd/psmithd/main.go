@@ -46,6 +46,7 @@ import (
 	// Driver packages self-register their provider type in init().
 	_ "github.com/jdpedrie/psmith/server/providers/anthropic"
 	_ "github.com/jdpedrie/psmith/server/providers/claudecode"
+	_ "github.com/jdpedrie/psmith/server/providers/codex"
 	_ "github.com/jdpedrie/psmith/server/providers/google"
 	_ "github.com/jdpedrie/psmith/server/providers/openai"
 

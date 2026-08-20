@@ -43,6 +43,14 @@ type initializeParams struct {
 type ThreadOptions struct {
 	// Model is the model slug. Empty leaves Codex's configured default.
 	Model string
+	// Sandbox and ApprovalPolicy pin what the thread may do.
+	//
+	// Not left to the user's config. Their Codex settings are tuned for an
+	// agent that edits files, so a chat turn could stall on an approval
+	// prompt nobody is there to answer. Empty sends nothing and defers to
+	// their config, which callers should avoid.
+	Sandbox        string
+	ApprovalPolicy string
 	// BaseInstructions replaces the system prompt.
 	//
 	// Codex accepts this on resume and fork as well as start, so unlike
@@ -53,18 +61,24 @@ type ThreadOptions struct {
 }
 
 type threadStartParams struct {
+	Sandbox          string `json:"sandbox,omitempty"`
+	ApprovalPolicy   string `json:"approvalPolicy,omitempty"`
 	Model            string `json:"model,omitempty"`
 	BaseInstructions string `json:"baseInstructions,omitempty"`
 }
 
 type threadResumeParams struct {
+	Sandbox          string `json:"sandbox,omitempty"`
+	ApprovalPolicy   string `json:"approvalPolicy,omitempty"`
 	ThreadID         string `json:"threadId"`
 	Model            string `json:"model,omitempty"`
 	BaseInstructions string `json:"baseInstructions,omitempty"`
 }
 
 type threadForkParams struct {
-	ThreadID string `json:"threadId"`
+	Sandbox        string `json:"sandbox,omitempty"`
+	ApprovalPolicy string `json:"approvalPolicy,omitempty"`
+	ThreadID       string `json:"threadId"`
 	// LastTurnID forks from a specific turn rather than the tip. This is the
 	// whole reason this package exists: editing message five means forking at
 	// turn five, with nothing replayed.
