@@ -882,6 +882,34 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 		OfInputItemList: inputs,
 	}
 
+	// Responses uses flat function definitions, unlike Chat Completions'
+	// nested function object. Preserve the pipeline's tool catalog here too.
+	for _, tool := range req.Tools {
+		var schema map[string]any
+		if len(tool.InputSchema) > 0 {
+			if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
+				return responses.ResponseNewParams{}, fmt.Errorf("tool %q input schema: %w", tool.Name, err)
+			}
+			if schema == nil {
+				return responses.ResponseNewParams{}, fmt.Errorf("tool %q input schema must be an object", tool.Name)
+			}
+		} else {
+			schema = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		fn := responses.FunctionToolParam{
+			Name:       tool.Name,
+			Parameters: schema,
+			// MCP schemas can contain optional fields and do not promise
+			// OpenAI's strict schema subset. Opt out explicitly so their
+			// original required/optional semantics survive translation.
+			Strict: param.NewOpt(false),
+		}
+		if tool.Description != "" {
+			fn.Description = param.NewOpt(tool.Description)
+		}
+		params.Tools = append(params.Tools, responses.ToolUnionParam{OfFunction: &fn})
+	}
+
 	// CallSettings. Reasoning models reject explicit temperature /
 	// top_p (see locksSampling) — omit them on those models.
 	if !locksSampling(req.ModelID) {
