@@ -274,7 +274,7 @@ func TestQuirks_OpenRouter_AppIdentityHeaders(t *testing.T) {
 }
 
 // TestQuirks_Qwen_EnableThinking — Qwen preset's RequestBodyFields hook
-// emits `enable_thinking: true` when the universal Thinking.Enabled
+// emits `enable_thinking: true` when the universal thinking effort
 // signal is set, omits it otherwise.
 func TestQuirks_Qwen_EnableThinking(t *testing.T) {
 	cases := []struct {
@@ -289,17 +289,17 @@ func TestQuirks_Qwen_EnableThinking(t *testing.T) {
 			wantPresent: false,
 		},
 		{
-			name: "thinking enabled → enable_thinking=true",
+			name: "any effort level → enable_thinking=true",
 			settings: providers.CallSettings{
-				Thinking: &providers.ThinkingSettings{Enabled: ptrBool(true)},
+				Thinking: &providers.ThinkingSettings{Effort: providers.ThinkingEffortMedium},
 			},
 			wantPresent: true,
 			wantValue:   true,
 		},
 		{
-			name: "thinking disabled → enable_thinking=false",
+			name: "effort off → enable_thinking=false",
 			settings: providers.CallSettings{
-				Thinking: &providers.ThinkingSettings{Enabled: ptrBool(false)},
+				Thinking: &providers.ThinkingSettings{Effort: providers.ThinkingEffortOff},
 			},
 			wantPresent: true,
 			wantValue:   false,

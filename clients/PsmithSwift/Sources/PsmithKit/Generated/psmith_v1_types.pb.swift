@@ -67,6 +67,60 @@ public nonisolated enum Psmith_V1_MetadataSource: SwiftProtobuf.Enum, Swift.Case
 
 }
 
+/// ThinkingEffort is the reasoning depth a user can ask for. The set is
+/// the union of what the providers accept (OpenAI and xAI: low to xhigh;
+/// Anthropic's adaptive models: low to xhigh) plus OFF, which each driver
+/// maps to the closest thing its API has.
+public nonisolated enum Psmith_V1_ThinkingEffort: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case off // = 1
+  case low // = 2
+  case medium // = 3
+  case high // = 4
+  case xhigh // = 5
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .off
+    case 2: self = .low
+    case 3: self = .medium
+    case 4: self = .high
+    case 5: self = .xhigh
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .off: return 1
+    case .low: return 2
+    case .medium: return 3
+    case .high: return 4
+    case .xhigh: return 5
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Psmith_V1_ThinkingEffort] = [
+    .unspecified,
+    .off,
+    .low,
+    .medium,
+    .high,
+    .xhigh,
+  ]
+
+}
+
 /// CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
 /// prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
 /// tier costs more to write but persists across longer idle gaps.
@@ -1405,41 +1459,30 @@ public nonisolated struct Psmith_V1_CallSettings: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-/// ThinkingSettings carries the cross-driver "show your work" knob. Each
-/// driver translates it differently:
-///   Anthropic & Google → literal budget_tokens.
-///   OpenAI Responses    → budget_tokens derives reasoning_effort
-///                         (<2k → low, 2-8k → medium, >8k → high).
-///   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+/// ThinkingSettings carries the cross-driver reasoning knob as an effort
+/// level. Token budgets are never user-facing: a driver whose API takes a
+/// budget derives one from the level (providers.BudgetTokensForEffort).
+///   Anthropic, adaptive generation → output_config.effort verbatim.
+///   Anthropic, legacy generation   → budget_tokens from the table, added
+///                                    on top of max_tokens so the answer
+///                                    keeps its full allowance.
+///   Google                         → thinkingBudget from the table; OFF
+///                                    hides thoughts (Gemini 2.5+ cannot
+///                                    stop thinking).
+///   OpenAI, both surfaces          → reasoning effort verbatim; OFF sends
+///                                    low on models that cannot stop
+///                                    reasoning and is omitted elsewhere.
 public nonisolated struct Psmith_V1_ThinkingSettings: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var enabled: Bool {
-    get {_enabled ?? false}
-    set {_enabled = newValue}
-  }
-  /// Returns true if `enabled` has been explicitly set.
-  public var hasEnabled: Bool {self._enabled != nil}
-  /// Clears the value of `enabled`. Subsequent reads from it will return its default value.
-  public mutating func clearEnabled() {self._enabled = nil}
-
-  public var budgetTokens: Int32 {
-    get {_budgetTokens ?? 0}
-    set {_budgetTokens = newValue}
-  }
-  /// Returns true if `budgetTokens` has been explicitly set.
-  public var hasBudgetTokens: Bool {self._budgetTokens != nil}
-  /// Clears the value of `budgetTokens`. Subsequent reads from it will return its default value.
-  public mutating func clearBudgetTokens() {self._budgetTokens = nil}
+  /// UNSPECIFIED inherits from the layer below
+  public var effort: Psmith_V1_ThinkingEffort = .unspecified
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _enabled: Bool? = nil
-  fileprivate var _budgetTokens: Int32? = nil
 }
 
 /// AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
@@ -3104,6 +3147,10 @@ nonisolated extension Psmith_V1_MetadataSource: SwiftProtobuf._ProtoNameProvidin
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0METADATA_SOURCE_UNSPECIFIED\0\u{1}METADATA_SOURCE_CATALOG\0\u{1}METADATA_SOURCE_DRIVER\0\u{1}METADATA_SOURCE_MANUAL\0")
 }
 
+nonisolated extension Psmith_V1_ThinkingEffort: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0THINKING_EFFORT_UNSPECIFIED\0\u{1}THINKING_EFFORT_OFF\0\u{1}THINKING_EFFORT_LOW\0\u{1}THINKING_EFFORT_MEDIUM\0\u{1}THINKING_EFFORT_HIGH\0\u{1}THINKING_EFFORT_XHIGH\0")
+}
+
 nonisolated extension Psmith_V1_CacheTTL: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CACHE_TTL_UNSPECIFIED\0\u{1}CACHE_TTL_5M\0\u{1}CACHE_TTL_1H\0")
 }
@@ -4128,7 +4175,7 @@ nonisolated extension Psmith_V1_CallSettings: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Psmith_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ThinkingSettings"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}enabled\0\u{3}budget_tokens\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{3}effort\0\u{b}enabled\0\u{b}budget_tokens\0\u{c}\u{1}\u{1}\u{c}\u{2}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4136,30 +4183,21 @@ nonisolated extension Psmith_V1_ThinkingSettings: SwiftProtobuf.Message, SwiftPr
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self._enabled) }()
-      case 2: try { try decoder.decodeSingularInt32Field(value: &self._budgetTokens) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.effort) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._enabled {
-      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
-    } }()
-    try { if let v = self._budgetTokens {
-      try visitor.visitSingularInt32Field(value: v, fieldNumber: 2)
-    } }()
+    if self.effort != .unspecified {
+      try visitor.visitSingularEnumField(value: self.effort, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Psmith_V1_ThinkingSettings, rhs: Psmith_V1_ThinkingSettings) -> Bool {
-    if lhs._enabled != rhs._enabled {return false}
-    if lhs._budgetTokens != rhs._budgetTokens {return false}
+    if lhs.effort != rhs.effort {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -437,9 +437,14 @@ func buildChatCompletionParams(req providers.SendRequest) (openai.ChatCompletion
 			OfStringArray: append([]string(nil), req.Settings.StopSequences...),
 		}
 	}
-	// OpenAI Chat Completions doesn't expose a top_k knob — drop. Same for
-	// the universal `thinking` field; reasoning effort is a Responses-API
-	// concept and Chat Completions has no equivalent on this surface.
+	// OpenAI Chat Completions doesn't expose a top_k knob — drop.
+	// Reasoning effort rides on this surface too: OpenAI's reasoning
+	// models accept it here, and so does every third-party endpoint
+	// routed this way that reasons (xAI's Grok 4 family among them,
+	// where the default is high and this is the only way down).
+	if effort, ok := reasoningEffortParam(req.Settings.ThinkingEffort(), req.ModelID); ok {
+		params.ReasoningEffort = effort
+	}
 
 	// Always set the prompt cache key to the conversation_id so successive
 	// turns route to the same cache shard. Empty conv id (compression turns,
@@ -891,29 +896,8 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 	if req.Settings.MaxOutputTokens != nil {
 		params.MaxOutputTokens = param.NewOpt(int64(*req.Settings.MaxOutputTokens))
 	}
-	// Thinking: derive Reasoning.Effort from budget_tokens.
-	//   <2k → low; 2k-8k → medium; >8k → high. Falls back to medium when
-	//   thinking is enabled but no budget is specified.
-	//
-	// An EXPLICIT disable can't switch reasoning off on the o-series /
-	// gpt-5 family — the API has no off position — but omitting the
-	// param means the model's default (medium) effort, whose hidden
-	// tokens spend from the same MaxOutputTokens budget as the visible
-	// text. Low effort is the closest honest translation of "don't
-	// think" (the compression path depends on it). Gated on
-	// locksSampling because non-reasoning models reject the reasoning
-	// param outright.
-	if t := req.Settings.Thinking; t != nil && t.Enabled != nil {
-		switch {
-		case *t.Enabled:
-			params.Reasoning = shared.ReasoningParam{
-				Effort: derivedReasoningEffort(t.BudgetTokens),
-			}
-		case locksSampling(req.ModelID):
-			params.Reasoning = shared.ReasoningParam{
-				Effort: shared.ReasoningEffortLow,
-			}
-		}
+	if effort, ok := reasoningEffortParam(req.Settings.ThinkingEffort(), req.ModelID); ok {
+		params.Reasoning = shared.ReasoningParam{Effort: effort}
 	}
 	// Always set the prompt cache key to the conversation_id so successive
 	// turns route to the same cache shard.
@@ -936,23 +920,31 @@ func buildResponseParams(req providers.SendRequest) (responses.ResponseNewParams
 	return params, nil
 }
 
-// derivedReasoningEffort maps a budget-tokens hint to the OpenAI reasoning
-// effort enum. The thresholds mirror the plan's budget→effort mapping
-// (<2k → low, 2-8k → medium, >8k → high). When the budget is unset we
-// default to medium — matches the prior "thinking enabled, effort medium"
-// behavior.
-func derivedReasoningEffort(budget *int) shared.ReasoningEffort {
-	if budget == nil {
-		return shared.ReasoningEffortMedium
+// reasoningEffortParam translates the cross-provider effort into the value
+// both OpenAI surfaces take, and reports whether to send one at all. Levels
+// pass through verbatim: the vocabulary is OpenAI's own, and a model that
+// does not support a level (xhigh outside the newest families) says so in
+// a 400 rather than silently running at another.
+//
+// OFF has no wire position on the o-series / gpt-5 family, and omitting
+// the param means the model's default (medium) effort, whose hidden tokens
+// spend from the same MaxOutputTokens budget as the visible text. Low is
+// the closest honest translation of "don't think" (the compression path
+// depends on it). Gated on locksSampling because non-reasoning models
+// reject the reasoning param outright; a third-party endpoint's model is
+// unknown to that table, so OFF there is omitted and the model keeps its
+// default.
+func reasoningEffortParam(effort providers.ThinkingEffort, modelID string) (shared.ReasoningEffort, bool) {
+	switch effort {
+	case providers.ThinkingEffortUnset:
+		return "", false
+	case providers.ThinkingEffortOff:
+		if locksSampling(modelID) {
+			return shared.ReasoningEffortLow, true
+		}
+		return "", false
 	}
-	switch {
-	case *budget < 2000:
-		return shared.ReasoningEffortLow
-	case *budget <= 8000:
-		return shared.ReasoningEffortMedium
-	default:
-		return shared.ReasoningEffortHigh
-	}
+	return shared.ReasoningEffort(effort), true
 }
 
 // responsesServiceTier maps the Psmith enum to the Responses API tier enum.

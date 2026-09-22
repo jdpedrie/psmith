@@ -74,15 +74,14 @@ var probes = []probe{
 	{Name: "top_k_forty", Mutate: func(s *psmithv1.CallSettings) { s.TopK = ptrInt(40) }},
 	{Name: "max_output_tokens_4", Mutate: func(s *psmithv1.CallSettings) { s.MaxOutputTokens = ptrInt(4) }},
 	{Name: "stop_sequences", Mutate: func(s *psmithv1.CallSettings) { s.StopSequences = []string{"END"} }},
-	// Thinking-capable probes: enabled at default budget; enabled
+	// Thinking-capable probes: low effort on its own; low effort
 	// alongside a non-1.0 temperature (Anthropic should reject this
-	// pair); enabled with a sub-floor budget (Anthropic has a 1024-
-	// token minimum on extended thinking — surfaces the exact error
-	// message verbatim).
+	// pair); and the top level, which only the newest families accept
+	// and the rest reject with an error naming the level.
 	{
-		Name: "thinking_enabled",
+		Name: "thinking_low",
 		Mutate: func(s *psmithv1.CallSettings) {
-			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
+			s.Thinking = &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_LOW}
 			s.MaxOutputTokens = ptrInt(2048)
 		},
 		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },
@@ -90,16 +89,16 @@ var probes = []probe{
 	{
 		Name: "thinking_with_temperature_half",
 		Mutate: func(s *psmithv1.CallSettings) {
-			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(1024)}
+			s.Thinking = &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_LOW}
 			s.Temperature = ptrFloat(0.5)
 			s.MaxOutputTokens = ptrInt(2048)
 		},
 		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },
 	},
 	{
-		Name: "thinking_below_min_budget",
+		Name: "thinking_xhigh",
 		Mutate: func(s *psmithv1.CallSettings) {
-			s.Thinking = &psmithv1.ThinkingSettings{Enabled: ptrBool(true), BudgetTokens: ptrInt(100)}
+			s.Thinking = &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH}
 			s.MaxOutputTokens = ptrInt(2048)
 		},
 		Skip: func(m *psmithv1.UserModel) bool { return !hasThinking(m) },

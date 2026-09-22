@@ -1352,8 +1352,7 @@ templ convCallTab(vm convSettingsVM) {
 		<section class="sgroup">
 			<header class="sgroup-head">Thinking</header>
 			<div class="sgroup-card">
-				@triField("Enabled", vm.ThinkingEnabled, "Let the model spend hidden reasoning tokens.")
-				@numField("Budget tokens", vm.ThinkingBudget, "256", "How many tokens the model may spend on hidden reasoning.")
+				@enumField("Effort", vm.ThinkingEffort, "How hard the model reasons before answering. Each provider maps the level onto its own knob; Off is honoured where the model can stop.")
 			</div>
 		</section>
 		<section class="sgroup">
@@ -1451,6 +1450,21 @@ templ textField(label string, f callFieldVM, desc string) {
 		<span class="field-desc">{ desc }</span>
 		<div class="field-control">
 			<input type="text" name={ f.Name } value={ f.Value } placeholder={ orPlaceholder(f.Inherited) } autocomplete="off"/>
+		</div>
+	</div>
+}
+
+templ enumField(label string, f enumFieldVM, desc string) {
+	<div class="field">
+		<div class="field-row"><span class="field-label">{ label }</span></div>
+		<span class="field-desc">{ desc }</span>
+		<div class="field-control tri">
+			<select name={ f.Name }>
+				<option value="" selected?={ f.Value == "" }>Inherit{ enumInheritLabel(f.Inherited) }</option>
+				for _, o := range f.Options {
+					<option value={ o.Value } selected?={ f.Value == o.Value }>{ o.Label }</option>
+				}
+			</select>
 		</div>
 	</div>
 }

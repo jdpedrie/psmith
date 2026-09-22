@@ -434,17 +434,18 @@ func TestResolve_CallSettings_ChainAcrossThreeLevels(t *testing.T) {
 func TestResolve_CallSettings_NestedThinkingMergesAcrossChain(t *testing.T) {
 	t.Parallel()
 
-	// Parent: thinking enabled with budget=2000. Child: thinking budget
-	// override only (no enabled flag). Resolved: enabled=true (parent),
-	// budget=8000 (child).
+	// Parent: low effort. Child: a thinking block with no effort set (an
+	// untouched form) plus an unrelated override. Resolved: the parent's
+	// level survives through the child's empty block.
 	parent := makeProfile("parent", nil)
 	parent = withCallSettingsBlob(t, parent, &psmithv1.CallSettings{
-		Thinking: &psmithv1.ThinkingSettings{Enabled: boolPtr(true), BudgetTokens: i32(2000)},
+		Thinking: &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_LOW},
 	})
 
 	child := makeProfile("child", &parent.ID)
 	child = withCallSettingsBlob(t, child, &psmithv1.CallSettings{
-		Thinking: &psmithv1.ThinkingSettings{BudgetTokens: i32(8000)},
+		Thinking: &psmithv1.ThinkingSettings{},
+		TopK:     i32(40),
 	})
 
 	got, err := Resolve(context.Background(), newLoader(parent, child), child)
@@ -455,10 +456,10 @@ func TestResolve_CallSettings_NestedThinkingMergesAcrossChain(t *testing.T) {
 	if cs == nil || cs.GetThinking() == nil {
 		t.Fatal("expected resolved thinking, got nil")
 	}
-	if !cs.GetThinking().GetEnabled() {
-		t.Error("thinking.enabled: should inherit true from parent")
+	if cs.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_LOW {
+		t.Errorf("thinking.effort: %v want LOW (inherited through the child's empty block)", cs.GetThinking().GetEffort())
 	}
-	if cs.GetThinking().GetBudgetTokens() != 8000 {
-		t.Errorf("thinking.budget_tokens: %v want 8000 (child)", cs.GetThinking().GetBudgetTokens())
+	if cs.GetTopK() != 40 {
+		t.Errorf("top_k: %v want 40 (child)", cs.GetTopK())
 	}
 }

@@ -628,7 +628,7 @@ func readBoundedError(resp *http.Response) string {
 // CallSettings translation:
 //   - common temperature/top_p/top_k/max_output_tokens/stop_sequences →
 //     generationConfig.{temperature, topP, topK, maxOutputTokens, stopSequences}.
-//   - Thinking.{Enabled, BudgetTokens} → generationConfig.thinkingConfig.
+//   - Thinking.Effort → generationConfig.thinkingConfig (budget from providers.BudgetTokensForEffort).
 //   - Google extras (safety, response_mime_type, response_schema, candidate_count) → corresponding fields.
 //
 // Unsupported fields are silently dropped — driver translation is intentionally
@@ -993,29 +993,27 @@ func generationConfigFromSettings(s providers.CallSettings) *generationConfig {
 		gc.StopSequences = append([]string(nil), s.StopSequences...)
 		any = true
 	}
-	if t := s.Thinking; t != nil {
+	if effort := s.ThinkingEffort(); effort != providers.ThinkingEffortUnset {
 		tc := &thinkingConfig{}
-		set := false
-		if t.Enabled != nil {
+		if effort.On() {
+			on := true
+			budget := providers.BudgetTokensForEffort(effort)
+			tc.IncludeThoughts = &on
+			tc.ThinkingBudget = &budget
+		} else {
 			// includeThoughts only controls whether thought summaries
-			// appear in the response — Enabled=false does NOT stop a
-			// Gemini 2.5+ model from thinking, and its thought tokens
-			// still count toward maxOutputTokens. thinkingBudget:0
-			// would stop it but is rejected per-model (2.5 Pro floors
-			// at 128), so callers that must not lose output to hidden
-			// thinking size MaxOutputTokens for it instead (see the
-			// compression budget in conversations.Compact).
-			tc.IncludeThoughts = t.Enabled
-			set = true
+			// appear in the response — OFF does NOT stop a Gemini 2.5+
+			// model from thinking, and its thought tokens still count
+			// toward maxOutputTokens. thinkingBudget:0 would stop it
+			// but is rejected per-model (2.5 Pro floors at 128), so
+			// callers that must not lose output to hidden thinking
+			// size MaxOutputTokens for it instead (see the compression
+			// budget in conversations.Compact).
+			off := false
+			tc.IncludeThoughts = &off
 		}
-		if t.BudgetTokens != nil {
-			tc.ThinkingBudget = t.BudgetTokens
-			set = true
-		}
-		if set {
-			gc.ThinkingConfig = tc
-			any = true
-		}
+		gc.ThinkingConfig = tc
+		any = true
 	}
 	if g := s.Google; g != nil {
 		if g.ResponseMimeType != nil && *g.ResponseMimeType != "" {

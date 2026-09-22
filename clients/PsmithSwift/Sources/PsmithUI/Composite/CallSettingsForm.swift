@@ -348,54 +348,36 @@ public struct CallSettingsForm: View {
                 .scaledFont(.caption2)
                 .foregroundStyle(.secondary)
             }
-            // Enabled toggle
+            // One control: the level. Token budgets are the server's
+            // business, derived per provider from the level.
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    fieldLabel("Enabled")
+                    fieldLabel("Effort")
                     Spacer()
-                    Picker("Enabled", selection: thinkingEnabledBinding) {
-                        Text(inheritPickerLabel(inheritedSettings?.thinking?.enabled) { $0 ? "On" : "Off" })
-                            .tag(Bool?.none)
-                        Text("On").tag(Bool?.some(true))
-                        Text("Off").tag(Bool?.some(false))
+                    Picker("Effort", selection: thinkingEffortBinding) {
+                        Text(inheritPickerLabel(inheritedSettings?.thinking?.effort) { $0.label })
+                            .tag(PsmithThinkingEffort?.none)
+                        ForEach(PsmithThinkingEffort.allCases, id: \.self) { level in
+                            Text(level.label).tag(PsmithThinkingEffort?.some(level))
+                        }
                     }
                     .adaptivePickerStyle()
                     .labelsHidden()
                     .fixedSize()
                 }
+                Text("How hard the model reasons before answering. Off is honoured where the model can stop; elsewhere it means the lowest level.")
+                    .scaledFont(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-
-            // Budget tokens
-            int32StepperRow(
-                title: "Budget tokens",
-                description: "How many tokens the model may spend on hidden reasoning.",
-                value: thinkingBudgetBinding,
-                inherited: inheritedSettings?.thinking?.budgetTokens,
-                step: 512,
-                lowerBound: 0,
-                upperBound: 64_000,
-                disabled: settings.thinking?.enabled == false
-            )
         }
     }
 
-    private var thinkingEnabledBinding: Binding<Bool?> {
+    private var thinkingEffortBinding: Binding<PsmithThinkingEffort?> {
         Binding(
-            get: { settings.thinking?.enabled },
+            get: { settings.thinking?.effort },
             set: { newValue in
                 var t = settings.thinking ?? PsmithThinkingSettings()
-                t.enabled = newValue
-                settings.thinking = t.isEmpty ? nil : t
-            }
-        )
-    }
-
-    private var thinkingBudgetBinding: Binding<Int32?> {
-        Binding(
-            get: { settings.thinking?.budgetTokens },
-            set: { newValue in
-                var t = settings.thinking ?? PsmithThinkingSettings()
-                t.budgetTokens = newValue
+                t.effort = newValue
                 settings.thinking = t.isEmpty ? nil : t
             }
         )

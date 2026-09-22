@@ -42,14 +42,14 @@ Plugin pipelines inherit too, with a twist. A child profile's pipeline is the pa
 
 ## Call settings and four-layer resolution
 
-A model call has settings: temperature, top-p, max tokens, thinking budget, and so on. These resolve through four layers, most specific wins:
+A model call has settings: temperature, top-p, max tokens, thinking effort, and so on. These resolve through four layers, most specific wins:
 
 1. **Conversation** — an override set on this conversation.
 2. **Profile** — the profile's settings (themselves resolved up the profile parent chain).
 3. **Model** — defaults attached to the enabled model snapshot.
 4. **Provider** — defaults on the provider instance.
 
-Each field resolves independently. A conversation can override temperature while inheriting max tokens from the profile and thinking budget from the model. The client shows the resolved value and labels its source (for example "Enabled (Inherited)") so the user can see where a setting comes from before deciding to override it. Some models lock a setting regardless of the layers: a model whose constraints fix temperature at 1.0 has that value forced and the others suppressed (see [providers.md](providers.md)).
+Each field resolves independently. A conversation can override temperature while inheriting max tokens from the profile and thinking effort from the model. The client shows the resolved value and labels its source (for example "Enabled (Inherited)") so the user can see where a setting comes from before deciding to override it. Some models lock a setting regardless of the layers: a model whose constraints fix temperature at 1.0 has that value forced and the others suppressed (see [providers.md](providers.md)).
 
 ## Compression and the context lifecycle
 

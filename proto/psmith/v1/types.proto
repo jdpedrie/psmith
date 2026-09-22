@@ -245,15 +245,36 @@ message CallSettings {
   optional bool explicit_cache = 13;
 }
 
-// ThinkingSettings carries the cross-driver "show your work" knob. Each
-// driver translates it differently:
-//   Anthropic & Google → literal budget_tokens.
-//   OpenAI Responses    → budget_tokens derives reasoning_effort
-//                         (<2k → low, 2-8k → medium, >8k → high).
-//   OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+// ThinkingSettings carries the cross-driver reasoning knob as an effort
+// level. Token budgets are never user-facing: a driver whose API takes a
+// budget derives one from the level (providers.BudgetTokensForEffort).
+//   Anthropic, adaptive generation → output_config.effort verbatim.
+//   Anthropic, legacy generation   → budget_tokens from the table, added
+//                                    on top of max_tokens so the answer
+//                                    keeps its full allowance.
+//   Google                         → thinkingBudget from the table; OFF
+//                                    hides thoughts (Gemini 2.5+ cannot
+//                                    stop thinking).
+//   OpenAI, both surfaces          → reasoning effort verbatim; OFF sends
+//                                    low on models that cannot stop
+//                                    reasoning and is omitted elsewhere.
 message ThinkingSettings {
-  optional bool   enabled        = 1;
-  optional int32  budget_tokens  = 2;
+  reserved 1, 2;
+  reserved "enabled", "budget_tokens";
+  ThinkingEffort effort = 3;   // UNSPECIFIED inherits from the layer below
+}
+
+// ThinkingEffort is the reasoning depth a user can ask for. The set is
+// the union of what the providers accept (OpenAI and xAI: low to xhigh;
+// Anthropic's adaptive models: low to xhigh) plus OFF, which each driver
+// maps to the closest thing its API has.
+enum ThinkingEffort {
+  THINKING_EFFORT_UNSPECIFIED = 0;
+  THINKING_EFFORT_OFF         = 1;
+  THINKING_EFFORT_LOW         = 2;
+  THINKING_EFFORT_MEDIUM      = 3;
+  THINKING_EFFORT_HIGH        = 4;
+  THINKING_EFFORT_XHIGH       = 5;
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-

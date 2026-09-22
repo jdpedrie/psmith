@@ -12,6 +12,8 @@ import (
 	"connectrpc.com/connect"
 
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
+	"github.com/jdpedrie/psmith/server/protoconv"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 // --- conversation settings (call settings + plugin overrides) ---
@@ -23,6 +25,19 @@ type callFieldVM struct {
 	Name      string
 	Value     string // conversation override, "" = inherit
 	Inherited string // resolved value below the conversation (placeholder)
+}
+
+// enumFieldVM is a fixed-choice call-settings field with an Inherit option.
+type enumFieldVM struct {
+	Name      string
+	Value     string // conversation override, "" = inherit
+	Inherited string // resolved label below the conversation, shown in the Inherit option
+	Options   []enumOption
+}
+
+type enumOption struct {
+	Value string
+	Label string
 }
 
 // triFieldVM is a tri-state (Inherit / On / Off) call-settings field.
@@ -47,8 +62,7 @@ type convSettingsVM struct {
 	MaxOutputTokens callFieldVM
 	TopK            callFieldVM
 	StopSequences   callFieldVM // comma-joined
-	ThinkingEnabled triFieldVM
-	ThinkingBudget  callFieldVM
+	ThinkingEffort  enumFieldVM
 	ExplicitCache   triFieldVM
 	IncludeThinking triFieldVM
 
@@ -114,9 +128,7 @@ func fillCallFields(vm *convSettingsVM, own, inh *psmithv1.CallSettings, ownConv
 	vm.TopK = intField("top_k", own.GetTopK(), own != nil && own.TopK != nil, inh.GetTopK(), inh != nil && inh.TopK != nil)
 	vm.StopSequences = callFieldVM{Name: "stop_sequences", Value: strings.Join(own.GetStopSequences(), ", "), Inherited: strings.Join(inh.GetStopSequences(), ", ")}
 
-	ownT, inhT := own.GetThinking(), inh.GetThinking()
-	vm.ThinkingEnabled = makeTri("thinking_enabled", thinkEnabled(ownT), thinkEnabled(inhT))
-	vm.ThinkingBudget = intField("thinking_budget", ownT.GetBudgetTokens(), ownT != nil && ownT.BudgetTokens != nil, inhT.GetBudgetTokens(), inhT != nil && inhT.BudgetTokens != nil)
+	vm.ThinkingEffort = thinkingEffortField(own.GetThinking().GetEffort(), inh.GetThinking().GetEffort())
 	vm.ExplicitCache = makeTri("explicit_cache", explicitCache(own), explicitCache(inh))
 	vm.IncludeThinking = makeTri("include_thinking_in_history", includeThinking(ownConv), includeThinking(inhConv))
 
@@ -131,14 +143,41 @@ func fillCallFields(vm *convSettingsVM, own, inh *psmithv1.CallSettings, ownConv
 	vm.GoogCandidates = intField("goog_candidate_count", ownG.GetCandidateCount(), ownG != nil && ownG.CandidateCount != nil, inhG.GetCandidateCount(), inhG != nil && inhG.CandidateCount != nil)
 }
 
+// thinkingEffortOptions are the levels in ascending order, labelled for the
+// select. Values are the driver-side spelling so the form round-trips
+// through protoconv without a second table.
+var thinkingEffortOptions = []enumOption{
+	{Value: string(providers.ThinkingEffortOff), Label: "Off"},
+	{Value: string(providers.ThinkingEffortLow), Label: "Low"},
+	{Value: string(providers.ThinkingEffortMedium), Label: "Medium"},
+	{Value: string(providers.ThinkingEffortHigh), Label: "High"},
+	{Value: string(providers.ThinkingEffortXHigh), Label: "Extra high"},
+}
+
+func thinkingEffortField(own, inh psmithv1.ThinkingEffort) enumFieldVM {
+	f := enumFieldVM{Name: "thinking_effort", Options: thinkingEffortOptions}
+	f.Value = string(protoconv.ThinkingEffort(own))
+	if inhWord := string(protoconv.ThinkingEffort(inh)); inhWord != "" {
+		for _, o := range thinkingEffortOptions {
+			if o.Value == inhWord {
+				f.Inherited = o.Label
+			}
+		}
+	}
+	return f
+}
+
+// enumInheritLabel renders the resolved lower-layer choice inside the
+// Inherit option, matching triInheritLabel's shape.
+func enumInheritLabel(inherited string) string {
+	if inherited == "" {
+		return ""
+	}
+	return " (" + strings.ToLower(inherited) + ")"
+}
+
 // nil-safe pointer accessors for nested optional bools (proto getters return
 // the message pointer, which can be nil; reaching the field would panic).
-func thinkEnabled(t *psmithv1.ThinkingSettings) *bool {
-	if t == nil {
-		return nil
-	}
-	return t.Enabled
-}
 func explicitCache(cs *psmithv1.CallSettings) *bool {
 	if cs == nil {
 		return nil
@@ -307,7 +346,11 @@ func mergeThinking(h, l *psmithv1.ThinkingSettings) *psmithv1.ThinkingSettings {
 	if l == nil {
 		l = &psmithv1.ThinkingSettings{}
 	}
-	return &psmithv1.ThinkingSettings{Enabled: pickB(h.Enabled, l.Enabled), BudgetTokens: pickI(h.BudgetTokens, l.BudgetTokens)}
+	out := &psmithv1.ThinkingSettings{Effort: l.Effort}
+	if h.Effort != psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED {
+		out.Effort = h.Effort
+	}
+	return out
 }
 
 func mergeAnth(h, l *psmithv1.AnthropicExtras) *psmithv1.AnthropicExtras {
@@ -403,8 +446,8 @@ func (h *Handler) handleConvSettingsSave(w http.ResponseWriter, r *http.Request)
 		StopSequences:   splitStops(r.FormValue("stop_sequences")),
 		ExplicitCache:   formTri(r, "explicit_cache"),
 	}
-	if en, bud := formTri(r, "thinking_enabled"), formInt(r, "thinking_budget"); en != nil || bud != nil {
-		cs.Thinking = &psmithv1.ThinkingSettings{Enabled: en, BudgetTokens: bud}
+	if e := protoconv.ThinkingEffortProto(providers.ThinkingEffort(r.FormValue("thinking_effort"))); e != psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED {
+		cs.Thinking = &psmithv1.ThinkingSettings{Effort: e}
 	}
 	if ce := formTri(r, "anth_cache_enabled"); ce != nil {
 		cs.Anthropic = &psmithv1.AnthropicExtras{CacheEnabled: ce}

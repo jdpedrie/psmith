@@ -28,12 +28,8 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 	// Thinking is applied per-attempt rather than in buildMessageParams:
 	// the wire shape differs by model generation (see thinking_shape.go)
 	// and a shape-mismatch 400 triggers one retry with the other shape.
-	thinkingOn := req.Settings.Thinking != nil &&
-		req.Settings.Thinking.Enabled != nil && *req.Settings.Thinking.Enabled
-	budget := 0
-	if thinkingOn && req.Settings.Thinking.BudgetTokens != nil {
-		budget = *req.Settings.Thinking.BudgetTokens
-	}
+	effort := req.Settings.ThinkingEffort()
+	thinkingOn := effort.On()
 	useAdaptive := requiresAdaptiveThinking(req.ModelID)
 
 	out := make(chan providers.Chunk, 16)
@@ -56,7 +52,7 @@ func (d *Driver) Send(ctx context.Context, req providers.SendRequest) (<-chan pr
 				p.TopK = param.Opt[int64]{}
 			}
 			if thinkingOn {
-				thinkingRequestConfig(&p, useAdaptive, budget)
+				thinkingRequestConfig(&p, useAdaptive, effort)
 			}
 			// NewStreaming returns a *Stream that lazily decodes; errors
 			// surface via stream.Err() during iteration.

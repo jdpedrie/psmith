@@ -173,16 +173,17 @@ var presets = map[PresetID]Preset{
 		LogoSlug: "qwen-color",
 		Quirks: Quirks{
 			// Qwen3 hybrid-thinking models accept `enable_thinking` at
-			// the top level. We mirror our universal Thinking.Enabled
+			// the top level. We mirror our universal thinking effort
 			// signal here — if the user turned thinking on for the
 			// turn (or it inherited from the profile/model layer), Qwen
 			// gets the boolean; otherwise the field is omitted and
 			// Qwen falls back to its default (off for most snapshots).
 			RequestBodyFields: func(req providers.SendRequest) map[string]any {
-				if req.Settings.Thinking == nil || req.Settings.Thinking.Enabled == nil {
+				effort := req.Settings.ThinkingEffort()
+				if effort == providers.ThinkingEffortUnset {
 					return nil
 				}
-				return map[string]any{"enable_thinking": *req.Settings.Thinking.Enabled}
+				return map[string]any{"enable_thinking": effort.On()}
 			},
 		},
 	},

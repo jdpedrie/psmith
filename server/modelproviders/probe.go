@@ -173,8 +173,6 @@ func probes() []capabilityProbe {
 		{
 			name: "thinking",
 			build: func(id string) providers.SendRequest {
-				on := true
-				budget := 1024
 				return providers.SendRequest{
 					ModelID: id,
 					Messages: []providers.WireMessage{{
@@ -182,7 +180,7 @@ func probes() []capabilityProbe {
 						Content: "What is 17 times 23? Work it out.",
 					}},
 					Settings: providers.CallSettings{
-						Thinking: &providers.ThinkingSettings{Enabled: &on, BudgetTokens: &budget},
+						Thinking: &providers.ThinkingSettings{Effort: providers.ThinkingEffortLow},
 					},
 				}
 			},

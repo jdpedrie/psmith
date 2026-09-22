@@ -33,8 +33,7 @@ public enum CallSettingsMerge {
     static func mergeThinking(_ higher: PsmithThinkingSettings?, _ lower: PsmithThinkingSettings?) -> PsmithThinkingSettings? {
         guard var out = higher else { return lower }
         guard let lower else { return out }
-        if out.enabled == nil      { out.enabled = lower.enabled }
-        if out.budgetTokens == nil { out.budgetTokens = lower.budgetTokens }
+        if out.effort == nil { out.effort = lower.effort }
         return out
     }
 

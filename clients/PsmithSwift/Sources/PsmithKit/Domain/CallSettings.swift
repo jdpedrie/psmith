@@ -109,30 +109,65 @@ extension PsmithCallSettings {
 
 // MARK: - ThinkingSettings
 
+/// The cross-provider reasoning knob: one level, no token budget. The
+/// server derives a budget for the APIs that still take one.
 public struct PsmithThinkingSettings: Sendable, Hashable, Codable {
-    public var enabled: Bool?
-    public var budgetTokens: Int32?
+    public var effort: PsmithThinkingEffort?
 
-    public init(enabled: Bool? = nil, budgetTokens: Int32? = nil) {
-        self.enabled = enabled
-        self.budgetTokens = budgetTokens
+    public init(effort: PsmithThinkingEffort? = nil) {
+        self.effort = effort
     }
 
-    public var isEmpty: Bool { enabled == nil && budgetTokens == nil }
+    public var isEmpty: Bool { effort == nil }
+}
+
+/// Reasoning depth in the vocabulary every provider now speaks. `off` is
+/// honoured where the model can stop reasoning and means the lowest
+/// level where it cannot.
+public enum PsmithThinkingEffort: String, Sendable, Hashable, Codable, CaseIterable {
+    case off, low, medium, high, xhigh
+
+    init?(from p: Psmith_V1_ThinkingEffort) {
+        switch p {
+        case .off: self = .off
+        case .low: self = .low
+        case .medium: self = .medium
+        case .high: self = .high
+        case .xhigh: self = .xhigh
+        case .unspecified, .UNRECOGNIZED: return nil
+        }
+    }
+
+    var proto: Psmith_V1_ThinkingEffort {
+        switch self {
+        case .off: return .off
+        case .low: return .low
+        case .medium: return .medium
+        case .high: return .high
+        case .xhigh: return .xhigh
+        }
+    }
+
+    /// Picker label, shared by both platforms.
+    public var label: String {
+        switch self {
+        case .off: return "Off"
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        case .xhigh: return "Extra high"
+        }
+    }
 }
 
 extension PsmithThinkingSettings {
     public init(from p: Psmith_V1_ThinkingSettings) {
-        self.init(
-            enabled:      p.hasEnabled      ? p.enabled      : nil,
-            budgetTokens: p.hasBudgetTokens ? p.budgetTokens : nil
-        )
+        self.init(effort: PsmithThinkingEffort(from: p.effort))
     }
 
     public var proto: Psmith_V1_ThinkingSettings {
         var s = Psmith_V1_ThinkingSettings()
-        if let v = enabled      { s.enabled      = v }
-        if let v = budgetTokens { s.budgetTokens = v }
+        if let v = effort { s.effort = v.proto }
         return s
     }
 }

@@ -59,7 +59,7 @@ func TestConvSettings_SaveCallSettings(t *testing.T) {
 	form := url.Values{
 		"temperature":       {"0.5"},
 		"max_output_tokens": {"2048"},
-		"thinking_enabled":  {"on"},
+		"thinking_effort":   {"high"},
 		"explicit_cache":    {"off"},
 	}
 	saveReq := httptest.NewRequest("POST", "/c/"+fx.convID.String()+"/settings", strings.NewReader(form.Encode())).WithContext(userCtx)
@@ -77,8 +77,8 @@ func TestConvSettings_SaveCallSettings(t *testing.T) {
 	if cs.GetTemperature() != 0.5 || cs.GetMaxOutputTokens() != 2048 {
 		t.Errorf("saved settings temp=%v max=%v want 0.5/2048", cs.GetTemperature(), cs.GetMaxOutputTokens())
 	}
-	if cs.GetThinking().GetEnabled() != true {
-		t.Errorf("thinking enabled not saved")
+	if cs.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH {
+		t.Errorf("thinking effort not saved: %v", cs.GetThinking().GetEffort())
 	}
 	if cs.GetExplicitCache() != false || cs.Anthropic != nil {
 		// explicit_cache off should be set; with no anthropic fields posted the block stays nil.

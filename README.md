@@ -32,7 +32,7 @@ A personal project, exercised daily by the author. Working today:
 - Anthropic, OpenAI (Chat Completions + Responses), Google Gemini, and any OpenAI-compatible endpoint, with **13 built-in provider presets** (OpenAI, Anthropic, Google, xAI, DeepSeek, Groq, OpenRouter, Mistral, Together, Cerebras, Qwen, Ollama, Perplexity) each carrying its per-provider quirks.
 - Streaming, branching, editing, deleting, and manual two-stage compression.
 - Per-message and per-context cost/token tracking, a cache-efficiency dot, prompt caching across Anthropic/OpenAI/Google, and auto-titling via a cheap model (or Apple Foundation Models on macOS).
-- Per-conversation overrides (`temperature`, `max_output_tokens`, thinking budget, …) with 4-layer resolution (conversation → profile → model → provider).
+- Per-conversation overrides (`temperature`, `max_output_tokens`, thinking effort, …) with 4-layer resolution (conversation → profile → model → provider).
 - **macOS and iOS** clients (SwiftUI) sharing repositories, view models, and most views via the `PsmithSwift` package; the iOS app reattaches to in-flight server streams on resume and stays readable offline via a SwiftData cache. A server-rendered **web** client is built into psmithd.
 - **Tool use end to end** — server-side tools (web search, memory, image generation) and on-device tools (Calendar, Reminders, Health, Obsidian on iOS), with an audit log, per-call permissions, and mid-call elicitation.
 - **Semantic history search, MCP, tracing** — opt-in embeddings power a `search_history` tool; a `/mcp` endpoint exposes a curated subset of the API; per-user Langfuse config emits traces.

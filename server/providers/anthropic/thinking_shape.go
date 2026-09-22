@@ -6,6 +6,7 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 
 	"github.com/jdpedrie/psmith/server/modelmeta"
+	"github.com/jdpedrie/psmith/server/providers"
 )
 
 // Anthropic split its extended-thinking API: older models take
@@ -42,22 +43,6 @@ func requiresAdaptiveThinking(modelID string) bool {
 		}
 	}
 	return false
-}
-
-// effortForBudget maps the legacy budget_tokens knob onto the adaptive
-// API's effort levels, so a user's existing thinking-budget setting
-// keeps meaning something on models that no longer accept a budget.
-func effortForBudget(budgetTokens int) string {
-	switch {
-	case budgetTokens <= 0:
-		return "" // unset — let the API pick its default
-	case budgetTokens < 8192:
-		return "low"
-	case budgetTokens < 32768:
-		return "medium"
-	default:
-		return "high"
-	}
 }
 
 // isThinkingShapeError reports whether an API error is the 400 telling
@@ -115,16 +100,21 @@ func isSamplingConstraintError(err error) bool {
 }
 
 // thinkingRequestConfig applies the chosen thinking shape to the outgoing
-// request. Both shapes are typed since sdk v1.56: the legacy shape is
-// enabled+budget, the adaptive shape is the bare adaptive tag plus an
-// output_config.effort derived from the budget (omitted when unset).
-func thinkingRequestConfig(params *sdk.MessageNewParams, adaptive bool, budgetTokens int) {
-	if !adaptive {
-		params.Thinking = sdk.ThinkingConfigParamOfEnabled(int64(budgetTokens))
+// request. Both shapes are typed since sdk v1.56. The adaptive shape takes
+// the effort level verbatim: the API's vocabulary (low through xhigh) is
+// ours. The legacy shape wants a token budget, derived from the level, and
+// the API charges that budget against max_tokens, so it goes on top of the
+// caller's output allowance rather than being carved out of it: a user who
+// asked for 4096 tokens of answer at high effort still gets 4096 tokens of
+// answer. Nobody sizes max_tokens for the budget by hand any more, because
+// the budget is no longer something a user can see.
+func thinkingRequestConfig(params *sdk.MessageNewParams, adaptive bool, effort providers.ThinkingEffort) {
+	if adaptive {
+		params.Thinking = sdk.ThinkingConfigParamUnion{OfAdaptive: &sdk.ThinkingConfigAdaptiveParam{}}
+		params.OutputConfig = sdk.OutputConfigParam{Effort: sdk.OutputConfigEffort(effort)}
 		return
 	}
-	params.Thinking = sdk.ThinkingConfigParamUnion{OfAdaptive: &sdk.ThinkingConfigAdaptiveParam{}}
-	if effort := effortForBudget(budgetTokens); effort != "" {
-		params.OutputConfig = sdk.OutputConfigParam{Effort: sdk.OutputConfigEffort(effort)}
-	}
+	budget := providers.BudgetTokensForEffort(effort)
+	params.Thinking = sdk.ThinkingConfigParamOfEnabled(int64(budget))
+	params.MaxTokens += int64(budget)
 }

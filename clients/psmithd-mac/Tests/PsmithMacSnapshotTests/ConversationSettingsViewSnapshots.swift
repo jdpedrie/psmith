@@ -61,7 +61,7 @@ struct ConversationSettingsViewSnapshots {
             maxOutputTokens: 4_096,
             stopSequences: [],
             topK: 50,
-            thinking: PsmithThinkingSettings(enabled: false, budgetTokens: 1_024)
+            thinking: PsmithThinkingSettings(effort: .off)
         )
         let model = SnapshotStubs.makeConversationViewModel(
             messages: [SnapshotFixtures.systemMessage()],
@@ -91,10 +91,10 @@ struct ConversationSettingsViewSnapshots {
     @Test
     func thinkingOverride() {
         var draft = PsmithCallSettings()
-        draft.thinking = PsmithThinkingSettings(enabled: true, budgetTokens: 4_096)
+        draft.thinking = PsmithThinkingSettings(effort: .high)
         let inherited = PsmithCallSettings(
             temperature: 1.0,
-            thinking: PsmithThinkingSettings(enabled: false, budgetTokens: 1_024)
+            thinking: PsmithThinkingSettings(effort: .off)
         )
         let model = SnapshotStubs.makeConversationViewModel(
             messages: [SnapshotFixtures.systemMessage()],

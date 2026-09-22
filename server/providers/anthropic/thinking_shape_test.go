@@ -26,6 +26,7 @@ func happySSE(w http.ResponseWriter) {
 
 // thinkingBody is the subset of the request body these tests inspect.
 type thinkingBody struct {
+	MaxTokens   int64 `json:"max_tokens"`
 	Temperature *float64 `json:"temperature"`
 	Thinking    *struct {
 		Type         string `json:"type"`
@@ -58,13 +59,8 @@ func captureServer(t *testing.T, respond func(n int, w http.ResponseWriter)) (*h
 	}
 }
 
-func thinkingSettings(budget int) providers.CallSettings {
-	enabled := true
-	s := providers.CallSettings{Thinking: &providers.ThinkingSettings{Enabled: &enabled}}
-	if budget > 0 {
-		s.Thinking.BudgetTokens = &budget
-	}
-	return s
+func thinkingSettings(effort providers.ThinkingEffort) providers.CallSettings {
+	return providers.CallSettings{Thinking: &providers.ThinkingSettings{Effort: effort}}
 }
 
 func TestSend_AdaptiveThinkingBody(t *testing.T) {
@@ -75,7 +71,7 @@ func TestSend_AdaptiveThinkingBody(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-fable-5",
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(16000),
+		Settings: thinkingSettings(providers.ThinkingEffortHigh),
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -93,32 +89,36 @@ func TestSend_AdaptiveThinkingBody(t *testing.T) {
 	if b.Thinking != nil && b.Thinking.BudgetTokens != nil {
 		t.Errorf("adaptive shape must not carry budget_tokens, got %d", *b.Thinking.BudgetTokens)
 	}
-	if b.OutputConfig == nil || b.OutputConfig.Effort != "medium" {
-		t.Errorf("output_config = %+v, want effort medium for a 16000 budget", b.OutputConfig)
+	if b.OutputConfig == nil || b.OutputConfig.Effort != "high" {
+		t.Errorf("output_config = %+v, want the level passed through as effort high", b.OutputConfig)
 	}
 }
 
-func TestSend_AdaptiveThinking_NoBudgetOmitsEffort(t *testing.T) {
-	srv, bodies := captureServer(t, func(_ int, w http.ResponseWriter) { happySSE(w) })
-	defer srv.Close()
-	d := newTestDriver(t, srv.URL, nil)
+// OFF sends no thinking configuration at all, on either generation: the
+// model's own default applies, which is what "off" meant before too.
+func TestSend_ThinkingOff_OmitsThinkingConfig(t *testing.T) {
+	for _, model := range []string{"claude-sonnet-5", "claude-haiku-4-5"} {
+		srv, bodies := captureServer(t, func(_ int, w http.ResponseWriter) { happySSE(w) })
+		d := newTestDriver(t, srv.URL, nil)
 
-	ch, err := d.Send(context.Background(), providers.SendRequest{
-		ModelID:  "claude-sonnet-5",
-		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(0),
-	})
-	if err != nil {
-		t.Fatalf("Send: %v", err)
-	}
-	drainChunks(t, ch)
+		ch, err := d.Send(context.Background(), providers.SendRequest{
+			ModelID:  model,
+			Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
+			Settings: thinkingSettings(providers.ThinkingEffortOff),
+		})
+		if err != nil {
+			t.Fatalf("%s: Send: %v", model, err)
+		}
+		drainChunks(t, ch)
+		srv.Close()
 
-	got := bodies()
-	if len(got) != 1 {
-		t.Fatalf("want 1 request, got %d", len(got))
-	}
-	if got[0].OutputConfig != nil {
-		t.Errorf("no budget set: output_config should be omitted, got %+v", got[0].OutputConfig)
+		got := bodies()
+		if len(got) != 1 {
+			t.Fatalf("%s: want 1 request, got %d", model, len(got))
+		}
+		if got[0].Thinking != nil || got[0].OutputConfig != nil {
+			t.Errorf("%s: off must omit thinking and output_config, got thinking=%+v output_config=%+v", model, got[0].Thinking, got[0].OutputConfig)
+		}
 	}
 }
 
@@ -130,7 +130,7 @@ func TestSend_LegacyThinkingBody(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-haiku-4-5",
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(16000),
+		Settings: thinkingSettings(providers.ThinkingEffortHigh),
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -145,8 +145,13 @@ func TestSend_LegacyThinkingBody(t *testing.T) {
 	if b.Thinking == nil || b.Thinking.Type != "enabled" {
 		t.Errorf("thinking = %+v, want type enabled", b.Thinking)
 	}
-	if b.Thinking != nil && (b.Thinking.BudgetTokens == nil || *b.Thinking.BudgetTokens != 16000) {
-		t.Errorf("legacy shape should carry budget_tokens=16000, got %+v", b.Thinking)
+	if b.Thinking != nil && (b.Thinking.BudgetTokens == nil || *b.Thinking.BudgetTokens != 16384) {
+		t.Errorf("legacy shape should carry the high-effort budget of 16384, got %+v", b.Thinking)
+	}
+	// The budget is charged against max_tokens, so it rides on top of the
+	// default output allowance rather than eating into it.
+	if b.MaxTokens != 4096+16384 {
+		t.Errorf("max_tokens = %d, want the 4096 default plus the 16384 budget", b.MaxTokens)
 	}
 	if b.OutputConfig != nil {
 		t.Errorf("legacy shape must not carry output_config, got %+v", b.OutputConfig)
@@ -172,7 +177,7 @@ func TestSend_ThinkingShapeRetry_EnabledToAdaptive(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-mystery-9", // not in the adaptive prefix table
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(50000),
+		Settings: thinkingSettings(providers.ThinkingEffortXHigh),
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -194,8 +199,8 @@ func TestSend_ThinkingShapeRetry_EnabledToAdaptive(t *testing.T) {
 	if got[1].Thinking == nil || got[1].Thinking.Type != "adaptive" {
 		t.Errorf("retry should be adaptive, got %+v", got[1].Thinking)
 	}
-	if got[1].OutputConfig == nil || got[1].OutputConfig.Effort != "high" {
-		t.Errorf("retry should map the 50000 budget to effort high, got %+v", got[1].OutputConfig)
+	if got[1].OutputConfig == nil || got[1].OutputConfig.Effort != "xhigh" {
+		t.Errorf("retry should carry the requested level through as effort xhigh, got %+v", got[1].OutputConfig)
 	}
 }
 
@@ -217,7 +222,7 @@ func TestSend_ThinkingShapeRetry_AdaptiveToEnabled(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-sonnet-4-6", // in the adaptive table
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(16000),
+		Settings: thinkingSettings(providers.ThinkingEffortHigh),
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -255,7 +260,7 @@ func TestSend_ThinkingUnrelatedErrorNoRetry(t *testing.T) {
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-haiku-4-5",
 		Messages: []providers.WireMessage{{Role: "user", Content: "hi"}},
-		Settings: thinkingSettings(16000),
+		Settings: thinkingSettings(providers.ThinkingEffortHigh),
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -266,23 +271,6 @@ func TestSend_ThinkingUnrelatedErrorNoRetry(t *testing.T) {
 	}
 	if got := bodies(); len(got) != 1 {
 		t.Errorf("unrelated error must not retry, got %d requests", len(got))
-	}
-}
-
-func TestEffortForBudget(t *testing.T) {
-	cases := []struct {
-		budget int
-		want   string
-	}{
-		{0, ""}, {-1, ""},
-		{1024, "low"}, {8191, "low"},
-		{8192, "medium"}, {32767, "medium"},
-		{32768, "high"}, {100000, "high"},
-	}
-	for _, c := range cases {
-		if got := effortForBudget(c.budget); got != c.want {
-			t.Errorf("effortForBudget(%d)=%q want %q", c.budget, got, c.want)
-		}
 	}
 }
 
@@ -412,7 +400,7 @@ func TestSend_ThinkingAndSamplingRemediesCompose(t *testing.T) {
 	d := newTestDriver(t, srv.URL, nil)
 
 	temp := 0.5
-	settings := thinkingSettings(16000)
+	settings := thinkingSettings(providers.ThinkingEffortHigh)
 	settings.Temperature = &temp
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-mystery-9",

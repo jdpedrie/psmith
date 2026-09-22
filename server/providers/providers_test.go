@@ -123,3 +123,47 @@ func TestTypes_Empty(t *testing.T) {
 		t.Errorf("expected empty, got %v", got)
 	}
 }
+
+// The budget table is the only place a level becomes tokens; every driver
+// that still speaks budgets reads it, so its shape is a contract.
+func TestBudgetTokensForEffort(t *testing.T) {
+	cases := map[ThinkingEffort]int{
+		ThinkingEffortUnset:  0,
+		ThinkingEffortOff:    0,
+		ThinkingEffortLow:    2048,
+		ThinkingEffortMedium: 8192,
+		ThinkingEffortHigh:   16384,
+		ThinkingEffortXHigh:  24576,
+	}
+	for effort, want := range cases {
+		if got := BudgetTokensForEffort(effort); got != want {
+			t.Errorf("BudgetTokensForEffort(%q)=%d want %d", effort, got, want)
+		}
+	}
+	// Anthropic's floor is 1024 and Gemini 2.5 Flash's ceiling is 24576;
+	// every level that thinks at all has to sit inside both.
+	for _, effort := range []ThinkingEffort{ThinkingEffortLow, ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh} {
+		if b := BudgetTokensForEffort(effort); b < 1024 || b > 24576 {
+			t.Errorf("%q budget %d is outside the range every budget API accepts", effort, b)
+		}
+	}
+}
+
+func TestThinkingEffort_On(t *testing.T) {
+	if ThinkingEffortUnset.On() || ThinkingEffortOff.On() {
+		t.Error("unset and off must not count as thinking")
+	}
+	for _, e := range []ThinkingEffort{ThinkingEffortLow, ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh} {
+		if !e.On() {
+			t.Errorf("%q should count as thinking", e)
+		}
+	}
+	var none CallSettings
+	if none.ThinkingEffort() != ThinkingEffortUnset {
+		t.Error("nil thinking block must read as unset")
+	}
+	set := CallSettings{Thinking: &ThinkingSettings{Effort: ThinkingEffortHigh}}
+	if set.ThinkingEffort() != ThinkingEffortHigh {
+		t.Error("ThinkingEffort() should surface the block's level")
+	}
+}

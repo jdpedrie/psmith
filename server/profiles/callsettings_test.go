@@ -123,37 +123,23 @@ func TestMergeCallSettings_PrecedenceMultipleLayers(t *testing.T) {
 
 // --- ThinkingSettings ------------------------------------------------------
 
-func TestMergeCallSettings_ThinkingPerFieldMerge(t *testing.T) {
-	// higher sets only enabled; lower sets only budget. Merged: both.
-	higher := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{Enabled: bp(true)}}
-	lower := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{BudgetTokens: i32(4000)}}
+func TestMergeCallSettings_ThinkingInheritsWhenHigherUnspecified(t *testing.T) {
+	// higher carries a thinking block with no effort (the shape an
+	// untouched form saves); lower sets a level. Merged: lower's level.
+	higher := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{}}
+	lower := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH}}
 	got := MergeCallSettings(higher, lower)
-	if got.GetThinking() == nil {
-		t.Fatal("thinking nil after merge")
-	}
-	if !got.GetThinking().GetEnabled() {
-		t.Error("enabled should be true (from higher)")
-	}
-	if got.GetThinking().GetBudgetTokens() != 4000 {
-		t.Errorf("budget: %v want 4000 (from lower)", got.GetThinking().GetBudgetTokens())
+	if got.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH {
+		t.Errorf("effort: %v want HIGH (from lower)", got.GetThinking().GetEffort())
 	}
 }
 
 func TestMergeCallSettings_ThinkingHigherOverridesLower(t *testing.T) {
-	higher := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{
-		Enabled:      bp(false),
-		BudgetTokens: i32(1000),
-	}}
-	lower := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{
-		Enabled:      bp(true),
-		BudgetTokens: i32(8000),
-	}}
+	higher := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_OFF}}
+	lower := &psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH}}
 	got := MergeCallSettings(higher, lower)
-	if got.GetThinking().GetEnabled() {
-		t.Error("expected higher's enabled=false")
-	}
-	if got.GetThinking().GetBudgetTokens() != 1000 {
-		t.Errorf("budget: %v want 1000", got.GetThinking().GetBudgetTokens())
+	if got.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_OFF {
+		t.Errorf("effort: %v want OFF (higher wins)", got.GetThinking().GetEffort())
 	}
 }
 
@@ -355,8 +341,7 @@ func TestCallSettingsCodec_RoundTrip(t *testing.T) {
 		StopSequences:   []string{"END", "STOP"},
 		TopK:            i32(50),
 		Thinking: &psmithv1.ThinkingSettings{
-			Enabled:      bp(true),
-			BudgetTokens: i32(4096),
+			Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH,
 		},
 		Openai: &psmithv1.OpenAIExtras{
 			Seed:        i32(7),
@@ -378,8 +363,8 @@ func TestCallSettingsCodec_RoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(out.StopSequences, []string{"END", "STOP"}) {
 		t.Errorf("stop_sequences: %v", out.StopSequences)
 	}
-	if out.GetThinking().GetBudgetTokens() != 4096 {
-		t.Errorf("thinking budget: %v", out.GetThinking().GetBudgetTokens())
+	if out.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH {
+		t.Errorf("thinking effort: %v", out.GetThinking().GetEffort())
 	}
 	if out.GetOpenai().GetSeed() != 7 || out.GetOpenai().GetServiceTier() != psmithv1.ServiceTier_SERVICE_TIER_PRIORITY {
 		t.Errorf("openai: %+v", out.GetOpenai())

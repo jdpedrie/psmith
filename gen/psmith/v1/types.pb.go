@@ -74,6 +74,68 @@ func (MetadataSource) EnumDescriptor() ([]byte, []int) {
 	return file_psmith_v1_types_proto_rawDescGZIP(), []int{0}
 }
 
+// ThinkingEffort is the reasoning depth a user can ask for. The set is
+// the union of what the providers accept (OpenAI and xAI: low to xhigh;
+// Anthropic's adaptive models: low to xhigh) plus OFF, which each driver
+// maps to the closest thing its API has.
+type ThinkingEffort int32
+
+const (
+	ThinkingEffort_THINKING_EFFORT_UNSPECIFIED ThinkingEffort = 0
+	ThinkingEffort_THINKING_EFFORT_OFF         ThinkingEffort = 1
+	ThinkingEffort_THINKING_EFFORT_LOW         ThinkingEffort = 2
+	ThinkingEffort_THINKING_EFFORT_MEDIUM      ThinkingEffort = 3
+	ThinkingEffort_THINKING_EFFORT_HIGH        ThinkingEffort = 4
+	ThinkingEffort_THINKING_EFFORT_XHIGH       ThinkingEffort = 5
+)
+
+// Enum value maps for ThinkingEffort.
+var (
+	ThinkingEffort_name = map[int32]string{
+		0: "THINKING_EFFORT_UNSPECIFIED",
+		1: "THINKING_EFFORT_OFF",
+		2: "THINKING_EFFORT_LOW",
+		3: "THINKING_EFFORT_MEDIUM",
+		4: "THINKING_EFFORT_HIGH",
+		5: "THINKING_EFFORT_XHIGH",
+	}
+	ThinkingEffort_value = map[string]int32{
+		"THINKING_EFFORT_UNSPECIFIED": 0,
+		"THINKING_EFFORT_OFF":         1,
+		"THINKING_EFFORT_LOW":         2,
+		"THINKING_EFFORT_MEDIUM":      3,
+		"THINKING_EFFORT_HIGH":        4,
+		"THINKING_EFFORT_XHIGH":       5,
+	}
+)
+
+func (x ThinkingEffort) Enum() *ThinkingEffort {
+	p := new(ThinkingEffort)
+	*p = x
+	return p
+}
+
+func (x ThinkingEffort) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ThinkingEffort) Descriptor() protoreflect.EnumDescriptor {
+	return file_psmith_v1_types_proto_enumTypes[1].Descriptor()
+}
+
+func (ThinkingEffort) Type() protoreflect.EnumType {
+	return &file_psmith_v1_types_proto_enumTypes[1]
+}
+
+func (x ThinkingEffort) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ThinkingEffort.Descriptor instead.
+func (ThinkingEffort) EnumDescriptor() ([]byte, []int) {
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{1}
+}
+
 // CacheTTL is the ephemeral-cache time-to-live selector for Anthropic's
 // prompt cache. Anthropic exposes 5-minute and 1-hour tiers; the 1-hour
 // tier costs more to write but persists across longer idle gaps.
@@ -110,11 +172,11 @@ func (x CacheTTL) String() string {
 }
 
 func (CacheTTL) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[1].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[2].Descriptor()
 }
 
 func (CacheTTL) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[1]
+	return &file_psmith_v1_types_proto_enumTypes[2]
 }
 
 func (x CacheTTL) Number() protoreflect.EnumNumber {
@@ -123,7 +185,7 @@ func (x CacheTTL) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CacheTTL.Descriptor instead.
 func (CacheTTL) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
 type ServiceTier int32
@@ -162,11 +224,11 @@ func (x ServiceTier) String() string {
 }
 
 func (ServiceTier) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[2].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[3].Descriptor()
 }
 
 func (ServiceTier) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[2]
+	return &file_psmith_v1_types_proto_enumTypes[3]
 }
 
 func (x ServiceTier) Number() protoreflect.EnumNumber {
@@ -175,7 +237,7 @@ func (x ServiceTier) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceTier.Descriptor instead.
 func (ServiceTier) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
 type HarmThreshold int32
@@ -217,11 +279,11 @@ func (x HarmThreshold) String() string {
 }
 
 func (HarmThreshold) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[3].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[4].Descriptor()
 }
 
 func (HarmThreshold) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[3]
+	return &file_psmith_v1_types_proto_enumTypes[4]
 }
 
 func (x HarmThreshold) Number() protoreflect.EnumNumber {
@@ -230,7 +292,7 @@ func (x HarmThreshold) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HarmThreshold.Descriptor instead.
 func (HarmThreshold) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
 type CompressionMode int32
@@ -266,11 +328,11 @@ func (x CompressionMode) String() string {
 }
 
 func (CompressionMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[4].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[5].Descriptor()
 }
 
 func (CompressionMode) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[4]
+	return &file_psmith_v1_types_proto_enumTypes[5]
 }
 
 func (x CompressionMode) Number() protoreflect.EnumNumber {
@@ -279,7 +341,7 @@ func (x CompressionMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CompressionMode.Descriptor instead.
 func (CompressionMode) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{5}
 }
 
 type MessageRole int32
@@ -324,11 +386,11 @@ func (x MessageRole) String() string {
 }
 
 func (MessageRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[5].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[6].Descriptor()
 }
 
 func (MessageRole) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[5]
+	return &file_psmith_v1_types_proto_enumTypes[6]
 }
 
 func (x MessageRole) Number() protoreflect.EnumNumber {
@@ -337,7 +399,7 @@ func (x MessageRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MessageRole.Descriptor instead.
 func (MessageRole) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{5}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{6}
 }
 
 type StreamRunStatus int32
@@ -382,11 +444,11 @@ func (x StreamRunStatus) String() string {
 }
 
 func (StreamRunStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[6].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[7].Descriptor()
 }
 
 func (StreamRunStatus) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[6]
+	return &file_psmith_v1_types_proto_enumTypes[7]
 }
 
 func (x StreamRunStatus) Number() protoreflect.EnumNumber {
@@ -395,7 +457,7 @@ func (x StreamRunStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StreamRunStatus.Descriptor instead.
 func (StreamRunStatus) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{6}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{7}
 }
 
 type StreamRunPurpose int32
@@ -431,11 +493,11 @@ func (x StreamRunPurpose) String() string {
 }
 
 func (StreamRunPurpose) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[7].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[8].Descriptor()
 }
 
 func (StreamRunPurpose) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[7]
+	return &file_psmith_v1_types_proto_enumTypes[8]
 }
 
 func (x StreamRunPurpose) Number() protoreflect.EnumNumber {
@@ -444,7 +506,7 @@ func (x StreamRunPurpose) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StreamRunPurpose.Descriptor instead.
 func (StreamRunPurpose) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{7}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{8}
 }
 
 type ChunkType int32
@@ -544,11 +606,11 @@ func (x ChunkType) String() string {
 }
 
 func (ChunkType) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[8].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[9].Descriptor()
 }
 
 func (ChunkType) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[8]
+	return &file_psmith_v1_types_proto_enumTypes[9]
 }
 
 func (x ChunkType) Number() protoreflect.EnumNumber {
@@ -557,7 +619,7 @@ func (x ChunkType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChunkType.Descriptor instead.
 func (ChunkType) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{9}
 }
 
 // DeviceFactKey is the closed enum of context bits a fact-aware
@@ -616,11 +678,11 @@ func (x DeviceFactKey) String() string {
 }
 
 func (DeviceFactKey) Descriptor() protoreflect.EnumDescriptor {
-	return file_psmith_v1_types_proto_enumTypes[9].Descriptor()
+	return file_psmith_v1_types_proto_enumTypes[10].Descriptor()
 }
 
 func (DeviceFactKey) Type() protoreflect.EnumType {
-	return &file_psmith_v1_types_proto_enumTypes[9]
+	return &file_psmith_v1_types_proto_enumTypes[10]
 }
 
 func (x DeviceFactKey) Number() protoreflect.EnumNumber {
@@ -629,7 +691,7 @@ func (x DeviceFactKey) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DeviceFactKey.Descriptor instead.
 func (DeviceFactKey) EnumDescriptor() ([]byte, []int) {
-	return file_psmith_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_psmith_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
 type User struct {
@@ -1895,17 +1957,23 @@ func (x *CallSettings) GetExplicitCache() bool {
 	return false
 }
 
-// ThinkingSettings carries the cross-driver "show your work" knob. Each
-// driver translates it differently:
+// ThinkingSettings carries the cross-driver reasoning knob as an effort
+// level. Token budgets are never user-facing: a driver whose API takes a
+// budget derives one from the level (providers.BudgetTokensForEffort).
 //
-//	Anthropic & Google → literal budget_tokens.
-//	OpenAI Responses    → budget_tokens derives reasoning_effort
-//	                      (<2k → low, 2-8k → medium, >8k → high).
-//	OpenAI Chat         → drop (Chat Completions has no reasoning surface).
+//	Anthropic, adaptive generation → output_config.effort verbatim.
+//	Anthropic, legacy generation   → budget_tokens from the table, added
+//	                                 on top of max_tokens so the answer
+//	                                 keeps its full allowance.
+//	Google                         → thinkingBudget from the table; OFF
+//	                                 hides thoughts (Gemini 2.5+ cannot
+//	                                 stop thinking).
+//	OpenAI, both surfaces          → reasoning effort verbatim; OFF sends
+//	                                 low on models that cannot stop
+//	                                 reasoning and is omitted elsewhere.
 type ThinkingSettings struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Enabled       *bool                  `protobuf:"varint,1,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
-	BudgetTokens  *int32                 `protobuf:"varint,2,opt,name=budget_tokens,json=budgetTokens,proto3,oneof" json:"budget_tokens,omitempty"`
+	Effort        ThinkingEffort         `protobuf:"varint,3,opt,name=effort,proto3,enum=psmith.v1.ThinkingEffort" json:"effort,omitempty"` // UNSPECIFIED inherits from the layer below
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1940,18 +2008,11 @@ func (*ThinkingSettings) Descriptor() ([]byte, []int) {
 	return file_psmith_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *ThinkingSettings) GetEnabled() bool {
-	if x != nil && x.Enabled != nil {
-		return *x.Enabled
+func (x *ThinkingSettings) GetEffort() ThinkingEffort {
+	if x != nil {
+		return x.Effort
 	}
-	return false
-}
-
-func (x *ThinkingSettings) GetBudgetTokens() int32 {
-	if x != nil && x.BudgetTokens != nil {
-		return *x.BudgetTokens
-	}
-	return 0
+	return ThinkingEffort_THINKING_EFFORT_UNSPECIFIED
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the cross-
@@ -4499,13 +4560,9 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"_anthropicB\t\n" +
 	"\a_openaiB\t\n" +
 	"\a_googleB\x11\n" +
-	"\x0f_explicit_cache\"y\n" +
-	"\x10ThinkingSettings\x12\x1d\n" +
-	"\aenabled\x18\x01 \x01(\bH\x00R\aenabled\x88\x01\x01\x12(\n" +
-	"\rbudget_tokens\x18\x02 \x01(\x05H\x01R\fbudgetTokens\x88\x01\x01B\n" +
-	"\n" +
-	"\b_enabledB\x10\n" +
-	"\x0e_budget_tokens\"\x92\x01\n" +
+	"\x0f_explicit_cache\"i\n" +
+	"\x10ThinkingSettings\x121\n" +
+	"\x06effort\x18\x03 \x01(\x0e2\x19.psmith.v1.ThinkingEffortR\x06effortJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\aenabledR\rbudget_tokens\"\x92\x01\n" +
 	"\x0fAnthropicExtras\x12(\n" +
 	"\rcache_enabled\x18\x01 \x01(\bH\x00R\fcacheEnabled\x88\x01\x01\x125\n" +
 	"\tcache_ttl\x18\x02 \x01(\x0e2\x13.psmith.v1.CacheTTLH\x01R\bcacheTtl\x88\x01\x01B\x10\n" +
@@ -4830,7 +4887,14 @@ const file_psmith_v1_types_proto_rawDesc = "" +
 	"\x1bMETADATA_SOURCE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17METADATA_SOURCE_CATALOG\x10\x01\x12\x1a\n" +
 	"\x16METADATA_SOURCE_DRIVER\x10\x02\x12\x1a\n" +
-	"\x16METADATA_SOURCE_MANUAL\x10\x03*I\n" +
+	"\x16METADATA_SOURCE_MANUAL\x10\x03*\xb4\x01\n" +
+	"\x0eThinkingEffort\x12\x1f\n" +
+	"\x1bTHINKING_EFFORT_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13THINKING_EFFORT_OFF\x10\x01\x12\x17\n" +
+	"\x13THINKING_EFFORT_LOW\x10\x02\x12\x1a\n" +
+	"\x16THINKING_EFFORT_MEDIUM\x10\x03\x12\x18\n" +
+	"\x14THINKING_EFFORT_HIGH\x10\x04\x12\x19\n" +
+	"\x15THINKING_EFFORT_XHIGH\x10\x05*I\n" +
 	"\bCacheTTL\x12\x19\n" +
 	"\x15CACHE_TTL_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fCACHE_TTL_5M\x10\x01\x12\x10\n" +
@@ -4904,125 +4968,127 @@ func file_psmith_v1_types_proto_rawDescGZIP() []byte {
 	return file_psmith_v1_types_proto_rawDescData
 }
 
-var file_psmith_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_psmith_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
 var file_psmith_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_psmith_v1_types_proto_goTypes = []any{
 	(MetadataSource)(0),           // 0: psmith.v1.MetadataSource
-	(CacheTTL)(0),                 // 1: psmith.v1.CacheTTL
-	(ServiceTier)(0),              // 2: psmith.v1.ServiceTier
-	(HarmThreshold)(0),            // 3: psmith.v1.HarmThreshold
-	(CompressionMode)(0),          // 4: psmith.v1.CompressionMode
-	(MessageRole)(0),              // 5: psmith.v1.MessageRole
-	(StreamRunStatus)(0),          // 6: psmith.v1.StreamRunStatus
-	(StreamRunPurpose)(0),         // 7: psmith.v1.StreamRunPurpose
-	(ChunkType)(0),                // 8: psmith.v1.ChunkType
-	(DeviceFactKey)(0),            // 9: psmith.v1.DeviceFactKey
-	(*User)(nil),                  // 10: psmith.v1.User
-	(*ProviderType)(nil),          // 11: psmith.v1.ProviderType
-	(*UserModelProvider)(nil),     // 12: psmith.v1.UserModelProvider
-	(*ProviderTemplate)(nil),      // 13: psmith.v1.ProviderTemplate
-	(*ModelCapabilities)(nil),     // 14: psmith.v1.ModelCapabilities
-	(*ModelPricing)(nil),          // 15: psmith.v1.ModelPricing
-	(*PricingTier)(nil),           // 16: psmith.v1.PricingTier
-	(*CatalogModelProvider)(nil),  // 17: psmith.v1.CatalogModelProvider
-	(*CatalogModel)(nil),          // 18: psmith.v1.CatalogModel
-	(*UserModel)(nil),             // 19: psmith.v1.UserModel
-	(*ModelConstraints)(nil),      // 20: psmith.v1.ModelConstraints
-	(*Range)(nil),                 // 21: psmith.v1.Range
-	(*CallSettings)(nil),          // 22: psmith.v1.CallSettings
-	(*ThinkingSettings)(nil),      // 23: psmith.v1.ThinkingSettings
-	(*AnthropicExtras)(nil),       // 24: psmith.v1.AnthropicExtras
-	(*OpenAIExtras)(nil),          // 25: psmith.v1.OpenAIExtras
-	(*ResponseFormat)(nil),        // 26: psmith.v1.ResponseFormat
-	(*JsonSchema)(nil),            // 27: psmith.v1.JsonSchema
-	(*GoogleExtras)(nil),          // 28: psmith.v1.GoogleExtras
-	(*SafetySettings)(nil),        // 29: psmith.v1.SafetySettings
-	(*ProfileDefaults)(nil),       // 30: psmith.v1.ProfileDefaults
-	(*Profile)(nil),               // 31: psmith.v1.Profile
-	(*ConversationSettings)(nil),  // 32: psmith.v1.ConversationSettings
-	(*Conversation)(nil),          // 33: psmith.v1.Conversation
-	(*HarnessBinding)(nil),        // 34: psmith.v1.HarnessBinding
-	(*StreamingComponentTag)(nil), // 35: psmith.v1.StreamingComponentTag
-	(*Context)(nil),               // 36: psmith.v1.Context
-	(*Message)(nil),               // 37: psmith.v1.Message
-	(*UIFragment)(nil),            // 38: psmith.v1.UIFragment
-	(*MessageAttachment)(nil),     // 39: psmith.v1.MessageAttachment
-	(*ToolCall)(nil),              // 40: psmith.v1.ToolCall
-	(*MessageUsage)(nil),          // 41: psmith.v1.MessageUsage
-	(*StreamRun)(nil),             // 42: psmith.v1.StreamRun
-	(*Chunk)(nil),                 // 43: psmith.v1.Chunk
-	(*DeviceFact)(nil),            // 44: psmith.v1.DeviceFact
-	nil,                           // 45: psmith.v1.OpenAIExtras.LogitBiasEntry
-	(*timestamppb.Timestamp)(nil), // 46: google.protobuf.Timestamp
+	(ThinkingEffort)(0),           // 1: psmith.v1.ThinkingEffort
+	(CacheTTL)(0),                 // 2: psmith.v1.CacheTTL
+	(ServiceTier)(0),              // 3: psmith.v1.ServiceTier
+	(HarmThreshold)(0),            // 4: psmith.v1.HarmThreshold
+	(CompressionMode)(0),          // 5: psmith.v1.CompressionMode
+	(MessageRole)(0),              // 6: psmith.v1.MessageRole
+	(StreamRunStatus)(0),          // 7: psmith.v1.StreamRunStatus
+	(StreamRunPurpose)(0),         // 8: psmith.v1.StreamRunPurpose
+	(ChunkType)(0),                // 9: psmith.v1.ChunkType
+	(DeviceFactKey)(0),            // 10: psmith.v1.DeviceFactKey
+	(*User)(nil),                  // 11: psmith.v1.User
+	(*ProviderType)(nil),          // 12: psmith.v1.ProviderType
+	(*UserModelProvider)(nil),     // 13: psmith.v1.UserModelProvider
+	(*ProviderTemplate)(nil),      // 14: psmith.v1.ProviderTemplate
+	(*ModelCapabilities)(nil),     // 15: psmith.v1.ModelCapabilities
+	(*ModelPricing)(nil),          // 16: psmith.v1.ModelPricing
+	(*PricingTier)(nil),           // 17: psmith.v1.PricingTier
+	(*CatalogModelProvider)(nil),  // 18: psmith.v1.CatalogModelProvider
+	(*CatalogModel)(nil),          // 19: psmith.v1.CatalogModel
+	(*UserModel)(nil),             // 20: psmith.v1.UserModel
+	(*ModelConstraints)(nil),      // 21: psmith.v1.ModelConstraints
+	(*Range)(nil),                 // 22: psmith.v1.Range
+	(*CallSettings)(nil),          // 23: psmith.v1.CallSettings
+	(*ThinkingSettings)(nil),      // 24: psmith.v1.ThinkingSettings
+	(*AnthropicExtras)(nil),       // 25: psmith.v1.AnthropicExtras
+	(*OpenAIExtras)(nil),          // 26: psmith.v1.OpenAIExtras
+	(*ResponseFormat)(nil),        // 27: psmith.v1.ResponseFormat
+	(*JsonSchema)(nil),            // 28: psmith.v1.JsonSchema
+	(*GoogleExtras)(nil),          // 29: psmith.v1.GoogleExtras
+	(*SafetySettings)(nil),        // 30: psmith.v1.SafetySettings
+	(*ProfileDefaults)(nil),       // 31: psmith.v1.ProfileDefaults
+	(*Profile)(nil),               // 32: psmith.v1.Profile
+	(*ConversationSettings)(nil),  // 33: psmith.v1.ConversationSettings
+	(*Conversation)(nil),          // 34: psmith.v1.Conversation
+	(*HarnessBinding)(nil),        // 35: psmith.v1.HarnessBinding
+	(*StreamingComponentTag)(nil), // 36: psmith.v1.StreamingComponentTag
+	(*Context)(nil),               // 37: psmith.v1.Context
+	(*Message)(nil),               // 38: psmith.v1.Message
+	(*UIFragment)(nil),            // 39: psmith.v1.UIFragment
+	(*MessageAttachment)(nil),     // 40: psmith.v1.MessageAttachment
+	(*ToolCall)(nil),              // 41: psmith.v1.ToolCall
+	(*MessageUsage)(nil),          // 42: psmith.v1.MessageUsage
+	(*StreamRun)(nil),             // 43: psmith.v1.StreamRun
+	(*Chunk)(nil),                 // 44: psmith.v1.Chunk
+	(*DeviceFact)(nil),            // 45: psmith.v1.DeviceFact
+	nil,                           // 46: psmith.v1.OpenAIExtras.LogitBiasEntry
+	(*timestamppb.Timestamp)(nil), // 47: google.protobuf.Timestamp
 }
 var file_psmith_v1_types_proto_depIdxs = []int32{
-	46, // 0: psmith.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	46, // 1: psmith.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	46, // 2: psmith.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
-	46, // 3: psmith.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 4: psmith.v1.UserModelProvider.default_settings:type_name -> psmith.v1.CallSettings
-	16, // 5: psmith.v1.ModelPricing.tiers:type_name -> psmith.v1.PricingTier
-	46, // 6: psmith.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
-	15, // 7: psmith.v1.CatalogModel.pricing:type_name -> psmith.v1.ModelPricing
-	14, // 8: psmith.v1.CatalogModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	46, // 9: psmith.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
-	15, // 10: psmith.v1.UserModel.pricing:type_name -> psmith.v1.ModelPricing
-	14, // 11: psmith.v1.UserModel.capabilities:type_name -> psmith.v1.ModelCapabilities
-	22, // 12: psmith.v1.UserModel.default_settings:type_name -> psmith.v1.CallSettings
+	47, // 0: psmith.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	47, // 1: psmith.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	47, // 2: psmith.v1.UserModelProvider.created_at:type_name -> google.protobuf.Timestamp
+	47, // 3: psmith.v1.UserModelProvider.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 4: psmith.v1.UserModelProvider.default_settings:type_name -> psmith.v1.CallSettings
+	17, // 5: psmith.v1.ModelPricing.tiers:type_name -> psmith.v1.PricingTier
+	47, // 6: psmith.v1.CatalogModelProvider.fetched_at:type_name -> google.protobuf.Timestamp
+	16, // 7: psmith.v1.CatalogModel.pricing:type_name -> psmith.v1.ModelPricing
+	15, // 8: psmith.v1.CatalogModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	47, // 9: psmith.v1.CatalogModel.fetched_at:type_name -> google.protobuf.Timestamp
+	16, // 10: psmith.v1.UserModel.pricing:type_name -> psmith.v1.ModelPricing
+	15, // 11: psmith.v1.UserModel.capabilities:type_name -> psmith.v1.ModelCapabilities
+	23, // 12: psmith.v1.UserModel.default_settings:type_name -> psmith.v1.CallSettings
 	0,  // 13: psmith.v1.UserModel.metadata_source:type_name -> psmith.v1.MetadataSource
-	46, // 14: psmith.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
-	46, // 15: psmith.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
-	20, // 16: psmith.v1.UserModel.constraints:type_name -> psmith.v1.ModelConstraints
-	21, // 17: psmith.v1.ModelConstraints.temperature:type_name -> psmith.v1.Range
-	23, // 18: psmith.v1.CallSettings.thinking:type_name -> psmith.v1.ThinkingSettings
-	24, // 19: psmith.v1.CallSettings.anthropic:type_name -> psmith.v1.AnthropicExtras
-	25, // 20: psmith.v1.CallSettings.openai:type_name -> psmith.v1.OpenAIExtras
-	28, // 21: psmith.v1.CallSettings.google:type_name -> psmith.v1.GoogleExtras
-	1,  // 22: psmith.v1.AnthropicExtras.cache_ttl:type_name -> psmith.v1.CacheTTL
-	2,  // 23: psmith.v1.OpenAIExtras.service_tier:type_name -> psmith.v1.ServiceTier
-	26, // 24: psmith.v1.OpenAIExtras.response_format:type_name -> psmith.v1.ResponseFormat
-	45, // 25: psmith.v1.OpenAIExtras.logit_bias:type_name -> psmith.v1.OpenAIExtras.LogitBiasEntry
-	27, // 26: psmith.v1.ResponseFormat.json_schema:type_name -> psmith.v1.JsonSchema
-	29, // 27: psmith.v1.GoogleExtras.safety_settings:type_name -> psmith.v1.SafetySettings
-	3,  // 28: psmith.v1.SafetySettings.harassment:type_name -> psmith.v1.HarmThreshold
-	3,  // 29: psmith.v1.SafetySettings.hate_speech:type_name -> psmith.v1.HarmThreshold
-	3,  // 30: psmith.v1.SafetySettings.sexually_explicit:type_name -> psmith.v1.HarmThreshold
-	3,  // 31: psmith.v1.SafetySettings.dangerous_content:type_name -> psmith.v1.HarmThreshold
-	22, // 32: psmith.v1.ProfileDefaults.call_settings:type_name -> psmith.v1.CallSettings
-	4,  // 33: psmith.v1.Profile.compression_mode:type_name -> psmith.v1.CompressionMode
-	30, // 34: psmith.v1.Profile.default_settings:type_name -> psmith.v1.ProfileDefaults
-	46, // 35: psmith.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	46, // 36: psmith.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	14, // 37: psmith.v1.Profile.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
-	22, // 38: psmith.v1.ConversationSettings.call_settings:type_name -> psmith.v1.CallSettings
-	32, // 39: psmith.v1.Conversation.settings:type_name -> psmith.v1.ConversationSettings
-	46, // 40: psmith.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
-	46, // 41: psmith.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
-	46, // 42: psmith.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
-	35, // 43: psmith.v1.Conversation.streaming_components:type_name -> psmith.v1.StreamingComponentTag
-	46, // 44: psmith.v1.Conversation.archived_at:type_name -> google.protobuf.Timestamp
-	46, // 45: psmith.v1.Conversation.pinned_at:type_name -> google.protobuf.Timestamp
-	34, // 46: psmith.v1.Conversation.harness:type_name -> psmith.v1.HarnessBinding
-	46, // 47: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
-	46, // 48: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 49: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
-	46, // 50: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	41, // 51: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
-	46, // 52: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
-	40, // 53: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
-	39, // 54: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
-	38, // 55: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
-	6,  // 56: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
-	7,  // 57: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
-	46, // 58: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
-	46, // 59: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
-	8,  // 60: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
-	9,  // 61: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
-	62, // [62:62] is the sub-list for method output_type
-	62, // [62:62] is the sub-list for method input_type
-	62, // [62:62] is the sub-list for extension type_name
-	62, // [62:62] is the sub-list for extension extendee
-	0,  // [0:62] is the sub-list for field type_name
+	47, // 14: psmith.v1.UserModel.metadata_snapshot_at:type_name -> google.protobuf.Timestamp
+	47, // 15: psmith.v1.UserModel.enabled_at:type_name -> google.protobuf.Timestamp
+	21, // 16: psmith.v1.UserModel.constraints:type_name -> psmith.v1.ModelConstraints
+	22, // 17: psmith.v1.ModelConstraints.temperature:type_name -> psmith.v1.Range
+	24, // 18: psmith.v1.CallSettings.thinking:type_name -> psmith.v1.ThinkingSettings
+	25, // 19: psmith.v1.CallSettings.anthropic:type_name -> psmith.v1.AnthropicExtras
+	26, // 20: psmith.v1.CallSettings.openai:type_name -> psmith.v1.OpenAIExtras
+	29, // 21: psmith.v1.CallSettings.google:type_name -> psmith.v1.GoogleExtras
+	1,  // 22: psmith.v1.ThinkingSettings.effort:type_name -> psmith.v1.ThinkingEffort
+	2,  // 23: psmith.v1.AnthropicExtras.cache_ttl:type_name -> psmith.v1.CacheTTL
+	3,  // 24: psmith.v1.OpenAIExtras.service_tier:type_name -> psmith.v1.ServiceTier
+	27, // 25: psmith.v1.OpenAIExtras.response_format:type_name -> psmith.v1.ResponseFormat
+	46, // 26: psmith.v1.OpenAIExtras.logit_bias:type_name -> psmith.v1.OpenAIExtras.LogitBiasEntry
+	28, // 27: psmith.v1.ResponseFormat.json_schema:type_name -> psmith.v1.JsonSchema
+	30, // 28: psmith.v1.GoogleExtras.safety_settings:type_name -> psmith.v1.SafetySettings
+	4,  // 29: psmith.v1.SafetySettings.harassment:type_name -> psmith.v1.HarmThreshold
+	4,  // 30: psmith.v1.SafetySettings.hate_speech:type_name -> psmith.v1.HarmThreshold
+	4,  // 31: psmith.v1.SafetySettings.sexually_explicit:type_name -> psmith.v1.HarmThreshold
+	4,  // 32: psmith.v1.SafetySettings.dangerous_content:type_name -> psmith.v1.HarmThreshold
+	23, // 33: psmith.v1.ProfileDefaults.call_settings:type_name -> psmith.v1.CallSettings
+	5,  // 34: psmith.v1.Profile.compression_mode:type_name -> psmith.v1.CompressionMode
+	31, // 35: psmith.v1.Profile.default_settings:type_name -> psmith.v1.ProfileDefaults
+	47, // 36: psmith.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	47, // 37: psmith.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 38: psmith.v1.Profile.required_model_capabilities:type_name -> psmith.v1.ModelCapabilities
+	23, // 39: psmith.v1.ConversationSettings.call_settings:type_name -> psmith.v1.CallSettings
+	33, // 40: psmith.v1.Conversation.settings:type_name -> psmith.v1.ConversationSettings
+	47, // 41: psmith.v1.Conversation.created_at:type_name -> google.protobuf.Timestamp
+	47, // 42: psmith.v1.Conversation.updated_at:type_name -> google.protobuf.Timestamp
+	47, // 43: psmith.v1.Conversation.last_activity_at:type_name -> google.protobuf.Timestamp
+	36, // 44: psmith.v1.Conversation.streaming_components:type_name -> psmith.v1.StreamingComponentTag
+	47, // 45: psmith.v1.Conversation.archived_at:type_name -> google.protobuf.Timestamp
+	47, // 46: psmith.v1.Conversation.pinned_at:type_name -> google.protobuf.Timestamp
+	35, // 47: psmith.v1.Conversation.harness:type_name -> psmith.v1.HarnessBinding
+	47, // 48: psmith.v1.Context.activation_time:type_name -> google.protobuf.Timestamp
+	47, // 49: psmith.v1.Context.created_at:type_name -> google.protobuf.Timestamp
+	6,  // 50: psmith.v1.Message.role:type_name -> psmith.v1.MessageRole
+	47, // 51: psmith.v1.Message.created_at:type_name -> google.protobuf.Timestamp
+	42, // 52: psmith.v1.Message.usage:type_name -> psmith.v1.MessageUsage
+	47, // 53: psmith.v1.Message.edited_at:type_name -> google.protobuf.Timestamp
+	41, // 54: psmith.v1.Message.tool_calls:type_name -> psmith.v1.ToolCall
+	40, // 55: psmith.v1.Message.attachments:type_name -> psmith.v1.MessageAttachment
+	39, // 56: psmith.v1.Message.ui_fragments:type_name -> psmith.v1.UIFragment
+	7,  // 57: psmith.v1.StreamRun.status:type_name -> psmith.v1.StreamRunStatus
+	8,  // 58: psmith.v1.StreamRun.purpose:type_name -> psmith.v1.StreamRunPurpose
+	47, // 59: psmith.v1.StreamRun.started_at:type_name -> google.protobuf.Timestamp
+	47, // 60: psmith.v1.StreamRun.ended_at:type_name -> google.protobuf.Timestamp
+	9,  // 61: psmith.v1.Chunk.type:type_name -> psmith.v1.ChunkType
+	10, // 62: psmith.v1.DeviceFact.key:type_name -> psmith.v1.DeviceFactKey
+	63, // [63:63] is the sub-list for method output_type
+	63, // [63:63] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_psmith_v1_types_proto_init() }
@@ -5041,7 +5107,6 @@ func file_psmith_v1_types_proto_init() {
 	file_psmith_v1_types_proto_msgTypes[10].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[11].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[12].OneofWrappers = []any{}
-	file_psmith_v1_types_proto_msgTypes[13].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[14].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[15].OneofWrappers = []any{}
 	file_psmith_v1_types_proto_msgTypes[16].OneofWrappers = []any{
@@ -5067,7 +5132,7 @@ func file_psmith_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_psmith_v1_types_proto_rawDesc), len(file_psmith_v1_types_proto_rawDesc)),
-			NumEnums:      10,
+			NumEnums:      11,
 			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -519,9 +519,8 @@ func TestCompact_OutputBudget(t *testing.T) {
 			// Thinking stays force-disabled on the compression request;
 			// the budget above is what prevents truncation on models
 			// where the disable doesn't stick.
-			th := req.Settings.Thinking
-			if th == nil || th.Enabled == nil || *th.Enabled {
-				t.Errorf("expected thinking explicitly disabled, got %+v", th)
+			if req.Settings.ThinkingEffort() != providers.ThinkingEffortOff {
+				t.Errorf("expected thinking explicitly off, got %+v", req.Settings.Thinking)
 			}
 		})
 	}

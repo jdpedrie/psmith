@@ -328,12 +328,10 @@ func TestSend_ThinkingAndToolUseStream(t *testing.T) {
 
 	d := newTestDriver(t, srv.URL, nil)
 
-	enabled := true
-	budget := 1024
 	ch, err := d.Send(context.Background(), providers.SendRequest{
 		ModelID:  "claude-opus-4-7",
 		Messages: []providers.WireMessage{{Role: "user", Content: "compute"}},
-		Settings: providers.CallSettings{Thinking: &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &budget}},
+		Settings: providers.CallSettings{Thinking: &providers.ThinkingSettings{Effort: providers.ThinkingEffortLow}},
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)

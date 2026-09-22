@@ -45,7 +45,7 @@ func shapeOf(req providers.SendRequest) string {
 			return "image"
 		}
 	}
-	if req.Settings.Thinking != nil && req.Settings.Thinking.Enabled != nil && *req.Settings.Thinking.Enabled {
+	if req.Settings.ThinkingEffort().On() {
 		return "thinking"
 	}
 	return "plain"

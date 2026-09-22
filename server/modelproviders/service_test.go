@@ -592,7 +592,7 @@ func TestUpdateUserModelProvider_EmptyLabelRejected(t *testing.T) {
 }
 
 // TestUpdateUserModelProvider_DefaultSettings round-trips a CallSettings
-// (temperature + thinking budget), then runs an unrelated update without the
+// (temperature + thinking effort), then runs an unrelated update without the
 // `default_settings` field set and verifies the previously-stored value
 // survives — the unset signals "leave the column alone."
 func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
@@ -601,16 +601,12 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	user := mustUser(t, q, "alice", false)
 	prov := makeProvider(t, q, user.ID, "fake", "main", nil)
 
-	// First write — set temperature + thinking.budget.
+	// First write — set temperature + thinking effort.
 	temp := 0.5
-	budget := int32(4096)
-	thinkingOn := true
+	effort := psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH
 	want := &psmithv1.CallSettings{
 		Temperature: &temp,
-		Thinking: &psmithv1.ThinkingSettings{
-			Enabled:      &thinkingOn,
-			BudgetTokens: &budget,
-		},
+		Thinking:    &psmithv1.ThinkingSettings{Effort: effort},
 	}
 	resp, err := svc.UpdateUserModelProvider(ctxAs(user), connect.NewRequest(&psmithv1.UpdateUserModelProviderRequest{
 		Id:              prov.ID.String(),
@@ -621,9 +617,7 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	}
 	if got := resp.Msg.Provider.GetDefaultSettings(); got == nil ||
 		got.GetTemperature() != temp ||
-		got.GetThinking() == nil ||
-		got.GetThinking().GetBudgetTokens() != budget ||
-		!got.GetThinking().GetEnabled() {
+		got.GetThinking().GetEffort() != effort {
 		t.Errorf("first-write round-trip mismatch: %+v", got)
 	}
 
@@ -636,7 +630,7 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	}
 	if got := getResp.Msg.Provider.GetDefaultSettings(); got == nil ||
 		got.GetTemperature() != temp ||
-		got.GetThinking().GetBudgetTokens() != budget {
+		got.GetThinking().GetEffort() != effort {
 		t.Errorf("Get round-trip mismatch: %+v", got)
 	}
 
@@ -657,7 +651,7 @@ func TestUpdateUserModelProvider_DefaultSettings(t *testing.T) {
 	}
 	if got := getResp2.Msg.Provider.GetDefaultSettings(); got == nil ||
 		got.GetTemperature() != temp ||
-		got.GetThinking().GetBudgetTokens() != budget {
+		got.GetThinking().GetEffort() != effort {
 		t.Errorf("default_settings wiped by unrelated update: %+v", got)
 	}
 }
@@ -1807,8 +1801,6 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 
 	temp := 0.7
 	maxOut := 4096
-	thinkingOn := true
-	thinkingBudget := 2048
 	rich := providers.Model{
 		ID:              "driver-rich",
 		DisplayName:     "Driver Rich",
@@ -1828,10 +1820,7 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 		DefaultSettings: providers.CallSettings{
 			Temperature:     &temp,
 			MaxOutputTokens: &maxOut,
-			Thinking: &providers.ThinkingSettings{
-				Enabled:      &thinkingOn,
-				BudgetTokens: &thinkingBudget,
-			},
+			Thinking:        &providers.ThinkingSettings{Effort: providers.ThinkingEffortLow},
 		},
 		MetadataSource: modelmeta.SourceDriver,
 	}
@@ -1868,9 +1857,7 @@ func TestEnableModels_FromDriver_RichMetadata_RoundTrip(t *testing.T) {
 	if got.DefaultSettings == nil ||
 		got.DefaultSettings.GetTemperature() != temp ||
 		got.DefaultSettings.GetMaxOutputTokens() != int32(maxOut) ||
-		got.DefaultSettings.GetThinking() == nil ||
-		!got.DefaultSettings.GetThinking().GetEnabled() ||
-		got.DefaultSettings.GetThinking().GetBudgetTokens() != int32(thinkingBudget) {
+		got.DefaultSettings.GetThinking().GetEffort() != psmithv1.ThinkingEffort_THINKING_EFFORT_LOW {
 		t.Errorf("default_settings round-trip: %+v", got.DefaultSettings)
 	}
 	if got.MetadataSource != psmithv1.MetadataSource_METADATA_SOURCE_DRIVER {

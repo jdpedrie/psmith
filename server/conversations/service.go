@@ -3272,12 +3272,9 @@ func (s *Service) Compact(ctx context.Context, req *connect.Request[psmithv1.Com
 	if modelRow.MaxOutputTokens != nil && *modelRow.MaxOutputTokens > 0 {
 		maxOut = min(int(*modelRow.MaxOutputTokens), compressionMaxOutputTokens)
 	}
-	thinkingDisabled := false
 	compressionSettings := providers.CallSettings{
 		MaxOutputTokens: &maxOut,
-		Thinking: &providers.ThinkingSettings{
-			Enabled: &thinkingDisabled,
-		},
+		Thinking:        &providers.ThinkingSettings{Effort: providers.ThinkingEffortOff},
 	}
 	compactSendReq := providers.SendRequest{
 		ModelID: *modelID,

@@ -11,6 +11,7 @@ import (
 	psmithv1 "github.com/jdpedrie/psmith/gen/psmith/v1"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/profiles"
+	"github.com/jdpedrie/psmith/server/protoconv"
 	"github.com/jdpedrie/psmith/server/providers"
 	"github.com/jdpedrie/psmith/server/store"
 )
@@ -265,15 +266,8 @@ func callSettingsToProto(s providers.CallSettings) *psmithv1.CallSettings {
 	if len(s.StopSequences) > 0 {
 		out.StopSequences = append([]string(nil), s.StopSequences...)
 	}
-	if t := s.Thinking; t != nil {
-		ts := &psmithv1.ThinkingSettings{Enabled: t.Enabled}
-		if t.BudgetTokens != nil {
-			v := int32(*t.BudgetTokens)
-			ts.BudgetTokens = &v
-		}
-		if ts.Enabled != nil || ts.BudgetTokens != nil {
-			out.Thinking = ts
-		}
+	if t := s.Thinking; t != nil && t.Effort != providers.ThinkingEffortUnset {
+		out.Thinking = &psmithv1.ThinkingSettings{Effort: protoconv.ThinkingEffortProto(t.Effort)}
 	}
 	if isCallSettingsEmpty(out) {
 		return nil

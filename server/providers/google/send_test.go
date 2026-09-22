@@ -518,8 +518,6 @@ func TestSend_AllSettings(t *testing.T) {
 	topP := 0.9
 	topK := 7
 	maxOut := 256
-	enabled := true
-	budget := 4096
 	respMime := "application/json"
 	candCount := 2
 	harassment := providers.HarmThresholdBlockNone
@@ -538,10 +536,7 @@ func TestSend_AllSettings(t *testing.T) {
 			TopK:            &topK,
 			MaxOutputTokens: &maxOut,
 			StopSequences:   []string{"END"},
-			Thinking: &providers.ThinkingSettings{
-				Enabled:      &enabled,
-				BudgetTokens: &budget,
-			},
+			Thinking: &providers.ThinkingSettings{Effort: providers.ThinkingEffortMedium},
 			Google: &providers.GoogleExtras{
 				ResponseMimeType: &respMime,
 				ResponseSchema:   []byte(`{"type":"object","properties":{"x":{"type":"integer"}}}`),
@@ -612,8 +607,8 @@ func TestSend_AllSettings(t *testing.T) {
 	if gc.ThinkingConfig.IncludeThoughts == nil || !*gc.ThinkingConfig.IncludeThoughts {
 		t.Errorf("includeThoughts=%v want true", gc.ThinkingConfig.IncludeThoughts)
 	}
-	if gc.ThinkingConfig.ThinkingBudget == nil || *gc.ThinkingConfig.ThinkingBudget != 4096 {
-		t.Errorf("thinkingBudget=%v want 4096", gc.ThinkingConfig.ThinkingBudget)
+	if gc.ThinkingConfig.ThinkingBudget == nil || *gc.ThinkingConfig.ThinkingBudget != 8192 {
+		t.Errorf("thinkingBudget=%v want 8192 (the medium-effort budget)", gc.ThinkingConfig.ThinkingBudget)
 	}
 
 	// Safety settings: 4 entries, all categories represented.

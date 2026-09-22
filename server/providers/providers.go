@@ -242,8 +242,57 @@ type CallSettings struct {
 
 // ThinkingSettings mirrors psmith.v1.ThinkingSettings.
 type ThinkingSettings struct {
-	Enabled      *bool
-	BudgetTokens *int
+	// Effort is the requested reasoning depth. Unset means no request was
+	// made at any layer, and the driver leaves the provider's default alone.
+	Effort ThinkingEffort
+}
+
+// ThinkingEffort is the cross-provider reasoning depth. Token budgets are
+// never user-facing: OpenAI-style APIs take the level verbatim, and a driver
+// whose API still wants a budget derives one through BudgetTokensForEffort.
+type ThinkingEffort string
+
+const (
+	ThinkingEffortUnset  ThinkingEffort = ""
+	ThinkingEffortOff    ThinkingEffort = "off"
+	ThinkingEffortLow    ThinkingEffort = "low"
+	ThinkingEffortMedium ThinkingEffort = "medium"
+	ThinkingEffortHigh   ThinkingEffort = "high"
+	ThinkingEffortXHigh  ThinkingEffort = "xhigh"
+)
+
+// On reports whether the effort asks the model to reason at all.
+func (e ThinkingEffort) On() bool {
+	return e != ThinkingEffortUnset && e != ThinkingEffortOff
+}
+
+// ThinkingEffort returns the resolved effort, or unset when the settings
+// carry none, so drivers skip the nil check.
+func (s CallSettings) ThinkingEffort() ThinkingEffort {
+	if s.Thinking == nil {
+		return ThinkingEffortUnset
+	}
+	return s.Thinking.Effort
+}
+
+// BudgetTokensForEffort is the one table that turns a level into a token
+// budget for the APIs that still take one: Anthropic's pre-adaptive models
+// and Gemini. The floor clears every provider's minimum (Anthropic wants at
+// least 1024), and the ceiling is the largest budget Gemini 2.5 Flash
+// accepts, so xhigh never has to know which model it lands on. Returns 0
+// for OFF and for an unset effort.
+func BudgetTokensForEffort(e ThinkingEffort) int {
+	switch e {
+	case ThinkingEffortLow:
+		return 2048
+	case ThinkingEffortMedium:
+		return 8192
+	case ThinkingEffortHigh:
+		return 16384
+	case ThinkingEffortXHigh:
+		return 24576
+	}
+	return 0
 }
 
 // AnthropicExtras carries Anthropic-specific knobs that don't fit the

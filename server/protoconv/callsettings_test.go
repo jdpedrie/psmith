@@ -29,7 +29,6 @@ func TestCallSettings_TopLevelFieldsRoundTrip(t *testing.T) {
 	topP := 0.95
 	maxTok := int32(2048)
 	topK := int32(40)
-	enabled := true
 	cache := true
 	out := CallSettings(&psmithv1.CallSettings{
 		Temperature:     &temp,
@@ -38,7 +37,7 @@ func TestCallSettings_TopLevelFieldsRoundTrip(t *testing.T) {
 		TopK:            &topK,
 		StopSequences:   []string{"END", "STOP"},
 		Thinking: &psmithv1.ThinkingSettings{
-			Enabled: &enabled,
+			Effort: psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH,
 		},
 		ExplicitCache: &cache,
 	})
@@ -54,22 +53,40 @@ func TestCallSettings_TopLevelFieldsRoundTrip(t *testing.T) {
 	if len(out.StopSequences) != 2 || out.StopSequences[0] != "END" {
 		t.Errorf("StopSequences=%v", out.StopSequences)
 	}
-	if out.Thinking == nil || out.Thinking.Enabled == nil || !*out.Thinking.Enabled {
-		t.Errorf("Thinking.Enabled=%v", out.Thinking)
+	if out.Thinking == nil || out.Thinking.Effort != providers.ThinkingEffortHigh {
+		t.Errorf("Thinking=%v want effort high", out.Thinking)
 	}
 	if out.ExplicitCache == nil {
 		t.Error("ExplicitCache lost")
 	}
 }
 
-func TestCallSettings_ThinkingBudgetTokensConverted(t *testing.T) {
+// Every level round-trips through both directions, and UNSPECIFIED drops
+// the block entirely so a driver sees "no request" rather than an empty
+// settings object.
+func TestCallSettings_ThinkingEffortRoundTrip(t *testing.T) {
 	t.Parallel()
-	budget := int32(8000)
-	out := CallSettings(&psmithv1.CallSettings{
-		Thinking: &psmithv1.ThinkingSettings{BudgetTokens: &budget},
-	})
-	if out.Thinking == nil || out.Thinking.BudgetTokens == nil || *out.Thinking.BudgetTokens != 8000 {
-		t.Errorf("BudgetTokens=%v", out.Thinking)
+	levels := map[psmithv1.ThinkingEffort]providers.ThinkingEffort{
+		psmithv1.ThinkingEffort_THINKING_EFFORT_OFF:    providers.ThinkingEffortOff,
+		psmithv1.ThinkingEffort_THINKING_EFFORT_LOW:    providers.ThinkingEffortLow,
+		psmithv1.ThinkingEffort_THINKING_EFFORT_MEDIUM: providers.ThinkingEffortMedium,
+		psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH:   providers.ThinkingEffortHigh,
+		psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH:  providers.ThinkingEffortXHigh,
+	}
+	for in, want := range levels {
+		if got := ThinkingEffort(in); got != want {
+			t.Errorf("ThinkingEffort(%v)=%q want %q", in, got, want)
+		}
+		if back := ThinkingEffortProto(want); back != in {
+			t.Errorf("ThinkingEffortProto(%q)=%v want %v", want, back, in)
+		}
+	}
+	if got := ThinkingEffort(psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED); got != providers.ThinkingEffortUnset {
+		t.Errorf("UNSPECIFIED should map to unset, got %q", got)
+	}
+	out := CallSettings(&psmithv1.CallSettings{Thinking: &psmithv1.ThinkingSettings{}})
+	if out.Thinking != nil {
+		t.Errorf("an unspecified effort must not produce a thinking block; got %+v", out.Thinking)
 	}
 }
 

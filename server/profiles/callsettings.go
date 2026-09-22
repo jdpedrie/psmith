@@ -136,20 +136,18 @@ func mergeThinking(higher, lower *psmithv1.ThinkingSettings) *psmithv1.ThinkingS
 	if lower == nil {
 		return cloneThinking(higher)
 	}
-	return &psmithv1.ThinkingSettings{
-		Enabled:      pickBool(higher.Enabled, lower.Enabled),
-		BudgetTokens: pickInt32(higher.BudgetTokens, lower.BudgetTokens),
+	out := &psmithv1.ThinkingSettings{Effort: lower.Effort}
+	if higher.Effort != psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED {
+		out.Effort = higher.Effort
 	}
+	return out
 }
 
 func cloneThinking(t *psmithv1.ThinkingSettings) *psmithv1.ThinkingSettings {
 	if t == nil {
 		return nil
 	}
-	return &psmithv1.ThinkingSettings{
-		Enabled:      copyBool(t.Enabled),
-		BudgetTokens: copyInt32(t.BudgetTokens),
-	}
+	return &psmithv1.ThinkingSettings{Effort: t.Effort}
 }
 
 // --- AnthropicExtras --------------------------------------------------------

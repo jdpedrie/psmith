@@ -40,17 +40,18 @@ final class CallSettingsMergeTests: XCTestCase {
     }
 
     func testThinkingNestedMerge() {
-        // The case the old flat merge got wrong: profile sets only
-        // `enabled`, model sets only `budgetTokens` — the resolved
-        // preview must show BOTH.
+        // A higher layer carrying an empty thinking block (an untouched
+        // form) must not mask the level set below it.
         var higher = PsmithCallSettings()
-        higher.thinking = PsmithThinkingSettings(enabled: true, budgetTokens: nil)
+        higher.thinking = PsmithThinkingSettings(effort: nil)
         var lower = PsmithCallSettings()
-        lower.thinking = PsmithThinkingSettings(enabled: nil, budgetTokens: 8192)
+        lower.thinking = PsmithThinkingSettings(effort: .high)
 
         let out = CallSettingsMerge.merge(higher: higher, lower: lower)
-        XCTAssertEqual(out.thinking?.enabled, true)
-        XCTAssertEqual(out.thinking?.budgetTokens, 8192, "unset nested field inherits through")
+        XCTAssertEqual(out.thinking?.effort, .high, "unset nested field inherits through")
+
+        higher.thinking = PsmithThinkingSettings(effort: .off)
+        XCTAssertEqual(CallSettingsMerge.merge(higher: higher, lower: lower).thinking?.effort, .off, "higher wins when set")
     }
 
     func testAnthropicNestedMerge() {
@@ -108,7 +109,7 @@ final class CallSettingsMergeTests: XCTestCase {
 
     func testNilBlocksPassThrough() {
         var lower = PsmithCallSettings()
-        lower.thinking = PsmithThinkingSettings(enabled: true, budgetTokens: 1024)
+        lower.thinking = PsmithThinkingSettings(effort: .low)
         lower.google = {
             var g = PsmithGoogleExtras()
             g.candidateCount = 3
@@ -116,8 +117,7 @@ final class CallSettingsMergeTests: XCTestCase {
         }()
 
         let out = CallSettingsMerge.merge(higher: PsmithCallSettings(), lower: lower)
-        XCTAssertEqual(out.thinking?.enabled, true)
-        XCTAssertEqual(out.thinking?.budgetTokens, 1024)
+        XCTAssertEqual(out.thinking?.effort, .low)
         XCTAssertEqual(out.google?.candidateCount, 3)
     }
 

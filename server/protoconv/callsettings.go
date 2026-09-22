@@ -38,13 +38,8 @@ func CallSettings(s *psmithv1.CallSettings) providers.CallSettings {
 	if len(s.StopSequences) > 0 {
 		out.StopSequences = append([]string(nil), s.StopSequences...)
 	}
-	if t := s.Thinking; t != nil {
-		ts := &providers.ThinkingSettings{Enabled: t.Enabled}
-		if t.BudgetTokens != nil {
-			v := int(*t.BudgetTokens)
-			ts.BudgetTokens = &v
-		}
-		out.Thinking = ts
+	if e := ThinkingEffort(s.GetThinking().GetEffort()); e != providers.ThinkingEffortUnset {
+		out.Thinking = &providers.ThinkingSettings{Effort: e}
 	}
 	if ae := s.Anthropic; ae != nil {
 		out.Anthropic = &providers.AnthropicExtras{
@@ -105,6 +100,43 @@ func CallSettings(s *psmithv1.CallSettings) providers.CallSettings {
 }
 
 // CacheTTL converts the Anthropic cache-TTL enum.
+// ThinkingEffort maps the proto enum onto the driver-side level. UNSPECIFIED
+// and values this build does not know become unset, which drivers read as
+// "no request made".
+func ThinkingEffort(in psmithv1.ThinkingEffort) providers.ThinkingEffort {
+	switch in {
+	case psmithv1.ThinkingEffort_THINKING_EFFORT_OFF:
+		return providers.ThinkingEffortOff
+	case psmithv1.ThinkingEffort_THINKING_EFFORT_LOW:
+		return providers.ThinkingEffortLow
+	case psmithv1.ThinkingEffort_THINKING_EFFORT_MEDIUM:
+		return providers.ThinkingEffortMedium
+	case psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH:
+		return providers.ThinkingEffortHigh
+	case psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH:
+		return providers.ThinkingEffortXHigh
+	}
+	return providers.ThinkingEffortUnset
+}
+
+// ThinkingEffortProto is the inverse of ThinkingEffort, for the layers that
+// hand driver-side settings back to clients.
+func ThinkingEffortProto(in providers.ThinkingEffort) psmithv1.ThinkingEffort {
+	switch in {
+	case providers.ThinkingEffortOff:
+		return psmithv1.ThinkingEffort_THINKING_EFFORT_OFF
+	case providers.ThinkingEffortLow:
+		return psmithv1.ThinkingEffort_THINKING_EFFORT_LOW
+	case providers.ThinkingEffortMedium:
+		return psmithv1.ThinkingEffort_THINKING_EFFORT_MEDIUM
+	case providers.ThinkingEffortHigh:
+		return psmithv1.ThinkingEffort_THINKING_EFFORT_HIGH
+	case providers.ThinkingEffortXHigh:
+		return psmithv1.ThinkingEffort_THINKING_EFFORT_XHIGH
+	}
+	return psmithv1.ThinkingEffort_THINKING_EFFORT_UNSPECIFIED
+}
+
 func CacheTTL(in *psmithv1.CacheTTL) providers.CacheTTL {
 	if in == nil {
 		return providers.CacheTTLUnspecified

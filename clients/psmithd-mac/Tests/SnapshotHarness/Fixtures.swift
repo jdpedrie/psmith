@@ -631,7 +631,7 @@ public enum SnapshotFixtures {
             maxOutputTokens: 4_096,
             stopSequences: ["</done>"],
             topK: 40,
-            thinking: PsmithThinkingSettings(enabled: true, budgetTokens: 8_192)
+            thinking: PsmithThinkingSettings(effort: .medium)
         )
     }
 
@@ -640,7 +640,7 @@ public enum SnapshotFixtures {
     public static func anthropicExtrasCallSettings() -> PsmithCallSettings {
         var s = PsmithCallSettings()
         s.anthropic = PsmithAnthropicExtras(cacheEnabled: true, cacheTTL: .oneHour)
-        s.thinking  = PsmithThinkingSettings(enabled: true, budgetTokens: 12_000)
+        s.thinking  = PsmithThinkingSettings(effort: .high)
         return s
     }
 

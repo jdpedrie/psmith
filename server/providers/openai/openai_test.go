@@ -787,8 +787,6 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 	p = forceResponsesAPI(t, p)
 
 	tier := providers.ServiceTierAuto
-	enabled := true
-	budget := 6000 // medium effort
 	ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
 		// Non-reasoning model: temperature / top_p are sent. (gpt-5
 		// would now correctly omit them — see
@@ -802,7 +800,7 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 		Settings: providers.CallSettings{
 			Temperature:   f64Ptr(0.3),
 			TopP:          f64Ptr(0.85),
-			Thinking:      &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &budget},
+			Thinking:      &providers.ThinkingSettings{Effort: providers.ThinkingEffortMedium},
 			StopSequences: []string{"END"}, // dropped on Responses; should not error
 			OpenAI: &providers.OpenAIExtras{
 				ServiceTier: &tier,
@@ -837,7 +835,7 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 		t.Errorf("service_tier missing; body=%s", body)
 	}
 	if !strings.Contains(body, `"effort":"medium"`) {
-		t.Errorf("reasoning effort missing (budget=6000 should derive medium); body=%s", body)
+		t.Errorf("reasoning effort missing (medium should pass through); body=%s", body)
 	}
 	// These should NOT appear in the body — Responses doesn't surface them.
 	for _, fragment := range []string{
@@ -853,21 +851,14 @@ func TestSend_Responses_AllNewFields(t *testing.T) {
 	}
 }
 
-// TestSend_Responses_ReasoningEffortFromBudget exercises the budget→effort
-// mapping (<2k → low, 2-8k → medium, >8k → high).
-func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
-	cases := []struct {
-		name   string
-		budget int
-		effort string
-	}{
-		{"low", 1500, "low"},
-		{"medium-low-edge", 2000, "medium"},
-		{"medium-high-edge", 8000, "medium"},
-		{"high", 12000, "high"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+// TestSend_Responses_ReasoningEffortPassesThrough: every level is OpenAI's
+// own vocabulary and goes on the wire verbatim, xhigh included.
+func TestSend_Responses_ReasoningEffortPassesThrough(t *testing.T) {
+	for _, effort := range []providers.ThinkingEffort{
+		providers.ThinkingEffortLow, providers.ThinkingEffortMedium,
+		providers.ThinkingEffortHigh, providers.ThinkingEffortXHigh,
+	} {
+		t.Run(string(effort), func(t *testing.T) {
 			srv, captured := captureRequest(t, "/v1/responses",
 				"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n")
 			p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
@@ -875,13 +866,11 @@ func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
 				t.Fatalf("New: %v", err)
 			}
 			p = forceResponsesAPI(t, p)
-			enabled := true
-			b := tc.budget
 			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
 				ModelID:  "gpt-5",
 				Messages: []providers.WireMessage{{Role: "user", Content: "x"}},
 				Settings: providers.CallSettings{
-					Thinking: &providers.ThinkingSettings{Enabled: &enabled, BudgetTokens: &b},
+					Thinking: &providers.ThinkingSettings{Effort: effort},
 				},
 			})
 			if err != nil {
@@ -889,8 +878,58 @@ func TestSend_Responses_ReasoningEffortFromBudget(t *testing.T) {
 			}
 			for range ch {
 			}
-			if !strings.Contains(*captured, `"effort":"`+tc.effort+`"`) {
-				t.Errorf("budget=%d expected effort=%s; body=%s", tc.budget, tc.effort, *captured)
+			if !strings.Contains(*captured, `"effort":"`+string(effort)+`"`) {
+				t.Errorf("expected effort=%s on the wire; body=%s", effort, *captured)
+			}
+		})
+	}
+}
+
+// TestSend_ChatCompletions_ReasoningEffort: the same knob rides Chat
+// Completions, which is where every third-party endpoint (xAI among them)
+// is routed. A level goes through verbatim; OFF becomes low only on a
+// model the constraints table knows reasons, and is omitted otherwise so
+// an unknown model keeps its default rather than getting a 400.
+func TestSend_ChatCompletions_ReasoningEffort(t *testing.T) {
+	cases := []struct {
+		name    string
+		modelID string
+		effort  providers.ThinkingEffort
+		want    string // fragment that must appear; "" means no reasoning_effort at all
+	}{
+		{"grok level passes through", "grok-4.6", providers.ThinkingEffortHigh, `"reasoning_effort":"high"`},
+		{"xhigh passes through", "grok-4.6", providers.ThinkingEffortXHigh, `"reasoning_effort":"xhigh"`},
+		{"off on a known reasoning model is low", "gpt-5", providers.ThinkingEffortOff, `"reasoning_effort":"low"`},
+		{"off on an unknown model is omitted", "grok-4.6", providers.ThinkingEffortOff, ""},
+		{"unset is omitted", "gpt-5", providers.ThinkingEffortUnset, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, captured := captureRequest(t, "/v1/chat/completions",
+				"data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			// A non-OpenAI base URL routes to Chat Completions.
+			p, err := New(providers.Deps{}, validConfig(t, srv.URL+"/v1", ""))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			ch, err := p.(providers.StatelessProvider).Send(context.Background(), providers.SendRequest{
+				ModelID:  tc.modelID,
+				Messages: []providers.WireMessage{{Role: "user", Content: "x"}},
+				Settings: providers.CallSettings{Thinking: &providers.ThinkingSettings{Effort: tc.effort}},
+			})
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			for range ch {
+			}
+			if tc.want == "" {
+				if strings.Contains(*captured, `"reasoning_effort"`) {
+					t.Errorf("expected no reasoning_effort; body=%s", *captured)
+				}
+				return
+			}
+			if !strings.Contains(*captured, tc.want) {
+				t.Errorf("expected %s; body=%s", tc.want, *captured)
 			}
 		})
 	}
@@ -1027,23 +1066,23 @@ var (
 // quiet "imported and not used" if any test path is removed.
 var _ = errors.New
 
-// TestSend_Responses_ThinkingDisabled — an EXPLICIT thinking-disable
-// maps to effort=low on reasoning models (there's no off position, and
-// omitting the param means the default medium effort silently spends
-// output budget — the compression path depends on the low mapping).
-// Non-reasoning models keep omitting the reasoning param entirely
-// (they 400 on it), as does an unset Thinking.
-func TestSend_Responses_ThinkingDisabled(t *testing.T) {
-	disabled := false
+// TestSend_Responses_ThinkingOff — an EXPLICIT OFF maps to effort=low on
+// reasoning models (there's no off position, and omitting the param means
+// the default medium effort silently spends output budget — the
+// compression path depends on the low mapping). Non-reasoning models keep
+// omitting the reasoning param entirely (they 400 on it), as does an
+// unset Thinking.
+func TestSend_Responses_ThinkingOff(t *testing.T) {
+	off := &providers.ThinkingSettings{Effort: providers.ThinkingEffortOff}
 	cases := []struct {
 		name     string
 		modelID  string
 		thinking *providers.ThinkingSettings
 		wantLow  bool
 	}{
-		{"reasoning model gets low", "gpt-5", &providers.ThinkingSettings{Enabled: &disabled}, true},
-		{"o-series gets low", "o3", &providers.ThinkingSettings{Enabled: &disabled}, true},
-		{"non-reasoning model omits", "gpt-4o", &providers.ThinkingSettings{Enabled: &disabled}, false},
+		{"reasoning model gets low", "gpt-5", off, true},
+		{"o-series gets low", "o3", off, true},
+		{"non-reasoning model omits", "gpt-4o", off, false},
 		{"unset thinking omits", "gpt-5", nil, false},
 	}
 	for _, tc := range cases {
