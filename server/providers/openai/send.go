@@ -39,16 +39,12 @@ func locksSampling(modelID string) bool {
 //	response.output_text.delta              → ChunkText
 //	response.reasoning_summary_text.delta   → ChunkThinking
 //	response.reasoning_summary.delta        → ChunkThinking (newer event name)
-//	response.output_item.added (function_call)
-//	  + response.function_call_arguments.delta
-//	  + response.output_item.done (function_call) → ChunkToolUseStart/Delta/End
+//	response.output_item.done (function_call) → ChunkToolUseStart/Delta/End
 //	error / response.failed                 → ChunkError
 //	response.completed                      → ChunkDone
 //
-// Tool-use translation is implemented but minimal: we emit start/delta/end
-// chunks with the call_id, name, and accumulated argument-JSON delta.
-// Psmith's history-builder doesn't yet round-trip tool calls, so this path
-// is best-effort — see the architecture doc's "Open threads".
+// Completed function calls emit contiguous start/delta/end groups using
+// the full argument JSON so interleaved upstream calls stay distinct.
 //
 // The returned channel is closed when the upstream stream terminates (any
 // reason). Cancellation of ctx propagates to the SDK and closes the
@@ -582,16 +578,6 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 	defer close(out)
 	defer stream.Close()
 
-	// Track in-flight function calls keyed by item id. Models emit one
-	// at a time today, but the Responses API allows parallel
-	// function_call items interleaving their argument deltas — a
-	// single slot would cross-wire them.
-	type activeCall struct {
-		callID string
-		name   string
-	}
-	active := make(map[string]*activeCall)
-
 	for stream.Next() {
 		evt := stream.Current()
 
@@ -617,37 +603,19 @@ func (d *Driver) pumpStream(ctx context.Context, stream streamLike, out chan<- p
 			}
 			emit(out, providers.ChunkThinking, map[string]string{"text": text})
 
-		case "response.output_item.added":
-			// We only care about function calls for the tool-use path.
-			if evt.Item.Type == "function_call" {
-				active[evt.Item.ID] = &activeCall{
-					callID: evt.Item.CallID,
-					name:   evt.Item.Name,
-				}
-				emit(out, providers.ChunkToolUseStart, map[string]string{
-					"id":   evt.Item.CallID,
-					"name": evt.Item.Name,
-				})
-			}
-
-		case "response.function_call_arguments.delta":
-			if call, ok := active[evt.ItemID]; ok {
-				emit(out, providers.ChunkToolUseDelta, map[string]string{
-					"id":             call.callID,
-					"arguments_json": evt.Delta.OfString,
-				})
-			}
-
 		case "response.output_item.done":
 			if evt.Item.Type == "function_call" {
-				if call, ok := active[evt.Item.ID]; ok {
-					emit(out, providers.ChunkToolUseEnd, map[string]string{
-						"id":             call.callID,
-						"name":           call.name,
-						"arguments_json": evt.Item.Arguments,
-					})
-					delete(active, evt.Item.ID)
-				}
+				// The completed item carries the full arguments. Emit one
+				// contiguous group because our tool loop and transcript
+				// aggregator track a single current call, while Responses
+				// can interleave deltas from several calls upstream.
+				emit(out, providers.ChunkToolUseStart, map[string]string{
+					"id": evt.Item.CallID, "name": evt.Item.Name,
+				})
+				emit(out, providers.ChunkToolUseDelta, map[string]string{
+					"partial_json": evt.Item.Arguments,
+				})
+				emit(out, providers.ChunkToolUseEnd, map[string]any{})
 			}
 
 		case "error":
