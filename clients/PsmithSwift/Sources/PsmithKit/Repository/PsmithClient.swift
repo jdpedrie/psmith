@@ -49,14 +49,15 @@ public final class PsmithClient: Sendable {
         // timeouts and one URLSession can't serve both.
         //
         // Streaming: `timeoutIntervalForRequest` governs "max time
-        // between bytes". A reasoning model that goes silent for ~60s
-        // while it thinks would race the server-side idle timeout
-        // (also 60s): sometimes URLSession wins, the subscriber gets a
-        // transport error before the server's Terminal event arrives,
-        // and the materialised row lands in the DB without the client
-        // ever reloading the chain — the assistant turn "disappears."
-        // So the stream transport sits well above that, letting the
-        // server's own timer terminate first and emit a clean Terminal.
+        // between bytes". A reasoning model that goes silent for
+        // minutes while it thinks would race the server-side timers
+        // (five minutes before the first chunk and five between
+        // chunks): if URLSession won, the subscriber got a transport
+        // error before the server's Terminal event arrived, and the
+        // materialised row landed in the DB without the client ever
+        // reloading the chain — the assistant turn "disappeared." So
+        // the stream transport sits above both, letting the server's
+        // own timer terminate first and emit a clean Terminal.
         //
         // That reasoning covers generation only. SubscribeAccountEvents
         // has no server-side bound, so 600s is the ONLY thing that would
@@ -153,14 +154,15 @@ enum RPCTimeouts {
     static let unaryResource: TimeInterval = 60
     static let streamingRequest: TimeInterval = 600
     /// The generation-stream idle timeout on the server
-    /// (`server/stream.IdleTimeout`), which bounds how long the LLM
-    /// upstream may go silent mid-run. `streamingRequest` is sized above
-    /// it so the server's timer fires first and emits a clean Terminal.
+    /// (`server/stream.IdleTimeout`, matched by its first-chunk budget
+    /// `PerAttemptTimeout`), which bounds how long the LLM upstream may
+    /// go silent. `streamingRequest` is sized above it so the server's
+    /// timer fires first and emits a clean Terminal.
     ///
     /// This governs generation only. It says nothing about
     /// SubscribeAccountEvents, which has no server-side bound at all —
     /// see `eventsLivenessDeadline`.
-    static let generationIdleTimeout: TimeInterval = 60
+    static let generationIdleTimeout: TimeInterval = 300
 
     /// How long the events stream may go quiet before the client treats
     /// it as dead and reconnects.

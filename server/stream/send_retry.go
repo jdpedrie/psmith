@@ -28,23 +28,31 @@ var (
 
 	// PerAttemptTimeout: the time each attempt has to (a) return from
 	// the driver's Send call and (b) deliver the first chunk on the
-	// returned channel. 60s is generous — most providers' first-byte
-	// latency is sub-second; even thinking models start emitting
-	// reasoning_summary deltas well under a minute. If we go past 60s
-	// without ANY chunk, the upstream is almost certainly stuck and a
-	// retry has better odds than continuing to wait.
+	// returned channel.
 	//
-	// Critically this only governs the wait for the FIRST chunk.
-	// Once the first chunk arrives, the upstream context is no longer
-	// deadline-bound — long-running responses (large outputs, deep
-	// thinking) are governed by IdleTimeout in `consume.go` instead, so
-	// a slow but still-streaming model isn't cut off mid-response.
-	PerAttemptTimeout = 60 * time.Second
+	// Five minutes because a reasoning model reached over Chat
+	// Completions streams nothing while it thinks: xAI returns no
+	// reasoning content on that surface at all, and Grok 4.6 at its
+	// default effort has a median first token past 40 seconds, so the
+	// old one-minute budget cancelled healthy requests on longer
+	// prompts. xAI's streaming docs tell clients to raise their
+	// timeouts for reasoning models. The ceiling is the client's stream
+	// transport, which gives up after ten minutes of silence
+	// (RPCTimeouts.streamingRequest in PsmithKit); this has to fire
+	// first so the run ends with a clean error rather than a turn the
+	// client never sees.
+	//
+	// This only governs the wait for the FIRST chunk. Once it arrives
+	// the upstream context is no longer deadline-bound and IdleTimeout
+	// in `consume.go` takes over, so a slow but still-streaming model
+	// isn't cut off mid-response.
+	PerAttemptTimeout = 5 * time.Minute
 
 	// InitialBackoff: wait before the second attempt. Doubles each
 	// subsequent retry (1s, 2s). 3 attempts → up to ~3s of pure
-	// waiting between failures, plus up to 60s per attempt — worst
-	// case ~3 minutes for the user-visible errored row to land.
+	// waiting between failures. A first-chunk timeout is never retried
+	// (errFirstChunkTimeout), so the attempts that do repeat are the
+	// fast failures and the errored row lands within seconds.
 	InitialBackoff = 1 * time.Second
 
 	// IdleTimeout: maximum gap between two consecutive chunks once the
@@ -53,9 +61,18 @@ var (
 	// the run is finalised as errored — see `consume.go`. Picked to
 	// match PerAttemptTimeout so the user-visible "stuck" budget is the
 	// same regardless of whether the stall happens before or after the
-	// first chunk.
-	IdleTimeout = 60 * time.Second
+	// first chunk, and for the same reason it stays under the client's
+	// ten-minute transport window.
+	IdleTimeout = 5 * time.Minute
 )
+
+// errFirstChunkTimeout marks an attempt whose stream opened but produced
+// no chunk within PerAttemptTimeout. openStreamWithRetry surfaces it
+// without retrying: the upstream accepted the request and is presumably
+// still working on it, so a second attempt bills the same reasoning
+// again, and three five-minute attempts would outlast the client's
+// transport window before any error reached the user.
+var errFirstChunkTimeout = errors.New("timeout")
 
 // SendFunc opens an upstream stream. The supervisor calls it (with
 // retry + timeout, see openStreamWithRetry) inside its run goroutine.
@@ -79,10 +96,12 @@ type sentSourceResult struct {
 // already consumed and ready for re-injection via reinjectFirstChunk)
 // on success, or the last error on exhaustion.
 //
-// "Applicable failures" intentionally aren't classified — every error
-// is retried. Permanent errors (auth, 4xx) burn through MaxSendAttempts
-// in a few seconds; transient errors (5xx, network blips, rate limits)
-// get up to two recoveries. The bound is the safety net.
+// Failures aren't classified beyond one exception: every error is
+// retried except a first-chunk timeout (errFirstChunkTimeout), which
+// returns at once. Permanent errors (auth, 4xx) burn through
+// MaxSendAttempts in a few seconds; transient errors (5xx, network
+// blips, rate limits) get up to two recoveries. The bound is the
+// safety net.
 func openStreamWithRetry(parent context.Context, sf SendFunc, logger *slog.Logger) (*sentSourceResult, error) {
 	var lastErr error
 	backoff := InitialBackoff
@@ -97,6 +116,9 @@ func openStreamWithRetry(parent context.Context, sf SendFunc, logger *slog.Logge
 				"attempt", attempt,
 				"max_attempts", MaxSendAttempts,
 				"err", err)
+		}
+		if errors.Is(err, errFirstChunkTimeout) {
+			return nil, fmt.Errorf("upstream send failed on attempt %d: %w", attempt, err)
 		}
 		if attempt == MaxSendAttempts {
 			break
@@ -156,7 +178,7 @@ func openOnce(parent context.Context, sf SendFunc) (*sentSourceResult, error) {
 		if errors.Is(parent.Err(), context.Canceled) {
 			return nil, parent.Err()
 		}
-		return nil, fmt.Errorf("timeout: no first chunk within %s", PerAttemptTimeout)
+		return nil, fmt.Errorf("%w: no first chunk within %s", errFirstChunkTimeout, PerAttemptTimeout)
 	case <-parent.Done():
 		cancel()
 		go drainChannel(ch)

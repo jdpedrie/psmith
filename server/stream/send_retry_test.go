@@ -106,8 +106,10 @@ func TestOpenStreamRetry_Exhausted(t *testing.T) {
 }
 
 // TestOpenStreamRetry_FirstChunkTimeout: SendFunc returns a channel
-// that never produces. Per-attempt timeout fires; the helper retries;
-// all attempts time out; the helper surfaces a timeout error.
+// that never produces. The per-attempt timeout fires and the helper
+// surfaces it without a second attempt: the upstream accepted the
+// request, so another try would bill the same work again and push the
+// error past the client's transport window.
 func TestOpenStreamRetry_FirstChunkTimeout(t *testing.T) {
 	shrinkRetryConfigForTest(t, 3, 50*time.Millisecond)
 
@@ -120,14 +122,14 @@ func TestOpenStreamRetry_FirstChunkTimeout(t *testing.T) {
 	_, err := openStreamWithRetry(context.Background(), s.fn(), slog.Default())
 	elapsed := time.Since(start)
 
-	if err == nil {
-		t.Fatal("expected timeout error")
+	if !errors.Is(err, errFirstChunkTimeout) {
+		t.Fatalf("err = %v; want errFirstChunkTimeout", err)
 	}
-	if got := s.calls.Load(); got != 3 {
-		t.Errorf("Send called %d times; want 3", got)
+	if got := s.calls.Load(); got != 1 {
+		t.Errorf("Send called %d times; want 1 (a first-chunk timeout is not retried)", got)
 	}
-	if elapsed < 100*time.Millisecond {
-		t.Errorf("retry loop returned suspiciously fast (%v) — timeout may not be firing", elapsed)
+	if elapsed < 50*time.Millisecond {
+		t.Errorf("returned suspiciously fast (%v) — timeout may not be firing", elapsed)
 	}
 }
 
