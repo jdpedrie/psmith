@@ -33,6 +33,15 @@ markdown. `component` emits a `choice_list` fragment through the
 picked letter into the composer. Default is `text`, so an existing profile does
 not silently change render shape on a build update.
 
+Both modes strip the delimiters from `display_content`, the fallback a client
+reads when it cannot draw fragments. In component mode the JSON body is
+rewritten there as lettered text, so the choices survive on any client.
+
+**Streaming.** The tag is advertised to the client in both modes. A half-typed
+block hides behind a placeholder, and a closed block renders at once: as buttons
+in component mode, as the body's markdown in text mode. Without this the raw
+delimiters sat on screen until the turn settled.
+
 In component mode the model emits JSON inside the delimiters, and letters are
 not part of it. The server assigns them by index. Less for the model to escape,
 less to get wrong, and button labels stay consistent with what the system prompt
@@ -45,8 +54,9 @@ taught.
 | `pluginapi.Configurable` | Mode, retention, prose override. |
 | `pluginapi.SystemPrompter` | Teaches the convention. |
 | `pluginapi.HistoryTransformer` | Prunes stale menus and injects the reminder. |
-| `pluginapi.DisplayTransformer` | Strips delimiters in text mode. |
+| `pluginapi.DisplayTransformer` | Strips delimiters for the fallback in both modes. |
 | `pluginapi.ContentRenderer` | Emits `choice_list` fragments in component mode. |
+| `pluginapi.StreamingTagProvider` | Hides half-typed blocks mid-stream. |
 
 ## Config
 

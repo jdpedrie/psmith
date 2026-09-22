@@ -178,9 +178,12 @@ func (p Pipeline) TransformAssistantContent(content string) string {
 
 // RenderContent walks the pipeline, applying every ContentRenderer in
 // order to the parts list. The first renderer sees a single Text part
-// containing `content` (typically the post-DisplayTransformer string);
-// subsequent renderers see whatever the previous one returned, free to
-// further split / replace any part.
+// containing `content`, the stored message text rather than the
+// DisplayTransformer's output, so a renderer can find the blocks a
+// transformer strips from the fallback. The caller runs the
+// DisplayTransformer chain over the text parts that come back (see
+// conversations.applyDisplay). Subsequent renderers see whatever the
+// previous one returned, free to further split / replace any part.
 //
 // Returns the final []ContentPart. When no ContentRenderer is in the
 // pipeline, returns nil so callers can short-circuit (the wire shape

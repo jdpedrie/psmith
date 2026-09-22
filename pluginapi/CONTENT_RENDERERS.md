@@ -239,6 +239,13 @@ Literal text segment (rendered as Markdown). The wire shape uses
 this for every Text part in the renderer output, so the parts
 list is uniform on the client side.
 
+As a streaming tag target (`StreamingTag{Component: "text"}`) it
+is the one component whose block body is prose rather than JSON:
+once the close tag lands the client folds the body into the
+surrounding markdown with the delimiters dropped, and until then
+the block hides like any other. `lettered_choices` uses it in text
+mode so its `<choices>` tags never show mid-stream.
+
 ```json
 { "text": "Some markdown content **here**." }
 ```

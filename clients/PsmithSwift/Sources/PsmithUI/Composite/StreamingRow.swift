@@ -50,9 +50,11 @@ public struct StreamingRow: View {
     /// (tag-name, renderer-component) pairs the active pipeline exposes
     /// as streamable components. When non-empty, the streamed text is
     /// parsed into segments — closed `<tag>body</tag>` blocks render
-    /// as the named component inline (no JSON-flash); in-progress
-    /// partials hide until the close lands. Empty list falls back to
-    /// rendering the streamed text verbatim as markdown.
+    /// as the named component inline (no JSON-flash), a `text`
+    /// component folds its body into the prose with the tags dropped,
+    /// and in-progress partials hide until the close lands. Empty
+    /// list falls back to rendering the streamed text verbatim as
+    /// markdown.
     let streamingComponents: [PsmithStreamingComponentTag]
     @Environment(\.chatPaneWidth) private var paneWidth
 
@@ -224,7 +226,8 @@ enum StreamingSegment {
 }
 
 /// Walk `text` linearly, splitting on any opening tag listed in
-/// `components`. For a matched close, emit a `.fragment`; for an
+/// `components`. For a matched close, emit a `.fragment` (or, for the
+/// built-in `text` component, fold the body into the prose); for an
 /// unmatched open (mid-stream), emit `.pendingBlock` and stop.
 ///
 /// Exposed at package scope (internal) for unit testability — callers
@@ -288,8 +291,19 @@ func parseStreamingSegments(_ text: String, components: [PsmithStreamingComponen
             segments.append(.pendingBlock)
             return segments
         }
-        let body = String(text[bodyStart..<closeRange.lowerBound])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawBody = String(text[bodyStart..<closeRange.lowerBound])
+        // The built-in `text` component takes prose, not JSON: the
+        // block's body joins the surrounding markdown with the
+        // delimiters dropped, which is what the settled row shows
+        // once the DisplayTransformer has run. lettered_choices' text
+        // mode advertises its tag this way so the raw tags never
+        // appear mid-stream.
+        if component == "text" {
+            pending += rawBody
+            i = closeRange.upperBound
+            continue
+        }
+        let body = rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
         // The block is closed. Validate the body as JSON — invalid
         // bodies (e.g., the model emitted prose inside the tags by
         // mistake) become a pending placeholder so the bubble stays

@@ -126,6 +126,40 @@ struct StreamingSegmentTests {
         }
     }
 
+    /// lettered_choices in text mode advertises `choices` as the
+    /// built-in `text` component. A closed block must fold its body
+    /// into the surrounding prose with the delimiters gone, matching
+    /// what the settled row shows after the DisplayTransformer runs.
+    @Test func textComponentFoldsBodyIntoProse() {
+        let choices = PsmithStreamingComponentTag(tag: "choices", component: "text")
+        let body = "Pick one.\n\n<choices>\nA. Attack\nB. Flee\n</choices>\nGo on."
+        let out = parseStreamingSegments(body, components: [choices])
+        #expect(out.count == 1)
+        if case .text(let s) = out[0] {
+            #expect(s == "Pick one.\n\n\nA. Attack\nB. Flee\n\nGo on.")
+            #expect(!s.contains("<choices>"))
+        } else {
+            Issue.record("expected a single prose segment, got \(out)")
+        }
+    }
+
+    /// An open `text` block still hides until the close lands, so the
+    /// tag never flashes on screen while the model is typing it.
+    @Test func textComponentOpenBlockHides() {
+        let choices = PsmithStreamingComponentTag(tag: "choices", component: "text")
+        let body = "Pick one.\n\n<choices>\nA. Att"
+        let out = parseStreamingSegments(body, components: [choices])
+        #expect(out.count == 2)
+        if case .text(let s) = out[0] {
+            #expect(s == "Pick one.\n\n")
+        } else {
+            Issue.record("expected leading prose, got \(out)")
+        }
+        if case .pendingBlock = out[1] {} else {
+            Issue.record("expected .pendingBlock for the open block, got \(out)")
+        }
+    }
+
     /// Realistic snapshot of a mid-stream tick: the user's reported
     /// scene_header body is JSON-valid, multi-line, includes em-dash
     /// + colons inside string values. Must produce one .fragment.

@@ -582,19 +582,38 @@ func applyDisplay(m *psmithv1.Message, pipeline pluginapi.Pipeline) {
 	// second from the first meant a plugin that both strips a tag block for
 	// the fallback AND renders it as a component destroyed its own renderer's
 	// input — the block vanished from the text and no fragment replaced it,
-	// so the content was simply invisible.
-	//
-	// lettered_choices worked around this by refusing to strip in component
-	// mode, at the cost of leaving raw tags in DisplayContent. game_master
-	// could not: its block is a JSON state blob that has to be stripped from
-	// the fallback and rendered as components. Handing renderers the original
-	// lets a plugin do both, which is what the capability split promises.
+	// so the content was simply invisible. game_master needs exactly that
+	// pair: its block is a JSON state blob that has to be stripped from the
+	// fallback and rendered as components.
 	//
 	// Renderers still chain with each other; RenderContent threads parts
 	// through every renderer in pipeline order.
-	if parts := pipeline.RenderContent(m.Content, roleProtoToString(m.Role)); parts != nil {
-		m.UiFragments = contentPartsToProto(parts)
+	parts := pipeline.RenderContent(m.Content, roleProtoToString(m.Role))
+	if parts == nil {
+		return
 	}
+
+	// The text a renderer leaves between its fragments is still the
+	// original, so anything a DisplayTransformer strips from the fallback
+	// would come through raw here, and clients draw the fragment view
+	// whenever it exists. Run the same transforms over each text part so
+	// the two views agree.
+	hasFragment := false
+	for i := range parts {
+		if parts[i].IsText() {
+			parts[i].Text = pipeline.TransformForDisplay(parts[i].Text)
+			continue
+		}
+		hasFragment = true
+	}
+	// A renderer is in the pipeline but produced no component for this
+	// message (lettered_choices in text mode, or a turn without a block).
+	// Leave ui_fragments empty so clients take the markdown fallback,
+	// which is the documented meaning of the field being unset.
+	if !hasFragment {
+		return
+	}
+	m.UiFragments = contentPartsToProto(parts)
 }
 
 // contentPartsToProto flattens a renderer pipeline's []ContentPart

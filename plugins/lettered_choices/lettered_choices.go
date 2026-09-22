@@ -153,7 +153,9 @@ type letteredChoicesConfig struct {
 	// ContentRenderer parses with json.Unmarshal and emits a
 	// `choice_list` pluginapi.UIFragment with letters auto-assigned by index
 	// and `compose:<letter>` actions. Clients that don't recognize
-	// the component fall back to UnknownComponentRenderer.
+	// the component fall back to UnknownComponentRenderer; a client
+	// with no fragment support at all reads display_content, where
+	// the same choices appear as lettered text.
 	OutputMode string `json:"output_mode"`
 }
 
@@ -301,18 +303,15 @@ func (p *letteredChoices) TransformHistoryMessage(msg providers.WireMessage, pos
 // --- DisplayTransformer ---
 
 func (p *letteredChoices) TransformForDisplay(content string) string {
-	// In component mode the ContentRenderer takes over — it needs the
-	// raw tag block to find the choices, so we MUST NOT strip
-	// delimiters here. The renderer rewrites the block in-place with
-	// a fragment, dropping the tag text from the rendered output.
-	if p.cfg.OutputMode == lcOutputModeComponent {
-		return content
-	}
-	// Text mode (default): keep choice content but drop just the delimiters.
-	// Content-aware first pass: if a block body is JSON (left over from
-	// a previous run with component mode on), rewrite it to lettered
-	// text in place so the user sees readable choices instead of raw
-	// JSON. Bodies that are already lettered text pass through unchanged.
+	// Both modes: keep choice content but drop just the delimiters. The
+	// renderer reads the stored content, not this output, so component
+	// mode can strip here too and a client that cannot draw fragments
+	// still gets the choices from display_content.
+	// Content-aware first pass: if a block body is JSON (component
+	// mode's shape, or left over from a run with that mode on), rewrite
+	// it to lettered text in place so the user sees readable choices
+	// instead of raw JSON. Bodies that are already lettered text pass
+	// through unchanged.
 	content = rewriteJSONChoiceBodiesAsLettered(content)
 	// Then strip the delimiters with the word-boundary-preserving helper
 	// so `</choices>What's next?` doesn't render as `BarWhat's next?` —
@@ -325,12 +324,12 @@ func (p *letteredChoices) TransformForDisplay(content string) string {
 
 // rewriteJSONChoiceBodiesAsLettered scans content for choice blocks
 // whose body is a valid choice_list JSON object and replaces each body
-// with a lettered-text rendering of the same items. Used by text mode
-// to handle messages that were generated under component mode: without
-// this pass the body would render as raw `{"items":[...]}` after tag
-// strip — readable but ugly. Bodies that aren't JSON (or don't match
-// the expected shape) are left alone; this is a pure progressive-
-// enhancement pass.
+// with a lettered-text rendering of the same items. Component mode
+// emits that JSON shape, and a text-mode profile can hold messages
+// generated under component mode: without this pass the body would
+// render as raw `{"items":[...]}` after tag strip — readable but ugly.
+// Bodies that aren't JSON (or don't match the expected shape) are left
+// alone; this is a pure progressive-enhancement pass.
 func rewriteJSONChoiceBodiesAsLettered(content string) string {
 	if !strings.Contains(content, lcOpenTag) {
 		return content
@@ -456,16 +455,20 @@ func stripTagPreservingWordBoundary(s, tag string) string {
 
 // --- StreamingTagProvider ---
 
-// StreamingTags surfaces the `<choices>` tag when this instance is
-// in component mode so the client can render completed choice blocks
-// as a choice_list inline during streaming. Text mode contributes
-// nothing — its blocks become plain markdown via DisplayTransformer,
-// not a structured component.
+// StreamingTags surfaces the `<choices>` tag so the client can handle
+// a choice block while the turn is still streaming: the open tag and
+// a partial body stay hidden, and a closed block renders at once. In
+// component mode the block renders as a choice_list. In text mode it
+// maps to the built-in `text` component, which the client folds into
+// the surrounding prose as markdown, the same result the
+// DisplayTransformer produces for the settled message. Without this
+// the raw delimiters sat on screen for the whole stream and only
+// vanished at terminal.
 func (p *letteredChoices) StreamingTags() []pluginapi.StreamingTag {
-	if p.cfg.OutputMode != lcOutputModeComponent {
-		return nil
+	if p.cfg.OutputMode == lcOutputModeComponent {
+		return []pluginapi.StreamingTag{{Tag: "choices", Component: "choice_list"}}
 	}
-	return []pluginapi.StreamingTag{{Tag: "choices", Component: "choice_list"}}
+	return []pluginapi.StreamingTag{{Tag: "choices", Component: "text"}}
 }
 
 // --- ContentRenderer ---

@@ -272,7 +272,7 @@ For one turn of `SendMessage`:
    - `Pipeline.BuildTurnContexts` contributes per-turn context blocks.
    - `Pipeline.TransformHistoryMessage` rewrites each historical message, and may expand one into several. Wire only, never persisted.
 3. **In-stream** (`server/stream/consume.go`):
-   - Driver streams chunks; `Pipeline.StreamingTags` tells the consumer which tag pairs to treat as structured rather than prose.
+   - Driver streams chunks; `Pipeline.StreamingTags` tells the consumer which tag pairs to treat as structured rather than prose (a tag mapped to the `text` component is the exception: its body folds into the prose once the block closes).
    - Tool calls dispatch through `server/conversations/tool_loop.go`, which injects the `pluginapi/host` capabilities onto the dispatch context. `ExecuteTool` is the only entry point that gets an identity-carrying context.
 4. **Post-stream materialization** (`materializeAssistant`):
    - `Pipeline.TransformAssistantContent` rewrites the assistant text; the row is inserted post-transform.

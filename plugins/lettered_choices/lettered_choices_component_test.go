@@ -23,12 +23,35 @@ func TestLetteredChoices_InvalidOutputModeRejected(t *testing.T) {
 	}
 }
 
-func TestLetteredChoices_ComponentMode_DisplayTransformerNoOp(t *testing.T) {
+// Component mode strips for the fallback too: the renderer reads the
+// stored content, so display_content no longer has to preserve the
+// block for it, and a client that cannot draw fragments gets readable
+// choices instead of raw tags around JSON.
+func TestLetteredChoices_ComponentMode_DisplayTransformerRendersLettered(t *testing.T) {
 	t.Parallel()
 	lc := buildLetteredChoices(t, `{"output_mode": "component"}`)
-	body := "Pick one:\n<choices>\nA. Attack\nB. Flee\n</choices>"
-	if got := lc.TransformForDisplay(body); got != body {
-		t.Errorf("DisplayTransformer should be a no-op in component mode; got %q want %q", got, body)
+	body := "Pick one:\n<choices>{\"items\":[{\"label\":\"Attack\"},{\"label\":\"Flee\"}]}</choices>"
+	got := lc.TransformForDisplay(body)
+	if strings.Contains(got, "<choices>") || strings.Contains(got, "</choices>") {
+		t.Errorf("component mode should strip delimiters from the fallback; got %q", got)
+	}
+	if !strings.Contains(got, "A. Attack") || !strings.Contains(got, "B. Flee") {
+		t.Errorf("JSON body should render as lettered text in the fallback; got %q", got)
+	}
+}
+
+// Both modes advertise the tag so the client hides a half-typed block
+// mid-stream. Text mode maps it to the built-in `text` component, which
+// the client folds into the prose; component mode to choice_list.
+func TestLetteredChoices_StreamingTags_ByMode(t *testing.T) {
+	t.Parallel()
+	text := buildLetteredChoices(t, "").StreamingTags()
+	if len(text) != 1 || text[0].Tag != "choices" || text[0].Component != "text" {
+		t.Errorf("text mode tags = %+v; want choices as text", text)
+	}
+	comp := buildLetteredChoices(t, `{"output_mode": "component"}`).StreamingTags()
+	if len(comp) != 1 || comp[0].Tag != "choices" || comp[0].Component != "choice_list" {
+		t.Errorf("component mode tags = %+v; want choices as choice_list", comp)
 	}
 }
 
