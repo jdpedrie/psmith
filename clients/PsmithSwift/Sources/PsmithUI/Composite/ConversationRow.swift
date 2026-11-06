@@ -13,6 +13,7 @@ import PsmithKit
 /// label. Pass nil to hide it (used in By-Profile mode where the
 /// section header already names the profile).
 public struct ConversationRow: View {
+    @Environment(\.theme) private var theme
     let conversation: PsmithConversation
     let profileChainName: String?
     /// When true the row renders a small spinner + "generating" caption,
@@ -55,7 +56,7 @@ public struct ConversationRow: View {
                         .accessibilityLabel("Generating")
                 } else if isUnseen {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(theme.accent)
                         .frame(width: 8, height: 8)
                         .accessibilityLabel("New message")
                 }

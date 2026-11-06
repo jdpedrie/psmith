@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var snappedWindows: Set<ObjectIdentifier> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DockIconSync.apply(themeID: sharedThemeStore.current.id)
         Self.configureAndTrackAllWindows()
         let names: [Notification.Name] = [
             NSWindow.didBecomeKeyNotification,
@@ -271,8 +272,9 @@ struct PsmithMacApp: App {
                     }
                     _ = sharedNotifier
                 }
-                .onChange(of: themeStore.current.id) { _, _ in
+                .onChange(of: themeStore.current.id) { _, id in
                     AppDelegate.configureAndTrackAllWindows()
+                    DockIconSync.apply(themeID: id)
                 }
         }
         // Default size on first run. macOS state-restores the window's last

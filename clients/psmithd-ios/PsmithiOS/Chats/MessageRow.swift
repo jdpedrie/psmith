@@ -533,10 +533,7 @@ struct MessageRow: View {
         } else {
             switch message.role {
             case .user:
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(.regularMaterial)
-                    RoundedRectangle(cornerRadius: 10).fill(theme.accent.opacity(0.18))
-                }
+                ThemedUserBubbleBackground(cornerRadius: 10)
             case .assistant:
                 RoundedRectangle(cornerRadius: 10).fill(.regularMaterial)
             default:

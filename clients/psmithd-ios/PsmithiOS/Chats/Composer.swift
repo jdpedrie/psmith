@@ -17,6 +17,7 @@ import PsmithUI
 /// `.sheet(isPresented:)` modifiers from the same anchor). Send morphs
 /// into a red Stop circle while `model.isStreaming`.
 struct Composer: View {
+    @Environment(\.theme) private var theme
     @Bindable var model: ConversationViewModel
     @Environment(AppModel.self) private var app
     /// Bridge state for the UIKit-backed input: the wrapper writes
@@ -676,7 +677,7 @@ struct Composer: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(canSend ? Color.accentColor : Color.gray.opacity(0.4), in: Circle())
+                    .background(canSend ? theme.accent : Color.gray.opacity(0.4), in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(!canSend)

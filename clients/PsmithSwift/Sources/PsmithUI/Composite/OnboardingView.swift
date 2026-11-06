@@ -14,6 +14,7 @@ import PsmithKit
 /// user opens Settings in another window and adds a provider/model
 /// there, the gate also lifts automatically.
 public struct OnboardingView: View {
+    @Environment(\.theme) private var theme
     @Environment(AppModel.self) private var app
 
     @State private var step: Step = .pickProvider
@@ -85,7 +86,7 @@ public struct OnboardingView: View {
         HStack(spacing: 6) {
             ZStack {
                 Circle()
-                    .fill(done ? Color.accentColor : (active ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15)))
+                    .fill(done ? theme.accent : (active ? theme.accent.opacity(0.2) : Color.secondary.opacity(0.15)))
                     .frame(width: 22, height: 22)
                 if done {
                     Image(systemName: "checkmark")
@@ -94,7 +95,7 @@ public struct OnboardingView: View {
                 } else {
                     Text("\(n)")
                         .scaledFont(.caption2, weight: .semibold)
-                        .foregroundStyle(active ? Color.accentColor : .secondary)
+                        .foregroundStyle(active ? theme.accent : .secondary)
                 }
             }
             Text(label)
@@ -350,7 +351,7 @@ public struct OnboardingView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
+                    .foregroundStyle(selected ? theme.accent : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(m.displayName)
                         .scaledFont(.callout, weight: .medium)
@@ -371,7 +372,7 @@ public struct OnboardingView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(selected ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.025))
+            .background(selected ? theme.accent.opacity(0.08) : Color.primary.opacity(0.025))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 0.5)

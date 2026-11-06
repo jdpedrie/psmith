@@ -1,4 +1,4 @@
-.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test web-generate swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png
+.PHONY: proto lint build run tidy migrate-up migrate-down sqlc test web-generate swift-build swift-test swift-test-l1 swift-test-l2 swift-test-l2-record mac-build mac-run mac-app mac-app-run ios-project ios-build ios-app-run logos-png app-icons
 
 TEMPL_VERSION ?= v0.3.1020
 
@@ -119,6 +119,8 @@ mac-app: mac-build clients/psmithd-mac/AppBundle/AppIcon.icns
 	/usr/libexec/PlistBuddy -c "Add :PsmithBuildCommit string $(PSMITH_VERSION)" \
 		clients/psmithd-mac/.build/PsmithMac.app/Contents/Info.plist
 	cp clients/psmithd-mac/AppBundle/AppIcon.icns clients/psmithd-mac/.build/PsmithMac.app/Contents/Resources/AppIcon.icns
+	# Per-theme Dock icons, swapped in at runtime (DockIconSync.swift).
+	cp clients/psmithd-mac/AppBundle/AppIcon-*.png clients/psmithd-mac/.build/PsmithMac.app/Contents/Resources/
 	cp clients/psmithd-mac/.build/debug/PsmithMac clients/psmithd-mac/.build/PsmithMac.app/Contents/MacOS/PsmithMac
 	# SwiftPM resource bundles. The provider-logo SVGs moved to
 	# PsmithUI/Resources/Logos/ as part of the iOS-share refactor —
@@ -169,6 +171,12 @@ ios-project:
 # UIImage(named:in:with:). Mac keeps using the SVGs via NSImage. Idempotent.
 logos-png:
 	scripts/convert-svgs-to-pngs.sh
+
+# Regenerate the per-theme alternate app icons from the base icon. Run
+# after changing AppIcon-1024.png or a theme's accent; the output is
+# checked in, so ordinary builds don't need it.
+app-icons:
+	swift scripts/recolor-app-icon.swift
 
 # Build the iOS app for the simulator. Pinned to a project-local
 # DerivedData path so `make ios-app-run` can find the bundle without

@@ -284,6 +284,7 @@ private struct ConversationBody: View {
     let liveConversation: PsmithConversation
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
+    @Environment(\.theme) private var theme
 
     // THE INVERTED TRANSCRIPT. The scroll view renders through
     // scaleEffect(y: -1) with each row flipped back and the message
@@ -447,6 +448,7 @@ private struct ConversationBody: View {
                 Composer(model: model)
             }
         }
+        .background(theme.chrome.ignoresSafeArea())
         .onChange(of: model.messages.count) { old, new in
             // Pre-warm parsed markdown for any newly-added messages
             // (terminal reloads, fork switches, manual refresh). Cache
@@ -638,9 +640,11 @@ private struct ConversationBody: View {
                 .overlay(alignment: .top) {
                     LinearGradient(
                         stops: [
-                            .init(color: Color(.systemBackground), location: 0),
-                            .init(color: Color(.systemBackground).opacity(0.85), location: 0.55),
-                            .init(color: Color(.systemBackground).opacity(0), location: 1),
+                            // The surface it fades into, so it reads as
+                            // part of the page, not a white band.
+                            .init(color: theme.chrome, location: 0),
+                            .init(color: theme.chrome.opacity(0.85), location: 0.55),
+                            .init(color: theme.chrome.opacity(0), location: 1),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -1344,7 +1348,7 @@ private struct PendingUserArea: View, @MainActor Equatable {
                     .id("__queued_\(entry.id)")
             }
             if let pending = model.pendingUserText {
-                PendingUserRow(text: pending)
+                PendingUserRow(text: pending, style: .themed)
                     .frame(width: rowWidth, alignment: .leading)
                     .chatRowFlip()
                     .id("__pending__")
@@ -1378,7 +1382,7 @@ private struct QueuedUserRow: View {
                     .font(.body)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 16))
+                    .background { ThemedUserBubbleBackground(cornerRadius: 16) }
                     .foregroundStyle(.primary)
             }
             HStack(spacing: 4) {

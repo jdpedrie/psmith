@@ -11,6 +11,7 @@ import PsmithUI
 /// Starts expanded when there is no default profile, since nothing can
 /// be sent until a profile is picked.
 struct DraftProfilePane: View {
+    @Environment(\.theme) private var theme
     let model: ConversationViewModel
     let profiles: [PsmithProfile]
     @State private var expanded: Bool
@@ -130,11 +131,11 @@ struct DraftProfilePane: View {
             .frame(width: 180, height: 104, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(selected ? AnyShapeStyle(Color.accentColor.opacity(0.14)) : AnyShapeStyle(Color(.systemBackground)))
+                    .fill(selected ? AnyShapeStyle(theme.accent.opacity(0.14)) : AnyShapeStyle(Color(.systemBackground)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(selected ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? theme.accent.opacity(0.6) : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }

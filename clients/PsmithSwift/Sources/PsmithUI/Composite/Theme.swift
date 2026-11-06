@@ -33,9 +33,9 @@ public struct Theme: Identifiable, Hashable, Sendable {
     /// similar "you're here" affordances.
     public let highlight: Color
 
-    /// Window/chrome tint. Used as a subtle shade behind glass; the bulk of
-    /// chrome is still `.thinMaterial` so the system background bleeds
-    /// through naturally.
+    /// Surface color: the Mac window background, and on iOS the chat list,
+    /// the conversation and the fade under the navigation bar. Glass bars
+    /// and the composer float over it.
     public let chrome: Color
 
     /// Colors for messages attributed to a named speaker, indexed by the
@@ -88,9 +88,13 @@ public struct Theme: Identifiable, Hashable, Sendable {
         id: "system",
         name: "System",
         blurb: "Platform default. Uses your system accent color and stock neutrals.",
-        accent: .accentColor,
-        bubbleTint: .accentColor,
-        highlight: .accentColor,
+        // The platform accent, named outright. `Color.accentColor` follows
+        // the active `.tint`, which the app sets from the theme, so a
+        // System theme built on it turned into whichever theme was
+        // already selected (its picker card showed that theme's colors).
+        accent: .platformAccent,
+        bubbleTint: .platformAccent,
+        highlight: .platformAccent,
         chrome: .systemChrome,
         personaColors: [
             .dynamic(light: .hex("#5B6B7A"), dark: .hex("#93A5B5")),
@@ -101,21 +105,23 @@ public struct Theme: Identifiable, Hashable, Sendable {
         ]
     )
 
-    // Chrome dark-mode values are bumped well above the original near-black
-    // spec. The originals (e.g. Sage #14171A) sit so close to system dark
-    // that they're indistinguishable from "no theme" once Liquid Glass
-    // materials layer over them. The brighter values here are still dark,
-    // but carry the palette's hue clearly enough to read across the whole
-    // app surface.
+    // Each palette is tuned to two contrast floors, so a theme can be vivid
+    // without hurting legibility: the accent as text on its own chrome is
+    // at least 4.5:1 in both appearances, and white on the accent (the send
+    // button's arrow, filled controls) at least 3:1. Dark accents sit a
+    // step darker than the brightest the hue allows for that second floor.
+    // Chrome carries the hue clearly in both modes: it is the surface most
+    // of the screen shows, and the earlier near-neutral chromes made every
+    // theme look like "no theme".
 
     public static let sage = Theme(
         id: "sage",
         name: "Sage & Graphite",
-        blurb: "Calm, premium, very un-default. Muted sage on deep forest graphite.",
-        accent:    .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
-        bubbleTint: .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
-        highlight: .dynamic(light: .hex("#C5D8CB"), dark: .hex("#A8C5B2")),
-        chrome:    .dynamic(light: .hex("#EAF0EC"), dark: .hex("#1F2A24")),
+        blurb: "Calm and green. Deep sage on a soft green-gray ground.",
+        accent:    .dynamic(light: .hex("#2C7550"), dark: .hex("#3EA36E")),
+        bubbleTint: .dynamic(light: .hex("#2C7550"), dark: .hex("#3EA36E")),
+        highlight: .dynamic(light: .hex("#CFE5D8"), dark: .hex("#24402F")),
+        chrome:    .dynamic(light: .hex("#E6F0E9"), dark: .hex("#15241C")),
         personaColors: [
             .dynamic(light: .hex("#5A8870"), dark: .hex("#7FA48A")),
             .dynamic(light: .hex("#6F7F4E"), dark: .hex("#9DAE78")),
@@ -129,10 +135,10 @@ public struct Theme: Identifiable, Hashable, Sendable {
         id: "clay",
         name: "Clay & Ink",
         blurb: "Warm, approachable. Terracotta on linen-paper neutrals.",
-        accent:    .dynamic(light: .hex("#B25E33"), dark: .hex("#C77A4F")),
-        bubbleTint: .dynamic(light: .hex("#B25E33"), dark: .hex("#C77A4F")),
-        highlight: .dynamic(light: .hex("#DBA987"), dark: .hex("#E0A574")),
-        chrome:    .dynamic(light: .hex("#F2E9DC"), dark: .hex("#2A211A")),
+        accent:    .dynamic(light: .hex("#B04A22"), dark: .hex("#E46F3A")),
+        bubbleTint: .dynamic(light: .hex("#B04A22"), dark: .hex("#E46F3A")),
+        highlight: .dynamic(light: .hex("#F3D2BF"), dark: .hex("#4A2A1B")),
+        chrome:    .dynamic(light: .hex("#F7EADC"), dark: .hex("#2B1C14")),
         personaColors: [
             .dynamic(light: .hex("#8A6A52"), dark: .hex("#BC9A7E")),
             .dynamic(light: .hex("#6B7358"), dark: .hex("#A0A981")),
@@ -145,11 +151,11 @@ public struct Theme: Identifiable, Hashable, Sendable {
     public static let slate = Theme(
         id: "slate",
         name: "Slate Pro",
-        blurb: "Apple Pro-app neutral. Desaturated steel blue, accent gets out of the way.",
-        accent:    .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
-        bubbleTint: .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
-        highlight: .dynamic(light: .hex("#6B8AA4"), dark: .hex("#9DB6CC")),
-        chrome:    .dynamic(light: .hex("#E8EEF4"), dark: .hex("#1C2530")),
+        blurb: "Cool and focused. Steel blue on blue-gray neutrals.",
+        accent:    .dynamic(light: .hex("#2C65A0"), dark: .hex("#4C96D9")),
+        bubbleTint: .dynamic(light: .hex("#2C65A0"), dark: .hex("#4C96D9")),
+        highlight: .dynamic(light: .hex("#CCDDF0"), dark: .hex("#1F3550")),
+        chrome:    .dynamic(light: .hex("#E4ECF5"), dark: .hex("#131D29")),
         personaColors: [
             .dynamic(light: .hex("#4A6E8A"), dark: .hex("#6B8AA4")),
             .dynamic(light: .hex("#57786E"), dark: .hex("#87A99E")),
@@ -162,11 +168,11 @@ public struct Theme: Identifiable, Hashable, Sendable {
     public static let aubergine = Theme(
         id: "aubergine",
         name: "Aubergine & Cream",
-        blurb: "Distinctive without being loud. Muted plum on warm gray.",
-        accent:    .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
-        bubbleTint: .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
-        highlight: .dynamic(light: .hex("#B8A296"), dark: .hex("#D9C8B5")),
-        chrome:    .dynamic(light: .hex("#F1E8EE"), dark: .hex("#251D2C")),
+        blurb: "Distinctive without being loud. Plum on warm cream.",
+        accent:    .dynamic(light: .hex("#7A3A8C"), dark: .hex("#B87CCA")),
+        bubbleTint: .dynamic(light: .hex("#7A3A8C"), dark: .hex("#B87CCA")),
+        highlight: .dynamic(light: .hex("#E6D1EC"), dark: .hex("#3A2445")),
+        chrome:    .dynamic(light: .hex("#F4E9F2"), dark: .hex("#22162A")),
         personaColors: [
             .dynamic(light: .hex("#6E5378"), dark: .hex("#8E6F94")),
             .dynamic(light: .hex("#5A6A85"), dark: .hex("#8698B4")),
@@ -179,11 +185,11 @@ public struct Theme: Identifiable, Hashable, Sendable {
     public static let nordic = Theme(
         id: "nordic",
         name: "Nordic Mist",
-        blurb: "Crisp, cold, low-stim. Pale icy blue on cool gray neutrals.",
-        accent:    .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
-        bubbleTint: .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
-        highlight: .dynamic(light: .hex("#88B0BF"), dark: .hex("#B8CDD6")),
-        chrome:    .dynamic(light: .hex("#E6EDF2"), dark: .hex("#1A242E")),
+        blurb: "Crisp and cold. Fjord blue on icy gray.",
+        accent:    .dynamic(light: .hex("#1C6F8E"), dark: .hex("#299CC1")),
+        bubbleTint: .dynamic(light: .hex("#1C6F8E"), dark: .hex("#299CC1")),
+        highlight: .dynamic(light: .hex("#C8E4EF"), dark: .hex("#193A47")),
+        chrome:    .dynamic(light: .hex("#E2EEF4"), dark: .hex("#12202A")),
         personaColors: [
             .dynamic(light: .hex("#4F8092"), dark: .hex("#88B0BF")),
             .dynamic(light: .hex("#5C7385"), dark: .hex("#97A9B8")),
@@ -194,6 +200,27 @@ public struct Theme: Identifiable, Hashable, Sendable {
     )
 
     public static let allThemes: [Theme] = [.system, .sage, .clay, .slate, .aubergine, .nordic]
+}
+
+// MARK: - User bubble
+
+/// The fill behind the user's own messages: the bubble tint laid over the
+/// theme's surface rather than over a material, which washed it out to a
+/// barely-there tint. Reads as a deeper shade of the page in every theme.
+public struct ThemedUserBubbleBackground: View {
+    let cornerRadius: CGFloat
+    @Environment(\.theme) private var theme
+
+    public init(cornerRadius: CGFloat = 10) {
+        self.cornerRadius = cornerRadius
+    }
+
+    public var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius).fill(theme.chrome)
+            RoundedRectangle(cornerRadius: cornerRadius).fill(theme.bubbleTint.opacity(0.24))
+        }
+    }
 }
 
 // MARK: - Color helpers
@@ -229,6 +256,18 @@ public extension Color {
             green: Double((rgb >>  8) & 0xFF) / 255.0,
             blue:  Double((rgb >>  0) & 0xFF) / 255.0
         )
+    }
+
+    /// The platform's own accent, independent of any `.tint` in effect:
+    /// the user's chosen accent on macOS, system blue on iOS.
+    static var platformAccent: Color {
+        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        return Color(nsColor: .controlAccentColor)
+        #elseif canImport(UIKit)
+        return Color(uiColor: .systemBlue)
+        #else
+        return .blue
+        #endif
     }
 
     /// Per-platform "system chrome" — the surface tint for window/scene

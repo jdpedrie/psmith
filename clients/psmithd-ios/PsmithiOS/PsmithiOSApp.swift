@@ -56,6 +56,12 @@ struct PsmithiOSApp: App {
                 .environment(\.clipboard, UIKitClipboard())
                 .environment(\.notifier, sharedIOSNotifier)
                 .tint(themeStore.current.accent)
+                // The home-screen icon follows the theme. Activation
+                // (below) catches up a switch that couldn't happen at the
+                // time, such as a theme chosen before this feature existed.
+                .onChange(of: themeStore.current.id) { _, id in
+                    AppIconSync.apply(themeID: id)
+                }
                 // Bootstrap is driven by `iOSAppShell`'s
                 // `.task(id: activeAccountID)` so it re-fires on
                 // every account switch, not just first launch.
@@ -85,6 +91,14 @@ struct PsmithiOSApp: App {
             }
         case .active:
             bgKeeper.end()
+            // iOS cancels an icon change requested while the scene is
+            // still activating (verified: "The operation was cancelled"
+            // from a launch-time call), so give it a beat.
+            let themeID = themeStore.current.id
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                AppIconSync.apply(themeID: themeID)
+            }
             // The events-stream kick on foreground lives in RootView's
             // scenePhase handler, next to the pull refresh it belongs with.
             // Adding a second one here fired two kicks per activation, and

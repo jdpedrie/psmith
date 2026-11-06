@@ -11,6 +11,7 @@ import PsmithUI
 /// Call-settings draft auto-saves on disappear; plugin overrides
 /// persist immediately on each toggle / save.
 struct ConversationSettingsView: View {
+    @Environment(\.theme) private var theme
     enum Tab: String, CaseIterable, Identifiable {
         case callSettings = "Call Settings"
         case plugins      = "Plugins"
@@ -343,7 +344,7 @@ struct ConversationSettingsView: View {
         let (label, color): (String, Color) = {
             switch source {
             case .profile:      return ("Inherited", .secondary)
-            case .conversation: return ("Override", .accentColor)
+            case .conversation: return ("Override", theme.accent)
             case .unspecified:  return ("Unknown", .secondary)
             }
         }()

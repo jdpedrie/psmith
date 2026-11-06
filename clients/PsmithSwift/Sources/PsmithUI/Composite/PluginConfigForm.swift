@@ -14,6 +14,7 @@ import PsmithKit
 ///                 for ≤4 (matches ConversationListView.sortMenu — SwiftUI
 ///                 macOS Menu / 2-item Picker is buggy on macOS 26).
 public struct PluginConfigForm: View {
+    @Environment(\.theme) private var theme
     let fields: [PsmithConfigField]
     @Binding var config: [String: Any]
     /// Available user_models for `.modelPicker` fields. Empty when
@@ -129,9 +130,9 @@ public struct PluginConfigForm: View {
                         .padding(.vertical, 1)
                         .background(
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.18))
+                                .fill(theme.accent.opacity(0.18))
                         )
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(theme.accent)
                         .help("This field concatenates across the profile chain and any conversation override. Your entry is added on top of inherited values, not replacing them.")
                 }
             }

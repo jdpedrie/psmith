@@ -16,6 +16,7 @@ struct ChatsRoot: View {
     @Environment(AppModel.self) private var app
     @Environment(AccountManager.self) private var accountManager
     @Environment(ConversationsModel.self) private var convos
+    @Environment(\.theme) private var theme
 
     /// Local mode binding driven by the filter menu. Search isn't in
     /// this enum because a non-empty query drives the third mode
@@ -55,6 +56,7 @@ struct ChatsRoot: View {
                 }
                 contentList
             }
+                .background(theme.chrome.ignoresSafeArea())
                 .navigationTitle("Chats")
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: ChatRoute.self) { route in
@@ -236,8 +238,12 @@ struct ChatsRoot: View {
             ScrollViewReader { proxy in
                 List {
                     modeBody(proxy)
+                        .listRowBackground(Color.clear)
                 }
                 .listStyle(.plain)
+                // The theme's surface shows through instead of the
+                // list's own system background.
+                .scrollContentBackground(.hidden)
                 // The 1pt tuck anchor must actually BE 1pt — List's
                 // default minimum row height (~44pt) would otherwise
                 // pad it into a visible dead band under the search
