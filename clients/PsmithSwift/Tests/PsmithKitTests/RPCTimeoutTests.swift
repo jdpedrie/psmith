@@ -15,8 +15,12 @@ struct RPCTimeoutTests {
     @Test("throws deadlineExceeded when the operation outruns the deadline")
     func throwsOnTimeout() async throws {
         do {
+            // Far past the deadline: under a loaded test run the deadline
+            // task was once starved longer than a 2s sleep, and the
+            // operation finished first. It's cancelled at the deadline, so
+            // this costs nothing when the run is healthy.
             _ = try await withRPCTimeout(seconds: 0.05) {
-                try await Task.sleep(for: .seconds(2))
+                try await Task.sleep(for: .seconds(60))
                 return "should-not-reach"
             }
             Issue.record("expected timeout to throw")
