@@ -167,4 +167,7 @@ public enum CacheKind {
     /// is never stored server-side, so this cache is the only replay
     /// path that avoids re-billing synthesis.
     public static let speechAudio = "speechAudio"
+    /// The user's synced preferences, so a launch with the server down
+    /// still applies them.
+    public static let preferences = "preferences"
 }

@@ -23,6 +23,9 @@ struct MessageActionMenu: View {
     /// transcript disables in-bubble selection so this menu's gesture
     /// can win the long-press; see MessageRow).
     let onSelectText: () -> Void
+    /// Opens the usage sheet (tokens, cache, cost, time): the details
+    /// the transcript keeps out of line unless turn details are on.
+    let onShowDetails: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.clipboard) private var clipboard
@@ -133,6 +136,13 @@ struct MessageActionMenu: View {
         row("Select text", systemImage: "character.cursor.ibeam") {
             dismiss()
             onSelectText()
+        }
+        if message.role == .assistant && message.usage != nil {
+            hairline
+            row("Details", systemImage: "info.circle") {
+                dismiss()
+                onShowDetails()
+            }
         }
         if message.role == .assistant && message.errorText == nil {
             hairline

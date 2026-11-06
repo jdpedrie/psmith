@@ -206,6 +206,9 @@ type Querier interface {
 	// means (sqlc emits ErrNoRows on no match; the service layer treats that
 	// as an empty config and returns `{}` to the wire).
 	GetUserPluginSettings(ctx context.Context, arg GetUserPluginSettingsParams) (UserPluginSetting, error)
+	// The user's preferences row, if any. pgx ErrNoRows when the user has
+	// never changed a setting; the service maps that to the defaults.
+	GetUserPreferences(ctx context.Context, userID uuid.UUID) (UserPreference, error)
 	// pgx ErrNoRows on missing — callers treat absence as the apple_local
 	// default (on-device synthesis, nothing to configure).
 	GetUserTTSConfig(ctx context.Context, userID uuid.UUID) (UserTtsConfig, error)
@@ -632,6 +635,9 @@ type Querier interface {
 	// decrypts incoming reads and falls back to plaintext when
 	// config_encrypted is NULL on legacy rows.
 	UpsertUserPluginSettings(ctx context.Context, arg UpsertUserPluginSettingsParams) (UserPluginSetting, error)
+	// Full replace of the row. The service merges the request's set fields
+	// onto the current values (or the defaults) before calling this.
+	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error)
 	// Single-row upsert keyed by user_id; conflict replaces every field
 	// (the service sparse-merges before calling, and "clear my api_key"
 	// must work via an empty bytea).

@@ -70,6 +70,8 @@ pgvector is the only required extension, used by `messages.embedding`. It is not
 | 00050 | stream_chunks_payload_json | `stream_chunks.payload` JSONB to JSON. Nothing ever queried into it, and JSONB paid parse-and-normalize on the hottest write path in the system. |
 | 00051 | provider_files | Provider-side file references keyed `(user_model_provider_id, sha256)`, so an attachment's bytes cross the wire once instead of on every turn. |
 | 00052 | message_harness_handle | `messages.harness_handle` plus a partial index on `(context_id, id)`. Drops `harness_sessions`. |
+| 00053 | thinking_effort | Data-only: stored `call_settings.thinking` blobs rewritten from `{enabled, budget_tokens}` to an effort level at all four resolution layers. |
+| 00054 | user_preferences | `user_preferences` (per-user singleton): `context_warning_tokens`. |
 
 Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dropped in 00017), `gemini_caches` (dropped in 00020), `harness_sessions` (dropped in 00052).
 
@@ -129,6 +131,8 @@ Tables that no longer exist: `catalog_model_providers` and `catalog_models` (dro
 **message_attachments** — composite PK `(message_id, ordinal)`; FK to messages ON DELETE CASCADE; `file_id` FK to files ON DELETE CASCADE; `kind` CHECK in (`image`, `audio`, `document`, `video`); `role_hint` CHECK in (`user_supplied`, `tool_result`, `model_generated`, `compressed_reference`). Index on `file_id`.
 
 **user_langfuse_config** — `user_id` PK (one row per user); FK ON DELETE CASCADE; `host` (default the Langfuse US cloud host); `public_key` (default empty); `secret_key_encrypted` BYTEA nullable; `enabled` (default false); timestamps.
+
+**user_preferences** — `user_id` PK (one row per user); FK ON DELETE CASCADE; `context_warning_tokens` INTEGER (default 0 = no warning, CHECK >= 0); timestamps. Client preferences that follow the user across devices. Absent until the user changes a setting; the service returns the defaults until then.
 
 **user_embedder_config** — `user_id` PK (one row per user); FK ON DELETE CASCADE; `type`; `config` JSONB (default empty object); `api_key_encrypted` BYTEA nullable; `enabled` (default true); timestamps.
 

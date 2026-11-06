@@ -29,6 +29,15 @@ public final class AppPreferences {
         }
     }
 
+    /// Shows every turn's metadata inline: role labels, the model on
+    /// every reply, token counts and timestamps. Off by default, where
+    /// the transcript keeps only signals (a model change, a poor cache
+    /// on a large prompt) and the details sit one tap away in the
+    /// usage sheet.
+    public var showTurnDetails: Bool = false {
+        didSet { UserDefaults.standard.set(showTurnDetails, forKey: Self.keyShowTurnDetails) }
+    }
+
     public static let minFontScale: Double = 0.8
     public static let maxFontScale: Double = 1.6
     public static let fontScaleStep: Double = 0.1
@@ -41,10 +50,12 @@ public final class AppPreferences {
         if d.object(forKey: Self.keyFontScale) != nil {
             fontScale = d.double(forKey: Self.keyFontScale)
         }
+        showTurnDetails = d.bool(forKey: Self.keyShowTurnDetails)
     }
 
     private static let keyNotifyUnfocused = "psmith.appPrefs.notifyOnUnfocusedCompletion"
     private static let keyFontScale = "psmith.appPrefs.fontScale"
+    private static let keyShowTurnDetails = "psmith.appPrefs.showTurnDetails"
 }
 
 /// Shared module-level instance — module-scope helpers (Mac's

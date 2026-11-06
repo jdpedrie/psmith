@@ -370,6 +370,23 @@ public final class ConversationViewModel {
     public var tokenCount: Int32?
     public var contextWindow: Int32?
 
+    /// Tokens the next request will carry: the server's count when it
+    /// has one, else the last reply's prompt plus its own output (the
+    /// next prompt contains both).
+    public var contextTokens: Int32? {
+        if let tokenCount { return tokenCount }
+        guard let u = messages.last(where: { $0.role == .assistant && $0.usage != nil })?.usage,
+              let input = u.inputTokens else { return nil }
+        let cached = u.cacheReadTokens ?? 0
+        // Some providers count cached tokens inside input, some apart.
+        let prompt = cached > input ? input + cached : input
+        return prompt + (u.outputTokens ?? 0)
+    }
+
+    public func contextWarning(threshold: Int32) -> ContextWarning? {
+        ContextWarning.evaluate(tokens: contextTokens, threshold: threshold, window: contextWindow)
+    }
+
     // MARK: Computed
 
     /// Total spend across every context in this conversation, summed from
@@ -450,6 +467,12 @@ public final class ConversationViewModel {
         if let saved = DraftStore.load(conversationID: conversation.id) {
             self.draft = saved
         }
+        if !conversation.id.isEmpty {
+            attachToHub()
+        }
+    }
+
+    private func attachToHub() {
         // Register this view as the terminal listener for our
         // conversation. Replaces any earlier registration (e.g. if the
         // user thrashes between the same conversation rapidly). Hub
@@ -464,6 +487,155 @@ public final class ConversationViewModel {
         hub.attachChangeObserver(conversationID: conversation.id) { [weak self] in
             await self?.refreshIfStale()
         }
+    }
+
+    // MARK: Draft (a new conversation not yet on the server)
+
+    /// A view model for a conversation that doesn't exist yet. The
+    /// screen behaves like a conversation (composer, model picker,
+    /// attachments) over a preview of the chosen profile's seed rows;
+    /// the first `send()` creates the conversation on the server and
+    /// the same view model carries on as that conversation. Nothing is
+    /// written until then, so backing out of a new chat leaves no empty
+    /// conversation behind.
+    public static func draft(
+        client: PsmithClient,
+        hub: StreamHub,
+        outboundQueue: OutboundQueue? = nil,
+        connectivity: ConnectivityMonitor? = nil,
+        onTerminal: @MainActor @escaping () async -> Void,
+        onAssistantTurnComplete: AssistantTurnCompleteHandler? = nil,
+        localTitler: LocalTitler? = nil
+    ) -> ConversationViewModel {
+        ConversationViewModel(
+            conversation: draftPlaceholder(profileID: ""),
+            client: client,
+            hub: hub,
+            outboundQueue: outboundQueue,
+            connectivity: connectivity,
+            onTerminal: onTerminal,
+            onAssistantTurnComplete: onAssistantTurnComplete,
+            localTitler: localTitler
+        )
+    }
+
+    private static func draftPlaceholder(profileID: String) -> PsmithConversation {
+        PsmithConversation(
+            id: "",
+            profileID: profileID,
+            title: nil,
+            activeContextID: "",
+            ownerUserID: "",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    /// True until the first send creates the conversation.
+    public var isDraft: Bool { conversation.id.isEmpty }
+
+    /// The profile a draft will be created with; nil until one is
+    /// chosen (no default profile set), which blocks sending.
+    public private(set) var draftProfile: PsmithProfile?
+
+    /// The create RPC of a first send is in flight.
+    public private(set) var creatingConversation = false
+
+    /// Fired once, when the first send has created the conversation, so
+    /// the host can list it before its first reply arrives.
+    public var onConversationCreated: (@MainActor (PsmithConversation) -> Void)?
+
+    /// Picks the profile a draft will start from and previews what
+    /// creating it will seed: the system message, the default user
+    /// message (as a context row) and the welcome, as the server snapshots them from the
+    /// resolved chain. The model chip moves to the profile's default;
+    /// an earlier pick is dropped with the rest of the old profile.
+    public func chooseDraftProfile(_ profile: PsmithProfile) async {
+        guard isDraft else { return }
+        draftProfile = profile
+        conversation = Self.draftPlaceholder(profileID: profile.id)
+        messages = []
+        selectedProviderID = nil
+        selectedModelID = nil
+        selectionIsInferredDefault = false
+        loadError = nil
+        let resolved = try? await client.profiles.get(id: profile.id, resolve: true).1
+        // A quicker second tap has already replaced this profile.
+        guard draftProfile?.id == profile.id else { return }
+        if let resolved {
+            messages = Self.seedPreview(for: resolved)
+        }
+        await loadAvailableModels()
+    }
+
+    /// Placeholder rows matching what CreateConversation will insert.
+    /// Their ids are local; `load()` swaps in the real rows after
+    /// create.
+    static func seedPreview(for profile: PsmithProfile) -> [PsmithMessage] {
+        var rows: [PsmithMessage] = []
+        func add(_ role: PsmithMessageRole, _ text: String?, welcome: Bool = false) {
+            guard let text, !text.isEmpty else { return }
+            rows.append(PsmithMessage(
+                id: "draft-seed-\(rows.count)",
+                contextID: "",
+                parentID: rows.last?.id,
+                role: role,
+                content: text,
+                createdAt: Date(),
+                isWelcome: welcome
+            ))
+        }
+        add(.system, profile.systemMessage)
+        // The server seeds the profile's default user message as a
+        // context row, not a user turn.
+        add(.context, profile.defaultUserMessage)
+        add(.assistant, profile.welcomeMessage, welcome: true)
+        return rows
+    }
+
+    /// The first send's create step. On failure the draft stays a draft
+    /// with the error showing and nothing else changed, so the user can
+    /// simply send again.
+    private func createFromDraft() async -> Bool {
+        guard let profile = draftProfile else { return false }
+        // Without a model the send after the create fails, and the
+        // conversation would exist with nothing in it.
+        guard selectedModelID != nil else {
+            loadError = "Pick a model to start this conversation."
+            return false
+        }
+        creatingConversation = true
+        defer { creatingConversation = false }
+        // Only an explicit pick is written; an inferred default stays
+        // unpinned and follows the profile, same as a conversation
+        // created any other way.
+        var settings: PsmithConversationSettings?
+        if !selectionIsInferredDefault,
+           let p = selectedProviderID, let m = selectedModelID {
+            settings = PsmithConversationSettings(defaultProviderID: p, defaultModelID: m)
+        }
+        let created: PsmithConversation
+        do {
+            created = try await client.conversations.create(
+                profileID: profile.id,
+                title: nil,
+                settings: settings
+            )
+        } catch {
+            loadError = PsmithError.display(error)
+            return false
+        }
+        // The welcome already played in the preview; the real row has a
+        // new id and mustn't play it again.
+        let previewedWelcome = messages.contains { $0.isWelcome }
+        conversation = created
+        attachToHub()
+        onConversationCreated?(created)
+        await load()
+        if previewedWelcome {
+            for m in messages where m.isWelcome { welcomePlayed.insert(m.id) }
+        }
+        return true
     }
 
     // MARK: Load
@@ -501,6 +673,9 @@ public final class ConversationViewModel {
     }
 
     public func load() async {
+        // A draft has no row to load; its preview comes from
+        // chooseDraftProfile.
+        guard !isDraft else { return }
         loading = true
         defer {
             loading = false
@@ -574,7 +749,7 @@ public final class ConversationViewModel {
         // A live local stream owns its own update path (in-place
         // terminal append); reloading under it would fight the
         // transcript at its most delicate moment.
-        guard !isStreaming, !sending, !loading else { return }
+        guard !isDraft, !isStreaming, !sending, !loading else { return }
         do {
             let (conv, ctx) = try await client.conversations.get(id: conversation.id)
             let contextChanged = ctx.id != activeContext?.id
@@ -611,6 +786,12 @@ public final class ConversationViewModel {
               || providerID != selectedProviderID
               || modelID != selectedModelID else { return }
         selectionIsInferredDefault = false
+        // No row to write yet; createFromDraft carries the pick.
+        if isDraft {
+            selectedProviderID = providerID
+            selectedModelID = modelID
+            return
+        }
         selectedProviderID = providerID
         selectedModelID = modelID
         // Build the full settings blob (UpdateConversation replaces, doesn't
@@ -867,6 +1048,11 @@ public final class ConversationViewModel {
         // and follow up in a subsequent message).
         guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return }
         guard !text.isEmpty || !pendingAttachments.isEmpty else { return }
+        // Before anything is cleared: a failed create leaves the typed
+        // text and chips exactly where they were.
+        if isDraft {
+            guard !creatingConversation, await createFromDraft() else { return }
+        }
         let attachmentIDs = pendingAttachments.map(\.fileID)
         draft = ""
         // Whatever the user had saved as a draft is now in flight —
@@ -1636,7 +1822,7 @@ public final class ConversationViewModel {
     /// True when the transcript's last message came from a named speaker, so
     /// the panel has somewhere to go next.
     public var canContinueDiscussion: Bool {
-        guard !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return false }
+        guard !isDraft, !sending, !isStreaming, !isCompacting, !hasPendingCompression else { return false }
         guard let last = messages.last else { return false }
         return last.role == .assistant && last.persona != nil
     }
@@ -1837,6 +2023,30 @@ public final class ConversationViewModel {
         let body = msg.displayContent ?? msg.content
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         player.play(messageID: resultID, content: body)
+    }
+
+    /// Assistant turns answered by a different model than the assistant
+    /// turn before them. The transcript names the model only on these:
+    /// otherwise every reply repeats what the model chip already says.
+    /// The first answering model isn't a change (the chip shows it).
+    public var modelChangeMessageIDs: Set<String> {
+        var out: Set<String> = []
+        var last: (provider: String?, model: String)?
+        for m in messages where m.role == .assistant {
+            guard let mid = m.modelID, !mid.isEmpty else { continue }
+            if let last, last.model != mid || last.provider != m.providerID {
+                out.insert(m.id)
+            }
+            last = (m.providerID, mid)
+        }
+        return out
+    }
+
+    /// The first reply that reported usage. Its prompt can't have been
+    /// cached by an earlier turn, so a cache miss there is expected,
+    /// not a signal.
+    public var firstMeteredReplyID: String? {
+        messages.first { $0.role == .assistant && $0.usage != nil }?.id
     }
 
     /// Returns the most recently-created assistant message in the loaded
@@ -2044,6 +2254,11 @@ extension ConversationViewModel {
     /// and panel menu have no cache and stayed empty (no model picker
     /// entries, a bare paperclip for the plus menu) until re-entry.
     public func reloadAfterReconnect() async {
+        if isDraft {
+            // Nothing on the server yet; only the picker's catalog.
+            await loadAvailableModels()
+            return
+        }
         await load()
         async let contexts: Void = loadContexts()
         async let models: Void = loadAvailableModels()
@@ -2052,7 +2267,8 @@ extension ConversationViewModel {
     }
 
     public func loadPanels() async {
-        guard let catalog = try? await client.profiles.listPluginTypes() else {
+        // Panels act on a conversation; a draft has none to act on.
+        guard !isDraft, let catalog = try? await client.profiles.listPluginTypes() else {
             // A panel menu is an affordance, not load-bearing: failing to
             // resolve it costs the entry, not the composer.
             availablePanels = []

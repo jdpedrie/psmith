@@ -37,6 +37,7 @@ make proto    # buf generate
 `buf.gen.yaml` runs four remote plugins:
 
 - `protocolbuffers/go` and `connectrpc/go` write Go into `gen/` with `paths=source_relative`. The Go import path is `gen/psmith/v1` (package `psmithv1`) and `gen/psmith/v1/psmithv1connect` for the service stubs.
+  `connectrpc/go` is pinned to the `connectrpc.com/connect` version in `go.mod` (v1.19.2). Unpinned, buf pulls the plugin's latest, which generates against connect/v2 and breaks the build. Bump the pin with the module.
 - `apple/swift` and `connectrpc/swift` write Swift into `clients/PsmithSwift/Sources/PsmithKit/Generated` with public visibility, async methods on, and callback methods off.
 
 `buf.yaml` sets the module root at `proto`, lint level STANDARD, breaking-change detection at FILE level. The protos live under `proto/psmith/v1/`.

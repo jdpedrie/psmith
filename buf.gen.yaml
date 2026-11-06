@@ -3,7 +3,9 @@ plugins:
   - remote: buf.build/protocolbuffers/go
     out: gen
     opt: paths=source_relative
-  - remote: buf.build/connectrpc/go
+  # Pinned to go.mod's connectrpc.com/connect: unpinned, the plugin's
+  # latest emits code for connect/v2 and nothing compiles.
+  - remote: buf.build/connectrpc/go:v1.19.2
     out: gen
     opt: paths=source_relative
   - remote: buf.build/apple/swift

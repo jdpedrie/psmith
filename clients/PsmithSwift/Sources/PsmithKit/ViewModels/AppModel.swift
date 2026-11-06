@@ -25,6 +25,8 @@ public final class AppModel {
     public let providers: ProvidersViewModel
     public let profiles: ProfilesViewModel
     public let mcpServers: MCPServersViewModel
+    /// Synced per-user preferences (context warning threshold, …).
+    public let preferences: PreferencesViewModel
 
     /// Tracks reachability of `serverURL`. Composer reads this to
     /// disable Send when the server is unreachable; banners read it
@@ -105,6 +107,7 @@ public final class AppModel {
         self.providers = ProvidersViewModel(client: c)
         self.profiles = ProfilesViewModel(client: c)
         self.mcpServers = MCPServersViewModel(client: c)
+        self.preferences = PreferencesViewModel(client: c)
         self.outboundQueue = OutboundQueue()
         self.connectivity = ConnectivityMonitor(
             host: host,
@@ -249,6 +252,7 @@ public final class AppModel {
         // run — the dispatcher reports "no handler" and the model
         // sees a clean tool error.
         if authState.phase == .signedIn {
+            await preferences.load()
             await deviceTools.registerWithServer()
         }
         // After successful auth, sweep the server for runs that were
@@ -315,6 +319,7 @@ public final class AppModel {
             streamHub.notifyConversationChanged(conversationID: id)
         }
         await providers.load()
+        await preferences.load()
         await deviceTools.registerWithServer()
         await adoptActiveRunsFromServer()
     }

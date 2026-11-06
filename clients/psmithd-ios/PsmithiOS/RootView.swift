@@ -141,6 +141,9 @@ private struct AppShell: View {
             if phase == .active {
                 app.kickEventStream()
                 convos?.refreshSoon()
+                // A preference changed on another device while this
+                // one was in the background; there's no push for it.
+                Task { await app.preferences.load() }
             }
         }
     }

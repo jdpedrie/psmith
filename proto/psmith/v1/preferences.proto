@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package psmith.v1;
+
+option go_package = "github.com/jdpedrie/psmith/gen/psmith/v1;psmithv1";
+
+// PreferencesService holds per-user client preferences that should
+// follow the user across devices: the Mac and iPhone apps read the same
+// row, so a setting made on one applies on the other.
+//
+// Storage: one row per user in user_preferences, created on the first
+// Update. Get returns the defaults when no row exists, so a user who
+// never touched a setting needs no special case.
+service PreferencesService {
+  // GetPreferences returns the calling user's preferences, or the
+  // defaults when none are stored. Never NotFound.
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
+
+  // UpdatePreferences writes the fields set on the request and leaves
+  // the rest alone, then returns the full stored preferences.
+  rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse);
+}
+
+message UserPreferences {
+  // Conversation context size, in tokens, past which clients show a
+  // context warning. 0 means no warning. A warning near the model's
+  // own context window is the clients' business and shows regardless.
+  int32 context_warning_tokens = 1;
+}
+
+message GetPreferencesRequest {}
+
+message GetPreferencesResponse {
+  UserPreferences preferences = 1;
+}
+
+message UpdatePreferencesRequest {
+  // Unset leaves the stored value unchanged. Must be >= 0.
+  optional int32 context_warning_tokens = 1;
+}
+
+message UpdatePreferencesResponse {
+  UserPreferences preferences = 1;
+}

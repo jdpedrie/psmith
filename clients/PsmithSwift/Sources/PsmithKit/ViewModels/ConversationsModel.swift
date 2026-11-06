@@ -214,13 +214,21 @@ public final class ConversationsModel {
                 title: title,
                 settings: effectiveSettings
             )
-            self.conversations.insert(c, at: 0)
-            self.selectedID = c.id
+            didCreate(c)
             return c
         } catch {
             self.loadError = PsmithError.display(error)
             return nil
         }
+    }
+
+    /// Lists a conversation created elsewhere (a draft's first send)
+    /// right away, ahead of the refresh that will confirm it.
+    public func didCreate(_ c: PsmithConversation) {
+        if !conversations.contains(where: { $0.id == c.id }) {
+            conversations.insert(c, at: 0)
+        }
+        selectedID = c.id
     }
 
     /// Archives the conversation and drops it from the active list —

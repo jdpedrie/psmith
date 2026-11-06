@@ -16,6 +16,10 @@ public enum DraftStore {
     }
 
     public static func load(conversationID: String) -> String? {
+        // A new conversation that doesn't exist yet has no id, and
+        // every one shares that empty id; its text isn't kept, or an
+        // abandoned new chat would greet the next one.
+        guard !conversationID.isEmpty else { return nil }
         let v = UserDefaults.standard.string(forKey: key(for: conversationID))
         // Treat empty saved drafts as absence — the composer's
         // restore path skips the assignment, leaving its own empty
@@ -24,6 +28,7 @@ public enum DraftStore {
     }
 
     public static func save(conversationID: String, text: String) {
+        guard !conversationID.isEmpty else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             // Empty draft = no draft. Removing the key keeps

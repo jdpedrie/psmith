@@ -11,6 +11,7 @@ public final class PsmithClient: Sendable {
     public let modelProviders: ModelProvidersRepository
     public let files: FilesRepository
     public let langfuse: LangfuseRepository
+    public let preferences: PreferencesRepository
     public let embedder: EmbedderRepository
     public let deviceTools: DeviceToolsRepository
     public let events: EventsSubscriber
@@ -116,6 +117,10 @@ public final class PsmithClient: Sendable {
         )
         self.langfuse = LangfuseRepository(
             client: Psmith_V1_LangfuseServiceClient(client: unaryClient)
+        )
+        self.preferences = PreferencesRepository(
+            client: Psmith_V1_PreferencesServiceClient(client: unaryClient),
+            cache: cache
         )
         self.embedder = EmbedderRepository(
             client: Psmith_V1_EmbedderServiceClient(client: unaryClient)

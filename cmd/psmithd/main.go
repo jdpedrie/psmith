@@ -35,6 +35,7 @@ import (
 	"github.com/jdpedrie/psmith/server/mcpserver"
 	"github.com/jdpedrie/psmith/server/modelmeta"
 	"github.com/jdpedrie/psmith/server/modelproviders"
+	"github.com/jdpedrie/psmith/server/preferencessvc"
 	"github.com/jdpedrie/psmith/server/profiles"
 	"github.com/jdpedrie/psmith/server/speechsvc"
 	"github.com/jdpedrie/psmith/server/storage"
@@ -304,6 +305,7 @@ func run() error {
 	mux.Handle(psmithv1connect.NewStreamsServiceHandler(streamsSvc, opts))
 	mux.Handle(psmithv1connect.NewFilesServiceHandler(filesSvc, opts))
 	mux.Handle(psmithv1connect.NewLangfuseServiceHandler(langfuseSvc, opts))
+	mux.Handle(psmithv1connect.NewPreferencesServiceHandler(preferencessvc.NewService(queries), opts))
 	mux.Handle(psmithv1connect.NewEmbedderServiceHandler(embedderSvc, opts))
 	mux.Handle(psmithv1connect.NewSpeechServiceHandler(speechSvc, opts))
 	mux.Handle(psmithv1connect.NewDeviceToolsServiceHandler(

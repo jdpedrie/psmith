@@ -22,6 +22,11 @@ struct MessageUsageSheet: View {
     @ViewBuilder
     private var modelSection: some View {
         Section("Model") {
+            // The transcript shows no timestamps by default; this is
+            // where the time lives.
+            if message.createdAt.timeIntervalSince1970 > 0 {
+                row("Sent", message.createdAt.formatted(date: .abbreviated, time: .shortened))
+            }
             if let pid = message.providerID, let label = model.providerLabels[pid] {
                 row("Provider", label)
             }

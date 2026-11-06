@@ -23,7 +23,16 @@ struct MessageRow: View {
     /// collapse. nil means "no predecessor", which always shows the label.
     var previousMessage: PsmithMessage? = nil
     let model: ConversationViewModel
+    /// This reply came from a different model than the reply before it
+    /// (see `ConversationViewModel.modelChangeMessageIDs`). Passed in
+    /// rather than computed here: the set is one pass over the whole
+    /// transcript, done once by the list, not once per row.
+    var modelChanged: Bool = false
+    /// The conversation's first metered reply: nothing earlier could
+    /// have warmed its cache, so a miss isn't worth a red dot.
+    var isFirstMeteredReply: Bool = false
     @Environment(AppModel.self) private var app
+    @Environment(AppPreferences.self) private var prefs
     @Environment(\.theme) private var theme
     @Environment(\.chatPaneWidth) private var paneWidth
 
@@ -160,6 +169,9 @@ struct MessageRow: View {
                         forkPill.offset(x: -6, y: -10)
                     }
             }
+            // With role labels gone, a little air around each question
+            // marks the turn boundaries the labels used to.
+            .padding(.vertical, 6)
         case .assistant:
             // Full-width, no bubble. Fork pill floats above the role
             // label in the top-right corner of the message region —
@@ -289,6 +301,9 @@ struct MessageRow: View {
     /// Presents the hoisted MessageActionMenu overlay for this row.
     /// The haptic stands in for the system menu's lift bump.
     private func presentActionMenu() {
+        // A new conversation's rows are a preview of what creating it
+        // will seed; there's nothing on the server to edit or delete.
+        guard !model.isDraft else { return }
         Haptics.impact(.medium)
         withAnimation(.snappy(duration: 0.22)) {
             model.actionMenuMessage = message
@@ -318,7 +333,9 @@ struct MessageRow: View {
     @ViewBuilder
     private var bubbleInner: some View {
         VStack(alignment: .leading, spacing: 4) {
-            headerRow
+            if headerHasContent {
+                headerRow
+            }
 
             // Thinking disclosure for assistant turns that reasoned.
             if message.role == .assistant, hasThinking {
@@ -530,6 +547,25 @@ struct MessageRow: View {
 
     // MARK: - Header row (role label + model chip + tap-to-show-usage)
 
+    /// Who's speaking is already in the layout (your tinted bubble on the
+    /// right, replies full width), so the role label is a detail. Errors,
+    /// system/context collapse controls and council speakers keep theirs.
+    private var showsRoleLabel: Bool {
+        prefs.showTurnDetails || isErrored || isCollapsibleHeaderRole
+    }
+
+    private var showsModelLabel: Bool {
+        modelDisplayLabel != nil && (prefs.showTurnDetails || modelChanged)
+    }
+
+    private var hasPersonaLabel: Bool {
+        message.personaSlot != nil && message.persona != nil && !isErrored
+    }
+
+    private var headerHasContent: Bool {
+        showsRoleLabel || hasPersonaLabel || showsModelLabel || showsSpeakerAffordance
+    }
+
     private var headerRow: some View {
         HStack(spacing: 6) {
             if isErrored {
@@ -565,7 +601,7 @@ struct MessageRow: View {
                     index: slot,
                     showsName: message.showsPersonaLabel(after: previousMessage)
                 )
-            } else {
+            } else if showsRoleLabel {
                 Text(roleLabel)
                     .font(.caption2)
                     .foregroundStyle(isErrored ? .orange : .secondary)
@@ -578,7 +614,7 @@ struct MessageRow: View {
                     .foregroundStyle(.orange)
             }
             Spacer(minLength: 6)
-            if let label = modelDisplayLabel {
+            if showsModelLabel, let label = modelDisplayLabel {
                 Text(label)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -640,6 +676,8 @@ struct MessageRow: View {
     private var footer: some View {
         if isEditing {
             EmptyView()
+        } else if !prefs.showTurnDetails {
+            compactFooter
         } else if message.role == .assistant, let usage = message.usage {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
@@ -683,6 +721,43 @@ struct MessageRow: View {
                 Text(stamp)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    /// The default footer: only what's worth noticing. A cache dot when
+    /// the prompt was big enough for caching to matter (tap for the
+    /// full usage), and an unexpected stop reason. Nothing otherwise,
+    /// so an ordinary reply ends where its text ends.
+    @ViewBuilder
+    private var compactFooter: some View {
+        let grade = message.role == .assistant ? message.usage.flatMap(cacheEfficiencyGrade) : nil
+        let stop = message.role == .assistant ? unexpectedFinishReasonLabel : nil
+        if grade != nil || stop != nil {
+            HStack(spacing: 6) {
+                if let grade {
+                    Button {
+                        showUsageSheet = true
+                    } label: {
+                        Circle()
+                            .fill(grade.color)
+                            .frame(width: 7, height: 7)
+                            .padding(6)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(-6)
+                    .accessibilityLabel(grade.tooltip)
+                    .accessibilityHint("Shows usage details")
+                }
+                if let stop {
+                    Text(stop)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
             }
             .padding(.top, 2)
         }
@@ -841,9 +916,16 @@ struct MessageRow: View {
     /// or excludes them; if cache_read > input the source uses the
     /// "separate" shape, otherwise "includes".
     private func cacheEfficiencyGrade(_ u: PsmithMessageUsage) -> CacheGrade? {
-        guard let cacheRead = u.cacheReadTokens, cacheRead > 0,
-              let input = u.inputTokens, input > 0 else { return nil }
+        guard let input = u.inputTokens, input > 0 else { return nil }
+        // No cache fields at all: the provider doesn't report caching.
+        guard u.cacheReadTokens != nil || u.cacheWriteTokens != nil else { return nil }
+        let cacheRead = u.cacheReadTokens ?? 0
+        if cacheRead == 0 && isFirstMeteredReply { return nil }
         let totalPrompt: Int32 = (cacheRead > input) ? (cacheRead + input) : input
+        // Providers don't cache prompts under roughly 1-4k tokens, so a
+        // grade there is noise: a red dot on a 900-token exchange teaches
+        // you to ignore the red dot on a 90k one.
+        guard totalPrompt >= Self.cacheGradeFloorTokens else { return nil }
         let ratio = Double(cacheRead) / Double(totalPrompt)
         let pct = Int((ratio * 100).rounded())
         let color: Color
@@ -858,6 +940,10 @@ struct MessageRow: View {
         }
         return CacheGrade(color: color, tooltip: "\(label) cache hit — \(pct)% of prompt served from cache")
     }
+
+    /// Prompt size below which the cache dot isn't shown. Above every
+    /// major provider's minimum cacheable prefix.
+    static let cacheGradeFloorTokens: Int32 = 4_096
 
     // MARK: - Usage summary
 

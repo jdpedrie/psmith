@@ -191,6 +191,17 @@ Per-user embedder config for semantic search. `proto/psmith/v1/embedder.proto`.
 
 See [embeddings-and-search.md](../design/embeddings-and-search.md).
 
+## PreferencesService
+
+Per-user client preferences shared by every device the user signs in on. `proto/psmith/v1/preferences.proto`.
+
+| RPC | Notes |
+|---|---|
+| `GetPreferences` | Never `NotFound`; the defaults when no row exists. |
+| `UpdatePreferences` | Sparse: unset fields keep the stored value. Returns the full stored preferences. `context_warning_tokens` must be >= 0; 0 turns the warning off. |
+
+No account event fires on change; clients re-read on launch, on foreground and after a reconnect.
+
 ## LangfuseService
 
 Per-user Langfuse tracing config. `proto/psmith/v1/langfuse.proto`.

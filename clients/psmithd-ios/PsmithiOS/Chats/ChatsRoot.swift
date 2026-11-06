@@ -34,15 +34,12 @@ struct ChatsRoot: View {
     @State private var deleteCandidate: PsmithConversation?
     @State private var renameCandidate: PsmithConversation?
     @State private var renameDraft: String = ""
-    @State private var showingNewConversation = false
     @State private var showingSettings = false
     @State private var showingAddAccount = false
-    /// Path appended-to when NewConversationSheet creates a chat — auto-
-    /// pushes the conversation onto the stack so the user lands inside
-    /// the new chat instead of having to find + tap it in the list.
-    /// Also driven by notification taps via `iOSNavigator
-    /// .pendingConversationSelection`.
-    @State private var conversationPath: [PsmithConversation] = []
+    /// The conversation stack: "+" pushes a new, not-yet-created
+    /// conversation, and notification taps (via `iOSNavigator
+    /// .pendingConversationSelection`) push an existing one.
+    @State private var conversationPath: [ChatRoute] = []
     @Environment(iOSNavigator.self) private var navigator
 
     enum PickerMode: Hashable {
@@ -60,8 +57,13 @@ struct ChatsRoot: View {
             }
                 .navigationTitle("Chats")
                 .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: PsmithConversation.self) { conversation in
-                    ConversationView(conversation: conversation)
+                .navigationDestination(for: ChatRoute.self) { route in
+                    switch route {
+                    case .conversation(let conversation):
+                        ConversationView(conversation: conversation)
+                    case .newConversation(let draftID):
+                        ConversationView(newConversation: draftID)
+                    }
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -72,14 +74,6 @@ struct ChatsRoot: View {
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         newConversationButton
-                    }
-                }
-                .sheet(isPresented: $showingNewConversation) {
-                    NewConversationSheet { newConversation in
-                        // Auto-push the new conversation onto the stack
-                        // so the user lands inside the chat instead of
-                        // having to tap-into-it from the list.
-                        conversationPath.append(newConversation)
                     }
                 }
                 .sheet(isPresented: $showingSettings) {
@@ -206,53 +200,22 @@ struct ChatsRoot: View {
 
     // MARK: - List body
 
-    /// With a default profile set, tapping + starts a conversation with
-    /// it immediately — the chooser stays reachable by press-and-hold.
-    /// Without a default, tap opens the chooser as before.
-    ///
-    /// Not a Menu(primaryAction:): inside a ToolbarItem on iOS 26 the
-    /// primary-action tap is silently swallowed (the long-press menu
-    /// still opens) — same class of Menu breakage as the Mac rendering
-    /// bug. Plain tap + long-press gestures on the label are reliable.
-    @ViewBuilder
+    /// Opens an empty conversation. Nothing is created on the server
+    /// until its first message is sent, so backing out leaves no empty
+    /// conversation behind; the profile is chosen inside it.
     private var newConversationButton: some View {
-        if let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
+        Button {
+            conversationPath.append(.newConversation(UUID()))
+        } label: {
             Image(systemName: "plus")
-                .foregroundStyle(.tint)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    Task { await createWithProfile(def) }
-                }
-                .onLongPressGesture {
-                    Haptics.impact(.light)
-                    showingNewConversation = true
-                }
-                .accessibilityLabel("New conversation")
-                .accessibilityHint("Starts a chat with \(def.name). Long-press to choose a profile.")
-                .accessibilityAddTraits(.isButton)
-        } else {
-            Button {
-                showingNewConversation = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .accessibilityLabel("New conversation")
-            // Only disable when we positively know there are no
-            // usable profiles. An empty list (not yet loaded)
-            // must NOT disable it — `allSatisfy` is true for an
-            // empty array, which used to wrongly grey this out
-            // before profiles finished loading.
-            .disabled(!convos.profiles.isEmpty && convos.profiles.allSatisfy { $0.parentOnly })
         }
-    }
-
-    @MainActor
-    private func createWithProfile(_ profile: PsmithProfile) async {
-        if let conversation = await convos.newConversation(
-            profileID: profile.id, title: nil, settings: nil
-        ) {
-            conversationPath.append(conversation)
-        }
+        .accessibilityLabel("New conversation")
+        // Only disable when we positively know there are no
+        // usable profiles. An empty list (not yet loaded)
+        // must NOT disable it — `allSatisfy` is true for an
+        // empty array, which used to wrongly grey this out
+        // before profiles finished loading.
+        .disabled(!convos.profiles.isEmpty && convos.profiles.allSatisfy { $0.parentOnly })
     }
 
     @ViewBuilder
@@ -548,7 +511,7 @@ struct ChatsRoot: View {
             Task {
                 await convos.refresh()
                 if let c = convos.conversations.first(where: { $0.id == id }) {
-                    conversationPath.append(c)
+                    conversationPath.append(.conversation(c))
                 }
             }
             return
@@ -556,9 +519,8 @@ struct ChatsRoot: View {
         // Avoid double-push if the user is already inside that
         // conversation (the notification tap landed while they were
         // looking at it).
-        if conversationPath.last?.id != id {
-            conversationPath.append(conversation)
-        }
+        if case .conversation(let open) = conversationPath.last, open.id == id { return }
+        conversationPath.append(.conversation(conversation))
     }
 
     // MARK: - Mode driving (push to ConversationsModel)
@@ -660,3 +622,10 @@ struct ChatsRoot: View {
     }
 }
 
+/// What the chats stack can show. A new conversation is its own route
+/// because it has no server id until its first send; the UUID only
+/// keeps two "+" taps distinct.
+enum ChatRoute: Hashable {
+    case conversation(PsmithConversation)
+    case newConversation(UUID)
+}

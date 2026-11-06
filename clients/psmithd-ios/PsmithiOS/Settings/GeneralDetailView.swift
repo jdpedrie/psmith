@@ -21,9 +21,12 @@ struct GeneralDetailView: View {
 
     @State private var clearing: Bool = false
     @State private var showingClearConfirm: Bool = false
+    @State private var editingCustomWarning = false
+    @State private var customWarningText = ""
 
     var body: some View {
         Form {
+            contextWarningSection
             Section {
                 HStack {
                     Text("Used")
@@ -103,4 +106,61 @@ struct GeneralDetailView: View {
         }
         return String(format: "%.1f MB", mb)
     }
+
+    // MARK: - Context warning
+
+    private static let warningPresets: [Int32] = [50_000, 75_000, 100_000, 150_000, 200_000]
+    /// Picker tag for "Custom…", never stored.
+    private static let customTag: Int32 = -1
+
+    private var warningTokens: Int32 {
+        app.preferences.preferences.contextWarningTokens
+    }
+
+    private var contextWarningSection: some View {
+        Section {
+            Picker("Warn at", selection: Binding(
+                get: { warningTokens },
+                set: { choice in
+                    if choice == Self.customTag {
+                        customWarningText = warningTokens > 0 ? String(warningTokens / 1_000) : ""
+                        editingCustomWarning = true
+                    } else {
+                        Task { await app.preferences.setContextWarningTokens(choice) }
+                    }
+                }
+            )) {
+                Text("Off").tag(Int32(0))
+                ForEach(Self.warningPresets, id: \.self) { preset in
+                    Text("\(ContextWarning.compact(preset)) tokens").tag(preset)
+                }
+                if warningTokens > 0, !Self.warningPresets.contains(warningTokens) {
+                    Text("\(ContextWarning.compact(warningTokens)) tokens").tag(warningTokens)
+                }
+                Text("Custom…").tag(Self.customTag)
+            }
+            if let error = app.preferences.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Context warning")
+        } footer: {
+            Text("When a conversation's context passes this size, it shows beside the model below the message field; tap it to compact. Near a model's own limit it shows in red whatever this is set to. Applies on all your devices.")
+        }
+        .alert("Warn at", isPresented: $editingCustomWarning) {
+            TextField("Thousands of tokens", text: $customWarningText)
+                .keyboardType(.numberPad)
+            Button("Save") {
+                if let k = Int32(customWarningText.trimmingCharacters(in: .whitespaces)), k > 0, k <= 2_000 {
+                    Task { await app.preferences.setContextWarningTokens(k * 1_000) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("In thousands of tokens: 120 warns at 120,000.")
+        }
+    }
+
 }

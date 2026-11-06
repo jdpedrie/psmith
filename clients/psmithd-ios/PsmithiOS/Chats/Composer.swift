@@ -107,7 +107,15 @@ struct Composer: View {
                     HStack(spacing: 12) {
                         paperclipButton
                         modelChip
-                        settingsButton
+                            .layoutPriority(1)
+                        // Conversation settings edit a row that a
+                        // new conversation doesn't have until it sends.
+                        if !model.isDraft {
+                            settingsButton
+                        }
+                        if let warning = contextWarning {
+                            contextChip(warning)
+                        }
                         Spacer(minLength: 0)
                         sendButton
                     }
@@ -473,6 +481,57 @@ struct Composer: View {
         }
     }
 
+    // MARK: - Context warning
+
+    /// Nothing under the user's threshold; past it, the size in amber;
+    /// near the model's own window, red, whatever the threshold.
+    private var contextWarning: ContextWarning? {
+        guard !model.isDraft else { return nil }
+        return model.contextWarning(threshold: app.preferences.preferences.contextWarningTokens)
+    }
+
+    /// Tapping opens Compact: the warning carries its own remedy.
+    private func contextChip(_ warning: ContextWarning) -> some View {
+        let tint: Color = {
+            if case .nearWindow = warning { return .red }
+            return .orange
+        }()
+        return Button {
+            Haptics.impact(.light)
+            model.showingCompactView = true
+        } label: {
+            // Gauge + number, not "82k context": the model name beside
+            // it is the more important text and lost the space fight.
+            HStack(spacing: 3) {
+                Image(systemName: "gauge.with.needle")
+                    .font(.caption2.weight(.semibold))
+                Text(ContextWarning.compact(warning.tokens))
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+            }
+                .lineLimit(1)
+                .fixedSize()
+                .foregroundStyle(tint)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(tint.opacity(0.14), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isStreaming || model.isCompacting || model.hasPendingCompression)
+        .accessibilityLabel(contextChipAccessibility(warning))
+        .accessibilityHint("Opens Compact")
+    }
+
+    private func contextChipAccessibility(_ warning: ContextWarning) -> String {
+        switch warning {
+        case .overThreshold(let t):
+            return "Context is \(t.formatted()) tokens, past your warning level"
+        case .nearWindow(let t, let w):
+            return "Context is \(t.formatted()) of the model's \(w.formatted()) tokens"
+        }
+    }
+
     // MARK: - Conversation settings button
 
     /// Pushes the per-conversation settings page (system message,
@@ -635,7 +694,13 @@ struct Composer: View {
         // yet) or while a compaction is mid-stream (those run on
         // their own dedicated stream and overlap is unsupported).
         let noUploadInFlight = model.attachmentUploadCount == 0
-        return hasContent && !model.sending && !model.isCompacting && noUploadInFlight
+        // A new conversation needs a profile to be created from and a
+        // model to answer (without one the create would succeed and the
+        // send fail, leaving the empty conversation drafts exist to
+        // avoid), and its first send is in flight while the create runs.
+        let draftReady = !model.isDraft
+            || (model.draftProfile != nil && model.selectedModelID != nil && !model.creatingConversation)
+        return hasContent && !model.sending && !model.isCompacting && noUploadInFlight && draftReady
     }
 
     private func triggerSend() {

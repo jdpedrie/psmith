@@ -327,6 +327,13 @@ type UserPluginSetting struct {
 	ConfigEncrypted []byte
 }
 
+type UserPreference struct {
+	UserID               uuid.UUID
+	ContextWarningTokens int32
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
 type UserTtsConfig struct {
 	UserID          uuid.UUID
 	Kind            string

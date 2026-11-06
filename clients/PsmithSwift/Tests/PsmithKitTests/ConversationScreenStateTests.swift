@@ -173,4 +173,49 @@ struct ConversationScreenStateTests {
         #expect(vm.availableModels.map(\.modelID) == [seeded.model.modelID])
         #expect(vm.contexts.count == 1)
     }
+
+    // MARK: - Transcript signals
+
+    private func reply(_ id: String, provider: String?, model: String?, metered: Bool = true) -> PsmithMessage {
+        PsmithMessage(
+            id: id, contextID: "c", role: .assistant, content: id,
+            providerID: provider, modelID: model,
+            usage: metered ? PsmithMessageUsage(inputTokens: 10, outputTokens: 5) : nil
+        )
+    }
+
+    private func offlineVM() -> ConversationViewModel {
+        let client = PsmithClient(
+            host: URL(string: "http://127.0.0.1:1")!,
+            tokenStore: InMemoryTokenStore(),
+            authState: AuthState()
+        )
+        return .draft(client: client, hub: StreamHub(subscriber: client.streams), onTerminal: { })
+    }
+
+    @Test("model changes mark the reply after a switch, not the first reply or repeats")
+    func modelChangeSet() {
+        let vm = offlineVM()
+        vm.messages = [
+            reply("welcome", provider: nil, model: nil, metered: false),
+            PsmithMessage(id: "u1", contextID: "c", role: .user, content: "q"),
+            reply("a1", provider: "p", model: "m1"),
+            reply("a2", provider: "p", model: "m1"),
+            reply("a3", provider: "p", model: "m2"),
+            reply("a4", provider: "q", model: "m2"),
+            reply("a5", provider: "q", model: "m2"),
+        ]
+        #expect(vm.modelChangeMessageIDs == ["a3", "a4"])
+    }
+
+    @Test("the first metered reply skips the welcome and other unmetered rows")
+    func firstMeteredReply() {
+        let vm = offlineVM()
+        vm.messages = [
+            reply("welcome", provider: nil, model: nil, metered: false),
+            reply("a1", provider: "p", model: "m1"),
+            reply("a2", provider: "p", model: "m1"),
+        ]
+        #expect(vm.firstMeteredReplyID == "a1")
+    }
 }

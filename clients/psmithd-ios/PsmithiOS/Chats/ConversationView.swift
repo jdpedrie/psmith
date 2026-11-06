@@ -25,12 +25,44 @@ extension Notification.Name {
 /// page-replace alternates (Compact / Contexts / Settings / Model
 /// Picker) become push/sheet destinations in Phase 5g.
 struct ConversationView: View {
-    let conversation: PsmithConversation
+    /// The conversation opened from the list; nil for a new one.
+    private let existing: PsmithConversation?
+    /// Identity of a new conversation's screen. Stable across its first
+    /// send, when the view model gains a server id: keying the setup
+    /// task on the conversation id would rebuild the model mid-send.
+    private let draftID: UUID?
     @Environment(AppModel.self) private var app
     @Environment(ConversationsModel.self) private var convos
     @Environment(\.notifier) private var notifier
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConversationViewModel?
+
+    init(conversation: PsmithConversation) {
+        existing = conversation
+        draftID = nil
+    }
+
+    /// A new conversation: nothing exists on the server until its first
+    /// message is sent.
+    init(newConversation draftID: UUID) {
+        existing = nil
+        self.draftID = draftID
+    }
+
+    /// The conversation as it currently stands: the view model's once
+    /// it exists (a draft's changes to a real one at its first send).
+    private var conversation: PsmithConversation {
+        model?.conversation ?? existing ?? Self.emptyDraft
+    }
+
+    private static let emptyDraft = PsmithConversation(
+        id: "", profileID: "", title: nil, activeContextID: "",
+        ownerUserID: "", createdAt: .distantPast, updatedAt: .distantPast
+    )
+
+    private var setupKey: String {
+        existing?.id ?? draftID?.uuidString ?? ""
+    }
 
     var body: some View {
         Group {
@@ -51,7 +83,16 @@ struct ConversationView: View {
             // message" dot on its sidebar row. markViewing also clears
             // any pending unseen flag — opening the chat is the user's
             // implicit "I've seen it."
-            app.streamHub.markViewing(conversationID: conversation.id)
+            if !conversation.id.isEmpty {
+                app.streamHub.markViewing(conversationID: conversation.id)
+            }
+        }
+        // A new conversation gets its id at the first send, while on
+        // screen.
+        .onChange(of: model?.conversation.id) { _, id in
+            if let id, !id.isEmpty {
+                app.streamHub.markViewing(conversationID: id)
+            }
         }
         .onDisappear {
             app.streamHub.markStoppedViewing(conversationID: conversation.id)
@@ -87,7 +128,11 @@ struct ConversationView: View {
             guard old == .offline, new == .online, let m = model else { return }
             Task { await m.reloadAfterReconnect() }
         }
-        .task(id: conversation.id) {
+        .task(id: setupKey) {
+            if existing == nil {
+                await setUpNewConversation()
+                return
+            }
             // Recreate the view model on every (re-)appearance — the
             // scroll machinery is built around a fresh cold-entry
             // settle per entry. A VM-reuse fast path for back-
@@ -109,7 +154,7 @@ struct ConversationView: View {
             // NoopNotifier default.
             let liveNotifier = notifier
             let m = ConversationViewModel(
-                conversation: conversation,
+                conversation: existing ?? conversation,
                 client: app.client,
                 hub: app.streamHub,
                 outboundQueue: app.outboundQueue,
@@ -190,8 +235,45 @@ struct ConversationView: View {
     }
 
     private var navTitle: String {
+        if conversation.id.isEmpty { return "New Conversation" }
         let t = liveConversation.title ?? ""
         return t.isEmpty ? "Untitled" : t
+    }
+
+    /// Builds a draft view model and starts it from the default
+    /// profile when one is set; otherwise the profile pane opens and
+    /// the user picks.
+    private func setUpNewConversation() async {
+        let liveNotifier = notifier
+        let m = ConversationViewModel.draft(
+            client: app.client,
+            hub: app.streamHub,
+            outboundQueue: app.outboundQueue,
+            connectivity: app.connectivity,
+            onTerminal: { [weak convos] in await convos?.refresh() },
+            onAssistantTurnComplete: { convID, title, msgID, preview in
+                liveNotifier.generationCompleted(
+                    conversationID: convID,
+                    conversationTitle: title,
+                    messageID: msgID,
+                    preview: preview
+                )
+            },
+            localTitler: AppleFoundationTitler()
+        )
+        m.speechPlayer = app.speech
+        // The terminal-time local titler resolves the profile's title
+        // kind from this map; an existing conversation seeds it at entry.
+        m.localTitleProfilesByID = Dictionary(uniqueKeysWithValues: convos.profiles.map { ($0.id, $0) })
+        m.onConversationCreated = { [weak convos] created in
+            convos?.didCreate(created)
+        }
+        model = m
+        if let profile = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
+            await m.chooseDraftProfile(profile)
+        } else {
+            await m.loadAvailableModels()
+        }
     }
 }
 
@@ -201,6 +283,7 @@ private struct ConversationBody: View {
     @Bindable var model: ConversationViewModel
     let liveConversation: PsmithConversation
     @Environment(AppModel.self) private var app
+    @Environment(ConversationsModel.self) private var convos
 
     // THE INVERTED TRANSCRIPT. The scroll view renders through
     // scaleEffect(y: -1) with each row flipped back and the message
@@ -237,6 +320,8 @@ private struct ConversationBody: View {
     /// Message opened in the full-document reader via the action
     /// menu's "Select text".
     @State private var selectTextMessage: PsmithMessage?
+    /// Message whose usage sheet the action menu's "Details" opened.
+    @State private var usageMessage: PsmithMessage?
 
     /// Latest scroll metrics, readable OUTSIDE the geometry handler.
     /// A reference-type box deliberately: writing it per tick must not
@@ -338,7 +423,13 @@ private struct ConversationBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let err = model.loadError, !model.messages.isEmpty {
+            if model.isDraft {
+                DraftProfilePane(model: model, profiles: convos.profiles)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            // A draft's failure (the create on first send) is a banner
+            // over its preview, never the full-pane load-failure state.
+            if let err = model.loadError, !model.messages.isEmpty || model.isDraft {
                 loadErrorBanner(err)
             }
             if let speechErr = app.speech.playbackError {
@@ -374,9 +465,14 @@ private struct ConversationBody: View {
             // there is no far-end estimate to strand the viewport
             // against.
         }
+        .animation(.snappy(duration: 0.25), value: model.isDraft)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                ConversationMenu(model: model, showingContexts: $showingContexts)
+            // Cost, contexts and compaction all act on a conversation
+            // that a draft doesn't have yet.
+            if !model.isDraft {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ConversationMenu(model: model, showingContexts: $showingContexts)
+                }
             }
         }
         .navigationDestination(isPresented: $showingContexts) {
@@ -397,9 +493,12 @@ private struct ConversationBody: View {
         // so the backdrop doesn't visibly scale.
         .overlay {
             if let msg = model.actionMenuMessage {
-                MessageActionMenu(message: msg, model: model) {
-                    selectTextMessage = msg
-                }
+                MessageActionMenu(
+                    message: msg,
+                    model: model,
+                    onSelectText: { selectTextMessage = msg },
+                    onShowDetails: { usageMessage = msg }
+                )
                 .transition(.opacity)
             }
         }
@@ -407,6 +506,20 @@ private struct ConversationBody: View {
         // transcript itself renders with selection off (see MessageRow),
         // so this is where a text grab actually happens. Same cache key
         // as the row, so the parse is warm.
+        .sheet(item: $usageMessage) { msg in
+            NavigationStack {
+                MessageUsageSheet(message: msg, model: model)
+                    .navigationTitle("Details")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { usageMessage = nil }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $selectTextMessage) { msg in
             let body = msg.displayContent ?? msg.content
             MarkdownDocumentView(
@@ -475,7 +588,7 @@ private struct ConversationBody: View {
 
     @ViewBuilder
     private var messageScroll: some View {
-        if let err = model.loadError, model.messages.isEmpty {
+        if let err = model.loadError, model.messages.isEmpty, !model.isDraft {
             EmptyStateView(
                 "Failed to load",
                 systemImage: "exclamationmark.triangle",
@@ -1058,19 +1171,13 @@ private struct ConversationMenu: View {
                 }
             }
         } label: {
-            // Truncated to cents; monospaced digits so the label
-            // doesn't wobble as the total ticks up. The warning
-            // triangle rides along when the total is approximate.
-            HStack(spacing: 4) {
-                if !modelsMissingCost.isEmpty {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-                Text(String(format: "$%.2f", accruedCost))
-                    .font(.callout.weight(.medium))
-                    .monospacedDigit()
-            }
+            // A menu, not a price tag: the running cost is the precise
+            // row inside, and the unpriced-models warning lives there
+            // too rather than as an orange triangle on every open.
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel("Conversation menu")
         .accessibilityValue(String(format: "cost $%.4f", accruedCost))
@@ -1170,6 +1277,9 @@ private struct ChatHistoryArea: View, @MainActor Equatable {
     }
 
     var body: some View {
+        // Once per transcript change, not once per row.
+        let modelChanges = model.modelChangeMessageIDs
+        let firstMetered = model.firstMeteredReplyID
         ForEach(model.messages.reversed()) { msg in
             if msg.role == .compressionSummary {
                 CompressionSummaryCard(message: msg, model: model)
@@ -1188,7 +1298,9 @@ private struct ChatHistoryArea: View, @MainActor Equatable {
                 MessageRow(
                     message: msg,
                     previousMessage: model.messages.first(where: { $0.id == msg.parentID }),
-                    model: model
+                    model: model,
+                    modelChanged: modelChanges.contains(msg.id),
+                    isFirstMeteredReply: msg.id == firstMetered
                 )
                     .frame(width: rowWidth, alignment: .leading)
                     .chatRowFlip()
