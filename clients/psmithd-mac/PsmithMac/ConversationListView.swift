@@ -20,9 +20,6 @@ struct ConversationListView: View {
     var body: some View {
         @Bindable var convos = convos
         VStack(spacing: 0) {
-            if app.connectivity.state == .offline {
-                offlineBanner
-            }
             List(selection: $convos.selectedID) {
                 if showingArchived {
                     archivedContent
@@ -38,6 +35,14 @@ struct ConversationListView: View {
             }
             .listStyle(.sidebar)
             .tint(theme.accent)
+            // In the list's top inset, not stacked above it: the sidebar
+            // runs under the title bar, and a sibling above the list sat
+            // under the window's traffic lights.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if app.connectivity.state == .offline {
+                    offlineBanner
+                }
+            }
             .task(id: showingArchived) {
                 if showingArchived { await convos.loadArchived() }
             }
@@ -131,15 +136,17 @@ struct ConversationListView: View {
             // empty-cache branch below already says the opposite.
             Text(convos.conversations.isEmpty
                  ? "Server unavailable"
-                 : "Server unavailable — showing cached chats")
+                 : "Server unavailable. Showing cached chats.")
                 .scaledFont(.caption2)
                 .lineLimit(1)
         }
         .foregroundStyle(.orange)
         .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
-        .background(.orange.opacity(0.12))
+        .background(.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
     }
 
     /// Pill at the top of the list — three buttons for All Chats / By

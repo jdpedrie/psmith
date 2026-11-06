@@ -75,6 +75,7 @@ public final class SpeechSettingsModel {
     }
 
     public func load() async {
+        saveError = nil
         async let kindsTask = loadKindsQuietly()
         async let providersTask = loadProvidersQuietly()
         do {

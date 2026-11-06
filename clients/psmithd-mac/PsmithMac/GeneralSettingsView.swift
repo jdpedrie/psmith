@@ -2,8 +2,8 @@ import SwiftUI
 import PsmithKit
 
 /// Mac settings panel for app-level preferences that don't fit the
-/// other categories. Currently the on-device cache controls; future
-/// home for defaults like conversation order.
+/// other categories: the context warning (synced across devices) and
+/// the on-device cache.
 struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var app
 
@@ -13,18 +13,53 @@ struct GeneralSettingsView: View {
     @State private var showingClearConfirm = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("General")
-                        .scaledFont(.title2, weight: .semibold)
-                    Text("Psmith keeps recent conversations on this Mac so they stay readable when the server is unreachable.")
-                        .scaledFont(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        SettingsPage(
+            title: "General",
+            subtitle: "Psmith keeps recent conversations on this Mac so they stay readable when the server is unreachable."
+        ) {
+                SettingsSection(title: "Context warning") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Warn at")
+                            Spacer()
+                            Picker("Warn at", selection: warningBinding) {
+                                Text("Off").tag(Int32(0))
+                                ForEach(Self.warningPresets, id: \.self) { preset in
+                                    Text("\(ContextWarning.compact(preset)) tokens").tag(preset)
+                                }
+                                if warningTokens > 0, !Self.warningPresets.contains(warningTokens) {
+                                    Text("\(ContextWarning.compact(warningTokens)) tokens").tag(warningTokens)
+                                }
+                                Text("Custom…").tag(Self.customTag)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
+                        Text("Past this size, a conversation's context shows beside the model under the message field; click it to compress. Near a model's own limit it shows in red whatever this is set to. Applies on all your devices.")
+                            .scaledFont(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let error = app.preferences.error {
+                            Text(error)
+                                .scaledFont(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+                .alert("Warn at", isPresented: $editingCustomWarning) {
+                    TextField("Thousands of tokens", text: $customWarningText)
+                    Button("Save") {
+                        if let k = Int32(customWarningText.trimmingCharacters(in: .whitespaces)), k > 0, k <= 2_000 {
+                            Task { await app.preferences.setContextWarningTokens(k * 1_000) }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("In thousands of tokens: 120 warns at 120,000.")
                 }
 
-                sectionCard("On-device cache") {
+                SettingsSection(title: "On-device cache") {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Used")
@@ -85,15 +120,35 @@ struct GeneralSettingsView: View {
                         }
                     }
                 }
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
-            .frame(maxWidth: 720, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
             currentBytes = await app.client.cache?.totalBytes() ?? 0
+            await app.preferences.load()
         }
+    }
+
+    // MARK: - Context warning
+
+    private static let warningPresets: [Int32] = [50_000, 75_000, 100_000, 150_000, 200_000]
+    /// Picker tag for "Custom…", never stored.
+    private static let customTag: Int32 = -1
+    @State private var editingCustomWarning = false
+    @State private var customWarningText = ""
+
+    private var warningTokens: Int32 { app.preferences.preferences.contextWarningTokens }
+
+    private var warningBinding: Binding<Int32> {
+        Binding(
+            get: { warningTokens },
+            set: { choice in
+                if choice == Self.customTag {
+                    customWarningText = warningTokens > 0 ? String(warningTokens / 1_000) : ""
+                    editingCustomWarning = true
+                } else {
+                    Task { await app.preferences.setContextWarningTokens(choice) }
+                }
+            }
+        )
     }
 
     private var minMB: Int { CachePreferences.minCapBytes / (1024 * 1024) }
@@ -105,18 +160,5 @@ struct GeneralSettingsView: View {
             return String(format: "%.0f KB", Double(n) / 1024)
         }
         return String(format: "%.1f MB", mb)
-    }
-
-    @ViewBuilder
-    private func sectionCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .scaledFont(.caption, weight: .semibold)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            content()
-                .padding(14)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-        }
     }
 }

@@ -79,6 +79,7 @@ public final class EmbedderViewModel {
     /// Refresh the saved snapshot + reset draft fields to match.
     /// Also primes the available-types list and the stats chip.
     public func load() async {
+        saveError = nil
         async let typesTask = loadTypesQuietly()
         async let statsTask = refreshStatsQuietly()
         do {

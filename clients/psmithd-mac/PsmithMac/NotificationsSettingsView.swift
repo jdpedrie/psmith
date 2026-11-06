@@ -1,46 +1,33 @@
 import SwiftUI
 import PsmithUI
 
-/// Detail-column content for `SettingsCategory.notifications`. Renders the
-/// pane for whichever sub-section the middle column currently has selected
-/// (today: just `.generationFinished`, but the shape is set up so future
-/// notification toggles slot in as new `NotificationsSection` cases without
-/// having to restructure the view).
+/// Detail content for `SettingsCategory.notifications`. One section per
+/// `NotificationsSection`; today that's generation finished.
 struct NotificationsSettingsView: View {
     let section: NotificationsSection
     @Environment(AppPreferences.self) private var prefs
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                switch section {
-                case .generationFinished: generationFinishedPane
+        @Bindable var p = prefs
+        SettingsPage(
+            title: "Notifications",
+            subtitle: "What Psmith tells you about while you're in another app. Stored on this Mac; not synced."
+        ) {
+            switch section {
+            case .generationFinished:
+                SettingsSection(title: "Generation finished") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $p.notifyOnUnfocusedCompletion) {
+                            Text("Notify when a reply finishes")
+                        }
+                        .toggleStyle(.switch)
+                        Text("Posts a notification when a reply completes while Psmith is in the background. Nothing posts while Psmith is the active app; you're already looking at the result. macOS asks for permission the first time one would post.")
+                            .scaledFont(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    @ViewBuilder
-    private var generationFinishedPane: some View {
-        @Bindable var p = prefs
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Generation finished")
-                    .scaledFont(.title2, weight: .semibold)
-                Text("Posts a macOS notification when an assistant turn completes while Psmith is in the background. Suppressed when Psmith is the active app — you're already looking at the result. Permission is requested the first time a notification would fire. Stored locally on this Mac; not synced.")
-                    .scaledFont(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Toggle(isOn: $p.notifyOnUnfocusedCompletion) {
-                Text("Ring on generation finish")
-                    .scaledFont(.callout, weight: .medium)
-            }
-            .toggleStyle(.switch)
-            .controlSize(.small)
         }
     }
 }

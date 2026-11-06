@@ -377,7 +377,7 @@ matters. The matrix is dimension × view count, shown collapsed below.
 |---|---|
 | chats mode, nothing selected | sidebar + WelcomeView |
 | chats mode, conversation selected | sidebar + ConversationView |
-| chats mode, composing new | sidebar + NewConversationView |
+| chats mode, new conversation | sidebar + a draft ConversationView |
 | settings mode | full SettingsView |
 | sidebarVisibility = .doubleColumn vs .all | both |
 
@@ -388,21 +388,22 @@ matters. The matrix is dimension × view count, shown collapsed below.
 | can create (profile exists) | renders New Conversation button |
 | cannot create (no profile) | button disabled, alt copy |
 
-#### New conversation (`NewConversationView`)
+#### New conversation (draft `ConversationBody`)
+
+A new conversation is a draft `ConversationViewModel` on the regular conversation view, as on iOS; nothing exists on the server until the first send.
 
 | State | Snapshot |
 |---|---|
-| no profile selected | profile picker visible, send disabled |
-| profile selected, default model | composer + model badge |
-| profile selected, model overridden | composer + override chip |
-| Chat Settings expanded | reveals CallSettingsForm inline |
+| default profile chosen | "Choose a Profile" pane collapsed, seed rows previewed, no conversation menu |
 
 #### Conversation view (`ConversationView`)
 
 | State | Snapshot |
 |---|---|
 | empty (just system) | system row only |
-| user + assistant pair | both rows + cost chip |
+| user + assistant pair | themed user bubble sized to its text, bare reply, the newest reply's action row |
+| turn details shown | role labels, model label, usage line |
+| context near the model's window | red context chip beside the model |
 | with thinking enabled | thinking disclosure visible |
 | with tool-use stub | tool-call message styling |
 | streaming | "•••" indicator + cancel button |
@@ -416,10 +417,25 @@ matters. The matrix is dimension × view count, shown collapsed below.
 | bullets inside a blockquote (narrow column + scale 1.1) | the quoted list item wraps instead of truncating |
 | long assistant message (tall viewport) | whole body inline through the chunked stack, no preview cut, no "Show full text" |
 | streaming long text (tall viewport) | whole accumulated stream, no leading "…" |
-| message text selection mode | assistant body as the native text view, hover pill up with the I-beam tinted |
+| message text selection mode | assistant body as the native text view, action row up with the I-beam tinted |
 | compression card text selection mode | whole summary as the native text view plus Done in the header, no preview cut |
 | composer with a three-line draft | the text view grows to three lines |
-| composer with a twenty-line draft | capped at eight lines, the rest scrolls |
+| composer with a twenty-line draft | capped at ten lines, the rest scrolls |
+
+#### Transcript scrolling (`TranscriptScrollTests`, Mac)
+
+Event tests in an offscreen titled window (a borderless window drops synthetic scroll-wheel events), with real scroll-wheel events for the user's part.
+
+| Behavior | Assertion |
+|---|---|
+| entry | the viewport is at the newest message |
+| append while at the bottom | still at the bottom |
+| user scrolls up, then content arrives | the viewport doesn't move |
+| a reply past one viewport | content stops growing (the clip), viewport at the bottom |
+| stream ends (append and clear in one update) | the viewport stays on the reply's start, not its end |
+| send while scrolled away | catches up to the bottom |
+
+`LiveProbe` (same target) renders the real view tree against a running test server when `PSMITH_LIVE_PROBE` names a directory for its PNGs; it's skipped otherwise.
 
 #### Selectable message text (`SelectableMessageText`, Mac)
 

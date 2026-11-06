@@ -3,6 +3,7 @@ import SwiftUI
 @testable import PsmithMac
 @_exported import PsmithKit
 @_exported import SnapshotHarness
+import PsmithUI
 
 /// Test-target helper that injects every `@Environment` PsmithMac views
 /// require — `AppModel` (PsmithKit, public), `ConversationsModel`
@@ -42,6 +43,7 @@ struct PsmithMacEnvironment<Content: View>: View {
             // instance renders the zero-account state, which is what
             // deterministic snapshots want.
             .environment(AccountManager())
+            .environment(AppPreferences())
             .preferredColorScheme(.dark)
     }
 }
@@ -75,7 +77,7 @@ enum SnapshotEnvironment {
         )
         let navigator = Navigator()
         navigator.mode = navMode
-        navigator.composingNewConversation = composing
+        if composing { navigator.startNewConversation() }
         let windowState = WindowState()
         windowState.mode = windowMode
         return (app, convos, navigator, windowState)

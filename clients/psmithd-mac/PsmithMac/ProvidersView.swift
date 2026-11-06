@@ -1293,6 +1293,7 @@ private struct ProviderDefaultSettingsTab: View {
     @Bindable var model: ProvidersViewModel
     @State private var draft = PsmithCallSettings()
     @State private var seeded = false
+    @State private var baseline = PsmithCallSettings()
 
     var body: some View {
         ScrollView {
@@ -1321,18 +1322,27 @@ private struct ProviderDefaultSettingsTab: View {
             // provider for unrelated reasons.
             if !seeded {
                 draft = provider.defaultSettings ?? PsmithCallSettings()
+                baseline = draft
                 seeded = true
             }
         }
         .onDisappear {
-            // Auto-save on dismiss. Skip the call when the draft matches what's
-            // already persisted — avoids a no-op round-trip every tab switch.
-            let original = provider.defaultSettings ?? PsmithCallSettings()
-            guard draft != original else { return }
+            // Save on leaving, only an edit: compared with what this tab
+            // seeded, not with the provider's current defaults, so an
+            // untouched tab can't write back over a change made on
+            // another device meanwhile. Every write publishes a provider
+            // event that reloads the provider list on every client.
+            guard seeded, draft != baseline else { return }
             let providerID = provider.id
             let settings = draft
             let m = model
-            Task { try? await m.updateProviderDefaultSettings(providerID: providerID, settings: settings) }
+            Task {
+                do {
+                    try await m.updateProviderDefaultSettings(providerID: providerID, settings: settings)
+                } catch {
+                    m.error = "Provider defaults weren't saved: \(PsmithError.display(error))"
+                }
+            }
         }
     }
 

@@ -46,24 +46,31 @@ struct HomeView: View {
             .frame(minWidth: 240)
             .navigationSplitViewColumnWidth(min: 240, ideal: 280)
         } detail: {
-            if navigator.composingNewConversation {
-                NewConversationView()
+            if let draft = navigator.draft, convos.selectedID == nil || convos.selectedID == draft.createdID {
+                ConversationView(newConversation: draft.key) { created in
+                    navigator.draft?.createdID = created.id
+                }
+                .id(draft.key)
             } else if let id = convos.selectedID,
                       let conversation = convos.conversations.first(where: { $0.id == id })
                           ?? convos.archivedConversations.first(where: { $0.id == id }) {
-                ConversationView(conversation: conversation, profiles: app.profiles)
+                ConversationView(conversation: conversation)
                     .id(id)
             } else {
                 WelcomeView()
             }
         }
-        // If the user picks a conversation from the sidebar while the
-        // new-conversation pane is up, dismiss the form and show the
-        // chosen conversation instead. Initial load is suppressed via
-        // `initial: false` so this only fires on user-driven changes.
+        // Picking another conversation in the sidebar abandons the draft;
+        // the draft's own creation selects its new id, which keeps it.
         .onChange(of: convos.selectedID, initial: false) { _, newID in
-            if newID != nil, navigator.composingNewConversation {
-                navigator.composingNewConversation = false
+            if let newID, let draft = navigator.draft, draft.createdID != newID {
+                navigator.draft = nil
+            }
+        }
+        // A fresh draft takes the detail pane from whatever was open.
+        .onChange(of: navigator.draft?.key) { _, key in
+            if key != nil, navigator.draft?.createdID == nil {
+                convos.selectedID = nil
             }
         }
     }
@@ -77,6 +84,9 @@ struct HomeView: View {
             mcpServersModel: app.mcpServers,
             onBack: { navigator.mode = .chats }
         )
+        // The settings sidebar names the screen; a leftover conversation
+        // title in the window bar would contradict it.
+        .navigationTitle("")
     }
 
     /// Bottom sidebar row: user menu (sign out) on the left, gear (settings)
@@ -162,39 +172,18 @@ struct HomeView: View {
                     .help("Settings (⌘,)")
 
                     Button {
-                        // With a default profile set, plain click starts a
-                        // chat with it immediately; ⌥-click (or no default)
-                        // opens the full compose pane with profile/model/
-                        // settings choices. Mirrors iOS's tap vs long-press.
-                        let optionHeld = NSEvent.modifierFlags.contains(.option)
-                        if !optionHeld,
-                           let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
-                            Task {
-                                if let c = await convos.newConversation(profileID: def.id, title: nil, settings: nil) {
-                                    convos.selectedID = c.id
-                                }
-                            }
-                        } else {
-                            navigator.composingNewConversation = true
-                        }
+                        navigator.startNewConversation()
                     } label: {
                         Image(systemName: "plus.bubble")
                     }
                     .buttonStyle(.glass)
                     .disabled(!convos.profiles.contains(where: { !$0.parentOnly }))
-                    .help(newConversationHelp)
+                    .help("New conversation (⌘N)")
                 }
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-    }
-
-    private var newConversationHelp: String {
-        if let def = convos.profiles.first(where: { $0.isDefault && !$0.parentOnly }) {
-            return "New conversation with \(def.name) — ⌥-click to choose"
-        }
-        return "New conversation"
     }
 
     // MARK: - Account switcher popover

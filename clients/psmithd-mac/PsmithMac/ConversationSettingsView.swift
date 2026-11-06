@@ -55,7 +55,9 @@ struct ConversationSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .task {
-            await model.loadAvailableModels()
+            // Prepare first: it marks the draft unseeded from its first
+            // line, which is what stops a quick exit saving that draft.
+            // It loads the model catalog itself when it's missing.
             await model.prepareSettingsView()
         }
         .onDisappear {

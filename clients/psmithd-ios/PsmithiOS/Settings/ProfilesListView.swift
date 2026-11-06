@@ -1262,9 +1262,13 @@ private struct ProfileEditSheet: View {
         let trimmedCompressionGuide = compressionGuide.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTitleGuide = titleGuide.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // The server replaces the whole defaults blob, and this form
+        // doesn't edit include-thinking (the web does): carry it through,
+        // or any save here erases it.
         let defaults = PsmithProfileDefaults(
             defaultProviderID: defaultProviderID,
             defaultModelID: defaultModelID,
+            includeThinkingInHistory: existing?.defaultSettings?.includeThinkingInHistory,
             callSettings: callSettingsDraft.isEmpty ? nil : callSettingsDraft
         )
 

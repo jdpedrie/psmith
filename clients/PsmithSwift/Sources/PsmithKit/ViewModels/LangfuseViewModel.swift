@@ -68,6 +68,7 @@ public final class LangfuseViewModel {
     /// Refresh the saved snapshot + reset draft fields to match.
     /// Idempotent; called by the view's `.task` modifier.
     public func load() async {
+        saveError = nil
         do {
             let cfg = try await client.langfuse.get()
             saved = cfg

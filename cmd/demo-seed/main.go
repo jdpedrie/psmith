@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 
@@ -235,6 +236,12 @@ func main() {
 			}
 			if n > len(text) {
 				n = len(text)
+			}
+			// A byte cut can land inside a multi-byte rune, and JSON
+			// encoding turns the halves into U+FFFD. Real providers
+			// never split a rune, so the fake shouldn't either.
+			for n < len(text) && !utf8.RuneStart(text[n]) {
+				n++
 			}
 			emit(text[:n])
 			text = text[n:]

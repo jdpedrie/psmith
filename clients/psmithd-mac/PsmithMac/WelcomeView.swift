@@ -30,7 +30,7 @@ struct WelcomeView: View {
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
             Button {
-                navigator.composingNewConversation = true
+                navigator.startNewConversation()
             } label: {
                 Label("New Conversation", systemImage: "plus.bubble")
                     .padding(.horizontal, 14)

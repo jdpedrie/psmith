@@ -456,6 +456,11 @@ private struct ProfileForm: View {
     @State private var pluginsDraft: [DraftPlugin] = []
     @State private var pluginsBaseline: [PsmithProfilePlugin] = []
     @State private var pluginsLoaded = false
+    /// The profile's attached plugins couldn't be fetched. The section
+    /// offers a retry instead of an editable list: a list seeded empty
+    /// would be saved with SetProfilePlugins, an atomic replace, and
+    /// detach every plugin the profile has.
+    @State private var pluginsLoadFailed = false
     /// One-shot guards: the plugin-settings drill-down REPLACES
     /// mainForm in `body`, so returning from it re-runs mainForm's
     /// `.onAppear`/`.task`. Unguarded, those re-seeded every field and
@@ -606,17 +611,26 @@ private struct ProfileForm: View {
             // drafts when the plugin sub-screen swapped back — see
             // formSeeded.)
             if !pluginsLoaded, let editing {
-                await model.loadPlugins(forProfileID: editing.id)
-                let stored = model.profilePlugins[editing.id] ?? []
-                pluginsBaseline = stored
-                pluginsDraft = stored.map { plugin in
-                    DraftPlugin(
-                        pluginName: plugin.pluginName,
-                        config: decodeConfigDict(plugin.config) ?? [:]
-                    )
-                }
+                await seedPlugins(profileID: editing.id)
             }
             pluginsLoaded = true
+        }
+    }
+
+    private func seedPlugins(profileID: String) async {
+        model.profilePlugins[profileID] = nil
+        await model.loadPlugins(forProfileID: profileID)
+        guard let stored = model.profilePlugins[profileID] else {
+            pluginsLoadFailed = true
+            return
+        }
+        pluginsLoadFailed = false
+        pluginsBaseline = stored
+        pluginsDraft = stored.map { plugin in
+            DraftPlugin(
+                pluginName: plugin.pluginName,
+                config: decodeConfigDict(plugin.config) ?? [:]
+            )
         }
     }
 
@@ -1126,11 +1140,17 @@ private struct ProfileForm: View {
         // one of the inner fields is populated, otherwise the server treats
         // an empty defaults blob the same as "preserve".
         let trimmedCallSettings: PsmithCallSettings? = callSettingsDraft.isEmpty ? nil : callSettingsDraft
+        // The server replaces the whole defaults blob, and this form
+        // doesn't edit include-thinking (the web does): carry it through,
+        // or any save here erases it.
+        let includeThinking = editing?.defaultSettings?.includeThinkingInHistory
         let hasAnyDefault = defaultProviderID != nil || defaultModelID != nil || trimmedCallSettings != nil
+            || includeThinking != nil
         if hasAnyDefault {
             patch.defaultSettings = PsmithProfileDefaults(
                 defaultProviderID: defaultProviderID,
                 defaultModelID: defaultModelID,
+                includeThinkingInHistory: includeThinking,
                 callSettings: trimmedCallSettings
             )
         }
@@ -1189,7 +1209,7 @@ private struct ProfileForm: View {
             // empty so any attached draft plugins flush to the
             // freshly-created profile id. On Edit mode we diff against
             // the loaded baseline; equality skips the round-trip.
-            if pluginsAreDirty {
+            if pluginsAreDirty, !pluginsLoadFailed {
                 let plugins: [PsmithProfilePlugin] = try pluginsDraft.enumerated().map { ordinal, plugin in
                     let data = try JSONSerialization.data(withJSONObject: plugin.config, options: [.sortedKeys])
                     return PsmithProfilePlugin(
@@ -1233,6 +1253,15 @@ private struct ProfileForm: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Loading plugins…").scaledFont(.caption).foregroundStyle(.secondary)
+                }
+            } else if pluginsLoadFailed, let editing {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Couldn't load this profile's plugins. Saving won't change them.")
+                        .scaledFont(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Retry") {
+                        Task { await seedPlugins(profileID: editing.id) }
+                    }
                 }
             } else {
                 if pluginsDraft.isEmpty {

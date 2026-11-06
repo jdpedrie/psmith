@@ -169,7 +169,10 @@ private struct PluginSettingsForm: View {
     @Bindable var model: ProfilesViewModel
 
     @State private var draft: [String: Any] = [:]
-    @State private var seeded = false
+    /// The draft as seeded from the server. nil until seeded; a change
+    /// away from it is the user's edit, and only that saves.
+    @State private var baselineKey: String?
+    @State private var saveTask: Task<Void, Never>?
     @State private var isSaving = false
     @State private var saveError: String?
 
@@ -187,7 +190,23 @@ private struct PluginSettingsForm: View {
                     }
 
                     let globals = plugin.globalConfigFields
-                    if globals.isEmpty {
+                    if !globals.isEmpty, !model.userPluginSettingsLoaded {
+                        // The stored config is unknown, so an editor would
+                        // start from defaults and save them over it.
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Couldn't load this plugin's saved settings.")
+                                .foregroundStyle(.secondary)
+                            if let err = model.error {
+                                Text(err).scaledFont(.caption).foregroundStyle(.red)
+                            }
+                            Button("Retry") {
+                                Task {
+                                    await model.loadUserPluginSettings()
+                                    seedFromModel()
+                                }
+                            }
+                        }
+                    } else if globals.isEmpty {
                         Text("This plugin has no global settings.")
                             .foregroundStyle(.secondary)
                     } else {
@@ -234,14 +253,14 @@ private struct PluginSettingsForm: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { seedFromModel() }
         .onChange(of: plugin.id) { _, _ in
-            seeded = false
+            saveTask?.cancel()
+            baselineKey = nil
             seedFromModel()
         }
-        .onChange(of: dirtyKey) { _, _ in
-            // Auto-save on each change; debounce-by-task avoids racing the
-            // repository on rapid keystrokes (we always run with the
-            // latest draft value; older Tasks no-op).
-            Task { await save() }
+        .onChange(of: model.userPluginSettingsLoaded) { _, _ in seedFromModel() }
+        .onChange(of: dirtyKey) { _, key in
+            guard let baselineKey, key != baselineKey else { return }
+            scheduleSave()
         }
     }
 
@@ -279,8 +298,22 @@ private struct PluginSettingsForm: View {
         return s
     }
 
+    /// Coalesces a burst of edits (every keystroke changes the draft)
+    /// into one write, and orders writes: each waits for the previous
+    /// one, so an earlier draft can never land after a later one.
+    private func scheduleSave() {
+        let previous = saveTask
+        previous?.cancel()
+        saveTask = Task {
+            await previous?.value
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await save()
+        }
+    }
+
     private func seedFromModel() {
-        guard !seeded else { return }
+        guard baselineKey == nil, model.userPluginSettingsLoaded else { return }
         let blob = model.globalSettings(for: plugin.name).config
         if !blob.isEmpty,
            let dict = try? JSONSerialization.jsonObject(with: blob) as? [String: Any] {
@@ -298,7 +331,7 @@ private struct PluginSettingsForm: View {
             }
             draft = initial
         }
-        seeded = true
+        baselineKey = dirtyKey
     }
 
     private func save() async {

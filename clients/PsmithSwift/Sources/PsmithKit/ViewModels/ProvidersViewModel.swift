@@ -266,12 +266,17 @@ public final class ProvidersViewModel {
         selectedID = id
         detailMode = .viewing
         isLoadingDetail = true
-        defer { isLoadingDetail = false }
+        defer { if selectedID == id { isLoadingDetail = false } }
         do {
             let (_, models) = try await client.modelProviders.get(id: id)
+            // A later selection replaced this one while the fetch was in
+            // flight: these models belong to a provider no longer shown,
+            // and actions on them would be sent against the new one.
+            guard selectedID == id else { return }
             enabledModels = models.sorted { $0.displayName < $1.displayName }
             error = nil
         } catch {
+            guard selectedID == id else { return }
             self.error = PsmithError.display(error)
         }
     }

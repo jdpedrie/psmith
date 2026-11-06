@@ -301,6 +301,11 @@ public final class ConversationViewModel {
     /// draft is then stale (or empty) rather than the conversation's
     /// settings, and saving it on the way out would overwrite them.
     private var settingsPrepareFailed = false
+    /// `conversationPluginOverrides` reflects the server. Until it does,
+    /// an empty list means "unknown", and SetConversationPlugins is an
+    /// atomic replace: a write built from it would delete every override
+    /// the conversation really has.
+    public private(set) var pluginOverridesLoaded = false
     /// Why the settings screen couldn't load or save. Separate from
     /// `loadError`, which renders on the transcript, not on settings.
     public var settingsError: String?
@@ -1445,10 +1450,15 @@ public final class ConversationViewModel {
         // in parallel — the Plugins tab needs all three to render rows
         // with proper labels and inherited-vs-overridden state.
         async let pipeline   = (try? await client.conversations.resolvePipeline(conversationID: liveConvo.id)) ?? []
-        async let overrides  = (try? await client.conversations.getPlugins(conversationID: liveConvo.id)) ?? []
+        async let overrides  = try? await client.conversations.getPlugins(conversationID: liveConvo.id)
         async let pluginCat  = (try? await client.profiles.listPluginTypes()) ?? []
         resolvedPluginPipeline      = await pipeline
-        conversationPluginOverrides = await overrides
+        if let loaded = await overrides {
+            conversationPluginOverrides = loaded
+            pluginOverridesLoaded = true
+        } else {
+            pluginOverridesLoaded = false
+        }
         registeredPluginTypes       = await pluginCat
     }
 
@@ -1517,6 +1527,10 @@ public final class ConversationViewModel {
     }
 
     private func pushPluginOverrides(_ overrides: [PsmithConversationPlugin]) async {
+        guard pluginOverridesLoaded else {
+            settingsError = "This conversation's plugin overrides didn't load, so changing them could delete the ones it has. Reopen settings to try again."
+            return
+        }
         do {
             _ = try await client.conversations.setPlugins(conversationID: conversation.id, plugins: overrides)
             conversationPluginOverrides = overrides
@@ -1538,7 +1552,9 @@ public final class ConversationViewModel {
     /// existing settings (default provider/model, include-thinking flag).
     /// Called on dismiss of the in-conversation Settings page.
     public func saveCallSettings() async {
-        guard !settingsPrepareFailed else { return }
+        // Mid-prepare the draft hasn't been seeded from the live row yet;
+        // saving it would write a stale or empty draft over the real one.
+        guard !settingsPrepareFailed, !preparingSettingsView else { return }
         do {
             // UpdateConversation REPLACES the settings blob, so build
             // from a fresh read of the live row, not the in-memory

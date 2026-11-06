@@ -15,7 +15,11 @@ struct SettingsView: View {
     let onBack: () -> Void
 
     @Environment(AppModel.self) private var app
-    @State private var category: SettingsCategory = .providers
+    /// On the navigator, so Settings reopens where the user left it.
+    private var category: SettingsCategory {
+        get { navigator.settingsCategory }
+        nonmutating set { navigator.settingsCategory = newValue }
+    }
     /// Which section of the Appearance pane is selected in the middle
     /// column. Persists across category switches so coming back to
     /// Appearance restores the user's last-viewed section.

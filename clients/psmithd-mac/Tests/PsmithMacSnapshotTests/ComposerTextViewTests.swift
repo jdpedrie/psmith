@@ -92,9 +92,9 @@ struct ComposerTextViewTests {
         let hosted = try hostConversation(size: CGSize(width: 1100, height: 720))
         defer { hosted.window.orderOut(nil) }
         #expect(hosted.scroll.frame.height == ceil(hosted.lineHeight))
-        // The composer spans the pane less its padding, nowhere near
-        // a fixed narrow column.
-        #expect(hosted.scroll.frame.width > 1000)
+        // The composer spans the reading column (820pt plus margins)
+        // less its padding, nowhere near a collapsed width.
+        #expect(hosted.scroll.frame.width > 760)
         #expect(hosted.textView.frame.width == hosted.scroll.contentSize.width)
         #expect(hosted.containerWidth == hosted.textView.frame.width)
     }
@@ -113,8 +113,8 @@ struct ComposerTextViewTests {
         hosted.type("\n")
         #expect(hosted.scroll.frame.height == line * 4)
 
-        hosted.type(String(repeating: "more\n", count: 12))
-        #expect(hosted.scroll.frame.height == line * 8)
+        hosted.type(String(repeating: "more\n", count: 14))
+        #expect(hosted.scroll.frame.height == line * 10)
         // Past the cap the text view is taller than its scroll view:
         // the rest is reachable by scrolling.
         #expect(hosted.textView.frame.height > hosted.scroll.frame.height)
@@ -126,7 +126,7 @@ struct ComposerTextViewTests {
         defer { hosted.window.orderOut(nil) }
         hosted.resize(to: CGSize(width: 1100, height: 720))
 
-        #expect(hosted.scroll.frame.width > 1000)
+        #expect(hosted.scroll.frame.width > 760)
         #expect(hosted.textView.frame.width == hosted.scroll.contentSize.width)
         #expect(hosted.containerWidth == hosted.textView.frame.width)
 

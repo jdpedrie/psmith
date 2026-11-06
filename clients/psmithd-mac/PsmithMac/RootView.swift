@@ -128,6 +128,8 @@ struct RootView: View {
     /// moment — the kick restores the push channel for what follows.
     private func reconcileWithServer() {
         app.kickEventStream()
+        // A preference changed on another device has no push.
+        Task { await app.preferences.load() }
         guard let convos else { return }
         convos.refreshSoon()
         if let sel = convos.selectedID {

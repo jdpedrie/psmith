@@ -75,9 +75,9 @@ private struct WindowChrome: NSViewRepresentable {
     }
 }
 
-/// Belt-and-braces: also configure every window the app creates from the
-/// AppDelegate. This catches the main window even if the SwiftUI background
-/// view's `viewDidMoveToWindow` hasn't fired yet.
+/// Also configures every window the app creates from the AppDelegate,
+/// which catches the main window before the SwiftUI background view's
+/// `viewDidMoveToWindow` has fired.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Re-entrancy guard for the snap-up `setFrame` call. `setFrame` posts
     /// `didResizeNotification`, which our observers handle by calling back
@@ -279,12 +279,17 @@ struct PsmithMacApp: App {
         }
         // Default size on first run. macOS state-restores the window's last
         // size on subsequent runs; the AppDelegate.configure NSWindow snap
-        // (contentMinSize + setFrame) is the belt-and-braces guard that
-        // forces the window back up to the SettingsView floor whenever it
-        // dips below — restored sessions don't reliably honor the SwiftUI
-        // .frame(minWidth:) modifier.
+        // (contentMinSize + setFrame) forces a restored window that comes
+        // back below the SettingsView floor up to it; restored sessions
+        // don't reliably honor the SwiftUI .frame(minWidth:) modifier.
         .defaultSize(width: 1100, height: 720)
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Conversation") {
+                    sharedNavigator.startNewConversation()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
             // Replace the standard "Settings…" menu item under the app menu
             // so ⌘, jumps the existing window into settings mode instead of
             // spawning a separate settings scene.

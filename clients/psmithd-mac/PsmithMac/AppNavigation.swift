@@ -14,9 +14,24 @@ enum AppMode: Hashable {
 final class Navigator {
     var mode: AppMode = .chats
 
-    /// While true, the chats shell's detail pane shows `NewConversationView`
-    /// instead of the regular conversation. Replaces the old popover.
-    var composingNewConversation: Bool = false
+    /// The Settings category on screen, kept across visits.
+    var settingsCategory: SettingsCategory = .providers
+
+    /// The new conversation on screen, if any. It exists only on this
+    /// Mac until its first send creates it on the server; `createdID`
+    /// is set then, and the same screen carries on as that conversation.
+    var draft: DraftRoute?
+
+    struct DraftRoute: Equatable {
+        let key = UUID()
+        var createdID: String?
+    }
+
+    /// "+", ⌘N, and the welcome screen's button all land here.
+    func startNewConversation() {
+        mode = .chats
+        draft = DraftRoute()
+    }
 
     /// One-shot signal: when set, the settings shell should switch to the
     /// Profiles category and select the named profile. Cleared by whoever

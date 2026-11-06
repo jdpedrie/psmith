@@ -19,7 +19,10 @@ struct EmbedderSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
-                if !model.didLoad {
+                if !model.didLoad, let err = model.saveError {
+                    // A failed load would otherwise spin here forever.
+                    SettingsLoadFailed(message: err) { await model.load() }
+                } else if !model.didLoad {
                     ProgressView().padding(.top, 40)
                 } else {
                     driverSection

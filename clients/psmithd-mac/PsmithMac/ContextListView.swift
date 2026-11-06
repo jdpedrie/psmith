@@ -5,8 +5,7 @@ import PsmithUI
 /// Full-pane "Contexts" view shown when the user opens the inbox button in
 /// the conversation toolbar. Replaces the message scroll inline (no
 /// popovers, no sheets) per the project's "no popup windows" convention.
-/// Mirrors `NewConversationView`'s page structure: navigation title +
-/// section labels + glass rows. Back navigation lives in the toolbar slot
+/// Page structure: navigation title + section labels + glass rows. Back navigation lives in the toolbar slot
 /// owned by `ConversationBody` (the inbox button swaps to a chevron while
 /// this page is active), so this view only renders the list itself.
 ///

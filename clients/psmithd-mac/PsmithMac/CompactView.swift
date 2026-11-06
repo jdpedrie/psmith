@@ -4,8 +4,7 @@ import PsmithKit
 /// Full-pane "Compact this conversation" view shown when the user opens
 /// the compact button in the conversation toolbar. Replaces the message
 /// scroll inline (no popovers, no sheets) per the project's "no popup
-/// windows" convention. Mirrors `NewConversationView` and
-/// `ContextListPane`'s page structure: section labels + glass rows;
+/// windows" convention. Mirrors `ContextListPane`'s page structure: section labels + glass rows;
 /// back navigation lives in the toolbar slot owned by `ConversationBody`
 /// (the compact button swaps to a chevron while this page is active).
 ///
@@ -19,7 +18,6 @@ import PsmithKit
 ///      a SwiftUI Menu here — single-item Menus render with zero-height
 ///      rows on macOS, and Menus over derived collections silently drop
 ///      items (see memory note `feedback_swiftui_menu_macos_bug.md`).
-///      The inline rows pattern is reused from `NewConversationView`.
 ///
 /// The footer carries a glass-prominent "Compact" button that fires the
 /// RPC with the current draft + selection as overrides. On submit the
@@ -179,8 +177,7 @@ struct CompactPane: View {
                 || m.modelID.lowercased().contains(needle)
                 || provider.lowercased().contains(needle)
         }
-        // FAVORITES section + per-provider groups, mirroring
-        // NewConversationView.modelRowList exactly.
+        // FAVORITES section, then per-provider groups.
         let favorites = filtered.filter { $0.favorite }.sorted { $0.displayName < $1.displayName }
         let nonFavorites = filtered.filter { !$0.favorite }
         let grouped: [(provider: String, models: [PsmithUserModel])] = Dictionary(grouping: nonFavorites) { $0.providerID }
@@ -267,8 +264,7 @@ struct CompactPane: View {
         model: PsmithUserModel,
         action: @escaping () -> Void
     ) -> some View {
-        // Same shape as NewConversationView.modelRow — two siblings inside
-        // an HStack, one for the row's selection action and one for the
+        // Two siblings inside an HStack, one for the row's selection action and one for the
         // favorite-toggle star. No nesting so each Button sees its own taps.
         HStack(spacing: 0) {
             Button(action: action) {

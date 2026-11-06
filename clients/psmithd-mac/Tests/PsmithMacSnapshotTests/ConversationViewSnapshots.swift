@@ -567,4 +567,53 @@ struct ConversationViewSnapshots {
     // assistant row's usage button is captured in the userAndAssistantPair
     // snapshot; the popover content is exercised by hand-testing for now.
     // TODO: Layer 3 (XCUITest).
+
+    // MARK: - iOS conformance
+
+    /// A new conversation before its first send: the profile pane on top,
+    /// the profile's seed rows as a preview, no conversation menu.
+    @Test
+    func draftConversation() async {
+        let profiles = [
+            SnapshotFixtures.profile(),
+            SnapshotFixtures.profile(id: "profile-pirate", name: "Pirate Tutor", description: "Answers in character.", favorite: false),
+        ]
+        let client = SnapshotStubs.makeClient()
+        let model = ConversationViewModel.draft(client: client, hub: StreamHub(subscriber: client.streams), onTerminal: {})
+        await model.chooseDraftProfile(profiles[0])
+        model.messages = [
+            PsmithMessage(id: "seed-system", contextID: "", role: .system, content: "You are a helpful assistant."),
+            PsmithMessage(id: "seed-welcome", contextID: "", parentID: "seed-system", role: .assistant, content: "Hello. What are we working on?", isWelcome: true),
+        ]
+        model.welcomePlayed.insert("seed-welcome")
+        model.availableModels = [SnapshotFixtures.userModel()]
+        model.selectedProviderID = "provider-anthropic"
+        model.selectedModelID = "claude-opus-4-7"
+        let env = SnapshotEnvironment.standard(conversations: [], profiles: profiles)
+        let view = PsmithMacEnvironment(app: env.app, convos: env.convos, navigator: env.navigator, windowState: env.windowState) {
+            NavigationStack {
+                ConversationBody(model: model, liveConversation: model.conversation)
+            }
+        }
+        assertViewSnapshots(view, sizes: columnSizes)
+    }
+
+    /// "Show turn details" on: role labels, the model on each reply, the
+    /// usage line and times.
+    @Test
+    func turnDetailsShown() {
+        let prefs = AppPreferences()
+        prefs.showTurnDetails = true
+        defer { prefs.showTurnDetails = false }
+        let model = SnapshotStubs.makeConversationViewModel()
+        assertViewSnapshots(body(for: model).environment(prefs), sizes: columnSizes)
+    }
+
+    /// Near the model's own window the context chip shows in red beside
+    /// the model, whatever the user's threshold.
+    @Test
+    func contextChipNearTheModelsWindow() {
+        let model = SnapshotStubs.makeConversationViewModel(tokenCount: 185_000, contextWindow: 200_000)
+        assertViewSnapshots(body(for: model), sizes: [("default", SnapshotSize.default)])
+    }
 }

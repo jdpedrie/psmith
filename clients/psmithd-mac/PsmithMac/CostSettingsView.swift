@@ -99,10 +99,10 @@ struct CostSettingsView: View {
             .frame(maxWidth: 720, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task { await reload() }
-        .onChange(of: range) { _, _ in Task { await reload() } }
-        .onChange(of: customSince) { _, _ in if range == .custom { Task { await reload() } } }
-        .onChange(of: customUntil) { _, _ in if range == .custom { Task { await reload() } } }
+        // Keyed on the window, so a new range cancels the load still in
+        // flight for the old one; otherwise a slow earlier answer could
+        // land last and show its totals under the new range's label.
+        .task(id: reloadKey) { await reload() }
     }
 
     private var rangeFooter: String {
@@ -134,12 +134,17 @@ struct CostSettingsView: View {
         }
     }
 
+    private var reloadKey: String {
+        range == .custom ? "custom-\(customSince.timeIntervalSince1970)-\(customUntil.timeIntervalSince1970)" : "\(range)"
+    }
+
     private func reload() async {
         loading = true
         defer { loading = false }
         do {
             let w = currentWindow
             let result = try await app.client.modelProviders.listProviderCosts(since: w.since, until: w.until)
+            guard !Task.isCancelled else { return }
             rows = result.providers
             grandTotal = result.grandTotal
             errorText = nil
