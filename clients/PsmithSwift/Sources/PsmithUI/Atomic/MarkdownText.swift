@@ -13,8 +13,8 @@ import MarkdownUI
 /// process-wide via `MarkdownCache`. Use the `cacheSource:` initializer
 /// to opt in (the parameter is the message id + an "edited at" stamp so
 /// post-edit content invalidates naturally).
-public struct MarkdownText: View {
-    private enum Source {
+public struct MarkdownText: View, Equatable {
+    private enum Source: Equatable {
         case raw(String)
         case cached(key: String, source: String)
     }
@@ -34,6 +34,15 @@ public struct MarkdownText: View {
     /// — so an edit invalidates the cache automatically.
     public init(_ content: String, cacheKey: String) {
         self.source = .cached(key: cacheKey, source: content)
+    }
+
+    /// Value equality on the source alone: `ChunkedMarkdownText` hands
+    /// a streaming row's settled chunks identical strings every flush,
+    /// and this is what lets SwiftUI skip their bodies. Nonisolated
+    /// because `View` puts the rest of the type on the main actor and
+    /// an Equatable conformance must be usable from anywhere.
+    nonisolated public static func == (lhs: MarkdownText, rhs: MarkdownText) -> Bool {
+        lhs.source == rhs.source
     }
 
     public var body: some View {
@@ -204,6 +213,17 @@ public final class MarkdownCache {
 }
 
 extension MarkdownUI.Theme {
+    @MainActor
+    private static func heading(_ configuration: BlockConfiguration, scale: CGFloat) -> some View {
+        configuration.label
+            .fixedSize(horizontal: false, vertical: true)
+            .markdownMargin(top: .em(1))
+            .markdownTextStyle {
+                FontWeight(.semibold)
+                FontSize(.em(scale))
+            }
+    }
+
     /// Tighter spacing than the default `.basic` so chat bubbles don't feel
     /// airy. Code blocks get a subtle background tint to read against the
     /// bubble's own background.
@@ -212,6 +232,33 @@ extension MarkdownUI.Theme {
         .text {
             ForegroundColor(.primary)
         }
+        // Text-bearing blocks size themselves to their wrapped height
+        // for whatever width they are given. Without this, a list item
+        // inside a blockquote (a label style and an overlay between the
+        // paragraph and its block sequence) is proposed a one-line
+        // height on macOS and the item renders as a single line ending
+        // in "…" instead of wrapping — the Mac "bullets truncate"
+        // report, reproduced at the narrow pane width and at scale 1.1
+        // and pinned by the bulletsInBlockquote snapshots. Every
+        // built-in MarkdownUI theme carries the same modifier on its
+        // paragraph style; `Theme()` does not.
+        .paragraph { configuration in
+            configuration.label
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        // Headings: a chat bubble wants modest steps, not the document
+        // scale MarkdownUI's own themes use (2em for h1). Semibold at
+        // 1.5 / 1.3 / 1.15 em for h1–h3 and body size from h4 down,
+        // with a line of room above so a section break reads as one.
+        // `Theme()` leaves headings unstyled, which drew `## Section`
+        // as a plain paragraph. SelectableMessageText's renderer
+        // mirrors these numbers.
+        .heading1 { heading($0, scale: 1.5) }
+        .heading2 { heading($0, scale: 1.3) }
+        .heading3 { heading($0, scale: 1.15) }
+        .heading4 { heading($0, scale: 1) }
+        .heading5 { heading($0, scale: 1) }
+        .heading6 { heading($0, scale: 1) }
         .code {
             FontFamilyVariant(.monospaced)
             FontSize(.em(0.92))

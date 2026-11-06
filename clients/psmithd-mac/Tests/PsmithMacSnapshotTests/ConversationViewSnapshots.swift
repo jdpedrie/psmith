@@ -257,6 +257,134 @@ struct ConversationViewSnapshots {
     }
 
     @Test
+    func bulletsInBlockquote() {
+        // A list item inside a blockquote rendered as ONE line ending
+        // in "…" at the narrow pane width and at scale 1.1 (the
+        // user-reported "bullets truncate", reproduced 2026-09-26): the
+        // paragraph inside the item's label was proposed a one-line
+        // height and truncated instead of wrapping. The theme's
+        // paragraph style now fixes its vertical size. Pinned at both
+        // triggering conditions; fails if the quoted bullet shows "…".
+        let quoted = """
+        > A quote containing a list:
+        > - **Bullet inside a blockquote** that wraps past two lines to check the overlay-bar blockquote style against list items nested inside it at this width
+        > - Second nested bullet, short
+
+        - Trailing bullet after the quote that wraps past the second line at this pane width to see whether preceding blocks change the outcome for the list that follows them
+        """
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "quote the list"),
+                SnapshotFixtures.assistantMessage(content: quoted),
+            ]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+        assertViewSnapshots(
+            body(for: model)
+                .environment(\.fontScale, 1.1)
+                .environment(\.font, .system(size: baseSize(for: .body) * 1.1)),
+            sizes: [(label: "scaled110", size: SnapshotSize.default)]
+        )
+    }
+
+    @Test
+    func longAssistantMessageRendersInFull() {
+        // A settled reply past the old 8,000-character inline budget
+        // used to stop at a head preview plus a "Show full text"
+        // button (user-reported: the end of long messages was hidden).
+        // The body now renders in full through ChunkedMarkdownText;
+        // a tall viewport pins the whole message on screen with no
+        // preview cut, no button, and invisible chunk boundaries.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "write it all out"),
+                SnapshotFixtures.assistantMessage(content: SnapshotFixtures.longMarkdown(sections: 8)),
+            ]
+        )
+        assertViewSnapshot(body(for: model), size: CGSize(width: 1100, height: 2200), name: "tall")
+    }
+
+    @Test
+    func streamingLongText() {
+        // The live row past the old budget dropped its head behind a
+        // leading "…" and pushed the visible text up as lines arrived,
+        // then snapped back at terminal (user-reported). The stream now
+        // renders in full through the same chunked stack; pins no
+        // leading ellipsis and the whole accumulated text.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.systemMessage(),
+                SnapshotFixtures.userMessage(content: "write it all out"),
+            ],
+            streamRunID: "stream-run-1",
+            streamingText: SnapshotFixtures.longMarkdown(sections: 8)
+        )
+        assertViewSnapshot(body(for: model), size: CGSize(width: 1100, height: 2200), name: "tall")
+    }
+
+    @Test
+    func messageTextSelectionMode() {
+        // Selection mode on an assistant row: the markdown body gives
+        // way to the native text view over the same content, and the
+        // hover pill stays up with the I-beam tinted so the way out is
+        // visible without hovering. Pins the AppKit body sitting in the
+        // bubble at the markdown body's width.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [
+                SnapshotFixtures.userMessage(content: "render the plan"),
+                SnapshotFixtures.assistantMessage(content: SelectableMessageTextSnapshots.sample),
+            ]
+        )
+        // Entered after the conversation is on screen, as the user
+        // does: opening a conversation ends any selection mode.
+        assertViewSnapshots(body(for: model), sizes: columnSizes) {
+            model.selectingTextMessageID = "msg-assistant-1"
+        }
+    }
+
+    @Test
+    func compressionCardTextSelectionMode() {
+        // The card's Mac context menu offers Select Text too: the head
+        // preview and its "Show full text" button give way to the
+        // native text view over the WHOLE summary plus a Done button.
+        let long = (0..<30).map { section in
+            "## Section \(section)\n\nDecisions and constraints recorded for section \(section), kept verbose enough that thirty of these clear the preview budget comfortably."
+        }.joined(separator: "\n\n")
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: SnapshotFixtures.sampleMessages()
+                + [SnapshotFixtures.compressionSummaryMessage(content: long)]
+        )
+        assertViewSnapshots(body(for: model), sizes: columnSizes) {
+            model.selectingTextMessageID = "msg-compression"
+        }
+    }
+
+    @Test
+    func composerGrowsWithDraft() {
+        // The composer's text view grows with the draft one line at a
+        // time: three lines of draft, three lines of composer.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [SnapshotFixtures.systemMessage(), SnapshotFixtures.userMessage()]
+        )
+        model.draft = (1...3).map { "Draft line \($0)" }.joined(separator: "\n")
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
+    func composerCapsAtEightLinesAndScrolls() {
+        // Past eight lines the composer stops growing and scrolls.
+        // SwiftUI's vertical TextField capped its height the same way
+        // but never scrolled on macOS, so the tail of a long draft was
+        // unreachable (user-reported). Pins the cap: if this snapshot
+        // ever shows draft line 20, the composer is unbounded again.
+        let model = SnapshotStubs.makeConversationViewModel(
+            messages: [SnapshotFixtures.systemMessage(), SnapshotFixtures.userMessage()]
+        )
+        model.draft = (1...20).map { "Draft line \($0) of a long message being composed" }.joined(separator: "\n")
+        assertViewSnapshots(body(for: model), sizes: columnSizes)
+    }
+
+    @Test
     func userAndAssistantPairScaled130() {
         // Pins the app-wide fontScale plumbing: every label and the
         // markdown body must render ~30% larger. If this snapshot ever

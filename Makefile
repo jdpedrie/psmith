@@ -125,7 +125,10 @@ mac-app: mac-build clients/psmithd-mac/AppBundle/AppIcon.icns
 	# the bundle is now PsmithSwift_PsmithUI.bundle (auto-named by SPM
 	# from <package>_<target>). Goes inside Contents/Resources/ so the
 	# .app stays a proper sealable bundle (unsealed root content
-	# breaks codesign).
+	# breaks codesign); `Bundle.psmithUI` (PsmithUI/Atomic/
+	# ResourceBundle.swift) looks there first, because SwiftPM's own
+	# accessor never does and would fall back to this checkout's
+	# build directory by absolute path.
 	if [ -e clients/psmithd-mac/.build/debug/PsmithSwift_PsmithUI.bundle ]; then \
 		cp -R clients/psmithd-mac/.build/debug/PsmithSwift_PsmithUI.bundle \
 			clients/psmithd-mac/.build/PsmithMac.app/Contents/Resources/PsmithSwift_PsmithUI.bundle; \

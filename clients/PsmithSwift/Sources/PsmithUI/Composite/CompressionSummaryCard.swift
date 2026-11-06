@@ -28,6 +28,11 @@ public struct CompressionSummaryCard: View {
     let model: ConversationViewModel
     @State private var showDeleteConfirm = false
     @State private var showPartialContent = false
+    #if os(macOS)
+    /// The live text view while in selection mode, for the drag that
+    /// began on the preview to extend into.
+    @State private var selectionHandle = SelectableMessageText.Handle()
+    #endif
 
     public init(message: PsmithMessage, model: ConversationViewModel) {
         self.message = message
@@ -82,23 +87,23 @@ public struct CompressionSummaryCard: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+                #if os(macOS)
+                // The way out of selection mode, in the header so it
+                // stays at the top of a summary that can run pages.
+                if isSelectingText {
+                    Button("Done selecting") {
+                        model.selectingTextMessageID = nil
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                #endif
             }
 
             if isErrored {
                 erroredBody
             } else {
-                // Bounded, not raw MarkdownText: a multi-leg compaction
-                // summary can run past 100KB, and an unbounded inline
-                // render of that hard-locks the app on entry (the
-                // transcript's single layout pass never returns). The
-                // preview + full-text viewer keeps entry O(preview).
-                BoundedMarkdownText(
-                    message.content,
-                    cacheKey: markdownCacheKey,
-                    documentTitle: "Compression summary",
-                    limit: Self.summaryPreviewLimit
-                )
-                .scaledFont(.callout)
+                summaryBody
                 if message.isTruncatedOutput {
                     Text("Cut off at the model's output limit — the tail of the summary is missing. Delete and re-run compaction rather than confirming.")
                         .scaledFont(.caption)
@@ -153,6 +158,7 @@ public struct CompressionSummaryCard: View {
         .contextMenu {
             if !isErrored {
                 Button {
+                    model.selectingTextMessageID = nil
                     model.editingMessage = message
                 } label: {
                     Label("Edit", systemImage: "pencil")
@@ -163,6 +169,18 @@ public struct CompressionSummaryCard: View {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
+            #if os(macOS)
+            if !isErrored {
+                Button {
+                    model.selectingTextMessageID = isSelectingText ? nil : message.id
+                } label: {
+                    Label(
+                        isSelectingText ? "Done Selecting" : "Select Text",
+                        systemImage: "character.cursor.ibeam"
+                    )
+                }
+            }
+            #endif
             Divider()
             Button(role: .destructive) {
                 showDeleteConfirm = true
@@ -213,6 +231,50 @@ public struct CompressionSummaryCard: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(message.content, forType: .string)
         #endif
+    }
+
+    /// The summary text. Bounded, not raw MarkdownText: a multi-leg
+    /// compaction summary can run past 100KB, and an unbounded inline
+    /// render of that hard-locks the app on entry (the transcript's
+    /// single layout pass never returns). The preview + full-text
+    /// viewer keeps entry O(preview). On Mac, selection mode swaps in
+    /// the native text view over the whole summary, same as a message
+    /// row; the header's Done button is the way out (the card has no
+    /// hover pill).
+    @ViewBuilder
+    private var summaryBody: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 0) {
+            if isSelectingText {
+                SelectableMessageText(markdown: message.content, handle: selectionHandle) {
+                    if isSelectingText { model.selectingTextMessageID = nil }
+                }
+            } else {
+                summaryPreview
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.markdownTextSelectable, false)
+        .dragToSelectText(handle: selectionHandle) {
+            model.selectingTextMessageID = message.id
+        }
+        #else
+        summaryPreview
+        #endif
+    }
+
+    private var summaryPreview: some View {
+        BoundedMarkdownText(
+            message.content,
+            cacheKey: markdownCacheKey,
+            documentTitle: "Compression summary",
+            limit: Self.summaryPreviewLimit
+        )
+        .scaledFont(.callout)
+    }
+
+    private var isSelectingText: Bool {
+        model.selectingTextMessageID == message.id
     }
 
     /// Body for an errored compression card: error text in red + an optional

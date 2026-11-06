@@ -98,7 +98,7 @@ struct ConversationBody: View {
     /// the spec asks for "on entering a chat, the message box should be
     /// immediately focused." The bool is the focus payload (single-field
     /// scope); flipping false→true re-focuses.
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocusRequest = 0
     /// System open panel for the paperclip. Drag-and-drop onto the
     /// composer is the other attach path.
     @State private var showingFileImporter = false
@@ -190,17 +190,20 @@ struct ConversationBody: View {
             await model.loadAvailableModels()
         }
         .onAppear {
-            // Defer to the next runloop so SwiftUI's first layout pass
-            // attaches the focus binding to the underlying NSTextField
-            // before we set it. Without the defer the assignment lands on
-            // a not-yet-mounted field and silently no-ops.
-            DispatchQueue.main.async { composerFocused = true }
+            // The message box is focused on entering a chat. A request
+            // that lands before the text view is in a window is held
+            // and honored when it joins one. A selection mode left on
+            // from an earlier visit ends first: its text view and the
+            // composer would otherwise take key focus from each other.
+            model.selectingTextMessageID = nil
+            composerFocusRequest += 1
         }
         .onChange(of: liveConversation.id) { _, _ in
             // Re-focus on every conversation switch — the user navigates
             // between chats with the keyboard and expects to land in the
             // composer immediately.
-            DispatchQueue.main.async { composerFocused = true }
+            model.selectingTextMessageID = nil
+            composerFocusRequest += 1
         }
     }
 
@@ -683,43 +686,38 @@ struct ConversationBody: View {
             // single Messages-style composer instead of a stack of widgets.
             GlassEffectContainer(spacing: 8) {
                 VStack(spacing: 6) {
-                    TextField("Send a message — shift-return for newline", text: $model.draft, axis: .vertical)
-                        .lineLimit(1...8)
-                        .textFieldStyle(.plain)
-                        .scaledFont(.body)
-                        .focused($composerFocused)
-                        .onKeyPress(.return) {
-                            // shift+Return → insert a literal newline. We
-                            // explicitly append "\n" instead of returning
-                            // `.ignored`; relying on the default produced
-                            // a text-selection extend on macOS instead of a
-                            // newline (TextField with axis: .vertical doesn't
-                            // route shift+Return to the newline handler).
-                            if NSEvent.modifierFlags.contains(.shift) {
-                                model.draft.append("\n")
-                                return .handled
-                            }
+                    // An AppKit text view, not SwiftUI's vertical
+                    // TextField: that one stops growing at its line
+                    // limit but never scrolls on macOS, so the tail of
+                    // a long draft was unreachable. Return sends;
+                    // Shift-Return inserts a newline at the caret; ⌘V
+                    // with a file or image on the pasteboard attaches
+                    // it (same route as drag-and-drop).
+                    ComposerTextView(
+                        text: $model.draft,
+                        isEnabled: !(model.sending || model.hasPendingCompression || model.isCompacting),
+                        focusRequest: composerFocusRequest,
+                        maxLines: 8,
+                        onSubmit: {
                             if !model.isStreaming
                                 && !model.sending
                                 && !model.hasPendingCompression
                                 && !model.isCompacting {
                                 Task { await model.send() }
                             }
-                            return .handled
+                        },
+                        onPasteAttachment: { pasteAttachmentIfPresent() }
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if model.draft.isEmpty {
+                            Text("Send a message — shift-return for newline")
+                                .scaledFont(.body)
+                                .foregroundStyle(Color(nsColor: .placeholderTextColor))
+                                .allowsHitTesting(false)
                         }
-                        .onKeyPress(KeyEquivalent("v")) {
-                            // ⌘V with a file or image on the pasteboard
-                            // attaches it (same route as drag-and-drop);
-                            // plain text falls through to the field's own
-                            // paste. onKeyPress is the working seam here —
-                            // onPasteCommand never fires while the AppKit
-                            // field editor is first responder.
-                            guard NSEvent.modifierFlags.contains(.command) else { return .ignored }
-                            return pasteAttachmentIfPresent()
-                        }
-                        .disabled(model.sending || model.hasPendingCompression || model.isCompacting)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 10)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
 
                     HStack(spacing: 8) {
                         paperclipButton
@@ -807,13 +805,13 @@ struct ConversationBody: View {
     }
 
     /// Attach whatever file/image content is on the general pasteboard.
-    /// Returns .handled when an attachment was taken (the field must not
-    /// also paste), .ignored for text-only pasteboards so the normal
+    /// Returns true when an attachment was taken (the text view must
+    /// not also paste), false for text-only pasteboards so the normal
     /// paste proceeds. Files win over image data — a Finder copy puts
     /// both a file URL and a preview image on the pasteboard, and the
     /// URL is the real payload.
-    private func pasteAttachmentIfPresent() -> KeyPress.Result {
-        guard attachmentsSupported else { return .ignored }
+    private func pasteAttachmentIfPresent() -> Bool {
+        guard attachmentsSupported else { return false }
         let pb = NSPasteboard.general
         if let urls = pb.readObjects(
             forClasses: [NSURL.self],
@@ -822,7 +820,7 @@ struct ConversationBody: View {
             for url in urls {
                 Task { @MainActor in await attach(url: url) }
             }
-            return .handled
+            return true
         }
         // Raw image bytes — a screenshot on the clipboard, or "Copy
         // Image" from a browser. Normalized to PNG; the VM's
@@ -834,9 +832,9 @@ struct ConversationBody: View {
            let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
             Task { @MainActor in await model.attachImage(data: png, originalFilename: nil) }
-            return .handled
+            return true
         }
-        return .ignored
+        return false
     }
 
     private var paperclipButton: some View {
@@ -1120,6 +1118,27 @@ private struct MessageRow: View {
         model.editingMessage?.id == message.id
     }
 
+    /// Selection mode: the body swaps to an AppKit text view holding
+    /// the whole message as one attributed string, so any range
+    /// selects and ⌘C copies it. SwiftUI's own text selection stops
+    /// at each paragraph (MarkdownUI renders one `Text` per block),
+    /// which read as "can't select consistently". Toggled from the
+    /// hover pill or the context menu; the view model owns the flag
+    /// so it survives row recycling and one row holds it at a time.
+    private var selectingText: Bool {
+        model.selectingTextMessageID == message.id
+    }
+
+    private func setSelectingText(_ on: Bool) {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            model.selectingTextMessageID = on ? message.id : nil
+        }
+    }
+
+    /// The live text view while in selection mode, for the drag that
+    /// began on the markdown rendering to extend into.
+    @State private var selectionHandle = SelectableMessageText.Handle()
+
     private var isErrored: Bool {
         message.errorText != nil
     }
@@ -1353,25 +1372,7 @@ private struct MessageRow: View {
                     onAction: handleFragmentAction
                 )
             } else {
-                let displayText = message.displayContent ?? message.content
-                if displayText.isEmpty {
-                    Text("(empty)").foregroundStyle(.secondary)
-                } else if isCollapsibleRole {
-                    collapsibleBody(displayText)
-                } else if message.isWelcome && !model.welcomePlayed.contains(message.id) {
-                    // First render of a profile-welcome message in this
-                    // app session — animate the reveal. Mark played
-                    // when the reveal completes so subsequent renders
-                    // (scroll, navigation back) show static text.
-                    WelcomeReveal(text: displayText) {
-                        model.welcomePlayed.insert(message.id)
-                    }
-                } else {
-                    // Bounded: same guard as the summary card — an
-                    // unbounded inline markdown layout freezes the app
-                    // past ~tens of KB (see MarkdownBudget).
-                    BoundedMarkdownText(displayText)
-                }
+                markdownBody
             }
             // Usage summary footer — assistant messages only, when data is present.
             if !isEditing, message.role == .assistant, let usage = message.usage {
@@ -1434,8 +1435,9 @@ private struct MessageRow: View {
         // never changes the bubble's footprint as the user mouses over.
         .overlay(alignment: .topTrailing) {
             // Kept visible while speaking so a stop control always
-            // exists without hunting for the hover position.
-            if (isHovering || isSpeaking), isEditableRole, !isEditing {
+            // exists without hunting for the hover position, and while
+            // selecting so the way out is always on screen.
+            if (isHovering || isSpeaking || selectingText), isEditableRole, !isEditing {
                 hoverActions
                     .padding(6)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1445,6 +1447,49 @@ private struct MessageRow: View {
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovering = hovering
             }
+        }
+    }
+
+    /// The markdown body, with a drag anywhere on it selecting text: the
+    /// first movement swaps in the native text view and the drag
+    /// continues as its selection (see `DragToSelectText`). The stack
+    /// is the view the gesture lives on, so it survives the swap. The
+    /// hover pill's I-beam and the context menu enter the same mode
+    /// for keyboard users.
+    private var markdownBody: some View {
+        let displayText = message.displayContent ?? message.content
+        return VStack(alignment: .leading, spacing: 0) {
+            if displayText.isEmpty {
+                Text("(empty)").foregroundStyle(.secondary)
+            } else if selectingText {
+                SelectableMessageText(markdown: displayText, handle: selectionHandle) {
+                    if selectingText { model.selectingTextMessageID = nil }
+                }
+            } else if isCollapsibleRole {
+                collapsibleBody(displayText)
+            } else if message.isWelcome && !model.welcomePlayed.contains(message.id) {
+                // First render of a profile-welcome message in this
+                // app session — animate the reveal. Mark played
+                // when the reveal completes so subsequent renders
+                // (scroll, navigation back) show static text.
+                WelcomeReveal(text: displayText) {
+                    model.welcomePlayed.insert(message.id)
+                }
+            } else {
+                // Bounded, not raw MarkdownText: the body renders
+                // whole as a stack of capped MarkdownUI documents,
+                // with a preview-plus-viewer valve only a giant
+                // turn reaches (see MarkdownBudget).
+                BoundedMarkdownText(displayText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // SwiftUI's per-paragraph selection would take the mouse
+        // before the drag below, and it is what the mode replaces.
+        .environment(\.markdownTextSelectable, false)
+        .dragToSelectText(handle: selectionHandle) {
+            guard canSelectText else { return }
+            model.selectingTextMessageID = message.id
         }
     }
 
@@ -1471,6 +1516,17 @@ private struct MessageRow: View {
                     disabled: !isReloadable
                 ) {
                     Task { await model.reloadFromMessage(id: message.id) }
+                }
+            }
+            if canSelectText {
+                hoverButton(
+                    systemImage: "character.cursor.ibeam",
+                    help: selectingText
+                        ? "Done selecting"
+                        : "Select text — drag over any range, ⌘C copies it",
+                    tint: selectingText ? theme.accent : nil
+                ) {
+                    setSelectingText(!selectingText)
                 }
             }
             hoverButton(
@@ -1967,6 +2023,10 @@ private struct MessageRow: View {
     private var contextMenuItems: some View {
         Button("Edit…") { startEdit() }
             .disabled(!isEditableRole)
+        Button(selectingText ? "Done Selecting" : "Select Text") {
+            setSelectingText(!selectingText)
+        }
+        .disabled(!canSelectText)
         Button("Reload from here") {
             Task { await model.reloadFromMessage(id: message.id) }
         }
@@ -1987,6 +2047,13 @@ private struct MessageRow: View {
         case .user, .assistant, .system, .context: return true
         default: return false
         }
+    }
+
+    /// Selection mode applies to rows whose body is markdown: not an
+    /// errored turn, not a structured fragment rendering, not empty.
+    private var canSelectText: Bool {
+        !isErrored && message.uiFragments.isEmpty
+            && !(message.displayContent ?? message.content).isEmpty
     }
 
     /// Role flipping is only meaningful between user and assistant;
@@ -2020,6 +2087,7 @@ private struct MessageRow: View {
     /// this). Pre-populates the inline editor with the current message
     /// content; the role picker defaults to the row's role.
     private func startEdit() {
+        model.selectingTextMessageID = nil
         editDraft = message.content
         editRoleDraft = message.role
         model.editingMessage = message
@@ -2068,11 +2136,12 @@ private struct CompactingRow: View {
                     .scaledFont(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                // Tail-clamped live view — this re-renders on every
-                // stream flush, and a multi-leg summary outgrows what
-                // a per-tick full re-layout survives. The settled card
-                // renders the full (bounded) body at terminal.
-                MarkdownText(MarkdownBudget.tailClamped(text))
+                // Chunked live view — this re-renders on every stream
+                // flush, and a multi-leg summary outgrows what a single
+                // document can re-lay out per tick; prefix-stable
+                // chunks mean only the growing tail re-parses. The
+                // settled card previews the head at terminal.
+                ChunkedMarkdownText(text)
                     .scaledFont(.callout)
             }
         }

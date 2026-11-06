@@ -70,7 +70,7 @@ public struct ProviderLogo: View {
 
         #if canImport(AppKit) && !targetEnvironment(macCatalyst)
         // Mac: NSImage decodes SVG natively.
-        guard let url = Bundle.module.url(forResource: slug, withExtension: "svg") else {
+        guard let url = Bundle.psmithUI.url(forResource: slug, withExtension: "svg") else {
             return nil
         }
         guard let img = NSImage(contentsOf: url) else { return nil }
@@ -84,7 +84,7 @@ public struct ProviderLogo: View {
         // `<slug>.png` alongside each `<slug>.svg` (built by
         // `scripts/convert-svgs-to-pngs.sh`); load that via
         // contentsOfFile, which handles PNG natively.
-        guard let url = Bundle.module.url(forResource: slug, withExtension: "png"),
+        guard let url = Bundle.psmithUI.url(forResource: slug, withExtension: "png"),
               let img = UIImage(contentsOfFile: url.path) else {
             return nil
         }

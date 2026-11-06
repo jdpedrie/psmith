@@ -406,10 +406,10 @@ struct MessageRow: View {
                         model.welcomePlayed.insert(message.id)
                     }
                 } else {
-                    // Bounded: an assistant turn near a large
-                    // max_output_tokens can exceed what a single
-                    // MarkdownUI layout pass survives (see
-                    // MarkdownBudget) — same guard as the summary card.
+                    // Bounded: the body renders whole as a stack of
+                    // capped MarkdownUI documents, with a preview-plus-
+                    // viewer valve only a turn near a large
+                    // max_output_tokens reaches (see MarkdownBudget).
                     BoundedMarkdownText(bodyText, cacheKey: markdownCacheKey)
                 }
             }

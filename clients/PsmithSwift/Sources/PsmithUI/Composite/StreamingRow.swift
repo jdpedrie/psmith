@@ -180,24 +180,19 @@ public struct StreamingRow: View {
     /// no surprise hiding of stray angle brackets in prose.
     @ViewBuilder
     private var streamingBody: some View {
-        // Tail-clamped: every flush re-renders this body, and a long
-        // run (a multi-leg compaction stream especially) accumulates
-        // past the point where a full markdown re-layout per tick
-        // freezes the app. Mid-stream only the tail is on screen
-        // anyway; the settled row renders the full body at terminal.
-        // Clamping before segment parsing also bounds the parse. A cut
-        // that lands inside a component block degrades that block to
-        // prose for the remainder of the stream — transient, and far
-        // cheaper than the alternative.
-        let segments = parseStreamingSegments(
-            MarkdownBudget.tailClamped(text),
-            components: streamingComponents
-        )
+        // Every flush re-renders this body with the whole accumulated
+        // text, and a long run (a multi-leg compaction stream
+        // especially) grows past what a single MarkdownUI document can
+        // re-lay out per tick. ChunkedMarkdownText keeps the full text
+        // on screen while bounding the per-tick work: its chunk
+        // boundaries are prefix-stable, so every settled chunk receives
+        // an identical value and only the growing tail chunk re-parses.
+        let segments = parseStreamingSegments(text, components: streamingComponents)
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .text(let s):
-                    MarkdownText(s)
+                    ChunkedMarkdownText(s)
                         .scaledFont(isCompression ? .callout : .body)
                 case .fragment(let frag):
                     FragmentView(fragments: [frag], onAction: { _ in })

@@ -397,6 +397,30 @@ public enum SnapshotFixtures {
     /// Compression summary message — the cards rendered between contexts.
     /// finishReason "max_tokens"/"length" renders the truncated-review
     /// state (badge on the card, warning in the review bar).
+    /// Deterministic long-form markdown past the old 8,000-character
+    /// inline budget: `sections` sections of a heading, two paragraphs,
+    /// and a short bulleted list, ~1,100 characters each, dense enough
+    /// that eight sections fit a tall snapshot viewport.
+    public static func longMarkdown(sections: Int) -> String {
+        var out = "Here is the full write-up, section by section."
+        for s in 1...sections {
+            out += """
+
+
+            ## Section \(s): the streaming path
+
+            The server consumes the upstream stream to completion regardless of client state, persists every chunk with a monotonic sequence number, and lets clients disconnect and reconnect freely. Background the app, come back five minutes later, and the answer for section \(s) is finished and waiting, because durability was designed in from the first chunk rather than bolted on.
+
+            The history builder composes the prefix from the active context: the system message, framing rows, and the user and assistant turns along the current branch, with role mapping, thinking handling, and the profile's plugin transforms applied before the provider call goes out, so every provider sees the same shape of history.
+
+            - **Replay** sends persisted chunks from the cursor in sequence order, then live-tails over the in-process broker
+            - **Terminal** materializes the assistant message, records usage and cost, and fires the post-assistant hook
+            """
+        }
+        out += "\n\nThat is the whole write-up."
+        return out
+    }
+
     public static func compressionSummaryMessage(
         id: String = "msg-compression",
         contextID: String = "context-conv-1-1",

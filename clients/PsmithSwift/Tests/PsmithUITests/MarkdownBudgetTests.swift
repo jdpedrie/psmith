@@ -70,37 +70,6 @@ struct MarkdownBudgetTests {
         }
     }
 
-    // MARK: tailClamped
-
-    @Test func tailClampedPassesThroughWithinBudget() {
-        let source = "hello\nworld"
-        #expect(MarkdownBudget.tailClamped(source, limit: 100) == source)
-    }
-
-    @Test func tailClampedKeepsTrailingLines() {
-        let source = (0..<100).map { "line-\($0)" }.joined(separator: "\n")
-        let out = MarkdownBudget.tailClamped(source, limit: 50)
-        #expect(out.hasPrefix("…\n\n"))
-        #expect(out.hasSuffix("line-99"))
-        #expect(out.count < 50 + 16)
-    }
-
-    @Test func tailClampedReopensFence() {
-        // The cut lands inside an unclosed fence — the tail must
-        // reopen it or everything after renders as corrupted prose.
-        let source = "prose before\n```\n" +
-            (0..<100).map { "code-\($0)" }.joined(separator: "\n")
-        let out = MarkdownBudget.tailClamped(source, limit: 50)
-        #expect(out.hasPrefix("…\n\n```\n"))
-    }
-
-    @Test func tailClampedHardCutsSingleMonsterLine() {
-        let source = String(repeating: "b", count: 50_000)
-        let out = MarkdownBudget.tailClamped(source, limit: 1_000)
-        #expect(out.count <= 1_000 + 8)
-        #expect(out.hasPrefix("…\n\n"))
-    }
-
     // MARK: chunks
 
     @Test func chunksAreConcatenationFaithful() {
@@ -159,6 +128,88 @@ struct MarkdownBudgetTests {
         #expect(parts.joined() == doc)
         for part in parts {
             #expect(part.count <= MarkdownBudget.chunkTarget * 2 + 2)
+        }
+    }
+
+    // MARK: chunks — boundaries
+
+    @Test func chunksPreferBlankLinesBeforeTopLevelBlocks() {
+        // A loose numbered list whose items carry indented
+        // continuation paragraphs. The blank line inside an item is
+        // not a boundary — a continuation cut from its item re-parses
+        // as an indented code block — so every cut lands where the
+        // next block starts at column 0.
+        var doc = ""
+        for i in 0..<40 {
+            doc += "\(i + 1). Item \(i) lead paragraph with enough words to matter here\n\n"
+            doc += "    Continuation paragraph indented under item \(i) of the list\n\n"
+        }
+        let parts = MarkdownBudget.chunks(doc, target: 300)
+        #expect(parts.count > 1)
+        #expect(parts.joined() == doc)
+        for part in parts {
+            #expect(part.first?.isWhitespace == false, "chunk starts indented: \(part.prefix(40))")
+        }
+    }
+
+    @Test func chunksFallBackToLineBoundariesWithoutBlankLines() {
+        // A long tight list has no blank lines at all. Past twice the
+        // target the chunker cuts before a column-0 line so the run
+        // stays bounded; a cut between two items is invisible.
+        let doc = (0..<200).map { "- item \($0) with a few words of text" }.joined(separator: "\n")
+        let parts = MarkdownBudget.chunks(doc, target: 300)
+        #expect(parts.count > 1)
+        #expect(parts.joined() == doc)
+        for part in parts {
+            #expect(part.count <= 300 * 2 + 40)
+            #expect(part.hasPrefix("- item"))
+        }
+    }
+
+    @Test func chunksNeverCutInsideTables() {
+        // A table longer than every fallback tier stays in one chunk:
+        // a body row without its header row re-parses as prose.
+        var doc = "intro\n\n| a | b |\n|---|---|\n"
+        for i in 0..<300 { doc += "| row \(i) | value \(i) |\n" }
+        doc += "\noutro"
+        let parts = MarkdownBudget.chunks(doc, target: 200)
+        #expect(parts.joined() == doc)
+        let tableChunks = parts.filter { $0.contains("|---|") }
+        #expect(tableChunks.count == 1)
+        #expect(tableChunks.first?.contains("| row 299 |") == true)
+    }
+
+    @Test func chunksIgnoreTrailingNewline() {
+        // The phantom empty element after a trailing newline is never
+        // a boundary, so a document ending in "\n" chunks exactly like
+        // one that does not (plus the newline on its last chunk).
+        #expect(MarkdownBudget.chunks("a\n\nb\n", target: 1) == ["a\n\n", "b\n"])
+        #expect(MarkdownBudget.chunks("a\n\nb", target: 1) == ["a\n\n", "b"])
+    }
+
+    @Test func chunkBoundariesArePrefixStable() {
+        // A streaming row re-chunks its growing prefix every flush.
+        // Every chunk but the last must equal the corresponding chunk
+        // of the full document, whatever prefix length the flush
+        // landed on, so settled chunks never re-render.
+        var doc = "# Title\n\nOpening paragraph.\n"
+        for s in 0..<8 {
+            doc += "\n## Section \(s)\n\n"
+            doc += (0..<6).map { "- item \($0) of section \(s) with some words" }.joined(separator: "\n")
+            doc += "\n\n1. Lead \(s)\n\n    continuation under the item\n\n"
+            doc += "```go\nfunc f\(s)() {}\n\nreturn\n```\n\n"
+            doc += "| a | b |\n|---|---|\n| \(s) | x |\n\n"
+            doc += "Closing paragraph for section \(s) that runs on for a while.\n"
+        }
+        let full = MarkdownBudget.chunks(doc, target: 150)
+        #expect(full.count > 4)
+        for n in stride(from: 1, to: doc.count, by: 7) {
+            let prefix = String(doc.prefix(n))
+            let parts = MarkdownBudget.chunks(prefix, target: 150)
+            #expect(parts.joined() == prefix)
+            for i in 0..<(parts.count - 1) {
+                #expect(parts[i] == full[i], "prefix \(n): chunk \(i) differs")
+            }
         }
     }
 }

@@ -251,6 +251,13 @@ public final class ConversationViewModel {
     // Edit state
     public var editingMessage: PsmithMessage?
 
+    /// Message whose body is in text-selection mode (Mac): the row
+    /// swaps its markdown for a native text view so any range selects
+    /// and ⌘C copies it. Hoisted here rather than kept as row state so
+    /// it survives the transcript's lazy row recycling and so one row
+    /// is in the mode at a time; rows clear it when an edit starts.
+    public var selectingTextMessageID: String?
+
     /// Message whose long-press action menu is showing (iOS). Hoisted
     /// here like `editingMessage` so the row that triggers it and the
     /// overlay that renders it don't need a binding path through the

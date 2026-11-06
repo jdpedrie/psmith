@@ -412,6 +412,30 @@ matters. The matrix is dimension × view count, shown collapsed below.
 | settings mode page | ConversationSettingsView replacement |
 | contexts mode page | ContextListView replacement |
 | usage popover | open with cache-read split |
+| long bullets / blockquotes (default + scale 1.1) | every wrapped list item and quote line shows in full, no "…" |
+| bullets inside a blockquote (narrow column + scale 1.1) | the quoted list item wraps instead of truncating |
+| long assistant message (tall viewport) | whole body inline through the chunked stack, no preview cut, no "Show full text" |
+| streaming long text (tall viewport) | whole accumulated stream, no leading "…" |
+| message text selection mode | assistant body as the native text view, hover pill up with the I-beam tinted |
+| compression card text selection mode | whole summary as the native text view plus Done in the header, no preview cut |
+| composer with a three-line draft | the text view grows to three lines |
+| composer with a twenty-line draft | capped at eight lines, the rest scrolls |
+
+#### Selectable message text (`SelectableMessageText`, Mac)
+
+| State | Snapshot |
+|---|---|
+| every block class | heading, inline styles, nested bullets, numbered list, quote, code fence, table, as one selectable attributed string |
+
+`TextSelectionDragTests` (same target) pin the screen-point to character-range mapping behind drag-to-select: one line, across lines in both directions, and points past the text.
+
+`ComposerKeyTests` (same target) drive the composer's text view with real key-down events, so AppKit's key-binding resolution is part of what is tested: Return and keypad Enter submit; Shift-, Option-, and Control-Return insert a newline at the caret. They also pin that a paste is skipped when an attachment was taken, that key focus survives the read-only stretch of a send, and that the text view registers no drag types of its own.
+
+`SelectionModeTests` (same target) deliver real mouse and key events to an offscreen window hosting the conversation: a drag across paragraphs enters selection mode and selects across them with key focus, Escape and a click into the composer leave the mode, and a composer update does not pull focus out of a selection.
+
+`ComposerTextViewTests` (same target) cover what a static snapshot cannot: the composer starts empty and is typed into, and the pane reaches its real width after the first layout. They host the conversation in an offscreen window, type through the text view's own input entry point, resize the window, and assert on frames: one line tall and full width at rest, a line per line typed up to eight then scrolling, wrapping at the pane's width after the window grows or shrinks, and back to one line when send clears the draft; key focus on opening the conversation and through a send. A snapshot with a preset draft passes with the text container stuck at a stale width; these fail.
+
+Interaction is where the Mac client's AppKit-backed views have broken, three times in a row in the composer alone, and none of it shows in a still image. A view that takes input gets a behavior test that drives it with events, not only a snapshot.
 
 #### Compact (`CompactView`)
 

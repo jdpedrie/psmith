@@ -8,27 +8,36 @@ import MarkdownUI
 /// thread. Past a few tens of kilobytes that pass never finishes at
 /// interactive timescales — SwiftUI's pending-update bookkeeping goes
 /// quadratic in the number of views and the app hard-locks (reproduced
-/// at 180KB: 100% CPU indefinitely, transcript never appears). The
-/// compaction continuation loop makes such documents routine — a
+/// on iOS at 180KB: 100% CPU indefinitely, transcript never appears).
+/// The compaction continuation loop makes such documents routine — a
 /// multi-leg summary of a long context can exceed 100KB — so every
 /// transcript markdown site renders through this budget:
 ///
-///   - `head(_:limit:)` — the inline preview cut, for settled rows.
-///     Full content stays reachable through `MarkdownDocumentView`.
-///   - `tailClamped(_:limit:)` — the live-stream cut. A stream flush
-///     re-renders the accumulated text every tick; only the visible
-///     tail matters mid-stream, and the settled row re-renders the
-///     full body through `head` at terminal.
-///   - `chunks(_:target:)` — paragraph-boundary split that lets the
-///     full-document viewer render any size progressively through a
-///     LazyVStack instead of as one monolithic layout pass.
+///   - `chunks(_:target:)` — paragraph-boundary split. `ChunkedMarkdownText`
+///     stacks one MarkdownUI document per chunk, so a body renders in
+///     full while no single document exceeds `chunkTarget`. Boundaries
+///     are prefix-stable, which is what lets the live stream row
+///     re-render per flush at the cost of its growing tail chunk only.
+///   - `head(_:limit:)` — the inline preview cut behind
+///     `BoundedMarkdownText`: a deliberately short preview on the
+///     compression summary card, and the safety valve past
+///     `inlineLimit` on message bubbles. Full content stays reachable
+///     through `MarkdownDocumentView`.
 ///
 /// All cuts land on line boundaries and re-balance fenced code blocks
 /// (a cut inside a fence would corrupt everything after it).
 public enum MarkdownBudget {
-    /// Characters of markdown a transcript row may lay out inline.
-    public static let inlineLimit = 8_000
-    /// Per-chunk target for the full-document viewer.
+    /// Characters of markdown a message bubble renders inline before
+    /// falling back to a head preview plus the full-document viewer.
+    /// Chunked layout cost measured linear on macOS 26 (about 12ms per
+    /// KB of markdown when the row realizes; 180KB took 3s), so this
+    /// is a valve against multi-second stalls on the rare giant turn
+    /// near a large `max_output_tokens`, not a routine cut: ordinary
+    /// long replies (the 8-30KB that the old 8,000-character budget
+    /// truncated) render whole.
+    public static let inlineLimit = 48_000
+    /// Per-document target for chunked rendering. Past this, a chunk
+    /// closes at the next safe boundary.
     public static let chunkTarget = 4_000
 
     /// Fence bookkeeping for a cut: which marker (``` or ~~~) is open,
@@ -52,7 +61,7 @@ public enum MarkdownBudget {
     /// paragraph) is hard-cut at `limit` characters — a mid-line cut
     /// can't unbalance a fence, and preview fidelity doesn't matter at
     /// that point; only boundedness does.
-    public static func head(_ source: String, limit: Int = inlineLimit) -> String? {
+    public static func head(_ source: String, limit: Int) -> String? {
         guard source.count > limit else { return nil }
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
         var out = ""
@@ -73,41 +82,27 @@ public enum MarkdownBudget {
         return out
     }
 
-    /// Live-stream clamp: `source` unchanged while it fits the budget,
-    /// else an ellipsis line plus the trailing ~`limit` characters cut
-    /// at a line boundary, with a fence reopened when the cut lands
-    /// inside one. Callers re-render the full text at terminal. Same
-    /// monster-line fallback as `head`, from the suffix side.
-    public static func tailClamped(_ source: String, limit: Int = inlineLimit) -> String {
-        guard source.count > limit else { return source }
-        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
-        var taken = 0
-        var start = lines.count
-        while start > 0 {
-            let line = lines[start - 1]
-            let addition = line.count + (start < lines.count ? 1 : 0)
-            if taken + addition > limit, start < lines.count { break }
-            taken += addition
-            start -= 1
-        }
-        var out = lines[start...].joined(separator: "\n")
-        if out.count > limit {
-            out = String(out.suffix(limit))
-        }
-        if let marker = openFenceMarker(over: lines[..<start]) {
-            out = "\(marker)\n" + out
-        }
-        return "…\n\n" + out
-    }
-
-    /// Paragraph-boundary split for progressive rendering. Chunks are
+    /// Paragraph-boundary split for chunked rendering. Chunks are
     /// concatenation-faithful: `chunks(s).joined() == s` — each chunk
-    /// carries its own trailing newlines, so the viewer loses nothing.
-    /// A boundary is a blank line outside any code fence, taken once
-    /// the current chunk has reached `target` characters — fences and
-    /// tables (which contain no blank lines) are never split. A single
-    /// line longer than twice the target (no newlines to cut at) is
-    /// hard-split into `target`-sized pieces so no chunk is unbounded.
+    /// carries its own trailing newlines, so nothing is lost.
+    ///
+    /// A chunk closes once it has reached `target` characters, at the
+    /// first boundary that keeps both halves parsing the way the whole
+    /// did. The preferred boundary is a blank line outside any code
+    /// fence whose next block starts at column 0 — a list continuation
+    /// or nested item cut from its parent would re-parse as an indented
+    /// code block. A run with no blank lines (a long tight list, a
+    /// hard-wrapped essay) falls back at twice the target to any
+    /// column-0 line outside a fence, and at four times the target to
+    /// any line outside a fence; both skip table rows, since a body row
+    /// without its header re-parses as prose. Fences are never split. A
+    /// single line longer than twice the target (no newlines to cut at)
+    /// is hard-split into `target`-sized pieces so no chunk is unbounded.
+    ///
+    /// Boundaries are prefix-stable: appending text never moves a
+    /// boundary already decided, so a streaming row that re-chunks its
+    /// accumulated text each flush hands every settled chunk an
+    /// identical string and only the tail chunk changes value.
     public static func chunks(_ source: String, target: Int = chunkTarget) -> [String] {
         let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
         var result: [String] = []
@@ -134,7 +129,10 @@ public enum MarkdownBudget {
                 continue
             }
             current += String(line) + terminator
-            if current.count >= target, openFence == nil, trimmed.isEmpty {
+            // Never cut after the final line: nothing follows it, and
+            // while streaming it is the line still being written.
+            guard openFence == nil, current.count >= target, i < lines.count - 1 else { continue }
+            if canClose(current: current, before: i + 1, in: lines, target: target, afterBlank: trimmed.isEmpty) {
                 result.append(current)
                 current = ""
             }
@@ -144,13 +142,94 @@ public enum MarkdownBudget {
         }
         return result
     }
+
+    /// Whether a chunk of `current` may close so that line `index`
+    /// opens the next one. See `chunks` for the tiers.
+    private static func canClose(
+        current: String,
+        before index: Int,
+        in lines: [Substring],
+        target: Int,
+        afterBlank: Bool
+    ) -> Bool {
+        // The line that would open the next chunk: past any further
+        // blank lines when closing on a blank one.
+        var j = index
+        if afterBlank {
+            while j < lines.count, lines[j].trimmingCharacters(in: .whitespaces).isEmpty {
+                j += 1
+            }
+            guard j < lines.count else { return false }
+        }
+        let opener = lines[j]
+        let openerIsTopLevel = !(opener.first?.isWhitespace ?? true)
+        let openerIsTableRow = opener.first == "|"
+        if afterBlank {
+            return openerIsTopLevel
+        }
+        if openerIsTableRow { return false }
+        if current.count >= target * 4 { return true }
+        return current.count >= target * 2 && openerIsTopLevel
+    }
 }
 
-/// Transcript-safe markdown body. Content within `MarkdownBudget`
-/// renders exactly like `MarkdownText`; oversized content renders a
-/// head preview plus a "Show full text" affordance that opens the
-/// chunked `MarkdownDocumentView`, so no transcript row ever hands
-/// MarkdownUI an unbounded document.
+/// Transcript-safe markdown body: the content split at paragraph
+/// boundaries into a stack of MarkdownUI documents, so a message of any
+/// size renders in full while no single document exceeds
+/// `MarkdownBudget.chunkTarget`. Chunks stack with the same nil-length
+/// padding MarkdownUI puts between blocks that declare no margin, so a
+/// boundary is invisible.
+///
+/// The live stream row renders its accumulated text through this view
+/// every flush. Chunk boundaries are prefix-stable, so every settled
+/// chunk receives an identical `MarkdownText` value (Equatable) and
+/// only the growing tail chunk re-parses.
+public struct ChunkedMarkdownText: View {
+    private let content: String
+    private let cacheKey: String?
+
+    /// `cacheKey` opts into `MarkdownCache` per chunk. A one-chunk body
+    /// keeps the bare key so entries prewarmed under it hit; longer
+    /// bodies suffix the chunk index.
+    public init(_ content: String, cacheKey: String? = nil) {
+        self.content = content
+        self.cacheKey = cacheKey
+    }
+
+    public var body: some View {
+        let parts = MarkdownBudget.chunks(content)
+        if parts.count == 1 {
+            chunk(parts[0], key: cacheKey)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(parts.indices, id: \.self) { i in
+                    chunk(parts[i], key: cacheKey.map { "\($0):chunk\(i)" })
+                        .padding(.top, i == 0 ? 0 : nil)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chunk(_ text: String, key: String?) -> some View {
+        if let key {
+            MarkdownText(text, cacheKey: key)
+        } else {
+            MarkdownText(text)
+        }
+    }
+}
+
+/// Transcript message body. Content within `limit` renders in full as
+/// a `ChunkedMarkdownText`; past it, a head preview plus a "Show full
+/// text" affordance opening the chunked `MarkdownDocumentView`.
+///
+/// `limit` tunes the budget per site. Message bubbles take the default
+/// (`MarkdownBudget.inlineLimit`, a valve only giant turns reach). The
+/// compression summary card passes a much smaller one — a multi-screen
+/// preview both reads as noise in the review flow and (as the tallest
+/// row in the cold-entry window) makes the iOS transcript's content
+/// estimate flap by thousands of points.
 public struct BoundedMarkdownText: View {
     private let content: String
     private let cacheKey: String?
@@ -158,12 +237,6 @@ public struct BoundedMarkdownText: View {
     private let limit: Int
     @State private var showingFull = false
 
-    /// `limit` tunes the inline budget per site: message bubbles use
-    /// the default; the compression summary card passes a much smaller
-    /// one — a multi-screen preview both reads as noise in the review
-    /// flow and (as the tallest row in the cold-entry window) makes
-    /// LazyVStack's content estimate flap by thousands of points,
-    /// which is exactly the instability the entry machinery fights.
     public init(
         _ content: String,
         cacheKey: String? = nil,
@@ -179,7 +252,7 @@ public struct BoundedMarkdownText: View {
     public var body: some View {
         if let preview = MarkdownBudget.head(content, limit: limit) {
             VStack(alignment: .leading, spacing: 8) {
-                markdown(preview, keySuffix: ":head")
+                ChunkedMarkdownText(preview, cacheKey: cacheKey.map { $0 + ":head" })
                 Button {
                     showingFull = true
                 } label: {
@@ -200,16 +273,7 @@ public struct BoundedMarkdownText: View {
                 )
             }
         } else {
-            markdown(content, keySuffix: "")
-        }
-    }
-
-    @ViewBuilder
-    private func markdown(_ text: String, keySuffix: String) -> some View {
-        if let key = cacheKey {
-            MarkdownText(text, cacheKey: key + keySuffix)
-        } else {
-            MarkdownText(text)
+            ChunkedMarkdownText(content, cacheKey: cacheKey)
         }
     }
 
@@ -224,8 +288,9 @@ public struct BoundedMarkdownText: View {
 /// Full-document markdown viewer: the content split at paragraph
 /// boundaries into a LazyVStack, so only the visible chunks pay their
 /// layout cost — any size document opens at interactive speed. This is
-/// the read surface behind BoundedMarkdownText's "Show full text";
-/// editing stays with the standard edit sheet.
+/// the read surface behind BoundedMarkdownText's "Show full text" and
+/// the iOS action menu's "Select text"; editing stays with the standard
+/// edit sheet.
 public struct MarkdownDocumentView: View {
     private let content: String
     private let cacheKey: String?
@@ -251,6 +316,9 @@ public struct MarkdownDocumentView: View {
                 .padding()
             }
             .navigationTitle(title)
+            // The reader is the selection surface: on whichever
+            // transcript presents it with per-paragraph selection off.
+            .environment(\.markdownTextSelectable, true)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

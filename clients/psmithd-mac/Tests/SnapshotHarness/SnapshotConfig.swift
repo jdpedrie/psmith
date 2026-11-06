@@ -42,6 +42,7 @@ public func assertViewSnapshot<V: View>(
     precision: Float = defaultPrecision,
     perceptualPrecision: Float = defaultPerceptualPrecision,
     record: Bool? = nil,
+    afterLayout: (() -> Void)? = nil,
     file: StaticString = #filePath,
     testName: String = #function,
     line: UInt = #line
@@ -96,6 +97,14 @@ public func assertViewSnapshot<V: View>(
     host.layoutSubtreeIfNeeded()
     RunLoop.current.run(until: Date().addingTimeInterval(0.15))
     host.layoutSubtreeIfNeeded()
+    // States the user reaches by acting on a view already on screen
+    // (entering a mode, typing) are set here, after the view's own
+    // appear handlers have run, then given the same time to settle.
+    if let afterLayout {
+        afterLayout()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        host.layoutSubtreeIfNeeded()
+    }
 
     withSnapshotTesting(record: recordMode) {
         assertSnapshot(
@@ -117,6 +126,7 @@ public func assertViewSnapshots<V: View>(
     _ view: V,
     sizes: [(label: String, size: CGSize)],
     record: Bool? = nil,
+    afterLayout: (() -> Void)? = nil,
     file: StaticString = #filePath,
     testName: String = #function,
     line: UInt = #line
@@ -127,6 +137,7 @@ public func assertViewSnapshots<V: View>(
             size: size,
             name: label,
             record: record,
+            afterLayout: afterLayout,
             file: file,
             testName: testName,
             line: line
