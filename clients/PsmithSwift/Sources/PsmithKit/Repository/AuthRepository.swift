@@ -315,49 +315,68 @@ public final class AuthRepository: Sendable {
         await MainActor.run { authState.clear() }
     }
 
-    /// Restore session from on-disk token: if a token is present, call WhoAmI.
-    /// On 401 the AuthInterceptor will already have flagged needsReauth; here
-    /// we swallow the error so callers can render Login. We also clear the
-    /// keychain when the stored token is rejected, so subsequent launches
-    /// don't repeat the dead-token round-trip and force the user through a
-    /// fresh login flow once.
+    /// Restore session from on-disk token: validate it with WhoAmI.
     ///
-    /// Wraps the whoAmI call in a short timeout so a dead / unreachable
-    /// server can't pin the app on the auth interstitial for the
-    /// URLSession default (600s here per PsmithClient). On timeout we
-    /// fall through to the same transport-error path as a real
-    /// network failure: cached identity if we have one, login if not.
+    /// The wait is bounded, and how long depends on whether there's a
+    /// cached identity to fall back to. With one, the server gets
+    /// `cachedIdentityGrace`: a reachable server answers well inside
+    /// it, so a live launch behaves exactly as an unbounded check
+    /// would (including a rejected token going straight to Login). A
+    /// server that can't answer in time (unroutable from this network,
+    /// asleep) gets the cached identity instead, and validation keeps
+    /// running in the background: a token it rejects then signs the
+    /// user out. Without a cached identity there's nothing to fall
+    /// back to, so the wait is the longer `uncachedTimeout`.
+    ///
+    /// The keychain is cleared only on auth-class failures, so the next
+    /// launch doesn't repeat the dead-token round-trip; transport errors
+    /// keep the token for a retry once the server is reachable.
     @discardableResult
     public func restoreSession() async -> PsmithUser? {
         guard let token = try? tokenStore.load(), !token.isEmpty else { return nil }
-        _ = token
+        var cached: PsmithUser?
+        if let cache {
+            cached = await cache.get(PsmithUser.self, kind: CacheKind.currentUser, id: "me")
+        }
         do {
-            return try await withRPCTimeout(seconds: 8) { [self] in
+            return try await withRPCTimeout(
+                seconds: cached == nil ? Self.uncachedTimeout : Self.cachedIdentityGrace
+            ) { [self] in
                 try await whoAmI()
             }
         } catch {
-            // Wipe the dead token only on auth-class failures. Network /
-            // transport errors are transient — keep the token so the next
-            // launch can retry once the server is reachable.
-            if case let PsmithError.rpc(code, _) = error,
-               code == .unauthenticated || code == .permissionDenied {
+            if Self.isAuthRejection(error) {
                 try? tokenStore.clear()
                 return nil
             }
-            // Transport/timeout/unavailable: rather than bouncing the user
-            // to Login, fall back to the cached identity if we have one.
-            // The connectivity monitor + composer-disable already
-            // signal "server unreachable" once they get inside; this
-            // just lets them get past the front door (and lets a
-            // multi-account install switch away to a working account
-            // via the login screen's "OR CONTINUE AS" list).
-            if let cache,
-               let cached: PsmithUser = await cache.get(PsmithUser.self, kind: CacheKind.currentUser, id: "me") {
-                await MainActor.run { authState.setAuthenticated(cached) }
-                return cached
+            guard let cached else { return nil }
+            await MainActor.run { authState.setAuthenticated(cached) }
+            if case let PsmithError.rpc(code, _) = error, code == .deadlineExceeded {
+                // The timed-out call was cancelled; ask again without a
+                // deadline so a slow server can still reject the token.
+                Task { [self] in
+                    do {
+                        _ = try await whoAmI()
+                    } catch {
+                        if Self.isAuthRejection(error) {
+                            try? tokenStore.clear()
+                            await MainActor.run { authState.clear() }
+                        }
+                    }
+                }
             }
-            return nil
+            return cached
         }
+    }
+
+    static let cachedIdentityGrace: TimeInterval = 1.5
+    static let uncachedTimeout: TimeInterval = 8
+
+    private static func isAuthRejection(_ error: Error) -> Bool {
+        if case let PsmithError.rpc(code, _) = error {
+            return code == .unauthenticated || code == .permissionDenied
+        }
+        return false
     }
 
     private func map(error: ConnectError?) -> PsmithError? {

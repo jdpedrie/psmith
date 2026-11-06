@@ -33,6 +33,11 @@ struct MessageActionMenu: View {
     /// plain fade (the backdrop scaling with the cards reads wrong);
     /// the cards get their spring here instead.
     @State private var appeared = false
+    /// Set the instant dismissal starts. The overlay stays in the tree
+    /// for its fade-out, and without this it kept swallowing touches
+    /// for those frames: a tap on the composer right after closing the
+    /// menu did nothing.
+    @State private var dismissing = false
 
     var body: some View {
         ZStack {
@@ -51,6 +56,7 @@ struct MessageActionMenu: View {
             .scaleEffect(appeared ? 1 : 0.94)
             .opacity(appeared ? 1 : 0)
         }
+        .allowsHitTesting(!dismissing)
         .onAppear {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 appeared = true
@@ -66,16 +72,20 @@ struct MessageActionMenu: View {
     /// the card is a preview, not a reader. Height-capped so a huge
     /// message on a small screen can't crowd out the actions.
     private var excerptCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(roleLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            let body = message.displayContent ?? message.content
-            MarkdownText(MarkdownBudget.head(body, limit: 600) ?? body)
+        // CappedHeight, not `.frame(maxHeight: 300)`: a max-height frame
+        // takes the full proposed height up to its cap whatever the
+        // content needs, so a one-line message sat in a 300pt card.
+        CappedHeight(limit: 300) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(roleLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                let body = message.displayContent ?? message.content
+                MarkdownText(MarkdownBudget.head(body, limit: 600) ?? body)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxHeight: 300, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemBackground))
@@ -107,7 +117,7 @@ struct MessageActionMenu: View {
             dismiss()
             model.editingMessage = message
         }
-        if message.role != .user {
+        if message.role != .user && message.role != .compressionSummary {
             hairline
             row("Reload", systemImage: "arrow.clockwise", enabled: isReloadable) {
                 dismiss()
@@ -231,6 +241,9 @@ struct MessageActionMenu: View {
     private var isEditableRole: Bool {
         switch message.role {
         case .user, .assistant, .system, .context: return true
+        // A clean summary is editable before it's confirmed; a failed
+        // one has nothing worth editing.
+        case .compressionSummary: return message.errorText == nil
         default: return false
         }
     }
@@ -263,8 +276,31 @@ struct MessageActionMenu: View {
     }
 
     private func dismiss() {
+        dismissing = true
         withAnimation(.snappy(duration: 0.2)) {
             model.actionMenuMessage = nil
         }
+    }
+}
+
+/// Sizes its single child to the child's ideal height, capped at
+/// `limit`, top-aligned. Overflow is the caller's to clip.
+private struct CappedHeight: Layout {
+    let limit: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let ideal = child.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? ideal.width, height: min(ideal.height, limit))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let child = subviews.first else { return }
+        let ideal = child.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        child.place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: ideal.height)
+        )
     }
 }

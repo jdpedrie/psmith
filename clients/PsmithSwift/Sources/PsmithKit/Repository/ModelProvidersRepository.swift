@@ -26,30 +26,55 @@ public final class ModelProvidersRepository: Sendable {
     }
 
     public func list() async throws -> [PsmithUserModelProvider] {
-        // Bounded timeout so a dead server falls through to cache
-        // quickly instead of pinning the launch splash for the
-        // URLSession default (~60s). See RPCTimeout.swift.
+        do {
+            return try await listFromServer()
+        } catch {
+            if let cached = await cachedList() { return cached }
+            throw error
+        }
+    }
+
+    /// The server's answer only, never the cache. Callers that draw
+    /// conclusions from the list (the onboarding gate: "this account
+    /// has no providers") need to know the answer is authoritative; a
+    /// cache fallback that looks identical to a fresh read is what
+    /// put signed-in users into the setup wizard whenever the server
+    /// was unreachable at launch.
+    public func listFromServer() async throws -> [PsmithUserModelProvider] {
+        // Bounded timeout so a dead server fails over quickly instead
+        // of pinning the launch splash for the transport timeout. See
+        // RPCTimeout.swift.
         let resp = try? await withRPCTimeout(seconds: 6) { [client] in
             await client.listUserModelProviders(request: .init(), headers: [:])
         }
-        if let msg = resp?.message {
-            let items = msg.providers.map(PsmithUserModelProvider.init(from:))
-            if let cache {
-                try? await cache.set(items, kind: CacheKind.providers, id: "all", capBytes: CachePreferences.capBytes)
-            }
-            return items
+        guard let msg = resp?.message else {
+            throw resp?.error.map(PsmithError.from) ?? .missingPayload("list providers")
         }
-        if let cache,
-           let cached: [PsmithUserModelProvider] = await cache.get([PsmithUserModelProvider].self, kind: CacheKind.providers, id: "all") {
-            return cached
+        let items = msg.providers.map(PsmithUserModelProvider.init(from:))
+        if let cache {
+            try? await cache.set(items, kind: CacheKind.providers, id: "all", capBytes: CachePreferences.capBytes)
         }
-        throw resp?.error.map(PsmithError.from) ?? .missingPayload("list providers")
+        return items
     }
 
-    public func get(id: String) async throws -> (PsmithUserModelProvider, [PsmithUserModel]) {
+    public func cachedList() async -> [PsmithUserModelProvider]? {
+        guard let cache else { return nil }
+        return await cache.get([PsmithUserModelProvider].self, kind: CacheKind.providers, id: "all")
+    }
+
+    /// `timeout` bounds the call for launch-path probes; nil leaves the
+    /// transport's own unary timeout in charge.
+    public func get(id: String, timeout: TimeInterval? = nil) async throws -> (PsmithUserModelProvider, [PsmithUserModel]) {
         var req = Psmith_V1_GetUserModelProviderRequest()
         req.id = id
-        let resp = await client.getUserModelProvider(request: req, headers: [:])
+        let resp: ResponseMessage<Psmith_V1_GetUserModelProviderResponse>
+        if let timeout {
+            resp = try await withRPCTimeout(seconds: timeout) { [client, req] in
+                await client.getUserModelProvider(request: req, headers: [:])
+            }
+        } else {
+            resp = await client.getUserModelProvider(request: req, headers: [:])
+        }
         guard let msg = resp.message else { throw resp.error.map(PsmithError.from) ?? .missingPayload("get provider") }
         return (PsmithUserModelProvider(from: msg.provider), msg.enabledModels.map(PsmithUserModel.init(from:)))
     }
@@ -213,12 +238,7 @@ public final class ModelProvidersRepository: Sendable {
             req.clearMaxOutputTokens_p = true
         }
         if let p = pricing {
-            var pr = Psmith_V1_ModelPricing()
-            if let v = p.inputPerMillion      { pr.inputPerMillionTokens      = v }
-            if let v = p.outputPerMillion     { pr.outputPerMillionTokens     = v }
-            if let v = p.cacheReadPerMillion  { pr.cacheReadPerMillionTokens  = v }
-            if let v = p.cacheWritePerMillion { pr.cacheWritePerMillionTokens = v }
-            req.pricing = pr
+            req.pricing = p.toProto()
         }
         if let m = modalities {
             req.updateModalities = true
@@ -231,6 +251,7 @@ public final class ModelProvidersRepository: Sendable {
             cap.toolUse       = c.toolUse
             cap.vision        = c.vision
             cap.promptCaching = c.promptCaching
+            cap.generatesImages = c.generatesImages
             req.capabilities = cap
         }
         if let kc = knowledgeCutoff {
@@ -271,12 +292,7 @@ public final class ModelProvidersRepository: Sendable {
         if let cw = contextWindow { req.contextWindow = cw }
         if let mo = maxOutputTokens { req.maxOutputTokens = mo }
         if let p = pricing {
-            var pr = Psmith_V1_ModelPricing()
-            if let v = p.inputPerMillion      { pr.inputPerMillionTokens      = v }
-            if let v = p.outputPerMillion     { pr.outputPerMillionTokens     = v }
-            if let v = p.cacheReadPerMillion  { pr.cacheReadPerMillionTokens  = v }
-            if let v = p.cacheWritePerMillion { pr.cacheWritePerMillionTokens = v }
-            req.pricing = pr
+            req.pricing = p.toProto()
         }
         req.modalities = modalities
         if let c = capabilities {
@@ -286,6 +302,7 @@ public final class ModelProvidersRepository: Sendable {
             cap.toolUse       = c.toolUse
             cap.vision        = c.vision
             cap.promptCaching = c.promptCaching
+            cap.generatesImages = c.generatesImages
             req.capabilities = cap
         }
         if let kc = knowledgeCutoff, !kc.isEmpty { req.knowledgeCutoff = kc }

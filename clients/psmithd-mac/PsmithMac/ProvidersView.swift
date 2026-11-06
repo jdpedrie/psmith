@@ -1397,6 +1397,11 @@ private struct ModelEditForm: View {
     @State private var capToolUse = false
     @State private var capVision = false
     @State private var capPromptCaching = false
+    /// No toggle for these on this form; carried from the edited model
+    /// so a save doesn't reset them (the server replaces capabilities
+    /// and pricing as blocks).
+    @State private var capGeneratesImages = false
+    @State private var pricingTiers: [PsmithPricingTier] = []
     @State private var knowledgeCutoffEnabled = false
     @State private var knowledgeCutoffDate = Date()
     @State private var defaultSettings = PsmithCallSettings()
@@ -1699,7 +1704,8 @@ private struct ModelEditForm: View {
             inputPerMillion: i,
             outputPerMillion: o,
             cacheReadPerMillion: cr,
-            cacheWritePerMillion: cw
+            cacheWritePerMillion: cw,
+            tiers: pricingTiers
         )
     }
 
@@ -1717,7 +1723,8 @@ private struct ModelEditForm: View {
             thinking: capThinking,
             toolUse: capToolUse,
             vision: capVision,
-            promptCaching: capPromptCaching
+            promptCaching: capPromptCaching,
+            generatesImages: capGeneratesImages
         )
     }
 
@@ -1748,6 +1755,7 @@ private struct ModelEditForm: View {
             outputPriceText     = p.outputPerMillion.map     { String($0) } ?? ""
             cacheReadPriceText  = p.cacheReadPerMillion.map  { String($0) } ?? ""
             cacheWritePriceText = p.cacheWritePerMillion.map { String($0) } ?? ""
+            pricingTiers = p.tiers
         }
         modalities = Set(m.modalities)
         if let c = m.capabilities {
@@ -1756,6 +1764,7 @@ private struct ModelEditForm: View {
             capToolUse       = c.toolUse
             capVision        = c.vision
             capPromptCaching = c.promptCaching
+            capGeneratesImages = c.generatesImages
         }
         if let kc = m.knowledgeCutoff, !kc.isEmpty {
             let formatter = DateFormatter()

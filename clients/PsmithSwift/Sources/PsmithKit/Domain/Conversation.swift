@@ -862,7 +862,7 @@ public struct PsmithProfile: Sendable, Hashable, Identifiable, Codable {
     public let name: String
     public let description: String
     public let parentOnly: Bool
-    public let favorite: Bool
+    public var favorite: Bool
     /// At most one profile per user. New conversations start with it
     /// directly, skipping the profile chooser.
     public let isDefault: Bool

@@ -45,14 +45,22 @@ struct CompactView: View {
                                 providerID: model.compactProviderID,
                                 modelID: model.compactModelID
                             )
-                            dismiss()
+                            // A pre-stream failure lands in
+                            // compactError; stay up so it's readable
+                            // (dismissing here hid every rejection).
+                            if model.compactError == nil {
+                                dismiss()
+                            }
                         }
                     } label: {
                         Text("Compact")
                             .fontWeight(.semibold)
                     }
+                    // The server refuses a compaction with no guide,
+                    // so an empty prompt can't be submitted.
                     .disabled(model.compactProviderID == nil
                               || model.compactModelID == nil
+                              || promptIsEmpty
                               || model.isCompacting)
                 }
             }
@@ -62,6 +70,10 @@ struct CompactView: View {
         .task {
             await model.prepareCompactView()
         }
+    }
+
+    private var promptIsEmpty: Bool {
+        model.compactPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var summaryHeader: some View {
@@ -80,6 +92,12 @@ struct CompactView: View {
             Text("Compaction prompt")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
+            if promptIsEmpty {
+                Text("Required. Tell the model what the summary should keep; set a default on the profile to prefill this.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             TextEditor(text: $model.compactPromptDraft)
                 .frame(minHeight: 140)
                 .padding(8)

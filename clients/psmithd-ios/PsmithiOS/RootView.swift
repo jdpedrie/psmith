@@ -73,6 +73,13 @@ private struct AppShell: View {
     /// change → re-init at the App level).
     @State private var convos: ConversationsModel?
 
+    /// Deadline for the splash below. The splash only exists to stop
+    /// OnboardingView flashing before the first provider list lands;
+    /// against an unroutable host that list takes its full timeout,
+    /// so after this the chats render from cache under the offline
+    /// banner. Same bound as the Mac shell.
+    @State private var splashExpired = false
+
     var body: some View {
         Group {
             // Splash until BOTH providers and convos are ready.
@@ -81,7 +88,7 @@ private struct AppShell: View {
             // because `providers.providers` is empty until the
             // first list completes — needsOnboarding then briefly
             // returns true before the load finishes.
-            if !app.providers.hasLoadedOnce || convos == nil {
+            if convos == nil || (!app.providers.hasLoadedOnce && !splashExpired) {
                 AuthInterstitialView()
             } else if needsOnboarding {
                 OnboardingView()
@@ -101,6 +108,13 @@ private struct AppShell: View {
         // consider rendering OnboardingView we know whether it's
         // genuinely warranted.
         .task {
+            try? await Task.sleep(for: .seconds(3))
+            splashExpired = true
+        }
+        .task {
+            // Concurrent: each is bounded by its own launch timeout, and
+            // in sequence an unreachable server cost both back to back.
+            async let providersLoad: Void = loadProvidersIfNeeded()
             if convos == nil {
                 let m = ConversationsModel(client: app.client, profiles: app.profiles, hub: app.streamHub)
                 // Server-push conversation events drive the list's
@@ -112,9 +126,7 @@ private struct AppShell: View {
                 convos = m
                 await m.refresh()
             }
-            if !app.providers.hasLoadedOnce {
-                await app.providers.load()
-            }
+            await providersLoad
         }
         // Foreground pull: events cover the app while it's active,
         // but anything pushed while iOS had the connection suspended
@@ -137,7 +149,13 @@ private struct AppShell: View {
     /// configured provider AND one enabled model. Identical gate to
     /// the Mac client — keeps both platforms aligned on the
     /// "can you actually chat?" precondition.
+    private func loadProvidersIfNeeded() async {
+        if !app.providers.hasLoadedOnce {
+            await app.providers.load()
+        }
+    }
+
     private var needsOnboarding: Bool {
-        app.providers.providers.isEmpty || !app.providers.hasAnyEnabledModel
+        app.providers.needsOnboarding
     }
 }

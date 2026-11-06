@@ -103,9 +103,20 @@ struct SpeechDetailView: View {
                         .buttonStyle(.borderless)
                     }
                     if let saved = model.saved, saved.apiKeySet, model.apiKeyDraft.isEmpty {
-                        Label("Key saved (replace by typing a new one)", systemImage: "lock.fill")
+                        HStack {
+                            Label("Key saved (replace by typing a new one)", systemImage: "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 8)
+                            // A typed key wins over a reused provider
+                            // credential, so switching to the provider
+                            // needs a way to drop the stored key.
+                            Button("Remove", role: .destructive) {
+                                Task { await model.clearAPIKey() }
+                            }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .buttonStyle(.borderless)
+                        }
                     }
                     if !model.availableProviders.isEmpty {
                         Picker("Reuse provider credential", selection: bindProviderRef(model)) {

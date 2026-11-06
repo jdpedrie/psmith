@@ -89,10 +89,16 @@ struct CostDetailView: View {
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await reload() }
-        .task { await reload() }
-        .onChange(of: range) { _, _ in Task { await reload() } }
-        .onChange(of: customSince) { _, _ in if range == .custom { Task { await reload() } } }
-        .onChange(of: customUntil) { _, _ in if range == .custom { Task { await reload() } } }
+        // One task keyed on the window: a change cancels the in-flight
+        // fetch, so a slow response for the old range can't land after
+        // the new one and show its numbers under the new label.
+        .task(id: windowKey) { await reload() }
+    }
+
+    private var windowKey: String {
+        range == .custom
+            ? "custom:\(customSince.timeIntervalSince1970):\(customUntil.timeIntervalSince1970)"
+            : "\(range)"
     }
 
     private var navTitle: String {
@@ -148,10 +154,16 @@ struct CostDetailView: View {
                 since: w.since,
                 until: w.until
             )
+            guard !Task.isCancelled else { return }
             rows = result.providers
             grandTotal = result.grandTotal
             errorText = nil
         } catch {
+            guard !Task.isCancelled else { return }
+            // Don't leave the previous window's figures under this
+            // window's title.
+            rows = []
+            grandTotal = 0
             errorText = PsmithError.display(error)
         }
     }

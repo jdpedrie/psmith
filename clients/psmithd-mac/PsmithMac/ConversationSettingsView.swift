@@ -32,6 +32,11 @@ struct ConversationSettingsView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    if let err = model.settingsError {
+                        Label(err, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if model.preparingSettingsView {
                         ProgressView()
                             .frame(maxWidth: .infinity, alignment: .center)

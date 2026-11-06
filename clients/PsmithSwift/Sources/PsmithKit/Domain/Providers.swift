@@ -140,13 +140,55 @@ public struct PsmithModelPricing: Sendable, Hashable, Codable {
     public let outputPerMillion: Double?
     public let cacheReadPerMillion: Double?
     public let cacheWritePerMillion: Double?
+    /// Context-size price tiers. No client edits these yet, but the
+    /// server replaces pricing as a block, so every pricing write has
+    /// to carry them back or it silently deletes them.
+    public let tiers: [PsmithPricingTier]
 
     public init(
         inputPerMillion: Double?,
         outputPerMillion: Double?,
         cacheReadPerMillion: Double?,
+        cacheWritePerMillion: Double?,
+        tiers: [PsmithPricingTier] = []
+    ) {
+        self.inputPerMillion = inputPerMillion
+        self.outputPerMillion = outputPerMillion
+        self.cacheReadPerMillion = cacheReadPerMillion
+        self.cacheWritePerMillion = cacheWritePerMillion
+        self.tiers = tiers
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputPerMillion, outputPerMillion, cacheReadPerMillion, cacheWritePerMillion, tiers
+    }
+
+    /// Tolerates cache entries written before `tiers` existed.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        inputPerMillion = try c.decodeIfPresent(Double.self, forKey: .inputPerMillion)
+        outputPerMillion = try c.decodeIfPresent(Double.self, forKey: .outputPerMillion)
+        cacheReadPerMillion = try c.decodeIfPresent(Double.self, forKey: .cacheReadPerMillion)
+        cacheWritePerMillion = try c.decodeIfPresent(Double.self, forKey: .cacheWritePerMillion)
+        tiers = try c.decodeIfPresent([PsmithPricingTier].self, forKey: .tiers) ?? []
+    }
+}
+
+public struct PsmithPricingTier: Sendable, Hashable, Codable {
+    public let thresholdTokens: Int32
+    public let inputPerMillion: Double?
+    public let outputPerMillion: Double?
+    public let cacheReadPerMillion: Double?
+    public let cacheWritePerMillion: Double?
+
+    public init(
+        thresholdTokens: Int32,
+        inputPerMillion: Double?,
+        outputPerMillion: Double?,
+        cacheReadPerMillion: Double?,
         cacheWritePerMillion: Double?
     ) {
+        self.thresholdTokens = thresholdTokens
         self.inputPerMillion = inputPerMillion
         self.outputPerMillion = outputPerMillion
         self.cacheReadPerMillion = cacheReadPerMillion
@@ -160,6 +202,34 @@ extension PsmithModelPricing {
         outputPerMillion     = p.hasOutputPerMillionTokens     ? p.outputPerMillionTokens     : nil
         cacheReadPerMillion  = p.hasCacheReadPerMillionTokens  ? p.cacheReadPerMillionTokens  : nil
         cacheWritePerMillion = p.hasCacheWritePerMillionTokens ? p.cacheWritePerMillionTokens : nil
+        tiers = p.tiers.map { t in
+            PsmithPricingTier(
+                thresholdTokens: t.thresholdTokens,
+                inputPerMillion: t.hasInputPerMillionTokens ? t.inputPerMillionTokens : nil,
+                outputPerMillion: t.hasOutputPerMillionTokens ? t.outputPerMillionTokens : nil,
+                cacheReadPerMillion: t.hasCacheReadPerMillionTokens ? t.cacheReadPerMillionTokens : nil,
+                cacheWritePerMillion: t.hasCacheWritePerMillionTokens ? t.cacheWritePerMillionTokens : nil
+            )
+        }
+    }
+
+    /// Wire form, tiers included.
+    func toProto() -> Psmith_V1_ModelPricing {
+        var pr = Psmith_V1_ModelPricing()
+        if let v = inputPerMillion      { pr.inputPerMillionTokens      = v }
+        if let v = outputPerMillion     { pr.outputPerMillionTokens     = v }
+        if let v = cacheReadPerMillion  { pr.cacheReadPerMillionTokens  = v }
+        if let v = cacheWritePerMillion { pr.cacheWritePerMillionTokens = v }
+        pr.tiers = tiers.map { t in
+            var w = Psmith_V1_PricingTier()
+            w.thresholdTokens = t.thresholdTokens
+            if let v = t.inputPerMillion      { w.inputPerMillionTokens      = v }
+            if let v = t.outputPerMillion     { w.outputPerMillionTokens     = v }
+            if let v = t.cacheReadPerMillion  { w.cacheReadPerMillionTokens  = v }
+            if let v = t.cacheWritePerMillion { w.cacheWritePerMillionTokens = v }
+            return w
+        }
+        return pr
     }
 }
 

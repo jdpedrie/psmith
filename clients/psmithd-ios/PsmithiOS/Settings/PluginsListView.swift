@@ -16,6 +16,20 @@ struct PluginsListView: View {
             if !loaded {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if profiles.pluginTypes.isEmpty, let err = profiles.error {
+                // Without this a failed catalog fetch read as a server
+                // built with no plugins.
+                VStack(spacing: 12) {
+                    EmptyStateView(
+                        "Couldn't load plugins",
+                        systemImage: "exclamationmark.triangle",
+                        description: "\(err)"
+                    )
+                    Button("Retry") {
+                        Task { await load() }
+                    }
+                    .buttonStyle(.bordered)
+                }
             } else if profiles.pluginTypes.isEmpty {
                 EmptyStateView(
                     "No plugins compiled in",
@@ -37,13 +51,16 @@ struct PluginsListView: View {
         }
         .navigationTitle("Plugins")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if profiles.pluginTypes.isEmpty {
-                await profiles.loadPluginTypes()
-            }
-            await profiles.loadUserPluginSettings()
-            loaded = true
+        .task { await load() }
+    }
+
+    private func load() async {
+        app.profiles.error = nil
+        if app.profiles.pluginTypes.isEmpty {
+            await app.profiles.loadPluginTypes()
         }
+        await app.profiles.loadUserPluginSettings()
+        loaded = true
     }
 
     @ViewBuilder
@@ -94,9 +111,14 @@ private struct PluginSettingsScreen: View {
     @Environment(AppModel.self) private var app
 
     @State private var draft: [String: Any] = [:]
-    @State private var seeded = false
+    /// `dirtyKey` of what the server holds (or what was seeded). Saves
+    /// fire only when the draft moves off it, so opening the screen,
+    /// which seeds defaults for a never-configured plugin, writes
+    /// nothing.
+    @State private var baselineKey: String?
     @State private var isSaving = false
     @State private var saveError: String?
+    @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -109,7 +131,21 @@ private struct PluginSettingsScreen: View {
                 }
 
                 let globals = plugin.globalConfigFields
-                if globals.isEmpty {
+                if !app.profiles.userPluginSettingsLoaded {
+                    // The stored config is unknown, so editing would
+                    // start from defaults and save them over it.
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Couldn't load this plugin's saved settings.")
+                            .foregroundStyle(.secondary)
+                        Button("Retry") {
+                            Task {
+                                await app.profiles.loadUserPluginSettings()
+                                seedFromModel()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                } else if globals.isEmpty {
                     Text("This plugin has no global settings.")
                         .foregroundStyle(.secondary)
                 } else {
@@ -160,8 +196,23 @@ private struct PluginSettingsScreen: View {
             }
         }
         .onAppear { seedFromModel() }
-        .onChange(of: dirtyKey) { _, _ in
-            Task { await save() }
+        .onChange(of: dirtyKey) { _, key in
+            guard let baselineKey, key != baselineKey else { return }
+            scheduleSave()
+        }
+    }
+
+    /// Coalesces a burst of edits (every keystroke changes the draft)
+    /// into one write, and orders writes: each waits for the previous
+    /// one, so an earlier draft can never land after a later one.
+    private func scheduleSave() {
+        let previous = saveTask
+        previous?.cancel()
+        saveTask = Task {
+            await previous?.value
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await save()
         }
     }
 
@@ -172,7 +223,7 @@ private struct PluginSettingsScreen: View {
     }
 
     private func seedFromModel() {
-        guard !seeded else { return }
+        guard baselineKey == nil, app.profiles.userPluginSettingsLoaded else { return }
         let blob = app.profiles.globalSettings(for: plugin.name).config
         if !blob.isEmpty,
            let dict = try? JSONSerialization.jsonObject(with: blob) as? [String: Any] {
@@ -188,7 +239,7 @@ private struct PluginSettingsScreen: View {
             }
             draft = initial
         }
-        seeded = true
+        baselineKey = dirtyKey
     }
 
     private func save() async {

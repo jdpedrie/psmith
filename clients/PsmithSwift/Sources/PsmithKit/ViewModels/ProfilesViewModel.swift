@@ -261,31 +261,19 @@ public final class ProfilesViewModel {
         guard let idx = profiles.firstIndex(where: { $0.id == id }) else { return }
         let original = profiles[idx]
         let newValue = !original.favorite
-        profiles[idx] = PsmithProfile(
-            id: original.id, name: original.name,
-            description: original.description,
-            parentOnly: original.parentOnly,
-            favorite: newValue,
-            isDefault: original.isDefault,
-            parentProfileID: original.parentProfileID,
-            systemMessage: original.systemMessage,
-            defaultUserMessage: original.defaultUserMessage,
-            compressionGuide: original.compressionGuide,
-            compressionMode: original.compressionMode,
-            compressionProviderID: original.compressionProviderID,
-            compressionModelID: original.compressionModelID,
-            defaultSettings: original.defaultSettings,
-            titleProviderID: original.titleProviderID,
-            titleModelID: original.titleModelID,
-            titleGuide: original.titleGuide,
-            titleProviderKind: original.titleProviderKind,
-            createdAt: original.createdAt,
-            updatedAt: original.updatedAt
-        )
+        // Copy-and-flip, not a field-by-field rebuild: the rebuild
+        // missed welcomeMessage and requiredModelCapabilities, and the
+        // next edit-and-save of that profile cleared its welcome.
+        var flipped = original
+        flipped.favorite = newValue
+        profiles[idx] = flipped
         do {
             var patch = PsmithProfilePatch()
             patch.favorite = newValue
-            _ = try await client.profiles.update(id: id, patch: patch)
+            let updated = try await client.profiles.update(id: id, patch: patch)
+            if let i = profiles.firstIndex(where: { $0.id == id }) {
+                profiles[i] = updated
+            }
         } catch {
             profiles[idx] = original
             self.error = PsmithError.display(error)
@@ -323,12 +311,19 @@ public final class ProfilesViewModel {
     /// binding. Nil → empty state.
     public var selectedPluginID: String?
 
+    /// True once `userPluginSettings` reflects the server. Until then
+    /// an absent entry means "unknown", not "unconfigured", and an
+    /// editor must not seed defaults from it: the next save would
+    /// overwrite the real stored config with them.
+    public private(set) var userPluginSettingsLoaded = false
+
     public func loadUserPluginSettings() async {
         do {
             let rows = try await client.profiles.listUserPluginSettings()
             var map: [String: PsmithUserPluginSettings] = [:]
             for row in rows { map[row.pluginName] = row }
             userPluginSettings = map
+            userPluginSettingsLoaded = true
         } catch {
             self.error = PsmithError.display(error)
         }

@@ -101,3 +101,29 @@ struct LegacyImportGateTests {
         #expect(!AccountManager.shouldAttemptLegacyImport(bundleID: nil))
     }
 }
+
+/// The login screen's "continue as" list. Only the active account's
+/// AppModel is ever bootstrapped, so every other account sits in
+/// `.resolving`; filtering on `.signedIn` alone left the list empty on
+/// every cold start, exactly when the active server is unreachable and
+/// switching away is the way out.
+@Suite("AccountManager continue-as list")
+struct AccountManagerSwitchListTests {
+    @Test("an unvalidated account with a stored session is offered")
+    func resolvingWithToken() {
+        #expect(AccountManager.offersSwitch(phase: .resolving, hasStoredSession: { true }))
+    }
+
+    @Test("an unvalidated account without a session is not")
+    func resolvingWithoutToken() {
+        #expect(!AccountManager.offersSwitch(phase: .resolving, hasStoredSession: { false }))
+    }
+
+    @Test("signed-in is offered and signed-out is not, without reading the token")
+    func settledPhases() {
+        var reads = 0
+        #expect(AccountManager.offersSwitch(phase: .signedIn, hasStoredSession: { reads += 1; return false }))
+        #expect(!AccountManager.offersSwitch(phase: .signedOut, hasStoredSession: { reads += 1; return true }))
+        #expect(reads == 0)
+    }
+}

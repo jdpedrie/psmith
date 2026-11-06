@@ -88,17 +88,39 @@ public final class AccountManager {
         !accounts.isEmpty
     }
 
-    /// Accounts other than the currently-active one whose AppModel
-    /// is signed in (token still valid). Used by the login screen
-    /// to offer a "tap to switch back" affordance when the user
-    /// signs out of the active account — without it they'd be
-    /// stranded on the login form with no path back to a working
-    /// session on another account.
+    /// Accounts other than the currently-active one that still hold a
+    /// session. Used by the login screen to offer a "tap to switch
+    /// back" affordance when the active account can't sign in (signed
+    /// out, or its server is unreachable with no cached identity);
+    /// without it the user is stranded on the login form.
+    ///
+    /// Only the active account's AppModel is ever bootstrapped, so the
+    /// rest sit in `.resolving` until switched to. Filtering on
+    /// `.signedIn` alone emptied this list on every cold start, which
+    /// is exactly when the escape hatch is needed; a stored token is
+    /// the right test for an account nobody has validated yet.
     public var otherSignedInAccounts: [Account] {
         accounts.filter { account in
-            guard account.id != activeAccountID else { return false }
-            return appModelByAccount[account.id]?.authState.phase == .signedIn
+            guard account.id != activeAccountID,
+                  let phase = appModelByAccount[account.id]?.authState.phase else { return false }
+            return Self.offersSwitch(phase: phase, hasStoredSession: { hasStoredSession(account) })
         }
+    }
+
+    /// Whether a non-active account belongs in the "continue as" list.
+    /// The token check is a closure because it reads the keychain file
+    /// and only the unvalidated (`.resolving`) case needs it.
+    nonisolated static func offersSwitch(phase: AuthPhase, hasStoredSession: () -> Bool) -> Bool {
+        switch phase {
+        case .signedIn: return true
+        case .signedOut: return false
+        case .resolving: return hasStoredSession()
+        }
+    }
+
+    private func hasStoredSession(_ account: Account) -> Bool {
+        guard let token = try? perAccountTokenStore(account: account).load() else { return false }
+        return !token.isEmpty
     }
 
     /// Build a fresh AppModel for the given account. Per-account

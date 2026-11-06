@@ -487,6 +487,10 @@ private struct ProviderDefaultSettingsScreen: View {
             }
         }
         .onDisappear {
+            // Only an edit writes. Every write publishes a provider
+            // event, and each one reloads the provider list on every
+            // client.
+            guard seeded, draft != (provider.defaultSettings ?? PsmithCallSettings()) else { return }
             Task { await save() }
         }
     }

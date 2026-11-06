@@ -134,6 +134,24 @@ public final class ProvidersViewModel {
     /// them fix an empty model list from settings.
     public private(set) var hasAnyEnabledModel: Bool = false
 
+    /// Set only when the SERVER said the account has no usable
+    /// provider. A cached list or a failed probe proves nothing, so
+    /// they leave this alone.
+    private var serverReportedUnusable = false
+
+    /// The shells' onboarding gate. True only on the server's word:
+    /// an unreachable server at launch must land a set-up user on
+    /// their cached chats with the offline banner, not in the setup
+    /// wizard (which then had nothing to load and spun forever).
+    public var needsOnboarding: Bool {
+        serverReportedUnusable && !hasAnyEnabledModel
+    }
+
+    /// Per-call bound on the onboarding probe's `get`s. The probe runs
+    /// before the launch splash lifts, so it can't inherit the 30s
+    /// unary transport timeout.
+    static let probeTimeout: TimeInterval = 6
+
     public func load() async {
         isLoadingProviders = true
         defer {
@@ -141,25 +159,28 @@ public final class ProvidersViewModel {
             hasLoadedOnce = true
         }
         do {
-            providers = try await client.modelProviders.list()
+            providers = try await client.modelProviders.listFromServer()
             error = nil
-            if selectedID == nil, let first = providers.first {
-                await selectProvider(first.id)
-            }
-            // Probe for the onboarding gate: stop at the first
-            // provider that has any enabled model. Sequential worst
-            // case is one get() per provider, but real accounts hit
-            // the first or second.
-            if !hasAnyEnabledModel {
-                for p in providers {
-                    if let (_, models) = try? await client.modelProviders.get(id: p.id), !models.isEmpty {
-                        hasAnyEnabledModel = true
-                        break
-                    }
-                }
+            if let unusable = await probeUnusable() {
+                serverReportedUnusable = unusable
             }
         } catch {
+            if let cached = await client.modelProviders.cachedList() {
+                providers = cached
+            }
             self.error = PsmithError.display(error)
+            // The server just failed to answer; the follow-ups below
+            // would each wait out the transport timeout against it (a
+            // minute in all for a host that hangs). The reconnect
+            // reload runs them once it's back.
+            return
+        }
+        // The gate only needs the verdict above; the provider detail
+        // and templates below serve the settings screens, and must not
+        // hold the launch splash while they load.
+        hasLoadedOnce = true
+        if selectedID == nil, let first = providers.first {
+            await selectProvider(first.id)
         }
         // Templates power both the Add flow AND the sidebar's
         // "available providers" section. Fetch eagerly on first load
@@ -168,6 +189,33 @@ public final class ProvidersViewModel {
         if !templatesLoaded {
             await loadTemplates()
         }
+    }
+
+    /// Asks the server whether any provider in the freshly listed
+    /// `providers` has an enabled model, stopping at the first that
+    /// does (real accounts hit the first or second). Returns true when
+    /// none does, false when one does, and nil when a probe failed
+    /// before an answer was found: a provider we couldn't read may be
+    /// the one with models.
+    private func probeUnusable() async -> Bool? {
+        guard !providers.isEmpty else {
+            hasAnyEnabledModel = false
+            return true
+        }
+        if hasAnyEnabledModel { return false }
+        var inconclusive = false
+        for p in providers {
+            do {
+                let (_, models) = try await client.modelProviders.get(id: p.id, timeout: Self.probeTimeout)
+                if !models.isEmpty {
+                    hasAnyEnabledModel = true
+                    return false
+                }
+            } catch {
+                inconclusive = true
+            }
+        }
+        return inconclusive ? nil : true
     }
 
     /// Returns the subset of templates that don't have a configured
@@ -206,15 +254,17 @@ public final class ProvidersViewModel {
     }
 
     public func selectProvider(_ id: String) async {
+        // Switching providers drops the old list before the fetch: its
+        // rows carry the old provider's model ids, and a favorite or
+        // disable tapped on one would be sent against `selectedID`, the
+        // new provider. Re-selecting the same provider keeps the list
+        // up while it refreshes. (The onboarding gate reads
+        // `needsOnboarding`, which a transient empty list can't move.)
+        if selectedID != id {
+            enabledModels = []
+        }
         selectedID = id
         detailMode = .viewing
-        // Intentionally do NOT zero `enabledModels` before the fetch.
-        // AppShell's onboarding gate observes `enabledModels.isEmpty`
-        // and a transient empty state tears down the entire chat
-        // navigation stack (it swaps to OnboardingView and back),
-        // popping the user from "tapped a provider row" to the chat
-        // homepage. Keep the previous list visible during refresh;
-        // the spinner from `isLoadingDetail` signals the reload.
         isLoadingDetail = true
         defer { isLoadingDetail = false }
         do {
@@ -233,6 +283,10 @@ public final class ProvidersViewModel {
         do {
             try await client.modelProviders.delete(id: id)
             providers.removeAll { $0.id == id }
+            if providers.isEmpty {
+                serverReportedUnusable = true
+                hasAnyEnabledModel = false
+            }
             selectedID = nil
             enabledModels = []
             detailMode = .viewing

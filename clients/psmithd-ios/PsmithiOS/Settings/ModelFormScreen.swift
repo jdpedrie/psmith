@@ -43,6 +43,10 @@ struct ModelFormScreen: View {
     @State private var capToolUse: Bool
     @State private var capVision: Bool
     @State private var capPromptCaching: Bool
+    @State private var capGeneratesImages: Bool
+    /// Carried through untouched: the form has no tier editor, and the
+    /// server replaces pricing as a block.
+    @State private var pricingTiers: [PsmithPricingTier]
     @State private var cutoffEnabled: Bool
     @State private var cutoffDate: Date
     @State private var defaultSettings: PsmithCallSettings
@@ -71,6 +75,8 @@ struct ModelFormScreen: View {
         _capToolUse = State(initialValue: m?.capabilities?.toolUse ?? false)
         _capVision = State(initialValue: m?.capabilities?.vision ?? false)
         _capPromptCaching = State(initialValue: m?.capabilities?.promptCaching ?? false)
+        _capGeneratesImages = State(initialValue: m?.capabilities?.generatesImages ?? false)
+        _pricingTiers = State(initialValue: m?.pricing?.tiers ?? [])
         let cutoff = m?.knowledgeCutoff.flatMap(Self.parseCutoff)
         _cutoffEnabled = State(initialValue: cutoff != nil)
         _cutoffDate = State(initialValue: cutoff ?? Date())
@@ -94,7 +100,28 @@ struct ModelFormScreen: View {
     }
 
     private var canSave: Bool {
-        !saving && !modelID.trimmingCharacters(in: .whitespaces).isEmpty
+        !saving
+            && !modelID.trimmingCharacters(in: .whitespaces).isEmpty
+            && invalidNumberFields.isEmpty
+    }
+
+    /// Fields holding text that isn't a number. Save is blocked while
+    /// any exist: the form used to read them as blank, and on an edit a
+    /// blank field CLEARS its column, so "128k" or "1,000" wiped the
+    /// stored value without a word.
+    private var invalidNumberFields: [String] {
+        var out: [String] = []
+        if !Self.isBlank(contextWindowText) && parseInt32(contextWindowText) == nil { out.append("Context window") }
+        if !Self.isBlank(maxOutputTokensText) && parseInt32(maxOutputTokensText) == nil { out.append("Max output") }
+        if !Self.isBlank(inputPriceText) && parseDouble(inputPriceText) == nil { out.append("Input price") }
+        if !Self.isBlank(outputPriceText) && parseDouble(outputPriceText) == nil { out.append("Output price") }
+        if !Self.isBlank(cacheReadPriceText) && parseDouble(cacheReadPriceText) == nil { out.append("Cache read price") }
+        if !Self.isBlank(cacheWritePriceText) && parseDouble(cacheWritePriceText) == nil { out.append("Cache write price") }
+        return out
+    }
+
+    private static func isBlank(_ s: String) -> Bool {
+        s.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -113,6 +140,17 @@ struct ModelFormScreen: View {
                 Text(isEdit
                      ? "The model ID is the row's key and can't change — remove the model and re-add it to rename the wire identifier."
                      : "The model ID is the wire identifier the provider expects. Display name defaults to the ID.")
+            }
+
+            if !invalidNumberFields.isEmpty {
+                Section {
+                    Label(
+                        "Not a number: \(invalidNumberFields.joined(separator: ", ")). Fix or clear before saving.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                }
             }
 
             Section("Limits") {
@@ -172,6 +210,7 @@ struct ModelFormScreen: View {
                 Toggle("Tool use", isOn: $capToolUse)
                 Toggle("Vision", isOn: $capVision)
                 Toggle("Prompt caching", isOn: $capPromptCaching)
+                Toggle("Generates images", isOn: $capGeneratesImages)
             } header: {
                 Text("Capabilities")
             } footer: {
@@ -205,6 +244,7 @@ struct ModelFormScreen: View {
                                     capToolUse = caps.toolUse
                                     capVision = caps.vision
                                     capPromptCaching = caps.promptCaching
+                                    capGeneratesImages = caps.generatesImages
                                 }
                             }
                         }
@@ -299,7 +339,7 @@ struct ModelFormScreen: View {
             toolUse: capToolUse,
             vision: capVision,
             promptCaching: capPromptCaching,
-            generatesImages: false
+            generatesImages: capGeneratesImages
         )
     }
 
@@ -331,7 +371,8 @@ struct ModelFormScreen: View {
                     clearMaxOutputTokens: parseInt32(maxOutputTokensText) == nil,
                     pricing: pricingFromFields() ?? PsmithModelPricing(
                         inputPerMillion: nil, outputPerMillion: nil,
-                        cacheReadPerMillion: nil, cacheWritePerMillion: nil
+                        cacheReadPerMillion: nil, cacheWritePerMillion: nil,
+                        tiers: pricingTiers
                     ),
                     modalities: Self.modalityChoices.map(\.key).filter { modalities.contains($0) },
                     capabilities: currentCapabilities,
@@ -388,6 +429,8 @@ struct ModelFormScreen: View {
                 capToolUse = model.capabilities?.toolUse ?? capToolUse
                 capVision = model.capabilities?.vision ?? capVision
                 capPromptCaching = model.capabilities?.promptCaching ?? capPromptCaching
+                capGeneratesImages = model.capabilities?.generatesImages ?? capGeneratesImages
+                pricingTiers = model.pricing?.tiers ?? pricingTiers
                 let cutoff = model.knowledgeCutoff.flatMap(Self.parseCutoff)
                 cutoffEnabled = cutoff != nil
                 if let cutoff { cutoffDate = cutoff }
@@ -406,30 +449,37 @@ struct ModelFormScreen: View {
         let output = parseDouble(outputPriceText)
         let cacheRead = parseDouble(cacheReadPriceText)
         let cacheWrite = parseDouble(cacheWritePriceText)
-        if input == nil && output == nil && cacheRead == nil && cacheWrite == nil {
+        if input == nil && output == nil && cacheRead == nil && cacheWrite == nil && pricingTiers.isEmpty {
             return nil
         }
         return PsmithModelPricing(
             inputPerMillion: input,
             outputPerMillion: output,
             cacheReadPerMillion: cacheRead,
-            cacheWritePerMillion: cacheWrite
+            cacheWritePerMillion: cacheWrite,
+            tiers: pricingTiers
         )
     }
 
+    // The cutoff is a calendar day, and the DatePicker shows days in
+    // the device's time zone, so parse and format in that zone too.
+    // Pinning UTC here displayed "2025-03-01" as Feb 28 anywhere west
+    // of Greenwich and saved an evening pick as the following day.
     private func cutoffFromFields() -> String? {
         guard cutoffEnabled else { return nil }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        fmt.timeZone = TimeZone(identifier: "UTC")
-        return fmt.string(from: cutoffDate)
+        return Self.cutoffFormatter().string(from: cutoffDate)
     }
 
     private static func parseCutoff(_ s: String) -> Date? {
+        cutoffFormatter().date(from: s)
+    }
+
+    private static func cutoffFormatter() -> DateFormatter {
         let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.dateFormat = "yyyy-MM-dd"
-        fmt.timeZone = TimeZone(identifier: "UTC")
-        return fmt.date(from: s)
+        fmt.timeZone = .current
+        return fmt
     }
 
     private static func priceText(_ v: Double?) -> String {
@@ -444,10 +494,17 @@ struct ModelFormScreen: View {
         return v
     }
 
+    /// Accepts the device locale's decimal separator: `.decimalPad`
+    /// types "," in comma-decimal locales, which `Double("3,50")`
+    /// rejects.
     private func parseDouble(_ s: String) -> Double? {
         let t = s.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty, let v = Double(t) else { return nil }
-        return v
+        guard !t.isEmpty else { return nil }
+        if let v = Double(t) { return v }
+        let fmt = NumberFormatter()
+        fmt.locale = .current
+        fmt.numberStyle = .decimal
+        return fmt.number(from: t)?.doubleValue
     }
 }
 

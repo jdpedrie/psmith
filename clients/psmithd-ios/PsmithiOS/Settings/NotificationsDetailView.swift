@@ -10,6 +10,9 @@ import PsmithUI
 /// first-fire-time.
 struct NotificationsDetailView: View {
     @Environment(AppPreferences.self) private var prefs
+    /// The system has notifications off for Psmith. The toggle can't
+    /// change that, so say so instead of letting it flip on silently.
+    @State private var deniedBySystem = false
 
     var body: some View {
         @Bindable var p = prefs
@@ -29,9 +32,26 @@ struct NotificationsDetailView: View {
             } footer: {
                 Text("Posts a notification when an assistant turn completes while Psmith is in the background. Suppressed when Psmith is the active app.")
             }
+            if deniedBySystem && prefs.notifyOnUnfocusedCompletion {
+                Section {
+                    Button("Open iOS Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } footer: {
+                    Text("Notifications are turned off for Psmith in iOS Settings, so nothing will ring until they're allowed there.")
+                }
+            }
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await refreshAuthorization() }
+    }
+
+    private func refreshAuthorization() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        deniedBySystem = settings.authorizationStatus == .denied
     }
 
     private func requestPermission() {
@@ -39,12 +59,12 @@ struct NotificationsDetailView: View {
         center.getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .notDetermined:
-                center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    Task { @MainActor in deniedBySystem = !granted }
+                }
+            case .denied:
+                Task { @MainActor in deniedBySystem = true }
             default:
-                // Already determined — nothing to prompt for. If the
-                // user denied earlier, the toggle still flips on but
-                // delivery silently no-ops; they have to re-enable in
-                // Settings.app to actually receive notifications.
                 break
             }
         }

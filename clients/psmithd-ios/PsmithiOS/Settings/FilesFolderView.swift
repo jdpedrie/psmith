@@ -8,6 +8,7 @@ import PsmithKit
 /// RegisterCapabilities call so the server starts surfacing
 /// files_* tools on the next model turn.
 struct FilesFolderView: View {
+    @State private var confirmingForget = false
     @Environment(AppModel.self) private var app
 
     /// Tracks the on-disk bookmark state. Refreshed whenever the
@@ -58,12 +59,23 @@ struct FilesFolderView: View {
             if isBookmarked {
                 Section {
                     Button(role: .destructive) {
-                        FilesFolderBookmark.clear()
-                        FilesTools.syncRegistration()
-                        refresh()
-                        Task { await app.deviceTools.registerWithServer() }
+                        confirmingForget = true
                     } label: {
                         Label("Forget folder", systemImage: "trash")
+                    }
+                    .confirmationDialog(
+                        "Forget this folder?",
+                        isPresented: $confirmingForget,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Forget folder", role: .destructive) {
+                            FilesFolderBookmark.clear()
+                            FilesTools.syncRegistration()
+                            refresh()
+                            Task { await app.deviceTools.registerWithServer() }
+                        }
+                    } message: {
+                        Text("The files stay where they are. The model loses access until you pick the folder again.")
                     }
                 } footer: {
                     Text("Removes the bookmark from this device. The model will report \"folder not configured\" until you pick a folder again.")

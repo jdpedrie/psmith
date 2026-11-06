@@ -223,6 +223,23 @@ public final class AppModel {
         if authState.phase == .resolving {
             authState.clear()
         }
+        // Register the drain hook BEFORE starting the monitor so
+        // the first probe of the session — which can fire online
+        // immediately — runs the drain. Otherwise queued messages
+        // from a prior offline session sit until the next state
+        // transition.
+        connectivity.onOnline { [weak self] in
+            guard let self else { return }
+            _ = await self.outboundQueue.drain(client: self.client)
+        }
+        connectivity.onReconnected { [weak self] in
+            guard let self, self.authState.phase == .signedIn else { return }
+            await self.reconcileAfterReconnect()
+        }
+        connectivity.start()
+        // The monitor starts first so the offline banner can appear
+        // while this and the sweep below wait on a dead server.
+        //
         // Tell the server which device tools this client can fulfill,
         // once per session. Runs after the auth restore so the
         // authenticated DeviceToolsService.RegisterCapabilities call
@@ -234,16 +251,6 @@ public final class AppModel {
         if authState.phase == .signedIn {
             await deviceTools.registerWithServer()
         }
-        // Register the drain hook BEFORE starting the monitor so
-        // the first probe of the session — which can fire online
-        // immediately — runs the drain. Otherwise queued messages
-        // from a prior offline session sit until the next state
-        // transition.
-        connectivity.onOnline { [weak self] in
-            guard let self else { return }
-            _ = await self.outboundQueue.drain(client: self.client)
-        }
-        connectivity.start()
         // After successful auth, sweep the server for runs that were
         // still going when the app last quit. Each one gets adopted
         // by the hub — cold-launching into a mid-stream conversation
@@ -294,5 +301,21 @@ public final class AppModel {
     /// everything after it.
     public func kickEventStream() {
         client.events.kick()
+    }
+
+    /// Catch up after the server comes back. A launch while it was
+    /// unreachable ran on cached reads, and every launch-time load
+    /// failed with no retry of its own: without this the app stayed
+    /// on whatever the cache held (or the splash) until relaunch.
+    /// Everything here is idempotent, so a flap costs a few reads.
+    public func reconcileAfterReconnect() async {
+        kickEventStream()
+        onConversationListChanged?()
+        for id in streamHub.viewingConversationIDs {
+            streamHub.notifyConversationChanged(conversationID: id)
+        }
+        await providers.load()
+        await deviceTools.registerWithServer()
+        await adoptActiveRunsFromServer()
     }
 }

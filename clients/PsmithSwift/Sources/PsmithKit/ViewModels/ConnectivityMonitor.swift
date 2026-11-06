@@ -50,6 +50,7 @@ public final class ConnectivityMonitor {
     private let backoffCapSeconds: TimeInterval = 60
     private let backoffStartSeconds: TimeInterval = 1
     private var onOnlineCallbacks: [@MainActor () async -> Void] = []
+    private var onReconnectedCallbacks: [@MainActor () async -> Void] = []
     /// Notification observer token for the OutboundQueue
     /// "did change" notification. Kept so we can de-register on
     /// stop() and reset on `init`.
@@ -105,6 +106,14 @@ public final class ConnectivityMonitor {
         onOnlineCallbacks.append(block)
     }
 
+    /// Register a closure that fires only on an `.offline` → `.online`
+    /// flip: the server came BACK. Unlike `onOnline` it skips the
+    /// session's first probe, so launch-time loads aren't repeated
+    /// when the server was reachable all along.
+    public func onReconnected(_ block: @escaping @MainActor () async -> Void) {
+        onReconnectedCallbacks.append(block)
+    }
+
     /// Starts the polling loop. Idempotent — safe to call from
     /// multiple lifecycle hooks (e.g. scenePhase becoming active).
     /// First probe fires immediately so the UI doesn't sit in
@@ -154,6 +163,11 @@ public final class ConnectivityMonitor {
             backoffExponent = 0
             for block in onOnlineCallbacks {
                 await block()
+            }
+            if priorState == .offline {
+                for block in onReconnectedCallbacks {
+                    await block()
+                }
             }
         }
     }

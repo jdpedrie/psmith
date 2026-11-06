@@ -21,13 +21,56 @@ struct ProfilesListView: View {
         @Bindable var profiles = app.profiles
         Group {
             if profiles.profiles.isEmpty && !creating {
-                EmptyStateView(
-                    "No profiles yet",
-                    systemImage: "person.crop.rectangle",
-                    description: "Tap + to create your first profile."
-                )
+                if let err = profiles.error {
+                    // A failed load is not an empty account.
+                    VStack(spacing: 12) {
+                        EmptyStateView(
+                            "Couldn't load profiles",
+                            systemImage: "exclamationmark.triangle",
+                            description: "\(err)"
+                        )
+                        Button("Retry") {
+                            Task { await profiles.load() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                } else {
+                    EmptyStateView(
+                        "No profiles yet",
+                        systemImage: "person.crop.rectangle",
+                        description: "Tap + to create your first profile."
+                    )
+                }
             } else {
                 List {
+                    // Every list action (delete, default, favorite,
+                    // import) reports failure through `profiles.error`;
+                    // nothing on iOS rendered it, so they failed silently.
+                    if let err = profiles.error, profiles.pendingImport == nil {
+                        Section {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text(err)
+                                    .font(.callout)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                                Button("Dismiss") { profiles.error = nil }
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                    if !profiles.importWarnings.isEmpty {
+                        Section {
+                            ForEach(profiles.importWarnings) { w in
+                                Label(w.message, systemImage: "exclamationmark.circle")
+                                    .font(.callout)
+                            }
+                            Button("Dismiss") { profiles.importWarnings = [] }
+                        } header: {
+                            Text("Imported. Still needs setup")
+                        }
+                    }
                     ForEach(sortedProfiles) { p in
                         NavigationLink {
                             ProfileViewerScreen(profileID: p.id)
@@ -438,6 +481,15 @@ private struct ProfileEditSheet: View {
     @State private var showingDiscardConfirm: Bool = false
     @State private var pluginsBaseline: [PsmithProfilePlugin] = []
     @State private var pluginsLoaded: Bool = false
+    /// Set when the profile's attached plugins couldn't be fetched.
+    /// The plugins tab offers a retry instead of an editable list: a
+    /// list seeded empty would be saved with SetProfilePlugins, an
+    /// atomic replace, and detach every plugin the profile had.
+    @State private var pluginsLoadFailed: Bool = false
+    /// A created profile's id, once the create RPC has landed. If a
+    /// later step (the plugin save) fails, a retried Save updates this
+    /// profile instead of creating a second one.
+    @State private var createdProfileID: String?
     @State private var addingPlugin: Bool = false
     // Picker presentation flags
     @State private var pickingParent: Bool = false
@@ -560,7 +612,15 @@ private struct ProfileEditSheet: View {
 
                 case .plugins:
                 Section {
-                    if !pluginsLoaded {
+                    if pluginsLoadFailed {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Couldn't load this profile's plugins.")
+                                .foregroundStyle(.secondary)
+                            Button("Retry") {
+                                Task { await loadPlugins() }
+                            }
+                        }
+                    } else if !pluginsLoaded {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.small)
                             Text("Loading plugins…")
@@ -956,8 +1016,12 @@ private struct ProfileEditSheet: View {
         await app.profiles.loadUserPluginSettings()
 
         if let id = existingProfileID {
+            pluginsLoadFailed = false
             await app.profiles.loadPlugins(forProfileID: id)
-            let stored = app.profiles.profilePlugins[id] ?? []
+            guard let stored = app.profiles.profilePlugins[id] else {
+                pluginsLoadFailed = true
+                return
+            }
             pluginsBaseline = stored
             pluginsDraft = stored.map { plugin in
                 let dict = (try? JSONSerialization.jsonObject(with: plugin.config, options: [])) as? [String: Any]
@@ -1246,15 +1310,16 @@ private struct ProfileEditSheet: View {
             // Step 1 — create / update the profile so we have an id
             // to attach plugins to.
             let profileID: String
-            if let existing = existing {
+            if let id = existing?.id ?? createdProfileID {
                 _ = try await app.profiles.update(
-                    id: existing.id,
+                    id: id,
                     patch: patch,
                     clearFields: clearFields
                 )
-                profileID = existing.id
+                profileID = id
             } else {
                 let created = try await app.profiles.create(patch)
+                createdProfileID = created.id
                 profileID = created.id
             }
 
@@ -1262,7 +1327,8 @@ private struct ProfileEditSheet: View {
             // empty so any drafts attach to the freshly-created
             // profile; edit-mode skips the round-trip when nothing
             // changed.
-            if pluginsAreDirty {
+            // Never without a loaded baseline: see pluginsLoadFailed.
+            if pluginsLoaded && pluginsAreDirty {
                 let plugins: [PsmithProfilePlugin] = try pluginsDraft.enumerated().map { ordinal, plugin in
                     let data = try JSONSerialization.data(withJSONObject: plugin.config, options: [.sortedKeys])
                     return PsmithProfilePlugin(
@@ -1508,9 +1574,23 @@ private struct ParentPickerSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// Every profile except this one and its descendants: making a
+    /// descendant the parent would close the chain into a cycle.
     private var eligibleParents: [PsmithProfile] {
-        app.profiles.profiles
-            .filter { $0.id != excludingID }
+        let all = app.profiles.profiles
+        var excluded: Set<String> = []
+        if let excludingID {
+            excluded.insert(excludingID)
+            var frontier = [excludingID]
+            while let id = frontier.popLast() {
+                for child in all where child.parentProfileID == id && !excluded.contains(child.id) {
+                    excluded.insert(child.id)
+                    frontier.append(child.id)
+                }
+            }
+        }
+        return all
+            .filter { !excluded.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 }
@@ -1684,6 +1764,13 @@ private struct ProfileImportSheet: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let err = profiles.error {
+                        Text(err)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     ProfileImportReview(
                         warnings: profiles.pendingImport?.warnings ?? [],

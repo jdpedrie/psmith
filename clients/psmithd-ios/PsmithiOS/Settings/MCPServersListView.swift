@@ -16,6 +16,19 @@ struct MCPServersListView: View {
             if !loaded {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.servers.isEmpty, let err = model.error {
+                // A failed load is not an empty registry.
+                VStack(spacing: 12) {
+                    EmptyStateView(
+                        "Couldn't load MCP servers",
+                        systemImage: "exclamationmark.triangle",
+                        description: "\(err)"
+                    )
+                    Button("Retry") {
+                        Task { await model.load() }
+                    }
+                    .buttonStyle(.bordered)
+                }
             } else if model.servers.isEmpty {
                 EmptyStateView(
                     "No MCP servers",
@@ -24,6 +37,13 @@ struct MCPServersListView: View {
                 )
             } else {
                 List {
+                    if let err = model.error {
+                        Section {
+                            Text(err)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    }
                     ForEach(model.servers) { server in
                         NavigationLink {
                             MCPServerFormScreen(server: server)
@@ -32,9 +52,13 @@ struct MCPServersListView: View {
                         }
                     }
                     .onDelete { indexSet in
+                        // Ids first: each delete shrinks `servers`, so
+                        // indices read after an await point at the wrong
+                        // row, or past the end.
+                        let ids = indexSet.map { model.servers[$0].id }
                         Task {
-                            for idx in indexSet {
-                                _ = await model.delete(id: model.servers[idx].id)
+                            for id in ids {
+                                _ = await model.delete(id: id)
                             }
                         }
                     }
@@ -230,6 +254,9 @@ struct MCPServerFormScreen: View {
                 }
             }
         }
+        // The VM's error is shared with the list; a stale list failure
+        // shouldn't greet a fresh form.
+        .onAppear { app.mcpServers.error = nil }
         .navigationTitle(server == nil ? "Register server" : (server?.name ?? ""))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

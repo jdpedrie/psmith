@@ -83,6 +83,10 @@ struct ConversationView: View {
                 break
             }
         }
+        .onChange(of: app.connectivity.state) { old, new in
+            guard old == .offline, new == .online, let m = model else { return }
+            Task { await m.reloadAfterReconnect() }
+        }
         .task(id: conversation.id) {
             // Recreate the view model on every (re-)appearance — the
             // scroll machinery is built around a fresh cold-entry
@@ -1169,6 +1173,14 @@ private struct ChatHistoryArea: View, @MainActor Equatable {
         ForEach(model.messages.reversed()) { msg in
             if msg.role == .compressionSummary {
                 CompressionSummaryCard(message: msg, model: model)
+                    // The card's own context menu is macOS-only; here it
+                    // gets the transcript's action menu like any row.
+                    .messageActionsOnLongPress {
+                        Haptics.impact(.medium)
+                        withAnimation(.snappy(duration: 0.22)) {
+                            model.actionMenuMessage = msg
+                        }
+                    }
                     .frame(width: rowWidth, alignment: .leading)
                     .chatRowFlip()
                     .id(msg.id)

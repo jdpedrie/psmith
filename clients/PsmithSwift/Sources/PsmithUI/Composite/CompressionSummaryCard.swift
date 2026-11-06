@@ -155,7 +155,9 @@ public struct CompressionSummaryCard: View {
         // controls every other row gets, replacing the old inline
         // "Edit…" special case. Delete here shares the confirmation
         // with the review bar's Delete; both are the same operation.
-        .contextMenu {
+        // macOS only: the iOS transcript attaches its custom action
+        // menu instead (see `macContextMenu`).
+        .macContextMenu {
             if !isErrored {
                 Button {
                     model.selectingTextMessageID = nil
@@ -361,5 +363,26 @@ public struct CompressionSummaryCard: View {
         case let (nil, m?): return m
         case (nil, nil): return mid
         }
+    }
+}
+
+private extension View {
+    /// `.contextMenu` on macOS, nothing on iOS. Inside the inverted iOS
+    /// transcript a context menu wraps its row in a UIKit portal
+    /// container whose un-flip is a separate CALayer transform: a card
+    /// inserted mid-session (a compaction finishing) rendered nowhere
+    /// until the conversation was re-entered, and the long-press lift
+    /// drew it upside down. The iOS transcript gives the card the same
+    /// custom action menu every message row uses.
+    @ViewBuilder
+    func macContextMenu<MenuItems: View, Preview: View>(
+        @ViewBuilder menuItems: () -> MenuItems,
+        @ViewBuilder preview: () -> Preview
+    ) -> some View {
+        #if os(macOS)
+        contextMenu(menuItems: menuItems, preview: preview)
+        #else
+        self
+        #endif
     }
 }

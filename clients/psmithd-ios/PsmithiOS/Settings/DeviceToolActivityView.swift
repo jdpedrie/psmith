@@ -23,6 +23,16 @@ struct DeviceToolActivityView: View {
             if calls.isEmpty && loading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if calls.isEmpty, let loadError {
+                // A failed fetch is not an empty log; the bare empty
+                // state also had no pull-to-refresh to recover with.
+                ContentUnavailableView {
+                    Label("Couldn't load activity", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(loadError)
+                } actions: {
+                    Button("Retry") { Task { await reload() } }
+                }
             } else if calls.isEmpty {
                 ContentUnavailableView(
                     "No device-tool activity yet",
@@ -42,7 +52,7 @@ struct DeviceToolActivityView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if let loadError {
+            if let loadError, !calls.isEmpty {
                 Text(loadError)
                     .font(.caption)
                     .foregroundStyle(.red)

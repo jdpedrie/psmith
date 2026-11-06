@@ -477,6 +477,9 @@ struct ChatsRoot: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+            // Explicit: the app-wide accent tint otherwise wins over
+            // the destructive role and draws Delete in the accent color.
+            .tint(.red)
             Button {
                 Task { await convos.archive(c.id) }
             } label: {

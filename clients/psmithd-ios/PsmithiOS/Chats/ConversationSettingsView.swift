@@ -26,6 +26,13 @@ struct ConversationSettingsView: View {
     /// the binding; on save we hand the encoded bytes to the VM.
     @State private var pluginEdit: PluginEditDraft?
     @State private var showingAddPluginSheet: Bool = false
+    /// Prepare runs once per visit. `.task` re-fires when the plugin
+    /// editor pops back, and a second prepare re-seeded the draft from
+    /// the server (reverting unsaved call-settings edits) behind a
+    /// full-screen spinner.
+    @State private var prepared = false
+    @State private var confirmingClearAll = false
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         Group {
@@ -34,6 +41,21 @@ struct ConversationSettingsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 0) {
+                    if let err = model.settingsError {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(err)
+                                .font(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Button("Dismiss") { model.settingsError = nil }
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.10))
+                    }
                     Picker("", selection: $tab) {
                         ForEach(Tab.allCases) { t in
                             Text(t.rawValue).tag(t)
@@ -60,9 +82,14 @@ struct ConversationSettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard !prepared else { return }
+            prepared = true
             await model.prepareSettingsView()
         }
         .onDisappear {
+            // Pushing the plugin editor also fires this; only leaving
+            // the screen should save.
+            guard pluginEdit == nil else { return }
             Task { await model.saveCallSettings() }
         }
         .sheet(isPresented: $showingAddPluginSheet) {
@@ -89,6 +116,7 @@ struct ConversationSettingsView: View {
                 providerLabels: model.providerLabels,
                 providerTypes: model.providerTypes,
                 providerPresetIDs: model.providerPresetIDs,
+                availableProfiles: app.profiles.profiles.map { ($0.id, $0.name) },
                 onSave: { editedDraft in
                     let data = encodePluginConfig(editedDraft.config)
                     Task {
@@ -177,12 +205,23 @@ struct ConversationSettingsView: View {
             if !model.conversationPluginOverrides.isEmpty {
                 Divider().padding(.vertical, 4)
                 Button(role: .destructive) {
-                    Task { await model.clearAllConversationOverrides() }
+                    confirmingClearAll = true
                 } label: {
                     Label("Clear all conversation overrides", systemImage: "arrow.uturn.backward")
                         .font(.callout)
                 }
                 .buttonStyle(.borderless)
+                .confirmationDialog(
+                    "Clear all conversation overrides?",
+                    isPresented: $confirmingClearAll,
+                    titleVisibility: .visible
+                ) {
+                    Button("Clear overrides", role: .destructive) {
+                        Task { await model.clearAllConversationOverrides() }
+                    }
+                } message: {
+                    Text("Every plugin returns to what the profile chain sets. Configs edited here are lost.")
+                }
             }
         }
     }
@@ -414,6 +453,8 @@ private struct PluginEditScreen: View {
     let providerLabels: [String: String]
     let providerTypes: [String: String]
     let providerPresetIDs: [String: String]
+    /// Options for profile-picker fields (a council roster, say).
+    let availableProfiles: [(id: String, name: String)]
     let onSave: (PluginEditDraft) -> Void
     let onCancel: () -> Void
 
@@ -426,6 +467,7 @@ private struct PluginEditScreen: View {
         providerLabels: [String: String],
         providerTypes: [String: String],
         providerPresetIDs: [String: String],
+        availableProfiles: [(id: String, name: String)],
         onSave: @escaping (PluginEditDraft) -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -435,6 +477,7 @@ private struct PluginEditScreen: View {
         self.providerLabels = providerLabels
         self.providerTypes = providerTypes
         self.providerPresetIDs = providerPresetIDs
+        self.availableProfiles = availableProfiles
         self.onSave = onSave
         self.onCancel = onCancel
         _draft = State(initialValue: initial)
@@ -448,7 +491,8 @@ private struct PluginEditScreen: View {
             availableModels: availableModels,
             providerLabels: providerLabels,
             providerTypes: providerTypes,
-            providerPresetIDs: providerPresetIDs
+            providerPresetIDs: providerPresetIDs,
+            availableProfiles: availableProfiles
         )
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

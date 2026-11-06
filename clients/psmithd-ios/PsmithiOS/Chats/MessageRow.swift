@@ -277,8 +277,7 @@ struct MessageRow: View {
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .onLongPressGesture { presentActionMenu() }
-        .accessibilityAction(named: "Message actions") { presentActionMenu() }
+        .messageActionsOnLongPress { presentActionMenu() }
         // Swipe-tray temporarily disabled — its DragGesture
         // intercepted vertical scroll on long messages, making
         // the chat unusable. The long-press action menu (above)
@@ -441,8 +440,7 @@ struct MessageRow: View {
                     )
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .onLongPressGesture { presentActionMenu() }
-            .accessibilityAction(named: "Message actions") { presentActionMenu() }
+            .messageActionsOnLongPress { presentActionMenu() }
             // Swipe-tray temporarily disabled — see other call site
             // for rationale; the long-press action menu still
             // exposes the same actions.
@@ -501,8 +499,7 @@ struct MessageRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .onLongPressGesture { presentActionMenu() }
-            .accessibilityAction(named: "Message actions") { presentActionMenu() }
+            .messageActionsOnLongPress { presentActionMenu() }
             // Swipe-tray temporarily disabled — see other call site
             // for rationale; the long-press action menu still
             // exposes the same actions.

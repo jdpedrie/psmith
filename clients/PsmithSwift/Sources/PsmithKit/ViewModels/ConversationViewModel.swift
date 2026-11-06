@@ -297,6 +297,13 @@ public final class ConversationViewModel {
     /// effective default model. Loaded by `prepareSettingsView()`.
     public var settingsResolvedProfile: PsmithProfile?
     public var preparingSettingsView = false
+    /// Set when `prepareSettingsView` couldn't read the live row. The
+    /// draft is then stale (or empty) rather than the conversation's
+    /// settings, and saving it on the way out would overwrite them.
+    private var settingsPrepareFailed = false
+    /// Why the settings screen couldn't load or save. Separate from
+    /// `loadError`, which renders on the transcript, not on settings.
+    public var settingsError: String?
 
     /// Merged pipeline (profile chain + conversation overrides, with
     /// `disabled` subtracts already applied). What's actually running for
@@ -336,6 +343,9 @@ public final class ConversationViewModel {
     public var providerDefaultSettings: [String: PsmithCallSettings] = [:]
     public var selectedProviderID: String?
     public var selectedModelID: String?
+    /// The selection above came from the profile chain's default, not
+    /// from the conversation (its settings or its last assistant turn).
+    private var selectionIsInferredDefault = false
     /// Active profile's resolved required model capabilities. Populated by
     /// `loadAvailableModels` from a fresh GetProfile call. Drives the model
     /// picker's capability filter — models lacking required caps render
@@ -524,9 +534,11 @@ public final class ConversationViewModel {
                let m = s.defaultModelID, !m.isEmpty {
                 selectedProviderID = p
                 selectedModelID    = m
+                selectionIsInferredDefault = false
             } else if let target = tokenCountTarget {
                 selectedProviderID = target.providerID
                 selectedModelID    = target.modelID
+                selectionIsInferredDefault = false
             }
             // Advisory refreshes (status-strip token count + cost,
             // branch-switcher tree). Concurrent: none depends on
@@ -570,7 +582,10 @@ public final class ConversationViewModel {
                 && ctx.currentLeafMessageID != messages.last?.id
             let stampMoved = conv.updatedAt != conversation.updatedAt
             conversation = conv
-            if contextChanged || leafMoved || stampMoved {
+            // A load that failed (opened while the server was down)
+            // left the transcript on cached rows and an error banner up;
+            // an unchanged server row doesn't make those current.
+            if contextChanged || leafMoved || stampMoved || loadError != nil {
                 // load() re-fetches the chain and runs the advisory
                 // refreshes (token count, tree, contexts) itself.
                 await load()
@@ -589,7 +604,13 @@ public final class ConversationViewModel {
     /// rolls back to whatever the server returns. Idempotent — picking
     /// the same model is a no-op write.
     public func selectModel(providerID: String, modelID: String) async {
-        guard providerID != selectedProviderID || modelID != selectedModelID else { return }
+        // Picking the model the chip already shows is still a choice
+        // when the chip was only showing the profile default: it pins
+        // the conversation to that model.
+        guard selectionIsInferredDefault
+              || providerID != selectedProviderID
+              || modelID != selectedModelID else { return }
+        selectionIsInferredDefault = false
         selectedProviderID = providerID
         selectedModelID = modelID
         // Build the full settings blob (UpdateConversation replaces, doesn't
@@ -773,17 +794,30 @@ public final class ConversationViewModel {
             // surface required_model_capabilities so the picker can filter.
             // Failure is non-fatal: filter stays inactive and every model
             // remains selectable.
-            async let profileTask: PsmithProfile? = {
+            async let profileTask: (PsmithProfile, PsmithProfile?)? = {
                 do {
-                    let (p, _) = try await client.profiles.get(id: conversation.profileID, resolve: false)
-                    return p
+                    return try await client.profiles.get(id: conversation.profileID, resolve: true)
                 } catch {
                     return nil
                 }
             }()
 
             availableModels = try await modelsTask
-            activeProfileRequiredCapabilities = await profileTask?.requiredModelCapabilities
+            let profiles = await profileTask
+            activeProfileRequiredCapabilities = profiles?.0.requiredModelCapabilities
+            // A conversation with no explicit choice and no assistant
+            // turn yet sends with the profile chain's default model, so
+            // that's what the chip shows. Display only: nothing is
+            // written, so a later change to the profile default still
+            // applies to this conversation.
+            if selectedModelID == nil,
+               let defaults = profiles?.1?.defaultSettings,
+               let p = defaults.defaultProviderID, !p.isEmpty,
+               let m = defaults.defaultModelID, !m.isEmpty {
+                selectedProviderID = p
+                selectedModelID = m
+                selectionIsInferredDefault = true
+            }
         } catch {
             // Non-fatal; model picker stays hidden if unavailable
         }
@@ -1135,8 +1169,17 @@ public final class ConversationViewModel {
             let (_, resolved) = try await client.profiles.get(id: conversation.profileID, resolve: true)
             guard let resolved else { return }
             compactPromptDraft = resolved.compressionGuide ?? ""
-            compactProviderID  = resolved.compressionProviderID
-            compactModelID     = resolved.compressionModelID
+            if let p = resolved.compressionProviderID, !p.isEmpty,
+               let m = resolved.compressionModelID, !m.isEmpty {
+                compactProviderID = p
+                compactModelID = m
+            } else {
+                // No compression model on the profile chain: summarise
+                // with the model the conversation is using, rather than
+                // opening with nothing picked and Compact disabled.
+                compactProviderID = selectedProviderID
+                compactModelID = selectedModelID
+            }
         } catch {
             // Non-fatal — the user just sees blanks and picks values
             // themselves. They get a clearer error from the Compact RPC if
@@ -1158,6 +1201,8 @@ public final class ConversationViewModel {
     ///     driver-specific extension block.
     public func prepareSettingsView() async {
         preparingSettingsView = true
+        settingsPrepareFailed = false
+        settingsError = nil
         defer { preparingSettingsView = false }
 
         // Always re-fetch the live conversation so we pick up settings
@@ -1171,6 +1216,8 @@ public final class ConversationViewModel {
         do {
             (liveConvo, _) = try await client.conversations.get(id: conversation.id)
         } catch {
+            settingsError = PsmithError.display(error)
+            settingsPrepareFailed = true
             return
         }
         conversation = liveConvo
@@ -1288,9 +1335,15 @@ public final class ConversationViewModel {
             _ = try await client.conversations.setPlugins(conversationID: conversation.id, plugins: overrides)
             conversationPluginOverrides = overrides
             // Refresh the merged view so the UI reflects the new state.
-            resolvedPluginPipeline = (try? await client.conversations.resolvePipeline(conversationID: conversation.id)) ?? []
+            // On failure keep the previous pipeline: an empty one reads
+            // as "no plugins are active".
+            if let pipeline = try? await client.conversations.resolvePipeline(conversationID: conversation.id) {
+                resolvedPluginPipeline = pipeline
+            }
         } catch {
-            loadError = PsmithError.display(error)
+            // The settings screen is where these run; `loadError`
+            // renders on the transcript behind it.
+            settingsError = PsmithError.display(error)
         }
     }
 
@@ -1299,6 +1352,7 @@ public final class ConversationViewModel {
     /// existing settings (default provider/model, include-thinking flag).
     /// Called on dismiss of the in-conversation Settings page.
     public func saveCallSettings() async {
+        guard !settingsPrepareFailed else { return }
         do {
             // UpdateConversation REPLACES the settings blob, so build
             // from a fresh read of the live row, not the in-memory
@@ -1308,6 +1362,14 @@ public final class ConversationViewModel {
             let (live, _) = try await client.conversations.get(id: conversation.id)
             var settings = live.settings ?? PsmithConversationSettings()
             settings.callSettings = conversationCallSettingsDraft.isEmpty ? nil : conversationCallSettingsDraft
+            // Leaving the screen untouched writes nothing. A no-op write
+            // still bumps the row's updated_at, and the open
+            // conversation's staleness check then reloads its whole
+            // transcript.
+            if settings.callSettings == live.settings?.callSettings {
+                conversation = live
+                return
+            }
             let updated = try await client.conversations.updateSettings(
                 id: conversation.id,
                 settings: settings
@@ -1976,6 +2038,19 @@ extension ConversationViewModel {
     /// settings screens that call `loadPluginTypes()`, so a user who goes
     /// straight from launch into a chat — the normal path — would find it
     /// empty and see no panels at all.
+    /// Re-runs everything conversation entry loads, for when the
+    /// server comes back. Entered offline, the transcript and
+    /// conversation row came from cache, but the model list, contexts
+    /// and panel menu have no cache and stayed empty (no model picker
+    /// entries, a bare paperclip for the plus menu) until re-entry.
+    public func reloadAfterReconnect() async {
+        await load()
+        async let contexts: Void = loadContexts()
+        async let models: Void = loadAvailableModels()
+        async let panels: Void = loadPanels()
+        _ = await (contexts, models, panels)
+    }
+
     public func loadPanels() async {
         guard let catalog = try? await client.profiles.listPluginTypes() else {
             // A panel menu is an affordance, not load-bearing: failing to

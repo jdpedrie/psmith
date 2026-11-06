@@ -190,6 +190,11 @@ private struct ServerURLEntry: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .onSubmit { Task { await test() } }
+                    // A probe result belongs to the URL it probed;
+                    // editing the text must re-earn Continue.
+                    .onChange(of: urlText) { _, _ in
+                        if !inFlight { status = .idle }
+                    }
             }
 
             statusBanner

@@ -35,6 +35,7 @@ public final class FakeProvider: @unchecked Sendable {
     private let lock = NSLock()
     private var requestBodies: [Data] = []
     private var replyText: String
+    private var healthy = true
 
     public init(modelID: String = "fake-model-1", replyText: String = "hello") {
         self.modelID = modelID
@@ -49,6 +50,17 @@ public final class FakeProvider: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         replyText = text
     }
+
+    /// What `GET /healthz` answers: 200 while healthy, 503 otherwise.
+    /// Lets a ConnectivityMonitor pointed at `rootURL` watch a server go
+    /// down and come back without rebinding the port.
+    public func setHealthy(_ value: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        healthy = value
+    }
+
+    /// The listener's root, for clients that probe `/healthz` there.
+    public var rootURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
 
     /// Snapshot of all recorded /v1/chat/completions request bodies in the
     /// order they were received.
@@ -210,6 +222,11 @@ public final class FakeProvider: @unchecked Sendable {
     }
 
     private func route(conn: NWConnection, method: String, path: String, body: Data) {
+        if method == "GET" && path.hasPrefix("/healthz") {
+            lock.lock(); let ok = healthy; lock.unlock()
+            respondJSON(conn: conn, status: ok ? "200 OK" : "503 Service Unavailable", body: Data("{}".utf8))
+            return
+        }
         if method == "GET" && path.hasPrefix("/v1/models") {
             self.respondJSON(conn: conn, status: "200 OK", body: self.modelsJSON)
             return
